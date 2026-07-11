@@ -1,6 +1,6 @@
 {
   "name": "builderforce-frontend",
-  "version": "2026.7.45",
+  "version": "2026.7.46",
   "private": true,
   "scripts": {
     "clean": "node -e \"const fs=require('fs');const p='.next';if(fs.existsSync(p)){fs.rmSync(p,{recursive:true});console.log('Removed .next');}else{console.log('.next not found');}\"",
@@ -22,8 +22,8 @@
     "@seanhogg/builderforce-brain-embedded": "link:../brain-embedded",
     "@seanhogg/builderforce-brain-ui": "link:../packages/brain-ui",
     "@seanhogg/builderforce-embedded": "link:../builderforce-embedded",
-    "@seanhogg/builderforce-memory": "^2026.6.39",
-    "@seanhogg/builderforce-memory-engine": "^2026.6.39",
+    "@seanhogg/builderforce-memory": "^2026.7.11",
+    "@seanhogg/builderforce-memory-engine": "^2026.7.11",
     "@seanhogg/builderforce-quality": "^2026.7.5",
     "@seanhogg/builderforce-sdk": "link:../sdk",
     "@seanhogg/builderforce-studio": "link:../studio",

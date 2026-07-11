@@ -22,6 +22,7 @@ import {
   type StackDiagnosticResult,
 } from '@/lib/evermindBuild';
 import { seedProjectEvermindFromArtifact } from '@/lib/projectEvermindApi';
+import { buildSparkline } from '@/lib/sparkline';
 
 interface Props {
   open: boolean;
@@ -192,6 +193,11 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
               </div>
             )}
 
+            {/* Structured training metrics the pipeline computed (loss curve, perplexity,
+                top-1, pass@1, dataset quality) — surfaced from runStackDiagnostic().metrics
+                instead of being buried in per-step detail strings. */}
+            {result && <BuildMetrics metrics={result.metrics} />}
+
             {/* Artifact + seed / download */}
             {result && (
               <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -243,5 +249,78 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
         )}
       </div>
     </SlideOutPanel>
+  );
+}
+
+/* ── Build metrics ─────────────────────────────────────────────────────────────
+   The real numbers the pipeline computed, read from the engine's curated
+   `metrics` (loss curve, benchmark, dataset quality, pass@1). `metrics` is an
+   untyped bag, so each field is narrowed defensively and only rendered when present. */
+
+const mNum = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const mNumArray = (v: unknown): number[] =>
+  Array.isArray(v) ? v.filter((x): x is number => typeof x === 'number' && Number.isFinite(x)) : [];
+const mRec = (v: unknown): Record<string, unknown> =>
+  v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+
+function BuildMetrics({ metrics }: { metrics: Record<string, unknown> }) {
+  const t = useTranslations('evermindBuild');
+  const loss = mNumArray(metrics.trainingHistory);
+  const videoLoss = mNumArray(metrics.videoTrainingHistory);
+  const curve = loss.length >= 2 ? loss : videoLoss;
+  const bench = mRec(metrics.benchmark);
+  const ds = mRec(metrics.datasetMetrics);
+  const code = mRec(metrics.codeBenchmark);
+  const converged = metrics.converged === true;
+  const videoMSE = mNum(metrics.videoReconMSE);
+
+  const tiles: Array<{ label: string; value: string }> = [];
+  const ppl = mNum(bench.perplexity); if (ppl != null) tiles.push({ label: t('mPerplexity'), value: ppl.toFixed(2) });
+  const bpt = mNum(bench.bitsPerToken); if (bpt != null) tiles.push({ label: t('mBits'), value: bpt.toFixed(2) });
+  const top1 = mNum(bench.top1Accuracy); if (top1 != null) tiles.push({ label: t('mTop1'), value: `${(top1 * 100).toFixed(0)}%` });
+  const topk = mNum(bench.topKAccuracy); if (topk != null) tiles.push({ label: t('mTopK', { k: mNum(bench.topK) ?? 5 }), value: `${(topk * 100).toFixed(0)}%` });
+  const pass1 = mNum(code.pass1); if (pass1 != null) tiles.push({ label: t('mPass1'), value: `${(pass1 * 100).toFixed(0)}%` });
+  const words = mNum(ds.words); if (words != null) tiles.push({ label: t('mWords'), value: words.toLocaleString() });
+  const seqs = mNum(ds.sequences); if (seqs != null) tiles.push({ label: t('mSequences'), value: seqs.toLocaleString() });
+  const dup = mNum(ds.duplicateRatio); if (dup != null) tiles.push({ label: t('mDuplicate'), value: `${(dup * 100).toFixed(0)}%` });
+  if (videoMSE != null) tiles.push({ label: t('mVideoMse'), value: videoMSE.toFixed(4) });
+
+  const spark = buildSparkline(curve, { w: 240, h: 44 });
+  const finalLoss = curve.length ? curve[curve.length - 1]! : null;
+  const lastDot = spark?.dots.at(-1);
+
+  if (!spark && tiles.length === 0 && !converged) return null;
+
+  return (
+    <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t('metricsTitle')}</span>
+        {converged && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--success, #22c55e)' }}>✓ {t('mConverged')}</span>}
+      </div>
+
+      {spark && (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>
+            <span>{t('mLossCurve')}</span>
+            {finalLoss != null && <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>{t('mFinalLoss', { loss: finalLoss.toFixed(3) })}</span>}
+          </div>
+          <svg viewBox={`0 0 ${spark.w} ${spark.h}`} preserveAspectRatio="none" role="img" aria-label={t('mLossAria', { count: curve.length })} style={{ width: '100%', height: 44, display: 'block' }}>
+            <polyline points={spark.points} fill="none" stroke="var(--coral-bright, #f4726e)" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+            {lastDot && <circle cx={lastDot.x} cy={lastDot.y} r={2.4} fill="var(--coral-bright, #f4726e)" />}
+          </svg>
+        </div>
+      )}
+
+      {tiles.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(84px, 1fr))', gap: 8 }}>
+          {tiles.map((tile) => (
+            <div key={tile.label} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '7px 10px' }}>
+              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>{tile.label}</div>
+              <div style={{ fontSize: 15, fontWeight: 700, marginTop: 2, fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{tile.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

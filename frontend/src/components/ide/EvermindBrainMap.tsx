@@ -37,6 +37,7 @@ import type {
   ProjectEvermindTrainingPoint,
 } from '@/lib/projectEvermindApi';
 import type { EvermindRegionKey } from '@/lib/evermindRegions';
+import { buildSparkline } from '@/lib/sparkline';
 import { useEvermindValidation } from './EvermindValidationContext';
 
 /* ── Geometry (SVG user units; the viewBox scales to the container) ──────────── */
@@ -440,22 +441,6 @@ const fmtInt = (n: number) => n.toLocaleString();
 /** Compact magnitude for the L2 weight movement (kept readable across scales). */
 const fmtNorm = (n: number) => (n === 0 ? '0' : n >= 0.01 ? n.toFixed(3) : n.toExponential(1));
 
-interface Spark { w: number; h: number; line: string; dots: Array<{ x: number; y: number }> }
-
-/** Build a normalised loss sparkline (lower loss sits lower). Needs ≥2 points. */
-function buildSparkline(values: number[]): Spark | null {
-  if (values.length < 2) return null;
-  const W = 128, H = 34, pad = 3;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = max - min || 1;
-  const dots = values.map((v, i) => ({
-    x: r2(pad + (i / (values.length - 1)) * (W - 2 * pad)),
-    y: r2(pad + (1 - (v - min) / span) * (H - 2 * pad)),
-  }));
-  return { w: W, h: H, line: dots.map((d) => `${d.x},${d.y}`).join(' '), dots };
-}
-
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="ev-train-stat">
@@ -496,7 +481,7 @@ function TrainingReadout({ training }: { training: ProjectEvermindTrainingPoint[
         {spark && (
           <svg className="ev-spark" viewBox={`0 0 ${spark.w} ${spark.h}`} preserveAspectRatio="none"
             role="img" aria-label={t('trainSparkAria', { count: measured.length })}>
-            <polyline points={spark.line} fill="none" stroke="var(--ev-neocortex)" strokeWidth={1.5}
+            <polyline points={spark.points} fill="none" stroke="var(--ev-neocortex)" strokeWidth={1.5}
               strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
             {spark.dots.map((d, i) => (
               <circle key={i} cx={d.x} cy={d.y} r={i === spark.dots.length - 1 ? 2.6 : 1.5} fill="var(--ev-neocortex)">

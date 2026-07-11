@@ -109,7 +109,7 @@ import {
   secondsUntilNextUtcMonth,
   sumTenantTextTokens,
 } from '../../application/llm/tokenUsage';
-import { getTenantTokenAvailability } from '../../application/llm/tenantTokenAvailability';
+import { getTenantTokenAvailability, tokenGateUpgradeHint } from '../../application/llm/tenantTokenAvailability';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -357,7 +357,13 @@ async function enforceTokenCaps(
   const availability = await getTenantTokenAvailability(
     db,
     access.tenantId,
-    { actingUserId: access.userId, actingIsSuperadmin: access.isSuperadmin },
+    {
+      actingUserId: access.userId,
+      actingIsSuperadmin: access.isSuperadmin,
+      // The gateway already resolved the plan snapshot on `access` — reuse it so the
+      // shared resolver skips a redundant tenant-row read on this hot path.
+      planSnapshot: { effectivePlan: access.effectivePlan, tokenDailyLimitOverride: access.tokenDailyLimitOverride },
+    },
     c.env,
   );
 
@@ -390,11 +396,7 @@ async function enforceTokenCaps(
 
   // Plan caps — the exhaustion verdict is the shared resolver's (daily precedence).
   if (!availability.hasTokens && availability.reason === 'daily_exhausted') {
-    const upgradeHint = access.effectivePlan === 'free'
-      ? ' Upgrade to Pro at builderforce.ai/pricing.'
-      : access.effectivePlan === 'pro'
-      ? ' Upgrade to Teams for a 5× higher daily budget.'
-      : '';
+    const upgradeHint = tokenGateUpgradeHint(access.effectivePlan, 'daily');
     return {
       blocked: c.json({
         error: `Plan daily token limit reached (${planDailyLimit.toLocaleString()} tokens).${upgradeHint}`,
@@ -412,11 +414,7 @@ async function enforceTokenCaps(
   // the tenant's already-processed data stays fully queryable; only NEW gateway
   // spend on our pool is paused until the month resets (or they upgrade).
   if (!availability.hasTokens && availability.reason === 'monthly_exhausted') {
-    const upgradeHint = access.effectivePlan === 'free'
-      ? ' Upgrade to Pro at builderforce.ai/pricing for a higher monthly allowance.'
-      : access.effectivePlan === 'pro'
-      ? ' Upgrade to Teams for an unlimited monthly allowance.'
-      : '';
+    const upgradeHint = tokenGateUpgradeHint(access.effectivePlan, 'monthly');
     const retryAfter = secondsUntilNextUtcMonth();
     return {
       blocked: c.json({

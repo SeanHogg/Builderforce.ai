@@ -22,7 +22,7 @@ export async function fetchPersonalityBlock(
 ): Promise<string> {
   if (!psychometric) return '';
   try {
-    const res = await apiRequest<{ block?: string }>('/api/limbic/block', {
+    const res = await apiRequest<{ block?: string; personaBlock?: string }>('/api/limbic/block', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ psychometric }),
@@ -31,7 +31,11 @@ export async function fetchPersonalityBlock(
       // raise the global error toast.
       expectedErrors: [400, 404, 500, 501],
     });
-    return typeof res.block === 'string' ? res.block : '';
+    // The static personality tone lives in `personaBlock`; `block` is the dynamic
+    // affect (near-empty for this text-less request). Join both non-empty layers.
+    return [res.block, res.personaBlock]
+      .filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
+      .join('\n\n');
   } catch {
     return '';
   }
