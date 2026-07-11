@@ -86,7 +86,7 @@ Source: [09-prd-cloud-agent-validation.md](./09-prd-cloud-agent-validation.md) Â
 | Steering & cancellation (GAP-S*) | 7 | 3 P0, 3 P1, 1 P2 | No steering path for cloud-fallback (P0) |
 | Observability & telemetry (GAP-O*) | 7 | 2 P0, 3 P1, 2 P2 | Telemetry reconstruction untested (P0) |
 | Billing & limits (GAP-B*) | 4 | 2 P0, 2 P1 | BYO-key fallback to platform key = billing leak (P0) |
-| Security & isolation (GAP-G*) | 3 | 2 P0, 1 P1 | BYO-key fallback to platform key = billing leak (P0) |
+| Security & isolation (GAP-G*) | 3 | 2 P0, 1 P1 | Cloud V2 bypassPermissions + Bash on shared infra with no sandbox (P0) |
 | Validation harness (GAP-V1) | 1 | 1 P0 | No repeatable E2E validation script |
 
 **Validation-gap standalone effort:** **42 SP** (midpoint estimate) â€” equivalent to an entire additional project.
