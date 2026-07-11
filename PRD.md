@@ -1,44 +1,129 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #141
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# PRD: Gap Analysis — OKR Epics vs Actual Codebase State
 
-## 1. Problem & Goal
+---
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+## Problem & Goal
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+Engineering and product leadership lack a clear, evidence-based view of how the current codebase maps to the five strategic OKR epics. Without this mapping, sprint planning, resourcing decisions, and investor/board communication rest on assumption rather than fact. This document defines the requirements for a structured gap analysis that produces a per-Key-Result implementation status, an OKR-level completion score, and a ranked list of critical blockers — all grounded in traceable code evidence.
 
-## 2. Target Users / ICP Roles
+---
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+## Target Users
 
-## 3. Scope
+| Role | Need |
+|---|---|
+| Engineering Leadership (CTO / VP Eng) | Prioritize technical work against strategic goals; identify where debt or missing foundations block progress |
+| Product Leadership (CPO / PM) | Align roadmap and sprint commitments to OKR completion percentages |
+| Executive / Board | Understand strategic readiness and risk at a glance |
+| Delivery Leads / Tech Leads | Own remediation plans for the critical gaps in their OKR area |
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+---
 
-## 4. Functional Requirements
+## Scope
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+### In Scope
 
-## 5. Acceptance Criteria
+- All five OKR epics and their documented Key Results:
+  - **OKR 1 — Revenue:** Managed hosting, onboarding funnel, marketplace, enterprise license, SOC 2
+  - **OKR 2 — Quality:** Orchestration workspace UI, inline diff, session checkpoint, remote streaming, multi-model routing
+  - **OKR 3 — Analytics:** Contributor profiles, activity pipeline, Jira/Bitbucket/GitHub integrations, standup reports, dashboards
+  - **OKR 4 — Orchestration:** PRD analysis workflow, Temporal engine, policy governance, task DAG UI, cross-agent context
+  - **OKR 5 — Security:** DB policy packs, governance portal, audit log, fleet load balancing, Docker self-hosted
+- Analysis of the current production codebase (all active repositories/monorepo paths) as the source of truth
+- Status classification of each Key Result: **Implemented** / **Partial** / **Not Started**
+- Per-OKR percentage-complete score
+- Per-OKR top-3 critical gaps that currently block progress toward the objective
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+### Out of Scope
 
-## 6. Out of Scope
+- Roadmap scheduling or sprint assignment of remediation work
+- Business-case analysis or ROI modelling
+- Stakeholder interviews or qualitative surveys
+- Infrastructure / cloud environment audits (only source code is analysed)
+- Future OKR epics not listed above
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+---
+
+## Functional Requirements
+
+### FR-1 Key Result Inventory
+
+1. For each of the five OKR epics, enumerate every discrete Key Result exactly as described in the epic documentation.
+2. Assign each Key Result a unique identifier (`OKR{n}-KR{m}`) to enable traceability throughout the document.
+
+### FR-2 Codebase Cross-Reference
+
+For every Key Result identified in FR-1, the analysis must:
+
+1. Search the codebase (file paths, module names, API endpoints, configuration, schema definitions, CI/CD pipelines) for concrete evidence of implementation.
+2. Assign one of three statuses:
+
+| Status | Definition |
+|---|---|
+| **Implemented** | Core functionality exists, is integrated, and is reachable via a defined interface (API route, UI screen, service, or job). Minor polish gaps are acceptable. |
+| **Partial** | Scaffolding, stub, or foundational code exists but the Key Result is not end-to-end functional; critical paths are missing or untested. |
+| **Not Started** | No meaningful code artifact related to this Key Result exists in the codebase. |
+
+3. Provide at least one code citation per Key Result (file path, function/class name, or endpoint) supporting the assigned status. Where status is Not Started, explicitly note the absence.
+
+### FR-3 OKR Completion Score
+
+1. For each OKR epic, compute a percentage-complete score using the following point weighting:
+   - Implemented = 1.0 point
+   - Partial = 0.5 points
+   - Not Started = 0.0 points
+2. Score formula: `(sum of points / total Key Results) × 100`, rounded to the nearest whole percent.
+3. Present the score prominently in both the per-OKR section and a consolidated summary table.
+
+### FR-4 Critical Gap Identification
+
+For each OKR epic, identify exactly **three critical gaps** defined as Key Results whose absence or partial state most severely blocks the parent Objective from being achieved. For each critical gap:
+
+1. State the Key Result identifier and description.
+2. Explain the blocking dependency (why this gap prevents OKR progress, not just individual KR progress).
+3. Classify the gap type: **Missing Feature**, **Missing Infrastructure**, **Missing Integration**, or **Missing Compliance Artifact**.
+
+### FR-5 Consolidated Summary
+
+Produce a single executive summary table with:
+- OKR name
+- Total Key Results count
+- Implemented / Partial / Not Started counts
+- Completion score (%)
+- Single-sentence characterisation of the OKR's overall readiness state
+
+### FR-6 Output Format
+
+1. The gap analysis must be delivered as a structured GitHub-flavored Markdown document.
+2. Sections must follow this order: Executive Summary → OKR-by-OKR Analysis (FR-1 through FR-4 per OKR) → Appendix (full Key Result status table).
+3. Code citations must use inline code formatting for paths and identifiers.
+4. The document must be self-contained — readable without access to external tools.
+
+---
+
+## Acceptance Criteria
+
+| ID | Criterion |
+|---|---|
+| AC-1 | Every Key Result across all five OKR epics has an assigned status (Implemented / Partial / Not Started) with at least one supporting code citation or explicit absence note. |
+| AC-2 | Every OKR section contains a calculated percentage-complete score derived from the defined weighting formula. |
+| AC-3 | Every OKR section contains exactly three critical gaps, each with a blocking-dependency explanation and gap-type classification. |
+| AC-4 | A consolidated executive summary table is present, covering all five OKRs in a single view. |
+| AC-5 | No Key Result status is asserted without traceable evidence (file path, endpoint, schema object, or config key). |
+| AC-6 | The output is valid GitHub-flavored Markdown renderable without errors. |
+| AC-7 | The analysis reflects the codebase state at a single, explicitly stated point in time (commit SHA or date). |
+
+---
+
+## Out of Scope
+
+- Sprint planning, ticket creation, or backlog grooming
+- Estimation of effort to close identified gaps
+- Architectural recommendations beyond naming the gap type
+- Evaluation of code quality, test coverage, or performance within implemented features
+- Comparison against competitor products or industry benchmarks
+- OKR target-setting or revision of Key Result definitions
+- Infrastructure environment audits, penetration testing, or live-system behavioural analysis
