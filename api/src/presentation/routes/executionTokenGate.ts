@@ -1,5 +1,5 @@
 import type { Context } from 'hono';
-import type { HonoEnv } from '../../env';
+import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { checkTenantTokenGate } from '../../application/llm/tenantTokenAvailability';
 
@@ -20,6 +20,6 @@ export async function executionTokenGate<E extends HonoEnv>(
   c: Context<E>,
   db: Db,
 ): Promise<Response | null> {
-  const gate = await checkTenantTokenGate(db, c.get('tenantId'), { actingUserId: c.get('userId') });
+  const gate = await checkTenantTokenGate(db, c.get('tenantId'), { actingUserId: c.get('userId') }, c.env as Env);
   return gate ? c.json(gate, 429) : null;
 }

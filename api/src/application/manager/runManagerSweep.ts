@@ -86,7 +86,7 @@ export async function runManagerSweep(env: Env): Promise<ManagerSweepResult> {
       let ok = tokenOk.get(p.tenantId);
       if (ok === undefined) {
         let availability;
-        try { availability = await getTenantTokenAvailability(db, p.tenantId); } catch { availability = null; }
+        try { availability = await getTenantTokenAvailability(db, p.tenantId, undefined, env); } catch { availability = null; }
         ok = !availability || availability.hasTokens; // fail OPEN on an unknown
         tokenOk.set(p.tenantId, ok);
         if (!ok) result.tokenBlockedTenants += 1;

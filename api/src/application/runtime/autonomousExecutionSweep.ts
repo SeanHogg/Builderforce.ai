@@ -161,7 +161,7 @@ export async function runAutonomousExecutionSweep(env: Env): Promise<AutonomousS
       // an unknown (a usage-scan error must not silently freeze a tenant's board).
       let availability;
       try {
-        availability = await getTenantTokenAvailability(db, tenantId);
+        availability = await getTenantTokenAvailability(db, tenantId, undefined, env);
       } catch {
         availability = null;
       }

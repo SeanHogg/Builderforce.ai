@@ -40,7 +40,7 @@
  * per-agent version token that every write bumps, so there is no N+1 and no staleness.
  */
 import { Hono } from 'hono';
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte } from 'drizzle-orm';
 import { compilePsychometricProfile, type LimbicPsychProfile } from '@builderforce/agent-tools';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { tenantHasFeature } from '../middleware/featureGate';

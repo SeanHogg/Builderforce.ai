@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   evermindGenerate,
+  evermindGenerateMedia,
   benchmarkEvermind,
   exportEvermindArtifact,
   buildEvermindCompletion,
@@ -8,7 +9,10 @@ import {
   loadEvermindModel,
   type ArtifactStore,
 } from './evermindRuntime';
-import { buildEvermindFixtureStore as buildFixture } from './__fixtures__/evermindModel';
+import {
+  buildEvermindFixtureStore as buildFixture,
+  buildEvermindMediaFixtureStore as buildMediaFixture,
+} from './__fixtures__/evermindModel';
 
 describe('messagesToPrompt', () => {
   it('flattens role-tagged turns and primes the assistant', () => {
@@ -44,6 +48,39 @@ describe('evermindGenerate (real .evermind from a mock R2)', () => {
     await expect(evermindGenerate(store, 'evermind-models/1/missing', [{ role: 'user', content: 'x' }]))
       .rejects.toThrow(/not found/);
   });
+});
+
+describe('evermindGenerateMedia (video/image from a self-contained media artifact)', () => {
+  it('loads a media .evermind, generates, and returns shaped base64 frames', async () => {
+    const ref = 'evermind-models/1/fixture-media';
+    const store = buildMediaFixture(ref, 'video');
+    const media = await evermindGenerateMedia(store, ref, { maxFrames: 3, seed: 1 });
+    expect(media.modality).toBe('video');
+    expect(media.width).toBe(8);
+    expect(media.height).toBe(8);
+    expect(media.channels).toBe(3);
+    expect(Array.isArray(media.frames)).toBe(true);
+    expect(media.frameCount).toBe(media.frames.length);
+    for (const f of media.frames) expect(typeof f).toBe('string');
+    // Tokens were actually generated (the plumbing ran end to end).
+    expect(media.usage.completion_tokens).toBeGreaterThan(0);
+  }, 20000);
+
+  it('serves the artifact from the per-isolate cache on the second call', async () => {
+    const ref = 'evermind-models/1/fixture-media-cache';
+    const store = buildMediaFixture(ref, 'video');
+    await evermindGenerateMedia(store, ref, { maxFrames: 1, seed: 1 });
+    const afterFirst = store.calls.length;
+    await evermindGenerateMedia(store, ref, { maxFrames: 1, seed: 1 });
+    expect(store.calls.length).toBe(afterFirst); // no re-fetch
+  }, 20000);
+
+  it('the TEXT loader rejects a media artifact with a clear steer to the media endpoint', async () => {
+    const ref = 'evermind-models/1/fixture-media-text';
+    const store = buildMediaFixture(ref, 'video');
+    await expect(evermindGenerate(store, ref, [{ role: 'user', content: 'x' }]))
+      .rejects.toThrow(/media generation endpoint/);
+  }, 20000);
 });
 
 describe('benchmarkEvermind (scores the real published artifact)', () => {
