@@ -27,6 +27,7 @@ import {
   portfolios,
   roadmapItems,
   specs,
+  ideAgents,
 } from '../../infrastructure/database/schema';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import { notSystemTask } from '../task/taskScope';
@@ -488,6 +489,16 @@ export class ChatTicketService {
         linkType, createdBy: input.createdBy ?? userId ?? null,
       }).returning();
     }
+    // Handoff: if this task-tier ticket already has a cloud-agent owner, bring that agent
+    // into the chat it was just linked to (the "assign the ticket, then link it" ordering
+    // — the assignment-time trigger fires only for chats linked at assignment time).
+    if (input.kind === 'task' || input.kind === 'epic' || input.kind === 'gap') {
+      try {
+        const [t] = await this.db.select({ agentRef: tasks.assignedAgentRef }).from(tasks).where(eq(tasks.id, Number(input.ref))).limit(1);
+        if (t?.agentRef) await this.onTicketAgentAssigned(tenantId, input.kind, input.ref, t.agentRef, { chatId });
+      } catch { /* best-effort: a handoff failure must never break linking */ }
+    }
+
     const health = await this.ticketHealthBatch(tenantId, [{ kind: input.kind, ref: input.ref }]);
     const h = health.get(`${input.kind}:${input.ref}`)!;
     return { ...h, linkId: row!.id, linkType: row!.linkType as LinkType, createdBy: row!.createdBy, createdAt: row!.createdAt };
@@ -631,6 +642,70 @@ export class ChatTicketService {
     if (!chat) return { error: 'Chat not found' as const };
     const ok = await this.assignments.unassign(tenantId, assignmentId);
     return { removed: ok };
+  }
+
+  // ── assignment → chat handoff ─────────────────────────────────────────────
+
+  /** Display name for a cloud agent (falls back to the ref when unknown). */
+  private async agentDisplayName(tenantId: number, agentRef: string): Promise<string> {
+    const [row] = await this.db
+      .select({ name: ideAgents.name })
+      .from(ideAgents)
+      .where(and(eq(ideAgents.id, agentRef), eq(ideAgents.tenantId, tenantId)))
+      .limit(1);
+    return row?.name ?? agentRef;
+  }
+
+  /** Append a system-authored assistant line to a chat (used for dispatch notices). */
+  private async postSystemMessage(chatId: number, content: string, metadata?: Record<string, unknown>): Promise<void> {
+    const [maxRow] = await this.db
+      .select({ maxSeq: sql<number>`COALESCE(MAX(${brainChatMessages.seq}), 0)` })
+      .from(brainChatMessages).where(eq(brainChatMessages.chatId, chatId));
+    const seq = Number(maxRow?.maxSeq ?? 0) + 1;
+    await this.db.insert(brainChatMessages).values({
+      chatId, role: 'assistant', content, metadata: (metadata ?? null) as unknown as string, seq,
+    });
+  }
+
+  /**
+   * Assignment → chat handoff. When a cloud agent becomes a ticket's owner, bring it INTO
+   * every Brain chat the ticket is linked to (agent_assignments scope='chat') and, on the
+   * agent's FIRST join, post a short "starting work" line — so the conversation that
+   * spawned the ticket shows the agent picking it up. Tenant-scoped + system-driven (no
+   * chat-owner check: the ticket assignment already authorized the handoff). Idempotent —
+   * an agent already in the chat is neither re-invited nor re-announced. Pass opts.chatId
+   * to scope to a single chat (the link-time trigger, where a ticket gains a NEW chat);
+   * omit to fan out to all of the ticket's linked chats (the assignment-time trigger).
+   * This closes the reported gap: "after assigning developers to the tickets it never
+   * assigned the dev agents to the chat / they never started working."
+   */
+  async onTicketAgentAssigned(
+    tenantId: number, kind: string, ref: string, agentRef: string,
+    opts?: { chatId?: number; agentName?: string },
+  ): Promise<void> {
+    if (!agentRef || !ref || !isTicketKind(kind)) return;
+    const targets = opts?.chatId != null
+      ? [{ chatId: opts.chatId, isArchived: false, mergedIntoChatId: null as number | null }]
+      : (await this.listChatsForTicket(tenantId, kind, ref)).map((c) => ({
+          chatId: c.chatId, isArchived: c.isArchived, mergedIntoChatId: c.mergedIntoChatId,
+        }));
+    if (targets.length === 0) return;
+    let name: string | undefined = opts?.agentName;
+    for (const t of targets) {
+      if (t.isArchived || t.mergedIntoChatId != null) continue;
+      const existing = await this.assignments.list(tenantId, CHAT_SCOPE, String(t.chatId));
+      const already = Array.isArray(existing) && existing.some((e) => String((e as { agentRef?: unknown }).agentRef) === String(agentRef));
+      if (already) continue;
+      await this.assignments.assign(tenantId, {
+        agentKind: 'workforce', agentRef, scope: CHAT_SCOPE, scopeId: String(t.chatId), role: 'participant',
+      });
+      if (name === undefined) name = await this.agentDisplayName(tenantId, agentRef);
+      await this.postSystemMessage(
+        t.chatId,
+        `🤖 **${name}** has been assigned to ${kind} #${ref} and is starting work. Progress will appear on the ticket.`,
+        { agentDispatch: true, agentRef, ticketKind: kind, ticketRef: ref },
+      );
+    }
   }
 }
 

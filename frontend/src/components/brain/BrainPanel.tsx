@@ -303,12 +303,14 @@ export function BrainPanel({
   }, [chats]);
 
   // Tell the model which project is in context, so "create a task" / "list
-  // specs" without a named project default to it. Covers BOTH the page the user
-  // is viewing (viewingProjectId, e.g. the scoped Tasks board) and the IDE's
-  // pinned project — pinnedProjectId switches persona/chat-scoping but never told
-  // the model the numeric id. Resolve the name from the loaded projects list
-  // when available; the id is what the tools actually need.
-  const ctxProjectId = viewingProjectId ?? pinnedProjectId;
+  // specs" without a named project default to it. Chat-FIRST: a chat that belongs
+  // to a project (chats.activeChat.projectId) always tells the model about ITS OWN
+  // project, regardless of what page/pinned scope the sidebar is currently on — the
+  // same resolution evermindProjectId uses below. Falls back to the viewed page
+  // (viewingProjectId, e.g. the scoped Tasks board) then the IDE's pinned project
+  // for a not-yet-scoped chat. Resolve the name from the loaded projects list when
+  // available; the id is what the tools actually need.
+  const ctxProjectId = chats.activeChat?.projectId ?? viewingProjectId ?? pinnedProjectId;
   // Cross-surface "what's live / what needs me" — decorates each chat row with a
   // status dot (running / needs-answer) that stays live even when another chat is
   // focused. Scoped when a project is in context, tenant-wide on the Brain Storm page.

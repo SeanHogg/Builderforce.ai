@@ -101,6 +101,43 @@ export function isTicketRecordingTool(name: string): boolean {
 }
 
 /**
+ * Read-only PLATFORM (gateway `builtin_*`) tool suffixes whose identical-args repeat
+ * within a SINGLE run is safe to suppress (idempotent observation — the result is already
+ * in the transcript above). Each entry is the FULL trailing verb of a CATALOG tool marked
+ * `mutates: false`, and every one is DISJOINT from all mutating verbs — so a write can
+ * NEVER be misread as a read and dropped (e.g. we list `_list_agents`, never bare
+ * `_agents`, because the mutating `analytics.sync_agents` also ends `_agents`). This is the
+ * fix for the Brain "keeps re-checking the same thing" loop: the read-dedupe used to cover
+ * only the 3 LOCAL file tools, and any platform/MCP call (tasks.list, cloud_agents.list_mine,
+ * chats.list_tickets, …) both went un-deduped AND wiped the file cache — so repeated roster
+ * / ticket / task listings re-ran every turn until the iteration cap. Conservative by design:
+ * a missed suffix costs one harmless re-read; a wrong one would drop a mutation, so the list
+ * omits verbs shared with writes (`import`, `remember`).
+ */
+const READ_ONLY_PLATFORM_SUFFIXES: readonly string[] = [
+  '_list', '_get', '_search', '_recall', '_read', '_assignees', '_audit', '_trace',
+  '_tree', '_rollup', '_runs', '_graph', '_triggers', '_metrics', '_usage', '_query',
+  '_health', '_models', '_providers', '_proposals', '_ticket_lineage', '_get_messages',
+  '_run_targets', '_activity_calendar', '_check_key', '_browse_public', '_tool_audit',
+  '_task_file_changes', '_list_active', '_list_agents', '_list_all', '_list_for_task',
+  '_list_mine', '_list_recent', '_list_tickets', '_list_sessions', '_list_users',
+  '_list_templates', '_list_purchased', '_list_directories', '_list_error_groups',
+  '_list_pull_requests', '_get_session', '_get_stats', '_get_user', '_get_config',
+  '_get_access', '_get_error_group',
+];
+
+/**
+ * True for a read-only, idempotent PLATFORM tool (gateway `builtin_*`) whose exact-args
+ * repeat within one run can be suppressed. Only `builtin_`-prefixed names qualify (local
+ * file tools are handled by the caller's own set); classification is by a read-only verb
+ * SUFFIX that no mutating tool shares, so it never returns true for a tool that writes.
+ */
+export function isReadOnlyPlatformTool(name: string): boolean {
+  if (!name.startsWith('builtin_')) return false;
+  return READ_ONLY_PLATFORM_SUFFIXES.some((s) => name.endsWith(s));
+}
+
+/**
  * Task-tier statuses that mean "not started yet" — mirrors the board's not-started
  * lanes (TaskStatus BACKLOG | TODO | READY). A linked ticket in one of these that a
  * code-changing run actively worked is advanced to `in_progress` by the loop backstop,

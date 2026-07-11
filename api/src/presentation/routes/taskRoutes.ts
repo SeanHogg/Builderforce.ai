@@ -23,6 +23,7 @@ import { evaluateTaskAutoRun, type AutoRunReason } from '../../application/swiml
 import { enforceLaneRequirements } from '../../application/swimlane/laneRequirementGate';
 import { TicketAuditService } from '../../application/audit/ticketAuditService';
 import { SecurityTicketAccessService } from '../../application/security/SecurityTicketAccessService';
+import { ChatTicketService } from '../../application/brain/ChatTicketService';
 import { resolveTicketViewer } from '../../application/security/resolveTicketViewer';
 import { executionTokenGate } from './executionTokenGate';
 import { broadcastProjectChanged } from '../../infrastructure/relay/broadcastRoom';
@@ -715,9 +716,23 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // double-fires. The live-run idempotency guard makes a redundant fire a no-op.
     const statusChanged = !!prevStatus && body.status !== undefined && body.status !== prevStatus.status;
     const newAgentRef = typeof body.assignedAgentRef === 'string' ? body.assignedAgentRef.trim() : null;
-    if (!statusChanged && newAgentRef && prevStatus && newAgentRef !== (prevStatus.assignedAgentRef ?? null)) {
+    const agentReassigned = !!newAgentRef && !!prevStatus && newAgentRef !== (prevStatus.assignedAgentRef ?? null);
+    if (!statusChanged && agentReassigned) {
       const plain = task.toPlain();
       fireLaneAutoRun(c, { projectId: plain.projectId, taskId: id, status: plain.status });
+    }
+    // Reassigning to a NEW cloud agent also brings it INTO the ticket's linked chats
+    // (with a "starting work" notice) — independent of whether the lane/status changed —
+    // so the conversation that spawned the ticket shows the agent picking it up. DRY with
+    // the Brain MCP path (fireAgentAssignmentHandoff → ChatTicketService.onTicketAgentAssigned).
+    if (agentReassigned && newAgentRef) {
+      const plain = task.toPlain() as { taskType?: string };
+      const kind = plain.taskType === 'epic' || plain.taskType === 'gap' ? plain.taskType : 'task';
+      c.executionCtx.waitUntil(
+        new ChatTicketService(db, c.env as Env)
+          .onTicketAgentAssigned(c.get('tenantId'), kind, String(id), newAgentRef)
+          .catch(() => {}),
+      );
     }
 
     // On transition to Done, finalize the ticket → commit + PR (host relay or

@@ -37,7 +37,7 @@ import type {
 } from './streamChatCompletion';
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
 import { withProvenanceMetadata, type ProvenanceAccount } from './provenance';
-import { chatWorkLinkingDirective, isCodeChangeTool, isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance } from './chatWorkLinking';
+import { chatWorkLinkingDirective, isCodeChangeTool, isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, isReadOnlyPlatformTool } from './chatWorkLinking';
 import {
   formatEvermindMemoryBlock,
   countReconciledMemories,
@@ -71,11 +71,20 @@ const MAX_TOOL_ITERATIONS = 25;
 /** How much history we send to the model (message-count ceiling). */
 const HISTORY_WINDOW = 80;
 
-/** Read-only, idempotent file/search tools whose exact-repeat call within a run is
- *  suppressed (the result is already in context). Deliberately narrow — only tools
- *  that observe the repo and can't mutate it, so a stubbed repeat never hides a real
- *  change (a mutation clears the dedupe set anyway; see {@link runLoop}). */
+/** Read-only, idempotent LOCAL file/search tools whose exact-repeat call within a run is
+ *  suppressed (the result is already in context). Read-only PLATFORM (`builtin_*`) tools
+ *  are covered separately by {@link isReadOnlyPlatformTool} — together they are the
+ *  `isDedupableRead` set. Deliberately narrow — only tools that observe and can't mutate,
+ *  so a stubbed repeat never hides a real change (a mutation clears the dedupe set anyway;
+ *  see {@link runLoop}). */
 const DEDUP_READ_TOOLS = new Set(['read_file', 'search_code', 'list_files']);
+
+/** A tool whose identical-args repeat within a run is safe to suppress: a local file/search
+ *  tool OR a read-only platform tool. This is the fix for the "Brain re-checks the same
+ *  roster / tickets / tasks every turn until it burns the iteration cap" loop — previously
+ *  ONLY the 3 local file tools deduped, and any platform (MCP) call both went un-deduped
+ *  AND wiped the cache, so repeated `builtin_*_list`/`_assignees` calls re-ran every turn. */
+const isDedupableRead = (name: string): boolean => DEDUP_READ_TOOLS.has(name) || isReadOnlyPlatformTool(name);
 
 /** Fold a `x-builderforce-byo-unresolved` header value (comma-separated providers)
  *  into the run cell's accumulated set, updating the snapshot only when it grows so a
@@ -1236,10 +1245,10 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
             continue;
           }
         }
-        // Read-dedupe: suppress an EXACT repeat of a read-only file/search call
-        // (its result is already above), and invalidate the cache on any other
-        // (possibly mutating) tool so a read AFTER a change is never suppressed.
-        const isReadTool = DEDUP_READ_TOOLS.has(tc.name);
+        // Read-dedupe: suppress an EXACT repeat of a read-only file/search OR read-only
+        // platform call (its result is already above), and invalidate the cache on any
+        // other (possibly mutating) tool so a read AFTER a change is never suppressed.
+        const isReadTool = isDedupableRead(tc.name);
         const dedupeKey = `${tc.name}:${tc.args ?? ''}`;
         if (isReadTool) {
           if (readDedupe.has(dedupeKey)) {
