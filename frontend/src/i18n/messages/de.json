@@ -5917,6 +5917,26 @@
     "detailPromptLabel": "Aufgabe",
     "detailTextLabel": "Gelernt"
   },
+  "topbar": {
+    "cart": "Warenkorb",
+    "cartWithCount": "Warenkorb, {count, plural, one {# Artikel} other {# Artikel}}",
+    "openMenu": "Menü öffnen",
+    "marketplace": "Marktplatz",
+    "previewingAs": "Vorschau als {role} — nur Frontend, keine API-Aufrufe betroffen",
+    "previewBadge": "Vorschau: {role}",
+    "exitPreview": "Rollenvorschau beenden",
+    "previewSelectTitle": "Vorschau als Rolle (nur Frontend)",
+    "previewPlaceholder": "Rollenvorschau…",
+    "signOut": "Abmelden",
+    "brandAlt": "Builderforce",
+    "brandName": "Builderforce.ai",
+    "betaBadge": "BETA"
+  },
+  "managerStatus": {
+    "active": "Manager aktiv",
+    "lastManaged": "Verwaltet {when}",
+    "ariaLabel": "KI-Manager-Status"
+  },
   "manager": {
     "title": "KI-Manager",
     "subtitle": "Lassen Sie einen KI-Manager dieses Backlog gesund halten: Er bewertet den Geschäftswert jedes Tickets, ordnet die Arbeit, weist Verantwortliche zu und steuert Pull Requests, damit Ihr Team immer weiß, was als Nächstes am wichtigsten ist.",

@@ -5917,6 +5917,26 @@
     "detailPromptLabel": "任务",
     "detailTextLabel": "已学内容"
   },
+  "topbar": {
+    "cart": "购物车",
+    "cartWithCount": "购物车，{count, plural, other {# 件商品}}",
+    "openMenu": "打开菜单",
+    "marketplace": "市场",
+    "previewingAs": "以 {role} 身份预览 — 仅前端，不影响任何 API 调用",
+    "previewBadge": "预览：{role}",
+    "exitPreview": "退出角色预览",
+    "previewSelectTitle": "以角色身份预览（仅前端）",
+    "previewPlaceholder": "预览角色…",
+    "signOut": "退出登录",
+    "brandAlt": "Builderforce",
+    "brandName": "Builderforce.ai",
+    "betaBadge": "BETA"
+  },
+  "managerStatus": {
+    "active": "管理器活跃",
+    "lastManaged": "已管理 {when}",
+    "ariaLabel": "AI 管理器状态"
+  },
   "manager": {
     "title": "AI 经理",
     "subtitle": "让 AI 经理保持这个待办列表的健康——它会为每个工单评估业务价值、对工作排序、分配负责人并推进合并请求，让团队始终清楚接下来最重要的事。",

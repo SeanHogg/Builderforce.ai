@@ -22,7 +22,8 @@ import { invalidateProjectNames } from "./projectNames";
 import { ProjectsTreeProvider } from "./projectsTree";
 import { SessionsTreeProvider } from "./sessionsTree";
 import { InboxTreeProvider } from "./inboxTree";
-import { AttentionPoller, setLocalChatRuns, onLocalRunsChange } from "./attention";
+import { AttentionPoller, setLocalChatRuns, onLocalRunsChange, managerAttention } from "./attention";
+import { appUrl } from "./auth";
 import { MeetingsController, joinMeetingInBrowser, joinMeetingNative, openMeetingsWeb, type MeetingItem } from "./meetings";
 
 /** Pull a numeric Brain chat id out of a Sessions tree item or a raw id argument. */
@@ -80,9 +81,33 @@ export function activate(context: vscode.ExtensionContext): void {
   // session lights up in lockstep with the web app and the board. Repaints the
   // two trees only when the surfaced state actually changes.
   const attention = new AttentionPoller(context.secrets);
+
+  // Ambient "AI Manager" status bar item — the manager runs in the background
+  // (cron + manual) across a project or the whole tenant, so a human in the editor
+  // should see when it just acted without opening the web app. Rides the SAME
+  // attention poll (manager cadence travels on that signal). Hidden until a manager
+  // has actually run in this workspace. Clicking opens the web Manager tab.
+  const OPEN_MANAGER_CMD = "builderforce.openManager";
+  const managerStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 90);
+  managerStatus.command = OPEN_MANAGER_CMD;
+  const updateManagerStatus = () => {
+    const m = managerAttention();
+    if (!m.lastRunAt) { managerStatus.hide(); return; }
+    const agoMs = Date.now() - new Date(m.lastRunAt).getTime();
+    const ago = agoMs < 60_000 ? "just now"
+      : agoMs < 3_600_000 ? `${Math.floor(agoMs / 60_000)}m ago`
+      : agoMs < 86_400_000 ? `${Math.floor(agoMs / 3_600_000)}h ago` : `${Math.floor(agoMs / 86_400_000)}d ago`;
+    managerStatus.text = m.recentlyActive ? "$(compass) Manager active" : `$(compass) Manager · ${ago}`;
+    managerStatus.tooltip = `AI Manager — last managed ${ago}. Click to open the Manager.`;
+    managerStatus.show();
+  };
+
   context.subscriptions.push(
     attention,
-    attention.onDidChange(() => { tree.refresh(); projects.refresh(); }),
+    managerStatus,
+    vscode.commands.registerCommand(OPEN_MANAGER_CMD, () =>
+      vscode.env.openExternal(vscode.Uri.parse(`${appUrl()}/projects?tab=manager`))),
+    attention.onDidChange(() => { tree.refresh(); projects.refresh(); updateManagerStatus(); }),
     // The in-webview Brain loop reports its own running / awaiting chats (the server
     // can't see them) — repaint the Sessions tree so they light up in lockstep.
     onLocalRunsChange(() => tree.refresh()),
@@ -90,6 +115,7 @@ export function activate(context: vscode.ExtensionContext): void {
     onProjectChange(() => attention.refresh()),
   );
   attention.start();
+  updateManagerStatus();
 
   // The Brain panel is the ONE chat surface — keep the sidebars live as it writes:
   // a new/renamed conversation refreshes the Sessions list; a platform-catalog write

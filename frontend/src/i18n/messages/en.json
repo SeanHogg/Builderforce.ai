@@ -5917,6 +5917,26 @@
     "detailPromptLabel": "Task",
     "detailTextLabel": "Learned"
   },
+  "topbar": {
+    "cart": "Shopping cart",
+    "cartWithCount": "Shopping cart, {count, plural, one {# item} other {# items}}",
+    "openMenu": "Open menu",
+    "marketplace": "Marketplace",
+    "previewingAs": "Previewing as {role} — frontend-only, no API calls affected",
+    "previewBadge": "Preview: {role}",
+    "exitPreview": "Exit role preview",
+    "previewSelectTitle": "Preview as role (frontend-only)",
+    "previewPlaceholder": "Preview role…",
+    "signOut": "Sign out",
+    "brandAlt": "Builderforce",
+    "brandName": "Builderforce.ai",
+    "betaBadge": "BETA"
+  },
+  "managerStatus": {
+    "active": "Manager active",
+    "lastManaged": "Managed {when}",
+    "ariaLabel": "AI Manager status"
+  },
   "manager": {
     "title": "AI Manager",
     "subtitle": "Let an AI manager keep this backlog healthy — it scores each ticket’s business value, ranks the work, assigns owners, and shepherds pull requests so your team always knows what matters most next.",

@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { BfAttention, BfAttentionState, getAttention } from "./bfApi";
+import { BfAttention, BfAttentionManager, BfAttentionState, getAttention } from "./bfApi";
 import { getSelectedProject } from "./projectState";
 
 /**
@@ -14,7 +14,13 @@ import { getSelectedProject } from "./projectState";
  * ({@link attentionIcon} / {@link attentionDescriptionPrefix}) so both trees agree.
  */
 
-let current: BfAttention = { tasks: {}, chats: {}, counts: { running: 0, awaiting: 0 } };
+let current: BfAttention = { tasks: {}, chats: {}, counts: { running: 0, awaiting: 0 }, manager: { lastRunAt: null, recentlyActive: false } };
+
+/** The AI Manager's cadence from the latest poll (tenant-wide / selected project) —
+ *  drives the ambient "Manager active / last managed" status bar item. */
+export function managerAttention(): BfAttentionManager {
+  return current.manager ?? { lastRunAt: null, recentlyActive: false };
+}
 
 /**
  * Webview-local run overlay. The in-editor Brain's agent loop runs INSIDE the
@@ -123,6 +129,8 @@ export class AttentionPoller implements vscode.Disposable {
     const key = JSON.stringify({
       t: Object.entries(next.tasks).map(([k, v]) => `${k}:${v.state}`).sort(),
       c: Object.entries(next.chats).map(([k, v]) => `${k}:${v.state}`).sort(),
+      // Include manager cadence so the status bar repaints when a pass lands / ages out.
+      m: `${next.manager?.recentlyActive ? 1 : 0}:${next.manager?.lastRunAt ?? ""}`,
     });
     if (key !== this.lastKey) {
       this.lastKey = key;

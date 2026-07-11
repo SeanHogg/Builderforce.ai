@@ -673,15 +673,25 @@ export interface BfAttentionItem {
   executionId?: number;
   approvalId?: string;
 }
+/** AI Manager cadence carried on the same attention signal (tenant-wide, or the
+ *  selected project) so the editor can show an ambient "Manager active" status. */
+export interface BfAttentionManager {
+  /** ISO of the freshest manager pass in scope, or null if never managed. */
+  lastRunAt: string | null;
+  /** A pass landed in the last few minutes. */
+  recentlyActive: boolean;
+}
 export interface BfAttention {
   /** Keyed by task id. */
   tasks: Record<number, BfAttentionItem>;
   /** Keyed by Brain chat id (a chat inherits the state of its linked task). */
   chats: Record<number, BfAttentionItem & { taskId?: number }>;
   counts: { running: number; awaiting: number };
+  /** AI Manager cadence (present on every response). */
+  manager?: BfAttentionManager;
 }
 
-const EMPTY_ATTENTION: BfAttention = { tasks: {}, chats: {}, counts: { running: 0, awaiting: 0 } };
+const EMPTY_ATTENTION: BfAttention = { tasks: {}, chats: {}, counts: { running: 0, awaiting: 0 }, manager: { lastRunAt: null, recentlyActive: false } };
 
 /**
  * Fetch the tenant's live "what's running / what needs a human answer" map — the

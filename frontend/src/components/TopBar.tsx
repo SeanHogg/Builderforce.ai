@@ -102,14 +102,14 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
         <Link href={isAuthenticated ? '/dashboard' : '/'} className="brand" style={{ textDecoration: 'none' }}>
           <Image
             src="/agentHost.png"
-            alt="Builderforce"
+            alt={t('brandAlt')}
             width={28}
             height={28}
             className="brand-logo"
             style={{ filter: 'drop-shadow(0 0 8px var(--logo-glow))' }}
           />
-          <span className="brand-name">Builderforce.ai</span>
-          <span className="brand-badge">BETA</span>
+          <span className="brand-name">{t('brandName')}</span>
+          <span className="brand-badge">{t('betaBadge')}</span>
         </Link>
       </div>
       <div className="topbar-center">
@@ -163,6 +163,8 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
             )}
           </div>
         )}
+
+        {isAuthenticated && <ManagerStatusIndicator />}
 
         {isAuthenticated && <NotificationBell />}
 

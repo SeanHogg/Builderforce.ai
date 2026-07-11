@@ -27,7 +27,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 /** The web app URL, derived from the gateway base (api.builderforce.ai → builderforce.ai). */
-function appUrl(): string {
+export function appUrl(): string {
   try {
     const u = new URL(getBaseUrl());
     u.hostname = u.hostname.replace(/^api\./, "");
