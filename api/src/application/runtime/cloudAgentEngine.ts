@@ -53,6 +53,7 @@ import { normalizeActionType, learnedRoutingEnabled, type ActionType } from '../
 import { getRoutingTable, MIN_SAMPLES, type RoutingScope } from '../llm/routingTable';
 import type { ActionModelRankStat } from '../llm/LlmProxyService';
 import { resolveTenantModel } from '../llm/tenantModelService';
+import { reasoningParamsForModel } from '../llm/reasoningCapability';
 import { dispatchProjectEvermindLearnText } from '../llm/projectEvermind';
 import { buildProjectFactsBlock } from '../llm/projectFacts';
 import { scoreRunOutcome } from './scoreRunOutcome';
@@ -1058,6 +1059,12 @@ export async function handleContainerOp(
       ...(pick.model ? { model: pick.model, ...(pick.strict ? { modelStrict: true } : {}) } : {}),
       // Personality temperature — parity with the Worker/DO loop.
       ...(ctx.execParams.temperature != null ? { temperature: ctx.execParams.temperature } : {}),
+      // Personality reasoning levers (thinkLevel/reasoningLevel) → the CORRECT vendor
+      // param for THIS model family (Anthropic `thinking` / OpenAI `reasoning_effort`),
+      // or nothing for a model that doesn't support one (reasoningCapability drops it).
+      // Only on a STRICT pin: an unpinned model may cascade to a different vendor that
+      // would reject the param, so we attach it solely when the resolved model is fixed.
+      ...(pick.strict ? reasoningParamsForModel(pick.model, ctx.execParams) ?? {} : {}),
       useCase: 'task_execution',
     });
     // Shared post-`complete` processing (metering + telemetry) — identical to the
@@ -1210,9 +1217,11 @@ export interface CloudLoopOpts {
    *  later ticks resume from state. */
   policyGates?: PolicyGate[];
   /** Execution levers compiled from the agent's/personas' psychometric personality
-   *  (from {@link prepareCloudRun}). Today only `temperature` is honored in cloud —
-   *  thinkLevel/reasoning are stripped by the gateway request whitelist. Applied to
-   *  every LLM turn so personality changes how the agent samples, not just its prompt. */
+   *  (from {@link prepareCloudRun}). `temperature` applies on every turn; the reasoning
+   *  levers (thinkLevel/reasoningLevel) are mapped to the correct vendor param for the
+   *  pinned model by {@link reasoningParamsForModel} (Anthropic `thinking` / OpenAI
+   *  `reasoning_effort`) and attached on a strict pin. Applied to every LLM turn so
+   *  personality changes how the agent reasons and samples, not just its prompt. */
   execParams?: AgentExecParams;
 }
 export interface CloudLoopResult {
@@ -1637,9 +1646,16 @@ export async function runCloudToolLoop(
             tool_choice: 'auto',
             ...(activeModel ? { model: activeModel, ...(strictPin ? { modelStrict: true } : {}) } : {}),
             // Personality temperature (compiled from the agent's/personas' traits).
-            // The reliable cloud lever — thinkLevel/reasoning are stripped by the
-            // gateway request whitelist, so they are not passed here.
             ...(opts?.execParams?.temperature != null ? { temperature: opts.execParams.temperature } : {}),
+            // Personality reasoning levers (thinkLevel/reasoningLevel) → the correct
+            // vendor param via reasoningCapability (Anthropic `thinking` / OpenAI
+            // `reasoning_effort`), surviving to the vendor as extraBody. Attached ONLY
+            // on a strict pin so it never rides a cascade onto a vendor that would 400
+            // on an unknown key; unsupported models return nothing (no change). Note the
+            // direct-Anthropic vendor gates `thinking` OFF when tools are present (the
+            // coding loop always has tools), so in practice this lands `reasoning_effort`
+            // for a pinned OpenAI o-series/gpt-5 coder.
+            ...(strictPin ? reasoningParamsForModel(activeModel, opts?.execParams) ?? {} : {}),
             useCase: 'task_execution',
           },
           undefined,

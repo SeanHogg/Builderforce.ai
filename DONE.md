@@ -4,6 +4,18 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-11 — Teaching telemetry: surface training data instead of discarding it (Knowledge Map + finetune eval + engine metrics sweep)
+
+Follow-through on "shouldn't we be able to train the neocortex?" → "show the data on the knowledge map" → "are there other spots where teaching throws metrics away?". The `evermind` Studio DOES train the cortex (coordinator DO `EvermindLMTrainer.fit` → FedAvg merge → new version); it just hid the numbers. A two-repo sweep then found the same compute-then-discard pattern in several other teach/train paths. Shipped app-side:
+
+- **Knowledge Map training telemetry** — `ProjectEvermindCoordinatorDO.drain()` now records per-version `{ loss, seqs, moved, deltaNorm, merged }` (real trainer loss + honest base→merged L2 weight-movement, new `deltaNorm` on `evermindMerge.mergeCheckpointDiffs`), threaded through `getProjectEvermindContributions().training` → a loss sparkline + Loss/Weights-moved/Update-size readout on `EvermindBrainMap` (themed, responsive, localized `evermindBrain.train*` in all 5 catalogs). Merge test asserts `deltaNorm = √Σ(merged−base)²`.
+- **#8 IDE-native finetune eval was FAKE → real judge** — `POST /ide/training/:id/evaluate` (`ideRoutes.ts`) generated paid outputs then hard-coded `score=0.85`; now routes through a real AI judge (`application/finetune/evaluateFinetune.ts`, mirrors the worker judge; uses the `readProxyChoice` unwrap primitive).
+- **#1 (IDE-native half) finetune sub-scores now persisted + shown** — migration `0323_ide_training_eval_scores.sql` adds `eval_score / eval_code_correctness / eval_reasoning_quality / eval_hallucination_rate / eval_details / evaluated_at` to `ide_training_jobs`; the evaluate route persists the full breakdown; `AITrainingPanel` renders a durable eval card (localized `aiTraining.eval*Label` + `reEvaluate` in all 5 catalogs) instead of a one-shot log line.
+
+Engine-side fixes (#2 grad-norm → `AdaptResult`, #3 recall similarity scores → `recallSimilarScored`/`recallDetailed`, #4 distillation gate perplexity kept, #1-engine `runStackDiagnostic().metrics`) are **source-complete, built, and test-green in builderforce-memory (staged as v2026.7.11)** but NOT yet shipped to the app — blocked on an `npm publish` (registry unauthenticated in the working env). They remain tracked in ROADMAP until published + consumed.
+
+---
+
 ## ✅ RESOLVED 2026-07-11 — Superadmin-owned account never freezes: tenant-level token bypass in the ONE gate + Manager "autonomy paused" surfacing (api + frontend)
 
 Diagnosed from "the AI Manager isn't working / Evermind stopped learning ~11h ago while the Manager tab shows last run = yesterday." Root cause: the cron manager sweep (`runManagerSweep`) and the always-on autonomous executor (`runAutonomousExecutionSweep`) both gate on `getTenantTokenAvailability` and skip a token-capped tenant — but that resolver only granted the "superadmin ⇒ unlimited" bypass from `opts.actingUserId`, which the crons don't pass. So a **superadmin-OWNED account** (unlimited by definition) had its board frozen (no rank/assign/dispatch) and its Evermind stopped learning (no runs finish → nothing enqueued to the coordinator DO), while only manual "Run manager now" (which doesn't token-gate) still worked — the exact "works when I click, dead on autopilot" asymmetry.
