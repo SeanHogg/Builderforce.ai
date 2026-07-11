@@ -262,7 +262,7 @@ function toOpenAIResponse(raw: unknown, model: string): Record<string, unknown> 
  * Build the Anthropic Messages request (headers + body) shared by `call` (non-stream)
  * and `callStream`. `stream` flips the `stream: true` flag; everything else — the OAuth
  * vs api-key auth, the Claude-Code identity system block OAuth requires, prompt caching
- * on the stable prefix, thinking disabled, structured-output passthrough — is identical,
+ * on the stable prefix, extended-thinking gating, structured-output passthrough — is identical,
  * so the two surfaces can never drift on request shape.
  */
 function prepareAnthropicRequest(
@@ -302,16 +302,33 @@ function prepareAnthropicRequest(
   const tools = req.tools && req.tools.length
     ? req.tools.map((t, i) => (i === req.tools!.length - 1 ? { ...t, cache_control: CACHE } : t))
     : undefined;
+  // Extended thinking: honor a caller-supplied `thinking:{type:'enabled',budget_tokens}`
+  // (produced ONLY by `reasoningCapability` for direct-Anthropic `claude-*` models),
+  // but ONLY on a request with NO tools. The gateway round-trips assistant turns
+  // through the OpenAI shape, which can't carry Anthropic `thinking` blocks; in a
+  // multi-turn TOOL loop that stripping makes Anthropic 400 (a tool_use turn must be
+  // preceded by its thinking block once thinking is enabled). A tool-less single-shot
+  // call has no such round-trip, so thinking is safe there. Anthropic also requires
+  // `max_tokens > thinking.budget_tokens`, so the output cap is bumped to fit.
+  const requestedThinking = (params.extraBody ?? {}).thinking as { type?: string; budget_tokens?: number } | undefined;
+  const enableThinking = requestedThinking?.type === 'enabled' && !(tools && tools.length);
+  let thinking: Record<string, unknown> = { type: 'disabled' };
+  let effectiveMaxTokens = maxTokens;
+  if (enableThinking) {
+    // Clamp the budget so it stays strictly below the output cap (leaving room for the
+    // actual answer), then ensure max_tokens exceeds it.
+    const budget = Math.max(1024, Math.min(Number(requestedThinking!.budget_tokens ?? 8192) || 8192, MAX_OUTPUT_TOKENS - 1024));
+    effectiveMaxTokens = Math.min(Math.max(maxTokens, budget + 1024), MAX_OUTPUT_TOKENS);
+    thinking = { type: 'enabled', budget_tokens: budget };
+  }
   const body: Record<string, unknown> = {
     model: params.model,
-    max_tokens: maxTokens,
+    max_tokens: effectiveMaxTokens,
     messages: req.messages,
     ...(system ? { system } : {}),
     ...(tools ? { tools } : {}),
     ...(req.tool_choice ? { tool_choice: req.tool_choice } : {}),
-    // Extended thinking OFF: the gateway round-trips assistant turns through the OpenAI
-    // shape, which can't carry `thinking` blocks; both catalog models accept disabled.
-    thinking: { type: 'disabled' },
+    thinking,
     ...(stream ? { stream: true } : {}),
   };
   const rf = (params.extraBody ?? {}).response_format as { type?: string; json_schema?: { schema?: unknown } } | undefined;

@@ -2615,6 +2615,15 @@ const STANDARD_BODY_FIELDS: ReadonlySet<string> = new Set([
   '_builderforce', // gateway-internal passthrough envelope (per-call vendorTimeoutMs override); consumed in dispatch(), never sent upstream
   // OpenAI-compatible pass-throughs (`tools`, `tool_choice`, `response_format`)
   // travel via the `extraBody` catch-all and reach the vendor verbatim.
+  //
+  // Reasoning levers (`reasoning_effort` for OpenAI o-series/gpt-5, `thinking` for
+  // direct-Anthropic `claude-*`) are DELIBERATELY not listed here: they are
+  // non-standard, so `stripStandardFields` routes them through `extraBody` to the
+  // vendor untouched. That is safe because their ONLY producer is
+  // `reasoningCapability.reasoningParamsForModel`, which emits them exclusively for
+  // model families known to accept them — the OpenAI-compatible factory spreads
+  // `extraBody` into the body (so `reasoning_effort` lands), and `vendors/anthropic.ts`
+  // consumes `extraBody.thinking`. A generic coder never receives either key.
 ]);
 
 /** Pick out non-standard fields from the request body so they can be passed

@@ -288,7 +288,7 @@ export function BrainPanel({
     const composer = buildComposerDirectives({ effort, thinking, web: webBrowsing });
     if (composer) parts.push(composer);
     return parts.length > 0 ? parts.join('\n') : undefined;
-  }, [ctxProjectId, projects, extraSystem, autoApprove, effort, thinking, webBrowsing]);
+  }, [ctxProjectId, projects, extraSystem, autoApprove, effort, thinking, webBrowsing, personalityBlock]);
 
   // Project-Evermind memory hooks: recall the active chat's project learnings
   // before answering (grounding the reply + surfacing recall/learn/reconcile
@@ -1140,4 +1140,11 @@ function ConversationHeader({ chat, projects, projectName, onAssign, onNewProjec
         ) : (
           <>
             <span style={{ fontSize: 12, color: 'var(--muted)' }}>{projectName(chat.projectId)}</span>
-            <Link href={`/workflows?project=${chat.projectId}`} style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px
+            <Link href={`/workflows?project=${chat.projectId}`} style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)' }}>{tBrain('workflowsArrow')}</Link>
+            <Link href={`/ide/${chat.projectId}?chat=${chat.id}`} style={{ fontSize: 12, fontWeight: 600, color: 'var(--coral-bright)', textDecoration: 'none', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--coral-bright)' }}>{tBrain('openInIde')}</Link>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
