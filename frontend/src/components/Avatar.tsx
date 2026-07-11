@@ -22,7 +22,7 @@ export function avatarColor(name: string | null | undefined): string {
  * Extract initials from a name (up to 2 characters).
  * "John Doe" → "JD", "Alice" → "AL", "" → "?"
  */
-export function avatarInitials(name: string): string {
+export function avatarInitials(name: string | null | undefined): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return '?';
   if (parts.length === 1) {
