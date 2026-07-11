@@ -54,6 +54,13 @@ function planString(plan: TenantPlan): 'free' | 'pro' | 'teams' {
   return 'free';
 }
 
+/** Map an effective-plan string (as the gateway carries it) to the TenantPlan enum. */
+function toTenantPlanEnum(ep: 'free' | 'pro' | 'teams'): TenantPlan {
+  if (ep === 'teams') return TenantPlan.TEAMS;
+  if (ep === 'pro') return TenantPlan.PRO;
+  return TenantPlan.FREE;
+}
+
 /**
  * Resolve a tenant's live token availability. THE single entry every cap path calls
  * (cron sweeps, interactive Run-now, and the LLM gateway's `enforceTokenCaps`), so
@@ -78,27 +85,39 @@ function planString(plan: TenantPlan): 'free' | 'pro' | 'teams' {
 export async function getTenantTokenAvailability(
   db: Db,
   tenantId: number,
-  opts?: { actingUserId?: string | null; actingIsSuperadmin?: boolean },
+  opts?: {
+    actingUserId?: string | null;
+    actingIsSuperadmin?: boolean;
+    /** A caller that ALREADY resolved the tenant's plan snapshot (the gateway holds
+     *  it on `access`) passes it here so this skips the tenant-row read — no redundant
+     *  query on the hot path. The DECISION still lives here; only the input is reused. */
+    planSnapshot?: { effectivePlan: 'free' | 'pro' | 'teams'; tokenDailyLimitOverride: number | null };
+  },
   env?: Env,
 ): Promise<TenantTokenAvailability> {
-  const [row] = await db
-    .select({
-      plan: tenants.plan,
-      billingStatus: tenants.billingStatus,
-      trialEndsAt: tenants.trialEndsAt,
-      tokenDailyLimitOverride: tenants.tokenDailyLimitOverride,
-    })
-    .from(tenants)
-    .where(eq(tenants.id, tenantId))
-    .limit(1);
-
-  const plan = (row?.plan ?? 'free') as keyof typeof TenantPlan | string;
-  const billingStatus = (row?.billingStatus ?? 'none') as string;
-  const effectivePlanEnum = resolveEffectivePlan({
-    plan: (plan as TenantPlan) ?? TenantPlan.FREE,
-    billingStatus: billingStatus as TenantBillingStatus,
-    trialEndsAt: row?.trialEndsAt ?? null,
-  });
+  let effectivePlanEnum: TenantPlan;
+  let tokenDailyLimitOverride: number | null;
+  if (opts?.planSnapshot) {
+    effectivePlanEnum = toTenantPlanEnum(opts.planSnapshot.effectivePlan);
+    tokenDailyLimitOverride = opts.planSnapshot.tokenDailyLimitOverride;
+  } else {
+    const [row] = await db
+      .select({
+        plan: tenants.plan,
+        billingStatus: tenants.billingStatus,
+        trialEndsAt: tenants.trialEndsAt,
+        tokenDailyLimitOverride: tenants.tokenDailyLimitOverride,
+      })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+    effectivePlanEnum = resolveEffectivePlan({
+      plan: (row?.plan as TenantPlan) ?? TenantPlan.FREE,
+      billingStatus: (row?.billingStatus ?? 'none') as TenantBillingStatus,
+      trialEndsAt: row?.trialEndsAt ?? null,
+    });
+    tokenDailyLimitOverride = row?.tokenDailyLimitOverride ?? null;
+  }
   const effectivePlan = planString(effectivePlanEnum);
 
   // Resolve the plan/override caps WITHOUT any superadmin lift first. A tenant that is
@@ -106,7 +125,7 @@ export async function getTenantTokenAvailability(
   // lookup and no usage scan.
   const planLimits = resolveTokenLimits({
     effectivePlan: effectivePlanEnum,
-    tokenDailyLimitOverride: row?.tokenDailyLimitOverride ?? null,
+    tokenDailyLimitOverride,
     isSuperadmin: false,
   });
   if (planLimits.dailyLimit <= 0 && planLimits.monthlyLimit <= 0) {
@@ -141,7 +160,7 @@ export async function getTenantTokenAvailability(
   if (isSuperadmin) {
     const superLimits = resolveTokenLimits({
       effectivePlan: effectivePlanEnum,
-      tokenDailyLimitOverride: row?.tokenDailyLimitOverride ?? null,
+      tokenDailyLimitOverride,
       isSuperadmin: true,
     });
     return { hasTokens: true, reason: null, dailyLimit: superLimits.dailyLimit, monthlyLimit: superLimits.monthlyLimit, usageToday: 0, usageMonth: 0, effectivePlan };
@@ -215,9 +234,10 @@ export interface TokenGateBlock {
   effectivePlan: 'free' | 'pro' | 'teams';
 }
 
-/** Plan-tailored upgrade hint appended to a cap-exceeded message (mirrors the
- *  gateway's copy so the daily/monthly caps read the same everywhere). */
-function tokenGateUpgradeHint(effectivePlan: 'free' | 'pro' | 'teams', window: 'daily' | 'monthly'): string {
+/** Plan-tailored upgrade hint appended to a cap-exceeded message. THE single source
+ *  of this copy — the LLM gateway's `enforceTokenCaps` imports it too, so every
+ *  daily/monthly cap message reads identically. */
+export function tokenGateUpgradeHint(effectivePlan: 'free' | 'pro' | 'teams', window: 'daily' | 'monthly'): string {
   if (effectivePlan === 'free') {
     return window === 'monthly'
       ? ' Upgrade to Pro at builderforce.ai/pricing for a higher monthly allowance.'

@@ -10,7 +10,7 @@ import { ProjectPagePanel, projectPageChoices } from "./projectPagePanel";
 import { registerChatParticipant } from "./chatParticipant";
 import { registerChatSessions } from "./chatSessions";
 import { scanCodebase } from "./codebaseScan";
-import { getModels, getWebBaseUrl, SECRET_KEY } from "./gateway";
+import { getModels, getWebBaseUrl, SECRET_KEY, clearPersonalityBlockCache } from "./gateway";
 import { InsightsController } from "./insights";
 import { EvermindViewProvider } from "./evermindView";
 import { DiagnosticsController } from "./diagnostics";
@@ -899,6 +899,7 @@ async function signOut(
   await auth.removeSession();
   bfApi.clearJwt();
   clearPlatformToolsCache();
+  clearPersonalityBlockCache();
   bfApi.setSelectedWorkspace(undefined);
   await context.globalState.update(SELECTED_TENANT_KEY, undefined);
   setGroundingSummary(undefined);

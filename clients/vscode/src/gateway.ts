@@ -249,8 +249,15 @@ async function postAffectiveBlock(
       body: JSON.stringify(body),
     });
     if (!res.ok) return "";
-    const json = (await res.json()) as { block?: string };
-    return typeof json.block === "string" ? json.block : "";
+    // The endpoint returns TWO directive layers: `block` (dynamic affect from the
+    // task appraisal) and `personaBlock` (STATIC personality tone). Both are
+    // system-prompt directives — join the non-empty ones so callers get affect
+    // AND personality (the personality-only fetch sends empty text, so `block` is
+    // near-empty and `personaBlock` carries the signal).
+    const json = (await res.json()) as { block?: string; personaBlock?: string };
+    return [json.block, json.personaBlock]
+      .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+      .join("\n\n");
   } catch {
     return "";
   }

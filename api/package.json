@@ -1,6 +1,6 @@
 {
   "name": "builderforce-api",
-  "version": "2026.7.68",
+  "version": "2026.7.69",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
@@ -20,7 +20,7 @@
   "dependencies": {
     "@cloudflare/containers": "^0.3.7",
     "@neondatabase/serverless": "^0.10.4",
-    "@seanhogg/builderforce-memory": "^2026.6.39",
+    "@seanhogg/builderforce-memory": "^2026.7.11",
     "@seanhogg/builderforce-quality": "^2026.7.5",
     "@seanhogg/hired-video-sdk": "^0.3.0",
     "@seanhogg/builderforce-memory-engine": "^2026.7.11",

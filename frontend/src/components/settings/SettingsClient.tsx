@@ -32,6 +32,7 @@ import PersonalitySummary from '@/components/PersonalitySummary';
 import ForHireCard from '@/components/account/ForHireCard';
 import AccountSecurityPanel from '@/components/security/AccountSecurityPanel';
 import type { PsychometricProfile } from '@/lib/psychometric';
+import { clearPersonalityBlockCache } from '@/lib/usePersonalityBlock';
 
 /**
  * Self-gating nav link to the API Keys page. Per product rule we don't hide the
@@ -143,6 +144,9 @@ export default function SettingsClient() {
     try {
       const saved = await updateMyPersonality(token, personality ?? null);
       setPersonality(saved ?? undefined);
+      // Invalidate the session-cached chat personality block so the new tone is
+      // picked up on the next Brain message instead of only after a reload.
+      clearPersonalityBlockCache();
       setPersonalityNotice(t('personalitySaved'));
     } catch (e) {
       setPersonalityNotice(e instanceof Error ? e.message : t('personalitySaveFailed'));
