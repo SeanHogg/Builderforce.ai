@@ -1,44 +1,174 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #160
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# PRD: Knowledge Extractor — Delta Detection Engine
 
-## 1. Problem & Goal
+## Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+Evermind currently executes tasks without capturing what it learns in the process. Insights, corrected assumptions, and discovered patterns dissolve after each run, forcing the system to relearn identical lessons across future executions. This creates compounding inefficiency and prevents genuine capability growth over time.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+**Goal:** Build a post-execution Knowledge Extractor that systematically detects, structures, and persists the delta between what Evermind knew before a task ran and what it knows after — across three complementary detection modes — so that extracted learnings can be stored, retrieved, and applied in future reasoning cycles.
 
-## 2. Target Users / ICP Roles
+---
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+## Target Users / ICP Roles
 
-## 3. Scope
+| Role | Interaction |
+|---|---|
+| **Evermind Runtime** | Primary consumer; triggers extraction automatically after each agent execution cycle |
+| **Memory System / Knowledge Store** | Downstream recipient of structured learning records |
+| **Agent Orchestrator** | Initiates extraction pipeline, supplies run context and metadata |
+| **ML / AI Engineers** | Inspect extraction quality, tune confidence thresholds, audit provenance trails |
+| **Product & Research Teams** | Monitor aggregate learning velocity and knowledge coverage over time |
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+---
 
-## 4. Functional Requirements
+## Scope
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+The Knowledge Extractor operates as a post-execution module. It receives execution context (pre-state snapshot, post-state snapshot, execution trace, agent self-report) and produces a structured set of learning records with full provenance. It does **not** apply or act on learnings — that responsibility belongs to the Memory Retrieval and Reasoning layers.
 
-## 5. Acceptance Criteria
+---
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+## Functional Requirements
 
-## 6. Out of Scope
+### FR-1: Extraction Pipeline Trigger
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+- **FR-1.1** The extractor MUST be invoked automatically at the end of every agent execution cycle, receiving a `RunContext` payload containing: `run_id`, `task_id`, `agent_id`, `timestamp_start`, `timestamp_end`, `trigger_event`, pre-execution knowledge snapshot, post-execution knowledge snapshot, and full execution trace.
+- **FR-1.2** The extractor MUST support on-demand invocation for replay and back-testing against historical runs.
+- **FR-1.3** The extractor MUST complete within a configurable timeout (default: 30 seconds) and emit a partial result with a `TIMEOUT` flag if the deadline is breached.
+
+---
+
+### FR-2: Explicit Extraction Mode
+
+- **FR-2.1** During execution, agents MAY emit structured `LearningSignal` events via a defined SDK interface. Each signal includes: `signal_type: EXPLICIT`, `content`, `rationale`, and an optional `confidence_hint` (0.0–1.0).
+- **FR-2.2** The extractor MUST collect all `LearningSignal` events from the execution trace and promote each to a candidate learning record.
+- **FR-2.3** Explicit signals MUST receive a baseline confidence boost (+0.15) relative to other modes, capped at 1.0, reflecting agent self-awareness.
+- **FR-2.4** The extractor MUST validate that explicit signals are non-empty, semantically coherent (via lightweight embedding check), and not duplicates of existing knowledge store entries before promotion.
+
+---
+
+### FR-3: Implicit Extraction Mode (Diff-Based)
+
+- **FR-3.1** The extractor MUST perform a structured diff between the pre- and post-execution knowledge snapshots. Snapshots are serialized representations of the agent's active knowledge graph / belief state.
+- **FR-3.2** The diff algorithm MUST identify three change types: `ADDITION` (new nodes/edges/beliefs), `MODIFICATION` (updated attribute values or relationship weights), and `RETRACTION` (beliefs explicitly abandoned or deprecated).
+- **FR-3.3** Each detected delta MUST be converted into a candidate learning record with `signal_type: IMPLICIT`.
+- **FR-3.4** The extractor MUST suppress noise by filtering out deltas below a configurable minimum significance threshold (default: change magnitude > 0.05 on a normalized 0–1 scale).
+- **FR-3.5** For `MODIFICATION` and `RETRACTION` types, the extractor MUST preserve the prior value in a `previous_value` field within the learning record for auditability.
+
+---
+
+### FR-4: Behavioral Extraction Mode (Action Path Inference)
+
+- **FR-4.1** The extractor MUST analyze the execution trace to detect divergence between the agent's anticipated action path (recorded at task-start) and the actual action path taken.
+- **FR-4.2** Divergence points MUST be classified into: `STRATEGY_CHANGE` (different tool or approach selected mid-task), `ERROR_RECOVERY` (deviation triggered by a failure event), and `OPTIMIZATION` (shortened or more efficient path to same outcome).
+- **FR-4.3** Each classified divergence MUST produce a candidate learning record with `signal_type: BEHAVIORAL` and an inferred learning description generated by a structured template engine (not a free-form LLM call, to ensure determinism).
+- **FR-4.4** Behavioral records MUST carry a lower baseline confidence floor (minimum 0.3, maximum 0.75) reflecting the inferential nature of this mode.
+- **FR-4.5** If no anticipated action path was recorded at task-start, the extractor MUST skip behavioral extraction for that run and log a `MISSING_BASELINE` warning.
+
+---
+
+### FR-5: Provenance Schema
+
+Every extracted learning record, regardless of mode, MUST conform to the following schema:
+
+```json
+{
+  "learning_id": "uuid-v4",
+  "run_id": "string",
+  "task_id": "string",
+  "agent_id": "string",
+  "trigger_event": "string",
+  "signal_type": "EXPLICIT | IMPLICIT | BEHAVIORAL",
+  "change_type": "ADDITION | MODIFICATION | RETRACTION | STRATEGY_CHANGE | ERROR_RECOVERY | OPTIMIZATION",
+  "content": "string",
+  "previous_value": "string | null",
+  "rationale": "string | null",
+  "confidence_score": "float [0.0–1.0]",
+  "extraction_timestamp": "ISO-8601",
+  "extractor_version": "semver string",
+  "status": "CANDIDATE | ACCEPTED | REJECTED | DUPLICATE"
+}
+```
+
+- **FR-5.1** `learning_id` MUST be globally unique and deterministically derived from `run_id` + `signal_type` + content hash to enable idempotent re-extraction.
+- **FR-5.2** `confidence_score` MUST be computed by the Confidence Scoring Engine (FR-6) and MUST NOT be passed through unmodified from agent self-reports.
+- **FR-5.3** `extractor_version` MUST be stamped on every record to enable schema migrations and extraction quality comparisons across versions.
+
+---
+
+### FR-6: Confidence Scoring Engine
+
+- **FR-6.1** The engine MUST compute a final `confidence_score` for each candidate record using a weighted model with the following inputs:
+
+| Input Signal | Weight |
+|---|---|
+| Signal type (EXPLICIT > IMPLICIT > BEHAVIORAL) | 0.30 |
+| Agent-provided `confidence_hint` (if present) | 0.20 |
+| Delta magnitude / divergence severity | 0.25 |
+| Corroboration across multiple modes (same learning detected by 2+ modes) | 0.25 |
+
+- **FR-6.2** Records with `confidence_score < 0.40` MUST be assigned `status: REJECTED` and stored in a quarantine log (not promoted to the live knowledge store) but retained for analysis.
+- **FR-6.3** The confidence thresholds (accept floor, reject ceiling) MUST be configurable per agent type and task domain without code changes.
+
+---
+
+### FR-7: Deduplication and Conflict Resolution
+
+- **FR-7.1** Before promoting a candidate record, the extractor MUST query the knowledge store for semantically similar existing entries (cosine similarity threshold ≥ 0.92 on embeddings).
+- **FR-7.2** If a near-duplicate exists and the new record has higher confidence, the extractor MUST promote the new record and mark the prior as superseded.
+- **FR-7.3** If a new record conflicts with an existing high-confidence record (contradictory content, both confidence > 0.70), the extractor MUST flag both with `status: CONFLICT` and route them to a human-review queue rather than auto-resolving.
+
+---
+
+### FR-8: Output and Persistence
+
+- **FR-8.1** Accepted records MUST be written to the Knowledge Store via the Memory System's ingestion API within the same synchronous extraction pipeline call.
+- **FR-8.2** The extractor MUST emit an `ExtractionReport` event to the event bus upon completion, containing: `run_id`, counts by mode and status, aggregate confidence distribution, and any warnings (`TIMEOUT`, `MISSING_BASELINE`, `CONFLICT`).
+- **FR-8.3** All candidate records (ACCEPTED, REJECTED, DUPLICATE, CONFLICT) MUST be persisted to an immutable extraction audit log, append-only, retained for a minimum of 90 days.
+
+---
+
+## Acceptance Criteria
+
+### AC-1: End-to-End Extraction
+- Given a completed agent run with all three modes active, when the extractor is invoked, then it produces at least one candidate learning record per active mode (if detectable deltas exist), each with a valid provenance schema and a computed confidence score.
+
+### AC-2: Explicit Mode Fidelity
+- Given an agent that emits 5 `LearningSignal` events during execution, when extraction completes, then all 5 signals appear as candidate records with `signal_type: EXPLICIT` and confidence scores reflecting the +0.15 boost logic.
+
+### AC-3: Implicit Mode Diff Accuracy
+- Given a synthetic test where 10 known belief-state changes are injected between pre- and post-snapshots, when extraction completes, then ≥ 90% of injected changes are detected and correctly classified as ADDITION, MODIFICATION, or RETRACTION.
+
+### AC-4: Behavioral Mode Divergence Detection
+- Given an execution trace with 3 pre-seeded divergence points (one per classification type), when extraction completes, then all 3 are detected, correctly classified, and carry confidence scores within the [0.30, 0.75] permitted range.
+
+### AC-5: Provenance Completeness
+- Given any extracted learning record, all required provenance fields are populated; `learning_id` is reproducible (re-running extraction on the same run produces identical IDs); `extractor_version` matches the deployed semver.
+
+### AC-6: Confidence Gating
+- Given a candidate record with a computed confidence of 0.38, the record is assigned `status: REJECTED`, written to the quarantine log, and NOT written to the live knowledge store.
+
+### AC-7: Deduplication
+- Given an incoming record semantically identical (≥ 0.92 cosine similarity) to an existing knowledge store entry with lower confidence, the new record supersedes the old, and the old entry is marked superseded rather than deleted.
+
+### AC-8: Conflict Routing
+- Given two contradictory records both with confidence > 0.70, neither is auto-accepted; both are flagged `CONFLICT` and appear in the human-review queue within the same extraction cycle.
+
+### AC-9: Performance
+- The full extraction pipeline (all three modes, deduplication, persistence) completes in ≤ 30 seconds for runs with execution traces up to 10,000 events.
+
+### AC-10: Idempotency
+- Re-running the extractor on the same `run_id` produces identical `learning_id` values and does not create duplicate entries in the knowledge store or audit log.
+
+---
+
+## Out of Scope
+
+- **Learning Application / Retrieval:** How stored learnings are retrieved and injected into future reasoning cycles is owned by the Memory Retrieval Layer.
+- **Knowledge Graph Construction:** The extractor writes records to the store; schema evolution, graph topology, and indexing strategies are owned by the Knowledge Store team.
+- **Real-Time / Mid-Execution Extraction:** All extraction is post-execution. In-flight learning signals are buffered in the trace and processed only after task completion.
+- **LLM-Generated Rationales:** Behavioral mode uses deterministic templates only. Free-form LLM summarization of learnings is a future enhancement.
+- **Cross-Agent Learning Propagation:** Sharing extracted learnings between distinct agent identities is a separate capability.
+- **User-Facing Learning Dashboards:** Visualization and reporting surfaces are out of scope for this engine; the `ExtractionReport` event is the boundary.
+- **Active Forgetting / TTL Policies:** Expiration and deprecation of stored learnings are managed by the Knowledge Lifecycle Manager, not this extractor.
