@@ -1,0 +1,27 @@
+{
+  "id": "knowledge-baseline",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "storeDir": {
+        "type": "string",
+        "description": "Directory used by the local filesystem storage adapter for baselines and snapshots."
+      },
+      "storageBackend": {
+        "type": "string",
+        "enum": ["local", "objectstore"],
+        "description": "Which storage adapter to use. 'local' = filesystem; 'objectstore' = S3-compatible (in-process reference implementation)."
+      },
+      "author": {
+        "type": "string",
+        "description": "Default author/system identity recorded in snapshot manifests."
+      },
+      "signingAlgorithm": {
+        "type": "string",
+        "enum": ["ed25519", "rsa-4096"],
+        "description": "Asymmetric algorithm used to sign a sealed baseline's canonical content hash."
+      }
+    }
+  }
+}
