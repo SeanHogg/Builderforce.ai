@@ -6,7 +6,7 @@ import { useMemo, type MouseEvent } from 'react';
  * Generate a deterministic color from a name string.
  * Used to give each team member/agent a consistent avatar background.
  */
-export function avatarColor(name: string): string {
+export function avatarColor(name: string | null | undefined): string {
   const colors = [
     '#f4726e', '#fb923c', '#fbbf24', '#a3e635', '#34d399',
     '#22d3ee', '#60a5fa', '#818cf8', '#a78bfa', '#e879f9',
