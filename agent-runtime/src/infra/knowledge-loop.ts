@@ -339,7 +339,7 @@ export class KnowledgeLoopService {
     // learning): adapt the project model on this run's activity and push the diff
     // to the coordinator. Fire-and-forget + fully guarded — a no-op unless the
     // runtime is configured to reach a seeded, connected project model.
-    void this.contributeToProjectEvermind((entry ?? summary ?? "").trim(), acc?.prompt);
+    void this.contributeToProjectEvermind((entry ?? summary ?? "").trim(), acc?.prompt, created.length + edited.length > 0);
 
     await this.syncIfConfigured();
   }
@@ -355,12 +355,15 @@ export class KnowledgeLoopService {
   }
 
   /** Adapt-and-push a project-Evermind contribution (best-effort, non-fatal). The
-   *  `prompt` (the run's ticket) lets the coordinator's teacher distil (task → answer). */
-  private async contributeToProjectEvermind(text: string, prompt?: string): Promise<void> {
+   *  `prompt` (the run's ticket) lets the coordinator's teacher distil (task → answer).
+   *  `producedChanges` weights the contribution by run quality: a run that actually
+   *  created/edited files teaches harder than a no-op one (0.7 vs 0.4), replacing the
+   *  old raw-text-length weight. */
+  private async contributeToProjectEvermind(text: string, prompt?: string, producedChanges = false): Promise<void> {
     const cfg = this.projectEvermindConfig();
     if (!cfg || text.length < 20) return;
     try {
-      const res = await contributeProjectEvermindFromText(cfg, text, prompt);
+      const res = await contributeProjectEvermindFromText(cfg, text, prompt, producedChanges ? 0.7 : 0.4);
       if (res.ok) logDebug(`[project-evermind] contributed a delta (base v${res.version})`);
       else logDebug(`[project-evermind] skipped: ${res.reason}`);
     } catch (err) {

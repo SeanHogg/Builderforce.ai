@@ -41,6 +41,9 @@ export interface EvermindValidateResult {
   matches: EvermindValidateMatch[];
   /** Id of the memory most likely used to respond, or null if none matched. */
   primaryId: number | null;
+  /** Which ranker produced these matches: the model's own SSM embedding (semantic)
+   *  or a lexical fallback when the model couldn't be reached. */
+  method: 'embedding' | 'lexical';
 }
 
 /** The head summary + live learning activity for a project's Evermind. */
@@ -158,6 +161,8 @@ export interface EvermindConsoleLabels {
   validatePrimaryBadge: string;
   validateScore: (pct: number) => string;
   validateClear: string;
+  /** Honest label for how the ranking was produced (semantic embedding vs lexical). */
+  validateMethod: (method: 'embedding' | 'lexical') => string;
   // Inspection
   inspectTitle: string;
   inspectEmpty: string;
@@ -243,6 +248,7 @@ export const DEFAULT_EVERMIND_LABELS: EvermindConsoleLabels = {
   validatePrimaryBadge: 'Most likely used',
   validateScore: (pct) => `${pct}% match`,
   validateClear: 'Clear',
+  validateMethod: (m) => (m === 'embedding' ? 'Semantic recall' : 'Lexical recall (fallback)'),
   inspectTitle: 'Recently learned',
   inspectEmpty: 'Nothing learned yet. Runs and teaching will appear here.',
   kindText: 'Run',

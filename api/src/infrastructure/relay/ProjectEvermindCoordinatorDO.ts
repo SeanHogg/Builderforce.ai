@@ -21,7 +21,7 @@
  * taken against a STALE base is dropped (the agent recomputes against the new
  * base on its next run) rather than corrupting the merge.
  */
-import { EvermindModelPackage, EvermindLMTrainer, BPETokenizer, diffCheckpoints } from '@seanhogg/builderforce-memory-engine';
+import { EvermindModelPackage, EvermindLMTrainer, BPETokenizer, diffCheckpoints, type EvermindLM } from '@seanhogg/builderforce-memory-engine';
 import { buildDatabase, type Db } from '../database/connection';
 import {
   getProjectEvermindHead,
@@ -31,6 +31,7 @@ import {
 } from '../../application/llm/projectEvermind';
 import { mergeCheckpointDiffs } from '../../application/llm/evermindMerge';
 import { buildEvermindTrainingText, resolveEvermindTeacherModel } from '../../application/llm/evermindTeacher';
+import { embedTokens, cosineVec, packVec, unpackVec, EMBED_MAX_TOKENS } from '../../application/llm/evermindEmbed';
 import type { Env } from '../../env';
 
 /** Debounce window — a burst of learns within this window folds into one merge. */
@@ -51,13 +52,16 @@ const MAX_FITS_PER_ALARM = 8;
 /** How many recent merged contributions to retain for inspection (ring buffer). The
  *  raw run text is otherwise consumed + dropped at merge time, so this is the ONLY
  *  window into "what the model recently learned" the Evermind console can show. */
-const RECENT_MAX = 30;
+const RECENT_MAX = 24;
 /** Chars of the task prompt kept per recent entry — enough for the console's
  *  "view detail" to show the whole task, not a truncated teaser. */
-const RECENT_PROMPT_CHARS = 2000;
-/** Chars of the learned run/exemplar text kept per recent entry. Bounded (the ring
- *  is capped at RECENT_MAX) but generous enough that "view detail" is meaningful. */
-const RECENT_TEXT_CHARS = 4000;
+const RECENT_PROMPT_CHARS = 800;
+/** Chars of the learned run/exemplar text kept per recent entry — generous enough
+ *  that "view detail" is meaningful. The ring is ONE Durable Object storage value
+ *  (128 KiB hard cap), so RECENT_MAX × (RECENT_PROMPT_CHARS + RECENT_TEXT_CHARS) +
+ *  the per-entry embedding must stay well under that: 24 × (800 + 2000) ≈ 67 KB of
+ *  text + ~16 KB of embeddings, comfortably within budget. */
+const RECENT_TEXT_CHARS = 2000;
 /** How many per-merge training points to retain for the Knowledge Map's training
  *  readout (a small sparkline of loss + weight movement across recent versions). */
 const TRAINING_MAX = 40;
@@ -130,6 +134,10 @@ interface RecentEntry {
   prompt?: string;
   /** Readable snippet of the run/exemplar text that was learned (text-path only). */
   text?: string;
+  /** base64-packed SSM embedding of this memory (text-path only), computed at merge
+   *  time from the merged model so recall only has to embed the QUERY. Never returned
+   *  to callers — it lives here purely to power {@link ProjectEvermindCoordinatorDO.handleRecall}. */
+  emb?: string;
 }
 
 /** One inspectable record of the ACTUAL training that produced a version — the real
@@ -168,6 +176,11 @@ function decodeBase64(b64: string): ArrayBuffer {
   return out.buffer;
 }
 
+/** Per-isolate cache of the loaded head model for recall embedding, keyed by the
+ *  immutable version ref (a new merge writes a new ref, so this can't serve stale
+ *  weights). Module-scoped so it survives across recall requests on the same isolate. */
+let embedModelCache: { key: string; model: { lm: EvermindLM; tok: BPETokenizer } } | null = null;
+
 export class ProjectEvermindCoordinatorDO implements DurableObject {
   declare readonly '__DURABLE_OBJECT_BRAND': never;
   private readonly db: Db;
@@ -181,6 +194,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     if (request.method === 'POST' && url.pathname.endsWith('/learn')) return this.handleLearn(request);
     if (request.method === 'POST' && url.pathname.endsWith('/flush')) return this.handleFlush();
     if (request.method === 'GET' && url.pathname.endsWith('/recent')) return this.handleRecent();
+    if (request.method === 'POST' && url.pathname.endsWith('/recall')) return this.handleRecall(request);
     if (request.method === 'GET' && url.pathname.endsWith('/head')) return this.handleHead();
     return new Response('not found', { status: 404 });
   }
@@ -207,7 +221,70 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     const pending = (await this.state.storage.get<PendingEntry[]>(PENDING_KEY)) ?? [];
     const recent = (await this.state.storage.get<RecentEntry[]>(RECENT_KEY)) ?? [];
     const training = (await this.state.storage.get<TrainingPoint[]>(TRAINING_KEY)) ?? [];
-    return this.json({ pending: pending.length, recent, training });
+    // Strip the packed embedding — it's a recall-only internal, never part of the
+    // inspection payload the console polls (keeps that read small).
+    const lean = recent.map(({ emb, ...rest }) => rest);
+    return this.json({ pending: pending.length, recent: lean, training });
+  }
+
+  /**
+   * SSM-embedding recall: rank which learned memories would answer `query`. Embeds the
+   * query with the CURRENT model and cosine-compares it to each memory's stored
+   * embedding (computed at merge time), so this is one forward + a cheap scan. Falls
+   * back to embedding a memory's text on the fly for legacy entries that predate stored
+   * embeddings. Returns `{ matches: {id, score}[], method }` — `method` tells the caller
+   * whether embedding recall actually ran, so it can fall back to lexical when it can't.
+   */
+  private async handleRecall(request: Request): Promise<Response> {
+    const meta = await this.state.storage.get<CoordMeta>(META_KEY);
+    if (!meta) return this.json({ matches: [], method: 'unavailable' });
+    const body = (await request.json().catch(() => null)) as { query?: unknown } | null;
+    const query = typeof body?.query === 'string' ? body.query.trim() : '';
+    if (!query) return this.json({ matches: [], method: 'unavailable' });
+
+    const recent = (await this.state.storage.get<RecentEntry[]>(RECENT_KEY)) ?? [];
+    const textEntries = recent.filter((e) => e.kind === 'text' && (e.text || e.prompt));
+    if (textEntries.length === 0) return this.json({ matches: [], method: 'embedding' });
+
+    const model = await this.loadEmbeddingModel(meta);
+    if (!model) return this.json({ matches: [], method: 'unavailable' });
+    const { lm, tok } = model;
+
+    const qVec = embedTokens(lm, tok.encode(query).slice(0, EMBED_MAX_TOKENS));
+    const scored = textEntries
+      .map((e) => {
+        const vec = e.emb ? unpackVec(e.emb) : embedTokens(lm, tok.encode(`${e.prompt ?? ''} ${e.text ?? ''}`.trim()).slice(0, EMBED_MAX_TOKENS));
+        if (vec.length === 0) return null;
+        const sim = cosineVec(qVec, vec); // -1..1; negatives are "unrelated", floor at 0
+        return { id: e.id, score: Math.round(Math.max(0, sim) * 1000) / 1000 };
+      })
+      .filter((m): m is { id: number; score: number } => m != null && m.score > 0.05)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8);
+    return this.json({ matches: scored, method: 'embedding' });
+  }
+
+  /**
+   * Load the head model + tokenizer for embedding, cached per isolate keyed by the
+   * immutable version ref (so repeated recalls between merges never re-read R2).
+   * Returns null when unseeded, storage is absent, or the head isn't an `evermind-lm`.
+   */
+  private async loadEmbeddingModel(meta: CoordMeta): Promise<{ lm: EvermindLM; tok: BPETokenizer } | null> {
+    const head = await getProjectEvermindHead(this.env, this.db, meta.tenantId, meta.projectId);
+    if (head.version === 0 || !head.ref) return null;
+    if (embedModelCache && embedModelCache.key === head.ref) return embedModelCache.model;
+    const store = this.env.UPLOADS;
+    if (!store) return null;
+    const [baseObj, tokObj] = await Promise.all([store.get(`${head.ref}/model.evermind`), store.get(`${head.ref}/tokenizer.json`)]);
+    if (!baseObj || !tokObj) return null;
+    const pkg = EvermindModelPackage.fromBlob(await baseObj.arrayBuffer());
+    if (pkg.manifest.modelType !== 'evermind-lm') return null;
+    const tokenizer = JSON.parse(await tokObj.text()) as { vocab: Record<string, number>; merges: string[] };
+    const tok = new BPETokenizer();
+    tok.loadFromObjects(tokenizer.vocab, tokenizer.merges);
+    const model = { lm: pkg.loadLM(), tok };
+    embedModelCache = { key: head.ref, model };
+    return model;
   }
 
   /**
@@ -374,7 +451,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     const processedIds: number[] = [];
     // Per-entry provenance for the inspection ring, stamped with the merged version
     // once the merge lands (parallel to `diffs`/`weights`).
-    const mergedMeta: Array<{ id: number; kind: 'text' | 'delta'; weight: number; prompt?: string; text?: string }> = [];
+    const mergedMeta: Array<{ id: number; kind: 'text' | 'delta'; weight: number; prompt?: string; text?: string; emb?: string }> = [];
     // Real training telemetry accumulated across the adaptations this merge runs, so
     // the Knowledge Map can show what teaching actually did to the neocortex weights.
     let lossSum = 0;
@@ -482,6 +559,22 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       // Verify the new version is the one we wrote (a concurrent merge is impossible
       // — single DO — but a forward-only DB guard means we trust the row).
       void projectEvermindRef(tenantId, projectId, nextVersion);
+      // Embed each text memory with the JUST-MERGED model so semantic recall (Validate)
+      // only has to embed the query later — the vector is computed once, here, off the
+      // recall path. isLM is guaranteed when any text entry exists (tok is loaded then).
+      if (isLM) {
+        for (const m of mergedMeta) {
+          if (m.kind !== 'text') continue;
+          const src = `${m.prompt ?? ''} ${m.text ?? ''}`.trim();
+          if (!src) continue;
+          try {
+            m.emb = packVec(embedTokens(lm, tok.encode(src).slice(0, EMBED_MAX_TOKENS)));
+          } catch { /* best-effort: a failed embed just falls back to lexical recall */ }
+        }
+      }
+      // Cache the freshly-merged model for recall on this isolate (its ref is the new
+      // version, so a later merge's new ref naturally supersedes this entry).
+      embedModelCache = { key: projectEvermindRef(tenantId, projectId, nextVersion), model: { lm, tok } };
       // Record the merged contributions in the inspection ring, stamped with the
       // version they landed in (newest first). Best-effort — never fail the merge.
       const at = Date.now();

@@ -125,6 +125,9 @@ export interface ProjectEvermindValidateResult {
   matches: ProjectEvermindValidateMatch[];
   /** Id of the memory most likely used to respond, or null if none matched. */
   primaryId: number | null;
+  /** Which ranker produced these matches: the model's own SSM embedding (semantic)
+   *  or a lexical fallback when the model couldn't be reached. */
+  method: 'embedding' | 'lexical';
 }
 
 /**

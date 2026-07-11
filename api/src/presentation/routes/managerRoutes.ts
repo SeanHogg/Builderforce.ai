@@ -22,10 +22,17 @@ import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import {
   getManagerConfigRow, getEffectiveManagerPolicy, upsertManagerConfig,
   listManagerActions, runManagerForProject, createManagerRunTask, finalizeManagerRunTask,
+  recordManagerAction,
 } from '../../application/manager/ManagerService';
 import { normalizePrMergePolicy } from '../../application/manager/managerPolicy';
+import { MANAGER_TYPES, normalizeManagerType } from '../../application/manager/managerTypes';
+import {
+  addManagerDirective, listManagerDirectives, setManagerDirectiveStatus,
+  type ManagerDirectiveStatus,
+} from '../../application/manager/managerDirectives';
 import { notSystemTask, SYSTEM_TASK_SOURCE_MANAGER } from '../../application/task/taskScope';
 import { getTenantTokenAvailability } from '../../application/llm/tenantTokenAvailability';
+import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 
 const NON_TERMINAL: string[] = [
   TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.READY,
@@ -105,6 +112,11 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       effectivePlan: tokenAvailability?.effectivePlan ?? null,
     };
 
+    // The manager-type catalog (ids only — the UI localizes label/description by id)
+    // and the standing coaching directives that steer this project's passes.
+    const managerTypes = MANAGER_TYPES.map((mt) => ({ id: mt.id }));
+    const directives = await listManagerDirectives(db, tenantId, projectId, 50).catch(() => []);
+
     // The manager's OWN run tasks (source = 'manager') — every "Backlog management
     // pass" the manager kicked off, surfaced with its owner + status so a human can
     // see the manager's open / in-progress / done work, not just its decisions.
@@ -134,6 +146,8 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       actions,
       runTasks,
       autonomy,
+      managerTypes,
+      directives,
     });
   });
 
@@ -151,6 +165,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       autoAssign?: boolean;
       autoBusinessValue?: boolean;
       autoPrioritize?: boolean;
+      managerType?: string;
     };
     const body = (await c.req.json<ConfigBody>().catch(() => ({} as ConfigBody)));
 
@@ -161,6 +176,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       ...(body.autoAssign !== undefined ? { autoAssign: !!body.autoAssign } : {}),
       ...(body.autoBusinessValue !== undefined ? { autoBusinessValue: !!body.autoBusinessValue } : {}),
       ...(body.autoPrioritize !== undefined ? { autoPrioritize: !!body.autoPrioritize } : {}),
+      ...(body.managerType !== undefined ? { managerType: normalizeManagerType(body.managerType) } : {}),
     });
     const policy = await getEffectiveManagerPolicy(db, tenantId, projectId);
     return c.json({ config, policy });
@@ -214,6 +230,71 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       }
     })());
     return c.json({ started: true });
+  });
+
+  // POST /api/manager/:projectId/coach — the human coaches the manager (managers only).
+  // The guidance becomes a standing directive the background pass honors on every run
+  // (see ManagerService's composed directive). `scope: 'tenant'` makes it apply to
+  // every project the manager runs; default is this project. Records to the manager
+  // feed + the unified activity log so the coaching is visible + auditable.
+  router.post('/:projectId/coach', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId');
+    const userId = (c as { get(k: 'userId'): string | undefined }).get('userId');
+    const projectId = Number(c.req.param('projectId'));
+    if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+    type CoachBody = { directive?: string; scope?: 'project' | 'tenant' };
+    const body = await c.req.json<CoachBody>().catch(() => ({} as CoachBody));
+    const directive = (body.directive ?? '').trim();
+    if (directive.length < 3) return c.json({ error: 'directive is required' }, 400);
+    const scopeProjectId = body.scope === 'tenant' ? null : projectId;
+
+    const id = await addManagerDirective(db, {
+      tenantId, projectId: scopeProjectId, directive, createdBy: userId ?? null, source: 'coach',
+    });
+    if (!id) return c.json({ error: 'could not record directive' }, 500);
+
+    // Surface it in the manager feed + the cross-surface audit timeline.
+    await recordManagerAction(db, {
+      tenantId, projectId, actionType: 'flag',
+      summary: `Coaching: “${directive.slice(0, 200)}”${scopeProjectId == null ? ' (workspace-wide)' : ''}.`,
+    });
+    await recordActivity(c.env as Env, db, {
+      tenantId, projectId: scopeProjectId ?? projectId,
+      actor: await resolveActorFromContext(c.env as Env, db, c as never),
+      verb: 'manager.coach',
+      targetType: 'project', targetId: projectId,
+      summary: `Coached the manager: ${directive.slice(0, 280)}`,
+      metadata: { scope: scopeProjectId == null ? 'tenant' : 'project' },
+    });
+    return c.json({ id, started: true });
+  });
+
+  // GET /api/manager/:projectId/directives — the standing coaching directives.
+  router.get('/:projectId/directives', async (c) => {
+    const tenantId = c.get('tenantId');
+    const projectId = Number(c.req.param('projectId'));
+    if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+    const directives = await listManagerDirectives(db, tenantId, projectId, Number(c.req.query('limit')) || 50);
+    return c.json({ directives });
+  });
+
+  // PATCH /api/manager/:projectId/directives/:id — retire a directive (managers only).
+  router.patch('/:projectId/directives/:id', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId');
+    const projectId = Number(c.req.param('projectId'));
+    const directiveId = c.req.param('id');
+    if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+    const body = await c.req.json<{ status?: string }>().catch(() => ({} as { status?: string }));
+    const status: ManagerDirectiveStatus = body.status === 'done' ? 'done' : 'dismissed';
+    const ok = await setManagerDirectiveStatus(db, tenantId, directiveId, status);
+    if (!ok) return c.json({ error: 'directive not found' }, 404);
+    return c.json({ ok: true, status });
   });
 
   // GET /api/manager/:projectId/activity — the decision audit feed.

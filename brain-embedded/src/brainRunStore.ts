@@ -373,6 +373,52 @@ function pushTrace(c: RunCell, ev: BrainTraceEvent): void {
   emit(c);
 }
 
+/** Cap on the persisted step RESULT (chars). The live trace keeps the full result;
+ *  only the durable copy is bounded so a big tool payload can't bloat the row. */
+const STEP_RESULT_CAP = 4_000;
+
+/**
+ * Persist a tool / memory step DURABLY so it survives a reload — the in-memory
+ * `trace` alone vanishes on remount, which is why tool + memory steps used to
+ * disappear from a reopened chat. Stored as a `role:'tool'` message whose metadata
+ * carries the step payload (`{ kind:'step', ... }`); the timeline reconstructs the
+ * node from it (see timelineModel.buildSettledTimeline).
+ *
+ * Deliberately NOT recorded into the live message list (no recordAppended): the live
+ * view already shows the step from `trace`, and the seed builders exclude `role:'tool'`
+ * so a persisted step never re-enters the model transcript (an orphaned tool message
+ * 400s strict vendors). Fire-and-forget — durability must never block or fail the run.
+ */
+function persistStep(chatId: number, persistence: BrainRunPersistence, ev: BrainTraceEvent): void {
+  let result: unknown = ev.result ?? null;
+  try {
+    const s = JSON.stringify(result);
+    if (s.length > STEP_RESULT_CAP) result = `${s.slice(0, STEP_RESULT_CAP)}…[${s.length - STEP_RESULT_CAP} more chars]`;
+  } catch {
+    result = String(result);
+  }
+  const metadata = JSON.stringify({
+    kind: 'step',
+    category: ev.category,
+    label: ev.label,
+    args: ev.args ?? null,
+    result,
+    isError: ev.isError ?? false,
+    ...(ev.durationMs != null ? { durationMs: ev.durationMs } : {}),
+    ts: ev.ts,
+  });
+  void persistence.sendMessages(chatId, [{ role: 'tool', content: '', metadata }]).catch(() => {
+    /* best-effort durability — the live trace already showed the step */
+  });
+}
+
+/** {@link pushTrace} + {@link persistStep}: record a tool/memory step both live (trace)
+ *  and durably (persisted), so it shows during the run AND survives a reload. */
+function pushDurableStep(c: RunCell, chatId: number, persistence: BrainRunPersistence, ev: BrainTraceEvent): void {
+  pushTrace(c, ev);
+  persistStep(chatId, persistence, ev);
+}
+
 /**
  * Record a freshly-persisted assistant message for live splice-in and bump the
  * epoch. The buffer is capped to the most recent {@link MAX_APPENDED}: any older
@@ -806,7 +852,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         const block = formatEvermindMemoryBlock(recalled.items);
         if (block) {
           systemPrompt = `${systemPrompt}\n\n${block}`;
-          pushTrace(c, {
+          pushDurableStep(c, chatId, persistence, {
             ts: nowIso(),
             category: 'recall',
             label: 'evermind.recall',
@@ -946,7 +992,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           });
           if (!ok) {
             convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify({ cancelled: true, reason: 'User declined this action.' }) });
-            pushTrace(c, { ts: nowIso(), category: 'tool', label: tc.name, args, result: { cancelled: true, reason: 'User declined this action.' } });
+            pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: 'tool', label: tc.name, args, result: { cancelled: true, reason: 'User declined this action.' } });
             continue;
           }
         }
@@ -976,7 +1022,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           out = { ok: false, error: message };
           // Errors are small; push as-is (trimming a short error would only add noise).
           convo.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(out) });
-          pushTrace(c, { ts: nowIso(), category: 'tool', label: tc.name, durationMs: nowMs() - toolStart, args, result: out, isError: true });
+          pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: 'tool', label: tc.name, durationMs: nowMs() - toolStart, args, result: out, isError: true });
           continue;
         }
         // The MODEL transcript gets a size-capped copy so a big list result can't
@@ -985,7 +1031,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         // size and a truncation flag the diagnostics block reads.
         const trimmedOut = trimToolResult(out ?? null);
         convo.push({ role: 'tool', tool_call_id: tc.id, content: trimmedOut.content });
-        pushTrace(c, {
+        pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),
           category: 'tool',
           label: tc.name,
@@ -1018,7 +1064,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     // `reconcile` step (write-through: the turn updates those learnings). This
     // mirrors the server gate so the step shows exactly when a contribution lands.
     if (recalled?.seeded && recalled.mode === 'connected' && finalText.trim().length >= EVERMIND_LEARN_MIN_CHARS) {
-      pushTrace(c, {
+      pushDurableStep(c, chatId, persistence, {
         ts: nowIso(),
         category: 'learn',
         label: 'evermind.learn',
@@ -1026,7 +1072,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       });
       const reconciled = countReconciledMemories(recalled.items, finalText);
       if (reconciled > 0) {
-        pushTrace(c, {
+        pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),
           category: 'reconcile',
           label: 'evermind.reconcile',

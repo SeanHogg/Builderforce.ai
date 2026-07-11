@@ -37,17 +37,21 @@ describe('resolveEffectiveManagerPolicy', () => {
       autoAssign: false,
       autoBusinessValue: true,
       autoPrioritize: true,
+      managerType: 'qa',
     });
     expect(eff.managerKind).toBe('agent');
     expect(eff.prMergePolicy).toBe('queue');
     expect(eff.autoAssign).toBe(false);
+    expect(eff.managerType).toBe('qa');
   });
   it('normalizes an invalid persisted policy string', () => {
     const eff = resolveEffectiveManagerPolicy({
       managerRef: null, enabled: true, prMergePolicy: 'garbage',
       autoAssign: true, autoBusinessValue: true, autoPrioritize: true,
+      managerType: 'not-a-type',
     });
     expect(eff.prMergePolicy).toBe('immediate');
     expect(eff.managerKind).toBe('system');
+    expect(eff.managerType).toBe('general');
   });
 });

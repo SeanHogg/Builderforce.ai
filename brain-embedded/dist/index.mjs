@@ -1287,6 +1287,32 @@ function pushTrace(c, ev) {
   if (c.trace.length > MAX_TRACE_EVENTS) c.trace.splice(0, c.trace.length - MAX_TRACE_EVENTS);
   emit(c);
 }
+var STEP_RESULT_CAP = 4e3;
+function persistStep(chatId, persistence, ev) {
+  let result = ev.result ?? null;
+  try {
+    const s = JSON.stringify(result);
+    if (s.length > STEP_RESULT_CAP) result = `${s.slice(0, STEP_RESULT_CAP)}\u2026[${s.length - STEP_RESULT_CAP} more chars]`;
+  } catch {
+    result = String(result);
+  }
+  const metadata = JSON.stringify({
+    kind: "step",
+    category: ev.category,
+    label: ev.label,
+    args: ev.args ?? null,
+    result,
+    isError: ev.isError ?? false,
+    ...ev.durationMs != null ? { durationMs: ev.durationMs } : {},
+    ts: ev.ts
+  });
+  void persistence.sendMessages(chatId, [{ role: "tool", content: "", metadata }]).catch(() => {
+  });
+}
+function pushDurableStep(c, chatId, persistence, ev) {
+  pushTrace(c, ev);
+  persistStep(chatId, persistence, ev);
+}
 function recordAppended(c, msg) {
   const next = [...c.appended, msg];
   c.appended = next.length > MAX_APPENDED ? next.slice(next.length - MAX_APPENDED) : next;
@@ -1523,7 +1549,7 @@ async function runLoop(chatId, c, req) {
           systemPrompt = `${systemPrompt}
 
 ${block}`;
-          pushTrace(c, {
+          pushDurableStep(c, chatId, persistence, {
             ts: nowIso(),
             category: "recall",
             label: "evermind.recall",
@@ -1635,7 +1661,7 @@ ${block}`;
           });
           if (!ok) {
             convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify({ cancelled: true, reason: "User declined this action." }) });
-            pushTrace(c, { ts: nowIso(), category: "tool", label: tc.name, args, result: { cancelled: true, reason: "User declined this action." } });
+            pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: "tool", label: tc.name, args, result: { cancelled: true, reason: "User declined this action." } });
             continue;
           }
         }
@@ -1661,12 +1687,12 @@ ${block}`;
           const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
           out = { ok: false, error: message };
           convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(out) });
-          pushTrace(c, { ts: nowIso(), category: "tool", label: tc.name, durationMs: nowMs2() - toolStart, args, result: out, isError: true });
+          pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: "tool", label: tc.name, durationMs: nowMs2() - toolStart, args, result: out, isError: true });
           continue;
         }
         const trimmedOut = trimToolResult(out ?? null);
         convo.push({ role: "tool", tool_call_id: tc.id, content: trimmedOut.content });
-        pushTrace(c, {
+        pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),
           category: "tool",
           label: tc.name,
@@ -1689,7 +1715,7 @@ ${block}`;
     recordAppended(c, assistantMsg);
     emit(c);
     if (recalled?.seeded && recalled.mode === "connected" && finalText.trim().length >= EVERMIND_LEARN_MIN_CHARS) {
-      pushTrace(c, {
+      pushDurableStep(c, chatId, persistence, {
         ts: nowIso(),
         category: "learn",
         label: "evermind.learn",
@@ -1697,7 +1723,7 @@ ${block}`;
       });
       const reconciled = countReconciledMemories(recalled.items, finalText);
       if (reconciled > 0) {
-        pushTrace(c, {
+        pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),
           category: "reconcile",
           label: "evermind.reconcile",
@@ -1912,7 +1938,7 @@ ${refs}`;
           }
           return true;
         }
-        const seed = scopeToConsolidation(messages).map((m) => ({
+        const seed = scopeToConsolidation(messages).filter((m) => m.role !== "tool").map((m) => ({
           role: m.role,
           content: m.content
         }));
@@ -1937,7 +1963,7 @@ ${refs}`;
     if (autoRepliedChatIdRef.current === chatId) return;
     autoRepliedChatIdRef.current = chatId;
     setLocalError("");
-    const seed = scopeToConsolidation(messages.slice(0, -1)).map((m) => ({
+    const seed = scopeToConsolidation(messages.slice(0, -1)).filter((m) => m.role !== "tool").map((m) => ({
       role: m.role,
       content: m.content
     }));

@@ -119,6 +119,7 @@ export function ProjectEvermindPanel({ projectId, showRecent = true }: { project
     validatePrimaryBadge: t('validatePrimaryBadge'),
     validateScore: (pct) => t('validateScore', { pct }),
     validateClear: t('validateClear'),
+    validateMethod: (method) => t('validateMethod', { method }),
     inspectTitle: t('inspectTitle'),
     inspectEmpty: t('inspectEmpty'),
     kindText: t('kindText'),

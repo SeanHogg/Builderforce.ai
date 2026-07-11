@@ -673,6 +673,11 @@ export async function getProjectEvermindContributions(
 /** A scored recall match — a recent contribution plus its 0..1 relevance to a task. */
 export type ProjectEvermindValidateMatch = RankedRecall;
 
+/** How a Validate ranking was produced: the model's own SSM embedding (semantic recall,
+ *  matching what inference actually retrieves) or a lexical TF-cosine fallback used when
+ *  the model/coordinator can't be reached. */
+export type ProjectEvermindRecallMethod = 'embedding' | 'lexical';
+
 /**
  * The Validate result: for a candidate task prompt, which of the project Evermind's
  * learned memories would answer it (ranked, best first), plus the id of the top
@@ -685,15 +690,52 @@ export interface ProjectEvermindValidateResult {
   matches: ProjectEvermindValidateMatch[];
   /** Id of the best match (the memory most likely used to respond), or null if none. */
   primaryId: number | null;
+  /** Which ranker produced these matches (surfaced so the UI can be honest about it). */
+  method: ProjectEvermindRecallMethod;
 }
 
 /**
- * Validate: given a candidate task prompt, rank the project Evermind's recent
- * learned memories by how well each would answer it — the "which memory would be
- * used to respond?" preview behind the console's Validate button. A lexical recall
- * preview over the inspectable recent ring (see {@link rankEvermindRecall}); cached
- * behind the head version token + a prompt hash so a re-validate is free until the
- * model learns something new.
+ * Ask the coordinator for SSM-embedding recall over the learned ring: it embeds the
+ * query with the current model and cosine-ranks each memory's stored embedding.
+ * Returns `{ matches:{id,score}[], method }`, or null when the binding is unset / the
+ * call fails, so the caller falls back to lexical recall.
+ */
+async function dispatchProjectEvermindRecall(
+  env: Env,
+  tenantId: number,
+  projectId: number,
+  query: string,
+): Promise<{ matches: Array<{ id: number; score: number }>; method: string } | null> {
+  const stub = coordinatorStub(env, tenantId, projectId);
+  if (!stub) return null;
+  try {
+    const res = await stub.fetch('https://coordinator/recall', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json().catch(() => null)) as { matches?: unknown; method?: unknown } | null;
+    if (!body || !Array.isArray(body.matches)) return null;
+    const matches = body.matches.filter(
+      (m): m is { id: number; score: number } =>
+        !!m && typeof (m as { id?: unknown }).id === 'number' && typeof (m as { score?: unknown }).score === 'number',
+    );
+    return { matches, method: typeof body.method === 'string' ? body.method : 'embedding' };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Validate: given a candidate task prompt, rank the project Evermind's recent learned
+ * memories by how well each would answer it — the "which memory would be used to
+ * respond?" preview behind the console's Validate button (and the reply-time grounding
+ * in {@link recallProjectEvermindMemory}). Prefers the model's own SSM-EMBEDDING recall
+ * (so the preview matches what inference actually retrieves) and falls back to the
+ * lexical TF-cosine ranker when the coordinator/model can't be reached. Cached behind
+ * the head version token + a prompt hash so a re-validate is free until the model
+ * learns something new.
  */
 export async function validateProjectEvermindRecall(
   env: Env,
@@ -709,8 +751,25 @@ export async function validateProjectEvermindRecall(
     `project_evermind:validate:${tenantId}:${projectId}:v:${token}:${hashRecallPrompt(clean)}`,
     async (): Promise<ProjectEvermindValidateResult> => {
       const contrib = await getProjectEvermindContributions(env, db, tenantId, projectId);
+      const base = { prompt: clean, version: contrib.version, seeded: contrib.seeded };
+
+      // Prefer the model's own embedding recall (semantic, matches inference-time
+      // retrieval). `method === 'embedding'` means it ran — even an empty match list is
+      // an authoritative "nothing learned matches". Anything else → lexical fallback.
+      const emb = await dispatchProjectEvermindRecall(env, tenantId, projectId, clean);
+      if (emb && emb.method === 'embedding') {
+        const byId = new Map(contrib.recent.map((e) => [e.id, e]));
+        const matches: ProjectEvermindValidateMatch[] = emb.matches
+          .map(({ id, score }): ProjectEvermindValidateMatch | null => {
+            const e = byId.get(id);
+            return e ? { ...e, score } : null;
+          })
+          .filter((m): m is ProjectEvermindValidateMatch => m != null);
+        return { ...base, matches, primaryId: matches[0]?.id ?? null, method: 'embedding' };
+      }
+
       const matches = rankEvermindRecall(clean, contrib.recent, { limit: 8 });
-      return { prompt: clean, version: contrib.version, seeded: contrib.seeded, matches, primaryId: matches[0]?.id ?? null };
+      return { ...base, matches, primaryId: matches[0]?.id ?? null, method: 'lexical' };
     },
     { kvTtlSeconds: 30 },
   );

@@ -3571,7 +3571,8 @@
     "detailKind": "Typ",
     "detailVersion": "Version",
     "detailWeight": "Gewicht",
-    "detailWhen": "Wann"
+    "detailWhen": "Wann",
+    "recallMethod": "{method, select, embedding {Semantischer Abruf} other {Lexikalischer Abruf (Fallback)}}"
   },
   "evermindStatus": {
     "label": "Evermind",
@@ -5922,7 +5923,8 @@
     "viewDetail": "Detail anzeigen",
     "hideDetail": "Detail ausblenden",
     "detailPromptLabel": "Aufgabe",
-    "detailTextLabel": "Gelernt"
+    "detailTextLabel": "Gelernt",
+    "validateMethod": "{method, select, embedding {Semantischer Abruf} other {Lexikalischer Abruf (Fallback)}}"
   },
   "topbar": {
     "cart": "Warenkorb",

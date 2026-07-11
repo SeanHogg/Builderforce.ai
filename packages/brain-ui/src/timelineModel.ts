@@ -97,14 +97,85 @@ export function buildTimeline(input: BuildTimelineInput): TimelineNode[] {
   return nodes;
 }
 
+/** A tool/memory step in the shape shared by a live `trace` event and a persisted
+ *  `role:'tool'` step message — so ONE builder ({@link stepNode}) covers both. */
+interface StepLike {
+  category: string;
+  label: string;
+  args?: unknown;
+  result?: unknown;
+  isError?: boolean;
+  durationMs?: number;
+}
+
+/** Identity of a step across the live trace and its durable persisted copy: same
+ *  category + label + client timestamp. Lets a step that exists in BOTH render once
+ *  (dedup), while a prior run's step — present only in the messages — still shows. */
+function stepSig(category: string, label: string, tsIso: string | undefined): string {
+  return `${category}|${label}|${tsIso ?? ''}`;
+}
+
+/** Build the timeline node for a tool/memory step (shared by the trace and the
+ *  persisted-message paths). Returns null for a category that isn't a step node. */
+function stepNode(step: StepLike, ts: number, key: string): TimelineNode | null {
+  switch (step.category) {
+    case 'tool':
+      return { key, kind: 'tool', ts, order: ORDER.tool, label: step.label, args: step.args, result: step.result, isError: !!step.isError, durationMs: step.durationMs };
+    case 'error':
+      return { key, kind: 'error', ts, order: ORDER.error, label: step.label, message: typeof step.result === 'string' ? step.result : JSON.stringify(step.result ?? '') };
+    case 'recall': {
+      const r = (step.result ?? {}) as { count?: number; version?: number; items?: EvermindRecallItem[] };
+      return { key, kind: 'recall', ts, order: ORDER.recall, version: typeof r.version === 'number' ? r.version : 0, count: typeof r.count === 'number' ? r.count : (Array.isArray(r.items) ? r.items.length : 0), items: Array.isArray(r.items) ? r.items : [] };
+    }
+    case 'learn': {
+      const r = (step.result ?? {}) as { version?: number };
+      return { key, kind: 'learn', ts, order: ORDER.learn, version: typeof r.version === 'number' ? r.version : 0 };
+    }
+    case 'reconcile': {
+      const r = (step.result ?? {}) as { count?: number; version?: number };
+      return { key, kind: 'reconcile', ts, order: ORDER.reconcile, version: typeof r.version === 'number' ? r.version : 0, count: typeof r.count === 'number' ? r.count : 0 };
+    }
+    default:
+      return null;
+  }
+}
+
+/** Parse a persisted `role:'tool'` step message's metadata (`{ kind:'step', … }`)
+ *  into a {@link StepLike} + its client timestamp, or null when it isn't a step. */
+function parseStepMessage(metadata: string | null): { step: StepLike; tsIso?: string } | null {
+  if (!metadata) return null;
+  try {
+    const m = JSON.parse(metadata) as { kind?: string; category?: string; label?: string; args?: unknown; result?: unknown; isError?: boolean; durationMs?: number; ts?: string };
+    if (m.kind !== 'step' || typeof m.category !== 'string') return null;
+    return {
+      step: { category: m.category, label: typeof m.label === 'string' ? m.label : m.category, args: m.args, result: m.result, isError: m.isError, durationMs: m.durationMs },
+      tsIso: typeof m.ts === 'string' ? m.ts : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * The stable, settled portion of the timeline — everything derived from the durable
  * `messages` and `trace` (the expensive map + sort). Split out from {@link buildTimeline}
  * so a live streaming turn (whose text ticks on every token) can be appended cheaply
  * without re-mapping and re-sorting the whole conversation per token.
+ *
+ * Tool + memory steps come from the live `trace` during a run and are ALSO persisted
+ * as `role:'tool'` messages (so they survive a reload — the trace is in-memory only).
+ * A step present in both is rendered once (dedup by {@link stepSig}); a prior run's
+ * step, present only in the messages, still shows.
  */
 export function buildSettledTimeline(messages: BrainMessage[], trace: BrainTraceEvent[]): TimelineNode[] {
   const nodes: TimelineNode[] = [];
+
+  // Steps already contributed by the live trace — so the persisted copy of the same
+  // step (same category+label+ts) isn't rendered twice.
+  const traceStepSigs = new Set<string>();
+  for (const ev of trace) {
+    if (ev.category !== 'llm' && ev.category !== 'message') traceStepSigs.add(stepSig(ev.category, ev.label, ev.ts));
+  }
 
   messages.forEach((message, i) => {
     const ts = parseTs(message.createdAt, i);
@@ -123,6 +194,15 @@ export function buildSettledTimeline(messages: BrainMessage[], trace: BrainTrace
         text: stripImageRefs(message.content, imageNames),
         images,
       });
+    } else if (message.role === 'tool') {
+      // A durable tool/memory STEP row — reconstruct its timeline node so it survives
+      // a reload. Skip when the live trace already carries this exact step (dedup), or
+      // when the metadata isn't a step (never render a tool row as an assistant bubble).
+      const parsed = parseStepMessage(message.metadata);
+      if (!parsed) return;
+      if (traceStepSigs.has(stepSig(parsed.step.category, parsed.step.label, parsed.tsIso))) return;
+      const node = stepNode(parsed.step, parseTs(parsed.tsIso, ts), `msg-${message.id}`);
+      if (node) nodes.push(node);
     } else {
       nodes.push({
         key: `msg-${message.id}`,
@@ -140,54 +220,17 @@ export function buildSettledTimeline(messages: BrainMessage[], trace: BrainTrace
     const ts = parseTs(ev.ts, 1e15 + i); // unparseable trace sorts after dated content
     if (ev.category === 'llm') {
       nodes.push({ key: `trace-${i}`, kind: 'thinking', ts, order: ORDER.thinking, durationMs: ev.durationMs, step: step++ });
-    } else if (ev.category === 'tool') {
-      nodes.push({
-        key: `trace-${i}`,
-        kind: 'tool',
+    } else if (ev.category === 'message') {
+      // 'message' trace events are intentionally dropped — the durable assistant
+      // message already renders that text.
+    } else {
+      const node = stepNode(
+        { category: ev.category, label: ev.label, args: ev.args, result: ev.result, isError: ev.isError, durationMs: ev.durationMs },
         ts,
-        order: ORDER.tool,
-        label: ev.label,
-        args: ev.args,
-        result: ev.result,
-        isError: !!ev.isError,
-        durationMs: ev.durationMs,
-      });
-    } else if (ev.category === 'error') {
-      nodes.push({
-        key: `trace-${i}`,
-        kind: 'error',
-        ts,
-        order: ORDER.error,
-        label: ev.label,
-        message: typeof ev.result === 'string' ? ev.result : JSON.stringify(ev.result ?? ''),
-      });
-    } else if (ev.category === 'recall') {
-      const r = (ev.result ?? {}) as { count?: number; version?: number; items?: EvermindRecallItem[] };
-      nodes.push({
-        key: `trace-${i}`,
-        kind: 'recall',
-        ts,
-        order: ORDER.recall,
-        version: typeof r.version === 'number' ? r.version : 0,
-        count: typeof r.count === 'number' ? r.count : (Array.isArray(r.items) ? r.items.length : 0),
-        items: Array.isArray(r.items) ? r.items : [],
-      });
-    } else if (ev.category === 'learn') {
-      const r = (ev.result ?? {}) as { version?: number };
-      nodes.push({ key: `trace-${i}`, kind: 'learn', ts, order: ORDER.learn, version: typeof r.version === 'number' ? r.version : 0 });
-    } else if (ev.category === 'reconcile') {
-      const r = (ev.result ?? {}) as { count?: number; version?: number };
-      nodes.push({
-        key: `trace-${i}`,
-        kind: 'reconcile',
-        ts,
-        order: ORDER.reconcile,
-        version: typeof r.version === 'number' ? r.version : 0,
-        count: typeof r.count === 'number' ? r.count : 0,
-      });
+        `trace-${i}`,
+      );
+      if (node) nodes.push(node);
     }
-    // 'message' trace events are intentionally dropped — the durable assistant
-    // message already renders that text.
   });
 
   // Stable chronological sort: timestamp, then per-kind order, then insertion.

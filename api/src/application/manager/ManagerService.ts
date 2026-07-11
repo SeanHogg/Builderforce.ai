@@ -45,6 +45,8 @@ import {
   type EffectiveManagerPolicy, type ManagerConfigRow,
 } from './managerPolicy';
 import { resolveManagerIdentity } from './managerIdentity';
+import { resolveManagerType, normalizeManagerType } from './managerTypes';
+import { listActiveManagerDirectives } from './managerDirectives';
 import { recommendTopAssignee } from '../metrics/assigneeRecommender';
 import { mergeRecordedPullRequest } from '../repos/mergeRecordedPr';
 import { pollPrCiStatus } from '../repos/pollPrCiStatus';
@@ -104,6 +106,7 @@ export async function getManagerConfigRow(
       autoAssign: projectManagerConfigs.autoAssign,
       autoBusinessValue: projectManagerConfigs.autoBusinessValue,
       autoPrioritize: projectManagerConfigs.autoPrioritize,
+      managerType: projectManagerConfigs.managerType,
       lastRunAt: projectManagerConfigs.lastRunAt,
     })
     .from(projectManagerConfigs)
@@ -124,7 +127,7 @@ export async function upsertManagerConfig(
   db: Db,
   tenantId: number,
   projectId: number,
-  patch: Partial<Pick<ManagerConfigRow, 'managerRef' | 'enabled' | 'prMergePolicy' | 'autoAssign' | 'autoBusinessValue' | 'autoPrioritize'>>,
+  patch: Partial<Pick<ManagerConfigRow, 'managerRef' | 'enabled' | 'prMergePolicy' | 'autoAssign' | 'autoBusinessValue' | 'autoPrioritize' | 'managerType'>>,
 ): Promise<ManagerConfigRow> {
   const now = new Date();
   await db
@@ -137,6 +140,7 @@ export async function upsertManagerConfig(
       autoAssign: patch.autoAssign ?? true,
       autoBusinessValue: patch.autoBusinessValue ?? true,
       autoPrioritize: patch.autoPrioritize ?? true,
+      managerType: normalizeManagerType(patch.managerType),
       updatedAt: now,
     })
     .onConflictDoUpdate({
@@ -148,6 +152,7 @@ export async function upsertManagerConfig(
         ...(patch.autoAssign !== undefined ? { autoAssign: patch.autoAssign } : {}),
         ...(patch.autoBusinessValue !== undefined ? { autoBusinessValue: patch.autoBusinessValue } : {}),
         ...(patch.autoPrioritize !== undefined ? { autoPrioritize: patch.autoPrioritize } : {}),
+        ...(patch.managerType !== undefined ? { managerType: normalizeManagerType(patch.managerType) } : {}),
         updatedAt: now,
       },
     });
@@ -436,6 +441,22 @@ export async function runManagerForProject(
   // resolve to the neutral system identity (no persona), so nothing changes for them.
   const identity = await resolveManagerIdentity(db, tenantId, policy);
 
+  // The manager's JUDGEMENT prompt = its DOMAIN TYPE framing (Development / QA /
+  // Service Desk / DevOps / …) + any standing human COACHING directives (project-
+  // scoped AND tenant-wide) + the designated agent's own persona. This ONE composed
+  // directive is what makes a "QA manager" score differently from a "DevOps manager"
+  // and makes coaching actually steer the pass. Fed to scoreBusinessValueAI below.
+  const managerType = resolveManagerType(policy.managerType);
+  const coachingDirectives = await listActiveManagerDirectives(db, tenantId, projectId).catch(() => []);
+  const composedDirective =
+    [
+      managerType.directive,
+      ...coachingDirectives.map((d) => `Standing directive from the team: ${d.directive}`),
+      identity.personaDirective,
+    ]
+      .filter((s): s is string => !!s && s.trim().length > 0)
+      .join('\n\n') || null;
+
   const now = Date.now();
   let managed = await loadManagedTasks(db, projectId);
 
@@ -463,7 +484,7 @@ export async function runManagerForProject(
           value = riceBusinessValueFromFeature(riceMatch, featureIndex.maxScore);
         } else {
           const scored = aiBudget > 0
-            ? (await scoreBusinessValueAI(env, { title: t.title, description: t.description }, identity.personaDirective))
+            ? (await scoreBusinessValueAI(env, { title: t.title, description: t.description }, composedDirective))
             : null;
           if (scored) aiBudget -= 1;
           value = scored ?? heuristicBusinessValue(toRankable(t), now, t.storyPoints);
@@ -614,7 +635,7 @@ export async function runManagerForProject(
         scored: summary.scored, ranked: summary.ranked, assigned: summary.assigned,
         dispatched: summary.dispatched, prsConducted: summary.prsConducted,
         prsMerged: summary.prsMerged, flagged: summary.flagged,
-        trigger: submittedBy,
+        trigger: submittedBy, managerType: policy.managerType, coachingApplied: coachingDirectives.length,
       },
     });
   }

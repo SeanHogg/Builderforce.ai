@@ -98,11 +98,14 @@ export function EvermindLearnings({
           {recallMode ? t('recallTitle') : t('learningsTitle')}
         </h3>
         {recallMode ? (
-          <button type="button" onClick={() => setHighlight(null)} style={filterChip}>
-            <span aria-hidden style={{ opacity: 0.8 }}>🎯</span>
-            {t('recallFor', { prompt: highlight!.prompt })}
-            <span aria-hidden style={{ marginLeft: 2, opacity: 0.7 }}>✕</span>
-          </button>
+          <>
+            <button type="button" onClick={() => setHighlight(null)} style={filterChip}>
+              <span aria-hidden style={{ opacity: 0.8 }}>🎯</span>
+              {t('recallFor', { prompt: highlight!.prompt })}
+              <span aria-hidden style={{ marginLeft: 2, opacity: 0.7 }}>✕</span>
+            </button>
+            <span style={methodChip}>{t('recallMethod', { method: highlight!.method })}</span>
+          </>
         ) : selectedRegion ? (
           <button type="button" onClick={onClearRegion} style={filterChip}>
             <span style={{ width: 9, height: 9, borderRadius: 3, background: `var(${REGION_HUE_VAR[selectedRegion]})` }} aria-hidden />
@@ -277,6 +280,10 @@ const filterChip: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.72rem', fontWeight: 600,
   padding: '2px 8px', borderRadius: 999, border: '1px solid var(--border-subtle)',
   background: 'var(--bg-elevated)', color: 'var(--text-secondary)', cursor: 'pointer', maxWidth: '100%',
+};
+const methodChip: React.CSSProperties = {
+  fontSize: '0.66rem', fontWeight: 600, color: 'var(--text-muted)',
+  padding: '1px 8px', borderRadius: 999, border: '1px solid var(--border-subtle)',
 };
 const primaryBadgeStyle: React.CSSProperties = {
   fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em',

@@ -57,7 +57,7 @@ import { resolveTenantModel } from '../llm/tenantModelService';
 import { reasoningParamsForModel } from '../llm/reasoningCapability';
 import { dispatchProjectEvermindLearnText } from '../llm/projectEvermind';
 import { buildProjectFactsBlock } from '../llm/projectFacts';
-import { scoreRunOutcome } from './scoreRunOutcome';
+import { scoreRunOutcome, finalizeLearnWeight } from './scoreRunOutcome';
 import { handleCloudRunCrash } from './cloudSelfHeal';
 import { cloudCrashReason } from './orphanReasons';
 import { RuntimeService } from './RuntimeService';
@@ -2175,8 +2175,13 @@ export async function finalizeCloudRun(
   // Best-effort, never affects the run outcome. [[evermind-learning-architecture]]
   if (repoCtx?.projectId && !cancelled && output.trim().length >= 20) {
     // Thread the task title as the teacher prompt so a pinned frontier teacher learns
-    // (task → ideal answer), not just a refinement of this run's output.
-    await dispatchProjectEvermindLearnText(env, tenantId, repoCtx.projectId, output, undefined, taskRow.title).catch(() => { /* best-effort */ });
+    // (task → ideal answer), not just a refinement of this run's output. Weight the
+    // contribution by run QUALITY (merged > opened > wrote-files > no-op) instead of
+    // the old text-length proxy, so a merged run teaches harder than a failed one.
+    const learnWeight = finalizeLearnWeight({
+      merged, prOpened, autoMergeFailed, producedChanges: writtenPaths.size > 0,
+    });
+    await dispatchProjectEvermindLearnText(env, tenantId, repoCtx.projectId, output, learnWeight, taskRow.title).catch(() => { /* best-effort */ });
   }
 
   return { ok: !autoMergeFailed, output: output + unverifiedNote };
