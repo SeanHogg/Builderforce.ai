@@ -1,0 +1,27 @@
+{
+  "id": "github-pr-review",
+  "name": "GitHub PR Review Agent",
+  "description": "Monitors GitHub PRs for open issues, failed checks, and reverted changes",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "githubToken": { "type": "string", "description": "GitHub Personal Access Token" },
+      "repositories": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "List of owner/repo strings to monitor"
+      },
+      "stalenessThresholdDays": { "type": "number", "default": 7 },
+      "filters": {
+        "type": "object",
+        "properties": {
+          "author": { "type": "string" },
+          "label": { "type": "string" },
+          "baseBranch": { "type": "string" },
+          "sinceDays": { "type": "number" }
+        }
+      }
+    }
+  }
+}
