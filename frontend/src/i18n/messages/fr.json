@@ -3571,7 +3571,8 @@
     "detailKind": "Type",
     "detailVersion": "Version",
     "detailWeight": "Poids",
-    "detailWhen": "Quand"
+    "detailWhen": "Quand",
+    "recallMethod": "{method, select, embedding {Rappel sémantique} other {Rappel lexical (repli)}}"
   },
   "evermindStatus": {
     "label": "Evermind",
@@ -5922,7 +5923,8 @@
     "viewDetail": "Voir le détail",
     "hideDetail": "Masquer le détail",
     "detailPromptLabel": "Tâche",
-    "detailTextLabel": "Appris"
+    "detailTextLabel": "Appris",
+    "validateMethod": "{method, select, embedding {Rappel sémantique} other {Rappel lexical (repli)}}"
   },
   "topbar": {
     "cart": "Panier",

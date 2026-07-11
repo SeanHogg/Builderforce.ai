@@ -348,8 +348,50 @@ function buildTimeline(input) {
   if (streaming) nodes.push(streaming);
   return nodes;
 }
+function stepSig(category, label, tsIso) {
+  return `${category}|${label}|${tsIso ?? ""}`;
+}
+function stepNode(step, ts, key) {
+  switch (step.category) {
+    case "tool":
+      return { key, kind: "tool", ts, order: ORDER.tool, label: step.label, args: step.args, result: step.result, isError: !!step.isError, durationMs: step.durationMs };
+    case "error":
+      return { key, kind: "error", ts, order: ORDER.error, label: step.label, message: typeof step.result === "string" ? step.result : JSON.stringify(step.result ?? "") };
+    case "recall": {
+      const r = step.result ?? {};
+      return { key, kind: "recall", ts, order: ORDER.recall, version: typeof r.version === "number" ? r.version : 0, count: typeof r.count === "number" ? r.count : Array.isArray(r.items) ? r.items.length : 0, items: Array.isArray(r.items) ? r.items : [] };
+    }
+    case "learn": {
+      const r = step.result ?? {};
+      return { key, kind: "learn", ts, order: ORDER.learn, version: typeof r.version === "number" ? r.version : 0 };
+    }
+    case "reconcile": {
+      const r = step.result ?? {};
+      return { key, kind: "reconcile", ts, order: ORDER.reconcile, version: typeof r.version === "number" ? r.version : 0, count: typeof r.count === "number" ? r.count : 0 };
+    }
+    default:
+      return null;
+  }
+}
+function parseStepMessage(metadata) {
+  if (!metadata) return null;
+  try {
+    const m = JSON.parse(metadata);
+    if (m.kind !== "step" || typeof m.category !== "string") return null;
+    return {
+      step: { category: m.category, label: typeof m.label === "string" ? m.label : m.category, args: m.args, result: m.result, isError: m.isError, durationMs: m.durationMs },
+      tsIso: typeof m.ts === "string" ? m.ts : void 0
+    };
+  } catch {
+    return null;
+  }
+}
 function buildSettledTimeline(messages, trace) {
   const nodes = [];
+  const traceStepSigs = /* @__PURE__ */ new Set();
+  for (const ev of trace) {
+    if (ev.category !== "llm" && ev.category !== "message") traceStepSigs.add(stepSig(ev.category, ev.label, ev.ts));
+  }
   messages.forEach((message, i) => {
     const ts = parseTs(message.createdAt, i);
     if (message.role === "user") {
@@ -365,6 +407,12 @@ function buildSettledTimeline(messages, trace) {
         text: stripImageRefs(message.content, imageNames),
         images
       });
+    } else if (message.role === "tool") {
+      const parsed = parseStepMessage(message.metadata);
+      if (!parsed) return;
+      if (traceStepSigs.has(stepSig(parsed.step.category, parsed.step.label, parsed.tsIso))) return;
+      const node = stepNode(parsed.step, parseTs(parsed.tsIso, ts), `msg-${message.id}`);
+      if (node) nodes.push(node);
     } else {
       nodes.push({
         key: `msg-${message.id}`,
@@ -381,51 +429,14 @@ function buildSettledTimeline(messages, trace) {
     const ts = parseTs(ev.ts, 1e15 + i);
     if (ev.category === "llm") {
       nodes.push({ key: `trace-${i}`, kind: "thinking", ts, order: ORDER.thinking, durationMs: ev.durationMs, step: step++ });
-    } else if (ev.category === "tool") {
-      nodes.push({
-        key: `trace-${i}`,
-        kind: "tool",
+    } else if (ev.category === "message") {
+    } else {
+      const node = stepNode(
+        { category: ev.category, label: ev.label, args: ev.args, result: ev.result, isError: ev.isError, durationMs: ev.durationMs },
         ts,
-        order: ORDER.tool,
-        label: ev.label,
-        args: ev.args,
-        result: ev.result,
-        isError: !!ev.isError,
-        durationMs: ev.durationMs
-      });
-    } else if (ev.category === "error") {
-      nodes.push({
-        key: `trace-${i}`,
-        kind: "error",
-        ts,
-        order: ORDER.error,
-        label: ev.label,
-        message: typeof ev.result === "string" ? ev.result : JSON.stringify(ev.result ?? "")
-      });
-    } else if (ev.category === "recall") {
-      const r = ev.result ?? {};
-      nodes.push({
-        key: `trace-${i}`,
-        kind: "recall",
-        ts,
-        order: ORDER.recall,
-        version: typeof r.version === "number" ? r.version : 0,
-        count: typeof r.count === "number" ? r.count : Array.isArray(r.items) ? r.items.length : 0,
-        items: Array.isArray(r.items) ? r.items : []
-      });
-    } else if (ev.category === "learn") {
-      const r = ev.result ?? {};
-      nodes.push({ key: `trace-${i}`, kind: "learn", ts, order: ORDER.learn, version: typeof r.version === "number" ? r.version : 0 });
-    } else if (ev.category === "reconcile") {
-      const r = ev.result ?? {};
-      nodes.push({
-        key: `trace-${i}`,
-        kind: "reconcile",
-        ts,
-        order: ORDER.reconcile,
-        version: typeof r.version === "number" ? r.version : 0,
-        count: typeof r.count === "number" ? r.count : 0
-      });
+        `trace-${i}`
+      );
+      if (node) nodes.push(node);
     }
   });
   nodes.sort((a, b) => a.ts - b.ts || a.order - b.order);
@@ -1567,6 +1578,7 @@ var DEFAULT_EVERMIND_LABELS = {
   validatePrimaryBadge: "Most likely used",
   validateScore: (pct) => `${pct}% match`,
   validateClear: "Clear",
+  validateMethod: (m) => m === "embedding" ? "Semantic recall" : "Lexical recall (fallback)",
   inspectTitle: "Recently learned",
   inspectEmpty: "Nothing learned yet. Runs and teaching will appear here.",
   kindText: "Run",
@@ -1953,6 +1965,7 @@ function ValidateResults({ t, result, onClear }) {
   return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { style: { display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { style: { ...fieldTitle, flex: 1, minWidth: 0 }, children: t.validateResultTitle(result.prompt) }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { style: { fontSize: "0.64rem", fontWeight: 600, color: C.text2, border: `1px solid ${C.border}`, borderRadius: 999, padding: "1px 8px" }, children: t.validateMethod(result.method) }),
       /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", onClick: onClear, style: { ...ghostBtn, marginLeft: 0 }, children: t.validateClear })
     ] }),
     result.matches.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { style: italic, children: t.validateEmpty }) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: result.matches.map((m) => {

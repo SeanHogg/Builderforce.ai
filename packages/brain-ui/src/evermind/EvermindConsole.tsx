@@ -435,6 +435,7 @@ function ValidateResults({ t, result, onClear }: { t: EvermindConsoleLabels; res
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
         <span style={{ ...fieldTitle, flex: 1, minWidth: 0 }}>{t.validateResultTitle(result.prompt)}</span>
+        <span style={{ fontSize: '0.64rem', fontWeight: 600, color: C.text2, border: `1px solid ${C.border}`, borderRadius: 999, padding: '1px 8px' }}>{t.validateMethod(result.method)}</span>
         <button type="button" onClick={onClear} style={{ ...ghostBtn, marginLeft: 0 }}>{t.validateClear}</button>
       </div>
       {result.matches.length === 0 ? (

@@ -3571,7 +3571,8 @@
     "detailKind": "类型",
     "detailVersion": "版本",
     "detailWeight": "权重",
-    "detailWhen": "时间"
+    "detailWhen": "时间",
+    "recallMethod": "{method, select, embedding {语义召回} other {词法召回（回退）}}"
   },
   "evermindStatus": {
     "label": "Evermind",
@@ -5922,7 +5923,8 @@
     "viewDetail": "查看详情",
     "hideDetail": "隐藏详情",
     "detailPromptLabel": "任务",
-    "detailTextLabel": "已学内容"
+    "detailTextLabel": "已学内容",
+    "validateMethod": "{method, select, embedding {语义召回} other {词法召回（回退）}}"
   },
   "topbar": {
     "cart": "购物车",

@@ -3571,7 +3571,8 @@
     "detailKind": "Type",
     "detailVersion": "Version",
     "detailWeight": "Weight",
-    "detailWhen": "When"
+    "detailWhen": "When",
+    "recallMethod": "{method, select, embedding {Semantic recall} other {Lexical recall (fallback)}}"
   },
   "evermindStatus": {
     "label": "Evermind",
@@ -5922,7 +5923,8 @@
     "viewDetail": "View detail",
     "hideDetail": "Hide detail",
     "detailPromptLabel": "Task",
-    "detailTextLabel": "Learned"
+    "detailTextLabel": "Learned",
+    "validateMethod": "{method, select, embedding {Semantic recall} other {Lexical recall (fallback)}}"
   },
   "topbar": {
     "cart": "Shopping cart",

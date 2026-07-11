@@ -3571,7 +3571,8 @@
     "detailKind": "Tipo",
     "detailVersion": "Versión",
     "detailWeight": "Peso",
-    "detailWhen": "Cuándo"
+    "detailWhen": "Cuándo",
+    "recallMethod": "{method, select, embedding {Recuperación semántica} other {Recuperación léxica (alternativa)}}"
   },
   "evermindStatus": {
     "label": "Evermind",
@@ -5922,7 +5923,8 @@
     "viewDetail": "Ver detalle",
     "hideDetail": "Ocultar detalle",
     "detailPromptLabel": "Tarea",
-    "detailTextLabel": "Aprendido"
+    "detailTextLabel": "Aprendido",
+    "validateMethod": "{method, select, embedding {Recuperación semántica} other {Recuperación léxica (alternativa)}}"
   },
   "topbar": {
     "cart": "Carrito de compras",

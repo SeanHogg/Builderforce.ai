@@ -41,6 +41,18 @@ describe("contributeProjectEvermindFromText", () => {
     expect(sentBody(fetchMock)).not.toHaveProperty("prompt");
   });
 
+  it("weights by run QUALITY, not text length — neutral default, caller override forwarded", async () => {
+    const fetchMock = mockFetch();
+    await contributeProjectEvermindFromText(CFG, RUN_TEXT);
+    // Neutral default (0.6), NOT the old text.length proxy.
+    expect(sentBody(fetchMock).weight).toBe(0.6);
+    expect(sentBody(fetchMock).weight).not.toBe(RUN_TEXT.length);
+
+    const fm2 = mockFetch();
+    await contributeProjectEvermindFromText(CFG, RUN_TEXT, undefined, 0.7);
+    expect(sentBody(fm2).weight).toBe(0.7);
+  });
+
   it("omits a blank/whitespace prompt", async () => {
     const fetchMock = mockFetch();
     await contributeProjectEvermindFromText(CFG, RUN_TEXT, "   ");

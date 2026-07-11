@@ -100,8 +100,10 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     expect(toolMsg?.tool_call_id).toBe('c1');
     expect(toolMsg?.content).toContain('"ok":true');
 
-    // Only user + final assistant persisted (tool turns stay in-memory).
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(2);
+    // user + the durable tool STEP + final assistant persist. The tool step is now
+    // persisted (role:'tool') so it survives a reload, but it is NOT added to the live
+    // message list (recordAppended) and is excluded from the model seed.
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(3);
     await waitFor(() => {
       expect(hook.current.messages.map((m) => m.content)).toEqual(['go', 'done']);
     });
@@ -164,8 +166,8 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
         'All done.',
       ]);
     });
-    // user + 2 narrations + final answer.
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(4);
+    // user + 2 narrations + 2 durable tool steps + final answer.
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(6);
   });
 
   it('persists nothing extra for a pure tool-call turn with no text', async () => {

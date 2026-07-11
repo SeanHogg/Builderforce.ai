@@ -597,6 +597,11 @@ declare function buildTimeline(input: BuildTimelineInput): TimelineNode[];
  * `messages` and `trace` (the expensive map + sort). Split out from {@link buildTimeline}
  * so a live streaming turn (whose text ticks on every token) can be appended cheaply
  * without re-mapping and re-sorting the whole conversation per token.
+ *
+ * Tool + memory steps come from the live `trace` during a run and are ALSO persisted
+ * as `role:'tool'` messages (so they survive a reload — the trace is in-memory only).
+ * A step present in both is rendered once (dedup by {@link stepSig}); a prior run's
+ * step, present only in the messages, still shows.
  */
 declare function buildSettledTimeline(messages: BrainMessage[], trace: BrainTraceEvent[]): TimelineNode[];
 /** The trailing live-streaming assistant bubble, or null when nothing is streaming.
@@ -646,6 +651,9 @@ interface EvermindValidateResult {
     matches: EvermindValidateMatch[];
     /** Id of the memory most likely used to respond, or null if none matched. */
     primaryId: number | null;
+    /** Which ranker produced these matches: the model's own SSM embedding (semantic)
+     *  or a lexical fallback when the model couldn't be reached. */
+    method: 'embedding' | 'lexical';
 }
 /** The head summary + live learning activity for a project's Evermind. */
 interface EvermindConsoleData {
@@ -752,6 +760,8 @@ interface EvermindConsoleLabels {
     validatePrimaryBadge: string;
     validateScore: (pct: number) => string;
     validateClear: string;
+    /** Honest label for how the ranking was produced (semantic embedding vs lexical). */
+    validateMethod: (method: 'embedding' | 'lexical') => string;
     inspectTitle: string;
     inspectEmpty: string;
     kindText: string;

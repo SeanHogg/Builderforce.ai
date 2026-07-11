@@ -341,10 +341,15 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         // `messages`, excluding the just-sent user turn), then append this turn.
         // Scoped to the last consolidation marker: a consolidated chat sends the
         // summary as its base context instead of the full (large) history.
-        const seed: ChatCompletionMessage[] = scopeToConsolidation(messages).map((m) => ({
-          role: m.role as ChatCompletionMessage['role'],
-          content: m.content,
-        }));
+        const seed: ChatCompletionMessage[] = scopeToConsolidation(messages)
+          // Durable tool/memory STEP rows (role:'tool', persisted for the timeline)
+          // are NOT model turns — exclude them so a reload never re-sends an orphaned
+          // tool message (which 400s strict vendors) into the transcript.
+          .filter((m) => m.role !== 'tool')
+          .map((m) => ({
+            role: m.role as ChatCompletionMessage['role'],
+            content: m.content,
+          }));
         await startRun(id, buildRequest(seed, modelContent));
         return true;
       } catch (e) {
@@ -376,10 +381,13 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     if (autoRepliedChatIdRef.current === chatId) return;
     autoRepliedChatIdRef.current = chatId;
     setLocalError('');
-    const seed: ChatCompletionMessage[] = scopeToConsolidation(messages.slice(0, -1)).map((m) => ({
-      role: m.role as ChatCompletionMessage['role'],
-      content: m.content,
-    }));
+    const seed: ChatCompletionMessage[] = scopeToConsolidation(messages.slice(0, -1))
+      // Exclude durable tool/memory STEP rows (see the send() seed above).
+      .filter((m) => m.role !== 'tool')
+      .map((m) => ({
+        role: m.role as ChatCompletionMessage['role'],
+        content: m.content,
+      }));
     void startRun(chatId, buildRequest(seed, last.content));
   }, [chatId, loadingMessages, localSending, messages, buildRequest]);
 

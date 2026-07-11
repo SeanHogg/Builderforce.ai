@@ -1150,11 +1150,34 @@ export const projectManagerConfigs = pgTable('project_manager_configs', {
   autoAssign:        boolean('auto_assign').notNull().default(true),
   autoBusinessValue: boolean('auto_business_value').notNull().default(true),
   autoPrioritize:    boolean('auto_prioritize').notNull().default(true),
+  /** The manager's DOMAIN focus/persona (see managerTypes.ts): 'general' | 'delivery'
+   *  | 'qa' | 'service_desk' | 'devops' | … . Shapes what it values + prioritizes. */
+  managerType:       varchar('manager_type', { length: 32 }).notNull().default('general'),
   lastRunAt:         timestamp('last_run_at'),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ({
   byProject: uniqueIndex('uq_project_manager_configs_project').on(t.tenantId, t.projectId),
+}));
+
+/**
+ * Standing human guidance the AI Manager honors on every pass — the persisted output
+ * of a "coaching session" (Manager-tab box or the manager.coach chat tool). A row
+ * scoped to one project applies to that project's passes; project_id NULL applies
+ * tenant-wide (a manager that manages the whole tenant). See migration 0327.
+ */
+export const managerDirectives = pgTable('manager_directives', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:  integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  directive:  text('directive').notNull(),
+  status:     varchar('status', { length: 16 }).notNull().default('active'),
+  createdBy:  varchar('created_by', { length: 36 }),
+  source:     varchar('source', { length: 16 }).notNull().default('coach'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  expiresAt:  timestamp('expires_at'),
+}, (t) => ({
+  byScope: index('idx_manager_directives_scope').on(t.tenantId, t.projectId, t.status),
 }));
 
 /**

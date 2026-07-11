@@ -85,6 +85,29 @@ export function computeOutcomeScore(inputs: OutcomeScoreInputs): OutcomeScore {
   return { score, terms: { merge, ci, completion, efficiency } };
 }
 
+/**
+ * Coarse learn-contribution weight (0..1) from what's known at run FINALIZE — before
+ * CI/routing outcome is scored. This is the FedAvg sample weight for the run's Evermind
+ * contribution: a clean auto-merge teaches the model most, a no-op/failed run barely
+ * teaches. It is DISTINCT from {@link computeOutcomeScore} (which scores a CI-known run
+ * for model routing); it exists because the old learn path weighted by raw TEXT LENGTH,
+ * so a long, failed run taught exactly as hard as a short, merged one. Floored at 0.2 so
+ * the coordinator's `weight > 0` gate still accepts (and lightly learns from) a
+ * low-quality run instead of silently snapping it back to the default weight of 1.
+ */
+export function finalizeLearnWeight(s: {
+  merged: boolean;
+  prOpened: boolean;
+  autoMergeFailed: boolean;
+  producedChanges: boolean;
+}): number {
+  if (s.merged) return 1;             // shipped clean — the strongest signal
+  if (s.autoMergeFailed) return 0.3;  // opened a PR but the auto-merge broke
+  if (s.prOpened) return 0.7;         // real change, awaiting approval/CI
+  if (s.producedChanges) return 0.4;  // wrote files but no PR opened
+  return 0.2;                         // text-only / no-op
+}
+
 export type OutcomeSource = 'cloud' | 'onprem' | 'ide' | 'external';
 
 export interface ClientRunOutcome {

@@ -42,10 +42,19 @@ export async function contributeProjectEvermindFromText(
   cfg: ProjectEvermindSyncConfig,
   text: string,
   prompt?: string,
+  /**
+   * Run-QUALITY weight (0..1) for the FedAvg merge — a run that produced concrete
+   * changes should teach harder than a no-op one. Replaces the old text-LENGTH proxy
+   * (which let a long, low-value run dominate the merge). Defaults to a neutral 0.6
+   * when the caller has no quality signal. Bounded 0.05..1 so it stays comparable with
+   * the cloud finalize weights and always clears the coordinator's `weight > 0` gate.
+   */
+  weight?: number,
 ): Promise<ContributeResult> {
   const trimmed = (text ?? "").trim();
   if (trimmed.length < 20) return { ok: false, reason: "text too short" };
   const promptTrimmed = (prompt ?? "").trim();
+  const learnWeight = Math.max(0.05, Math.min(1, typeof weight === "number" && weight > 0 ? weight : 0.6));
   try {
     const res = await fetch(`${cfg.gatewayUrl}/api/agent/projects/${cfg.projectId}/evermind/learn-text`, {
       method: "POST",
@@ -53,7 +62,7 @@ export async function contributeProjectEvermindFromText(
       body: JSON.stringify({
         text: trimmed.slice(0, cfg.maxChars ?? 8000),
         ...(promptTrimmed ? { prompt: promptTrimmed.slice(0, cfg.maxChars ?? 8000) } : {}),
-        weight: trimmed.length,
+        weight: learnWeight,
       }),
     });
     const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;

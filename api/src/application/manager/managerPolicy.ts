@@ -9,6 +9,8 @@
  * caller (the sweep, the run-now endpoint, the surface) sees one consistent policy.
  */
 
+import { normalizeManagerType, DEFAULT_MANAGER_TYPE, type ManagerTypeId } from './managerTypes';
+
 /** PR authority tiers (see migration 0265). */
 export type PrMergePolicy = 'immediate' | 'on_green' | 'queue';
 
@@ -23,6 +25,8 @@ export interface ManagerConfigRow {
   autoAssign: boolean;
   autoBusinessValue: boolean;
   autoPrioritize: boolean;
+  /** The manager's domain type (see managerTypes.ts). Defaults to 'general'. */
+  managerType: string;
 }
 
 export interface EffectiveManagerPolicy {
@@ -36,6 +40,8 @@ export interface EffectiveManagerPolicy {
   autoAssign: boolean;
   autoBusinessValue: boolean;
   autoPrioritize: boolean;
+  /** The manager's domain type id ('general' | 'delivery' | 'qa' | 'service_desk' | 'devops' | …). */
+  managerType: ManagerTypeId;
 }
 
 /** The tenant default applied when a project has no explicit manager config row. */
@@ -47,6 +53,7 @@ export const DEFAULT_MANAGER_POLICY: EffectiveManagerPolicy = {
   autoAssign: true,
   autoBusinessValue: true,
   autoPrioritize: true,
+  managerType: DEFAULT_MANAGER_TYPE,
 };
 
 const VALID_PR_POLICIES: ReadonlySet<string> = new Set(['immediate', 'on_green', 'queue']);
@@ -111,5 +118,6 @@ export function resolveEffectiveManagerPolicy(row: ManagerConfigRow | null | und
     autoAssign: row.autoAssign,
     autoBusinessValue: row.autoBusinessValue,
     autoPrioritize: row.autoPrioritize,
+    managerType: normalizeManagerType(row.managerType),
   };
 }
