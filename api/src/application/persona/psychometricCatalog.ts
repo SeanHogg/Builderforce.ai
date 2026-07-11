@@ -150,37 +150,103 @@ export const ENNEAGRAM_TYPES: Array<{ type: number; name: string; motivation: st
 // Questionnaire intake + scoring
 // ---------------------------------------------------------------------------
 
+/**
+ * A questionnaire item.
+ *  - `kind: 'dimension'` (default) scores a 0..100 trait onto {@link CatalogDimension}
+ *    `dimension` (a DIM id).
+ *  - `kind: 'mbti'` contributes to one MBTI dichotomy ({@link mbtiAxis}); agreement
+ *    points to {@link mbtiAgreePole}. It does NOT touch the trait vector.
+ *  - `kind: 'enneagram'` is a typing item for {@link enneagramType} (1..9); high
+ *    agreement raises the likelihood of that type. It does NOT touch the vector.
+ *
+ * `tier` splits the bank into a quick free BASIC test (the Big-Five/HEXACO spine +
+ * a few dispositional items, ~2 min) and the full ADVANCED battery (everything).
+ */
 export type CatalogQuestion = {
   id: string;
+  /** DIM id for `dimension` items; a descriptive non-DIM token for mbti/enneagram. */
   dimension: string;
   text: string;
-  /** When true, a high agreement maps to a LOW score on the dimension. */
+  /** When true, a high agreement maps to a LOW score (or the OPPOSITE pole/type). */
   reverse?: boolean;
+  /** Which test the item belongs to. Basic = quick free spine; advanced = full battery. */
+  tier: 'basic' | 'advanced';
+  /** Item family. Absent ⇒ a normal `'dimension'` trait item. */
+  kind?: 'dimension' | 'mbti' | 'enneagram';
+  /** For `kind: 'mbti'` — the dichotomy this item loads on. */
+  mbtiAxis?: MbtiAxis;
+  /** For `kind: 'mbti'` — the pole a high agreement points to (the other pole is its partner). */
+  mbtiAgreePole?: string;
+  /** For `kind: 'enneagram'` — the type (1..9) this item is diagnostic of. */
+  enneagramType?: number;
 };
 
-const q = (id: string, dimension: string, text: string, reverse = false): CatalogQuestion => ({
+/** The four MBTI dichotomies and their pole pairs (first pole = the scoring reference). */
+export type MbtiAxis = 'EI' | 'SN' | 'TF' | 'JP';
+const MBTI_AXES: Array<{ axis: MbtiAxis; poles: [string, string] }> = [
+  { axis: 'EI', poles: ['E', 'I'] },
+  { axis: 'SN', poles: ['S', 'N'] },
+  { axis: 'TF', poles: ['T', 'F'] },
+  { axis: 'JP', poles: ['J', 'P'] },
+];
+
+const q = (
+  id: string,
+  dimension: string,
+  text: string,
+  reverse = false,
+  tier: 'basic' | 'advanced' = 'advanced',
+): CatalogQuestion => ({ id, dimension, text, reverse, tier, kind: 'dimension' });
+
+/** An MBTI dichotomy item. `agreePole` is the letter a "strongly agree" points to. */
+const qm = (id: string, axis: MbtiAxis, agreePole: string, text: string): CatalogQuestion => ({
   id,
-  dimension,
+  dimension: `mbti.${axis.toLowerCase()}`,
   text,
-  reverse,
+  reverse: false,
+  tier: 'advanced',
+  kind: 'mbti',
+  mbtiAxis: axis,
+  mbtiAgreePole: agreePole,
+});
+
+/** An Enneagram typing item — agreement raises the likelihood of `type` (1..9). */
+const qe = (id: string, type: number, text: string): CatalogQuestion => ({
+  id,
+  dimension: 'enneagram.type',
+  text,
+  reverse: false,
+  tier: 'advanced',
+  kind: 'enneagram',
+  enneagramType: type,
 });
 
 /**
- * A compact validated-style intake. Each item is a 1..5 Likert (Strongly disagree
- * → Strongly agree). Two items per high-leverage dimension, one for the rest.
+ * A validated-style intake. Each item is a 1..5 Likert (Strongly disagree → Strongly
+ * agree). The BASIC tier (`tier: 'basic'`) is a quick, free, high-signal spine —
+ * one item per HEXACO factor plus a few dispositional/orientation items — that any
+ * user can finish in ~2 minutes. Everything else is the full ADVANCED battery:
+ * decision style, moral foundations, conflict, the ten Schwartz values, and the
+ * categorical MBTI + Enneagram typing items.
  */
 export const PSYCHOMETRIC_QUESTIONS: CatalogQuestion[] = [
-  q('c1', DIM.conscientiousness, 'I plan my work carefully and check it before calling it done.'),
+  // ── BASIC spine — Big-Five/HEXACO (one per factor) + core dispositional ──────
+  q('c1', DIM.conscientiousness, 'I plan my work carefully and check it before calling it done.', false, 'basic'),
+  q('o1', DIM.openness, 'I enjoy trying unconventional approaches to a problem.', false, 'basic'),
+  q('e1', DIM.emotionality, 'I tend to worry about what could go wrong.', false, 'basic'),
+  q('x1', DIM.extraversion, 'I proactively share updates and options without being asked.', false, 'basic'),
+  q('a1', DIM.agreeableness, 'I would rather find consensus than argue my point.', false, 'basic'),
+  q('h1', DIM.honesty, "I will admit uncertainty even when it's not what people want to hear.", false, 'basic'),
+  q('r1', DIM.regulatoryFocus, 'I focus more on seizing opportunities than on avoiding mistakes.', false, 'basic'),
+  q('n1', DIM.needForCognition, 'I enjoy working through complex problems step by step.', false, 'basic'),
+  q('g1', DIM.grit, 'I keep going on hard problems long after others would quit.', false, 'basic'),
+  q('lc1', DIM.locusInternal, 'When something fails, I focus on what I can do to fix it.', false, 'basic'),
+  q('rt1', DIM.riskTolerance, 'I am comfortable taking calculated risks to move faster.', false, 'basic'),
+
+  // ── ADVANCED — second HEXACO items + full framework coverage ─────────────────
   q('c2', DIM.conscientiousness, 'I often dive in and figure things out as I go.', true),
-  q('o1', DIM.openness, 'I enjoy trying unconventional approaches to a problem.'),
   q('o2', DIM.openness, 'I prefer sticking to proven, familiar methods.', true),
-  q('e1', DIM.emotionality, 'I tend to worry about what could go wrong.'),
-  q('x1', DIM.extraversion, 'I proactively share updates and options without being asked.'),
-  q('a1', DIM.agreeableness, 'I would rather find consensus than argue my point.'),
   q('a2', DIM.agreeableness, 'I push back directly when I think someone is wrong.', true),
-  q('h1', DIM.honesty, "I will admit uncertainty even when it's not what people want to hear."),
-  q('r1', DIM.regulatoryFocus, 'I focus more on seizing opportunities than on avoiding mistakes.'),
-  q('n1', DIM.needForCognition, 'I enjoy working through complex problems step by step.'),
   q('n2', DIM.needForCognition, 'I prefer quick answers over lengthy analysis.', true),
   q('rf1', DIM.reflection, 'I double-check my first instinct before acting on it.'),
   q('dr1', DIM.decisionRational, 'I weigh the trade-offs explicitly before deciding.'),
@@ -196,17 +262,59 @@ export const PSYCHOMETRIC_QUESTIONS: CatalogQuestion[] = [
   q('mli1', DIM.moralLiberty, 'I dislike imposing unnecessary constraints on people.'),
   q('ca1', DIM.conflictAssertiveness, 'In a disagreement I push hard for the outcome I believe in.'),
   q('cc1', DIM.conflictCooperativeness, "In a disagreement I work to satisfy everyone's concerns."),
-  q('g1', DIM.grit, 'I keep going on hard problems long after others would quit.'),
-  q('lc1', DIM.locusInternal, 'When something fails, I focus on what I can do to fix it.'),
-  q('rt1', DIM.riskTolerance, 'I am comfortable taking calculated risks to move faster.'),
+
+  // ── ADVANCED — Schwartz basic values (one item per value) ────────────────────
+  q('vsd1', DIM.valSelfDirection, 'Thinking up my own ideas and being creative is important to me.'),
+  q('vst1', DIM.valStimulation, 'I look for adventure and welcome new and exciting experiences.'),
+  q('vhe1', DIM.valHedonism, "Enjoying life's pleasures and having a good time is important to me."),
+  q('vac1', DIM.valAchievement, 'Being very successful and having others recognise my achievements matters to me.'),
+  q('vpo1', DIM.valPower, 'Being in charge and having control over people and resources matters to me.'),
+  q('vse1', DIM.valSecurity, 'Living in safe, stable, and orderly surroundings is important to me.'),
+  q('vco1', DIM.valConformity, 'I believe people should follow the rules even when no one is watching.'),
+  q('vtr1', DIM.valTradition, 'Upholding traditions and established customs is important to me.'),
+  q('vbe1', DIM.valBenevolence, 'Caring for the wellbeing of the people close to me is important to me.'),
+  q('vun1', DIM.valUniversalism, 'I believe everyone should be treated equally and the environment protected.'),
+
+  // ── ADVANCED — MBTI dichotomies (derive a 4-letter type) ─────────────────────
+  qm('mbti_ei', 'EI', 'E', 'I gain energy from being around other people rather than from time alone.'),
+  qm('mbti_sn', 'SN', 'S', 'I focus more on concrete facts and details than on patterns and possibilities.'),
+  qm('mbti_tf', 'TF', 'T', 'I make decisions based on logic and consistency rather than personal values.'),
+  qm('mbti_jp', 'JP', 'J', 'I prefer to have things planned and settled rather than open-ended.'),
+
+  // ── ADVANCED — Enneagram typing (derive the most-likely core type) ───────────
+  qe('enn1', 1, 'I strive to be principled and correct, and it bothers me when things are done sloppily.'),
+  qe('enn2', 2, "I focus on being helpful and attending to other people's needs."),
+  qe('enn3', 3, 'I am driven to achieve, succeed, and be seen as effective.'),
+  qe('enn4', 4, 'I want to be authentic and express what makes me different from everyone else.'),
+  qe('enn5', 5, 'I prefer to observe and understand things deeply before I get involved.'),
+  qe('enn6', 6, 'I stay alert to what could go wrong and value being secure and prepared.'),
+  qe('enn7', 7, 'I seek variety and new experiences and like to keep my options open.'),
+  qe('enn8', 8, 'I take charge, assert myself, and protect the people I care about.'),
+  qe('enn9', 9, 'I try to keep the peace and avoid conflict wherever I can.'),
 ];
 
+/** The richer questionnaire result: a trait vector plus derived categorical skins. */
+export interface QuestionnaireResult {
+  vector: Record<string, number>;
+  /** A full 4-letter MBTI type — present only when all four dichotomies are answered. */
+  mbti?: string;
+  /** The most-likely Enneagram core type (1..9) — present when any typing item is answered. */
+  enneagramType?: number;
+}
+
+const mean = (values: number[]): number => values.reduce((a, b) => a + b, 0) / values.length;
+
 /**
- * Score a set of Likert answers (questionId -> 1..5) into a 0..100 trait vector.
- * Only dimensions with at least one answer appear in the result. Pure function.
+ * Score a set of Likert answers (questionId -> 1..5) into a trait vector plus the
+ * derived MBTI / Enneagram skins. Only dimensions with at least one answer appear in
+ * `vector`; `mbti` is emitted only when all four dichotomies are answered; `enneagramType`
+ * is the highest-agreement type (ties → lowest type number). Pure, reverse-key aware.
  */
-export function scoreQuestionnaire(answers: Record<string, number>): Record<string, number> {
+export function scoreQuestionnaire(answers: Record<string, number>): QuestionnaireResult {
   const byDimension = new Map<string, number[]>();
+  // Per MBTI axis: agreement toward the FIRST pole (0..100), so multiple items combine.
+  const byMbtiAxis = new Map<MbtiAxis, number[]>();
+  const byEnneagram = new Map<number, number[]>();
   const questionById = new Map(PSYCHOMETRIC_QUESTIONS.map((item) => [item.id, item]));
 
   for (const [id, raw] of Object.entries(answers)) {
@@ -216,16 +324,52 @@ export function scoreQuestionnaire(answers: Record<string, number>): Record<stri
     if (Number.isNaN(likert)) continue;
     let pct = ((likert - 1) / 4) * 100;
     if (item.reverse) pct = 100 - pct;
-    const list = byDimension.get(item.dimension) ?? [];
-    list.push(pct);
-    byDimension.set(item.dimension, list);
+
+    if (item.kind === 'mbti' && item.mbtiAxis) {
+      const spec = MBTI_AXES.find((a) => a.axis === item.mbtiAxis);
+      if (!spec) continue;
+      // Normalise every item on the axis to "agreement toward the first pole".
+      const towardFirst = item.mbtiAgreePole === spec.poles[0] ? pct : 100 - pct;
+      const list = byMbtiAxis.get(item.mbtiAxis) ?? [];
+      list.push(towardFirst);
+      byMbtiAxis.set(item.mbtiAxis, list);
+    } else if (item.kind === 'enneagram' && typeof item.enneagramType === 'number') {
+      const list = byEnneagram.get(item.enneagramType) ?? [];
+      list.push(pct);
+      byEnneagram.set(item.enneagramType, list);
+    } else {
+      const list = byDimension.get(item.dimension) ?? [];
+      list.push(pct);
+      byDimension.set(item.dimension, list);
+    }
   }
 
   const vector: Record<string, number> = {};
   for (const [dimension, values] of byDimension) {
-    vector[dimension] = Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+    vector[dimension] = Math.round(mean(values));
   }
-  return vector;
+
+  const result: QuestionnaireResult = { vector };
+
+  // MBTI — only a COMPLETE 4-letter type (every dichotomy answered) is meaningful.
+  if (MBTI_AXES.every(({ axis }) => byMbtiAxis.has(axis))) {
+    result.mbti = MBTI_AXES.map(({ axis, poles }) => {
+      const towardFirst = mean(byMbtiAxis.get(axis)!);
+      return towardFirst >= 50 ? poles[0] : poles[1];
+    }).join('');
+  }
+
+  // Enneagram — the highest-agreement type; ties resolve to the lowest type number.
+  if (byEnneagram.size > 0) {
+    let best = { type: 0, score: -1 };
+    for (const type of [...byEnneagram.keys()].sort((a, b) => a - b)) {
+      const s = mean(byEnneagram.get(type)!);
+      if (s > best.score) best = { type, score: s };
+    }
+    if (best.type > 0) result.enneagramType = best.type;
+  }
+
+  return result;
 }
 
 /** Every valid dimension id (for validating imported vectors). */

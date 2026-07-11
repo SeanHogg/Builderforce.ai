@@ -23,8 +23,10 @@ import {
 import { PUBLIC_LIST_CACHE_KEY } from './workforceRoutes';
 import {
   ideProxy,
+  readProxyChoice,
   type ChatCompletionRequest,
 } from '../../application/llm/LlmProxyService';
+import { evaluateFinetuneOutputs } from '../../application/finetune/evaluateFinetune';
 import { tenantProxyForPlan } from '../../application/llm/tenantProxy';
 import {
   IDE_PREFIX,
@@ -659,9 +661,9 @@ export function createIdeRoutes(): Hono<HonoEnv> {
         }
       }
     }
+    const service = ideProxy(c.env);
     const modelOutputs: string[] = [];
     if (c.env.OPENROUTER_API_KEY && examples.length > 0) {
-      const service = ideProxy(c.env);
       for (const ex of examples) {
         try {
           const result = await service.complete({
@@ -672,17 +674,30 @@ export function createIdeRoutes(): Hono<HonoEnv> {
             stream: false,
             max_tokens: 512,
           } as ChatCompletionRequest);
-          const json = await result.response.json() as { choices?: Array<{ message?: { content?: string } }> };
-          modelOutputs.push(json.choices?.[0]?.message?.content?.trim() ?? '(no output)');
+          const { content } = await readProxyChoice(result);
+          modelOutputs.push(content || '(no output)');
         } catch {
           modelOutputs.push('(Error generating output)');
         }
       }
     }
-    const score = modelOutputs.length > 0 ? 0.85 : 0;
-    const result = { job_id: jobId, score, code_correctness: score, reasoning_quality: score, hallucination_rate: 0.1, details: 'Evaluation complete', created_at: new Date().toISOString() };
-    await getSql(c)`INSERT INTO ide_training_logs (id, job_id, message) VALUES (${generateId()}, ${jobId}, ${`Evaluation complete — score: ${score.toFixed(3)}`})`;
-    return c.json(result);
+    // Real AI-judge scoring against the dataset's expected outputs (replaces the
+    // fabricated flat 0.85). Persist the full breakdown so it's queryable — the
+    // training panel charts correctness/reasoning/hallucination instead of a log.
+    const evaluated = await evaluateFinetuneOutputs(service, examples, modelOutputs);
+    await getSql(c)`
+      UPDATE ide_training_jobs
+      SET eval_score = ${evaluated.score},
+          eval_code_correctness = ${evaluated.code_correctness},
+          eval_reasoning_quality = ${evaluated.reasoning_quality},
+          eval_hallucination_rate = ${evaluated.hallucination_rate},
+          eval_details = ${evaluated.details},
+          evaluated_at = NOW(),
+          updated_at = NOW()
+      WHERE id = ${jobId}
+    `;
+    await getSql(c)`INSERT INTO ide_training_logs (id, job_id, message) VALUES (${generateId()}, ${jobId}, ${`Evaluation complete — score: ${evaluated.score.toFixed(3)}`})`;
+    return c.json({ job_id: jobId, ...evaluated, created_at: new Date().toISOString() });
   });
 
   // ---------- Agents (workforce registry) ----------

@@ -24,9 +24,12 @@ import {
   BPETokenizer,
   benchmarkText,
   exportEvermind,
+  generateVideo,
   EXPORT_FORMATS,
   type ExportFormat,
   type ExportResult,
+  type VideoRVQCodec,
+  type EvermindModality,
 } from '@seanhogg/builderforce-memory-engine';
 
 export { EXPORT_FORMATS };
@@ -76,6 +79,10 @@ export async function loadEvermindModel(store: ArtifactStore, ref: string): Prom
   const pkg = EvermindModelPackage.fromBlob(await modelObj.arrayBuffer());
   const verdict = pkg.validate();
   if (!verdict.ok) throw new Error(`invalid .evermind artifact: ${verdict.errors.join('; ')}`);
+  const modality = pkg.manifest.modality ?? 'text';
+  if (modality !== 'text') {
+    throw new Error(`Evermind artifact at ${ref} is a '${modality}' model — use the media generation endpoint, not text chat`);
+  }
   const lm = pkg.loadLM();
 
   const tokObj = await store.get(`${ref}/tokenizer.json`);
@@ -216,5 +223,132 @@ export function buildEvermindCompletion(
     model,
     choices: [{ index: 0, message: { role: 'assistant', content: gen.content }, finish_reason: 'stop' }],
     usage: gen.usage,
+  };
+}
+
+// ── Media (video / image) generation ──────────────────────────────────────────
+//
+// Text and media share ONE generator (EvermindLM). A media `.evermind` bundles a
+// VideoRVQCodec inside the artifact, so serving is: load package → loadMediaLM()
+// → run the generator → decode tokens back to frames. Reuses the same R2 loader
+// and per-isolate memo pattern as the text path (DRY).
+
+/** Upper bound on frames returned per request (keeps the response payload bounded). */
+const MAX_MEDIA_FRAMES = 64;
+
+export interface EvermindMediaGenerateOptions {
+  /** Text conditioning (only used when the model has a text region + tokenizer). */
+  prompt?: string;
+  /** Cap on frames to return. Default 1 (image) / 16 (video), hard-capped at 64. */
+  maxFrames?: number;
+  /** Cap on generated tokens. Default sizes to `maxFrames` worth of tokens. */
+  maxTokens?: number;
+  temperature?: number;
+  seed?: number;
+}
+
+export interface EvermindMediaGeneration {
+  modality: 'video' | 'image';
+  width: number;
+  height: number;
+  channels: number;
+  frameCount: number;
+  /** Base64 of each frame's bytes, row-major `((y·W)+x)·C+ch`, 0–255. */
+  frames: string[];
+  usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+}
+
+interface LoadedMediaModel {
+  lm: EvermindLM;
+  codec: VideoRVQCodec;
+  modality: EvermindModality;
+  /** Present only for text-conditioned media models (textVocabSize > 0). */
+  tok?: BPETokenizer;
+}
+
+/** Per-isolate memo of loaded media models, keyed by immutable versioned ref (see {@link MODEL_CACHE}). */
+const MEDIA_CACHE = new Map<string, LoadedMediaModel>();
+
+/** Load (and cache) a published video/image model + its bundled codec from R2. */
+export async function loadEvermindMediaModel(store: ArtifactStore, ref: string): Promise<LoadedMediaModel> {
+  const cached = MEDIA_CACHE.get(ref);
+  if (cached) return cached;
+
+  const modelObj = await store.get(`${ref}/model.evermind`);
+  if (!modelObj) throw new Error(`Evermind model artifact not found at ${ref}/model.evermind`);
+  const pkg = EvermindModelPackage.fromBlob(await modelObj.arrayBuffer());
+  const verdict = pkg.validate();
+  if (!verdict.ok) throw new Error(`invalid .evermind artifact: ${verdict.errors.join('; ')}`);
+  const modality = pkg.manifest.modality ?? 'text';
+  if (modality !== 'video' && modality !== 'image') {
+    throw new Error(`Evermind artifact at ${ref} is a '${modality}' model, not video/image`);
+  }
+  const { lm, codec } = pkg.loadMediaLM();
+  const loaded: LoadedMediaModel = { lm, codec, modality };
+
+  // Text-conditioned media models carry a tokenizer for the caption prefix.
+  if (codec.vocab.textVocabSize > 0) {
+    const tokObj = await store.get(`${ref}/tokenizer.json`);
+    if (tokObj) {
+      const tokDesc = JSON.parse(await tokObj.text()) as { vocab: Record<string, number>; merges: string[] };
+      const tok = new BPETokenizer();
+      tok.loadFromObjects(tokDesc.vocab, tokDesc.merges);
+      loaded.tok = tok;
+    }
+  }
+
+  MEDIA_CACHE.set(ref, loaded);
+  return loaded;
+}
+
+/** Base64 of a single [0,1] frame quantized to 0–255 bytes. */
+function frameToBase64(frame: Float32Array): string {
+  const bytes = new Uint8Array(frame.length);
+  for (let i = 0; i < frame.length; i++) {
+    const v = Math.round((frame[i] ?? 0) * 255);
+    bytes[i] = v < 0 ? 0 : v > 255 ? 255 : v;
+  }
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);
+  return btoa(bin);
+}
+
+/**
+ * Generate video/image from a published media Evermind model: run the generator
+ * over the (optionally text-conditioned) prompt and decode the emitted tokens to
+ * frames via the bundled codec. Returns base64 frames + token usage.
+ */
+export async function evermindGenerateMedia(
+  store: ArtifactStore,
+  ref: string,
+  opts: EvermindMediaGenerateOptions = {},
+): Promise<EvermindMediaGeneration> {
+  const { lm, codec, modality, tok } = await loadEvermindMediaModel(store, ref);
+
+  // Caption prefix — only when the model actually has a text region + tokenizer.
+  let promptTokens: number[] = [];
+  if (tok && codec.vocab.textVocabSize > 0 && opts.prompt) {
+    promptTokens = tok.encode(opts.prompt).filter((id) => id < codec.vocab.textVocabSize);
+  }
+
+  const maxFrames = Math.min(Math.max(1, opts.maxFrames ?? (modality === 'image' ? 1 : 16)), MAX_MEDIA_FRAMES);
+  const maxNewTokens = opts.maxTokens ?? (codec.tokensPerFrame + 1) * maxFrames + 2;
+  const { video, tokens } = generateVideo(lm, codec, promptTokens, {
+    maxNewTokens,
+    temperature: opts.temperature ?? 0.7,
+    ...(opts.seed != null ? { seed: opts.seed } : {}),
+  });
+
+  const frames = video.slice(0, modality === 'image' ? 1 : maxFrames).map(frameToBase64);
+  const prompt_tokens = promptTokens.length;
+  const completion_tokens = tokens.length;
+  return {
+    modality,
+    width: codec.width,
+    height: codec.height,
+    channels: codec.channels,
+    frameCount: frames.length,
+    frames,
+    usage: { prompt_tokens, completion_tokens, total_tokens: prompt_tokens + completion_tokens },
   };
 }

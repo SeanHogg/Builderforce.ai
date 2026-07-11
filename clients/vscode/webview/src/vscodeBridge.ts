@@ -83,6 +83,13 @@ export interface InitData {
   tools: ToolSpecMsg[];
   /** Localized UI strings (see {@link LabelBundle}). */
   labels: LabelBundle;
+  /**
+   * The signed-in user's PERSONALITY-only directive block (from the gateway's
+   * `/api/limbic/block`), so the chat's tone reflects the user. Injected into the
+   * ambient `extraSystem` channel (not baked into the shared persona). Empty/absent
+   * when the user has no profile — a no-op. Fetched once per session by the host.
+   */
+  personalityBlock?: string;
 }
 
 interface VsCodeApi {

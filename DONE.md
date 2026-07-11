@@ -4,6 +4,16 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-11 — Superadmin-owned account never freezes: tenant-level token bypass in the ONE gate + Manager "autonomy paused" surfacing (api + frontend)
+
+Diagnosed from "the AI Manager isn't working / Evermind stopped learning ~11h ago while the Manager tab shows last run = yesterday." Root cause: the cron manager sweep (`runManagerSweep`) and the always-on autonomous executor (`runAutonomousExecutionSweep`) both gate on `getTenantTokenAvailability` and skip a token-capped tenant — but that resolver only granted the "superadmin ⇒ unlimited" bypass from `opts.actingUserId`, which the crons don't pass. So a **superadmin-OWNED account** (unlimited by definition) had its board frozen (no rank/assign/dispatch) and its Evermind stopped learning (no runs finish → nothing enqueued to the coordinator DO), while only manual "Run manager now" (which doesn't token-gate) still worked — the exact "works when I click, dead on autopilot" asymmetry.
+
+- **One-source fix** — [`tenantTokenAvailability.ts`](./api/src/application/llm/tenantTokenAvailability.ts) now resolves superadmin from BOTH the acting user AND the tenant's OWN active membership via the new exported `tenantHasSuperadminMember(db, tenantId)` (indexed `tenant_members → users.is_superadmin` join). Every gate — cron manager sweep, autonomous executor, interactive Run-now, LLM gateway — flows through this one function, so a superadmin-owned tenant is unlimited **everywhere** with no per-caller change. Restructured to resolve plan caps first and only consult superadmin (and skip the usage scan) for an already-capped tenant, so unlimited tenants pay nothing extra.
+- **Surfacing (for genuinely-capped customer tenants)** — `GET /api/manager/:projectId` returns `autonomy: { tokenBlocked, reason, effectivePlan }` ([managerRoutes.ts](./api/src/presentation/routes/managerRoutes.ts)); [`ManagerContent.tsx`](./frontend/src/components/manager/ManagerContent.tsx) renders a themed, responsive "Autonomous management paused" banner (localized in all 5 catalogs, `manager.autonomyPaused.*`) so a stale "last managed" reads as "out of tokens — only manual runs work", not a silent break. This supersedes the earlier "record a throttled skip flag in the activity feed" idea — the banner + the existing once-per-day upgrade email already explain the freeze without flooding.
+- **Verified** — `tenantTokenAvailability.test.ts` extended (10 pass, incl. new "tenant OWNED by a superadmin is unlimited with NO acting user (cron path)"); `evermindTeacher.test.ts` 17 pass; api + frontend typecheck clean.
+
+---
+
 ## ✅ RESOLVED 2026-07-09 — Evermind video + image generation: engine codec, Studio build steps, image path, codec serialization (builderforce-memory `2026.7.1`)
 
 Enabled Evermind to generate video/image WITHOUT a new model — the generator (`EvermindLM`) is a modality-agnostic next-token predictor, so this is a codec + vocabulary problem. New `packages/memory-engine/src/codec/`:

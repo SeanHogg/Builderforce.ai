@@ -11,10 +11,17 @@
  * Unlike `enforceTokenCaps`, this takes no Hono `Context`: it resolves the
  * tenant's plan snapshot straight from the `tenants` row so a cron (which has
  * only `db`) can call it per tenant.
+ *
+ * THE single source of the "superadmin ⇒ unlimited" rule for every caller. It is
+ * granted from BOTH the acting user (when present) AND the tenant's OWN active
+ * membership ({@link tenantHasSuperadminMember}), so an account OWNED/operated by a
+ * superadmin is never gated — including on the cron sweeps, which pass no acting
+ * user. Every gate (cron manager sweep, autonomous executor, interactive Run-now,
+ * gateway) flows through here, so this one function is the only place to change it.
  */
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { tenants, users } from '../../infrastructure/database/schema';
+import { tenants, tenantMembers, users } from '../../infrastructure/database/schema';
 import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { resolveTokenLimits } from '../../domain/tenant/PlanLimits';
@@ -82,10 +89,27 @@ export async function getTenantTokenAvailability(
   });
   const effectivePlan = planString(effectivePlanEnum);
 
-  // Superadmin acting user → unlimited, same as the LLM gateway. Resolved from
-  // `users.isSuperadmin` (fresh on every call → instant revocation), never from a
-  // JWT claim. Best-effort: a lookup failure is treated as "not superadmin" so the
-  // normal plan gate still applies rather than accidentally granting bypass.
+  // Resolve the plan/override caps WITHOUT any superadmin lift first. A tenant that is
+  // already unlimited by plan (Teams / -1 override) is done here — no superadmin
+  // lookup and no usage scan.
+  const planLimits = resolveTokenLimits({
+    effectivePlan: effectivePlanEnum,
+    tokenDailyLimitOverride: row?.tokenDailyLimitOverride ?? null,
+    isSuperadmin: false,
+  });
+  if (planLimits.dailyLimit <= 0 && planLimits.monthlyLimit <= 0) {
+    return { hasTokens: true, reason: null, dailyLimit: planLimits.dailyLimit, monthlyLimit: planLimits.monthlyLimit, usageToday: 0, usageMonth: 0, effectivePlan };
+  }
+
+  // The tenant IS capped by plan — but a superadmin OPERATOR is unlimited EVERYWHERE.
+  // Superadmin is resolved from BOTH sources so the bypass holds on every path:
+  //   (a) the acting user, when present (interactive Run-now / gateway), AND
+  //   (b) the tenant's OWN active membership — so an account OWNED/operated by a
+  //       superadmin is never frozen even on the cron sweeps, which call this with
+  //       `db` only (no acting user). This is THE single place the "superadmin ⇒
+  //       unlimited" rule lives; every caller (cron + interactive) inherits it.
+  // `users.isSuperadmin` is the sole, revocation-safe source of truth (fresh per
+  // call). Only consulted for a capped tenant, so unlimited tenants pay nothing.
   let isSuperadmin = false;
   if (opts?.actingUserId) {
     try {
@@ -99,20 +123,19 @@ export async function getTenantTokenAvailability(
       isSuperadmin = false;
     }
   }
+  if (!isSuperadmin) isSuperadmin = await tenantHasSuperadminMember(db, tenantId);
+  if (isSuperadmin) {
+    const superLimits = resolveTokenLimits({
+      effectivePlan: effectivePlanEnum,
+      tokenDailyLimitOverride: row?.tokenDailyLimitOverride ?? null,
+      isSuperadmin: true,
+    });
+    return { hasTokens: true, reason: null, dailyLimit: superLimits.dailyLimit, monthlyLimit: superLimits.monthlyLimit, usageToday: 0, usageMonth: 0, effectivePlan };
+  }
 
-  const { dailyLimit, monthlyLimit } = resolveTokenLimits({
-    effectivePlan: effectivePlanEnum,
-    tokenDailyLimitOverride: row?.tokenDailyLimitOverride ?? null,
-    isSuperadmin,
-  });
-
+  const { dailyLimit, monthlyLimit } = planLimits;
   const dailyCapped = dailyLimit > 0;
   const monthlyCapped = monthlyLimit > 0;
-
-  // No positive cap on either axis → unlimited; skip the usage scan entirely.
-  if (!dailyCapped && !monthlyCapped) {
-    return { hasTokens: true, reason: null, dailyLimit, monthlyLimit, usageToday: 0, usageMonth: 0, effectivePlan };
-  }
 
   const usage = await sumTenantTextTokensDayAndMonth(db, tenantId, utcDayStart(), utcMonthStart());
 
@@ -129,6 +152,34 @@ export async function getTenantTokenAvailability(
     usageMonth: usage.month,
     effectivePlan,
   };
+}
+
+/**
+ * Does this tenant have an ACTIVE member who is a platform superadmin? An account
+ * OWNED/operated by a superadmin is unlimited everywhere (the operator is never
+ * gated), so this grants the cron sweeps — which have no acting user — the SAME
+ * bypass the interactive paths grant via `actingUserId`. Single indexed join on
+ * `tenant_members(tenant_id)` → `users.is_superadmin`; only ever called for an
+ * already-capped tenant (so it adds no cost to unlimited tenants and, when true,
+ * short-circuits the heavier usage scan). Best-effort: false on any error so a
+ * lookup failure falls back to the normal plan gate rather than granting bypass.
+ */
+export async function tenantHasSuperadminMember(db: Db, tenantId: number): Promise<boolean> {
+  try {
+    const [row] = await db
+      .select({ isSuperadmin: users.isSuperadmin })
+      .from(tenantMembers)
+      .innerJoin(users, eq(users.id, tenantMembers.userId))
+      .where(and(
+        eq(tenantMembers.tenantId, tenantId),
+        eq(tenantMembers.isActive, true),
+        eq(users.isSuperadmin, true),
+      ))
+      .limit(1);
+    return !!row;
+  } catch {
+    return false;
+  }
 }
 
 /** The 429 body an interactive run path returns when the tenant is out of tokens.

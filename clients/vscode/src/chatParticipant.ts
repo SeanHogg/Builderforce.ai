@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { runAgent } from "./agent";
 import { ChatMessage, SECRET_KEY, fetchLimbicBlock } from "./gateway";
+import { getCurrentUserId } from "./bfApi";
 import { contributeProjectEvermind } from "./evermindLearn";
 import { getGroundingSummary } from "./grounding";
 import { getEditorContext } from "./editorContext";
@@ -32,9 +33,12 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
     const model = await resolveEffectiveModel(ctx.secrets);
     const permissionMode = cfg.get<"ask" | "acceptEdits">("permissionMode") ?? "ask";
 
-    // Limbic affective layer (gateway-injected) — parity with the webview chat
-    // and the cloud (V3) / on-prem agents. Best-effort; '' at rest or offline.
-    const limbicBlock = await fetchLimbicBlock(ctx.secrets, request.prompt);
+    // Limbic affective layer + PERSONALITY (gateway-injected) — parity with the
+    // webview chat and the cloud (V3) / on-prem agents. Passing the signed-in
+    // user's id (session-cached) makes the returned block carry their personality
+    // TONE, not just the affective appraisal. Best-effort; '' at rest or offline.
+    const userId = (await getCurrentUserId(ctx.secrets)) ?? undefined;
+    const limbicBlock = await fetchLimbicBlock(ctx.secrets, request.prompt, userId ? { userId } : undefined);
     // Live editor context (active file / selection / open tabs) so the agent resolves
     // "this file" / "the selection" to what's actually open — read fresh each turn.
     const editorCtx = editorContextDirective(getEditorContext());
