@@ -530,18 +530,32 @@ function Chat({ init }: { init: InitData }) {
     return chat.id;
   }, [chatId, persistence, reloadChats, t, init.project?.id]);
 
-  // Ambient project context — the SAME `extraSystem` channel the web Brain uses to
-  // tell the model the current project, so platform tools (repos.*/tasks.*/…)
-  // default to it instead of asking for a projectId. Updates on project switch.
-  // Ambient project context only. The work-visibility instruction (record code
-  // changes as tickets) is now folded into the shared run loop's chat-work-linking
-  // directive — injected with the resolved chatId so the created ticket actually
-  // links to THIS conversation — so we no longer append the id-less
-  // `deltaVisibilityDirective` here (it was strictly weaker: no chatId, no
-  // investigation-work coverage).
+  // The project this chat is associated with — the SINGLE chat-first resolution reused
+  // by the system-prompt directive, header label, Evermind scope, and triage report.
+  // An existing chat uses its OWN project (brain_chats.projectId); a not-yet-created
+  // chat falls back to the sidebar's active project it will be scoped to on first send.
+  // Names resolve from the host's projectId→name map, falling back to the sidebar name.
+  const activeChat = useMemo(() => chatOptions.find((c) => c.id === chatId) ?? null, [chatOptions, chatId]);
+  const associatedProjectId = activeChat ? activeChat.projectId : (init.project?.id ?? null);
+  const associatedProject = useMemo<{ id: number; name: string } | null>(() => {
+    if (associatedProjectId == null) return null;
+    const name = init.projectNames?.[String(associatedProjectId)]
+      ?? (associatedProjectId === init.project?.id ? init.project?.name : undefined);
+    return { id: associatedProjectId, name: name ?? `#${associatedProjectId}` };
+  }, [associatedProjectId, init.projectNames, init.project?.id, init.project?.name]);
+
+  // Ambient project context — the SAME `extraSystem` channel the web Brain uses to tell
+  // the model the current project, so platform tools (repos.*/tasks.*/…) default to it
+  // instead of asking for a projectId. Chat-FIRST: a chat that belongs to a project
+  // always tells the model about ITS OWN project regardless of what the sidebar is
+  // currently showing — fixing the bug where opening a project chat while the sidebar
+  // had a different (or no) project left the agent not knowing which project it was in.
+  // The id-less deltaVisibilityDirective is intentionally not appended here — it is
+  // folded into the shared run loop's chat-work-linking directive with the resolved
+  // chatId, so the ticket it mints actually links to THIS conversation.
   const projectDirective = useMemo(
-    () => activeProjectDirective(init.project) ?? '',
-    [init.project?.id, init.project?.name],
+    () => activeProjectDirective(associatedProject) ?? '',
+    [associatedProject?.id, associatedProject?.name],
   );
 
   // Live editor context (active file / selection / open tabs), pushed by the host as
@@ -567,11 +581,9 @@ function Chat({ init }: { init: InitData }) {
 
   // Project-Evermind memory hooks: recall the chat's project learnings before
   // answering (grounding the reply + surfacing recall/learn/reconcile steps in the
-  // timeline). Bound to the chat's project (falling back to the IDE's open project).
-  const evermindProjectId = useMemo(
-    () => chats.find((c) => c.id === chatId)?.projectId ?? init.project?.id ?? null,
-    [chats, chatId, init.project?.id],
-  );
+  // timeline). Bound to the chat's project (falling back to the IDE's open project) —
+  // the SAME chat-first resolution the system-prompt directive uses (associatedProjectId).
+  const evermindProjectId = associatedProjectId;
 
   // Self-heal Evermind learning scope. The server's chat→Evermind learn gate keys on
   // brain_chats.projectId (evaluateBrainLearnGate): a project-less chat NEVER
@@ -991,18 +1003,8 @@ function Chat({ init }: { init: InitData }) {
   // "No response" turn can be shared with its underlying system output, and run
   // the host's connection diagnostics. The host owns the clipboard + the
   // `builderforce.diagnose` command, reached over the bridge.
-  // The project this chat is associated with: an existing chat's own project,
-  // else (for a not-yet-created chat) the sidebar's active project it will be
-  // scoped to on first send. Names resolve from the host's `projectId → name`
-  // map, falling back to the active project's name.
-  const activeChat = useMemo(() => chatOptions.find((c) => c.id === chatId) ?? null, [chatOptions, chatId]);
-  const associatedProjectId = activeChat ? activeChat.projectId : (init.project?.id ?? null);
-  const associatedProject = useMemo<{ id: number; name: string } | null>(() => {
-    if (associatedProjectId == null) return null;
-    const name = init.projectNames?.[String(associatedProjectId)]
-      ?? (associatedProjectId === init.project?.id ? init.project?.name : undefined);
-    return { id: associatedProjectId, name: name ?? `#${associatedProjectId}` };
-  }, [associatedProjectId, init.projectNames, init.project?.id, init.project?.name]);
+  // (activeChat / associatedProjectId / associatedProject are resolved once, chat-first,
+  // near the project directive above — reused here for the header + triage report.)
 
   const canCopy = hasTranscriptContent({ messages: conv.messages, trace: conv.trace, error: conv.error });
   const copyTranscript = useCallback(() => {
