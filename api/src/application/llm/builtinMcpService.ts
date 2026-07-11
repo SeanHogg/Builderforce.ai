@@ -30,7 +30,7 @@ import { TaskRepository } from '../../infrastructure/repositories/TaskRepository
 import { ProjectStatus, TaskPriority, TaskType, TenantRole } from '../../domain/shared/types';
 import { parseJsonObject } from '../../domain/shared/json';
 import { signJwt } from '../../infrastructure/auth/JwtService';
-import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems } from '../../infrastructure/database/schema';
+import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments } from '../../infrastructure/database/schema';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import type { McpToolEntry } from './mcpExtensionService';
 import type { Env } from '../../env';
@@ -523,9 +523,12 @@ const CATALOG: BuiltinTool[] = [
     parameters: obj({ id: N, title: S, description: S, status: S, priority: S, dueDate: S, archived: B, taskType: { type: 'string', enum: ['task', 'epic'] }, parentTaskId: { type: ['number', 'null'] }, assignedUserId: { type: ['string', 'null'] }, assignedAgentRef: { type: ['string', 'null'] }, assignedAgentHostId: { type: ['number', 'null'] } }, ['id']),
     run: async (ctx, a) => {
       // tenant-scope guard (service.updateTask doesn't check) + capture the prior
-      // lane so the autonomous trigger only fires on a genuine lane change.
+      // lane AND owner so the autonomous triggers fire only on a genuine lane change /
+      // a genuine reassignment.
       const before = await getTenantTask(ctx, num(a.id));
-      const previousStatus = before.toPlain().status;
+      const beforePlain = before.toPlain() as { status: string; assignedAgentRef?: string | null };
+      const previousStatus = beforePlain.status;
+      const previousAgentRef = beforePlain.assignedAgentRef ?? null;
       const updated = await ctx.tasks.updateTask(num(a.id), {
         title: a.title != null ? str(a.title) : undefined,
         description: a.description != null ? str(a.description) : undefined,
@@ -542,6 +545,11 @@ const CATALOG: BuiltinTool[] = [
       // The ticket may have just entered a new lane — run that lane's configured
       // agent (AS the lane agent; the ticket's own assignee is left untouched).
       await fireLaneAutoRun(ctx, updated, previousStatus);
+      // Assignment → work handoff: reassigning the ticket to a NEW cloud agent is itself
+      // a "go" — start that owner's run AND bring it into the ticket's linked chats (the
+      // MCP path used to do neither, so a dev agent assigned by the Brain never picked up
+      // the ticket or joined the conversation).
+      await fireAgentAssignmentHandoff(ctx, updated, previousAgentRef);
       return updated.toPlain();
     },
   },
@@ -2133,8 +2141,47 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'analytics.activity_calendar', mutates: false, description: 'Contributor activity calendar (humans + AI agents).', parameters: obj({ from: S, to: S, contributorId: N }), run: (ctx, a) => { const q = new URLSearchParams(); if (a.from != null) q.set('from', str(a.from)); if (a.to != null) q.set('to', str(a.to)); if (a.contributorId != null) q.set('contributorId', String(num(a.contributorId))); const qs = q.toString(); return replayRoute(ctx, 'GET', `/api/analytics/activity-calendar${qs ? `?${qs}` : ''}`); } },
   { tool: 'analytics.sync_agents', mutates: true, description: 'Refresh AI-agent contributor data.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'POST', '/api/analytics/sync-agents', {}) },
 
-  // ---- Tasks: the assignable team roster (humans + agents) ----
-  { tool: 'tasks.assignees', mutates: false, description: 'List the FULL team a task can be assigned to — humans AND agents in one roster. Resolve an assignee name here, then set the matching id field on tasks.create / tasks.update.', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/api/tasks/assignees') },
+  // ---- Tasks: the assignable team roster (humans + cloud agents) ----
+  // The `/api/tasks/assignees` route returns HUMANS only by design (the frontend picker
+  // composes agents client-side from /workforce/agents/mine — see listWorkforceDirectory).
+  // The Brain/@agent loop has no such client-side merge, so this tool assembles the FULL
+  // roster server-side: tenant members + the tenant's cloud agents (ide_agents), each with
+  // its real ref. This is what stops an agent inventing a fake assignee ref — every ref it
+  // hands to tasks.create/tasks.update comes from here.
+  {
+    tool: 'tasks.assignees', mutates: false,
+    description: 'List the FULL team a task can be assigned to — humans AND cloud agents in ONE roster. Returns { humans:[{ref,name}], agents:[{ref,name,role,builtinKind,status,scope,assignedToProject}] }. An agent "ref" is its ide_agents id: set it as `assignedAgentRef` on tasks.create/tasks.update to hand work to that agent (use a human ref as the task\'s assigneeId for a person). Pass projectId to mark which agents are staffed to that project (assignedToProject=true) and prefer those. NEVER invent an assignee/agent ref — only use refs returned by this tool.',
+    parameters: obj({ projectId: N }),
+    run: async (ctx, a) => {
+      const projectId = a.projectId != null ? num(a.projectId) : null;
+      const humansRes = (await replayRoute(ctx, 'GET', '/api/tasks/assignees')) as { members?: { id: string; name: string }[] };
+      const agentRows = await ctx.db
+        .select({ id: ideAgents.id, name: ideAgents.name, title: ideAgents.title, builtinKind: ideAgents.builtinKind, status: ideAgents.status, projectId: ideAgents.projectId })
+        .from(ideAgents)
+        .where(and(eq(ideAgents.tenantId, ctx.tenantId), eq(ideAgents.status, 'active')))
+        .limit(200);
+      // Explicit project→agent role assignments (mig 0281) mark project-staffed agents.
+      const assignedRefs = projectId != null
+        ? new Set(
+            (await ctx.db
+              .select({ ref: projectRoleAssignments.assigneeRef })
+              .from(projectRoleAssignments)
+              .where(and(eq(projectRoleAssignments.tenantId, ctx.tenantId), eq(projectRoleAssignments.projectId, projectId), eq(projectRoleAssignments.assigneeKind, 'agent')))
+              .limit(200)).map((r) => String(r.ref)),
+          )
+        : new Set<string>();
+      const agents = agentRows.map((r) => ({
+        ref: String(r.id),
+        name: r.name,
+        role: r.title ?? r.builtinKind ?? null,
+        builtinKind: r.builtinKind ?? null,
+        status: r.status,
+        scope: r.projectId != null ? 'project' : 'tenant',
+        assignedToProject: projectId != null && (r.projectId === projectId || assignedRefs.has(String(r.id))),
+      }));
+      return { humans: humansRes.members ?? [], agents };
+    },
+  },
 
   // ---- Kanban: role sign-off (the reviewer round-trip, first-class for agents) ----
   { tool: 'kanban.signoff', mutates: true, description: 'Record a role SIGN-OFF on a ticket as a reviewer acting AS a role (satisfies a lane\'s role/review requirement so the audit clears and the swimlane can advance). verdict "approved" (default) or "changes_requested". Pass laneKey to scope the sign-off to a lane; memberKind defaults to "agent" (you), memberRef to your agent id.', parameters: obj({ taskId: N, roleKey: S, laneKey: S, verdict: { type: 'string', enum: ['approved', 'changes_requested'] }, summary: S, memberRef: S }, ['taskId', 'roleKey']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${num(a.taskId)}/signoff`, { roleKey: str(a.roleKey), laneKey: a.laneKey != null ? str(a.laneKey) : undefined, verdict: a.verdict === 'changes_requested' ? 'changes_requested' : 'approved', summary: a.summary != null ? str(a.summary) : undefined, memberKind: 'agent', memberRef: a.memberRef != null ? str(a.memberRef) : (ctx.userId ?? undefined) }) },
@@ -2290,6 +2337,42 @@ async function fireLaneAutoRun(ctx: BuiltinCtx, task: Task, previousStatus?: str
   else await run;
 }
 
+/** Kind used on chat↔ticket links for a task-tier row (epic | gap | task). */
+function taskLinkKind(task: Task): string {
+  const t = (task.toPlain() as { taskType?: unknown }).taskType;
+  return t === 'epic' || t === 'gap' ? t : 'task';
+}
+
+/**
+ * Assignment → work handoff for a Brain task write. When a ticket's cloud-agent OWNER
+ * changes to a new non-null ref, (1) fire the lane auto-run so the agent actually STARTS
+ * working (idempotent, so safe alongside a lane-change {@link fireLaneAutoRun}), and
+ * (2) bring the agent INTO every chat the ticket is linked to, with a "starting work"
+ * notice — via {@link ChatTicketService.onTicketAgentAssigned}. This ports the HTTP PATCH
+ * route's reassignment branch (taskRoutes) onto the MCP path — the one the Brain uses,
+ * which previously did nothing on reassignment: assigning a dev agent left the ticket
+ * inert and never joined the agent to the conversation. `previousAgentRef` omitted (a
+ * create) treats any owner as newly assigned. Best-effort + backgrounded on the request's
+ * executionCtx so it survives the tool returning; a no-env context simply skips it.
+ */
+async function fireAgentAssignmentHandoff(ctx: BuiltinCtx, task: Task, previousAgentRef?: string | null): Promise<void> {
+  const env = ctx.env;
+  if (!env) return;
+  const plain = task.toPlain() as { id: number; projectId: number; status: string; assignedAgentRef?: string | null };
+  const newRef = plain.assignedAgentRef ?? null;
+  if (!newRef || newRef === (previousAgentRef ?? null)) return;
+  const run = maybeAutoRunOnLaneEntry(env, ctx.db, buildRuntimeService(env, ctx.db), {
+    tenantId: ctx.tenantId, projectId: plain.projectId, taskId: plain.id, status: plain.status,
+    submittedBy: ctx.userId ?? 'system:agent-assign',
+  });
+  const joinChats = new ChatTicketService(ctx.db, env)
+    .onTicketAgentAssigned(ctx.tenantId, taskLinkKind(task), String(plain.id), newRef)
+    .catch(() => {});
+  const work = Promise.all([run, joinChats]);
+  if (ctx.executionCtx) ctx.executionCtx.waitUntil(work);
+  else await work;
+}
+
 /** Flat, gateway-safe advertised name: `builtin_projects_list` (no dots). */
 function advertisedName(tool: string): string {
   return `builtin_${tool.replace(/[^a-zA-Z0-9]+/g, '_')}`;
@@ -2356,6 +2439,9 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   'projects.list', 'projects.get', 'projects.create', 'projects.update', 'projects.check_key',
   // Tasks — read + write + move + assignees (no delete). "create other tasks for gaps".
   'tasks.list', 'tasks.get', 'tasks.create', 'tasks.update', 'tasks.move', 'tasks.assignees',
+  // Workforce roster — the tenant's own cloud agents (any publish state), so an agent
+  // handing work off knows the REAL agents that exist and their ids (never invents a ref).
+  'cloud_agents.list_mine',
   // Specs / PRDs — read + write (no delete)
   'specs.list', 'specs.get', 'specs.create', 'specs.patch',
   // Strategy / OKRs — read + write (no delete). "update project related items (OKR)".

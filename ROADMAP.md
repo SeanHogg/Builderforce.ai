@@ -82,6 +82,12 @@
 
 ## Consolidated Gap Register
 
+### 🤖 Cloud-agent run progress → Brain chat streaming (post 2026-07-11 assignment-handoff ship)
+
+> Shipped this pass (api 2026.7.81 · frontend 2026.7.57 · brain-embedded 2026.7.29 · VSIX 2026.7.70): assigning a dev/cloud agent to a chat-linked ticket now (a) STARTS the agent's run on the MCP path — `fireAgentAssignmentHandoff` in `builtinMcpService.ts` ports the HTTP PATCH route's reassignment trigger onto `tasks.update` (previously only a lane/status change fired a run, so a Brain reassignment was inert); and (b) BRINGS the agent INTO every chat the ticket is linked to with a "starting work" notice — `ChatTicketService.onTicketAgentAssigned`, fired from both task-write paths AND `linkTicket` (covering the assign-then-link ordering). The Brain also now sees the REAL workforce (`tasks.assignees` returns humans + `ide_agents`; `cloud_agents.list_mine` advertised to the agent loops), so it stops inventing agent refs.
+
+- **Run progress is still not streamed into the Brain chat.** A dispatched cloud run posts only to its own `execution_messages` / `toolAuditEvents` timeline; nothing reads `chatTicketLinks` to post progress/terminal status back into the linked Brain chat, and the dispatch payload (`maybeAutoRunOnLaneEntry`, `taskRoutes.ts`) carries no `chatId`. So after the "starting work" notice, the conversation goes quiet until the ticket's own status advances. Fix = thread `chatId` (or resolve it via `listChatsForTicket` at terminal/progress checkpoints) through the runtime lifecycle (`cloudAgentEngine`/`runtimeRoutes`) and post milestone lines (started ▸ PR opened ▸ in review ▸ done/failed) via `ChatTicketService.postSystemMessage`. Unblocks the full "devs provide updates on the tickets as they work" loop the operator asked for.
+
 ### 🧠 Evermind chat-learning scope — residual (post VSIX 2026.7.65)
 
 - **Web Brain has the same project-less-chat blind spot the VSIX just fixed.** The server learn gate keys on `brain_chats.projectId`; a web Brain chat created without an active project scope (or an older/global chat) contributes nothing while the web Evermind surface may still show a connected model. The VSIX fix (self-heal adopt in `clients/vscode/webview/src/App.tsx`) is client-local. Verify the web `BrainPanel`/`ProjectEvermindPanel` flow (`frontend/src/components/brain/*`) and apply the same adopt-on-open (or make the panel's "connected" state reflect the CHAT's projectId, not a fallback). Unblocks web chats reliably training the project Evermind.
