@@ -502,10 +502,29 @@ export interface ProjectEvermindRecentEntry {
   text?: string;
 }
 
+/** One measured training run the coordinator recorded (mirrors the DO's TrainingPoint).
+ *  The real signal behind a version bump: mean loss + how far the neocortex moved. */
+export interface ProjectEvermindTrainingPoint {
+  version: number;
+  at: number;
+  /** Mean next-token loss across the adaptations folded into this version. */
+  loss: number;
+  /** Training sequences fed to the trainer this merge. */
+  seqs: number;
+  /** Distinct neocortex weights the merge changed. */
+  moved: number;
+  /** L2 norm of the weight movement base→merged. */
+  deltaNorm: number;
+  /** Contributions folded into this version. */
+  merged: number;
+}
+
 /** The coordinator's live learning snapshot: queued count + recent merged contributions. */
 export interface ProjectEvermindActivity {
   pending: number;
   recent: ProjectEvermindRecentEntry[];
+  /** Per-version training telemetry (newest first) — loss + weight movement. */
+  training: ProjectEvermindTrainingPoint[];
 }
 
 /**
@@ -520,19 +539,22 @@ export async function getProjectEvermindActivity(
   projectId: number,
 ): Promise<ProjectEvermindActivity> {
   const stub = coordinatorStub(env, tenantId, projectId);
-  if (!stub) return { pending: 0, recent: [] };
+  if (!stub) return { pending: 0, recent: [], training: [] };
   try {
     const res = await stub.fetch('https://coordinator/recent');
-    if (!res.ok) return { pending: 0, recent: [] };
+    if (!res.ok) return { pending: 0, recent: [], training: [] };
     const body = (await res.json().catch(() => ({}))) as Partial<ProjectEvermindActivity>;
     // Backfill a stable id for legacy ring entries written before ids were stamped,
     // so every entry the console sees can be targeted (Validate highlight / detail).
     const recent = Array.isArray(body.recent)
       ? body.recent.map((e) => ({ ...e, id: typeof e.id === 'number' ? e.id : e.at }))
       : [];
-    return { pending: typeof body.pending === 'number' ? body.pending : 0, recent };
+    // `training` is absent from rings written before this telemetry shipped — degrade
+    // to empty so an older project simply shows no training readout yet.
+    const training = Array.isArray(body.training) ? body.training : [];
+    return { pending: typeof body.pending === 'number' ? body.pending : 0, recent, training };
   } catch {
-    return { pending: 0, recent: [] };
+    return { pending: 0, recent: [], training: [] };
   }
 }
 
@@ -603,6 +625,9 @@ export interface ProjectEvermindContributions {
   lastLearnedAt: string | null;
   pending: number;
   recent: ProjectEvermindRecentEntry[];
+  /** Per-version training telemetry (newest first) — loss + weight movement, the
+   *  real data behind each neocortex update, surfaced on the Knowledge Map. */
+  training: ProjectEvermindTrainingPoint[];
   /** Current affective (limbic) state — powers the brain-map's limbic regions. */
   affect: ProjectEvermindAffect;
 }
@@ -637,6 +662,7 @@ export async function getProjectEvermindContributions(
         lastLearnedAt: head.lastLearnedAt,
         pending: activity.pending,
         recent: activity.recent,
+        training: activity.training,
         affect: computeProjectAffect(activity.recent),
       };
     },

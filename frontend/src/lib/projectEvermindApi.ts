@@ -63,6 +63,26 @@ export interface ProjectEvermindAffect {
   exploreBias: number;
 }
 
+/** One measured training run behind a version bump (mirrors api `ProjectEvermindTrainingPoint`).
+ *  The real neocortex-update signal the Knowledge Map surfaces — nothing fabricated. */
+export interface ProjectEvermindTrainingPoint {
+  /** The version this training run produced. */
+  version: number;
+  /** Epoch ms the merge landed. */
+  at: number;
+  /** Mean next-token training loss across the adaptations folded into this version
+   *  (0 when the merge was pure pre-diffed deltas, so no local fit measured a loss). */
+  loss: number;
+  /** Training sequences (token windows) fed to the trainer this merge. */
+  seqs: number;
+  /** Distinct neocortex weights the merge changed. */
+  moved: number;
+  /** L2 norm of the weight movement base→merged — magnitude of the update. */
+  deltaNorm: number;
+  /** Contributions folded into this version. */
+  merged: number;
+}
+
 /** The Evermind inspection console payload — head summary + live learning activity. */
 export interface ProjectEvermindContributions {
   version: number;
@@ -75,6 +95,9 @@ export interface ProjectEvermindContributions {
   /** Contributions queued but not yet merged (in the coordinator's debounce window). */
   pending: number;
   recent: ProjectEvermindRecentEntry[];
+  /** Per-version training telemetry (newest first) — loss + weight movement, the real
+   *  data behind each neocortex update. Empty for projects that predate this telemetry. */
+  training: ProjectEvermindTrainingPoint[];
   /** Current affective (limbic) state — powers the brain-map's limbic regions. */
   affect: ProjectEvermindAffect;
 }

@@ -34,6 +34,7 @@ import { useTranslations } from 'next-intl';
 import type {
   ProjectEvermindContributions,
   ProjectEvermindRecentEntry,
+  ProjectEvermindTrainingPoint,
 } from '@/lib/projectEvermindApi';
 import type { EvermindRegionKey } from '@/lib/evermindRegions';
 import { useEvermindValidation } from './EvermindValidationContext';
@@ -256,6 +257,11 @@ export function EvermindBrainMap({
         <Stat label={t('statQueued')} value={loaded ? String(data?.pending ?? 0) : '…'} />
       </div>
 
+      {/* Real training telemetry behind each neocortex update — loss + how far the
+          weights actually moved, per version, so teaching reads as the training it is. */}
+      <TrainingReadout training={data?.training ?? []} />
+
+
       <div style={{ position: 'relative', flex: '1 1 300px', minHeight: 260 }}>
         {!loaded ? (
           <Centered>{t('loading')}</Centered>
@@ -423,6 +429,87 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
+/* ── Training readout ─────────────────────────────────────────────────────────
+   The actual data behind "training the neocortex": per-version mean loss + how far
+   the weights moved. Everything shown is measured by the coordinator at merge time
+   (fit loss + base→merged L2), never fabricated. Renders only once real training
+   points exist, so an un-taught project isn't cluttered with empty gauges. */
+
+const fmtLoss = (n: number) => n.toFixed(3);
+const fmtInt = (n: number) => n.toLocaleString();
+/** Compact magnitude for the L2 weight movement (kept readable across scales). */
+const fmtNorm = (n: number) => (n === 0 ? '0' : n >= 0.01 ? n.toFixed(3) : n.toExponential(1));
+
+interface Spark { w: number; h: number; line: string; dots: Array<{ x: number; y: number }> }
+
+/** Build a normalised loss sparkline (lower loss sits lower). Needs ≥2 points. */
+function buildSparkline(values: number[]): Spark | null {
+  if (values.length < 2) return null;
+  const W = 128, H = 34, pad = 3;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const dots = values.map((v, i) => ({
+    x: r2(pad + (i / (values.length - 1)) * (W - 2 * pad)),
+    y: r2(pad + (1 - (v - min) / span) * (H - 2 * pad)),
+  }));
+  return { w: W, h: H, line: dots.map((d) => `${d.x},${d.y}`).join(' '), dots };
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="ev-train-stat">
+      <span className="ev-train-stat-label">{label}</span>
+      <span className="ev-train-stat-value">{value}</span>
+    </div>
+  );
+}
+
+function TrainingReadout({ training }: { training: ProjectEvermindTrainingPoint[] }) {
+  const t = useTranslations('evermindBrain');
+  const view = useMemo(() => {
+    if (training.length === 0) return null;
+    const latest = training[0]!;
+    // Loss is only measured on text-path adaptations; a pure delta-merge records 0.
+    // Surface the most recent MEASURED loss so the stat is never a misleading 0.
+    const latestLoss = training.find((p) => p.loss > 0)?.loss ?? null;
+    // Sparkline over chronological measured losses (payload is newest-first).
+    const measured = [...training].reverse().filter((p) => p.loss > 0);
+    return { latest, latestLoss, spark: buildSparkline(measured.map((p) => p.loss)), measured };
+  }, [training]);
+
+  if (!view) return null;
+  const { latest, latestLoss, spark, measured } = view;
+
+  return (
+    <div className="ev-training">
+      <div className="ev-training-head">
+        <span className="ev-training-title">{t('trainTitle')}</span>
+        <span className="ev-training-sub">{t('trainLatest', { version: latest.version })}</span>
+      </div>
+      <div className="ev-training-body">
+        <div className="ev-training-stats">
+          <MiniStat label={t('trainLoss')} value={latestLoss != null ? fmtLoss(latestLoss) : '—'} />
+          <MiniStat label={t('trainMoved')} value={fmtInt(latest.moved)} />
+          <MiniStat label={t('trainMagnitude')} value={fmtNorm(latest.deltaNorm)} />
+        </div>
+        {spark && (
+          <svg className="ev-spark" viewBox={`0 0 ${spark.w} ${spark.h}`} preserveAspectRatio="none"
+            role="img" aria-label={t('trainSparkAria', { count: measured.length })}>
+            <polyline points={spark.line} fill="none" stroke="var(--ev-neocortex)" strokeWidth={1.5}
+              strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+            {spark.dots.map((d, i) => (
+              <circle key={i} cx={d.x} cy={d.y} r={i === spark.dots.length - 1 ? 2.6 : 1.5} fill="var(--ev-neocortex)">
+                <title>{t('trainPointTip', { version: measured[i]!.version, loss: fmtLoss(measured[i]!.loss), moved: measured[i]!.moved })}</title>
+              </circle>
+            ))}
+          </svg>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Centered({ children, tone }: { children: React.ReactNode; tone?: 'error' }) {
   return (
     <div style={{
@@ -490,6 +577,16 @@ const BRAINMAP_CSS = `
 .ev-legend-name { font-weight: 700; color: var(--text-primary); white-space: nowrap; }
 .ev-legend-cap { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ev-retry { background: transparent; color: inherit; border: 1px solid currentColor; border-radius: 6px; padding: 1px 9px; font-size: 0.74rem; cursor: pointer; margin-left: 4px; }
+.ev-brainmap .ev-training { flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 10px 12px; }
+.ev-brainmap .ev-training-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.ev-brainmap .ev-training-title { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ev-neocortex); }
+.ev-brainmap .ev-training-sub { font-size: 0.72rem; color: var(--text-muted); }
+.ev-brainmap .ev-training-body { display: flex; align-items: center; justify-content: space-between; gap: 12px 20px; flex-wrap: wrap; }
+.ev-brainmap .ev-training-stats { display: flex; gap: 18px; flex: 1 1 auto; min-width: 0; }
+.ev-brainmap .ev-train-stat { display: flex; flex-direction: column; gap: 1px; }
+.ev-brainmap .ev-train-stat-label { font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+.ev-brainmap .ev-train-stat-value { font-size: 0.95rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.ev-brainmap .ev-spark { width: 128px; height: 34px; flex-shrink: 0; overflow: visible; }
 @media (prefers-reduced-motion: no-preference) {
   .ev-brainmap .ev-edge-live { stroke-dasharray: 6 10; animation: ev-flow 1.1s linear infinite; }
   @keyframes ev-flow { to { stroke-dashoffset: -32; } }

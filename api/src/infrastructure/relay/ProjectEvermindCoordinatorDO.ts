@@ -58,6 +58,9 @@ const RECENT_PROMPT_CHARS = 2000;
 /** Chars of the learned run/exemplar text kept per recent entry. Bounded (the ring
  *  is capped at RECENT_MAX) but generous enough that "view detail" is meaningful. */
 const RECENT_TEXT_CHARS = 4000;
+/** How many per-merge training points to retain for the Knowledge Map's training
+ *  readout (a small sparkline of loss + weight movement across recent versions). */
+const TRAINING_MAX = 40;
 
 interface PendingEntry {
   id: number;
@@ -129,10 +132,34 @@ interface RecentEntry {
   text?: string;
 }
 
+/** One inspectable record of the ACTUAL training that produced a version — the real
+ *  signal the Knowledge Map surfaces so "teaching" reads as the weight update it is,
+ *  not a black box. All fields are measured, never fabricated: `loss` is the mean
+ *  next-token cross-entropy the trainer reported this merge, `moved`/`deltaNorm` are
+ *  how many neocortex weights changed and how far they moved (base→merged L2). */
+interface TrainingPoint {
+  /** The version this training run produced (head.version + 1 at merge time). */
+  version: number;
+  /** Epoch ms the merge landed. */
+  at: number;
+  /** Mean training loss across the adaptations folded into this merge (0 when the
+   *  merge was pure pre-diffed deltas, i.e. no local fit ran here to measure loss). */
+  loss: number;
+  /** Training sequences (token windows) fed to the trainer this merge. */
+  seqs: number;
+  /** How many distinct neocortex weights the merged delta changed. */
+  moved: number;
+  /** L2 norm of the weight movement base→merged — magnitude of the update. */
+  deltaNorm: number;
+  /** How many contributions were folded into this version. */
+  merged: number;
+}
+
 const PENDING_KEY = 'pending';
 const META_KEY = 'meta';
 const SEQ_KEY = 'seq';
 const RECENT_KEY = 'recent';
+const TRAINING_KEY = 'training';
 
 function decodeBase64(b64: string): ArrayBuffer {
   const bin = atob(b64);
@@ -179,7 +206,8 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
   private async handleRecent(): Promise<Response> {
     const pending = (await this.state.storage.get<PendingEntry[]>(PENDING_KEY)) ?? [];
     const recent = (await this.state.storage.get<RecentEntry[]>(RECENT_KEY)) ?? [];
-    return this.json({ pending: pending.length, recent });
+    const training = (await this.state.storage.get<TrainingPoint[]>(TRAINING_KEY)) ?? [];
+    return this.json({ pending: pending.length, recent, training });
   }
 
   /**
@@ -203,6 +231,13 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     const current = (await this.state.storage.get<RecentEntry[]>(RECENT_KEY)) ?? [];
     const next = [...entries, ...current].slice(0, RECENT_MAX);
     await this.state.storage.put(RECENT_KEY, next);
+  }
+
+  /** Append one per-merge training point to the ring, newest first, capped. */
+  private async recordTraining(point: TrainingPoint): Promise<void> {
+    const current = (await this.state.storage.get<TrainingPoint[]>(TRAINING_KEY)) ?? [];
+    const next = [point, ...current].slice(0, TRAINING_MAX);
+    await this.state.storage.put(TRAINING_KEY, next);
   }
 
   private async handleLearn(request: Request): Promise<Response> {
@@ -340,6 +375,11 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     // Per-entry provenance for the inspection ring, stamped with the merged version
     // once the merge lands (parallel to `diffs`/`weights`).
     const mergedMeta: Array<{ id: number; kind: 'text' | 'delta'; weight: number; prompt?: string; text?: string }> = [];
+    // Real training telemetry accumulated across the adaptations this merge runs, so
+    // the Knowledge Map can show what teaching actually did to the neocortex weights.
+    let lossSum = 0;
+    let lossN = 0;
+    let seqTotal = 0;
     try {
       const store = this.env.UPLOADS;
       if (!store) return { merged: 0, newVersion: null }; // no R2 → can't merge; leave everything pending for a later alarm
@@ -393,7 +433,12 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
           const seqs = windows(ids, ADAPT_WINDOW_TOKENS);
           if (seqs.length === 0) continue;
           const lm = basePkg.loadLM();
-          new EvermindLMTrainer(lm, { epochs: 1 }).fit(seqs);
+          const history = new EvermindLMTrainer(lm, { epochs: 1 }).fit(seqs);
+          // Record the trainer's real per-epoch mean loss (final epoch) so the map's
+          // training readout reflects measured convergence, not a stand-in.
+          const loss = history.length > 0 ? history[history.length - 1]! : 0;
+          if (Number.isFinite(loss) && loss > 0) { lossSum += loss; lossN++; }
+          seqTotal += seqs.length;
           diffs.push(diffCheckpoints(basePkg.checkpoint, lm.exportWeights()));
           weights.push(e.weight);
           textFits++;
@@ -418,7 +463,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
 
       if (diffs.length === 0) return { merged: 0, newVersion: null }; // nothing merged (finally drops what we consumed)
 
-      const { checkpoint, contributors } = mergeCheckpointDiffs(basePkg.checkpoint, diffs, weights);
+      const { checkpoint, contributors, mergedRows, deltaNorm } = mergeCheckpointDiffs(basePkg.checkpoint, diffs, weights);
 
       // Repackage the merged weights as the next immutable version (recomputes the
       // manifest checksum), carrying the base name + model card forward.
@@ -441,6 +486,17 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       // version they landed in (newest first). Best-effort — never fail the merge.
       const at = Date.now();
       await this.recordRecent(mergedMeta.map((m) => ({ ...m, version: nextVersion, at })));
+      // Record the measured training telemetry for this version (loss + how far the
+      // neocortex weights actually moved) — the data the Knowledge Map surfaces.
+      await this.recordTraining({
+        version: nextVersion,
+        at,
+        loss: lossN > 0 ? lossSum / lossN : 0,
+        seqs: seqTotal,
+        moved: mergedRows,
+        deltaNorm,
+        merged: mergedMeta.length,
+      });
       return { merged: mergedMeta.length, newVersion: nextVersion };
     } finally {
       // Clear only what we consumed; anything that arrived mid-merge OR was deferred

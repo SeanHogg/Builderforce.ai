@@ -63,6 +63,16 @@ describe('mergeCheckpointDiffs (FedAvg over contributors)', () => {
     expect(out[1]).toBeCloseTo(0, 6); // B ignored (weight 0) → stays base
   });
 
+  it('reports deltaNorm = L2 of the actual weight movement base→merged', () => {
+    const diffA = diffCheckpoints(base, ckpt([1, 1, 0, 0, 0, 0])); // touches 0,1
+    const diffB = diffCheckpoints(base, ckpt([0, 3, 3, 0, 0, 0])); // touches 1,2
+    // Merged from an all-zero base = [1, 2, 3, 0, 0, 0]; movement L2 = √(1+4+9).
+    const { deltaNorm } = mergeCheckpointDiffs(base, [diffA, diffB]);
+    expect(deltaNorm).toBeCloseTo(Math.sqrt(1 + 4 + 9), 5);
+    // No contributors → no movement.
+    expect(mergeCheckpointDiffs(base, []).deltaNorm).toBe(0);
+  });
+
   it('is reproducible (deterministic merge of the same inputs)', () => {
     const dA = diffCheckpoints(base, ckpt([1, 2, 0, 0, 0, 0]));
     const dB = diffCheckpoints(base, ckpt([0, 4, 5, 0, 0, 0]));

@@ -82,6 +82,10 @@
 
 ## Consolidated Gap Register
 
+### 🧠 Evermind teach console has no "why teaching isn't updating weights" hint
+
+- The Knowledge Map now surfaces real per-version training telemetry (loss sparkline + weights-moved + update-size L2, from `ProjectEvermindCoordinatorDO` merge-time capture → `contributions.training`). But when a project is **unseeded** (`version 0`) or **offline-frozen**, a "Teach"/"Learn now" from `EvermindConsole` is rejected server-side (409/423) and simply produces no new training point — the map shows the dormant/frozen status but never says *that a teach was refused and why*. Fixing it: thread the learn-text/flush rejection reason back to the console as an inline toast/notice (the routes already return `{error, mode}`), so a user who expects a weight update but gets none understands it's a seed/mode gate, not a silent failure. Unblocks the "I taught it and nothing happened" confusion for un-seeded/frozen projects.
+
 ### 🌐 IDE modality labels/taglines are hardcoded English (not i18n)
 
 - `MODALITIES` in `frontend/src/lib/modality.ts` carries each modality's `label` + `tagline` as English string constants, surfaced user-facing on the IDE dashboard chooser cards + filter chips (`app/ide/dashboard/page.tsx`) and the create/details slide-outs. This predates the evermind/finetune split (designer/video/voice were already un-localized) but the split added two more English strings. The registry copy is also reused verbatim in the English Brain system prompt, so a localization pass must add a display layer (e.g. `ide.modality.<id>.label/tagline` keys read only by the UI) without changing what the Brain prompt consumes. Fixing it makes the IDE launcher fully localized in all 5 locales.
@@ -101,9 +105,9 @@
 
 ### 🎬 Evermind video/image generation — engine + Studio shipped; gateway serving + real training remain
 
-> Engine foundation, Studio BUILD steps, image path, and codec serialization SHIPPED 2026-07-09 (builderforce-memory 2026.7.1) — see DONE.md. Two items remain before it's a live product:
+> Engine foundation, Studio BUILD steps, image path, codec serialization, AND self-contained media artifacts SHIPPED 2026-07-09/10 (builderforce-memory 2026.7.1) — see DONE.md. Two items remain before it's a live product:
 
-- **P2 — gateway does not serve a video/image modality.** `evermind/<ref>` serving (api `llmRoutes.ts`) is text-token only. The codec is now serializable (`VideoRVQCodec.serialize`/`deserialize`), so the artifact side is unblocked; still needed in api: package the codec into the `.evermind` artifact (extend `EvermindModelPackage`), add a video/image output content-type, and decode-on-serve so a pinned Evermind media model returns frames instead of text. Left unwired deliberately (HTTP + binary response-format decision, and no trained media model to serve yet) to avoid a dead endpoint. Unblocks: media generation reachable from api/Brain.
+- **P2 — api gateway does not serve a video/image modality (HTTP surface only; engine prerequisite DONE).** `.evermind` media artifacts are now self-contained — `EvermindModelPackage.fromMediaLM`/`loadMediaLM` bundle + reload the codec with the weights, checksum-validated, and the `video-roundtrip` Studio step emits one verified via package→reload→generate. What remains is purely api-side: `evermind/<ref>` serving (`llmRoutes.ts`) is text-token only — add a media output content-type and a decode-on-serve branch that calls `loadMediaLM()` → `generateVideo`/`generateImage` and returns frames (binary/base64) instead of text. Left unwired deliberately (HTTP response-format decision + no trained media model to serve non-noise yet) to avoid a dead endpoint. Unblocks: media generation reachable from api/Brain.
 - **P1 (compute-blocked) — codebooks + generator are untrained, so output isn't yet coherent.** The full train path exists and is exercised (`video-train` step: fit codec → build video sequences → train EvermindLM), but reaching watchable fidelity needs a real video/image corpus + GPU training, or teacher distillation from a frontier media model (extend the existing text teacher-distillation path). The one inherent blocker — mechanism done, large-scale training run pending. Unblocks: real text→video/image output.
 
 ### 🧠 Evermind chat recall/learn/reconcile — follow-ups
