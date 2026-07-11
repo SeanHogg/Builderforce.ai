@@ -21,6 +21,7 @@ import {
   deserializeRowDelta,
   serializeRowDelta,
   applyCheckpointDiff,
+  verifyCrcTrailer,
   type RowDelta,
 } from '@seanhogg/builderforce-memory-engine';
 
@@ -31,6 +32,10 @@ export interface MergeResult {
   mergedRows: number;
   /** How many contributor deltas were folded in. */
   contributors: number;
+  /** L2 norm of the ACTUAL weight movement base→merged (Σ(merged−base)²)^½ — an
+   *  honest "how far the neocortex weights moved this merge" magnitude. 0 when the
+   *  merge touched nothing. Telemetry for the Knowledge Map's training readout. */
+  deltaNorm: number;
 }
 
 /** Per-element weighted accumulator while merging. */
@@ -55,7 +60,7 @@ export function mergeCheckpointDiffs(
   weights?: number[],
 ): MergeResult {
   if (diffs.length === 0) {
-    return { checkpoint: baseCheckpoint, mergedRows: 0, contributors: 0 };
+    return { checkpoint: baseCheckpoint, mergedRows: 0, contributors: 0, deltaNorm: 0 };
   }
   if (weights && weights.length !== diffs.length) {
     throw new Error(`mergeCheckpointDiffs: weights length ${weights.length} != diffs length ${diffs.length}`);
@@ -86,7 +91,7 @@ export function mergeCheckpointDiffs(
   });
 
   if (acc.size === 0) {
-    return { checkpoint: baseCheckpoint, mergedRows: 0, contributors: parsed.length };
+    return { checkpoint: baseCheckpoint, mergedRows: 0, contributors: parsed.length, deltaNorm: 0 };
   }
 
   const rows = [...acc.keys()].sort((a, b) => a - b);
@@ -96,7 +101,18 @@ export function mergeCheckpointDiffs(
     data[i] = a.sum / a.weight;
   });
 
+  // Honest weight-movement magnitude: the merged delta stores ABSOLUTE new values,
+  // so the actual movement is (merged − base) at each touched element. The base body
+  // (trailer stripped) is the same f32 vector the merge indexes into.
+  const baseBody = new Float32Array(verifyCrcTrailer(baseCheckpoint).body);
+  let sumSq = 0;
+  rows.forEach((idx, i) => {
+    const moved = data[i]! - (baseBody[idx] ?? 0);
+    sumSq += moved * moved;
+  });
+  const deltaNorm = Math.sqrt(sumSq);
+
   const merged: RowDelta = { rowSize: 1, rows, data };
   const checkpoint = applyCheckpointDiff(baseCheckpoint, serializeRowDelta(merged));
-  return { checkpoint, mergedRows: rows.length, contributors: parsed.length };
+  return { checkpoint, mergedRows: rows.length, contributors: parsed.length, deltaNorm };
 }
