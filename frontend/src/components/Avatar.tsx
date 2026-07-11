@@ -6,7 +6,7 @@ import { useMemo, type MouseEvent } from 'react';
  * Generate a deterministic color from a name string.
  * Used to give each team member/agent a consistent avatar background.
  */
-export function avatarColor(name: string): string {
+export function avatarColor(name: string | null | undefined): string {
   const colors = [
     '#f4726e', '#fb923c', '#fbbf24', '#a3e635', '#34d399',
     '#22d3ee', '#60a5fa', '#818cf8', '#a78bfa', '#e879f9',
@@ -22,7 +22,7 @@ export function avatarColor(name: string): string {
  * Extract initials from a name (up to 2 characters).
  * "John Doe" → "JD", "Alice" → "AL", "" → "?"
  */
-export function avatarInitials(name: string): string {
+export function avatarInitials(name: string | null | undefined): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return '?';
   if (parts.length === 1) {
@@ -63,8 +63,8 @@ export function Avatar({
   color,
   title,
 }: AvatarProps) {
-  const bgColor = useMemo(() => color ?? avatarColor(name), [name, color]);
-  const initials = useMemo(() => avatarInitials(name), [name]);
+  const bgColor = useMemo(() => color ?? avatarColor(name ?? ''), [name, color]);
+  const initials = useMemo(() => avatarInitials(name ?? ''), [name]);
 
   return (
     <button
