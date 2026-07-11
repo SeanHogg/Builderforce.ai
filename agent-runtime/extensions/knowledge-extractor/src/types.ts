@@ -1,34 +1,20 @@
 /**
  * Knowledge Extractor — Core Types
  *
- * Defines the data schemas for the post-execution delta detection engine.
- * Every extracted learning record, regardless of detection mode, conforms to
- * the Provenance Schema (FR-5).
+ * Defines the schema for every learning record, run context, extraction
+ * configuration, and report emitted by the pipeline.
+ *
+ * See PRD section "FR-5: Provenance Schema" for field-level requirements.
  */
 
 // ============================================================================
-// Signal Types & Change Types (FR-2, FR-3, FR-4)
+// Enums & Constants
 // ============================================================================
 
-/**
- * How a learning was detected.
- * - EXPLICIT: Agent self-reported via LearningSignal events during execution.
- * - IMPLICIT: Diff-based detection from pre/post knowledge snapshots.
- * - BEHAVIORAL: Inferred from action-path divergence in the execution trace.
- */
+/** The three detection modes a learning signal can originate from. */
 export type SignalType = "EXPLICIT" | "IMPLICIT" | "BEHAVIORAL";
 
-/**
- * The nature of the change detected.
- * For EXPLICIT/IMPLICIT modes:
- * - ADDITION: New knowledge (node, edge, belief) appeared.
- * - MODIFICATION: Existing knowledge changed.
- * - RETRACTION: A belief was abandoned/deprecated.
- * For BEHAVIORAL mode:
- * - STRATEGY_CHANGE: Different tool/approach selected mid-task.
- * - ERROR_RECOVERY: Deviation triggered by a failure event.
- * - OPTIMIZATION: Shortened/more efficient path to same outcome.
- */
+/** The classification of a change detected by any mode. */
 export type ChangeType =
   | "ADDITION"
   | "MODIFICATION"
@@ -37,92 +23,92 @@ export type ChangeType =
   | "ERROR_RECOVERY"
   | "OPTIMIZATION";
 
-// ============================================================================
-// Status values for learning records (FR-5.1, FR-6.2, FR-7)
-// ============================================================================
-
-/**
- * CANDIDATE  — freshly extracted, waiting for dedup + confidence gating.
- * ACCEPTED  — passed all checks, persisted to live knowledge store.
- * REJECTED  — confidence below threshold, quarantined (FR-6.2).
- * DUPLICATE — semantically identical to a higher-confidence existing entry.
- * CONFLICT  — contradictory to an existing high-confidence entry (FR-7.3).
- */
+/** Lifecycle status of a learning record after the extraction pipeline. */
 export type LearningStatus = "CANDIDATE" | "ACCEPTED" | "REJECTED" | "DUPLICATE" | "CONFLICT";
 
+/** Divergence classifications for behavioural mode. */
+export type DivergenceClass = "STRATEGY_CHANGE" | "ERROR_RECOVERY" | "OPTIMIZATION";
+
+/** Warnings the pipeline may emit. */
+export type ExtractionWarning = "TIMEOUT" | "MISSING_BASELINE" | "CONFLICT";
+
 // ============================================================================
-// RunContext — the payload passed to the extractor (FR-1.1)
+// Input Types
 // ============================================================================
 
 /**
- * A snapshot of the agent's knowledge graph/belief state at a point in time.
- * Serialized representation of the active knowledge graph.
- */
-export type KnowledgeSnapshot = Record<string, unknown>;
-
-/**
- * A single step/tool-call in the execution trace.
- */
-export interface TraceEvent {
-  /** Index in the execution sequence (0-based). */
-  index: number;
-  /** The tool or action invoked. */
-  action: string;
-  /** Input parameters. */
-  input: unknown;
-  /** Output or result. */
-  output: unknown;
-  /** Timestamp of the event. */
-  timestamp: string;
-  /** Duration of the event in milliseconds. */
-  durationMs?: number;
-  /** Whether the event indicated a failure. */
-  isError?: boolean;
-  /** Error message if isError is true. */
-  errorMessage?: string;
-}
-
-/**
- * A learning signal emitted by an agent during execution (FR-2.1).
+ * A structured learning signal emitted by an agent mid-execution.
+ * Agents call an SDK interface; signals are buffered in the execution trace.
  */
 export interface LearningSignal {
   signal_type: "EXPLICIT";
   content: string;
   rationale: string | null;
-  confidence_hint?: number; // 0.0–1.0
+  confidence_hint?: number; // 0.0–1.0 (optional)
 }
 
-/**
- * The full execution context supplied to the extractor (FR-1.1).
- */
+/** Pre- or post-execution snapshot of the agent's knowledge graph / belief state. */
+export interface KnowledgeSnapshot {
+  nodes: Array<{
+    id: string;
+    label: string;
+    attributes: Record<string, unknown>;
+  }>;
+  edges: Array<{
+    source: string;
+    target: string;
+    weight: number;
+    label?: string;
+  }>;
+  beliefs: Array<{
+    statement: string;
+    confidence: number; // 0.0–1.0
+    source?: string;
+  }>;
+}
+
+/** An action recorded in the execution trace. */
+export interface TraceAction {
+  timestamp: number;
+  tool_name: string;
+  input: string;
+  output: string;
+  error: string | null;
+  duration_ms: number;
+}
+
+/** A divergence point recorded when the agent deviates from its anticipated path. */
+export interface AnticipatedAction {
+  step_index: number;
+  description: string;
+  expected_tool: string;
+  timestamp: number;
+}
+
+/** Full context the extractor receives for every extraction run. */
 export interface RunContext {
   run_id: string;
   task_id: string;
   agent_id: string;
-  timestamp_start: string;
-  timestamp_end: string;
+  timestamp_start: string; // ISO-8601
+  timestamp_end: string; // ISO-8601
   trigger_event: string;
   pre_snapshot: KnowledgeSnapshot;
   post_snapshot: KnowledgeSnapshot;
-  execution_trace: {
-    /** Ordered list of trace events. */
-    events: TraceEvent[];
-    /** If the agent recorded an anticipated action path at task-start (FR-4.5). */
-    anticipated_path?: TraceEvent[];
-    /** LearningSignal events emitted during execution. */
-    learning_signals?: LearningSignal[];
-  };
+  execution_trace: TraceAction[];
+  learning_signals: LearningSignal[];
+  anticipated_actions: AnticipatedAction[];
 }
 
 // ============================================================================
-// LearningRecord — the provenance schema (FR-5)
+// Output Types
 // ============================================================================
 
 /**
- * Every extracted learning record conforms to this schema.
+ * A single extracted learning record — the canonical output of the extractor.
+ * Every field conforms to the provenance schema defined in FR-5.
  */
 export interface LearningRecord {
-  /** Globally unique, deterministically derived from run_id + signal_type + content hash (FR-5.1). */
   learning_id: string;
   run_id: string;
   task_id: string;
@@ -131,90 +117,117 @@ export interface LearningRecord {
   signal_type: SignalType;
   change_type: ChangeType;
   content: string;
-  /** Prior value for MODIFICATION/RETRACTION (FR-3.5), null otherwise. */
   previous_value: string | null;
-  /** Why this learning matters (optional, from agent self-report or template). */
   rationale: string | null;
-  /** Computed by the Confidence Scoring Engine (FR-5.2, FR-6). */
   confidence_score: number;
-  /** ISO-8601 timestamp when extraction ran. */
-  extraction_timestamp: string;
-  /** Semver string identifying extractor version (FR-5.3). */
-  extractor_version: string;
-  /** Lifecycle status after dedup + confidence gating. */
+  extraction_timestamp: string; // ISO-8601
+  extractor_version: string; // semver
   status: LearningStatus;
 }
 
-// ============================================================================
-// ExtractionReport — emitted upon pipeline completion (FR-8.2)
-// ============================================================================
+/** Aggregated counts by mode and status for the extraction report. */
+export interface ModeCounts {
+  EXPLICIT: number;
+  IMPLICIT: number;
+  BEHAVIORAL: number;
+}
 
+export interface StatusCounts {
+  CANDIDATE: number;
+  ACCEPTED: number;
+  REJECTED: number;
+  DUPLICATE: number;
+  CONFLICT: number;
+}
+
+/** The report emitted to the event bus after extraction completes (FR-8.2). */
 export interface ExtractionReport {
   run_id: string;
-  /** Counts of records by mode. */
-  counts_by_mode: Record<SignalType, number>;
-  /** Counts of records by final status. */
-  counts_by_status: Record<LearningStatus, number>;
-  /** Aggregate confidence stats. */
+  task_id: string;
+  agent_id: string;
+  counts_by_mode: ModeCounts;
+  counts_by_status: StatusCounts;
   confidence_distribution: {
-    mean: number;
     min: number;
     max: number;
+    mean: number;
     median: number;
   };
-  /** Any warnings emitted during extraction. */
   warnings: ExtractionWarning[];
-  /** Total pipeline duration in milliseconds. */
-  duration_ms: number;
-  /** Whether the pipeline hit the timeout (FR-1.3). */
+  extraction_duration_ms: number;
   timed_out: boolean;
-  /** The extractor version used. */
-  extractor_version: string;
-}
-
-export interface ExtractionWarning {
-  code: "TIMEOUT" | "MISSING_BASELINE" | "CONFLICT" | "NO_CHANGES" | "EMPTY_SIGNAL" | "DUPLICATE_SKIPPED";
-  message: string;
 }
 
 // ============================================================================
-// Extractor configuration
+// Configuration
 // ============================================================================
 
+/**
+ * Configurable thresholds and settings for the extraction pipeline.
+ * All numeric thresholds are injectable per agent type / task domain (FR-6.3).
+ */
 export interface ExtractorConfig {
-  /** max wall-clock time in ms (default 30000). */
+  /** Max wall-clock time for the full pipeline (ms). Default: 30 000. */
   timeoutMs: number;
-  /** Minimum confidence to accept a record (default 0.60). */
+
+  /** Minimum confidence to auto-accept (FR-6.2). Default: 0.60. */
   acceptThreshold: number;
-  /** Records below this threshold are rejected (default 0.40). */
+
+  /** Maximum confidence to auto-reject. Default: 0.40. */
   rejectThreshold: number;
-  /** Minimum delta magnitude for implicit mode (default 0.05). */
+
+  /** Minimum delta magnitude to keep an implicit diff (FR-3.4). Default: 0.05. */
   minSignificance: number;
-  /** Behavioral mode confidence floor (default 0.30). */
+
+  /** Baseline confidence floor for behavioural records (FR-4.4). Default: 0.30. */
   behavioralConfidenceFloor: number;
-  /** Behavioral mode confidence ceiling (default 0.75). */
+
+  /** Baseline confidence ceiling for behavioural records (FR-4.4). Default: 0.75. */
   behavioralConfidenceCeiling: number;
-  /** Cosine similarity threshold for dedup (default 0.92). */
+
+  /** Cosine similarity above which two records are considered duplicates (FR-7.1). Default: 0.92. */
   duplicateSimilarityThreshold: number;
-  /** Path to the immutable audit log. */
-  auditLogPath?: string;
-  /** Max trace events to process before truncating (default 10000). */
+
+  /** Path to the immutable append-only audit log. */
+  auditLogPath: string;
+
+  /** Max execution trace events to process before truncating for performance (AC-9). Default: 10000. */
   maxTraceEvents: number;
 }
 
 export const DEFAULT_EXTRACTOR_CONFIG: ExtractorConfig = {
   timeoutMs: 30_000,
-  acceptThreshold: 0.60,
-  rejectThreshold: 0.40,
+  acceptThreshold: 0.6,
+  rejectThreshold: 0.4,
   minSignificance: 0.05,
-  behavioralConfidenceFloor: 0.30,
+  behavioralConfidenceFloor: 0.3,
   behavioralConfidenceCeiling: 0.75,
   duplicateSimilarityThreshold: 0.92,
+  auditLogPath: "",
   maxTraceEvents: 10_000,
 };
 
 // ============================================================================
-// Extractor version — change with every schema-breaking update (FR-5.3)
+// Diff Types (Implicit Mode)
 // ============================================================================
 
-export const EXTRACTOR_VERSION = "1.0.0";
+export type DiffType = "ADDITION" | "MODIFICATION" | "RETRACTION";
+
+export interface KnowledgeDiff {
+  type: DiffType;
+  path: string; // dot-notation path within the snapshot
+  previous_value: unknown;
+  current_value: unknown;
+  magnitude: number; // normalized 0–1
+}
+
+// ============================================================================
+// Dedup Quarantine & Conflict
+// ============================================================================
+
+export interface ConflictEntry {
+  existing_record: LearningRecord;
+  incoming_record: LearningRecord;
+  reason: string;
+  detected_at: string;
+}
