@@ -7,6 +7,5 @@
 
 /* Example of duplicate property to fix */
 .example {
-  color: blue;
-  color: red; /* Duplicate property */
+  color: red; /* Fixed duplicate property */
 }
