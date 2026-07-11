@@ -361,6 +361,11 @@ export interface Env {
    *  Set via: wrangler secret put SLACK_APPROVAL_WEBHOOK_URL */
   SLACK_APPROVAL_WEBHOOK_URL?: string;
 
+  /** Incoming MS Teams webhook URL for incident/on-call notifications (an Incoming
+   *  Webhook connector posting MessageCard JSON — the low-effort analog to Slack).
+   *  Set via: wrangler secret put TEAMS_WEBHOOK_URL */
+  TEAMS_WEBHOOK_URL?: string;
+
   /** Resend API key for email notifications.
    *  Set via: wrangler secret put RESEND_API_KEY */
   RESEND_API_KEY?: string;

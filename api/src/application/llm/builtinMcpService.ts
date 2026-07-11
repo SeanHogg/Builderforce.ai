@@ -51,6 +51,9 @@ import { BrainService } from '../brain/BrainService';
 import { WorkDeltaService, type DeltaKind } from '../delta/WorkDeltaService';
 import { ValidationService, type ReviewVerdict, type ReviewGapInput } from '../validation/ValidationService';
 import { SecurityAuditService, type FindingSeverity, type TrustCriterion } from '../security/SecurityAuditService';
+import { IncidentService, type IncidentSeverity, type IncidentStatus } from '../incident/IncidentService';
+import { OnCallService } from '../incident/OnCallService';
+import { EscalationService } from '../incident/EscalationService';
 import { SecurityTicketAccessService } from '../security/SecurityTicketAccessService';
 import { recallProjectFacts, upsertProjectFact } from './projectFacts';
 import type { Task } from '../../domain/task/Task';
@@ -613,6 +616,73 @@ const CATALOG: BuiltinTool[] = [
       }, ctx.userId ?? null);
     },
   },
+
+  // ---- Incident Manager (help-desk triage, on-call paging & escalation) ----
+  {
+    tool: 'incidents.open', mutates: true,
+    description: 'Open a new incident (Incident Manager agent). Mints a bridged INCIDENT board ticket + an incident record. severity: sev1 (most severe) … sev4. Pass affectedSystem once you have worked out which system the issue pertains to (or use incidents.classify later). Set openWarRoom to start the on-call war-room chat. Returns { incidentId, boardTaskId, warRoomChatId, created }.',
+    parameters: obj({
+      title: S, description: S,
+      severity: { type: 'string', enum: ['sev1', 'sev2', 'sev3', 'sev4'] },
+      source: S, affectedSystem: S, externalRef: S, externalUrl: S, openWarRoom: B,
+    }, ['title']),
+    run: (ctx, a) => new IncidentService(ctx.db).openIncident(ctx.tenantId, {
+      title: str(a.title),
+      description: a.description != null ? str(a.description) : null,
+      severity: a.severity != null ? (str(a.severity) as IncidentSeverity) : undefined,
+      source: a.source != null ? str(a.source) : 'agent',
+      affectedSystem: a.affectedSystem != null ? str(a.affectedSystem) : null,
+      externalRef: a.externalRef != null ? str(a.externalRef) : null,
+      externalUrl: a.externalUrl != null ? str(a.externalUrl) : null,
+      openWarRoom: a.openWarRoom === true,
+      actorRef: 'agent',
+    }),
+  },
+  {
+    tool: 'incidents.classify', mutates: true,
+    description: 'Record which SYSTEM an incident pertains to, once you have analysed the ticket (e.g. "Payments", "Authentication", "Database"). Updates the incident + its board ticket. Params: incidentId, system.',
+    parameters: obj({ incidentId: S, system: S }, ['incidentId', 'system']),
+    run: async (ctx, a) => { await new IncidentService(ctx.db).classify(ctx.tenantId, str(a.incidentId), str(a.system), 'agent'); return { ok: true }; },
+  },
+  {
+    tool: 'incidents.update', mutates: true,
+    description: 'Update an incident: severity (sev1..sev4), status (open|acknowledged|mitigated|resolved), impact, rootCause. Acknowledging or mitigating an incident STOPS further escalation pages. Resolving it stamps the MTTR resolve time and closes the board ticket lifecycle.',
+    parameters: obj({
+      incidentId: S,
+      severity: { type: 'string', enum: ['sev1', 'sev2', 'sev3', 'sev4'] },
+      status: { type: 'string', enum: ['open', 'acknowledged', 'mitigated', 'resolved'] },
+      impact: S, rootCause: S,
+    }, ['incidentId']),
+    run: async (ctx, a) => {
+      await new IncidentService(ctx.db).updateIncident(ctx.tenantId, str(a.incidentId), {
+        severity: a.severity != null ? (str(a.severity) as IncidentSeverity) : undefined,
+        status: a.status != null ? (str(a.status) as IncidentStatus) : undefined,
+        impact: a.impact != null ? str(a.impact) : undefined,
+        rootCause: a.rootCause != null ? str(a.rootCause) : undefined,
+        actorRef: 'agent',
+      });
+      return { ok: true };
+    },
+  },
+  {
+    tool: 'incidents.add_note', mutates: true,
+    description: 'Post an update onto the incident timeline / war-room feed (what you are seeing, what you are doing). Params: incidentId, message.',
+    parameters: obj({ incidentId: S, message: S }, ['incidentId', 'message']),
+    run: async (ctx, a) => { await new IncidentService(ctx.db).addEvent(ctx.tenantId, str(a.incidentId), { kind: 'note', actorRef: 'agent', message: str(a.message) }); return { ok: true }; },
+  },
+  { tool: 'incidents.list', mutates: false, description: 'List incidents in the workspace, newest first. Pass activeOnly:true to exclude resolved ones.', parameters: obj({ activeOnly: B }), run: (ctx, a) => new IncidentService(ctx.db).listIncidents(ctx.tenantId, { activeOnly: a.activeOnly === true }) },
+  { tool: 'incidents.get', mutates: false, description: 'Get one incident + its timeline (the war-room detail). Params: incidentId.', parameters: obj({ incidentId: S }, ['incidentId']), run: (ctx, a) => new IncidentService(ctx.db).getIncident(ctx.tenantId, str(a.incidentId)) },
+  {
+    tool: 'oncall.page', mutates: true,
+    description: 'Page the on-call list for an incident right now via the matching escalation policy (Teams / Slack / email). Use after opening an incident to notify whoever is on call. Params: incidentId.',
+    parameters: obj({ incidentId: S }, ['incidentId']),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('paging requires the worker environment');
+      await new EscalationService(ctx.db).pageInitial(ctx.env, ctx.tenantId, str(a.incidentId));
+      return { paged: true };
+    },
+  },
+  { tool: 'oncall.list', mutates: false, description: 'List on-call rotations and who is currently on call for each.', parameters: obj({}), run: (ctx) => new OnCallService(ctx.db).listRotations(ctx.tenantId) },
 
   // ---- Workflows (read) — tenant-scoped direct queries [1296] ----
   { tool: 'workflows.list', mutates: false, description: 'List workflows in the workspace.', parameters: obj({}), run: (ctx) => ctx.db.select().from(workflows).where(eq(workflows.tenantId, ctx.tenantId)).orderBy(desc(workflows.updatedAt)).limit(200) },
@@ -2202,6 +2272,11 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   // deciding who can see security tickets is an admin action, never an unattended
   // agent reconfiguring its own findings' visibility.
   'security.record_finding',
+  // Incident Manager: triage help-desk tickets into incidents, classify the affected
+  // system, page/escalate on-call, and post war-room updates. NOT the on-call/policy
+  // CRUD — configuring rotations & escalation policies is a human/admin action.
+  'incidents.open', 'incidents.classify', 'incidents.update', 'incidents.add_note',
+  'incidents.list', 'incidents.get', 'oncall.page', 'oncall.list',
   // Gig Marketplace: a Product-Manager/Designer agent may publish work, run the hiring
   // funnel, evaluate proposals with AI, and schedule review/interview meetings.
   'marketplace.publish_ticket', 'marketplace.unpublish_ticket',

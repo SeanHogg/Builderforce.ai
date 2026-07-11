@@ -13,6 +13,7 @@ import { and, desc, eq, or, isNull } from 'drizzle-orm';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { buildCloudMemoryCapability } from './cloudMemory';
 import { isValidatorReviewPayload } from '../validation/validatorReviewMarker';
+import { isIncidentTriagePayload, incidentIdFromPayload } from '../incident/incidentTriageMarker';
 import { resolveTicketRepoContext, commitAgentFile, deleteAgentFile, type TicketRepoContext } from '../repos/commitFileAsPendingChange';
 import { commitPrdAsPendingChange } from '../repos/commitPrdToRepo';
 import { createPullRequest } from '../repos/createPullRequest';
@@ -2260,6 +2261,13 @@ export async function prepareCloudRun(
   // via reviews.record, rather than editing code.
   const isReviewRun = isValidatorReviewPayload(payload);
 
+  // Incident-triage run: the payload marks this as the Incident Manager working an
+  // open incident, NOT shipping code. Steer it (independent of persona) to analyse the
+  // ticket, classify the affected system, page/escalate on-call, and post war-room
+  // updates via the incidents.*/oncall.* tools.
+  const isIncidentRun = isIncidentTriagePayload(payload);
+  const incidentRunId = incidentIdFromPayload(payload);
+
   // Show the agent the repo it's about to edit BEFORE it spends an LLM call, so a
   // wrong/empty binding is caught up-front instead of after a conceptual non-answer
   // (the exec #54 failure: the agent never saw that only `agent-runtime` was bound).
@@ -2281,6 +2289,9 @@ export async function prepareCloudRun(
   const userContent = [
     isReviewRun
       ? `## Acceptance review (do NOT edit code)\n\nThis is a VALIDATOR REVIEW of already-Done work — verify the ticket was genuinely completed against its PRD/requirements and the repository. Read the branch/PR and the relevant code with search_code / read_file, judge whether the deliverable is complete and correct, then call the \`builtin_reviews_record\` tool with your verdict ('complete' or 'gaps'), a short assessment, and any concrete gaps (each becomes a GAP ticket). Do NOT write_file / delete_file or change the ticket's status — you are reviewing, not implementing.`
+      : null,
+    isIncidentRun
+      ? `## Incident triage (do NOT edit code)\n\nYou are the INCIDENT MANAGER working an OPEN incident${incidentRunId ? ` (incident \`${incidentRunId}\`)` : ''} — help-desk triage and response, NOT a code change. Steps:\n1. Read the incident with \`builtin_incidents_get\`; read the source ticket in the task description.\n2. Work out WHICH SYSTEM the issue pertains to and record it with \`builtin_incidents_classify\`.\n3. Set an accurate severity with \`builtin_incidents_update\` (sev1 = full outage / broad impact … sev4 = minor).\n4. Page whoever is on call with \`builtin_oncall_page\` (check \`builtin_oncall_list\` first). Escalation to later tiers happens automatically on a timer until someone acknowledges.\n5. Post what you find and do to the war-room feed with \`builtin_incidents_add_note\`.\nDo NOT write_file / delete_file — you are triaging, not implementing. Finish once you have classified, set severity, and paged on-call.`
       : null,
     remediation
       ? `## Build failure to fix (attempt ${remediation.attempt}/${remediation.maxAttempts})\n\n${

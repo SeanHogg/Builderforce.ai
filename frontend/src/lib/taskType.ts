@@ -7,7 +7,7 @@
  * from context and return no badge class.
  */
 
-export type TaskType = 'task' | 'epic' | 'gap' | 'security' | 'product' | 'design';
+export type TaskType = 'task' | 'epic' | 'gap' | 'security' | 'product' | 'design' | 'incident';
 
 const TASK_TYPE_BADGE_CLASS: Record<string, string | null> = {
   task: null,
@@ -21,6 +21,10 @@ const TASK_TYPE_BADGE_CLASS: Record<string, string | null> = {
   // the other badge classes — never one-theme hex.
   product: 'badge-blue',
   design: 'badge-green',
+  // An INCIDENT ticket (Incident Manager agent / prod_incidents war room) reads as
+  // "urgent / live outage" — a distinct orange badge, set apart from the red SECURITY
+  // and amber GAP badges. Theme-safe (translucent bg + saturated text), never one-theme hex.
+  incident: 'badge-orange',
 };
 
 /** Badge CSS class for a task type, or `null` to render no type badge. */
@@ -35,6 +39,7 @@ const TASK_TYPE_LABEL_KEY: Record<string, string> = {
   security: 'typeSecurity',
   product: 'typeProduct',
   design: 'typeDesign',
+  incident: 'typeIncident',
 };
 
 /** i18n key (under the `common` namespace) for a task type's short label. */

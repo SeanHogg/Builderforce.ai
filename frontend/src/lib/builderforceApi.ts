@@ -4450,7 +4450,7 @@ export const factsApi = {
 // ---------------------------------------------------------------------------
 
 export type IntegrationProvider =
-  | 'github' | 'gitlab' | 'bitbucket' | 'jira' | 'confluence' | 'freshservice'
+  | 'github' | 'gitlab' | 'bitbucket' | 'jira' | 'confluence' | 'freshservice' | 'freshdesk'
   | 'servicenow' | 'linear' | 'sentry' | 'pagerduty' | 'monday' | 'asana' | 'clickup';
 
 export interface IntegrationCredential {
@@ -4505,6 +4505,187 @@ export const integrationsApi = {
 
   syncLogs: (id: string, limit = 20) =>
     request<{ logs: unknown[] }>(`/api/integrations/${id}/sync-logs?limit=${limit}`).then((r) => r.logs ?? []),
+};
+
+// ---------------------------------------------------------------------------
+// Incident Management — /api/incidents (prod_incidents war rooms, on-call
+// rotations, escalation policies, business-contact directory). Reads require
+// auth; writes require MANAGER (server-enforced via requireRole).
+// ---------------------------------------------------------------------------
+
+export type IncidentSeverity = 'sev1' | 'sev2' | 'sev3' | 'sev4';
+export type IncidentStatus = 'open' | 'acknowledged' | 'mitigated' | 'resolved';
+
+export interface Incident {
+  id: string;
+  title: string;
+  severity: IncidentSeverity;
+  status: IncidentStatus;
+  source: string | null;
+  affectedSystem: string | null;
+  boardTaskId: string | null;
+  warRoomChatId: string | null;
+  escalationLevel: number;
+  startedAt: string;
+  acknowledgedAt: string | null;
+  resolvedAt: string | null;
+  impact: string | null;
+  rootCause: string | null;
+  externalUrl: string | null;
+}
+
+export interface IncidentEvent {
+  id: string;
+  kind: string;
+  actorRef: string | null;
+  message: string | null;
+  channel: string | null;
+  target: string | null;
+  level: number | null;
+  createdAt: string;
+}
+
+export interface CreateIncidentBody {
+  title: string;
+  description?: string;
+  severity?: IncidentSeverity;
+  source?: string;
+  affectedSystem?: string;
+  projectId?: number | null;
+  escalationPolicyId?: string | null;
+  openWarRoom?: boolean;
+  page?: boolean;
+}
+
+export interface OnCallRotationMember {
+  id: string;
+  memberRef: string;
+  displayName: string | null;
+  position: number;
+}
+
+export type RotationKind = 'manual' | 'daily' | 'weekly';
+
+export interface OnCallRotation {
+  id: string;
+  name: string;
+  description: string | null;
+  rotationKind: RotationKind;
+  currentIndex: number;
+  active: boolean;
+  members: OnCallRotationMember[];
+  onCall: { memberRef: string; displayName: string | null } | null;
+}
+
+export type EscalationTargetKind = 'oncall_rotation' | 'user' | 'contact' | 'team_chat';
+
+export interface EscalationLevel {
+  id: string;
+  level: number;
+  afterMinutes: number;
+  targetKind: EscalationTargetKind;
+  targetRef: string | null;
+  notifyTeams: boolean;
+  notifySlack: boolean;
+  notifyEmail: boolean;
+}
+
+export interface EscalationPolicy {
+  id: string;
+  name: string;
+  description: string | null;
+  matchSeverity: IncidentSeverity | null;
+  active: boolean;
+  levels: EscalationLevel[];
+}
+
+export interface BusinessContact {
+  id: string;
+  name: string;
+  roleTitle: string | null;
+  company: string | null;
+  email: string | null;
+  phone: string | null;
+  teamsId: string | null;
+  notes: string | null;
+}
+
+export const incidentsApi = {
+  list: (activeOnly = false): Promise<Incident[]> =>
+    request<{ incidents: Incident[] }>(`/api/incidents?activeOnly=${activeOnly ? 'true' : 'false'}`)
+      .then((r) => r.incidents ?? []),
+
+  create: (body: CreateIncidentBody): Promise<{ incidentId: string; boardTaskId: string | null; warRoomChatId: string | null; created: boolean }> =>
+    request('/api/incidents', { method: 'POST', body: JSON.stringify(body) }),
+
+  get: (id: string): Promise<{ incident: Incident; timeline: IncidentEvent[] }> =>
+    request(`/api/incidents/${id}`),
+
+  update: (id: string, body: Partial<{ severity: IncidentSeverity; status: IncidentStatus; impact: string; rootCause: string }>): Promise<{ ok: boolean }> =>
+    request(`/api/incidents/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  classify: (id: string, system: string): Promise<{ ok: boolean }> =>
+    request(`/api/incidents/${id}/classify`, { method: 'POST', body: JSON.stringify({ system }) }),
+
+  addNote: (id: string, message: string): Promise<{ ok: boolean }> =>
+    request(`/api/incidents/${id}/notes`, { method: 'POST', body: JSON.stringify({ message }) }),
+
+  page: (id: string): Promise<{ paged: boolean }> =>
+    request(`/api/incidents/${id}/page`, { method: 'POST' }),
+
+  warRoom: (id: string): Promise<{ chatId: string }> =>
+    request(`/api/incidents/${id}/war-room`, { method: 'POST' }),
+
+  triage: (id: string): Promise<{ dispatched: boolean }> =>
+    request(`/api/incidents/${id}/triage`, { method: 'POST' }),
+
+  // On-call rotations
+  listRotations: (): Promise<OnCallRotation[]> =>
+    request<{ rotations: OnCallRotation[] }>('/api/incidents/on-call/rotations').then((r) => r.rotations ?? []),
+
+  createRotation: (body: { name: string; description?: string; rotationKind?: RotationKind; projectId?: number | null }): Promise<OnCallRotation> =>
+    request<{ rotation: OnCallRotation }>('/api/incidents/on-call/rotations', { method: 'POST', body: JSON.stringify(body) }).then((r) => r.rotation),
+
+  updateRotation: (id: string, body: Partial<{ name: string; description: string; rotationKind: RotationKind; active: boolean; currentIndex: number }>): Promise<{ ok: boolean }> =>
+    request(`/api/incidents/on-call/rotations/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  removeRotation: (id: string): Promise<{ ok: boolean }> =>
+    request(`/api/incidents/on-call/rotations/${id}`, { method: 'DELETE' }),
+
+  addRotationMember: (id: string, body: { memberRef: string; displayName?: string; position?: number }): Promise<OnCallRotationMember> =>
+    request<{ member: OnCallRotationMember }>(`/api/incidents/on-call/rotations/${id}/members`, { method: 'POST', body: JSON.stringify(body) }).then((r) => r.member),
+
+  removeRotationMember: (id: string, memberId: string): Promise<{ ok: boolean }> =>
+    request(`/api/incidents/on-call/rotations/${id}/members/${memberId}`, { method: 'DELETE' }),
+
+  // Escalation policies
+  listPolicies: (): Promise<EscalationPolicy[]> =>
+    request<{ policies: EscalationPolicy[] }>('/api/incidents/escalation/policies').then((r) => r.policies ?? []),
+
+  createPolicy: (body: { name: string; description?: string; matchSeverity?: IncidentSeverity; projectId?: number | null }): Promise<EscalationPolicy> =>
+    request<{ policy: EscalationPolicy }>('/api/incidents/escalation/policies', { method: 'POST', body: JSON.stringify(body) }).then((r) => r.policy),
+
+  removePolicy: (id: string): Promise<{ ok: boolean }> =>
+    request(`/api/incidents/escalation/policies/${id}`, { method: 'DELETE' }),
+
+  addPolicyLevel: (id: string, body: { level?: number; afterMinutes: number; targetKind?: EscalationTargetKind; targetRef?: string; notifyTeams?: boolean; notifySlack?: boolean; notifyEmail?: boolean }): Promise<EscalationLevel> =>
+    request<{ level: EscalationLevel }>(`/api/incidents/escalation/policies/${id}/levels`, { method: 'POST', body: JSON.stringify(body) }).then((r) => r.level),
+
+  removeLevel: (levelId: string): Promise<{ ok: boolean }> =>
+    request(`/api/incidents/escalation/levels/${levelId}`, { method: 'DELETE' }),
+
+  // Business contacts
+  listContacts: (): Promise<BusinessContact[]> =>
+    request<{ contacts: BusinessContact[] }>('/api/incidents/contacts').then((r) => r.contacts ?? []),
+
+  createContact: (body: Partial<Omit<BusinessContact, 'id'>> & { name: string }): Promise<BusinessContact> =>
+    request<{ contact: BusinessContact }>('/api/incidents/contacts', { method: 'POST', body: JSON.stringify(body) }).then((r) => r.contact),
+
+  updateContact: (id: string, body: Partial<Omit<BusinessContact, 'id'>>): Promise<{ ok: boolean }> =>
+    request(`/api/incidents/contacts/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  removeContact: (id: string): Promise<{ ok: boolean }> =>
+    request(`/api/incidents/contacts/${id}`, { method: 'DELETE' }),
 };
 
 // ---------------------------------------------------------------------------

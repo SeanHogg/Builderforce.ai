@@ -23,8 +23,8 @@ interface BuiltinAgentSeed {
 }
 
 /** The seeded built-in workforce — kept in sync with migrations 0271 (Validator),
- *  0291 (Security) and 0293 (Product Manager + Designer) so an existing-tenant
- *  backfill and a new-tenant provision agree. */
+ *  0291 (Security), 0293 (Product Manager + Designer) and 0326 (Incident Manager) so
+ *  an existing-tenant backfill and a new-tenant provision agree. */
 const BUILTIN_AGENTS: BuiltinAgentSeed[] = [
   {
     kind: 'validator',
@@ -57,6 +57,14 @@ const BUILTIN_AGENTS: BuiltinAgentSeed[] = [
     title: 'Designer — UI/UX design and design review',
     bio: "Shapes UI/UX work — new product design or a review of an existing system's UX — into a design gig published to the Marketplace, and reviews delivered designs against the brief.",
     skills: ['ui-design', 'ux', 'design-review', 'prototyping'],
+  },
+  {
+    kind: 'incident_manager',
+    idPrefix: 'incident-manager-t',
+    name: 'Incident Manager',
+    title: 'Incident Manager — help-desk triage, on-call paging & escalation',
+    bio: 'Runs the help desk and the first minutes of incident response. Reads inbound support tickets (Freshdesk / Freshservice), works out which system the issue pertains to, and for anything that reads as an incident opens a first-class incident — a tracked board ticket bridged to the incident record with a severity. It then pages the right on-call list, opens an on-call war-room chat, posts status updates (in-app + MS Teams), and escalates to the next on-call tier and business contacts on a timer until someone acknowledges.',
+    skills: ['incident-response', 'triage', 'on-call', 'itsm', 'escalation', 'help-desk'],
   },
 ];
 

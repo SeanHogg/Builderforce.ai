@@ -32,7 +32,7 @@ import { encryptCredentials, decryptCredentials } from '../../application/integr
  */
 const CREDENTIAL_PROVIDERS = [
   'github', 'gitlab', 'bitbucket', 'jira', 'confluence',
-  'freshservice', 'servicenow', 'linear', 'sentry', 'pagerduty',
+  'freshservice', 'freshdesk', 'servicenow', 'linear', 'sentry', 'pagerduty',
   'monday', 'asana', 'clickup',
 ] as const;
 type CredentialProvider = (typeof CREDENTIAL_PROVIDERS)[number];
@@ -143,6 +143,22 @@ async function testFreshservice(
   return res.ok
     ? { ok: true, message: 'Connected' }
     : { ok: false, message: `Freshservice API returned ${res.status}` };
+}
+
+async function testFreshdesk(
+  creds: Record<string, unknown>,
+  baseUrl: string | null,
+): Promise<{ ok: boolean; message: string }> {
+  const apiKey = creds.apiKey as string;
+  if (!apiKey || !baseUrl) return { ok: false, message: 'apiKey and baseUrl are required' };
+  // Freshdesk REST API — a lightweight agent-list probe; Basic auth with apiKey:X.
+  const url = `${baseUrl.replace(/\/$/, '')}/api/v2/agents?per_page=1`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Basic ${btoa(`${apiKey}:X`)}`, Accept: 'application/json' },
+  });
+  return res.ok
+    ? { ok: true, message: 'Connected' }
+    : { ok: false, message: `Freshdesk API returned ${res.status}` };
 }
 
 async function testLinear(creds: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
@@ -467,6 +483,9 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
         break;
       case 'freshservice':
         result = await testFreshservice(creds, row.baseUrl);
+        break;
+      case 'freshdesk':
+        result = await testFreshdesk(creds, row.baseUrl);
         break;
       case 'linear':
         result = await testLinear(creds);

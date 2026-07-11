@@ -82,6 +82,15 @@
 
 ## Consolidated Gap Register
 
+### 🚨 Incident Management — residual polish (post 2026-07-11 full-slice ship)
+
+> The incident-management subsystem shipped 2026-07-11 (Help Desk / Incident Manager agent, Freshdesk connector, incident bridge, on-call rotations, timed escalation, Teams/Slack/email paging, war-room; see DONE.md). These are the non-blocking follow-ups; each has a live/working path today.
+
+- **War-room is a persisted feed, not yet a live room.** `IncidentService.ensureWarRoom` creates a `brain_chats` row (`origin='incident'`) linked as `prod_incidents.war_room_chat_id`, and the incident timeline (`incident_events`) is the war-room feed. It is NOT yet wired to real-time presence via `CeremonyRoomDO` (`incident:<id>` room) nor surfaced as a joinable Brain chat in the incidents UI. Wiring the chat view + a `CeremonyRoomDO` room would make it a true live war room with typing/presence. Unblocks synchronous humans+agents collaboration during an incident.
+- **Incident-triage runs don't guard board-task lane movement on completion.** Unlike the Validator review marker (which skips the status transition to avoid a re-trigger loop), an `incidentTriage` run completing on the bridged INCIDENT board task lets the normal COMPLETED→next-lane path move it. Harmless today (no on-status incident trigger to loop), but the board lane can drift from `prod_incidents.status`. Fixing = have the runtime honor `isIncidentTriagePayload` to skip the lane transition, and mirror `prod_incidents.status`→lane on `IncidentService.updateIncident`.
+- **On-call notification for agent members is timeline-only.** A `c:<agentRef>` on-call member has no external channel (Teams/Slack/email); `incidentNotifier` logs a timeline note but does not dispatch the agent. Wiring `contact:`/`u:` covers humans; agents-on-call could instead trigger `dispatchIncidentTriage`. Unblocks an agent being a first-class on-call responder.
+- **Freshdesk push-back is title/description only.** `FreshdeskBoardProvider.pushUpdate` mirrors Freshservice (subject/description); it does not sync incident status/severity back to the Freshdesk ticket. Unblocks bidirectional help-desk sync (resolve in BF → close in Freshdesk).
+
 ### 🧭 Manager Coaching Session — human ↔ AI-Manager chat that assigns work TO the manager (designed 2026-07-11, not built)
 
 > Follow-on to the manager cross-surface visibility work (shipped — see DONE.md). Today the human can SEE what the manager did; they cannot DIRECT it in-conversation. The ask: a "Coaching Session" — a chat with the manager (in web Brain AND the VSIX AI chat) where the human gives guidance ("focus the payments epic", "hold merges on release/*", "deprioritize infra") and that guidance becomes durable **manager directives** the background pass then honors, plus optional discrete tasks the manager executes. Concrete design:

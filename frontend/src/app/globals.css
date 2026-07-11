@@ -2056,6 +2056,16 @@ textarea.input { resize: vertical; line-height: 1.5; }
   font-size: 11px;
   font-weight: 600;
 }
+/* "Live / urgent" — used for INCIDENT task-type + severity accents. Distinct from
+   red (blocked/security) and amber (gap/in-review); reads in both themes. */
+.badge-orange {
+  background: rgba(249, 115, 22, 0.2);
+  color: #fb923c;
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 6px);
+  font-size: 11px;
+  font-weight: 600;
+}
 /* Muted/"off" counterpart to .badge-green (DRAFT, OFFLINE, inactive states).
    Previously re-inlined as a style object everywhere a non-green badge was needed. */
 .badge-muted {
