@@ -1646,6 +1646,15 @@ export interface ManagerRunTask {
   completedAt: string | null;
 }
 
+/** Why the autonomous machinery (cron manager sweep + executor) may be paused for
+ *  this tenant. `tokenBlocked` freezes ranking/assignment/dispatch AND Evermind
+ *  learning — only manual "Run manager now" (which does not token-gate) still runs. */
+export interface ManagerAutonomy {
+  tokenBlocked: boolean;
+  reason: 'daily_exhausted' | 'monthly_exhausted' | null;
+  effectivePlan: 'free' | 'pro' | 'teams' | null;
+}
+
 /** The full manager overview returned by GET /api/manager/:projectId. */
 export interface ManagerOverview {
   config: ManagerConfig | null;
@@ -1655,6 +1664,8 @@ export interface ManagerOverview {
   actions: ManagerAction[];
   /** The manager's own run tasks (open / in-progress / done), newest first. */
   runTasks: ManagerRunTask[];
+  /** Autonomy health — whether the cron sweeps are paused (e.g. tenant out of tokens). */
+  autonomy: ManagerAutonomy;
 }
 
 /** Editable subset accepted by PUT /api/manager/:projectId. */

@@ -210,8 +210,9 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
   }
   if (!data) return null;
 
-  const { policy, stats, backlog, actions, runTasks } = data;
+  const { policy, stats, backlog, actions, runTasks, autonomy } = data;
   const managerValue = policy.managerRef ?? '';
+  const window = autonomy?.reason === 'monthly_exhausted' ? 'monthly' : 'daily';
 
   const priorityChart: BarDatum[] = PRIORITIES.map((p) => ({
     key: p,
@@ -247,6 +248,32 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
       {error && data && (
         <div style={{ ...panelStyle, borderColor: 'var(--danger, #dc2626)', color: 'var(--danger, #dc2626)', fontSize: '0.85rem' }}>
           {error}
+        </div>
+      )}
+
+      {/* Autonomy paused — the cron manager sweep + executor gate on the tenant's
+          token budget and skip a capped tenant, so the board (and its Evermind
+          learning) freezes with no on-surface reason. Surface it: only manual runs
+          work while blocked. */}
+      {autonomy?.tokenBlocked && (
+        <div
+          role="alert"
+          style={{
+            ...panelStyle,
+            display: 'flex', alignItems: 'flex-start', gap: 10,
+            borderColor: 'var(--warning-fg, #b45309)',
+            background: 'var(--warning-bg, rgba(180, 83, 9, 0.08))',
+          }}
+        >
+          <span aria-hidden style={{ fontSize: '1.1rem', lineHeight: '1.3rem' }}>⏸️</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--warning-fg, #b45309)' }}>
+              {t('autonomyPaused.title')}
+            </div>
+            <div style={{ ...mutedStyle, marginTop: 4 }}>
+              {t(`autonomyPaused.${window}`)}
+            </div>
+          </div>
         </div>
       )}
 
