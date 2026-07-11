@@ -15,6 +15,19 @@ export interface BrainChat {
   updatedAt: string;
 }
 
+/**
+ * Truthful, server-reported outcome of the project-Evermind LEARN gate for a
+ * just-persisted assistant turn: whether the server WILL contribute this turn to the
+ * project's Evermind (the same gate `learnFromBrainTurn` applies — project-scoped +
+ * seeded + connected head) and the head version it contributes to. The run loop uses
+ * it to render a TRUTHFUL `learn` step, replacing the old client-side heuristic guess
+ * (which both false-positived and, for a connected-but-empty Evermind, false-negatived).
+ */
+export interface EvermindLearnOutcome {
+  learned: boolean;
+  version: number;
+}
+
 /** A single message within a chat. */
 export interface BrainMessage {
   id: number;
@@ -23,6 +36,13 @@ export interface BrainMessage {
   metadata: string | null;
   seq: number;
   createdAt: string;
+  /**
+   * Transient (NOT persisted, NOT returned by getMessages): the learn-gate outcome
+   * the send-messages response computed for THIS turn, attached to the returned
+   * assistant message so the run loop can render a truthful learn step. Absent on
+   * loaded/historical messages and on non-assistant turns.
+   */
+  evermindLearn?: EvermindLearnOutcome;
 }
 
 /**

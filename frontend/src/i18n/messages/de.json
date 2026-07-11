@@ -3782,7 +3782,10 @@
     "gaps": "{count, plural, one {# Lücke} other {# Lücken}}",
     "noGaps": "Keine Lücken",
     "more": "+{count}",
-    "itemAria": "{name}: {score}, {label}, {gaps}"
+    "itemAria": "{name}: {score}, {label}, {gaps}",
+    "remediationResolved": "Behebung zusammengeführt",
+    "remediationPrOpen": "Behebungs-PR geöffnet",
+    "remediationFiled": "{count, plural, =0 {Behebung angelegt} one {# Ticket angelegt} other {# Tickets angelegt}}"
   },
   "marketing": {
     "ctaGetStartedFree": "Kostenlos starten",
@@ -6778,7 +6781,8 @@
     "tierBasic": "Basis",
     "tierAdvanced": "Erweitert",
     "tierBasicHint": "Ein schneller 2-Minuten-Test zu den zentralen Persönlichkeitsmerkmalen.",
-    "tierAdvancedHint": "Die vollständige, psychologisch fundierte Testbatterie über alle Frameworks hinweg."
+    "tierAdvancedHint": "Die vollständige, psychologisch fundierte Testbatterie über alle Frameworks hinweg.",
+    "derivedBanner": "Aus deinen Antworten abgeleitet"
   },
   "workforceRoles": {
     "title": "Rollen",
@@ -8187,7 +8191,31 @@
     "teamChatScope": "Team-Chat",
     "teamChatProject": "Projekt-Team-Chat",
     "teamChatTenant": "Workspace-Team-Chat",
-    "teamChatHint": "Wählen Sie, mit welcher Unterhaltung dieses Meeting verknüpft ist – der Chat eines bestimmten Teams oder der Standard für seinen Bereich."
+    "teamChatHint": "Wählen Sie, mit welcher Unterhaltung dieses Meeting verknüpft ist – der Chat eines bestimmten Teams oder der Standard für seinen Bereich.",
+    "shrinkTile": "Verkleinern",
+    "expandTile": "Vergrößern",
+    "cameraSize": "Kameragröße",
+    "sizeSmall": "Klein",
+    "sizeLarge": "Groß",
+    "transcript": "Transkript",
+    "minutesTitle": "Protokoll",
+    "noTranscript": "Noch kein Transkript. Schalten Sie Ihr Mikrofon ein, um mit der Untertitelung zu beginnen.",
+    "captionsUnsupported": "Live-Untertitel benötigen Chrome oder Edge; das Transkript erfasst weiterhin andere Teilnehmer und Agenten.",
+    "close": "Schließen",
+    "agentVoice": "Agentenstimme",
+    "agentThinking": "{name} denkt nach…",
+    "askForUpdate": "{name} fragen",
+    "askWhichAgent": "Welcher Agent",
+    "askAgentPlaceholder": "Stellen Sie einem Agenten eine Frage…",
+    "askSend": "Fragen",
+    "agentTurnFailed": "Der Agent konnte nicht antworten.",
+    "generateMinutes": "Protokoll erstellen",
+    "generatingMinutes": "Protokoll wird erstellt…",
+    "minutesReady": "Protokoll erstellt und im Team-Chat gepostet.",
+    "minutesFailed": "Protokoll konnte nicht erstellt werden.",
+    "pastMeetings": "Vergangene Meetings",
+    "minutesAvailable": "Protokoll bereit",
+    "viewNotes": "Notizen ansehen"
   },
   "brainLauncher": {
     "open": "Brain-Assistent öffnen",
@@ -9264,5 +9292,27 @@
       "gte": "Mindestens (≥)",
       "lte": "Höchstens (≤)"
     }
+  },
+  "installAgents": {
+    "intro": "Lade den BuilderForce-Agents-Agenten herunter und installiere ihn auf deinem Rechner. Er registriert sich automatisch bei deinem Arbeitsbereich, sodass du sofort Aufgaben delegieren kannst.",
+    "tokenPreconfigured": "Dein Arbeitsbereich-Token ist vorkonfiguriert — der Agent registriert sich beim ersten Start automatisch.",
+    "laterHint": "Du kannst das auch später auf der Seite <link>Team</link> erledigen."
+  },
+  "inviteMembers": {
+    "intro": "Füge Teammitglieder per E-Mail zu deinem Arbeitsbereich hinzu. Wenn sie bereits ein Builderforce-Konto haben, treten sie sofort bei; andernfalls bleibt die Einladung <strong>ausstehend</strong> und sie treten automatisch bei, sobald sie sich erstmals mit dieser E-Mail anmelden.",
+    "emailPlaceholder": "kollege@firma.com",
+    "invite": "Einladen",
+    "roles": {
+      "developer": "Entwickler",
+      "manager": "Manager",
+      "viewer": "Betrachter"
+    },
+    "statusSending": "Senden…",
+    "statusAdded": "Hinzugefügt",
+    "statusInvited": "Eingeladen · ausstehend",
+    "statusInvitedHint": "Noch kein Konto — tritt bei der Registrierung automatisch bei",
+    "statusError": "Fehler",
+    "errFailed": "Einladung fehlgeschlagen",
+    "laterHint": "Du kannst Teammitglieder auch später über <link>Team</link> einladen."
   }
 }

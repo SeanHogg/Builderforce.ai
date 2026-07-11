@@ -45,8 +45,9 @@ import {
   type EffectiveManagerPolicy, type ManagerConfigRow,
 } from './managerPolicy';
 import { resolveManagerIdentity } from './managerIdentity';
-import { resolveManagerType, normalizeManagerType } from './managerTypes';
+import { resolveManagerTypeById, normalizeManagerType } from './managerTypes';
 import { listActiveManagerDirectives } from './managerDirectives';
+import { RoleAssignmentService, type AssigneeKind } from '../kanban/roleAssignmentService';
 import { recommendTopAssignee } from '../metrics/assigneeRecommender';
 import { mergeRecordedPullRequest } from '../repos/mergeRecordedPr';
 import { pollPrCiStatus } from '../repos/pollPrCiStatus';
@@ -223,15 +224,7 @@ export async function createManagerRunTask(
       .limit(1);
     if (!project) return null;
 
-    // Next gap-safe key sequence (mirrors TaskRepository.maxKeySeqByProject).
-    const [seqRow] = await db
-      .select({
-        value: sql<number>`COALESCE(MAX(CASE WHEN regexp_replace(${tasks.key}, '^.*-', '') ~ '^[0-9]+$'
-          THEN CAST(regexp_replace(${tasks.key}, '^.*-', '') AS INTEGER) END), 0)`,
-      })
-      .from(tasks)
-      .where(eq(tasks.projectId, projectId));
-    const baseSeq = Number(seqRow?.value ?? 0) + 1;
+    const baseSeq = await nextProjectKeySeqBase(db, projectId);
     const assignee = resolveManagerAssignee(policy.managerRef);
     const now = new Date();
 
@@ -302,6 +295,150 @@ export async function finalizeManagerRunTask(
   } catch {
     /* best-effort */
   }
+}
+
+/** Next gap-safe key sequence base for a project (mirrors TaskRepository.maxKeySeqByProject). */
+async function nextProjectKeySeqBase(db: Db, projectId: number): Promise<number> {
+  const [seqRow] = await db
+    .select({
+      value: sql<number>`COALESCE(MAX(CASE WHEN regexp_replace(${tasks.key}, '^.*-', '') ~ '^[0-9]+$'
+        THEN CAST(regexp_replace(${tasks.key}, '^.*-', '') AS INTEGER) END), 0)`,
+    })
+    .from(tasks)
+    .where(eq(tasks.projectId, projectId));
+  return Number(seqRow?.value ?? 0) + 1;
+}
+
+// ── coaching → discrete task ─────────────────────────────────────────────────
+
+/** `tasks.source` marker for a one-off task a human handed the manager via coaching. */
+export const COACHING_TASK_SOURCE = 'coaching';
+
+/**
+ * Turn a coaching turn into a DISCRETE task the manager executes ONCE — the "assign a
+ * task to the manager" half of a coaching session (vs a standing directive that reshapes
+ * every pass). Unlike a manager RUN task (`source='manager'`, a non-runnable coordination
+ * card), this is a real, dispatchable, high-priority ticket OWNED by the designated
+ * manager, so the manager's own dispatch step (or the autonomous executor) picks it up
+ * like any assigned work. Best-effort: a miss returns null and coaching still records the
+ * intent. Shared by the Manager-tab coach box and the `manager.coach` chat tool.
+ */
+export async function createManagerCoachingTask(
+  env: Env,
+  db: Db,
+  runtimeService: RuntimeService,
+  args: { tenantId: number; projectId: number; directive: string; createdBy?: string | null; submittedBy?: string },
+): Promise<number | null> {
+  const { tenantId, projectId } = args;
+  const directive = args.directive.trim();
+  if (directive.length < 3) return null;
+  try {
+    const [project] = await db
+      .select({ key: projects.key })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId)))
+      .limit(1);
+    if (!project) return null;
+
+    const policy = await getEffectiveManagerPolicy(db, tenantId, projectId);
+    const assignee = resolveManagerAssignee(policy.managerRef);
+    const baseSeq = await nextProjectKeySeqBase(db, projectId);
+    const title = (directive.split('\n', 1)[0] ?? directive).trim().slice(0, 120) || 'Manager task';
+    const now = new Date();
+
+    let taskId: number | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const key = `${project.key}-${String(baseSeq + attempt).padStart(3, '0')}`;
+      try {
+        const [row] = await db
+          .insert(tasks)
+          .values({
+            projectId, key, title,
+            description: directive,
+            status: TaskStatus.TODO,
+            priority: TaskPriority.HIGH,
+            // A REAL, dispatchable work item (NOT source='manager', which is non-runnable),
+            // owned by the manager so autonomy executes it once.
+            source: COACHING_TASK_SOURCE,
+            assignedUserId: assignee.assignedUserId,
+            assignedAgentRef: assignee.assignedAgentRef,
+            assignedAgentHostId: assignee.assignedAgentHostId,
+            startDate: now, lastWorkedAt: now, updatedAt: now,
+          })
+          .returning({ id: tasks.id });
+        taskId = row?.id ?? null;
+        break;
+      } catch { /* likely a unique-key collision — try the next sequence number */ }
+    }
+    if (taskId == null) return null;
+
+    // Immediacy: if the manager is an agent and the lane is staffed, start now — else the
+    // manager's next pass (step 5 dispatch) picks up the assigned runnable ticket anyway.
+    try {
+      await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+        tenantId, projectId, taskId, status: TaskStatus.TODO,
+        submittedBy: args.submittedBy ?? `coach:${args.createdBy ?? 'human'}`,
+      });
+    } catch { /* dispatch is best-effort; autonomy still picks it up */ }
+    return taskId;
+  } catch {
+    return null;
+  }
+}
+
+// ── roster sync (a manager IS a team member holding its type's role) ──────────
+
+/** Map a manager designation ref to a roster assignee, reusing the ONE ref decoder.
+ *  Null for the system service (not a team member → holds no roster role). */
+function managerRefToRosterAssignee(managerRef: string | null): { kind: AssigneeKind; ref: string } | null {
+  const a = resolveManagerAssignee(managerRef);
+  if (a.assignedUserId) return { kind: 'human', ref: a.assignedUserId };
+  if (a.assignedAgentRef) return { kind: 'agent', ref: a.assignedAgentRef };
+  if (a.assignedAgentHostId != null) return { kind: 'agent', ref: String(a.assignedAgentHostId) };
+  return null;
+}
+
+/**
+ * Keep the roster in sync with a manager designation: the manager is a team member and
+ * its TYPE is the roster ROLE it fills (managerTypes → roleCatalog). When the designation
+ * or its type changes, MOVE the manager's project-scoped role pin from the previous role
+ * to the new one — reversing only OUR own prior pin (exact assignee + prior role) so an
+ * unrelated human-made assignment is never touched. Best-effort: a roster miss never
+ * blocks saving the manager config.
+ */
+export async function syncManagerRosterRole(
+  env: Env, db: Db, tenantId: number, projectId: number,
+  prior: { managerRef: string | null; managerType: string } | null,
+  next: { managerRef: string | null; managerType: string },
+): Promise<void> {
+  try {
+    const svc = new RoleAssignmentService(db);
+    const nextAssignee = managerRefToRosterAssignee(next.managerRef);
+    const nextRoleKey = (await resolveManagerTypeById(env, db, tenantId, next.managerType)).roleKey;
+
+    if (prior) {
+      const priorAssignee = managerRefToRosterAssignee(prior.managerRef);
+      const priorRoleKey = (await resolveManagerTypeById(env, db, tenantId, prior.managerType)).roleKey;
+      const changed =
+        !nextAssignee || !priorAssignee ||
+        priorAssignee.kind !== nextAssignee.kind || priorAssignee.ref !== nextAssignee.ref ||
+        priorRoleKey !== nextRoleKey;
+      if (priorAssignee && priorRoleKey && changed) {
+        const scoped = await svc.listForScope(env, tenantId, projectId);
+        const stale = scoped.find((a) =>
+          a.roleKey === priorRoleKey && a.assigneeKind === priorAssignee.kind && a.assigneeRef === priorAssignee.ref);
+        if (stale) await svc.remove(env, tenantId, stale.id);
+      }
+    }
+
+    // Pin the current manager to its role (idempotent). Skip the system service (no
+    // assignee) and a type with no catalog role (e.g. Service Desk → roleKey null).
+    if (nextAssignee && nextRoleKey) {
+      await svc.create(env, tenantId, null, {
+        roleKey: nextRoleKey, assigneeKind: nextAssignee.kind, assigneeRef: nextAssignee.ref, projectId,
+      });
+    }
+  } catch { /* roster sync is best-effort */ }
 }
 
 // ── the pass ────────────────────────────────────────────────────────────────
@@ -446,7 +583,7 @@ export async function runManagerForProject(
   // scoped AND tenant-wide) + the designated agent's own persona. This ONE composed
   // directive is what makes a "QA manager" score differently from a "DevOps manager"
   // and makes coaching actually steer the pass. Fed to scoreBusinessValueAI below.
-  const managerType = resolveManagerType(policy.managerType);
+  const managerType = await resolveManagerTypeById(env, db, tenantId, policy.managerType);
   const coachingDirectives = await listActiveManagerDirectives(db, tenantId, projectId).catch(() => []);
   const composedDirective =
     [

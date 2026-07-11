@@ -144,11 +144,21 @@ const MAGIC_LINK_BODY = `
 // Public send functions
 // ---------------------------------------------------------------------------
 
+/** Append the landing anon-id (`aid`) to a signup/sign-in URL when present, so a
+ *  cross-device email-link open (start on phone, click link on desktop) can adopt
+ *  the originating device's anon id and reunite the pre-signup session. No-op when
+ *  anonId is absent — fully backward compatible. */
+export function appendAnonId(url: string, anonId?: string | null): string {
+  if (!anonId) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}aid=${encodeURIComponent(anonId)}`;
+}
+
 export async function sendMagicLinkEmail(
   env: EmailEnv,
   to: string,
   name: string,
   magicUrl: string,
+  anonId?: string | null,
 ): Promise<void> {
   const provider = getEmailProvider(env);
   if (!provider) return;
@@ -156,7 +166,7 @@ export async function sendMagicLinkEmail(
   const html = render(HEADER + MAGIC_LINK_BODY + FOOTER, {
     Subject: 'Your Builderforce sign-in link',
     RecipientName: name || to,
-    MagicUrl: magicUrl,
+    MagicUrl: appendAnonId(magicUrl, anonId),
     Year: String(new Date().getFullYear()),
   });
 
@@ -184,6 +194,11 @@ export async function sendVerificationCodeEmail(
   to: string,
   name: string,
   code: string,
+  // Accepted for signature parity with sendMagicLinkEmail (the auth start handlers
+  // thread the landing anon-id through both paths). The code-entry email carries no
+  // link, so there is no URL to attach `aid` to today — kept for a future link-based
+  // verify flow and so callers can pass it uniformly.
+  _anonId?: string | null,
 ): Promise<void> {
   const provider = getEmailProvider(env);
   if (!provider) return;

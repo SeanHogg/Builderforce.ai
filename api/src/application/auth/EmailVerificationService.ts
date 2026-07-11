@@ -44,7 +44,7 @@ export async function issueVerificationCode(
   db: Db,
   env: EmailEnv,
   user: VerificationUser,
-  opts: { force?: boolean } = {},
+  opts: { force?: boolean; anonId?: string | null } = {},
 ): Promise<IssueResult> {
   if (!opts.force) {
     const [recent] = await db
@@ -76,7 +76,7 @@ export async function issueVerificationCode(
     expiresAt: new Date(Date.now() + CODE_TTL_MS),
   });
 
-  await sendVerificationCodeEmail(env, user.email, user.displayName ?? user.username ?? user.email, code);
+  await sendVerificationCodeEmail(env, user.email, user.displayName ?? user.username ?? user.email, code, opts.anonId);
   return { sent: true };
 }
 

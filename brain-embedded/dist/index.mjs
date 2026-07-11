@@ -1566,6 +1566,17 @@ ${block}`;
       }
     }
   }
+  if (req.augmentSystemPrompt) {
+    try {
+      const extra = await req.augmentSystemPrompt(latestUserText(convo));
+      if (typeof extra === "string" && extra.trim()) {
+        systemPrompt = `${systemPrompt}
+
+${extra}`;
+      }
+    } catch {
+    }
+  }
   const readDedupe = /* @__PURE__ */ new Set();
   for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
     if (c.abort?.signal.aborted) return;
@@ -1574,11 +1585,13 @@ ${block}`;
     const working = await buildWorkingTranscript(c, systemPrompt, stream, model);
     if (c.abort?.signal.aborted) return;
     const llmStart = nowMs2();
+    let firstTokenAt;
     let result;
     try {
       result = await stream(
         { messages: working, tools, tool_choice: tools ? "auto" : void 0, model, signal: c.abort?.signal },
         { onTextDelta: (d) => {
+          if (firstTokenAt === void 0) firstTokenAt = nowMs2();
           c.streamingText += d;
           emit(c);
         } }
@@ -1613,6 +1626,7 @@ ${block}`;
       category: "llm",
       label: "llm.complete",
       durationMs: nowMs2() - llmStart,
+      ttftMs: firstTokenAt !== void 0 ? firstTokenAt - llmStart : void 0,
       // `model` is the model the gateway ACTUALLY used (resolved), falling back to
       // what we requested when the gateway didn't report one. `requestedModel`
       // keeps the caller's ask (empty/'default' ⇒ gateway auto-selects) so triage
@@ -1752,10 +1766,12 @@ ${block}`;
           content: "You have reached your tool-call budget for this turn. Do NOT call any more tools. Answer the user now, in prose, using what you have already gathered \u2014 summarise your findings and state plainly anything you could not finish."
         }
       ];
+      let closeFirstTokenAt;
       const closing = await stream(
         // No `tools` → the model can't call another tool and must produce text.
         { messages: working, model, signal: c.abort?.signal },
         { onTextDelta: (d) => {
+          if (closeFirstTokenAt === void 0) closeFirstTokenAt = nowMs2();
           c.streamingText += d;
           emit(c);
         } }
@@ -1766,6 +1782,7 @@ ${block}`;
         category: "llm",
         label: "llm.complete",
         durationMs: nowMs2() - closeStart,
+        ttftMs: closeFirstTokenAt !== void 0 ? closeFirstTokenAt - closeStart : void 0,
         args: { model: closing.resolvedModel ?? model ?? "default", requestedModel: model ?? "default", step: MAX_TOOL_ITERATIONS, toolCalls: 0, forcedFinish: true, account: closing.account, byoUnresolved: closing.byoUnresolved },
         usage: closing.usage,
         finishReason: closing.finishReason,
@@ -2113,6 +2130,7 @@ export {
   byoReasonHint,
   byoUnresolvedInTrace,
   byoUnresolvedSummary,
+  clearRunError,
   computeBrainDiagnostics,
   consolidationMarkerContent,
   consolidationMetadata,
@@ -2122,11 +2140,14 @@ export {
   formatBrainProvenance,
   formatEvermindMemoryBlock,
   getGlobalRunState,
+  getRunSnapshot,
+  getRunTrace,
   isConnectedAccountUnused,
   isConsolidationMarker,
   isDirectedToParticipant,
   isEvermindModel,
   isFailedToolResult,
+  isRunning,
   isStepMessage,
   lastConsolidationIndex,
   mentionRecipient,
@@ -2137,9 +2158,14 @@ export {
   parseMessageProvenance,
   prepareImageDataUrl,
   resolveRecipient,
+  resolveRunConfirm,
+  startRun as runBrainLoop,
   savePendingPrompt,
   scopeToConsolidation,
+  startRun,
+  stopRun,
   streamChatCompletion,
+  subscribeRun,
   subscribeRunStore,
   takePendingPrompt,
   useBrainActions,

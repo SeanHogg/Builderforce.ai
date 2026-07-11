@@ -9,7 +9,7 @@
  * caller (the sweep, the run-now endpoint, the surface) sees one consistent policy.
  */
 
-import { normalizeManagerType, DEFAULT_MANAGER_TYPE, type ManagerTypeId } from './managerTypes';
+import { normalizeManagerType, DEFAULT_MANAGER_TYPE } from './managerTypes';
 
 /** PR authority tiers (see migration 0265). */
 export type PrMergePolicy = 'immediate' | 'on_green' | 'queue';
@@ -40,8 +40,9 @@ export interface EffectiveManagerPolicy {
   autoAssign: boolean;
   autoBusinessValue: boolean;
   autoPrioritize: boolean;
-  /** The manager's domain type id ('general' | 'delivery' | 'qa' | 'service_desk' | 'devops' | …). */
-  managerType: ManagerTypeId;
+  /** The manager's domain type id: a built-in ('general' | 'delivery' | 'qa' |
+   *  'service_desk' | 'devops') or a `role:<key>` custom-role type. */
+  managerType: string;
 }
 
 /** The tenant default applied when a project has no explicit manager config row. */

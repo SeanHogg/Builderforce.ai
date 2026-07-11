@@ -3782,7 +3782,10 @@
     "gaps": "{count, plural, one {# écart} other {# écarts}}",
     "noGaps": "Aucun écart",
     "more": "+{count}",
-    "itemAria": "{name} : {score}, {label}, {gaps}"
+    "itemAria": "{name} : {score}, {label}, {gaps}",
+    "remediationResolved": "Remédiation fusionnée",
+    "remediationPrOpen": "PR de remédiation ouverte",
+    "remediationFiled": "{count, plural, =0 {Remédiation créée} one {# ticket créé} other {# tickets créés}}"
   },
   "marketing": {
     "ctaGetStartedFree": "Commencer gratuitement",
@@ -6778,7 +6781,8 @@
     "tierBasic": "Basique",
     "tierAdvanced": "Avancé",
     "tierBasicHint": "Un test rapide de 2 minutes couvrant les traits de personnalité essentiels.",
-    "tierAdvancedHint": "La batterie complète alignée sur la psychologie, couvrant tous les cadres."
+    "tierAdvancedHint": "La batterie complète alignée sur la psychologie, couvrant tous les cadres.",
+    "derivedBanner": "Déduit de vos réponses"
   },
   "workforceRoles": {
     "title": "Rôles",
@@ -8187,7 +8191,31 @@
     "teamChatScope": "Chat d'équipe",
     "teamChatProject": "Chat d'équipe du projet",
     "teamChatTenant": "Chat d'équipe de l'espace",
-    "teamChatHint": "Choisissez la conversation à laquelle cette réunion est adossée : le chat d'une équipe nommée ou celui par défaut de sa portée."
+    "teamChatHint": "Choisissez la conversation à laquelle cette réunion est adossée : le chat d'une équipe nommée ou celui par défaut de sa portée.",
+    "shrinkTile": "Réduire",
+    "expandTile": "Agrandir",
+    "cameraSize": "Taille des caméras",
+    "sizeSmall": "Petit",
+    "sizeLarge": "Grand",
+    "transcript": "Transcription",
+    "minutesTitle": "Compte rendu",
+    "noTranscript": "Pas encore de transcription. Activez votre micro pour lancer le sous-titrage.",
+    "captionsUnsupported": "Les sous-titres en direct nécessitent Chrome ou Edge ; la transcription capture toujours les autres participants et agents.",
+    "close": "Fermer",
+    "agentVoice": "Voix de l'agent",
+    "agentThinking": "{name} réfléchit…",
+    "askForUpdate": "Demander à {name}",
+    "askWhichAgent": "Quel agent",
+    "askAgentPlaceholder": "Posez une question à un agent…",
+    "askSend": "Demander",
+    "agentTurnFailed": "L'agent n'a pas pu répondre.",
+    "generateMinutes": "Générer le compte rendu",
+    "generatingMinutes": "Génération du compte rendu…",
+    "minutesReady": "Compte rendu généré et publié dans le chat d'équipe.",
+    "minutesFailed": "Impossible de générer le compte rendu.",
+    "pastMeetings": "Réunions passées",
+    "minutesAvailable": "Compte rendu prêt",
+    "viewNotes": "Voir les notes"
   },
   "brainLauncher": {
     "open": "Ouvrir l’assistant Brain",
@@ -9264,5 +9292,27 @@
       "gte": "Au moins (≥)",
       "lte": "Au plus (≤)"
     }
+  },
+  "installAgents": {
+    "intro": "Téléchargez et installez l’agent BuilderForce Agents sur votre machine. Il s’enregistrera automatiquement auprès de votre espace de travail pour que vous puissiez déléguer des tâches immédiatement.",
+    "tokenPreconfigured": "Votre jeton d’espace de travail est préconfiguré — l’agent s’enregistrera automatiquement au premier lancement.",
+    "laterHint": "Vous pouvez aussi le faire plus tard depuis la page <link>Équipe</link>."
+  },
+  "inviteMembers": {
+    "intro": "Ajoutez des coéquipiers à votre espace de travail par e-mail. S’ils ont déjà un compte Builderforce, ils rejoignent immédiatement ; sinon, l’invitation reste <strong>en attente</strong> et ils rejoignent automatiquement à leur première connexion avec cet e-mail.",
+    "emailPlaceholder": "collegue@entreprise.com",
+    "invite": "Inviter",
+    "roles": {
+      "developer": "Développeur",
+      "manager": "Responsable",
+      "viewer": "Observateur"
+    },
+    "statusSending": "Envoi…",
+    "statusAdded": "Ajouté",
+    "statusInvited": "Invité · en attente",
+    "statusInvitedHint": "Pas encore de compte — rejoint automatiquement à l’inscription",
+    "statusError": "Erreur",
+    "errFailed": "Échec de l’invitation",
+    "laterHint": "Vous pouvez aussi inviter des coéquipiers plus tard depuis <link>Équipe</link>."
   }
 }

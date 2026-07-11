@@ -6,7 +6,9 @@
 --      Development manager, a QA manager, an IT Service Desk manager, a DevOps
 --      manager, etc. The type shapes what the manager values + prioritizes. The
 --      concrete catalog lives in code (managerTypes.ts); this column stores the
---      chosen id. 'general' preserves the existing (domain-neutral) behavior.
+--      chosen id — a built-in ('general' | 'delivery' | …) or a `role:<key>` id
+--      derived from a tenant custom job role. 'general' preserves the existing
+--      (domain-neutral) behavior.
 --
 --   2. Human→manager COACHING directives — standing guidance a human gives the
 --      manager ("focus the payments epic", "hold merges on release/*") that the
@@ -14,7 +16,10 @@
 --      directive (a manager scoped to the whole tenant, not one project).
 
 ALTER TABLE project_manager_configs
-  ADD COLUMN IF NOT EXISTS manager_type VARCHAR(32) NOT NULL DEFAULT 'general';
+  ADD COLUMN IF NOT EXISTS manager_type VARCHAR(80) NOT NULL DEFAULT 'general';
+-- Idempotent widen so a prior apply at VARCHAR(32) still fits a `role:<key>` id.
+ALTER TABLE project_manager_configs
+  ALTER COLUMN manager_type TYPE VARCHAR(80);
 
 CREATE TABLE IF NOT EXISTS manager_directives (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),

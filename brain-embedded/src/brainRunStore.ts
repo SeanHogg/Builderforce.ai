@@ -40,7 +40,6 @@ import { withProvenanceMetadata, type ProvenanceAccount } from './provenance';
 import {
   formatEvermindMemoryBlock,
   countReconciledMemories,
-  EVERMIND_LEARN_MIN_CHARS,
   type EvermindRunHooks,
   type EvermindRecallResult,
 } from './evermindMemory';
@@ -191,6 +190,18 @@ export interface BrainRunRequest {
    * for a non-project chat (nothing memory-related happens).
    */
   evermind?: EvermindRunHooks;
+  /**
+   * Optional per-turn system-prompt augmentation — the LIMBIC parity seam.
+   *
+   * Called once at loop start (alongside Evermind recall) with the latest user
+   * text; a non-empty return is appended to the system prompt with a leading
+   * `\n\n`. This lets a host inject a per-turn dynamic block (e.g. a limbic /
+   * affective state fetched from the gateway) that the synchronous
+   * `resolvedSystemPrompt` resolver cannot produce. Best-effort: a throw is
+   * swallowed and the turn proceeds without the augmentation, exactly like a
+   * failed Evermind recall.
+   */
+  augmentSystemPrompt?: (userText: string) => Promise<string | undefined>;
 }
 
 /** Live, observable snapshot of a chat's run (what the hook renders). */
@@ -828,6 +839,15 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
   }
 }
 
+/**
+ * Framework-free entry point for the Brain agent loop — a documented alias of
+ * {@link startRun}. A non-React host (e.g. the native VS Code chat participant)
+ * drives a run by calling `runBrainLoop(chatId, req)` and observing it with
+ * {@link subscribeRun} + {@link getRunSnapshot} / {@link getRunTrace}, without
+ * pulling in the React hook. Same single-flight semantics as `startRun`.
+ */
+export { startRun as runBrainLoop };
+
 async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promise<void> {
   const { resolvedSystemPrompt, tools: toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind } = req;
   const convo = c.transcript;
@@ -864,6 +884,21 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     }
   }
 
+  // Per-turn system-prompt augmentation (the LIMBIC parity seam). Fetched once
+  // at loop start with the latest user text; a non-empty return is appended to
+  // the system prompt. Best-effort — a throw just skips it, exactly like the
+  // Evermind recall above.
+  if (req.augmentSystemPrompt) {
+    try {
+      const extra = await req.augmentSystemPrompt(latestUserText(convo));
+      if (typeof extra === 'string' && extra.trim()) {
+        systemPrompt = `${systemPrompt}\n\n${extra}`;
+      }
+    } catch {
+      // ignore — proceed without the augmentation
+    }
+  }
+
   // Read-only tool calls whose (name+args) exactly repeat within a run return a
   // "already returned above" stub instead of re-fetching + re-injecting the full
   // payload — the context bloat that let a weak model thrash into exhaustion (one
@@ -884,11 +919,15 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     const working = await buildWorkingTranscript(c, systemPrompt, stream, model);
     if (c.abort?.signal.aborted) return;
     const llmStart = nowMs();
+    // Time-to-first-token: stamped on the FIRST streamed delta of this turn so
+    // the timeline's "Thought for Xs" reflects latency-to-first-token, not the
+    // whole turn. Stays undefined for a pure tool-call / empty turn.
+    let firstTokenAt: number | undefined;
     let result;
     try {
       result = await stream(
         { messages: working, tools, tool_choice: tools ? 'auto' : undefined, model, signal: c.abort?.signal },
-        { onTextDelta: (d) => { c.streamingText += d; emit(c); } },
+        { onTextDelta: (d) => { if (firstTokenAt === undefined) firstTokenAt = nowMs(); c.streamingText += d; emit(c); } },
       );
     } catch (e) {
       // Aborting the fetch rejects the stream — that's a user Stop, exit quietly
@@ -928,6 +967,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       category: 'llm',
       label: 'llm.complete',
       durationMs: nowMs() - llmStart,
+      ttftMs: firstTokenAt !== undefined ? firstTokenAt - llmStart : undefined,
       // `model` is the model the gateway ACTUALLY used (resolved), falling back to
       // what we requested when the gateway didn't report one. `requestedModel`
       // keeps the caller's ask (empty/'default' ⇒ gateway auto-selects) so triage
@@ -1057,26 +1097,29 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     recordAppended(c, assistantMsg);
     emit(c);
 
-    // Evermind learning + reconciliation steps. When the project is CONNECTED and
-    // the answer clears the teach floor, the server contributes this turn to the
-    // project's Evermind (brainRoutes → learnFromBrainTurn); surface that as a
-    // `learn` step, and — when the answer restates recalled memories — a
-    // `reconcile` step (write-through: the turn updates those learnings). This
-    // mirrors the server gate so the step shows exactly when a contribution lands.
-    if (recalled?.seeded && recalled.mode === 'connected' && finalText.trim().length >= EVERMIND_LEARN_MIN_CHARS) {
+    // Evermind learning + reconciliation steps. The server reports the TRUTHFUL learn
+    // outcome for this turn on the persisted assistant message (`evermindLearn`) — the
+    // same `learnFromBrainTurn` gate it actually applies — so the `learn` step shows
+    // exactly when the server contributed. This replaces the old client-side heuristic
+    // (which both false-positived, and false-negatived for a connected-but-EMPTY Evermind
+    // where recall seeded nothing yet the first contribution still lands). The
+    // `reconcile` step stays client-side: which of the RECALLED memories this answer
+    // restated (write-through — the turn updates those learnings).
+    const learn = assistantMsg?.evermindLearn;
+    if (learn?.learned) {
       pushDurableStep(c, chatId, persistence, {
         ts: nowIso(),
         category: 'learn',
         label: 'evermind.learn',
-        result: { version: recalled.version, queued: true },
+        result: { version: learn.version, queued: true },
       });
-      const reconciled = countReconciledMemories(recalled.items, finalText);
+      const reconciled = recalled?.items ? countReconciledMemories(recalled.items, finalText) : 0;
       if (reconciled > 0) {
         pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),
           category: 'reconcile',
           label: 'evermind.reconcile',
-          result: { count: reconciled, version: recalled.version },
+          result: { count: reconciled, version: learn.version },
         });
       }
     }
@@ -1106,10 +1149,11 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
             'You have reached your tool-call budget for this turn. Do NOT call any more tools. Answer the user now, in prose, using what you have already gathered — summarise your findings and state plainly anything you could not finish.',
         },
       ];
+      let closeFirstTokenAt: number | undefined;
       const closing = await stream(
         // No `tools` → the model can't call another tool and must produce text.
         { messages: working, model, signal: c.abort?.signal },
-        { onTextDelta: (d) => { c.streamingText += d; emit(c); } },
+        { onTextDelta: (d) => { if (closeFirstTokenAt === undefined) closeFirstTokenAt = nowMs(); c.streamingText += d; emit(c); } },
       );
       accrueByoUnresolved(c, closing.byoUnresolved);
       pushTrace(c, {
@@ -1117,6 +1161,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         category: 'llm',
         label: 'llm.complete',
         durationMs: nowMs() - closeStart,
+        ttftMs: closeFirstTokenAt !== undefined ? closeFirstTokenAt - closeStart : undefined,
         args: { model: closing.resolvedModel ?? model ?? 'default', requestedModel: model ?? 'default', step: MAX_TOOL_ITERATIONS, toolCalls: 0, forcedFinish: true, account: closing.account, byoUnresolved: closing.byoUnresolved },
         usage: closing.usage,
         finishReason: closing.finishReason,

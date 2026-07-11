@@ -14,6 +14,8 @@ import { resolveChannelCapabilities } from "../../../config/channel-capabilities
 import { getMachineDisplayName } from "../../../infra/machine-name.js";
 import { getLimbicSystemService } from "../../../infra/limbic-system-service.js";
 import { emitAgentEvent } from "../../../infra/agent-events.js";
+import { resolveHiredAgentRef } from "../../../infra/hired-agents-sync.js";
+import { reportPersonalityEvent } from "../../../infra/personality-event-reporter.js";
 import { globalPersonaRegistry } from "../../../builderforce/personas.js";
 import { MAX_IMAGE_BYTES } from "../../../media/constants.js";
 import { getGlobalHookRunner } from "../../../plugins/hook-runner-global.js";
@@ -342,10 +344,13 @@ export async function runEmbeddedAttempt(
     // observability event naming the active persona(s) + a short directives summary
     // right after personality+affect is resolved. Does NOT alter the application
     // logic above — it only reports it. Best-effort: never fails the run.
+    const activePersonas = globalPersonaRegistry.listActive?.() ?? [];
+    const personaDirectives = buildAssignedPersonaPrompt();
+    const appliedTemperature = (effectiveStreamParams as { temperature?: number } | undefined)
+      ?.temperature;
+    const appliedTemp = typeof appliedTemperature === "number" ? appliedTemperature : null;
+    const directivesSummary = summarizePersonaDirectives(personaDirectives);
     try {
-      const activePersonas = globalPersonaRegistry.listActive?.() ?? [];
-      const personaDirectives = buildAssignedPersonaPrompt();
-      const appliedTemperature = (effectiveStreamParams as { temperature?: number } | undefined)?.temperature;
       emitAgentEvent({
         runId: params.runId,
         stream: "personality",
@@ -354,14 +359,49 @@ export async function runEmbeddedAttempt(
           phase: "applied",
           personas: activePersonas,
           hasPsychometric: Boolean(personaDirectives),
-          directivesSummary: summarizePersonaDirectives(personaDirectives),
+          directivesSummary,
           thinkLevel: effectiveThinkLevel,
           reasoningLevel: effectiveReasoningLevel,
-          temperature: typeof appliedTemperature === "number" ? appliedTemperature : null,
+          temperature: appliedTemp,
         },
       });
     } catch {
       /* personality-usage observability is best-effort */
+    }
+
+    // Residual R2 — the in-process event above is EPHEMERAL. Cloud runs persist a
+    // durable personality-usage row; an on-prem run left no history. Fire-and-forget
+    // the SAME application to the api's durable seam so self-hosted runs appear on
+    // the Personality-Usage panel at parity with cloud.
+    //
+    // agentRef: the embedded runner's `agentId` is a LOCAL partition id (e.g. "main"),
+    // not an ide_agents.id. It IS the ide_agents.id only when the session runs as a
+    // Builderforce-hired agent (registered under its roleKey/id). resolveHiredAgentRef
+    // maps it back to the canonical ide_agents.id, or null for a local/persona-less
+    // agent — in which case we SKIP the durable POST (the in-process event still fired).
+    // Base URL + bearer come from the shared BUILDERFORCE_URL / BUILDERFORCE_API_KEY the
+    // rest of agent-runtime uses; one POST per run, never per-step. Best-effort only.
+    try {
+      const agentRef = resolveHiredAgentRef(params.agentId);
+      const directiveCount = personaDirectives
+        .split("\n")
+        .filter((line) => line.trim().length > 0).length;
+      if (agentRef && directiveCount > 0) {
+        void reportPersonalityEvent({
+          agentRef,
+          runId: params.runId,
+          sessionKey: params.sessionKey ?? params.sessionId,
+          profileSource: "agent",
+          personaIds: activePersonas.map((p) => p.name),
+          directivesSummary,
+          directiveCount,
+          thinkLevel: effectiveThinkLevel,
+          reasoningLevel: effectiveReasoningLevel,
+          temperature: appliedTemp,
+        });
+      }
+    } catch {
+      /* durable personality-usage report is best-effort */
     }
 
     const sessionLabel = params.sessionKey ?? params.sessionId;

@@ -71,14 +71,17 @@ export function createToolRoutes(
     return c.json(outcome, 201);
   });
 
-  // ── Project / tenant rating (auth, manager+) — registered before `/:id` so the
-  //    static segments win over the `:id` param. ──────────────────────────────
-  router.get('/rollup', authMiddleware, requireRole(TenantRole.MANAGER), async (c) => {
+  // ── Project / tenant rating — registered before `/:id` so the static segments
+  //    win over the `:id` param. Read-only diagnostic SCORES (SOC 2 / Quality
+  //    readiness, remediation status) are viewer-safe: every workspace member,
+  //    not just managers, sees their project's diagnostics strip. (Running an
+  //    audit + the raw finding tickets remain manager/role-gated elsewhere.) ────
+  router.get('/rollup', authMiddleware, requireRole(TenantRole.VIEWER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     return c.json(await toolService.getTenantRollup(c.env as Env, tenantId));
   });
 
-  router.get('/projects/:projectId/score', authMiddleware, requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/projects/:projectId/score', authMiddleware, requireRole(TenantRole.VIEWER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const projectId = Number(c.req.param('projectId'));
     if (!Number.isFinite(projectId)) return c.json({ error: 'Invalid project id' }, 400);

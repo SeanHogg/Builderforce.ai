@@ -645,10 +645,13 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       password: string;
       agreeToTerms?: boolean;
       accountType?: string;
+      anonId?: string;
     }>();
     if (!body.email || !body.password) {
       return c.json({ error: 'email and password are required' }, 400);
     }
+    // Optional landing anon-id — threaded through so the verification path can carry it.
+    const anonId = typeof body.anonId === 'string' && body.anonId.trim() ? body.anonId.trim() : undefined;
     // 'freelancer' = restricted gig account for hire; anything else = standard.
     const accountType = body.accountType === 'freelancer' ? 'freelancer' : 'standard';
     if (body.agreeToTerms !== true) {
@@ -722,7 +725,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     // issued until the user enters the 6-digit code we email now. This is what
     // stops fake / unowned-email signups. The client flips to the code-entry step
     // on `verificationRequired` and calls /web/register/verify to obtain a session.
-    await issueVerificationCode(db, c.env, created, { force: true });
+    await issueVerificationCode(db, c.env, created, { force: true, anonId });
 
     return c.json({
       verificationRequired: true,

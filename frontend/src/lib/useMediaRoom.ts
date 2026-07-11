@@ -48,6 +48,10 @@ export interface UseMediaRoom {
   connected: boolean;
   /** getUserMedia failed / was denied (null = fine). */
   mediaError: string | null;
+  /** Live caption text keyed by member ref (STT lines + agent spoken lines). */
+  captions: Record<string, string>;
+  /** Member refs currently speaking (drives the tile accent ring). */
+  speaking: Set<string>;
   toggleCam: () => void;
   toggleMic: () => void;
 }
@@ -66,7 +70,10 @@ export function useMediaRoom(
   const [micOn, setMicOn] = useState(true);
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [captions, setCaptions] = useState<Record<string, string>>({});
+  const [speaking, setSpeaking] = useState<Set<string>>(() => new Set());
 
+  const captionTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const wsRef = useRef<WebSocket | null>(null);
   const myIdRef = useRef<string>('');
   const peersRef = useRef<Map<string, PeerState>>(new Map());
@@ -80,6 +87,28 @@ export function useMediaRoom(
     setTiles([...peersRef.current.entries()].map(([peerId, p]) => ({
       peerId, name: p.name, ref: p.ref, stream: p.stream, camOn: p.camOn, micOn: p.micOn,
     })));
+  }, []);
+
+  // A caption arrived for `ref` (a human STT line, or an agent's spoken line). Show
+  // it on that tile, flag them speaking, and — for agent lines — voice it aloud via
+  // the browser's speech synthesis (agents have no media track). Auto-clears after a
+  // hold proportional to the line length.
+  const markCaption = useCallback((ref: string, text: string, speak: boolean) => {
+    if (!ref || !text) return;
+    setCaptions((prev) => ({ ...prev, [ref]: text }));
+    setSpeaking((prev) => { const n = new Set(prev); n.add(ref); return n; });
+    const timers = captionTimers.current;
+    const existing = timers.get(ref);
+    if (existing) clearTimeout(existing);
+    const holdMs = Math.min(14_000, 2_800 + text.length * 55);
+    timers.set(ref, setTimeout(() => {
+      setCaptions((prev) => { const n = { ...prev }; delete n[ref]; return n; });
+      setSpeaking((prev) => { const n = new Set(prev); n.delete(ref); return n; });
+      timers.delete(ref);
+    }, holdMs));
+    if (speak && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try { window.speechSynthesis.speak(new SpeechSynthesisUtterance(text)); } catch { /* voicing is best-effort */ }
+    }
   }, []);
 
   const send = useCallback((frame: Record<string, unknown>) => {
@@ -145,6 +174,11 @@ export function useMediaRoom(
 
     if (type === 'hello') { myIdRef.current = String(msg.id ?? ''); return; }
 
+    // Caption / agent-voice frames are broadcast server-side (agents have no socket)
+    // so they carry no `from` — handle them before the peer-frame guard below.
+    if (type === 'caption') { markCaption(String(msg.ref ?? ''), String(msg.text ?? ''), false); return; }
+    if (type === 'agent-say') { markCaption(String(msg.ref ?? ''), String(msg.text ?? ''), true); return; }
+
     if (type === 'roster') {
       const peers = (msg.peers as RoomPeer[] | undefined) ?? [];
       for (const p of peers) {
@@ -190,7 +224,7 @@ export function useMediaRoom(
       const p = peersRef.current.get(from);
       if (p) { p.camOn = !!msg.camOn; p.micOn = !!msg.micOn; syncTiles(); }
     }
-  }, [ensurePeer, makeOffer, shouldOffer, closePeer, send, syncTiles]);
+  }, [ensurePeer, makeOffer, shouldOffer, closePeer, send, syncTiles, markCaption]);
 
   // Acquire media + open the socket while enabled.
   useEffect(() => {
@@ -256,6 +290,11 @@ export function useMediaRoom(
       setTiles(EMPTY);
       setConnected(false);
       myIdRef.current = '';
+      for (const [, timer] of captionTimers.current) clearTimeout(timer);
+      captionTimers.current.clear();
+      setCaptions({});
+      setSpeaking(new Set());
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) { try { window.speechSynthesis.cancel(); } catch { /* ignore */ } }
     };
   }, [enabled, roomKey, audioOnly, send, handleFrame]);
 
@@ -277,5 +316,5 @@ export function useMediaRoom(
     send({ type: 'm-state', camOn, micOn: next });
   }, [camOn, micOn, send]);
 
-  return { localStream, tiles, camOn, micOn, connected, mediaError, toggleCam, toggleMic };
+  return { localStream, tiles, camOn, micOn, connected, mediaError, captions, speaking, toggleCam, toggleMic };
 }

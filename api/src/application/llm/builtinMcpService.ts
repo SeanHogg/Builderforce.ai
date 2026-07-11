@@ -24,6 +24,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { ProjectService } from '../project/ProjectService';
 import { TaskService } from '../task/TaskService';
 import { addManagerDirective } from '../manager/managerDirectives';
+import { createManagerCoachingTask } from '../manager/ManagerService';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
 import { ProjectStatus, TaskPriority, TaskType, TenantRole } from '../../domain/shared/types';
@@ -45,7 +46,7 @@ import { invalidateProjectsList } from '../../presentation/routes/projectRoutes'
 import { recordActivity, resolveHumanActor, SYSTEM_ACTOR } from '../activity/activityLog';
 import { pmoVersionKey } from '../../presentation/routes/pmoRoutes';
 import { bumpCacheVersion, invalidateCached, trackerCacheKey, bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
-import { convertWorkItemType, ConvertError, type WorkItemKind } from '../workitem/convertWorkItemType';
+import { convertWorkItemType, promoteOrphanOkrEpics, ConvertError, type WorkItemKind } from '../workitem/convertWorkItemType';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { ChatTicketService } from '../brain/ChatTicketService';
 import { BrainService } from '../brain/BrainService';
@@ -1023,6 +1024,19 @@ const CATALOG: BuiltinTool[] = [
       }
     },
   },
+  {
+    tool: 'objectives.promote_orphans', mutates: true,
+    description: 'Bulk-fix OKRs modelled as the wrong TYPE: promote EVERY board Epic whose title starts with "OKR" (e.g. "OKR 1 — Grow revenue") into a real OKR Objective, so it appears on the Portfolio ▸ OKRs tab and satisfies each project\'s 360 "Direction". One call sweeps the whole workspace; pass projectId to limit it to one board. Skips Epics already linked to an objective. Manager action. Returns { promoted, ids }.',
+    parameters: obj({ projectId: N }),
+    run: async (ctx, a) => {
+      const res = await promoteOrphanOkrEpics(
+        { db: ctx.db, tasks: ctx.tasks, env: ctx.env },
+        { tenantId: ctx.tenantId, projectId: a.projectId != null ? num(a.projectId) : undefined },
+      );
+      await bumpPmo(ctx);
+      return res;
+    },
+  },
 
   { tool: 'key_results.list', mutates: false, description: 'List key results (the measurable targets under OKR objectives).', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(keyResults).where(and(eq(keyResults.tenantId, ctx.tenantId), eq(keyResults.segmentId, seg))).orderBy(desc(keyResults.updatedAt)).limit(500); } },
   {
@@ -1272,16 +1286,25 @@ const CATALOG: BuiltinTool[] = [
   // twin of the Manager tab's coaching box. Same store, so guidance given in chat and
   // guidance given on the tab are one list.
   { tool: 'manager.coach', mutates: true,
-    description: "Give the AI Manager standing direction it will honor on every backlog pass — e.g. 'focus the payments epic', 'hold merges on release/* until QA signs off', 'deprioritize infra this sprint'. Use when the human tells you how they want work managed or prioritized. scope='tenant' applies it to EVERY project the manager runs; default ('project') applies to the given projectId only.",
-    parameters: obj({ projectId: N, directive: S, scope: { type: 'string', enum: ['project', 'tenant'] } }, ['projectId', 'directive']),
+    description: "Coach the AI Manager. mode='directive' (default) gives STANDING direction it honors on every backlog pass — e.g. 'focus the payments epic', 'hold merges on release/* until QA signs off' (scope='tenant' applies to EVERY project the manager runs; default 'project' applies to the given projectId only). mode='task' instead hands the manager ONE discrete task to execute once (owned by the designated manager, e.g. 'reorganize the payments epic and rank its backlog'). Use directive for how-to-manage guidance, task for a concrete one-off job.",
+    parameters: obj({ projectId: N, directive: S, scope: { type: 'string', enum: ['project', 'tenant'] }, mode: { type: 'string', enum: ['directive', 'task'] } }, ['projectId', 'directive']),
     run: async (ctx, a) => {
-      const scopeProjectId = a.scope === 'tenant' ? null : num(a.projectId);
+      const projectId = num(a.projectId);
+      if (a.mode === 'task') {
+        if (!ctx.env) throw new Error('task mode requires the worker runtime');
+        const taskId = await createManagerCoachingTask(ctx.env, ctx.db, buildRuntimeService(ctx.env, ctx.db), {
+          tenantId: ctx.tenantId, projectId, directive: str(a.directive), createdBy: ctx.userId ?? null,
+        });
+        if (taskId == null) throw new Error('could not create manager task');
+        return { mode: 'task', taskId, directive: str(a.directive) };
+      }
+      const scopeProjectId = a.scope === 'tenant' ? null : projectId;
       const id = await addManagerDirective(ctx.db, {
         tenantId: ctx.tenantId, projectId: scopeProjectId, directive: str(a.directive),
         createdBy: ctx.userId ?? null, source: 'chat',
       });
       if (!id) throw new Error('directive is too short');
-      return { id, scope: scopeProjectId == null ? 'tenant' : 'project', directive: str(a.directive) };
+      return { mode: 'directive', id, scope: scopeProjectId == null ? 'tenant' : 'project', directive: str(a.directive) };
     },
   },
 
@@ -2313,7 +2336,7 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   // Strategy / OKRs — read + write (no delete). "update project related items (OKR)".
   'portfolios.list', 'portfolios.create', 'portfolios.update',
   'initiatives.list', 'initiatives.create', 'initiatives.update',
-  'objectives.list', 'objectives.create', 'objectives.update', 'objectives.add_link', 'objectives.remove_link',
+  'objectives.list', 'objectives.create', 'objectives.update', 'objectives.add_link', 'objectives.remove_link', 'objectives.promote_orphans',
   'key_results.list', 'key_results.create', 'key_results.update',
   'work_items.convert_type', 'pmo.tree', 'pmo.rollup', 'pmo.link_project', 'pmo.add_dependency',
   // Team chat — a PM/manager agent asks the team for status or shares a burndown.

@@ -1,8 +1,9 @@
-import { and, eq, desc, isNotNull } from 'drizzle-orm';
+import { and, eq, desc, isNotNull, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
-import { toolRuns, projects } from '../../infrastructure/database/schema';
+import { toolRuns, projects, tasks } from '../../infrastructure/database/schema';
+import { deriveRemediation, type RemediationSummary, type RemediationTaskRow } from './remediationStatus';
 import { TOOLS, getTool } from './toolDefinitions';
 import { TOOL_DATA_PROVIDERS, hasDataProvider } from './toolDataProviders';
 import { toSummary, toDefinition, type ToolSummary, type ToolDefinition, type ToolResult } from './toolTypes';
@@ -54,6 +55,10 @@ export interface ProjectDiagnostic {
   /** Number of open gaps (recommendations) the latest run flagged — the
    *  "remediation outstanding" signal surfaced beside the score. */
   gapCount: number;
+  /** Real remediation status derived from the diagnostic's filed ticket(s):
+   *  filed / PR-open / resolved (the marketing "Remediation PR opened" badge).
+   *  `state: 'none'` when no remediation ticket exists (fall back to gapCount). */
+  remediation: RemediationSummary;
   kind: string;
   createdAt: string;
   /** The full latest run result, for the per-diagnostic results view. */
@@ -75,6 +80,9 @@ export interface ProjectDiagnosticSummary {
   score: number | null;
   scoreLabel: string | null;
   gapCount: number;
+  /** Real remediation status (filed / PR-open / resolved), so the project card
+   *  shows the true remediation signal, not just the raw gap count. */
+  remediation: RemediationSummary;
 }
 
 export interface TenantProjectScore {
@@ -110,6 +118,36 @@ function meanScore(scores: Array<number | null | undefined>): number | null {
 
 export class ToolService {
   constructor(private readonly db: Db) {}
+
+  /**
+   * Non-archived tasks (title + lane + PR link) for the given projects, grouped by
+   * projectId — the join source for deriving each diagnostic's real remediation
+   * status. One query for the whole rollup / project score. Best-effort: returns an
+   * empty map on failure so scoring never blocks on the task read.
+   */
+  private async remediationTasksByProject(projectIds: number[]): Promise<Map<number, RemediationTaskRow[]>> {
+    const byProject = new Map<number, RemediationTaskRow[]>();
+    if (projectIds.length === 0) return byProject;
+    try {
+      const rows = await this.db
+        .select({
+          projectId: tasks.projectId,
+          title: tasks.title,
+          status: tasks.status,
+          githubPrUrl: tasks.githubPrUrl,
+        })
+        .from(tasks)
+        .where(and(inArray(tasks.projectId, projectIds), eq(tasks.archived, false)));
+      for (const r of rows) {
+        const list = byProject.get(r.projectId) ?? [];
+        list.push({ title: r.title, status: r.status, githubPrUrl: r.githubPrUrl });
+        byProject.set(r.projectId, list);
+      }
+    } catch {
+      // Task read failed — diagnostics still score, remediation just shows 'none'.
+    }
+    return byProject;
+  }
 
   /** Public — list every free tool (client-safe summaries + data-mode flag). */
   list(): ToolSummary[] {
@@ -232,16 +270,21 @@ export class ToolService {
       const latest = new Map<string, typeof toolRuns.$inferSelect>();
       for (const r of rows) if (!latest.has(r.toolId)) latest.set(r.toolId, r);
 
+      // Join the project's tasks to derive each diagnostic's real remediation state.
+      const projectTasks = (await this.remediationTasksByProject([projectId])).get(projectId) ?? [];
+
       const diagnostics: ProjectDiagnostic[] = [...latest.values()].map((r) => {
         const result = r.result as ToolResult;
+        const name = diagnosticName(r.toolId);
         return {
           toolId: r.toolId,
-          name: diagnosticName(r.toolId),
+          name,
           icon: diagnosticIcon(r.toolId),
           score: result.score ?? null,
           scoreLabel: result.scoreLabel ?? null,
           headline: result.headline ?? '',
           gapCount: result.recommendations?.length ?? 0,
+          remediation: deriveRemediation(name, projectTasks),
           kind: r.kind,
           createdAt: r.createdAt.toISOString(),
           result,
@@ -302,18 +345,26 @@ export class ToolService {
         : [];
       const nameById = new Map(names.map((p) => [p.id, p.name]));
 
+      // One task read for the whole rollup → each diagnostic's remediation state.
+      const tasksByProject = await this.remediationTasksByProject(projectIds);
+
       const projectScores: TenantProjectScore[] = projectIds.map((pid) => {
         const entry = byProject.get(pid)!;
+        const projectTasks = tasksByProject.get(pid) ?? [];
         const score = meanScore([...entry.latest.values()].map((r) => r.score ?? null));
         const diagnostics: ProjectDiagnosticSummary[] = [...entry.latest.entries()]
-          .map(([toolId, r]) => ({
-            toolId,
-            name: diagnosticName(toolId),
-            icon: diagnosticIcon(toolId),
-            score: r.score ?? null,
-            scoreLabel: r.scoreLabel ?? null,
-            gapCount: r.recommendations?.length ?? 0,
-          }))
+          .map(([toolId, r]) => {
+            const name = diagnosticName(toolId);
+            return {
+              toolId,
+              name,
+              icon: diagnosticIcon(toolId),
+              score: r.score ?? null,
+              scoreLabel: r.scoreLabel ?? null,
+              gapCount: r.recommendations?.length ?? 0,
+              remediation: deriveRemediation(name, projectTasks),
+            };
+          })
           .sort((a, b) => a.name.localeCompare(b.name));
         return {
           projectId: pid,

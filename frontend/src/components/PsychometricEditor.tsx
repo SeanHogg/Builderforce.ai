@@ -61,6 +61,10 @@ export default function PsychometricEditor({ value, onChange, forceUnlocked = fa
   const [importText, setImportText] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  // The categorical MBTI / Enneagram result derived from the last questionnaire run,
+  // surfaced as an inline banner so the user sees their type without hunting the
+  // Sliders tab. Null until a run derives at least one categorical skin.
+  const [derived, setDerived] = useState<{ mbti?: string; enneagramType?: number } | null>(null);
 
   const emit = useCallback(
     (next: { vector?: Record<string, number>; enneagramType?: number; mbti?: string; source?: PsychometricProfile['source'] }) => {
@@ -95,7 +99,15 @@ export default function PsychometricEditor({ value, onChange, forceUnlocked = fa
       if (scoredMbti) setMbti(scoredMbti);
       if (typeof scoredEnn === 'number') setEnneagramType(scoredEnn);
       emit({ vector: next, mbti: nextMbti || undefined, enneagramType: nextEnn, source: 'questionnaire' });
-      setTab('sliders');
+      // If the answers derived a categorical type, keep the user on the questionnaire
+      // tab and show it inline; otherwise jump to the sliders to review the scores.
+      const hasType = !!scoredMbti || typeof scoredEnn === 'number';
+      if (hasType) {
+        setDerived({ mbti: scoredMbti, enneagramType: scoredEnn });
+      } else {
+        setDerived(null);
+        setTab('sliders');
+      }
       setNotice(t('noticeScored'));
     } catch (e) {
       setNotice(e instanceof Error ? e.message : t('noticeScoreFailed'));
@@ -290,6 +302,32 @@ export default function PsychometricEditor({ value, onChange, forceUnlocked = fa
               </div>
             ))}
           </div>
+          {derived && (derived.mbti || typeof derived.enneagramType === 'number') && (
+            <div
+              style={{
+                marginTop: 12,
+                padding: '8px 10px',
+                borderRadius: 8,
+                border: '1px solid var(--border)',
+                background: 'var(--surface-2)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                flexWrap: 'wrap',
+              }}
+            >
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)' }}>{t('derivedBanner')}</span>
+              {derived.mbti && <span className="badge badge-gray">MBTI · {derived.mbti}</span>}
+              {typeof derived.enneagramType === 'number' && (
+                <span className="badge badge-gray">
+                  {t('enneagramLabel')} · {derived.enneagramType}
+                  {enneagram.find((en) => en.type === derived.enneagramType)?.name
+                    ? ` ${enneagram.find((en) => en.type === derived.enneagramType)?.name}`
+                    : ''}
+                </span>
+              )}
+            </div>
+          )}
           <button
             type="button"
             className="btn btn-primary btn-sm"

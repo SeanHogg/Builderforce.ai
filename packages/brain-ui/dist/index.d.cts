@@ -182,6 +182,46 @@ declare function QuestionCard({ payload, labels, onAnswer, }: {
 }): React.JSX.Element;
 
 /**
+ * ConsolidateForkControl — the shared "compress this chat / branch it into a new
+ * one" control, rendered identically on the web Brain composer and inside the VS
+ * Code webview (which historically hand-rolled the same two buttons).
+ *
+ * Presentational only: it renders two buttons and calls back. The host owns the
+ * actual consolidation/fork logic (summarize the chat, append the consolidation
+ * marker, or create + seed a forked chat) and the busy/enabled state. Colors come
+ * exclusively from theme CSS variables (with layered fallbacks) so the SAME markup
+ * reads correctly in the web app's light/dark themes and the VS Code editor theme —
+ * no hardcoded hex that only works in one theme.
+ */
+/** Copy for the two buttons — defaulted in English, overridable per host for i18n. */
+interface ConsolidateForkLabels {
+    consolidate: string;
+    consolidating: string;
+    fork: string;
+    forking: string;
+}
+declare const DEFAULT_CONSOLIDATE_FORK_LABELS: ConsolidateForkLabels;
+interface ConsolidateForkControlProps {
+    /** Whether the chat is long enough / in a state where consolidation makes sense. */
+    canConsolidate: boolean;
+    /** A consolidation is in flight. */
+    consolidating: boolean;
+    /** A fork is in flight. */
+    forking: boolean;
+    onConsolidate(): void;
+    onFork(): void;
+    labels?: Partial<ConsolidateForkLabels>;
+    className?: string;
+}
+/**
+ * Two buttons: Consolidate (compress the chat into a summary marker the rest of
+ * the conversation builds on) and Fork (branch that summary into a new chat).
+ * Both are disabled when consolidation isn't possible or either action is busy,
+ * so a host can't fire a second op mid-flight.
+ */
+declare function ConsolidateForkControl({ canConsolidate, consolidating, forking, onConsolidate, onFork, labels, className, }: ConsolidateForkControlProps): React.JSX.Element;
+
+/**
  * Participant avatars — the shared way a chat renders WHO a participant is.
  *
  * A BuilderForce chat is multi-party (the BRAIN + invited agents/humans). Wherever
@@ -1083,4 +1123,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindMode, type EvermindRecentEntry, type EvermindSeedModel, type EvermindTeacherOptions, HealthRing, type HealthRingProps, type HealthTier, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, ParticipantBadge, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, serializeAskUser, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };
+export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, ConsolidateForkControl, type ConsolidateForkControlProps, type ConsolidateForkLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_CONSOLIDATE_FORK_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindMode, type EvermindRecentEntry, type EvermindSeedModel, type EvermindTeacherOptions, HealthRing, type HealthRingProps, type HealthTier, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, ParticipantBadge, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, serializeAskUser, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };

@@ -228,3 +228,69 @@ export async function convertWorkItemType(
 
   throw new ConvertError(`unsupported conversion: ${sourceKind} → ${target}`);
 }
+
+/** An Epic whose title starts with "OKR" (e.g. "OKR 1 — Grow revenue") is an OKR
+ *  modelled as the wrong TYPE. `\b` after OKR avoids matching e.g. "OKRoster". */
+const OKR_EPIC_TITLE_RE = /^\s*OKR\b/i;
+
+/**
+ * Bulk-promote every ORPHAN "OKR" Epic to a real OKR Objective. An orphan is a
+ * `tasks` row with taskType='epic' whose title matches {@link OKR_EPIC_TITLE_RE}
+ * and that is NOT already a delivery link under some objective (those belong to an
+ * OKR already — promoting them would be wrong). Each match is run through the SAME
+ * per-item promote path as {@link convertWorkItemType} (task/epic → objective), so
+ * its child tasks re-link to the new objective and it scopes to the item's project.
+ *
+ * Tenant-scoped via the project join; pass `projectId` to sweep just one board.
+ * A row that can't convert is skipped (best-effort bulk) rather than aborting the
+ * whole sweep. Returns how many were promoted + their (now-deleted) task ids.
+ */
+export async function promoteOrphanOkrEpics(
+  deps: ConvertDeps,
+  opts: { tenantId: number; projectId?: number | null },
+): Promise<{ promoted: number; ids: number[] }> {
+  const { db } = deps;
+  const { tenantId, projectId } = opts;
+
+  // Candidate epics in tenant scope (+ project when given). Title is filtered in JS
+  // with the exact regex so the "OKR" word-boundary rule lives in ONE place.
+  const conds = [eq(tasks.taskType, 'epic' as TaskType), eq(projects.tenantId, tenantId)];
+  if (projectId != null) conds.push(eq(tasks.projectId, projectId));
+  const candidates = await db
+    .select({ id: tasks.id, title: tasks.title, segmentId: tasks.segmentId })
+    .from(tasks)
+    .innerJoin(projects, eq(tasks.projectId, projects.id))
+    .where(and(...conds));
+
+  const okrEpics = candidates.filter((t) => OKR_EPIC_TITLE_RE.test(t.title ?? ''));
+  if (okrEpics.length === 0) return { promoted: 0, ids: [] };
+
+  // Exclude epics already linked to an objective (already part of an OKR structure).
+  const ids = okrEpics.map((t) => t.id);
+  const linked = await db
+    .select({ taskId: objectiveLinks.taskId })
+    .from(objectiveLinks)
+    .where(and(eq(objectiveLinks.tenantId, tenantId), inArray(objectiveLinks.taskId, ids)));
+  const linkedSet = new Set(linked.map((l) => l.taskId));
+  const orphans = okrEpics.filter((t) => !linkedSet.has(t.id));
+
+  const promotedIds: number[] = [];
+  for (const epic of orphans) {
+    try {
+      // Per-row await (no interactive tx on neon-http). loadBoardItem re-reads the
+      // real segmentId, so the passed fallback is only a type placeholder.
+      await convertWorkItemType(deps, {
+        tenantId,
+        segmentId: epic.segmentId ?? '',
+        sourceKind: 'epic',
+        sourceId: String(epic.id),
+        target: 'objective',
+      });
+      promotedIds.push(epic.id);
+    } catch (e) {
+      if (e instanceof ConvertError) continue; // skip an unconvertible row; keep sweeping
+      throw e;
+    }
+  }
+  return { promoted: promotedIds.length, ids: promotedIds };
+}

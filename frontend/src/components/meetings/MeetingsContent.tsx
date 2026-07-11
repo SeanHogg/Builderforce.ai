@@ -10,6 +10,7 @@ import {
 import { CalendarConnectionsCard } from './CalendarConnectionsCard';
 import { ScheduleMeetingPanel } from './ScheduleMeetingPanel';
 import { MeetingRoom } from './MeetingRoom';
+import { MeetingNotes } from './MeetingNotes';
 import { TeamChatButton } from '@/components/brain/TeamChatButton';
 
 function KindBadge({ label }: { label: string }) {
@@ -41,21 +42,25 @@ export default function MeetingsContent({
   const params = useSearchParams();
 
   const [meetings, setMeetings] = useState<MeetingDetail[]>([]);
+  const [past, setPast] = useState<MeetingDetail[]>([]);
   const [events, setEvents] = useState<CalendarEventItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [startNowPreset, setStartNowPreset] = useState(false);
   const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null);
+  const [notesFor, setNotesFor] = useState<MeetingDetail | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [m, e] = await Promise.all([
+      const [m, all, e] = await Promise.all([
         meetingsApi.list({ scope: 'upcoming' }),
+        meetingsApi.list({ scope: 'all' }).catch(() => ({ meetings: [] as MeetingDetail[] })),
         calendarApi.events(14).catch(() => ({ events: [] as CalendarEventItem[] })),
       ]);
       setMeetings(m.meetings);
+      setPast(all.meetings.filter((d) => d.meeting.status === 'ended').slice(0, 20));
       setEvents(e.events);
     } finally { setLoading(false); }
   }, []);
@@ -166,6 +171,27 @@ export default function MeetingsContent({
             )}
           </section>
 
+          {past.length > 0 && (
+            <section>
+              <h2 style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)', margin: '0 0 10px' }}>{t('pastMeetings')}</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {past.map((d) => (
+                  <div key={d.meeting.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 14px', borderRadius: 10, background: 'var(--surface-card)', border: '1px solid var(--border-subtle)', flexWrap: 'wrap' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{d.meeting.title}</span>
+                        <KindBadge label={t(`kind_${d.meeting.kind}`)} />
+                        {d.meeting.summary && <span style={{ fontSize: 11, color: 'var(--emerald-bright, #34d399)' }}>{t('minutesAvailable')}</span>}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{whenLabel(d.meeting.endedAt ?? d.meeting.scheduledAt)}</div>
+                    </div>
+                    <button type="button" onClick={() => setNotesFor(d)} style={btn(false)}>{t('viewNotes')}</button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {events.length > 0 && (
             <section>
               <h2 style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)', margin: '0 0 10px' }}>{t('fromYourCalendar')}</h2>
@@ -199,6 +225,9 @@ export default function MeetingsContent({
       <ScheduleMeetingPanel open={scheduleOpen} startNow={startNowPreset} onClose={() => setScheduleOpen(false)} onCreated={onCreated} />
       {activeMeetingId && (
         <MeetingRoom meetingId={activeMeetingId} onClose={() => { setActiveMeetingId(null); reload(); }} />
+      )}
+      {notesFor && (
+        <MeetingNotes meetingId={notesFor.meeting.id} title={notesFor.meeting.title} open onClose={() => setNotesFor(null)} />
       )}
     </div>
   );
