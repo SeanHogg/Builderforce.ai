@@ -63,7 +63,7 @@ export function Avatar({
   color,
   title,
 }: AvatarProps) {
-  const bgColor = useMemo(() => color ?? avatarColor(name), [name, color]);
+  const bgColor = useMemo(() => color ?? avatarColor(name ?? ''), [name, color]);
   const initials = useMemo(() => avatarInitials(name), [name]);
 
   return (
