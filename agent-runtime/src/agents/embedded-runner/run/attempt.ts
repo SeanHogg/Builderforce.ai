@@ -13,6 +13,8 @@ import type { ImageContent } from "../../../builderforce/model/types.js";
 import { resolveChannelCapabilities } from "../../../config/channel-capabilities.js";
 import { getMachineDisplayName } from "../../../infra/machine-name.js";
 import { getLimbicSystemService } from "../../../infra/limbic-system-service.js";
+import { emitAgentEvent } from "../../../infra/agent-events.js";
+import { globalPersonaRegistry } from "../../../builderforce/personas.js";
 import { MAX_IMAGE_BYTES } from "../../../media/constants.js";
 import { getGlobalHookRunner } from "../../../plugins/hook-runner-global.js";
 import {
@@ -123,6 +125,25 @@ import {
 } from "./compaction-timeout.js";
 import { detectAndLoadPromptImages } from "./images.js";
 import type { EmbeddedRunAttemptParams, EmbeddedRunAttemptResult } from "./types.js";
+
+/**
+ * Compact one-line summary of an assigned-persona prompt block for the personality
+ * usage timeline event. Takes the leading phrase of the first few directive lines
+ * (the text before the first colon) so the readout is "Conscientiousness · Reflection
+ * · …" rather than the full multi-paragraph block. Pure; empty in → empty out.
+ */
+export function summarizePersonaDirectives(personaPrompt: string): string {
+  if (!personaPrompt.trim()) return "";
+  const heads: string[] = [];
+  for (const line of personaPrompt.split("\n")) {
+    const trimmed = line.replace(/^[-*\s]+/, "").trim();
+    if (!trimmed) continue;
+    const head = trimmed.split(":")[0]?.trim();
+    if (head && head.length <= 60 && !heads.includes(head)) heads.push(head);
+    if (heads.length >= 4) break;
+  }
+  return heads.join(" · ");
+}
 
 export function injectHistoryImagesIntoMessages(
   messages: AgentMessage[],
@@ -314,6 +335,34 @@ export async function runEmbeddedAttempt(
       psychometricParams.temperature !== undefined
         ? { temperature: psychometricParams.temperature, ...(params.streamParams ?? {}) }
         : params.streamParams;
+
+    // Gap 7 — personality USAGE tracking. The cloud engine already emits a
+    // `limbic.appraise` timeline event; the embedded runner emitted nothing, so an
+    // on-prem run left no record of WHICH personality/persona was applied. Emit ONE
+    // observability event naming the active persona(s) + a short directives summary
+    // right after personality+affect is resolved. Does NOT alter the application
+    // logic above — it only reports it. Best-effort: never fails the run.
+    try {
+      const activePersonas = globalPersonaRegistry.listActive?.() ?? [];
+      const personaDirectives = buildAssignedPersonaPrompt();
+      const appliedTemperature = (effectiveStreamParams as { temperature?: number } | undefined)?.temperature;
+      emitAgentEvent({
+        runId: params.runId,
+        stream: "personality",
+        sessionKey: params.sessionKey ?? params.sessionId,
+        data: {
+          phase: "applied",
+          personas: activePersonas,
+          hasPsychometric: Boolean(personaDirectives),
+          directivesSummary: summarizePersonaDirectives(personaDirectives),
+          thinkLevel: effectiveThinkLevel,
+          reasoningLevel: effectiveReasoningLevel,
+          temperature: typeof appliedTemperature === "number" ? appliedTemperature : null,
+        },
+      });
+    } catch {
+      /* personality-usage observability is best-effort */
+    }
 
     const sessionLabel = params.sessionKey ?? params.sessionId;
     const { bootstrapFiles: hookAdjustedBootstrapFiles, contextFiles } =

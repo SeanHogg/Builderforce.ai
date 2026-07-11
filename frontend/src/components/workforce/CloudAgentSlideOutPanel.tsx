@@ -17,6 +17,7 @@ import { useTranslations } from 'next-intl';
 import { CapabilitiesContent } from '@/components/CapabilitiesContent';
 import { useConfirm } from '@/components/ConfirmProvider';
 import PersonalitySummary from '@/components/PersonalitySummary';
+import PersonalityUsagePanel from '@/components/PersonalityUsagePanel';
 import { useAssignedRoles } from '@/lib/useAssignedRoles';
 import {
   CloudAgentDetailsFields,
@@ -298,6 +299,12 @@ export function CloudAgentSlideOutPanel({
               </div>
               <CloudAgentPersonalityFields form={form} onChange={patchForm} />
               {saveFooter}
+              {/* Personality LEARNING + TRACKING (Gaps 6 & 7): which personality this
+                  agent applied to recent runs, and outcome-driven reinforcement
+                  suggestions the owner can Apply/Dismiss. */}
+              <div style={{ marginTop: 20, paddingTop: 18, borderTop: '1px solid var(--border-subtle)' }}>
+                <PersonalityUsagePanel agentId={agent.id} canApply={owner} onApplied={onSaved} />
+              </div>
             </>
           )}
 

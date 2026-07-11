@@ -85,7 +85,7 @@ async function loadSkillBody(env: Env, db: Db, slug: string): Promise<SkillBody>
   });
 }
 
-async function loadPersonaBody(env: Env, db: Db, slug: string): Promise<PersonaBody> {
+export async function loadPersonaBody(env: Env, db: Db, slug: string): Promise<PersonaBody> {
   return getOrSetCached<PersonaBody>(env, personaCacheKey(slug), async () => {
     // 1. Admin-managed platform personas (builtins) — highest precedence.
     const [row] = await db
@@ -141,6 +141,40 @@ function parsePsychometric(raw: string | null): LimbicPsychProfile | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Coerce a stored psychometric JSON string OR an already-parsed profile object into a
+ * validated {@link LimbicPsychProfile} (returns `undefined` for absent/malformed/traitless
+ * input). Shared so every caller that resolves a profile — from a DB column or a request
+ * body — validates it identically (persona/agent/user all use the same shape).
+ */
+export function parsePsychometricProfile(
+  raw: string | LimbicPsychProfile | null | undefined,
+): LimbicPsychProfile | undefined {
+  if (!raw) return undefined;
+  if (typeof raw === 'object') return raw.vector ? raw : undefined;
+  return parsePsychometric(raw);
+}
+
+/**
+ * Compile a HUMAN user's psychometric profile into a system-prompt directive block so a
+ * chat surface can inject the CURRENT user's personality into its system prompt. The same
+ * compiler personas/agents use ({@link buildPsychometricBlock}) — a person and an agent are
+ * described identically — but framed for TONE-matching: the traits describe the person the
+ * assistant is talking to, shaping HOW it communicates, never WHAT it does. Returns '' when
+ * the user has no profile (safe no-op), so callers can inject unconditionally.
+ */
+export function buildUserPersonalityBlock(
+  psychometric: string | LimbicPsychProfile | null | undefined,
+): string {
+  const block = buildPsychometricBlock(parsePsychometricProfile(psychometric));
+  if (!block) return '';
+  return [
+    "## Your conversation partner's personality",
+    'Adapt your TONE and communication style to this person (do not change facts, decisions, or actions you take):',
+    block,
+  ].join('\n');
 }
 
 /**

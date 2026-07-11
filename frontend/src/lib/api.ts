@@ -770,6 +770,93 @@ export async function fetchAgentPerf(agentId: string): Promise<AgentPerfRollup> 
   return apiRequest<AgentPerfRollup>(`/api/workforce/agents/${agentId}/perf`);
 }
 
+// ── Personality LEARNING + TRACKING (Gaps 6 & 7) ──────────────────────────────
+// Usage events + outcome-driven trait reinforcement for a cloud agent. Powers the
+// PersonalityUsagePanel in the agent details slide-out.
+
+/** One "personality applied to a run" entry — recorded durably, or derived live
+ *  from a real terminal run (`recorded: false`). */
+export interface PersonalityEvent {
+  id: string;
+  recorded: boolean;
+  executionId: number | null;
+  runId: string | null;
+  profileSource: string;
+  personaIds: string[];
+  directivesSummary: string;
+  directiveCount: number;
+  thinkLevel: string | null;
+  reasoningLevel: string | null;
+  temperature: number | null;
+  at: string | null;
+}
+
+export interface PersonalityEventsResponse {
+  agentRef: string;
+  activeSummary: string;
+  activeDirectiveCount: number;
+  events: PersonalityEvent[];
+}
+
+/** A bounded, reversible trait-reinforcement proposal computed from run outcomes. */
+export interface ReinforcementProposal {
+  deltas: Record<string, number>;
+  rationale: string[];
+  summary: string;
+  previewVector: Record<string, number>;
+}
+
+export interface ReinforcementHistoryItem {
+  id: number;
+  status: 'proposed' | 'applied' | 'dismissed';
+  deltas: Record<string, number>;
+  rationale: string[];
+  basedOnRuns: number;
+  autoApplied: boolean;
+  proposedAt: string | null;
+  decidedAt: string | null;
+}
+
+export interface ReinforcementResponse {
+  agentRef: string;
+  windowDays: number;
+  basedOnRuns: number;
+  proposal: ReinforcementProposal | null;
+  rationale: string[];
+  caps: { perDimension: number; perPeriod: number };
+  history: ReinforcementHistoryItem[];
+}
+
+export async function fetchPersonalityEvents(agentId: string, limit = 20): Promise<PersonalityEventsResponse> {
+  return apiRequest<PersonalityEventsResponse>(`/api/personality/agents/${agentId}/events?limit=${limit}`);
+}
+
+export async function fetchTraitReinforcements(agentId: string, days = 14): Promise<ReinforcementResponse> {
+  return apiRequest<ReinforcementResponse>(`/api/personality/agents/${agentId}/reinforcements?days=${days}`);
+}
+
+export async function applyTraitReinforcement(
+  agentId: string,
+  body: { deltas: Record<string, number>; rationale: string[]; basedOnRuns: number; windowDays: number },
+): Promise<{ id: number; applied: Record<string, number>; vector: Record<string, number>; summary: string }> {
+  return apiRequest(`/api/personality/agents/${agentId}/reinforcements/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function dismissTraitReinforcement(
+  agentId: string,
+  body: { deltas: Record<string, number>; rationale: string[] },
+): Promise<{ id: number; dismissed: boolean }> {
+  return apiRequest(`/api/personality/agents/${agentId}/reinforcements/dismiss`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
 /**
  * Ensure the agent's canonical (project-less) identity row and return its
  * numeric id. Per-agent skills/personas are assigned against this id with

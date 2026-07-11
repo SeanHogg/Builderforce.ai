@@ -4618,6 +4618,60 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
 });
 
 // ---------------------------------------------------------------------------
+// Personality LEARNING + TRACKING (migration 0324, Gaps 6 & 7).
+//   personalityEvents      — one row each time a personality/persona is applied to a
+//                            run; the durable spine the /api/personality events
+//                            endpoint + PersonalityUsagePanel read.
+//   traitReinforcements    — proposed/applied/dismissed outcome-driven trait nudges
+//                            with full provenance (vector before/after), so the
+//                            static trait vector can self-update reversibly + audited.
+// ---------------------------------------------------------------------------
+
+/** Which personality was applied to a run (agent, run/session, source, summary). */
+export const personalityEvents = pgTable('personality_events', {
+  id:                serial('id').primaryKey(),
+  tenantId:          integer('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
+  /** ide_agents.id (== run_model_outcomes.cloud_agent_ref) whose personality applied. */
+  agentRef:          varchar('agent_ref', { length: 64 }).notNull(),
+  /** The run: executionId for cloud runs; runId/sessionKey for the embedded runner. */
+  executionId:       integer('execution_id'),
+  runId:             varchar('run_id', { length: 128 }),
+  sessionKey:        varchar('session_key', { length: 255 }),
+  /** 'agent' | 'persona' | 'blended' | a raw profile source. */
+  profileSource:     varchar('profile_source', { length: 24 }).notNull().default('agent'),
+  /** JSON string[] of the persona/agent names applied. */
+  personaIds:        text('persona_ids'),
+  directivesSummary: text('directives_summary'),
+  directiveCount:    integer('directive_count').notNull().default(0),
+  thinkLevel:        varchar('think_level', { length: 16 }),
+  reasoningLevel:    varchar('reasoning_level', { length: 8 }),
+  temperature:       real('temperature'),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+});
+
+/** A proposed/applied/dismissed outcome-driven trait reinforcement (reversible). */
+export const traitReinforcements = pgTable('trait_reinforcements', {
+  id:            serial('id').primaryKey(),
+  tenantId:      integer('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
+  agentRef:      varchar('agent_ref', { length: 64 }).notNull(),
+  /** 'proposed' | 'applied' | 'dismissed'. */
+  status:        varchar('status', { length: 16 }).notNull().default('proposed'),
+  /** JSON Record<dimensionId, number> — the bounded per-dimension nudges. */
+  deltas:        text('deltas').notNull(),
+  /** JSON string[] — the reason for each nudge. */
+  rationale:     text('rationale'),
+  basedOnRuns:   integer('based_on_runs').notNull().default(0),
+  windowDays:    integer('window_days').notNull().default(0),
+  /** Reversibility: the exact vector before/after the change (after null until applied). */
+  vectorBefore:  text('vector_before'),
+  vectorAfter:   text('vector_after'),
+  autoApplied:   boolean('auto_applied').notNull().default(false),
+  proposedAt:    timestamp('proposed_at').notNull().defaultNow(),
+  decidedAt:     timestamp('decided_at'),
+  decidedBy:     varchar('decided_by', { length: 128 }),
+});
+
+// ---------------------------------------------------------------------------
 // Digital Transformation / Architect repo-analysis tool (migration 0072).
 // Cloud-only LLM analysis of a project's mapped repos, driven by
 // AnalysisRunnerDO one stage per alarm() tick. See repoAnalysisRoutes +

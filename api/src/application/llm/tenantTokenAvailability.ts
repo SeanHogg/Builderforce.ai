@@ -21,10 +21,12 @@
  */
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
 import { tenants, tenantMembers, users } from '../../infrastructure/database/schema';
 import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { resolveTokenLimits } from '../../domain/tenant/PlanLimits';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { sumTenantTextTokensDayAndMonth, utcDayStart, utcMonthStart } from './tokenUsage';
 
 export type TokenExhaustionReason = 'daily_exhausted' | 'monthly_exhausted';
