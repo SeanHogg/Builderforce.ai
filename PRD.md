@@ -1,44 +1,161 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #192
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# Product Requirements Document (PRD): Cloud Agent Validation Analysis Tool
 
-## 1. Problem & Goal
+**Status**: Work In Progress (WIP)
+**Author**: Senior Product Architect
+**Date**: [YYYY-MM-DD]
+**Version**: 0.1
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+---
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+## **1. Problem & Goal**
+### **Problem Statement**
+The current process for analyzing Cloud Agent Validation PRDs relies on manual review, leading to:
+- Inconsistent identification of gaps between documented requirements and implementation readiness.
+- Time-consuming triangulation between PRDs, technical designs, and downstream dependencies (e.g., engineering, security, compliance).
+- Limited traceability of resolved vs. open gaps, causing accountability gaps and delayed resolution.
+- Lack of standardized tooling to quantify or prioritize gaps, resulting in subjective prioritization.
 
-## 2. Target Users / ICP Roles
+### **Goal**
+Deliver a repeatable, tool-assisted workflow to:
+1. **Standardize gap analysis** for Cloud Agent Validation PRDs by systematically comparing documented requirements against implementation readiness.
+2. **Automate gap quantification** to count resolved vs. open gaps, with prioritization support.
+3. **Improve collaboration** between product, engineering, and stakeholders by surfacing actionable insights (e.g., "30 of 50 gaps are open; 15 are blockers").
+4. **Reduce manual effort** by 70% for PRD validation analysis.
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+---
 
-## 3. Scope
+## **2. Target Users / ICP Roles**
+| Role                     | Key Pain Points                                                                 | Value Proposition                                                                 |
+|--------------------------|---------------------------------------------------------------------------------|-----------------------------------------------------------------------------------|
+| **Product Managers**     | Manual gap tracking; delayed visibility into downstream readiness.              | Automated gap quantification and prioritization to accelerate PRD approvals.      |
+| **Engineering Leads**    | Unclear requirements; reactive fire-drills to address unresolved gaps.         | Early identification of implementation blockers with traceable resolutions.       |
+| **Security/Compliance**  | Manual audit of PRDs for policy adherence; risk of non-compliance.             | Automated flagging of security/compliance-related gaps with risk scoring.         |
+| **Program Managers**     | Coordination overhead between teams; lack of data-driven launch readiness.     | Dashboard of open/resolved gaps to track cross-functional dependencies.           |
+| **QA/Test Leads**        | Undocumented or shifting requirements leading to test coverage gaps.            | Alignment of test cases to documented requirements with gap traceability.         |
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+---
 
-## 4. Functional Requirements
+## **3. Scope**
+### **In Scope**
+1. **Gap Analysis Framework**:
+   - Define a standardized methodology to identify gaps between PRD requirements and implementation readiness (e.g., missing acceptance criteria, unresolved dependencies).
+   - Support for 50 pre-defined gap types (e.g., "Missing security review," "Unclear API contract," "No performance benchmark").
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+2. **Tooling**:
+   - **PRD Parser**: Extract structured requirements from GitHub-flavored markdown PRDs.
+   - **Gap Detector**: Compare requirements against signals from:
+     - GitHub issues/PRs (linked to requirements).
+     - CI/CD pipelines (test coverage, build status).
+     - Security/compliance tools (e.g., Snyk, open policy checks).
+   - **Dashboard**: Visualize gap counts (resolved vs. open), prioritization (P0-P2), and ownership.
 
-## 5. Acceptance Criteria
+3. **Workflow Integration**:
+   - GitHub Action/Slack bot to surface gap counts and alerts.
+   - Jira/Linear integration for ticket creation from open gaps.
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+4. **Reporting**:
+   - Generate a "Gap Analysis Report" (markdown/PDF) summarizing:
+     - Total gaps (50), % resolved (e.g., 60%).
+     - Breakdown by category (e.g., security: 5 open, engineering: 10 open).
+     - Historical trends (e.g., "Gaps resolved per week").
 
-## 6. Out of Scope
+### **Out of Scope**
+- **Automated resolution**: Tooling will not auto-fix gaps (e.g., auto-generate missing test cases).
+- **Full PRD generation**: Will not generate PRDs; assumes input PRDs are in a standardized format.
+- **Non-Cloud Agent PRDs**: Only supports Cloud Agent Validation PRDs initially.
+- **Compliance Certification**: Will not replace formal compliance audits (e.g., SOC2, ISO).
+- **Real-time monitoring**: Gap analysis will run on-demand or on PRD updates (not continuous).
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+---
+
+## **4. Functional Requirements**
+### **FR-1: PRD Parsing**
+- Parse GitHub-flavored markdown PRDs to extract:
+  - Sections (Problem, Goals, Requirements, Acceptance Criteria, etc.).
+  - Requirements with unique identifiers (e.g., `REQ-1.1`).
+  - Acceptance criteria with pass/fail conditions.
+- Handle nested lists, tables, and code blocks.
+- Validate PRD structure against a schema (e.g., required sections, ID formats).
+
+### **FR-2: Gap Detection**
+- Compare extracted requirements against signals from:
+  - **GitHub**: Linked issues/PRs with labels (e.g., `req:REQ-1.1`).
+  - **CI/CD**: Test coverage (e.g., "REQ-2.1 has 0 test cases").
+  - **Security/Compliance**: Scans (e.g., "REQ-3.2 violates policy P12").
+  - **Manual Input**: User-provided status (e.g., "Resolved" with evidence).
+- Support 50 pre-defined gap types (see Appendix A), with extensibility for custom gaps.
+- Classify gaps by severity (P0: Blocker, P1: High, P2: Medium/Low).
+
+### **FR-3: Gap Quantification**
+- Count total gaps detected (e.g., 50).
+- Count resolved vs. open gaps, with:
+  - Percentage resolved (e.g., 60%).
+  - Breakdown by category/severity (e.g., "Security: 5 open / 10 total").
+- Generate time-series data (e.g., "3 gaps resolved this week").
+
+### **FR-4: Dashboard**
+- Display:
+  - Total gaps, % resolved, and trend graphs.
+  - Filterable list of open gaps (by severity, category, owner).
+  - Drill-down to gap details (description, evidence, resolution notes).
+- Export to markdown/PDF/CSV.
+
+### **FR-5: Workflow Integration**
+- GitHub Action to:
+  - Run analysis on PRD updates.
+  - Comment on PRDs with gap summary (e.g., "@team, 15 new gaps detected").
+- Slack bot to:
+  - Notify owners of P0 gaps.
+  - Surface daily/weekly gap reports.
+- Jira/Linear integration to:
+  - Auto-create tickets for P0/P1 gaps.
+  - Link tickets to PRD requirements.
+
+### **FR-6: Reporting**
+- Generate a "Gap Analysis Report" including:
+  - Executive summary (e.g., "60% of gaps resolved").
+  - Detailed gap list with status, owner, and resolution notes.
+  - Risk assessment (e.g., "3 P0 gaps may delay launch").
+
+---
+
+## **5. Acceptance Criteria**
+| ID     | Description                                                                                     | Deliverable                                                                       |
+|--------|-------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------|
+| AC-1   | Tool parses a PRD in GitHub-flavored markdown and extracts all requirements/acceptance criteria. | Test PRD parsed without errors; requirements displayed in dashboard.              |
+| AC-2   | Detect at least 90% of the 50 pre-defined gap types in a test PRD.                              | Gap detection accuracy >= 90% for test PRD.                                       |
+| AC-3   | Dashboard accurately reflects gap counts (resolved/open) and trends.                           | Dashboard matches manual count for 3 test PRDs.                                   |
+| AC-4   | GitHub Action comments on a PRD with correct gap summary.                                       | Action comments on 3 test PRDs with accurate counts.                              |
+| AC-5   | Export gap analysis report in markdown/PDF/CSV.                                                 | Report generated for 3 test PRDs with all required sections.                      |
+| AC-6   | Jira ticket created for P0 gaps with correct metadata (e.g., linked to requirement ID).         | 3 test P0 gaps result in Jira tickets with correct linkage.                       |
+| AC-7   | Slack bot notifies owners of P0 gaps within 5 minutes of detection.                             | Slack messages received for 3 test P0 gaps.                                       |
+| AC-8   | Tool handles PRDs with missing optional sections (e.g., "Out of Scope") gracefully.             | Test PRDs with missing sections parsed without errors.                            |
+
+---
+
+## **6. Out of Scope**
+1. **Auto-resolution**: The tool will identify gaps but not automatically resolve them (e.g., auto-write tests).
+2. **Non-standard PRDs**: Tooling assumes PRDs follow a specific structure (GitHub-flavored markdown with sections like `Acceptance Criteria`).
+3. **Continuous monitoring**: Gap analysis runs on-demand or on PRD updates, not continuously.
+4. **Non-Cloud Agent PRDs**: Analysis limited to Cloud Agent Validation PRDs initially.
+5. **Compliance certification**: Tooling aids compliance but does not replace formal audits.
+6. **Real-time collaboration**: No built-in real-time collaborative editing (e.g., Google Docs integration).
+
+---
+
+## **Appendices**
+### **Appendix A: Pre-defined Gap Types**
+| Category          | Description                                                                       | Severity |
+|-------------------|-----------------------------------------------------------------------------------|----------|
+| **Security**      | Missing security review (e.g., no penetration test).                              | P0       |
+| **Compliance**    | Requirement violates policy (e.g., unencrypted data).                            | P0       |
+| **Engineering**   | Unclear API contract or undefined request/response formats.                       | P1       |
+| **Testing**       | Zero test coverage for requirement.                                               | P1       |
+| **Dependencies**  | No owner assigned for external dependency (e.g., third-party service).            | P1       |
+| **Performance**   | Missing performance benchmarks.                                                   | P2       |
+| **Documentation** | Requirement lacks acceptance criteria.                                           | P2       |
+
+---
