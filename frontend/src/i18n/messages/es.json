@@ -5922,6 +5922,11 @@
     "subtitle": "Deja que un manager de IA mantenga sano este backlog: puntúa el valor de negocio de cada ticket, ordena el trabajo, asigna responsables y gestiona los pull requests para que tu equipo siempre sepa qué es lo más importante a continuación.",
     "lastManaged": "Gestionado por última vez {when}",
     "neverManaged": "Este backlog aún no se ha gestionado.",
+    "autonomyPaused": {
+      "title": "Gestión autónoma en pausa",
+      "daily": "Este espacio de trabajo alcanzó su límite diario de tokens, por lo que el gestor automático y los agentes están en pausa hasta que se restablezca. Hasta entonces, el backlog no se volverá a priorizar, el trabajo sin responsable no se asignará ni se despachará, y el Evermind no aprenderá de nuevas ejecuciones. Aún puedes ejecutar el gestor manualmente abajo. Mejora tu plan para obtener una asignación diaria mayor.",
+      "monthly": "Este espacio de trabajo alcanzó su asignación mensual de tokens, por lo que el gestor automático y los agentes están en pausa hasta que se restablezca. Hasta entonces, el backlog no se volverá a priorizar, el trabajo sin responsable no se asignará ni se despachará, y el Evermind no aprenderá de nuevas ejecuciones. Aún puedes ejecutar el gestor manualmente abajo. Mejora tu plan para obtener una asignación mensual mayor."
+    },
     "runNow": "Ejecutar manager ahora",
     "running": "Gestionando…",
     "disabledNotice": "La gestión está en pausa. Activa «Mantener este backlog gestionado» para ejecutar el manager.",

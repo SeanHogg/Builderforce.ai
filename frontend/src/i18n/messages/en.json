@@ -5922,6 +5922,11 @@
     "subtitle": "Let an AI manager keep this backlog healthy — it scores each ticket’s business value, ranks the work, assigns owners, and shepherds pull requests so your team always knows what matters most next.",
     "lastManaged": "Last managed {when}",
     "neverManaged": "This backlog hasn’t been managed yet.",
+    "autonomyPaused": {
+      "title": "Autonomous management paused",
+      "daily": "This workspace has reached its daily token limit, so the automatic manager and agents are paused until it resets. Until then the backlog won’t be re-ranked, unowned work won’t be assigned or dispatched, and the Evermind won’t learn from new runs. You can still run the manager manually below. Upgrade your plan for a higher daily allowance.",
+      "monthly": "This workspace has reached its monthly token allowance, so the automatic manager and agents are paused until it resets. Until then the backlog won’t be re-ranked, unowned work won’t be assigned or dispatched, and the Evermind won’t learn from new runs. You can still run the manager manually below. Upgrade your plan for a higher monthly allowance."
+    },
     "runNow": "Run manager now",
     "running": "Managing…",
     "disabledNotice": "Managing is paused. Turn on “Keep this backlog managed” to run the manager.",

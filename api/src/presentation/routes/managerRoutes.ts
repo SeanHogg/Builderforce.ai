@@ -25,6 +25,7 @@ import {
 } from '../../application/manager/ManagerService';
 import { normalizePrMergePolicy } from '../../application/manager/managerPolicy';
 import { notSystemTask, SYSTEM_TASK_SOURCE_MANAGER } from '../../application/task/taskScope';
+import { getTenantTokenAvailability } from '../../application/llm/tenantTokenAvailability';
 
 const NON_TERMINAL: string[] = [
   TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.READY,
@@ -90,6 +91,20 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
 
     const actions = await listManagerActions(db, tenantId, projectId, 30);
 
+    // Autonomy health: the cron manager sweep + the autonomous executor BOTH gate on
+    // the tenant's token budget and silently skip a tenant that's out of it — so a
+    // capped tenant sees its board freeze (no ranking, no assignment, no dispatch, no
+    // Evermind learning) with no on-surface reason, and only manual "Run manager now"
+    // (which does NOT token-gate) still works. Surface the gate verdict so a stale
+    // "last managed" reads as "autonomy paused — out of tokens", not a silent break.
+    // Fail OPEN (treat an unknown as "has budget") — same contract as the sweep.
+    const tokenAvailability = await getTenantTokenAvailability(db, tenantId).catch(() => null);
+    const autonomy = {
+      tokenBlocked: tokenAvailability ? !tokenAvailability.hasTokens : false,
+      reason: tokenAvailability?.reason ?? null,
+      effectivePlan: tokenAvailability?.effectivePlan ?? null,
+    };
+
     // The manager's OWN run tasks (source = 'manager') — every "Backlog management
     // pass" the manager kicked off, surfaced with its owner + status so a human can
     // see the manager's open / in-progress / done work, not just its decisions.
@@ -118,6 +133,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       backlog,
       actions,
       runTasks,
+      autonomy,
     });
   });
 

@@ -5922,6 +5922,11 @@
     "subtitle": "Lassen Sie einen KI-Manager dieses Backlog gesund halten: Er bewertet den Geschäftswert jedes Tickets, ordnet die Arbeit, weist Verantwortliche zu und steuert Pull Requests, damit Ihr Team immer weiß, was als Nächstes am wichtigsten ist.",
     "lastManaged": "Zuletzt verwaltet {when}",
     "neverManaged": "Dieses Backlog wurde noch nicht verwaltet.",
+    "autonomyPaused": {
+      "title": "Autonome Verwaltung pausiert",
+      "daily": "Dieser Arbeitsbereich hat sein tägliches Token-Limit erreicht, daher sind der automatische Manager und die Agenten pausiert, bis es zurückgesetzt wird. Bis dahin wird das Backlog nicht neu priorisiert, nicht zugewiesene Arbeit nicht verteilt oder gestartet, und der Evermind lernt nicht aus neuen Ausführungen. Du kannst den Manager unten weiterhin manuell ausführen. Führe ein Upgrade deines Tarifs für ein höheres tägliches Kontingent durch.",
+      "monthly": "Dieser Arbeitsbereich hat sein monatliches Token-Kontingent erreicht, daher sind der automatische Manager und die Agenten pausiert, bis es zurückgesetzt wird. Bis dahin wird das Backlog nicht neu priorisiert, nicht zugewiesene Arbeit nicht verteilt oder gestartet, und der Evermind lernt nicht aus neuen Ausführungen. Du kannst den Manager unten weiterhin manuell ausführen. Führe ein Upgrade deines Tarifs für ein höheres monatliches Kontingent durch."
+    },
     "runNow": "Manager jetzt ausführen",
     "running": "Wird verwaltet…",
     "disabledNotice": "Die Verwaltung ist pausiert. Aktiviere „Dieses Backlog verwaltet halten“, um den Manager auszuführen.",
