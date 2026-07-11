@@ -1,44 +1,146 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Mike QA (Tester V2 (Durable) · task #142
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# PRD: Bug & Quality Audit — Product Health Analysis
 
-## 1. Problem & Goal
+## Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+Engineering and product leadership lack a consolidated, quantified view of current product quality. Bugs, regressions, CI/CD failures, and validation gaps are scattered across task trackers, build logs, PRDs, and GitHub PRs. Without a single audit report, it is impossible to assess release readiness, allocate remediation resources, or communicate risk to stakeholders.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+**Goal:** Produce a structured quality audit that counts, categorizes, and prioritizes every known defect, test failure, and validation gap, and delivers a defensible quality risk score to leadership.
 
-## 2. Target Users / ICP Roles
+---
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+## Target Users / ICP Roles
 
-## 3. Scope
+| Role | Need |
+|---|---|
+| Engineering Lead | Prioritized bug list with root causes to plan sprints |
+| Product Manager | Severity breakdown and gap closure rate to assess release readiness |
+| QA / SDET | Canonical list of failing tests and CI checks to drive fix verification |
+| CTO / VP Engineering | Quality risk score and trend to make ship/hold decisions |
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+---
 
-## 4. Functional Requirements
+## Scope
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+### In Scope
 
-## 5. Acceptance Criteria
+- All tasks in non-done status labeled as bug, regression, or build fix (explicit examples: task #62 Regression, tasks #57 & #90 Fix the build, task #66 Fix agent execution)
+- CI/CD pipeline scan: last 30 days of build logs, test run summaries, and failed check results
+- Cloud Agent Validation PRD: all 50 documented gaps, classified by P0/P1/P2, with resolved vs. open count
+- Known named test failures:
+  - `TeamMemberAvatarFilter.tsx` — null reference error
+  - Duplicate CSS property build errors causing compilation failure
+- GitHub PR audit: open PRs with failing checks, reverted changes, and PRs tagged as fixing a defect
+- Severity classification for every item found
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+### Out of Scope
 
-## 6. Out of Scope
+- Feature requests, technical debt, and performance improvements not causing functional failures
+- Security vulnerability scanning (handled by separate security audit)
+- Mobile / native platform defects outside the web application
+- Post-audit remediation planning or sprint scheduling
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+---
+
+## Functional Requirements
+
+### FR-1 — Task Tracker Bug Census
+
+1.1 Query the task tracker for all non-done items with type = bug, regression, or build-fix.
+1.2 Record for each: task ID, title, type, severity, assignee, open duration, and current status.
+1.3 Flag tasks #57, #62, #66, #90 explicitly; confirm type and severity assignment.
+1.4 Produce a count: total open bugs, total regressions, total build-fix tasks.
+
+### FR-2 — CI/CD Pipeline Failure Inventory
+
+2.1 Ingest build logs and test run reports from the CI/CD system for the trailing 30 days.
+2.2 Identify every unique failing test, failing build step, and failed deployment gate.
+2.3 For each failure record: pipeline name, step, failure message, first-seen date, recurrence count, and linked task (if any).
+2.4 Specifically confirm root-cause status for:
+- `TeamMemberAvatarFilter.tsx` null reference — reproduce, confirm scope, and note whether a fix PR is open or merged.
+- Duplicate CSS property errors — identify which stylesheet(s), confirm whether build is currently broken or intermittently broken.
+
+### FR-3 — Cloud Agent Validation Gap Analysis
+
+3.1 Parse the Cloud Agent Validation PRD; extract all 50 documented gaps.
+3.2 Classify each gap as P0 (blocking / data-loss risk), P1 (major functional failure), or P2 (degraded experience / edge case) using criteria defined in that PRD.
+3.3 Cross-reference each gap against the task tracker and recent merged PRs to determine status: Open, In Progress, or Resolved.
+3.4 Output: total open by priority (P0 open, P1 open, P2 open), total resolved, and percentage closed.
+
+### FR-4 — GitHub PR Audit
+
+4.1 List all open PRs that have one or more failing required checks.
+4.2 List all PRs merged within the last 30 days that were subsequently reverted; note revert reason.
+4.3 List all open PRs whose description or linked issue references a bug or regression.
+4.4 For each item: PR number, title, check failure reason, and author.
+
+### FR-5 — Severity Classification Framework
+
+5.1 Apply a four-level severity model to every item cataloged:
+
+| Severity | Definition |
+|---|---|
+| Critical (S1) | Data loss, security breach, or complete feature unavailable in production |
+| High (S2) | Core workflow broken; no workaround available |
+| Medium (S3) | Functionality degraded; workaround exists |
+| Low (S4) | Cosmetic, edge-case, or minor UX issue |
+
+5.2 Every item in FR-1 through FR-4 must carry exactly one severity label before the audit is considered complete.
+
+### FR-6 — Quality Risk Score
+
+6.1 Compute the Quality Risk Score using the following weighted model:
+
+| Input | Weight |
+|---|---|
+| Count of open S1/Critical items | 40 % |
+| Count of open S2/High items | 25 % |
+| CI/CD build currently broken (yes/no) | 20 % |
+| Cloud Agent P0/P1 gaps open | 15 % |
+
+6.2 Map the computed score to a three-tier label:
+
+| Score | Label |
+|---|---|
+| ≥ 70 | 🔴 High Risk |
+| 40 – 69 | 🟡 Medium Risk |
+| < 40 | 🟢 Low Risk |
+
+6.3 Provide a written justification (≤ 150 words) explaining the dominant risk drivers.
+
+---
+
+## Acceptance Criteria
+
+| # | Criterion | Verification Method |
+|---|---|---|
+| AC-1 | Total bug/regression count is reported with a breakdown by severity (S1–S4) and type (bug / regression / build-fix) | Reviewer cross-checks a random sample of 5 task IDs against the tracker |
+| AC-2 | Every known CI/CD failure is listed with: pipeline, step, failure message, first-seen date, and root-cause hypothesis | QA lead confirms the `TeamMemberAvatarFilter` and CSS duplicate-property failures appear with correct detail |
+| AC-3 | All 50 Cloud Agent validation gaps appear in the report; each carries a P0/P1/P2 label and an Open/In Progress/Resolved status | PM cross-references against the Cloud Agent Validation PRD source document |
+| AC-4 | GitHub PR audit lists every open PR with a failing required check and every reverted PR in the last 30 days | Engineering lead spot-checks 3 PR numbers against GitHub |
+| AC-5 | Quality Risk Score is present with tier label (High / Medium / Low) and a written justification of ≤ 150 words | Leadership reviewer confirms formula inputs are traceable to items in the report |
+| AC-6 | Report is delivered as a single Markdown document with a machine-readable summary table (bug counts, CI failures, gap counts, risk score) at the top | Automated parser successfully extracts the summary table without manual editing |
+
+---
+
+## Out of Scope
+
+- Remediation plans, sprint assignments, or fix timelines (a separate planning artifact)
+- Security vulnerability assessment or penetration test findings
+- Performance benchmarking, load testing, or SLA analysis
+- UX research findings or accessibility audits
+- Bugs filed against deprecated or sunset features
+- Any defect first reported after the audit snapshot date
+
+---
+
+## Definitions
+
+| Term | Meaning |
+|---|---|
+| Regression | A defect in functionality that previously passed verification |
+| Build-fix task | A task whose sole purpose is restoring a broken build or broken CI pipeline |
+| Gap (Cloud Agent) | A discrete validation scenario documented in the Cloud Agent Validation PRD that is not yet confirmed passing |
+| Snapshot date | The date/time at which data is frozen for this audit; all counts reflect state as of that moment |
