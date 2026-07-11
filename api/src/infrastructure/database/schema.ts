@@ -5289,13 +5289,17 @@ export const knowledgeDocuments = pgTable('knowledge_documents', {
   tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   projectId:     integer('project_id').references(() => projects.id, { onDelete: 'set null' }), // null = workspace-wide
-  docType:       varchar('doc_type', { length: 16 }).notNull().default('sop'),   // 'sop' | 'process' | 'doc'
+  docType:       varchar('doc_type', { length: 16 }).notNull().default('sop'),   // 'sop' | 'process' | 'doc' | 'postmortem' | 'known_error'
   title:         varchar('title', { length: 255 }).notNull(),
   summary:       varchar('summary', { length: 500 }),
   content:       text('content').notNull().default(''),
   status:        varchar('status', { length: 16 }).notNull().default('draft'),   // 'draft' | 'published' | 'archived'
   versionNumber: integer('version_number').notNull().default(0),                 // monotonic published version
   requiresAck:   boolean('requires_ack').notNull().default(false),
+  /** For an incident RCA / post-mortem (docType 'postmortem'), the prod_incidents
+   *  record it reviews (migration 0328) — the Knowledge → incident back-link. Null on
+   *  ordinary docs. */
+  sourceIncidentId: uuid('source_incident_id'),
   createdBy:     varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   updatedBy:     varchar('updated_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   publishedAt:   timestamp('published_at'),

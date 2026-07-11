@@ -1586,6 +1586,9 @@ export interface ManagerConfig {
   lastRunAt: string | null;
 }
 
+/** The AI Manager's domain type / functional role (see api managerTypes.ts). */
+export type ManagerTypeId = 'general' | 'delivery' | 'qa' | 'service_desk' | 'devops';
+
 /** Effective policy (config merged with defaults + resolved manager kind). */
 export interface ManagerPolicy {
   enabled: boolean;
@@ -1595,6 +1598,21 @@ export interface ManagerPolicy {
   autoAssign: boolean;
   autoBusinessValue: boolean;
   autoPrioritize: boolean;
+  /** The manager's domain type / role. */
+  managerType: ManagerTypeId;
+}
+
+/** One standing coaching directive that steers the manager (project-scoped, or
+ *  tenant-wide when projectId is null). */
+export interface ManagerDirective {
+  id: string;
+  projectId: number | null;
+  directive: string;
+  status: 'active' | 'done' | 'dismissed';
+  createdBy: string | null;
+  source: 'coach' | 'chat';
+  createdAt: string;
+  expiresAt: string | null;
 }
 
 /** Headline counts for the manager dashboard tiles. */
@@ -1669,6 +1687,10 @@ export interface ManagerOverview {
   runTasks: ManagerRunTask[];
   /** Autonomy health — whether the cron sweeps are paused (e.g. tenant out of tokens). */
   autonomy: ManagerAutonomy;
+  /** The available manager-type ids (the UI localizes label/description by id). */
+  managerTypes: Array<{ id: ManagerTypeId }>;
+  /** Standing coaching directives that steer this project's passes (incl. tenant-wide). */
+  directives: ManagerDirective[];
 }
 
 /** Editable subset accepted by PUT /api/manager/:projectId. */
@@ -1680,6 +1702,7 @@ export type ManagerConfigPatch = Partial<{
   autoAssign: boolean;
   autoBusinessValue: boolean;
   autoPrioritize: boolean;
+  managerType: ManagerTypeId;
 }>;
 
 export const managerApi = {
@@ -1703,6 +1726,15 @@ export const managerApi = {
    */
   run: (projectId: number): Promise<{ started: boolean; reason?: 'disabled' }> =>
     request<{ started: boolean; reason?: 'disabled' }>(`/api/manager/${projectId}/run`, { method: 'POST' }),
+
+  /** Coach the manager — record a standing directive it honors on every pass.
+   *  `scope: 'tenant'` applies it to every project the manager runs. */
+  coach: (projectId: number, body: { directive: string; scope?: 'project' | 'tenant' }): Promise<{ id: string; started: boolean }> =>
+    request<{ id: string; started: boolean }>(`/api/manager/${projectId}/coach`, { method: 'POST', body: JSON.stringify(body) }),
+
+  /** Retire a coaching directive (dismissed / done). */
+  dismissDirective: (projectId: number, directiveId: string, status: 'dismissed' | 'done' = 'dismissed'): Promise<{ ok: boolean }> =>
+    request<{ ok: boolean }>(`/api/manager/${projectId}/directives/${directiveId}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
 
   /** Recent manager actions (activity feed), newest first. */
   activity: (projectId: number, limit?: number): Promise<ManagerAction[]> => {
@@ -4532,6 +4564,29 @@ export interface Incident {
   impact: string | null;
   rootCause: string | null;
   externalUrl: string | null;
+  postmortemUrl?: string | null;
+}
+
+export type PostmortemDocType = 'postmortem' | 'known_error';
+
+export interface PublishPostmortemBody {
+  summary?: string;
+  rootCause?: string;
+  impact?: string;
+  contributingFactors?: string;
+  resolution?: string;
+  whatWentWell?: string;
+  whatWentWrong?: string;
+  docType?: PostmortemDocType;
+  actionItems?: { title: string; detail?: string }[];
+}
+
+export interface PublishPostmortemResult {
+  docId: string;
+  url: string;
+  actionItemTaskIds: number[];
+  incidentTitle: string;
+  affectedSystem: string | null;
 }
 
 export interface IncidentEvent {
@@ -4638,6 +4693,9 @@ export const incidentsApi = {
 
   triage: (id: string): Promise<{ dispatched: boolean }> =>
     request(`/api/incidents/${id}/triage`, { method: 'POST' }),
+
+  publishPostmortem: (id: string, body: PublishPostmortemBody): Promise<PublishPostmortemResult> =>
+    request(`/api/incidents/${id}/postmortem`, { method: 'POST', body: JSON.stringify(body) }),
 
   // On-call rotations
   listRotations: (): Promise<OnCallRotation[]> =>

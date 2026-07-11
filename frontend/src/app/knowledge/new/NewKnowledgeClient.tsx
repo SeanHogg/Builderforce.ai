@@ -35,7 +35,7 @@ const BLANKS: BlankStarter[] = [
   { key: 'blank-canvas', labelKey: 'blankCanvas', descKey: 'blankCanvasDesc', icon: '🧩', docType: 'doc', canvas: true },
 ];
 
-const DOC_TYPE_LABELS: Record<DocType, string> = { sop: 'type_sop', process: 'type_process', doc: 'type_doc' };
+const DOC_TYPE_LABELS: Record<DocType, string> = { sop: 'type_sop', process: 'type_process', doc: 'type_doc', postmortem: 'type_postmortem', known_error: 'type_known_error' };
 
 export default function NewKnowledgeClient() {
   const t = useTranslations('knowledge');

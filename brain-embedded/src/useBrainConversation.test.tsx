@@ -183,8 +183,9 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
 
     await act(async () => { await hook.current.send('go'); });
 
-    // Empty narration ⇒ only user + final assistant persist.
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(2);
+    // Empty narration ⇒ NO narration bubble; user + the durable tool step + final
+    // assistant persist (the empty-text turn still records its tool step durably).
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(3);
     await waitFor(() => expect(hook.current.messages.map((m) => m.content)).toEqual(['go', 'done']));
   });
 
@@ -207,8 +208,9 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     expect(mockStream).toHaveBeenCalledTimes(26);
     // The forced closing turn runs no tools, so tool execution is unchanged at 25.
     expect(runTool).toHaveBeenCalledTimes(25);
-    // user persisted, but no final assistant text (the closing turn was empty too).
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(1);
+    // user + 25 durable tool steps persist; no final assistant text (the forced
+    // closing turn was empty too, so no answer bubble).
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(26);
     await waitFor(() => expect(hook.current.error).toMatch(/kept calling tools/i));
   });
 
@@ -233,8 +235,8 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     expect(mockStream).toHaveBeenCalledTimes(26); // 25 tool turns + forced final synthesis
     expect(runTool).toHaveBeenCalledTimes(25);
     expect(hook.current.error).toBeFalsy();
-    // user + the forced final answer both persist.
-    expect(persistence.sendMessages).toHaveBeenCalledTimes(2);
+    // user + 25 durable tool steps + the forced final answer persist.
+    expect(persistence.sendMessages).toHaveBeenCalledTimes(27);
     await waitFor(() =>
       expect(hook.current.messages.map((m) => m.content)).toEqual(['loop', 'Here is what I found so far, and what I could not finish.']),
     );

@@ -23,6 +23,7 @@ import {
   type IncidentEvent,
   type IncidentSeverity,
   type IncidentStatus,
+  type PostmortemDocType,
   type OnCallRotation,
   type RotationKind,
   type EscalationPolicy,
@@ -345,6 +346,9 @@ function IncidentDetailPanel({ t, tc, canManage, incidentId, onClose, onChanged 
               </div>
             </div>
 
+            {/* RCA / post-mortem */}
+            <RcaSection t={t} tc={tc} canManage={canManage} incident={incident} onPublished={() => { load(); onChanged(); }} />
+
             {/* Classify */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 180 }}>
@@ -397,6 +401,153 @@ function DetailRow({ label, value }: { label: string; value: string }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>{label}</span>
       <span style={{ fontSize: 13, color: 'var(--text-primary)', wordBreak: 'break-word' }}>{value}</span>
+    </div>
+  );
+}
+
+/* ─────────────────────── RCA / post-mortem ─────────────────────── */
+
+const RCA_DOC_TYPES: PostmortemDocType[] = ['postmortem', 'known_error'];
+type ActionItemDraft = { title: string; detail: string };
+
+function RcaSection({ t, tc, canManage, incident, onPublished }: SectionProps & { incident: Incident; onPublished: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [summary, setSummary] = useState('');
+  const [rootCause, setRootCause] = useState(incident.rootCause ?? '');
+  const [impact, setImpact] = useState(incident.impact ?? '');
+  const [contributingFactors, setContributingFactors] = useState('');
+  const [resolution, setResolution] = useState('');
+  const [whatWentWell, setWhatWentWell] = useState('');
+  const [whatWentWrong, setWhatWentWrong] = useState('');
+  const [docType, setDocType] = useState<PostmortemDocType>('postmortem');
+  const [actionItems, setActionItems] = useState<ActionItemDraft[]>([{ title: '', detail: '' }]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Already published — offer the read link.
+  if (incident.postmortemUrl) {
+    return (
+      <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-secondary)', flex: 1, minWidth: 0 }}>{t('rca.publishedNote')}</span>
+        <a href={incident.postmortemUrl} className="btn btn-secondary btn-sm">{t('rca.view')}</a>
+      </div>
+    );
+  }
+
+  // Only resolved incidents without a post-mortem can publish one.
+  if (incident.status !== 'resolved') return null;
+
+  if (!open) {
+    return (
+      <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-secondary)', flex: 1, minWidth: 0 }}>{t('rca.prompt')}</span>
+        <button type="button" className="btn btn-primary btn-sm" onClick={() => setOpen(true)} disabled={!canManage} title={canManage ? undefined : t('needManager')}>
+          {t('rca.publish')}
+        </button>
+      </div>
+    );
+  }
+
+  const setItem = (i: number, patch: Partial<ActionItemDraft>) =>
+    setActionItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
+  const addItem = () => setActionItems((prev) => [...prev, { title: '', detail: '' }]);
+  const removeItem = (i: number) => setActionItems((prev) => {
+    if (prev.length <= 1) return prev;
+    return prev.filter((_, idx) => idx !== i);
+  });
+
+  const submit = async () => {
+    setSaving(true); setError(null);
+    try {
+      const items = actionItems
+        .map((it) => ({ title: it.title.trim(), detail: it.detail.trim() || undefined }))
+        .filter((it) => it.title.length > 0);
+      await incidentsApi.publishPostmortem(incident.id, {
+        summary: summary.trim() || undefined,
+        rootCause: rootCause.trim() || undefined,
+        impact: impact.trim() || undefined,
+        contributingFactors: contributingFactors.trim() || undefined,
+        resolution: resolution.trim() || undefined,
+        whatWentWell: whatWentWell.trim() || undefined,
+        whatWentWrong: whatWentWrong.trim() || undefined,
+        docType,
+        actionItems: items.length ? items : undefined,
+      });
+      onPublished();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Publish failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>{t('rca.formTitle')}</div>
+      {error && <ErrorCard msg={error} />}
+
+      <Field label={t('rca.docType.label')}>
+        <Select className="input" value={docType} onChange={(e) => setDocType(e.target.value as PostmortemDocType)}>
+          {RCA_DOC_TYPES.map((d) => <option key={d} value={d}>{t(`rca.docType.${d}`)}</option>)}
+        </Select>
+      </Field>
+
+      <Field label={t('rca.summary')}>
+        <textarea className="input" style={{ minHeight: 60 }} value={summary} onChange={(e) => setSummary(e.target.value)} placeholder={t('rca.summaryPlaceholder')} />
+      </Field>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+        <Field label={t('rca.rootCause')}>
+          <textarea className="input" style={{ minHeight: 60 }} value={rootCause} onChange={(e) => setRootCause(e.target.value)} />
+        </Field>
+        <Field label={t('rca.impact')}>
+          <textarea className="input" style={{ minHeight: 60 }} value={impact} onChange={(e) => setImpact(e.target.value)} />
+        </Field>
+        <Field label={t('rca.contributingFactors')}>
+          <textarea className="input" style={{ minHeight: 60 }} value={contributingFactors} onChange={(e) => setContributingFactors(e.target.value)} />
+        </Field>
+        <Field label={t('rca.resolution')}>
+          <textarea className="input" style={{ minHeight: 60 }} value={resolution} onChange={(e) => setResolution(e.target.value)} />
+        </Field>
+        <Field label={t('rca.whatWentWell')}>
+          <textarea className="input" style={{ minHeight: 60 }} value={whatWentWell} onChange={(e) => setWhatWentWell(e.target.value)} />
+        </Field>
+        <Field label={t('rca.whatWentWrong')}>
+          <textarea className="input" style={{ minHeight: 60 }} value={whatWentWrong} onChange={(e) => setWhatWentWrong(e.target.value)} />
+        </Field>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>{t('rca.actionItems')}</span>
+        {actionItems.map((it, i) => (
+          <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <input
+              className="input"
+              style={{ flex: 2, minWidth: 160 }}
+              value={it.title}
+              onChange={(e) => setItem(i, { title: e.target.value })}
+              placeholder={t('rca.actionItemTitle')}
+            />
+            <input
+              className="input"
+              style={{ flex: 3, minWidth: 160 }}
+              value={it.detail}
+              onChange={(e) => setItem(i, { detail: e.target.value })}
+              placeholder={t('rca.actionItemDetail')}
+            />
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeItem(i)} disabled={actionItems.length <= 1} aria-label={t('rca.removeActionItem')}>✕</button>
+          </div>
+        ))}
+        <div>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={addItem}>{t('rca.addActionItem')}</button>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+        <button type="button" className="btn btn-primary btn-sm" onClick={submit} disabled={saving || !canManage}>
+          {saving ? tc('saving') : t('rca.submit')}
+        </button>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setOpen(false)} disabled={saving}>{tc('cancel')}</button>
+      </div>
     </div>
   );
 }

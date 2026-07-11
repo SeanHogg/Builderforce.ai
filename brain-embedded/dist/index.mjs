@@ -823,6 +823,12 @@ function useBrainChats(options = {}) {
 // src/useBrainConversation.ts
 import { useCallback as useCallback4, useEffect as useEffect5, useRef as useRef4, useState as useState5 } from "react";
 
+// src/types.ts
+var STEP_MESSAGE_ROLE = "tool";
+function isStepMessage(m) {
+  return m.role === STEP_MESSAGE_ROLE;
+}
+
 // src/consolidation.ts
 var CONSOLIDATION_META = { consolidation: true };
 function consolidationMetadata() {
@@ -1938,7 +1944,7 @@ ${refs}`;
           }
           return true;
         }
-        const seed = scopeToConsolidation(messages).filter((m) => m.role !== "tool").map((m) => ({
+        const seed = scopeToConsolidation(messages).filter((m) => !isStepMessage(m)).map((m) => ({
           role: m.role,
           content: m.content
         }));
@@ -1963,7 +1969,7 @@ ${refs}`;
     if (autoRepliedChatIdRef.current === chatId) return;
     autoRepliedChatIdRef.current = chatId;
     setLocalError("");
-    const seed = scopeToConsolidation(messages.slice(0, -1)).filter((m) => m.role !== "tool").map((m) => ({
+    const seed = scopeToConsolidation(messages.slice(0, -1)).filter((m) => !isStepMessage(m)).map((m) => ({
       role: m.role,
       content: m.content
     }));
@@ -2100,6 +2106,7 @@ export {
   CONSOLIDATION_META,
   EVERMIND_LEARN_MIN_CHARS,
   PROVENANCE_META_KEY,
+  STEP_MESSAGE_ROLE,
   accountUsedInTrace,
   activeMentionToken,
   buildBrainTriageReport,
@@ -2120,6 +2127,7 @@ export {
   isDirectedToParticipant,
   isEvermindModel,
   isFailedToolResult,
+  isStepMessage,
   lastConsolidationIndex,
   mentionRecipient,
   modelsUsedInTrace,

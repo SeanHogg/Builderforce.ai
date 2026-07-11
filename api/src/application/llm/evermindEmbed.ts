@@ -32,14 +32,14 @@ export function embedTokens(lm: EvermindLM, tokens: number[]): Float32Array {
   const x = cache.finalX;
   if (x.length === 0) return out;
   for (const row of x) {
-    for (let d = 0; d < dModel; d++) out[d] += row[d]!;
+    for (let d = 0; d < dModel; d++) out[d] = out[d]! + row[d]!;
   }
   const inv = 1 / x.length;
-  for (let d = 0; d < dModel; d++) out[d] *= inv;
+  for (let d = 0; d < dModel; d++) out[d] = out[d]! * inv;
   let norm = 0;
-  for (let d = 0; d < dModel; d++) norm += out[d] * out[d];
+  for (let d = 0; d < dModel; d++) norm += out[d]! * out[d]!;
   norm = Math.sqrt(norm) || 1;
-  for (let d = 0; d < dModel; d++) out[d] /= norm;
+  for (let d = 0; d < dModel; d++) out[d] = out[d]! / norm;
   return out;
 }
 

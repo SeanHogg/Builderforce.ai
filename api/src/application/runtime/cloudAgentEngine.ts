@@ -55,7 +55,7 @@ import { getRoutingTable, MIN_SAMPLES, type RoutingScope } from '../llm/routingT
 import type { ActionModelRankStat } from '../llm/LlmProxyService';
 import { resolveTenantModel } from '../llm/tenantModelService';
 import { reasoningParamsForModel } from '../llm/reasoningCapability';
-import { dispatchProjectEvermindLearnText } from '../llm/projectEvermind';
+import { dispatchProjectEvermindLearnText, buildEvermindLessonsBlock } from '../llm/projectEvermind';
 import { buildProjectFactsBlock } from '../llm/projectFacts';
 import { scoreRunOutcome, finalizeLearnWeight } from './scoreRunOutcome';
 import { handleCloudRunCrash } from './cloudSelfHeal';
@@ -2212,7 +2212,7 @@ export async function prepareCloudRun(
   // The agent's OWN personality (independent of assigned personas) — folded into the
   // capability prompt block, the exec params, and (by the caller) the limbic setpoints.
   const agentPsychometric = await loadAgentPsychometric(env, tenantId, cloudAgentRef);
-  const [prd, governance, capabilities, workspace, factsBlock] = await Promise.all([
+  const [prd, governance, capabilities, workspace, factsBlock, lessonsBlock] = await Promise.all([
     ensureTaskPrd(env, db, executionId, taskRow, tenantId, projectId, taskRow.id, agentLabel, model),
     loadGovernanceContext(db, tenantId, projectId, cloudAgentRef),
     loadCapabilityContext(env, db, artifacts, agentPsychometric),
@@ -2224,6 +2224,9 @@ export async function prepareCloudRun(
     // Shared project memory — durable facts any surface (VS Code / on-prem / prior
     // cloud run) wrote for this project, recalled by the task text. Best-effort '' .
     buildProjectFactsBlock(env, db, tenantId, projectId, `${taskRow.title} ${taskRow.description ?? ''}`.trim()),
+    // Evermind lessons — prior run outcomes AND incident post-mortem causes recalled by
+    // the task text, so the agent doesn't repeat mistakes that caused incidents.
+    buildEvermindLessonsBlock(env, db, tenantId, projectId, `${taskRow.title} ${taskRow.description ?? ''}`.trim()),
   ]);
   const priorChanges = workspace.priorChanges;
   const repoLabel = workspace.repo ? `${workspace.repo.owner}/${workspace.repo.repo}` : null;
@@ -2296,7 +2299,7 @@ export async function prepareCloudRun(
       ? `## Acceptance review (do NOT edit code)\n\nThis is a VALIDATOR REVIEW of already-Done work — verify the ticket was genuinely completed against its PRD/requirements and the repository. Read the branch/PR and the relevant code with search_code / read_file, judge whether the deliverable is complete and correct, then call the \`builtin_reviews_record\` tool with your verdict ('complete' or 'gaps'), a short assessment, and any concrete gaps (each becomes a GAP ticket). Do NOT write_file / delete_file or change the ticket's status — you are reviewing, not implementing.`
       : null,
     isIncidentRun
-      ? `## Incident triage (do NOT edit code)\n\nYou are the INCIDENT MANAGER working an OPEN incident${incidentRunId ? ` (incident \`${incidentRunId}\`)` : ''} — help-desk triage and response, NOT a code change. Steps:\n1. Read the incident with \`builtin_incidents_get\`; read the source ticket in the task description.\n2. Work out WHICH SYSTEM the issue pertains to and record it with \`builtin_incidents_classify\`.\n3. Set an accurate severity with \`builtin_incidents_update\` (sev1 = full outage / broad impact … sev4 = minor).\n4. Page whoever is on call with \`builtin_oncall_page\` (check \`builtin_oncall_list\` first). Escalation to later tiers happens automatically on a timer until someone acknowledges.\n5. Post what you find and do to the war-room feed with \`builtin_incidents_add_note\`.\nDo NOT write_file / delete_file — you are triaging, not implementing. Finish once you have classified, set severity, and paged on-call.`
+      ? `## Incident triage (do NOT edit code)\n\nYou are the INCIDENT MANAGER working an OPEN incident${incidentRunId ? ` (incident \`${incidentRunId}\`)` : ''} — help-desk triage and response, NOT a code change. Steps:\n1. Read the incident with \`builtin_incidents_get\`; read the source ticket in the task description.\n2. **Search the knowledge base FIRST** with \`builtin_knowledge_search\` for prior similar incidents, RCAs, or known-errors — if this has happened before, reuse the documented workaround/resolution instead of starting from scratch.\n3. Work out WHICH SYSTEM the issue pertains to and record it with \`builtin_incidents_classify\`.\n4. Set an accurate severity with \`builtin_incidents_update\` (sev1 = full outage / broad impact … sev4 = minor).\n5. Page whoever is on call with \`builtin_oncall_page\` (check \`builtin_oncall_list\` first). Escalation to later tiers happens automatically on a timer until someone acknowledges.\n6. Post what you find and do to the war-room feed with \`builtin_incidents_add_note\`.\n7. When the incident is resolved, set its status to resolved with \`builtin_incidents_update\`, then **publish a post-mortem** with \`builtin_incidents_postmortem\` (root cause, contributing factors, resolution, what went well/wrong, and concrete action items) — it becomes a searchable Knowledge RCA, files the action items as remediation tasks, and teaches the workforce not to repeat the cause.\nDo NOT write_file / delete_file — you are triaging, not implementing.`
       : null,
     remediation
       ? `## Build failure to fix (attempt ${remediation.attempt}/${remediation.maxAttempts})\n\n${
@@ -2346,6 +2349,7 @@ export async function prepareCloudRun(
     + 'When you finish, base any "what remains" statement on real state — the tasks you actually created plus `builtin_tasks_list` — never a guess.',
     capabilities.promptBlock || null,
     factsBlock || null,
+    lessonsBlock || null,
   ].filter(Boolean).join('\n\n');
 
   return { systemPrompt, userContent, execParams: capabilities.execParams, agentPsychometric };

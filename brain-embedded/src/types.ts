@@ -25,6 +25,23 @@ export interface BrainMessage {
   createdAt: string;
 }
 
+/**
+ * The message role used for durable tool/memory STEP rows the agent loop persists
+ * (so a reload can reconstruct the timeline steps — the live trace is in-memory only).
+ * These rows are NOT conversation turns: their `content` is empty and the payload
+ * lives in `metadata` (`{ kind:'step', … }`). The timeline reconstructs them into
+ * tool/recall/learn/reconcile nodes; every OTHER consumer that treats the message
+ * list as a dialogue (the model seed, a summary/PRD transcript, a plain bubble list)
+ * must exclude them via {@link isStepMessage}.
+ */
+export const STEP_MESSAGE_ROLE = 'tool';
+
+/** True when a persisted message is a durable tool/memory STEP row (role ===
+ *  {@link STEP_MESSAGE_ROLE}) rather than a user/assistant conversation turn. */
+export function isStepMessage(m: { role: string }): boolean {
+  return m.role === STEP_MESSAGE_ROLE;
+}
+
 /** An uploaded attachment reference attached to an outgoing message. */
 export interface ChatInputAttachment {
   key: string;

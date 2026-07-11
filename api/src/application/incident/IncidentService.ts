@@ -30,7 +30,10 @@ import { TaskService } from '../task/TaskService';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
 import { TaskType, TaskPriority } from '../../domain/shared/types';
+import { publishKnowledgeDoc } from '../knowledge/publishKnowledgeDoc';
+import { recordIncidentLearning } from './incidentLearning';
 import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
 
 /** sev1 (most severe) … sev4. */
 export type IncidentSeverity = 'sev1' | 'sev2' | 'sev3' | 'sev4';
@@ -73,6 +76,57 @@ export function guessAffectedSystem(text: string | null | undefined): string | n
   const s = String(text ?? '');
   for (const [name, re] of SYSTEM_KEYWORDS) if (re.test(s)) return name;
   return null;
+}
+
+/** Render a structured RCA / post-mortem markdown body from the incident + inputs. */
+function buildRcaMarkdown(
+  inc: { title: string; severity: string; affectedSystem: string | null; source: string; startedAt: Date; resolvedAt: Date | null; impact: string | null; externalUrl: string | null },
+  input: { summary?: string | null; rootCause?: string | null; impact?: string | null; contributingFactors?: string | null; resolution?: string | null; whatWentWell?: string | null; whatWentWrong?: string | null },
+  actionItems: Array<{ title: string; detail?: string | null }>,
+): string {
+  const started = new Date(inc.startedAt);
+  const resolved = inc.resolvedAt ? new Date(inc.resolvedAt) : null;
+  const mttrMin = resolved ? Math.round((resolved.getTime() - started.getTime()) / 60_000) : null;
+  const lines = [
+    `# RCA — ${inc.title}`,
+    '',
+    `| | |`,
+    `|---|---|`,
+    `| **Severity** | ${inc.severity} |`,
+    `| **Affected system** | ${inc.affectedSystem ?? '—'} |`,
+    `| **Source** | ${inc.source} |`,
+    `| **Started** | ${started.toISOString()} |`,
+    `| **Resolved** | ${resolved ? resolved.toISOString() : '—'} |`,
+    `| **Time to resolve** | ${mttrMin != null ? `${mttrMin} min` : '—'} |`,
+    inc.externalUrl ? `| **Source ticket** | ${inc.externalUrl} |` : '',
+    '',
+    `## Summary`,
+    input.summary ?? '_—_',
+    '',
+    `## Impact`,
+    input.impact ?? inc.impact ?? '_—_',
+    '',
+    `## Root cause`,
+    input.rootCause ?? '_—_',
+    '',
+    `## Contributing factors`,
+    input.contributingFactors ?? '_—_',
+    '',
+    `## Resolution`,
+    input.resolution ?? '_—_',
+    '',
+    `## What went well`,
+    input.whatWentWell ?? '_—_',
+    '',
+    `## What went wrong`,
+    input.whatWentWrong ?? '_—_',
+    '',
+    `## Action items`,
+    actionItems.length
+      ? actionItems.map((a) => `- [ ] **${a.title}**${a.detail ? ` — ${a.detail}` : ''}`).join('\n')
+      : '_None_',
+  ];
+  return lines.filter((l) => l !== '').join('\n');
 }
 
 export interface OpenIncidentInput {
@@ -177,7 +231,7 @@ export class IncidentService {
       const brief = [
         `INCIDENT (incident \`${incidentId}\`, ${severity}) from ${source}. This is HELP-DESK TRIAGE, not a code change.`,
         input.description ? `\nSource ticket:\n${input.description}` : '',
-        `\nWork out WHICH SYSTEM this pertains to and record it with incidents.classify; set an accurate severity with incidents.update; page whoever is on call with oncall.page; post what you find/do with incidents.add_note. Do NOT write code.`,
+        `\nFirst search the knowledge base with knowledge.search for prior similar incidents / known-errors. Work out WHICH SYSTEM this pertains to and record it with incidents.classify; set an accurate severity with incidents.update; page whoever is on call with oncall.page; post what you find/do with incidents.add_note. When resolved, publish an RCA with incidents.postmortem (root cause + action items). Do NOT write code.`,
       ].join('');
       const created = await this.tasks.createTask({
         projectId,
@@ -278,6 +332,99 @@ export class IncidentService {
         message: `Status → ${patch.status}`,
       });
     }
+  }
+
+  /**
+   * Publish a post-incident review (RCA / lessons-learned) as a first-class, versioned
+   * Knowledge article, file the action items as remediation tasks, and back-link the
+   * incident to the doc. The learning half of incident management — reached by the
+   * agent's `incidents.postmortem` tool on resolve and by the manual route.
+   *
+   * Returns the knowledge doc id + url + the remediation task ids so the caller can
+   * ALSO feed the learning into Evermind (so the workforce stops repeating the cause).
+   */
+  async publishPostmortem(
+    tenantId: number,
+    incidentId: string,
+    input: {
+      summary?: string | null;
+      rootCause?: string | null;
+      impact?: string | null;
+      contributingFactors?: string | null;
+      resolution?: string | null;
+      whatWentWell?: string | null;
+      whatWentWrong?: string | null;
+      actionItems?: Array<{ title: string; detail?: string | null }>;
+      docType?: 'postmortem' | 'known_error';
+      actorRef?: string | null;
+    },
+    env?: Env,
+  ): Promise<{ docId: string; url: string; actionItemTaskIds: number[]; incidentTitle: string; affectedSystem: string | null }> {
+    const [inc] = await this.db.select().from(prodIncidents)
+      .where(and(eq(prodIncidents.id, incidentId), eq(prodIncidents.tenantId, tenantId))).limit(1);
+    if (!inc) throw new Error('Incident not found in workspace');
+
+    const rootCause = input.rootCause ?? inc.rootCause ?? null;
+    const actionItems = (input.actionItems ?? []).filter((a) => a.title?.trim());
+    const content = buildRcaMarkdown(inc, { ...input, rootCause }, actionItems);
+
+    const docType = input.docType ?? 'postmortem';
+    const { id: docId } = await publishKnowledgeDoc(this.db, env, {
+      tenantId,
+      projectId: inc.projectId ?? null,
+      docType,
+      title: `RCA: ${inc.title}`.slice(0, 255),
+      summary: (input.summary ?? rootCause ?? inc.impact ?? `Post-incident review for ${inc.title}`)?.slice(0, 500) ?? null,
+      content,
+      tags: ['rca', 'incident', `incident:${incidentId}`, ...(inc.affectedSystem ? [inc.affectedSystem] : []), inc.severity],
+      sourceIncidentId: incidentId,
+      createdBy: null,
+    });
+    const url = `/knowledge/documents/${docId}`;
+
+    // File the action items as remediation follow-up tasks, linked to the incident.
+    const actionItemTaskIds: number[] = [];
+    if (inc.projectId != null && actionItems.length) {
+      for (const item of actionItems) {
+        const task = await this.tasks.createTask({
+          projectId: inc.projectId,
+          title: `Remediation: ${item.title}`.slice(0, 500),
+          description: `${item.detail ?? ''}\n\nFollow-up action item from the RCA for incident "${inc.title}" (${url}).`.trim(),
+          priority: TaskPriority.HIGH,
+          taskType: TaskType.TASK,
+        }, tenantId);
+        const taskId = Number(task.id);
+        await this.db.update(tasksTable).set({ incidentId, updatedAt: new Date() }).where(eq(tasksTable.id, taskId));
+        actionItemTaskIds.push(taskId);
+      }
+    }
+
+    // Back-link the incident → the RCA doc; persist the confirmed root cause.
+    await this.db.update(prodIncidents).set({
+      postmortemUrl: url,
+      rootCause: rootCause ?? undefined,
+      updatedAt: new Date(),
+    }).where(eq(prodIncidents.id, incidentId));
+
+    await this.addEvent(tenantId, incidentId, {
+      kind: 'note', actorRef: input.actorRef ?? 'agent',
+      message: `Post-mortem published (${url})${actionItemTaskIds.length ? ` — ${actionItemTaskIds.length} remediation action item(s) filed` : ''}`,
+    });
+
+    // Feed the lesson into the project's Evermind so the workforce stops repeating the
+    // cause (best-effort, project-scoped, never fails the post-mortem).
+    const learned = await recordIncidentLearning(env, tenantId, {
+      projectId: inc.projectId ?? null,
+      title: inc.title,
+      severity: inc.severity,
+      affectedSystem: inc.affectedSystem ?? null,
+      rootCause,
+      whatWentWrong: input.whatWentWrong ?? null,
+      resolution: input.resolution ?? null,
+    });
+    if (learned) await this.addEvent(tenantId, incidentId, { kind: 'note', actorRef: 'system', message: 'Lesson contributed to Evermind — the workforce will avoid repeating this cause' });
+
+    return { docId, url, actionItemTaskIds, incidentTitle: inc.title, affectedSystem: inc.affectedSystem ?? null };
   }
 
   /** Append one timeline / notification event. */

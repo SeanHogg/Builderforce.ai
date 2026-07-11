@@ -11,6 +11,8 @@ const DOC_TYPE_COLOR: Record<KnowledgeDoc['docType'], string> = {
   sop: 'var(--cyan-bright, #00e5cc)',
   process: 'var(--coral-bright, #f4726e)',
   doc: 'var(--text-muted)',
+  postmortem: 'var(--error-text, #ef4444)',
+  known_error: 'var(--warning-text, #f59e0b)',
 };
 
 /**

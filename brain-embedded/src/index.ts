@@ -135,3 +135,4 @@ export type { MessageProvenance, ProvenanceAccount } from './provenance';
 
 // Shared data shapes
 export type { BrainChat, BrainMessage, BrainModality, ChatInputAttachment } from './types';
+export { STEP_MESSAGE_ROLE, isStepMessage } from './types';

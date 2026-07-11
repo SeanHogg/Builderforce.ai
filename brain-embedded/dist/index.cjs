@@ -29,6 +29,7 @@ __export(src_exports, {
   CONSOLIDATION_META: () => CONSOLIDATION_META,
   EVERMIND_LEARN_MIN_CHARS: () => EVERMIND_LEARN_MIN_CHARS,
   PROVENANCE_META_KEY: () => PROVENANCE_META_KEY,
+  STEP_MESSAGE_ROLE: () => STEP_MESSAGE_ROLE,
   accountUsedInTrace: () => accountUsedInTrace,
   activeMentionToken: () => activeMentionToken,
   buildBrainTriageReport: () => buildBrainTriageReport,
@@ -49,6 +50,7 @@ __export(src_exports, {
   isDirectedToParticipant: () => isDirectedToParticipant,
   isEvermindModel: () => isEvermindModel,
   isFailedToolResult: () => isFailedToolResult,
+  isStepMessage: () => isStepMessage,
   lastConsolidationIndex: () => lastConsolidationIndex,
   mentionRecipient: () => mentionRecipient,
   modelsUsedInTrace: () => modelsUsedInTrace,
@@ -900,6 +902,12 @@ function useBrainChats(options = {}) {
 
 // src/useBrainConversation.ts
 var import_react6 = require("react");
+
+// src/types.ts
+var STEP_MESSAGE_ROLE = "tool";
+function isStepMessage(m) {
+  return m.role === STEP_MESSAGE_ROLE;
+}
 
 // src/consolidation.ts
 var CONSOLIDATION_META = { consolidation: true };
@@ -2016,7 +2024,7 @@ ${refs}`;
           }
           return true;
         }
-        const seed = scopeToConsolidation(messages).filter((m) => m.role !== "tool").map((m) => ({
+        const seed = scopeToConsolidation(messages).filter((m) => !isStepMessage(m)).map((m) => ({
           role: m.role,
           content: m.content
         }));
@@ -2041,7 +2049,7 @@ ${refs}`;
     if (autoRepliedChatIdRef.current === chatId) return;
     autoRepliedChatIdRef.current = chatId;
     setLocalError("");
-    const seed = scopeToConsolidation(messages.slice(0, -1)).filter((m) => m.role !== "tool").map((m) => ({
+    const seed = scopeToConsolidation(messages.slice(0, -1)).filter((m) => !isStepMessage(m)).map((m) => ({
       role: m.role,
       content: m.content
     }));
@@ -2179,6 +2187,7 @@ function takePendingPrompt() {
   CONSOLIDATION_META,
   EVERMIND_LEARN_MIN_CHARS,
   PROVENANCE_META_KEY,
+  STEP_MESSAGE_ROLE,
   accountUsedInTrace,
   activeMentionToken,
   buildBrainTriageReport,
@@ -2199,6 +2208,7 @@ function takePendingPrompt() {
   isDirectedToParticipant,
   isEvermindModel,
   isFailedToolResult,
+  isStepMessage,
   lastConsolidationIndex,
   mentionRecipient,
   modelsUsedInTrace,
