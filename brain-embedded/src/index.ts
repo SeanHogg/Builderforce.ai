@@ -121,10 +121,12 @@ export {
   isTicketRecordingTool,
   codeChangeFile,
   workItemLinkFromCreate,
+  linkedTicketsToAdvance,
   CODE_CHANGE_TOOLS,
   TICKET_RECORDING_TOOLS,
+  NOT_STARTED_TASK_STATUSES,
 } from './chatWorkLinking';
-export type { CreatedWorkItemLink } from './chatWorkLinking';
+export type { CreatedWorkItemLink, LinkedTicketToAdvance } from './chatWorkLinking';
 
 // Landing-page → auth → replay handoff
 export { savePendingPrompt, takePendingPrompt } from './pendingPrompt';
@@ -166,4 +168,4 @@ export type { MessageProvenance, ProvenanceAccount } from './provenance';
 
 // Shared data shapes
 export type { BrainChat, BrainMessage, BrainModality, ChatInputAttachment, EvermindLearnOutcome } from './types';
-export { STEP_MESSAGE_ROLE, isStepMessage } from './types';
+export { STEP_MESSAGE_ROLE, isStepMessage, attachEvermindLearn } from './types';

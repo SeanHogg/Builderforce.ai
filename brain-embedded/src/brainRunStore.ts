@@ -37,7 +37,7 @@ import type {
 } from './streamChatCompletion';
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
 import { withProvenanceMetadata, type ProvenanceAccount } from './provenance';
-import { chatWorkLinkingDirective, isCodeChangeTool, isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate } from './chatWorkLinking';
+import { chatWorkLinkingDirective, isCodeChangeTool, isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance } from './chatWorkLinking';
 import {
   formatEvermindMemoryBlock,
   countReconciledMemories,
@@ -892,6 +892,17 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
     if (!aborted && c.codeChanged && !c.ticketRecorded && req.projectId != null && req.runTool) {
       await recordCodeChangeTicket(chatId, c, req).catch(() => { /* never fail the run on the backstop */ });
     }
+    // Keep the board honest about STATUS: if this run CHANGED code, advance any
+    // task/epic/gap linked to this chat that is still sitting in a not-started lane
+    // (backlog/todo/ready) to in_progress — so "started work on a ticket but never
+    // moved it off backlog" can't happen silently. Independent of the from_delta
+    // backstop above (that MINTS a ticket; this ADVANCES existing linked ones), and
+    // runs after it so a freshly-minted review-status ticket is never touched.
+    // Gated on a project (like the from_delta backstop) — an IDE code-change run always
+    // has one; a project-less chat has no board to reconcile.
+    if (!aborted && c.codeChanged && req.projectId != null && req.runTool) {
+      await advanceLinkedTickets(chatId, c, req).catch(() => { /* never fail the run on the backstop */ });
+    }
     emit(c);
   }
 }
@@ -934,6 +945,46 @@ async function recordCodeChangeTicket(chatId: number, c: RunCell, req: BrainRunR
     result: out ?? null,
     isError: isFailedToolResult(out),
   });
+}
+
+/**
+ * Post-run backstop for the "a ticket you WORKED reflects that on the board" guarantee.
+ * Lists the tickets linked to this chat (via the run's own `runTool` dispatcher, so it
+ * rides the same gateway MCP relay the model uses), and for every task/epic/gap still in
+ * a not-started lane (see {@link linkedTicketsToAdvance}) advances it to `in_progress`
+ * with `builtin_tasks_update`. This closes the reported gap where the agent started work
+ * on linked bug tickets but left them in backlog. Best-effort per ticket, records a
+ * durable step so the auto-advance is visible on the timeline, never throws.
+ */
+async function advanceLinkedTickets(chatId: number, c: RunCell, req: BrainRunRequest): Promise<void> {
+  if (!req.runTool) return;
+  let listed: unknown;
+  try {
+    listed = await req.runTool('builtin_chats_list_tickets', { chatId });
+  } catch {
+    return; // can't read the links — nothing to advance
+  }
+  const toAdvance = linkedTicketsToAdvance(listed);
+  for (const t of toAdvance) {
+    const id = Number(t.ref);
+    if (!Number.isInteger(id)) continue;
+    const toolStart = nowMs();
+    let out: unknown;
+    try {
+      out = await req.runTool('builtin_tasks_update', { id, status: 'in_progress' });
+    } catch (e) {
+      out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+    pushDurableStep(c, chatId, req.persistence, {
+      ts: nowIso(),
+      category: 'tool',
+      label: 'builtin_tasks_update',
+      durationMs: nowMs() - toolStart,
+      args: { id, status: 'in_progress', auto: true, reason: 'worked-ticket-off-backlog' },
+      result: out ?? null,
+      isError: isFailedToolResult(out),
+    });
+  }
 }
 
 /**

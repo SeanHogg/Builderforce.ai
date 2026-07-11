@@ -70,6 +70,27 @@ export function isStepMessage(m: { role: string }): boolean {
   return m.role === STEP_MESSAGE_ROLE;
 }
 
+/**
+ * Attach the send-messages response's TRUTHFUL learn-gate {@link EvermindLearnOutcome}
+ * (transient — never persisted, never returned by getMessages) onto the assistant
+ * turn(s) a `POST /chats/:id/messages` just persisted, so the Brain run loop renders a
+ * `learn` step (or an EXPLAINED muted skip step, via {@link EvermindLearnOutcome.reason})
+ * exactly when the server contributed — instead of a client-side guess.
+ *
+ * The ONE shared implementation every persistence adapter (web app + VS Code webview)
+ * calls, so the two can't drift: a divergence here silently disables the learn/skip step
+ * on one surface — the VSIX regression that made "Connected, yet nothing learned" an
+ * unexplained mystery again while the web app showed it correctly. Generic over the
+ * message shape so each surface's own `BrainMessage` type flows through unchanged.
+ */
+export function attachEvermindLearn<M extends { role: string }>(
+  messages: M[],
+  outcome: EvermindLearnOutcome | null | undefined,
+): M[] {
+  if (!outcome) return messages;
+  return messages.map((m) => (m.role === 'assistant' ? { ...m, evermindLearn: outcome } : m));
+}
+
 /** An uploaded attachment reference attached to an outgoing message. */
 export interface ChatInputAttachment {
   key: string;

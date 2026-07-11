@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.7.67] — Keep typing while the assistant works — your follow-ups now wait their turn
+
+- **You no longer have to sit on your hands while a run is going.** Previously, once the assistant started working the composer went read-only — anything you typed was ignored until it finished, so a follow-up thought had to wait (and was easy to lose). Now you can keep composing and send while a run is in flight: your message joins a queue and goes out automatically the moment the current run finishes. Queue several and they send one at a time, each as its own turn, so you can line up "then do X, then check Y" without babysitting the run. Queued messages show as removable chips above the box, so you can see exactly what's pending and cancel anything you change your mind about before it sends.
+
 ## [2026.7.65] — Your chats now actually train the project's model
 
 - **Fixed: conversations that showed "Learning · Connected" weren't teaching the model anything.** The Evermind panel could say a chat was connected and learning while, under the hood, that conversation wasn't tied to a project — and the model only learns from project conversations. So the counter never moved no matter how much you discussed. Now, when you have a project open, an unscoped chat is automatically attached to it, so what you work through in chat genuinely trains the project's model (the "Last learned" and queued counts move as you'd expect). Existing older chats self-heal the next time you open them with a project selected.

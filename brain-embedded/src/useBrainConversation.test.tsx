@@ -276,7 +276,35 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     await act(async () => { await hook.current.send('read, write, read'); });
 
     // The write cleared the read cache, so the SECOND read is NOT suppressed.
+    // (chatId 5 has no projectId, so neither the from_delta nor the status backstop fires.)
     expect(runTool).toHaveBeenCalledTimes(3);
+  });
+
+  it('advances a linked backlog ticket to in_progress after a code-change run (status backstop)', async () => {
+    mockStream
+      .mockResolvedValueOnce(result({ toolCalls: [{ id: 'c1', name: 'write_file', args: '{"path":"a.ts","content":"x"}' }], finishReason: 'tool_calls' }))
+      .mockResolvedValueOnce(result({ text: 'fixed it' }));
+    // The chat has one linked ticket still in backlog; the run changed code but never
+    // moved it — exactly the reported "worked a ticket, left it in backlog" case.
+    const runTool = vi.fn(async (name: string) => {
+      if (name === 'builtin_chats_list_tickets') {
+        return [
+          { kind: 'task', ref: '488', status: 'backlog', exists: true },
+          { kind: 'task', ref: '999', status: 'done', exists: true }, // must NOT be re-touched
+        ];
+      }
+      return { ok: true };
+    });
+    const { result: hook } = renderHook(
+      () => useBrainConversation({ chatId: 7, projectId: 10, toolSpecs: [], runTool }),
+      { wrapper },
+    );
+
+    await act(async () => { await hook.current.send('fix the bug'); });
+
+    // The backstop moved the worked backlog ticket to in_progress, and left the done one alone.
+    await waitFor(() => expect(runTool).toHaveBeenCalledWith('builtin_tasks_update', { id: 488, status: 'in_progress' }));
+    expect(runTool).not.toHaveBeenCalledWith('builtin_tasks_update', { id: 999, status: 'in_progress' });
   });
 
   it('surfaces a connected-but-unresolved BYO provider on the hook (for the reconnect banner)', async () => {

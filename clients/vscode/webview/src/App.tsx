@@ -912,20 +912,53 @@ function Chat({ init }: { init: InitData }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sendNonce]);
 
+  // Fetch this turn's fresh limbic block, fold it into extraSystem, THEN stage the
+  // send (the nonce effect above fires it once the new system prompt is committed) —
+  // so the webview run executes under the same per-turn affective layer as the native
+  // chat. Shared by the direct composer submit AND the queue drain below.
+  const dispatchSend = useCallback(async (text: string, to: DirectedRecipient | null) => {
+    const block = await requestLimbic(text);
+    setTurnLimbic(block);
+    pendingSendRef.current = { text, recipient: to };
+    setSendNonce((n) => n + 1);
+  }, [requestLimbic]);
+
+  // Messages the user composed WHILE a run was in flight. The VSIX chat used to drop
+  // these (submit early-returned when sending); now they queue and drain FIFO — one
+  // message per completed run — so follow-ups are never lost and each stays a distinct
+  // steerable turn. Cleared when switching chats (a queue belongs to its conversation).
+  const [messageQueue, setMessageQueue] = useState<Array<{ id: number; text: string; recipient: DirectedRecipient | null }>>([]);
+  const queueIdRef = useRef(0);
+  useEffect(() => { setMessageQueue([]); }, [chatId]);
+  const removeQueued = useCallback((id: number) => {
+    setMessageQueue((q) => q.filter((m) => m.id !== id));
+  }, []);
+
+  // Drain the queue: when a run finishes (sending true→false) and messages are queued,
+  // dispatch the next one. Draining one-per-run keeps each follow-up its own turn (and
+  // lets the user watch/steer between them) rather than concatenating them into one.
+  const prevSendingForQueue = useRef(false);
+  useEffect(() => {
+    if (prevSendingForQueue.current && !conv.sending && messageQueue.length > 0) {
+      const [next, ...rest] = messageQueue;
+      setMessageQueue(rest);
+      void dispatchSend(next.text, next.recipient);
+    }
+    prevSendingForQueue.current = conv.sending;
+  }, [conv.sending, messageQueue, dispatchSend]);
+
   const submit = useCallback(() => {
     const text = input.trim();
-    if (!text || conv.sending) return;
+    if (!text) return;
     setInput('');
-    // Fetch this turn's fresh limbic block, fold it into extraSystem, THEN queue the
-    // send (the effect above fires it once the new system prompt is committed) — so the
-    // webview run executes under the same per-turn affective layer as the native chat.
-    void (async () => {
-      const block = await requestLimbic(text);
-      setTurnLimbic(block);
-      pendingSendRef.current = { text, recipient };
-      setSendNonce((n) => n + 1);
-    })();
-  }, [input, conv, recipient, requestLimbic]);
+    // A run is already streaming: queue this message instead of dropping it. The drain
+    // effect above sends it (via the same limbic → nonce path) when the run finishes.
+    if (conv.sending) {
+      setMessageQueue((q) => [...q, { id: (queueIdRef.current += 1), text, recipient }]);
+      return;
+    }
+    void dispatchSend(text, recipient);
+  }, [input, conv.sending, recipient, dispatchSend]);
 
   // Answering an agent's ask_user card posts the chosen option(s) as the user's next
   // turn — same send path as the composer, so the question and answer stay in order.
@@ -1261,6 +1294,20 @@ function Chat({ init }: { init: InitData }) {
             ))}
           </div>
         )}
+        {/* Messages queued behind the in-flight run — each sends automatically, one
+            per completed run. Shown as removable chips so the user can see and cancel
+            what's pending before it goes out. */}
+        {messageQueue.length > 0 && (
+          <div className="bf-queued" role="list" aria-label={t('app.queuedLabel', 'Queued messages')}>
+            <span className="bf-queued__hint">{t('app.queuedHint', 'Queued — sends when the run finishes')}</span>
+            {messageQueue.map((m) => (
+              <span key={m.id} className="bf-chip bf-chip--queued" role="listitem" title={m.text}>
+                <span className="bf-chip__name">{m.text}</span>
+                <button className="bf-chip__x" onClick={() => removeQueued(m.id)} aria-label={t('app.remove', 'Remove')}>×</button>
+              </span>
+            ))}
+          </div>
+        )}
         <textarea
           ref={inputRef}
           className="bf-input"
@@ -1470,11 +1517,26 @@ function Chat({ init }: { init: InitData }) {
           )}
 
           {/* While a run is in flight the primary action becomes Stop — it aborts
-              the streaming LLM request and unwinds the agent loop (conv.stop). */}
+              the streaming LLM request and unwinds the agent loop (conv.stop). The
+              user can still compose: with text typed, a Queue button (and Enter) adds
+              the message to the drain queue instead of dropping it. */}
           {conv.sending ? (
-            <button className="bf-btn bf-btn--stop" onClick={conv.stop} title={t('app.stop', 'Stop')}>
-              <span className="bf-stop-glyph" aria-hidden="true">■</span> {t('app.stop', 'Stop')}
-            </button>
+            <>
+              {input.trim() && (
+                <button
+                  type="button"
+                  className="bf-iconbtn bf-iconbtn--send"
+                  onClick={submit}
+                  title={t('app.queueSend', 'Queue message — sends when the current run finishes')}
+                  aria-label={t('app.queueSend', 'Queue message — sends when the current run finishes')}
+                >
+                  <IconSend />
+                </button>
+              )}
+              <button className="bf-btn bf-btn--stop" onClick={conv.stop} title={t('app.stop', 'Stop')}>
+                <span className="bf-stop-glyph" aria-hidden="true">■</span> {t('app.stop', 'Stop')}
+              </button>
+            </>
           ) : (
             <button
               className="bf-iconbtn bf-iconbtn--send"

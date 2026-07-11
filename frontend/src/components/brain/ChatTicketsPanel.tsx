@@ -35,12 +35,19 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
   // Open a linked work item in its own view. Routes to the surface the item lives on
   // (board for task/epic/gap + spec-in-project; Portfolio ▸ OKRs tab for the strategy
   // tiers), reusing the same project-scoped board route the Brain's navigate_to uses.
+  // For a task/epic/gap we also append `&task=<ref>` so the board opens straight into
+  // that ticket's DETAIL drawer (assignee/status/PRD) rather than just the board.
   const openTicket = useMemo(() => (tk: TicketLinkVM) => {
     switch (tk.kind) {
       case 'objective': case 'initiative': case 'portfolio':
         router.push('/projects?tab=portfolio');
         break;
-      default: // task | epic | gap | spec | roadmap → the project's board
+      case 'task': case 'epic': case 'gap': {
+        const base = projectId != null ? `/projects?tab=tasks&project=${projectId}` : '/projects?tab=tasks';
+        router.push(`${base}&task=${encodeURIComponent(tk.ref)}`);
+        break;
+      }
+      default: // spec | roadmap → the project's board (no per-item drawer)
         router.push(projectId != null ? `/projects?tab=tasks&project=${projectId}` : '/projects?tab=tasks');
     }
   }, [router, projectId]);

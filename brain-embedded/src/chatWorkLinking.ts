@@ -100,6 +100,57 @@ export function isTicketRecordingTool(name: string): boolean {
   return TICKET_RECORDING_TOOLS.has(name);
 }
 
+/**
+ * Task-tier statuses that mean "not started yet" — mirrors the board's not-started
+ * lanes (TaskStatus BACKLOG | TODO | READY). A linked ticket in one of these that a
+ * code-changing run actively worked is advanced to `in_progress` by the loop backstop,
+ * so "you worked a ticket but never moved it off backlog" can't happen silently.
+ * `blocked` / `in_progress` / `in_review` / `done` are deliberately excluded — the run
+ * must not un-block, re-open, or regress a ticket that already moved past the backlog.
+ */
+export const NOT_STARTED_TASK_STATUSES: ReadonlySet<string> = new Set(['backlog', 'todo', 'ready']);
+
+/** Ticket tiers whose status lives on the tasks table (settable via builtin_tasks_update). */
+const TASK_TIER_KINDS: ReadonlySet<string> = new Set(['task', 'epic', 'gap']);
+
+/** A linked ticket the deterministic backstop should advance to in_progress. */
+export interface LinkedTicketToAdvance {
+  kind: string;
+  ref: string;
+}
+
+/**
+ * From a `builtin_chats_list_tickets` result, the task-tier tickets still sitting in a
+ * not-started lane — the ones a code-changing run left behind in backlog. The loop
+ * advances each to `in_progress` via `builtin_tasks_update`, closing the gap that let
+ * the agent "start work on a ticket without ever updating its status". Tolerant of the
+ * tool result arriving as a JSON string, a parsed array, or an error object (returns
+ * [] for anything unusable), and skips deleted/unresolved links.
+ */
+export function linkedTicketsToAdvance(listResult: unknown): LinkedTicketToAdvance[] {
+  let rows: unknown = listResult;
+  if (typeof rows === 'string') {
+    try {
+      rows = JSON.parse(rows);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(rows)) return [];
+  const out: LinkedTicketToAdvance[] = [];
+  for (const r of rows) {
+    if (!r || typeof r !== 'object') continue;
+    const row = r as { kind?: unknown; ref?: unknown; status?: unknown; exists?: unknown };
+    if (typeof row.kind !== 'string' || !TASK_TIER_KINDS.has(row.kind)) continue;
+    if (row.exists === false) continue;
+    const ref = typeof row.ref === 'number' ? String(row.ref) : typeof row.ref === 'string' && row.ref.trim() ? row.ref : null;
+    if (!ref) continue;
+    if (typeof row.status !== 'string' || !NOT_STARTED_TASK_STATUSES.has(row.status.toLowerCase())) continue;
+    out.push({ kind: row.kind, ref });
+  }
+  return out;
+}
+
 /** The workspace-relative path a code-change tool touched (for delta provenance),
  *  or null when the args carry no usable `path`. */
 export function codeChangeFile(args: unknown): string | null {
@@ -121,6 +172,7 @@ export function chatWorkLinkingDirective(chatId: number): string {
     `You are working inside Brain chat #${chatId}. Tie the work of this conversation back to it:\n` +
     `• When your investigation concludes that something needs to be DONE — a bug to fix, a missing capability, a follow-up, or a gap you identified — do not merely describe it. Create the work item now (builtin_tasks_create with taskType "task", "epic", or "gap"; or the matching builtin_*_create for an objective, spec, or roadmap item) AND link it to this conversation with builtin_chats_link_ticket (chatId=${chatId}, linkType="created"). To hand a large or long-horizon job off to run autonomously, set assignedAgentRef on the created task.\n` +
     `• When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide") so the change becomes a ticket linked to this chat that completes when it ships.\n` +
-    `• Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked before creating a duplicate. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat.`
+    `• Keep the board honest about STATUS. The MOMENT you start actively working an existing linked task/epic/gap — investigating its fix, editing code for it, or driving it — move it out of the backlog with builtin_tasks_update (id=<the ticket's ref>, status="in_progress"). When the work is finished and shipped, advance it to "in_review" (or "done" if it needs no review). Never leave a ticket you are actively working sitting in backlog.\n` +
+    `• Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked — both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.`
   );
 }

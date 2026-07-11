@@ -5,6 +5,7 @@ import {
   isTicketRecordingTool,
   codeChangeFile,
   workItemLinkFromCreate,
+  linkedTicketsToAdvance,
 } from './chatWorkLinking';
 
 describe('chatWorkLinkingDirective', () => {
@@ -16,6 +17,58 @@ describe('chatWorkLinkingDirective', () => {
     expect(d).toContain('builtin_tickets_from_delta (chatId=42');
     expect(d).toContain('builtin_tasks_create');
     expect(d).toContain('builtin_chats_list_tickets (chatId=42)');
+    // The status-progression requirement is present (the reported "worked a ticket but
+    // never moved it off backlog" gap).
+    expect(d).toContain('builtin_tasks_update');
+    expect(d).toContain('in_progress');
+  });
+});
+
+describe('linkedTicketsToAdvance', () => {
+  it('selects task-tier tickets still in a not-started lane', () => {
+    const listed = [
+      { kind: 'task', ref: '488', status: 'backlog', exists: true },
+      { kind: 'gap', ref: '489', status: 'todo', exists: true },
+      { kind: 'epic', ref: '77', status: 'ready', exists: true },
+    ];
+    expect(linkedTicketsToAdvance(listed)).toEqual([
+      { kind: 'task', ref: '488' },
+      { kind: 'gap', ref: '489' },
+      { kind: 'epic', ref: '77' },
+    ]);
+  });
+
+  it('never regresses or re-touches tickets already at/past in_progress, blocked, or done', () => {
+    const listed = [
+      { kind: 'task', ref: '1', status: 'in_progress', exists: true },
+      { kind: 'task', ref: '2', status: 'in_review', exists: true },
+      { kind: 'task', ref: '3', status: 'done', exists: true },
+      { kind: 'task', ref: '4', status: 'blocked', exists: true },
+    ];
+    expect(linkedTicketsToAdvance(listed)).toEqual([]);
+  });
+
+  it('ignores non-task tiers and deleted/unresolved links', () => {
+    const listed = [
+      { kind: 'objective', ref: 'obj-uuid', status: 'active', exists: true },
+      { kind: 'spec', ref: 'spec-uuid', status: 'draft', exists: true },
+      { kind: 'task', ref: '9', status: 'backlog', exists: false }, // deleted
+    ];
+    expect(linkedTicketsToAdvance(listed)).toEqual([]);
+  });
+
+  it('tolerates a JSON-string result, numeric refs, and mixed-case status', () => {
+    const raw = JSON.stringify([
+      { kind: 'task', ref: 500, status: 'Backlog', exists: true },
+    ]);
+    expect(linkedTicketsToAdvance(raw)).toEqual([{ kind: 'task', ref: '500' }]);
+  });
+
+  it('returns [] for an error object, non-array, or unparseable input', () => {
+    expect(linkedTicketsToAdvance({ error: 'Chat not found' })).toEqual([]);
+    expect(linkedTicketsToAdvance('not json')).toEqual([]);
+    expect(linkedTicketsToAdvance(null)).toEqual([]);
+    expect(linkedTicketsToAdvance(undefined)).toEqual([]);
   });
 });
 

@@ -5,7 +5,8 @@
  * exact same server-side conversation as on the web: one unified brain.
  */
 
-import type { BrainPersistenceAdapter, BrainChat, BrainMessage } from '@seanhogg/builderforce-brain-embedded';
+import type { BrainPersistenceAdapter, BrainChat, BrainMessage, EvermindLearnOutcome } from '@seanhogg/builderforce-brain-embedded';
+import { attachEvermindLearn } from '@seanhogg/builderforce-brain-embedded';
 import { authedFetch } from './authedFetch';
 
 export function createPersistence(
@@ -32,10 +33,15 @@ export function createPersistence(
     getMessages: (id, limit) =>
       req<{ messages: BrainMessage[] }>(`/api/brain/chats/${id}/messages${limit != null ? `?limit=${limit}` : ''}`).then((r) => r.messages),
     sendMessages: (id, msgs) =>
-      req<{ messages: BrainMessage[] }>(`/api/brain/chats/${id}/messages`, {
+      req<{ messages: BrainMessage[]; evermindLearn?: EvermindLearnOutcome }>(`/api/brain/chats/${id}/messages`, {
         method: 'POST',
         body: JSON.stringify({ messages: msgs }),
-      }).then((r) => r.messages),
+        // Attach the server's TRUTHFUL learn-gate outcome (transient) to the assistant
+        // turn(s) this POST persisted, so the run loop renders a learn step when the
+        // server contributed — and an EXPLAINED skip step (with reason) when it did not.
+        // WITHOUT this the VSIX dropped the outcome and every turn was silent about
+        // learning, leaving "Connected, yet nothing learned" an unexplained mystery.
+      }).then((r) => attachEvermindLearn(r.messages, r.evermindLearn)),
     setMessageFeedback: (mid, fb) =>
       req(`/api/brain/messages/${mid}/feedback`, { method: 'PATCH', body: JSON.stringify({ feedback: fb }) }),
     requestAgentReply: (id, input) =>

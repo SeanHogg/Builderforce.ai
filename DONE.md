@@ -4,7 +4,15 @@
 
 ---
 
-## ✅ RESOLVED 2026-07-11 — Evermind chat-learning: silent non-learning made visible + redundant client path deleted (api · brain-embedded · brain-ui · frontend · VSIX)
+## ✅ RESOLVED 2026-07-11 — VSIX Brain never showed the learn/skip step: webview persistence adapter dropped the server's `evermindLearn` outcome (brain-embedded 2026.7.27 · VSIX 2026.7.68 · frontend)
+
+Operator (superadmin) reported that in the VSIX, "even after multiple bug fixes, memory says learning is On but LAST LEARNED is stuck ~21h." Traced through code, not guessed.
+
+**Root cause:** the "truthful learn/skip step" mechanism (shipped 2026-07-11, entry below) reaches the run loop ONLY if the persistence adapter attaches the send-messages response's `evermindLearn` onto the returned assistant message — `brainRunStore` reads `assistantMsg.evermindLearn` to render the ✅ learn step OR the muted **"Not learned — <reason>"** skip step. The **web** adapter did this (`frontend/src/lib/builderforceApi.ts` mapped the top-level `evermindLearn` onto assistant turns). The **VS Code webview** adapter (`clients/vscode/webview/src/persistence.ts` `sendMessages`) did **not** — it returned `.then((r) => r.messages)`, DROPPING the top-level `evermindLearn` the server (`POST /chats/:id/messages` → `{ messages, evermindLearn }`) returns. So on the VSIX — the exact surface the operator uses — `assistantMsg.evermindLearn` was always `undefined`: neither the learn step NOR the actionable skip reason (`not-attached`/`not-seeded`/`frozen`) ever rendered. The whole "explain non-learning instead of silence" fix was **dead on the VSIX**, leaving "Connected, yet nothing learned" an unexplained mystery — matching the symptom exactly. (The panel's frozen LAST LEARNED is real coordinator state: if a chat is silently `not-attached`, the server genuinely never contributes — and the VSIX was hiding that reason.)
+
+**Fix (DRY — one shared implementation so the two adapters can't drift again):** added `attachEvermindLearn(messages, outcome)` to `brain-embedded/src/types.ts` (generic over the message shape, exported from the package index) — it attaches the transient outcome onto assistant turns. `clients/vscode/webview/src/persistence.ts` now returns `attachEvermindLearn(r.messages, r.evermindLearn)`; `frontend/src/lib/builderforceApi.ts` was refactored onto the same helper (removing its inline copy). Rebuilt `brain-embedded` (tsup, → `2026.7.27`), rebuilt the webview (vite, `evermindLearn` present in the shipped bundle), packaged **`builderforce-ai-2026.7.68.vsix`**. Frontend change ships on its next deploy (push-to-main); no functional change there (same behavior, now via the shared helper).
+
+
 
 Follow-up to the 2026.7.65 project-less-chat fix below. The operator was still burned by the SAME confusion because two things remained: (a) when a turn did NOT feed the Evermind, the gate returned `{learned:false}` with **no reason** and the chat rendered **nothing** — so "Connected, yet nothing learned" stayed an unexplained mystery (this is what sent a whole debugging session in circles); (b) a **second, redundant** learning path still existed and muddied the picture.
 
