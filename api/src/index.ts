@@ -95,6 +95,7 @@ import { createFreelancerMessagingRoutes } from './presentation/routes/freelance
 import { createGigMarketplaceRoutes, createEngagementBoardRoutes, createDeliverableRoutes } from './presentation/routes/gigMarketplaceRoutes';
 import { createLimbicRoutes }           from './presentation/routes/limbicRoutes';
 import { createPersonaRoutes }          from './presentation/routes/personaRoutes';
+import { createPersonalityRoutes }      from './presentation/routes/personalityRoutes';
 import { createLlmRoutes }          from './presentation/routes/llmRoutes';
 import { createTenantModelRoutes }  from './presentation/routes/tenantModelRoutes';
 import { createSemanticCacheRoutes } from './presentation/routes/semanticCacheRoutes';
@@ -374,7 +375,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
 
   // Limbic affective layer — serves the shared compiler's directive block to
   // clients that can't bundle it (the VS Code built-in agent).
-  app.route('/api/limbic', createLimbicRoutes());
+  app.route('/api/limbic', createLimbicRoutes(db));
 
   // Diagnostics & Tools — list/get/compute are public (free preview);
   // save/runs apply auth + manager role inside the router.
@@ -439,6 +440,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/project-agents', createProjectAgentRoutes(db));
   app.route('/api/marketplace-stats', createMarketplaceStatsRoutes(db));
   app.route('/api/personas', createPersonaRoutes(db));
+  // Personality LEARNING + TRACKING (Gaps 6 & 7) — usage events + outcome-driven
+  // trait reinforcement (propose/apply/dismiss). Reinforcement reads real run
+  // outcomes (run_model_outcomes) so a suggestion is LIVE from real data.
+  app.route('/api/personality', createPersonalityRoutes(db));
 
   // Chat persistence (agentHost-auth writes + tenant-JWT reads)
   app.route('/api', createChatRoutes(db));

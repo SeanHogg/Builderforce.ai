@@ -728,6 +728,11 @@ export class BrainService {
     const persona = resolved?.directives
       ? `${resolved.directives}\n\n`
       : `You are ${agentName}, a member of this team's chat.\n\n`;
+    // The persona's compiled directives are already folded into `resolved.directives`
+    // (→ the system prompt), and its compiled temperature drives sampling here — so the
+    // agent replies UNDER its personality, tone AND sampling, instead of a flat default.
+    // Falls back to the prior 0.4 when the agent carries no psychometric profile.
+    const replyTemp = resolved?.execParams?.temperature ?? 0.4;
 
     const authorName = (label: string | null): string => {
       if (!label) return 'BuilderForce';
@@ -830,7 +835,7 @@ export class BrainService {
         model: pinnedModel,
         messages: convo as never,
         tools,
-        temperature: 0.4,
+        temperature: replyTemp,
         max_tokens: 1200,
       });
       this.recordUsage(apiKey, tenantId, 'brain_agent_reply', result);
@@ -899,7 +904,7 @@ export class BrainService {
       const finalResult = await service.complete({
         model: pinnedModel,
         messages: [...convo, { role: 'user', content: `Now write your reply to the team AS ${agentName}: plain prose, first person, no tool calls. Summarise what you found or did.` }] as never,
-        temperature: 0.4,
+        temperature: replyTemp,
         max_tokens: 1000,
       });
       this.recordUsage(apiKey, tenantId, 'brain_agent_reply', finalResult);
@@ -930,7 +935,7 @@ export class BrainService {
         const evResult = await service.complete({
           model: `evermind/${head.ref}`,
           messages: [...convo, { role: 'user', content: `Write your reply to the team AS ${agentName}: plain prose, first person, no tool calls. Summarise what you found or did.` }] as never,
-          temperature: 0.4,
+          temperature: replyTemp,
           max_tokens: 1000,
         });
         this.recordUsage(apiKey, tenantId, 'brain_agent_reply', evResult);
