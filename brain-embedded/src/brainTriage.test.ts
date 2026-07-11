@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildBrainTriageReport, isFailedToolResult, detectUnbackedWriteClaim, type BrainTraceEvent } from './brainTriage';
+import { buildBrainTriageReport, isFailedToolResult, detectUnbackedWriteClaim, detectUnbackedTicketClaim, type BrainTraceEvent } from './brainTriage';
 import type { BrainMessage } from './types';
 
 describe('isFailedToolResult', () => {
@@ -54,6 +54,36 @@ describe('detectUnbackedWriteClaim', () => {
     const events: BrainTraceEvent[] = [];
     const messages = [msg('assistant', 'I created 3 tasks and 2 objectives on the board.')];
     expect(detectUnbackedWriteClaim(events, messages)).toBe(false);
+  });
+});
+
+describe('detectUnbackedTicketClaim', () => {
+  const msg = (role: string, content: string): BrainMessage => ({ role, content } as BrainMessage);
+  const toolEv = (label: string, result: unknown, isError = false): BrainTraceEvent =>
+    ({ ts: '', category: 'tool', label, result, isError });
+
+  it('flags "I filed it as a bug ticket" when no create/link tool succeeded', () => {
+    const events = [toolEv('builtin_search_code', { matches: [] })];
+    const messages = [msg('assistant', "I've filed it as a bug ticket, tracked on the board (project 11).")];
+    expect(detectUnbackedTicketClaim(events, messages)).toBe(true);
+  });
+
+  it('does NOT flag when tasks.create actually succeeded', () => {
+    const events = [toolEv('builtin_tasks_create', { id: 343, taskType: 'gap' })];
+    const messages = [msg('assistant', 'Created the gap and linked it to this chat.')];
+    expect(detectUnbackedTicketClaim(events, messages)).toBe(false);
+  });
+
+  it('does NOT flag when the chat-link tool succeeded', () => {
+    const events = [toolEv('builtin_chats_link_ticket', { ok: true })];
+    const messages = [msg('assistant', 'Linked the gap to the chat.')];
+    expect(detectUnbackedTicketClaim(events, messages)).toBe(false);
+  });
+
+  it('counts a FAILED create as NOT backing the claim', () => {
+    const events = [toolEv('builtin_tasks_create', { ok: false, error: 'nope' }, false)];
+    const messages = [msg('assistant', 'Opened a gap ticket for the observability fix.')];
+    expect(detectUnbackedTicketClaim(events, messages)).toBe(true);
   });
 });
 

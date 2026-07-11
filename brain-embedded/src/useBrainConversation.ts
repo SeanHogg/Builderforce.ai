@@ -77,6 +77,13 @@ export interface UseBrainConversationOptions {
   /** Notify the host (chats hook) that this chat got new activity. */
   onActivity?: (chatId: number) => void;
   /**
+   * Fired once when the FIRST user turn of a chat is persisted, with that turn's text —
+   * the seam the host uses to auto-name a still-"New chat" conversation from what it's
+   * about (wired to `useBrainChats.autoTitle`). Best-effort and idempotent on the host
+   * side; omit to leave chats untitled.
+   */
+  onFirstUserTurn?: (chatId: number, text: string) => void;
+  /**
    * Project-Evermind memory hooks, bound by the host to the active chat's project.
    * When set, a run recalls the project's learned memories before answering
    * (grounding the reply) and records recall/learn/reconcile steps in the trace.
@@ -178,6 +185,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     needsConfirm,
     ensureChatId,
     onActivity,
+    onFirstUserTurn,
     evermind,
     augmentSystemPrompt,
   } = options;
@@ -339,6 +347,10 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         const [userMsg] = await persistence.sendMessages(id, [{ role: 'user', content: displayContent, metadata }]);
         setMessages((prev) => [...prev, userMsg]);
         onActivity?.(id);
+        // First user turn of this chat → let the host auto-name it from the topic
+        // (so it stops reading "New chat"). Uses the raw typed text, not the
+        // attachment-decorated display content.
+        if (messages.length === 0) onFirstUserTurn?.(id, trimmed);
         // Addressed to a participant, not the BRAIN: the turn is posted to the
         // chat (visible to everyone) and the BRAIN loop stays idle. The auto-reply
         // guard was already claimed above, and the effect below also skips it, so
@@ -384,7 +396,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         setLocalSending(false);
       }
     },
-    [persistence, chatId, localSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity],
+    [persistence, chatId, localSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity, onFirstUserTurn],
   );
 
   // Auto-reply when a chat loads with a trailing unanswered user message

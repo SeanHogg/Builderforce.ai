@@ -9,6 +9,7 @@ import {
   compactTailStart,
   compactMiddleRange,
   assembleCompacted,
+  pinnedDirectiveIndex,
   COMPACT_TAIL_TURNS,
 } from './brainRunStore';
 import type { ChatCompletionMessage } from './streamChatCompletion';
@@ -117,32 +118,50 @@ describe('auto-compaction partitioning (summarize the middle, never orphan a too
     expect(convo[start].role).not.toBe('tool');
   });
 
-  it('assembled output never begins its tail on a tool message', () => {
+  it('assembled output is [system, memo, active directive, ...tail] and never orphans a tool', () => {
     const convo: ChatCompletionMessage[] = [msg('user', 'task')];
     for (let i = 0; i < 30; i++) convo.push(msg(i % 2 === 0 ? 'assistant' : 'tool', `s${i}`));
     const out = assembleCompacted('SYS', convo, 'MEMO', COMPACT_TAIL_TURNS);
-    // [system, pinned user task, assistant memo, ...tail]
     expect(out[0]).toEqual({ role: 'system', content: 'SYS' });
-    expect(out[1].role).toBe('user');
-    expect(out[1].content).toBe('task');
-    expect(out[2]).toEqual({ role: 'assistant', content: 'MEMO' });
-    // The first tail message after the memo is never an orphaned tool result.
+    // Memo first (the compressed history), THEN the active directive verbatim — not the
+    // other way round, so the model reads the directive as the current instruction.
+    expect(out[1]).toEqual({ role: 'assistant', content: 'MEMO' });
+    expect(out[2].role).toBe('user');
+    expect(out[2].content).toBe('task');
+    // The first tail message after the directive is never an orphaned tool result.
     expect(out[3].role).not.toBe('tool');
   });
 
-  it('middle range excludes the pinned task and the recent tail', () => {
+  it('re-injects the MOST RECENT user directive, not the first, when several fell out of the tail', () => {
+    // The opening request, then a superseding instruction, then a long tool loop that
+    // pushes BOTH out of the verbatim tail. The active directive is the latest one.
+    const convo: ChatCompletionMessage[] = [msg('user', 'run a self-diagnostic'), msg('assistant', 'ok')];
+    convo.push(msg('user', 'now create the gap and fix the code'));
+    for (let i = 0; i < 30; i++) convo.push(msg(i % 2 === 0 ? 'assistant' : 'tool', `s${i}`));
+    const idx = pinnedDirectiveIndex(convo, COMPACT_TAIL_TURNS);
+    expect(convo[idx].content).toBe('now create the gap and fix the code');
+    const out = assembleCompacted('SYS', convo, 'MEMO', COMPACT_TAIL_TURNS);
+    const directive = out[2];
+    expect(directive.role).toBe('user');
+    expect(directive.content).toBe('now create the gap and fix the code');
+    // The stale opening request is NOT re-injected verbatim (it lives only in the memo).
+    expect(out.filter((m) => m.content === 'run a self-diagnostic')).toHaveLength(0);
+  });
+
+  it('middle range covers the whole history before the recent tail', () => {
     const convo: ChatCompletionMessage[] = [msg('user', 'task')];
     for (let i = 0; i < 20; i++) convo.push(msg('assistant', `a${i}`));
     const { start, end } = compactMiddleRange(convo, COMPACT_TAIL_TURNS);
-    expect(start).toBe(1); // after the pinned first user task
+    expect(start).toBe(0); // the memo summarizes everything, incl. earlier user turns
     expect(end).toBe(convo.length - COMPACT_TAIL_TURNS); // before the recent tail
     expect(start).toBeLessThan(end);
   });
 
-  it('does not pin the first user turn when it already lives inside the tail', () => {
+  it('does not re-inject the directive when the latest user turn already lives in the tail', () => {
     const convo = [msg('user', 'task'), msg('assistant'), msg('user', 'later')];
+    // Latest user turn ('later') is inside the tail → nothing to re-inject.
+    expect(pinnedDirectiveIndex(convo, COMPACT_TAIL_TURNS)).toBe(-1);
     const out = assembleCompacted('SYS', convo, 'MEMO', COMPACT_TAIL_TURNS);
-    // Short convo: whole thing is the tail, so no separate pinned-task duplication.
-    expect(out.filter((m) => m.content === 'task')).toHaveLength(1);
+    expect(out.filter((m) => m.content === 'later')).toHaveLength(1);
   });
 });

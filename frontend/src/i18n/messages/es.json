@@ -5526,6 +5526,7 @@
       "none": "Aún no hay tickets vinculados.",
       "ringAria": "{label}: {pct}% completado",
       "spawned": "creado aquí",
+      "open": "Abrir",
       "run": "Ejecutar el agente en el ticket",
       "lineage": "Linaje del chat",
       "unlink": "Desvincular",

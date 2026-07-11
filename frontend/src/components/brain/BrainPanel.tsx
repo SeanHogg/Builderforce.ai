@@ -396,6 +396,7 @@ export function BrainPanel({
     needsConfirm,
     ensureChatId,
     onActivity: chats.touch,
+    onFirstUserTurn: chats.autoTitle,
     evermind: gatedEvermind,
     augmentSystemPrompt,
   });

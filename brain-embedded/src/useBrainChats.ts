@@ -10,6 +10,27 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useBrainConfig } from './config';
 import type { BrainChat } from './types';
 
+/** The placeholder title `create()` stamps on an untitled chat. A chat still carrying
+ *  it has never been named, so {@link deriveChatTitle}-based auto-titling may replace it
+ *  (a user/seed-provided title never matches this and is left alone). */
+export const DEFAULT_CHAT_TITLE = 'New chat';
+
+/**
+ * Derive a short, human chat title from the first user message — "what the chat is
+ * about" — so a conversation stops showing as "New chat" the moment it starts. Pure and
+ * LLM-free (no cost, instant, deterministic): first non-empty line, whitespace
+ * collapsed, trimmed to ~60 chars on a word boundary. Returns '' when there's nothing
+ * usable (so the caller leaves the placeholder in place).
+ */
+export function deriveChatTitle(text: string): string {
+  const firstLine = (text.split('\n').find((l) => l.trim()) ?? '').replace(/\s+/g, ' ').trim();
+  if (!firstLine) return '';
+  if (firstLine.length <= 60) return firstLine;
+  const cut = firstLine.slice(0, 60);
+  const lastSpace = cut.lastIndexOf(' ');
+  return `${(lastSpace > 30 ? cut.slice(0, lastSpace) : cut).trim()}…`;
+}
+
 export interface UseBrainChatsOptions {
   /** Dropdown filter — id string, 'none', or null (all). Ignored when `pinnedProjectId` is set. */
   filterProjectId?: string | null;
@@ -37,6 +58,13 @@ export interface UseBrainChats {
   /** Create a chat (defaults project to the active filter/pin) and select it. */
   create(opts?: { title?: string; projectId?: number | null }): Promise<BrainChat | null>;
   rename(id: number, title: string): Promise<void>;
+  /**
+   * Auto-name a still-untitled chat (title === {@link DEFAULT_CHAT_TITLE}) from its
+   * first user message, so "New chat" becomes the topic once the conversation begins.
+   * No-op when the chat was already given a real title (user rename / task seed), so it
+   * never clobbers an intentional name. Wired to the conversation's first-turn hook.
+   */
+  autoTitle(id: number, firstUserText: string): Promise<void>;
   summarize(id: number): Promise<void>;
   remove(id: number): Promise<void>;
   assignToProject(id: number, projectId: number | null): Promise<void>;
@@ -53,6 +81,13 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
   const [error, setError] = useState('');
   const [internalActiveId, setInternalActiveId] = useState<number | null>(null);
   const assigningRef = useRef(false);
+  // Latest chats in a ref so `autoTitle` can read the current title without a stale
+  // closure (and without re-creating the callback on every list change).
+  const chatsRef = useRef<BrainChat[]>(chats);
+  chatsRef.current = chats;
+  // Chats we've already auto-titled this session — a single-flight guard so the
+  // first-turn hook firing twice (e.g. StrictMode / rapid re-render) can't double-rename.
+  const autoTitledRef = useRef<Set<number>>(new Set());
 
   // Controlled when the caller passes `activeChatId` (even null); otherwise the
   // hook owns the selection. Either way `setActiveChatId` is the single mutation
@@ -147,6 +182,23 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
     }
   }, [persistence]);
 
+  const autoTitle = useCallback(async (id: number, firstUserText: string) => {
+    if (autoTitledRef.current.has(id)) return;
+    const chat = chatsRef.current.find((c) => c.id === id);
+    // Only replace the untitled placeholder — never an intentional user/seed title.
+    if (chat && chat.title && chat.title !== DEFAULT_CHAT_TITLE) return;
+    const title = deriveChatTitle(firstUserText);
+    if (!title) return;
+    autoTitledRef.current.add(id);
+    try {
+      const updated = await persistence.updateChat(id, { title });
+      setChats((prev) => prev.map((c) => (c.id === id ? { ...c, title: updated.title } : c)));
+    } catch {
+      // Best-effort — a failed auto-title just leaves the placeholder; allow a retry.
+      autoTitledRef.current.delete(id);
+    }
+  }, [persistence]);
+
   const summarize = useCallback(async (id: number) => {
     setError('');
     try {
@@ -209,6 +261,7 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
     select,
     create,
     rename,
+    autoTitle,
     summarize,
     remove,
     assignToProject,

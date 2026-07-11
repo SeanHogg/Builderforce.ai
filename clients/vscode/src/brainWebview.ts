@@ -2,7 +2,8 @@ import * as vscode from "vscode";
 import { getTenantJwt, getCurrentUserId } from "./bfApi";
 import { TOOL_DEFS } from "./fileTools";
 import { contributeProjectEvermind } from "./evermindLearn";
-import { getBaseUrl, SECRET_KEY, fetchPersonalityBlock, fetchLimbicBlock } from "./gateway";
+import { getBaseUrl, getWebBaseUrl, SECRET_KEY, fetchPersonalityBlock, fetchLimbicBlock } from "./gateway";
+import { BoardPanel } from "./boardPanel";
 import { getGroundingSummary } from "./grounding";
 import { getEditorContext, watchEditorContext } from "./editorContext";
 import { resolveEffectiveModel } from "./modelState";
@@ -16,6 +17,11 @@ interface BrainInbound extends WebviewInbound {
   text?: string;
   prompt?: string;
   args?: Record<string, unknown>;
+  /** For `open.artifact`: the linked work item to reveal (kind = ChatTicketService
+   *  ticket kind; ref = task id as text or a UUID; projectId scopes the board). */
+  kind?: string;
+  ref?: string;
+  projectId?: number;
   /** For `runs.local`: chat ids the webview's agent loop is executing / paused on. */
   running?: number[];
   awaiting?: number[];
@@ -103,6 +109,10 @@ function buildLabels(): Record<string, string> {
     "app.forkHint": t("Summarize this chat and continue in a new one from that summary"),
     "app.forking": t("Forking…"),
     "app.forkTitle": t("Fork of {title}"),
+    // Per-chat project-Evermind memory switch
+    "app.memory": t("Memory"),
+    "app.memoryOnHint": t("Memory on — this chat recalls and learns from the project Evermind"),
+    "app.memoryOffHint": t("Memory off — this chat is a scratch space (no recall, no learning)"),
     "app.diagnostics": t("Run connection diagnostics"),
     "app.attachImage": t("Attach image"),
     "app.remove": t("Remove"),
@@ -236,6 +246,15 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
         await vscode.env.clipboard.writeText(typeof msg.text === "string" ? msg.text : "");
         void vscode.window.showInformationMessage(vscode.l10n.t("Chat transcript copied to clipboard."));
         break;
+      // Open a linked work item (clicked in the ChatTicketsPanel) in its own view:
+      // board tiers reveal the native BoardPanel when the item's project is active;
+      // strategy tiers + specs open the web portal to the surface they live on.
+      case "open.artifact":
+        this.openArtifact(
+          typeof msg.kind === "string" ? msg.kind : "",
+          typeof msg.projectId === "number" ? msg.projectId : undefined,
+        );
+        break;
       // Run the existing connection-diagnostics command (opens the output channel).
       case "diagnose":
         void vscode.commands.executeCommand("builderforce.diagnose");
@@ -276,6 +295,31 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
         break;
       }
     }
+  }
+
+  /**
+   * Reveal a linked work item the user opened from the ChatTicketsPanel. Board tiers
+   * (task/epic/gap) open the native BoardPanel when the item belongs to the active
+   * project (kept in-IDE); everything else — a different project's board, or the
+   * strategy tiers (objective/initiative/portfolio) + specs that only have a web
+   * surface — opens the web portal to the page the item lives on. Mirrors the web
+   * app's own onOpenTicket routing so "Open" behaves the same on both surfaces.
+   */
+  private openArtifact(kind: string, projectId?: number): void {
+    if ((kind === "task" || kind === "epic" || kind === "gap") && projectId != null) {
+      const sel = getSelectedProject();
+      if (sel && sel.id === projectId) {
+        BoardPanel.open(this.ctx, sel.id, sel.name);
+        return;
+      }
+    }
+    const path =
+      kind === "objective" || kind === "initiative" || kind === "portfolio"
+        ? "/projects?tab=portfolio"
+        : projectId != null
+          ? `/projects?tab=tasks&project=${projectId}`
+          : "/projects?tab=tasks";
+    void vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}${path}`));
   }
 
   /**

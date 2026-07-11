@@ -5526,6 +5526,7 @@
       "none": "Aucun ticket lié pour l’instant.",
       "ringAria": "{label} : {pct}% terminé",
       "spawned": "créé ici",
+      "open": "Ouvrir",
       "run": "Exécuter l’agent sur le ticket",
       "lineage": "Lignée du chat",
       "unlink": "Dissocier",

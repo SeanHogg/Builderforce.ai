@@ -567,6 +567,18 @@ declare function useBrainContext(): BrainContextValue;
  */
 declare function useOptionalBrainContext(): BrainContextValue | null;
 
+/** The placeholder title `create()` stamps on an untitled chat. A chat still carrying
+ *  it has never been named, so {@link deriveChatTitle}-based auto-titling may replace it
+ *  (a user/seed-provided title never matches this and is left alone). */
+declare const DEFAULT_CHAT_TITLE = "New chat";
+/**
+ * Derive a short, human chat title from the first user message — "what the chat is
+ * about" — so a conversation stops showing as "New chat" the moment it starts. Pure and
+ * LLM-free (no cost, instant, deterministic): first non-empty line, whitespace
+ * collapsed, trimmed to ~60 chars on a word boundary. Returns '' when there's nothing
+ * usable (so the caller leaves the placeholder in place).
+ */
+declare function deriveChatTitle(text: string): string;
 interface UseBrainChatsOptions {
     /** Dropdown filter — id string, 'none', or null (all). Ignored when `pinnedProjectId` is set. */
     filterProjectId?: string | null;
@@ -596,6 +608,13 @@ interface UseBrainChats {
         projectId?: number | null;
     }): Promise<BrainChat | null>;
     rename(id: number, title: string): Promise<void>;
+    /**
+     * Auto-name a still-untitled chat (title === {@link DEFAULT_CHAT_TITLE}) from its
+     * first user message, so "New chat" becomes the topic once the conversation begins.
+     * No-op when the chat was already given a real title (user rename / task seed), so it
+     * never clobbers an intentional name. Wired to the conversation's first-turn hook.
+     */
+    autoTitle(id: number, firstUserText: string): Promise<void>;
     summarize(id: number): Promise<void>;
     remove(id: number): Promise<void>;
     assignToProject(id: number, projectId: number | null): Promise<void>;
@@ -953,6 +972,13 @@ interface UseBrainConversationOptions {
     /** Notify the host (chats hook) that this chat got new activity. */
     onActivity?: (chatId: number) => void;
     /**
+     * Fired once when the FIRST user turn of a chat is persisted, with that turn's text —
+     * the seam the host uses to auto-name a still-"New chat" conversation from what it's
+     * about (wired to `useBrainChats.autoTitle`). Best-effort and idempotent on the host
+     * side; omit to leave chats untitled.
+     */
+    onFirstUserTurn?: (chatId: number, text: string) => void;
+    /**
      * Project-Evermind memory hooks, bound by the host to the active chat's project.
      * When set, a run recalls the project's learned memories before answering
      * (grounding the reply) and records recall/learn/reconcile steps in the trace.
@@ -1261,6 +1287,23 @@ declare const TICKET_RECORDING_TOOLS: ReadonlySet<string>;
  */
 declare const CODE_CHANGE_TOOLS: ReadonlySet<string>;
 declare function isCodeChangeTool(name: string): boolean;
+/** A work item a create tool just produced, in the shape `builtin_chats_link_ticket`
+ *  wants: which tier it is, its ref, and whether it was newly created vs. an
+ *  idempotent hit on a pre-existing item (so the link records the honest lineage). */
+interface CreatedWorkItemLink {
+    kind: string;
+    ref: string;
+    linkType: 'created' | 'linked';
+}
+/**
+ * Derive the chat-link descriptor for the result of a work-item CREATE tool, or null
+ * when the tool is not a create (or the result carries no usable id). This is what
+ * makes "an item the Brain creates is always tied to the conversation" DETERMINISTIC:
+ * the run loop fires `builtin_chats_link_ticket` off this instead of hoping the model
+ * remembers to. An idempotent-hit result (`{ deduped: true, … }`) links as 'linked'
+ * (the item already existed) rather than 'created'.
+ */
+declare function workItemLinkFromCreate(toolName: string, result: unknown): CreatedWorkItemLink | null;
 declare function isTicketRecordingTool(name: string): boolean;
 /** The workspace-relative path a code-change tool touched (for delta provenance),
  *  or null when the args carry no usable `path`. */
@@ -1392,4 +1435,4 @@ declare function parseMessageProvenance(msg: {
  */
 declare function withProvenanceMetadata(provenance: MessageProvenance | null | undefined, base?: Record<string, unknown>): string | undefined;
 
-export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type EvermindLearnOutcome, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type McpToolResultInfo, type MentionToken, type MessageProvenance, PROVENANCE_META_KEY, type PreparedImage, type ProvenanceAccount, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, accountUsedInTrace, activeMentionToken, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, chatWorkLinkingDirective, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, filterMentionCandidates, formatBrainDiagnostics, formatBrainProvenance, formatEvermindMemoryBlock, getGlobalRunState, getRunSnapshot, getRunTrace, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, mentionRecipient, modelsUsedInTrace, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, prepareImageDataUrl, resolveRecipient, resolveRunConfirm, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, startRun, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata };
+export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type EvermindLearnOutcome, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type McpToolResultInfo, type MentionToken, type MessageProvenance, PROVENANCE_META_KEY, type PreparedImage, type ProvenanceAccount, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, accountUsedInTrace, activeMentionToken, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, chatWorkLinkingDirective, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, filterMentionCandidates, formatBrainDiagnostics, formatBrainProvenance, formatEvermindMemoryBlock, getGlobalRunState, getRunSnapshot, getRunTrace, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, mentionRecipient, modelsUsedInTrace, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, prepareImageDataUrl, resolveRecipient, resolveRunConfirm, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, startRun, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };

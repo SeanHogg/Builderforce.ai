@@ -2,7 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
-## [2026.7.60] — Chat work always becomes a linked ticket (every chat surface)
+## [2026.7.62] — Open any item the chat created, and it stays linked automatically
+
+- **Every task, epic, OKR, or spec the chat creates is now one click from its board card.** The linked-work strip under the chat header now shows each item as a clickable "Open" link (with a ↗ button) — click it to jump straight to the board it lives on. No more hunting for the thing the assistant just made.
+- **Items the chat creates now link back to the conversation on their own.** Previously, when the assistant created work through its tools, the link back to the chat depended on it remembering a follow-up step — so items sometimes landed on the board orphaned from the conversation that produced them. Now every item the chat creates is tied to that conversation automatically, so the "who asked for this and why" trail is always intact.
+- **Fixed: the assistant no longer runs out of room mid-task on projects with many specs.** Listing your PRDs pulled in every document's full text at once, which could fill the assistant's working memory and leave a multi-step job (like re-linking objectives to epics) half-finished. It now pulls a lightweight index and reads a document in full only when it needs it, so longer planning sessions finish what they start.
 
 - **What you fix or plan in chat now lands on the board, tied to the conversation.** The chat assistant now knows which conversation it is in, so when its investigation concludes that something needs doing — a bug, a gap, a follow-up — it creates the work item and links it back to this chat, instead of only describing it. And when the assistant changes code, that change is recorded as a ticket linked to the chat (it opens in review and completes automatically once the change ships). If a turn edits code but doesn't record a ticket itself, the extension mints one for you, so an edit is never invisible or unlinked. Every item is traceable from the chat that produced it.
 - **Now covers the native `@builderforce` chat too.** The native chat participant previously had no conversation of its own, so its work couldn't be linked back. Each `@builderforce` session now gets its own Brain conversation (created on the first message, reused for the rest of the session, and persisted so you can reopen it), and the same "work becomes a linked ticket" guarantee applies there as in the sidebar Brain.

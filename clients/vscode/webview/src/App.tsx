@@ -14,6 +14,8 @@ import {
   subscribeRunStore,
   getGlobalRunState,
   parseByoUnresolved,
+  deriveChatTitle,
+  DEFAULT_CHAT_TITLE,
   type BrainConfig,
   type BrainChat,
   type DirectedRecipient,
@@ -58,6 +60,13 @@ import { buildTranscript, hasTranscriptContent } from './transcript';
 function makeT(labels: LabelBundle) {
   return (key: string, fallback: string): string => labels[key] ?? fallback;
 }
+
+/**
+ * Per-chat memory switch storage key (parity with the web Brain's `MEMORY_KEY`).
+ * '0' = off; anything else (or absent) = on. Keyed by chat id so the choice sticks
+ * per chat across reloads.
+ */
+const MEMORY_KEY = (chatId: number) => `bf_brain_memory:${chatId}`;
 
 /** The subset of the host bundle the shared <BrainTimeline> consumes. */
 function timelineLabels(labels: LabelBundle): Partial<BrainTimelineLabels> {
@@ -170,6 +179,10 @@ const IconConsolidate = () => (
 /* Fork = branch the conversation into a new one (git-branch glyph). */
 const IconFork = () => (
   <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="4" cy="3.5" r="1.5" fill="currentColor" /><circle cx="4" cy="12.5" r="1.5" fill="currentColor" /><circle cx="12" cy="3.5" r="1.5" fill="currentColor" /><path d="M4 5v6M4 8h4.5A3.5 3.5 0 0 0 12 4.5V5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+);
+/* Memory = brain glyph for the per-chat project-Evermind recall/learn switch. */
+const IconBrain = () => (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 2.5a2 2 0 0 0-2 2 2 2 0 0 0-1 3.5 2 2 0 0 0 1 3.5 2 2 0 0 0 2 2V2.5zM10 2.5a2 2 0 0 1 2 2 2 2 0 0 1 1 3.5 2 2 0 0 1-1 3.5 2 2 0 0 1-2 2V2.5z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" /><path d="M8 2.5v11" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" /></svg>
 );
 /* Rename = pencil glyph for editing the selected chat's title. */
 const IconRename = () => (
@@ -427,6 +440,27 @@ function Chat({ init }: { init: InitData }) {
   }, [persistence, init.project?.id]);
   useEffect(() => { reloadChats(); }, [reloadChats]);
 
+  // Auto-name a still-untitled chat from its first user message, so the dropdown +
+  // Sessions tree stop showing "New chat". The VSIX manages its own chat list (it does
+  // not use the shared useBrainChats), so it runs the SAME shared `deriveChatTitle`
+  // helper here. Single-flight per chat; only replaces the placeholder (English default
+  // OR the localized "New chat" ensureChatId seeds) — never an intentional/ticket title.
+  const chatsRef = useRef<BrainChat[]>(chats);
+  chatsRef.current = chats;
+  const autoTitledRef = useRef<Set<number>>(new Set());
+  const autoTitleChat = useCallback((id: number, firstUserText: string) => {
+    if (autoTitledRef.current.has(id)) return;
+    const chat = chatsRef.current.find((c) => c.id === id);
+    const localizedDefault = t('app.newChat', 'New chat');
+    if (chat && chat.title && chat.title !== DEFAULT_CHAT_TITLE && chat.title !== localizedDefault) return;
+    const title = deriveChatTitle(firstUserText);
+    if (!title) return;
+    autoTitledRef.current.add(id);
+    persistence.updateChat(id, { title })
+      .then(() => reloadChats())
+      .catch(() => { autoTitledRef.current.delete(id); });
+  }, [persistence, reloadChats, t]);
+
   // The open chat may not be in the project-filtered list — e.g. it belongs to
   // another project, or was just created for a task scoped elsewhere. Fetch it so
   // the dropdown still shows + keeps it selected instead of going blank.
@@ -550,6 +584,27 @@ function Chat({ init }: { init: InitData }) {
     };
   }, [evermindProjectId, init.baseUrl]);
 
+  // Per-chat memory switch: whether THIS chat passes the project-Evermind hooks
+  // (recall before answering + the learn contribution when the run finishes).
+  // Default ON; persisted per-chat in localStorage so it sticks across reloads.
+  // Turning it off makes the chat a scratch space that neither recalls from nor
+  // writes back to the project's learned memory. (Web BrainPanel parity.)
+  const [memoryEnabled, setMemoryEnabled] = useState(true);
+  useEffect(() => {
+    if (chatId == null) { setMemoryEnabled(true); return; }
+    try {
+      const v = window.localStorage.getItem(MEMORY_KEY(chatId));
+      setMemoryEnabled(v == null ? true : v !== '0');
+    } catch { setMemoryEnabled(true); }
+  }, [chatId]);
+  const toggleMemory = useCallback((on: boolean) => {
+    setMemoryEnabled(on);
+    if (chatId == null) return;
+    try { window.localStorage.setItem(MEMORY_KEY(chatId), on ? '1' : '0'); } catch { /* storage blocked */ }
+  }, [chatId]);
+  // Gate the recall hook on the per-chat switch — off ⇒ no recall this chat.
+  const gatedEvermind = memoryEnabled ? evermind : undefined;
+
   const conv = useBrainConversation({
     chatId,
     modality: 'ide',
@@ -565,7 +620,8 @@ function Chat({ init }: { init: InitData }) {
     needsConfirm,
     ensureChatId,
     onActivity: reloadChats,
-    evermind,
+    onFirstUserTurn: autoTitleChat,
+    evermind: gatedEvermind,
   });
 
   // Trace rehydrate (parity with the web app): on chat open, load the persisted
@@ -730,7 +786,9 @@ function Chat({ init }: { init: InitData }) {
   useEffect(() => {
     if (prevSending.current && !conv.sending
       && hasTranscriptContent({ messages: conv.messages, trace: conv.trace, error: conv.error })) {
-      post('run.complete', {
+      // Only feed the project-Evermind when this chat's memory switch is on — an
+      // off chat neither recalls (gated above) nor contributes learnings back.
+      if (memoryEnabled) post('run.complete', {
         text: buildTranscript({
           messages: conv.messages,
           trace: conv.trace,
@@ -764,7 +822,7 @@ function Chat({ init }: { init: InitData }) {
       }
     }
     prevSending.current = conv.sending;
-  }, [conv.sending, conv.messages, conv.trace, conv.error, init.model, chatId, apiReq]);
+  }, [conv.sending, conv.messages, conv.trace, conv.error, init.model, chatId, apiReq, memoryEnabled]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachFiles = useCallback((files: FileList | File[] | null) => {
@@ -1085,6 +1143,7 @@ function Chat({ init }: { init: InitData }) {
             refreshSignal={ticketRefresh}
             visibility={chatVisibility}
             onSetVisibility={chatIsOwner ? async (v) => { await persistence.updateChat(chatId, { visibility: v }); setChatVisibility(v); } : undefined}
+            onOpenTicket={(tk) => post('open.artifact', { kind: tk.kind, ref: tk.ref, projectId: init.project?.id ?? undefined })}
           />
         </div>
       )}
@@ -1351,6 +1410,25 @@ function Chat({ init }: { init: InitData }) {
           </button>
 
           <div className="bf-header__spacer" />
+
+          {/* Per-chat memory switch — when off, this chat neither recalls from nor
+              contributes back to the project's Evermind (web BrainPanel parity).
+              Only shown when there's a project Evermind to gate. */}
+          {evermindProjectId != null && (
+            <button
+              type="button"
+              className={`bf-toggle${memoryEnabled ? ' is-on' : ''}`}
+              title={memoryEnabled
+                ? t('app.memoryOnHint', 'Memory on — this chat recalls and learns from the project Evermind')
+                : t('app.memoryOffHint', 'Memory off — this chat is a scratch space (no recall, no learning)')}
+              aria-label={t('app.memory', 'Memory')}
+              aria-pressed={memoryEnabled}
+              onClick={() => toggleMemory(!memoryEnabled)}
+            >
+              <IconBrain />
+              <span>{t('app.memory', 'Memory')}</span>
+            </button>
+          )}
 
           {/* Evermind posture for the active project — parity with the web Brain
               composer. Self-gates (renders nothing until a seeded Evermind). */}

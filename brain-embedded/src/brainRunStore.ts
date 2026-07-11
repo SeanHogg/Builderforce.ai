@@ -37,7 +37,7 @@ import type {
 } from './streamChatCompletion';
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
 import { withProvenanceMetadata, type ProvenanceAccount } from './provenance';
-import { chatWorkLinkingDirective, isCodeChangeTool, isTicketRecordingTool, codeChangeFile } from './chatWorkLinking';
+import { chatWorkLinkingDirective, isCodeChangeTool, isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate } from './chatWorkLinking';
 import {
   formatEvermindMemoryBlock,
   countReconciledMemories,
@@ -579,21 +579,43 @@ export function compactTailStart(convo: ChatCompletionMessage[], tailTurns: numb
   return start;
 }
 
-/** The middle span [start,end) to summarize: everything between the pinned first
- *  user task (kept verbatim as the run anchor) and the recent tail. Pure/testable. */
-export function compactMiddleRange(convo: ChatCompletionMessage[], tailTurns: number): { start: number; end: number } {
+/**
+ * Index of the MOST RECENT user turn to re-inject verbatim ahead of the tail — the
+ * ACTIVE directive — or -1 when the latest user turn is already inside the tail (so it
+ * needs no re-injection). This is the fix for the "reverts to the opening request"
+ * failure: compaction used to pin the FIRST user turn as the run anchor, so in a chat
+ * with several successive instructions the model kept re-anchoring on the stale
+ * opening message (chat #55: it re-ran the initial "self-diagnostic" and abandoned the
+ * live "create the gap and fix the code" order — twice). The current instruction is
+ * always the LATEST user turn, never the first, so that is what must survive verbatim.
+ * Pure/testable.
+ */
+export function pinnedDirectiveIndex(convo: ChatCompletionMessage[], tailTurns: number): number {
   const tailStart = compactTailStart(convo, tailTurns);
-  const firstUserIdx = convo.findIndex((m) => m.role === 'user');
-  const start = firstUserIdx >= 0 && firstUserIdx < tailStart ? firstUserIdx + 1 : 0;
-  return { start, end: tailStart };
+  const lastUser = convo.map((m) => m.role).lastIndexOf('user');
+  return lastUser >= 0 && lastUser < tailStart ? lastUser : -1;
+}
+
+/** The middle span [start,end) to summarize: the whole history before the recent tail.
+ *  Every earlier user turn is captured in the memo (in prose); the LATEST directive is
+ *  additionally re-injected verbatim by {@link assembleCompacted}, so anchoring never
+ *  drifts to a stale opening request. Pure/testable. */
+export function compactMiddleRange(convo: ChatCompletionMessage[], tailTurns: number): { start: number; end: number } {
+  return { start: 0, end: compactTailStart(convo, tailTurns) };
 }
 
 /**
- * Assemble the working transcript from a compressed-memory `note`: system + the
- * pinned first user task (run anchor) + the memory note + the recent tail (verbatim,
- * tool-pairing safe via {@link compactTailStart}). Pure so partitioning is unit-
- * tested; the note text comes from the async summarizer. Mirrors the cloud
- * compactMessages layout (pinned head → single assistant memory → recent tail).
+ * Assemble the working transcript from a compressed-memory `note`: system + the memory
+ * note + the ACTIVE user directive re-injected verbatim (the most recent user turn,
+ * when it fell outside the tail) + the recent tail (verbatim, tool-pairing safe via
+ * {@link compactTailStart}). Pure so partitioning is unit-tested; the note text comes
+ * from the async summarizer.
+ *
+ * The directive sits immediately before the tail — the most-recent pre-tail position —
+ * so the model reads it as the CURRENT instruction, not a stale opening task the memo
+ * also mentions. Pinning the FIRST user turn here (the previous behavior) is exactly
+ * what made a multi-instruction chat revert to its opening request and ignore the live
+ * order.
  */
 export function assembleCompacted(
   systemPrompt: string,
@@ -602,10 +624,10 @@ export function assembleCompacted(
   tailTurns: number,
 ): ChatCompletionMessage[] {
   const tailStart = compactTailStart(convo, tailTurns);
-  const firstUserIdx = convo.findIndex((m) => m.role === 'user');
   const out: ChatCompletionMessage[] = [{ role: 'system', content: systemPrompt }];
-  if (firstUserIdx >= 0 && firstUserIdx < tailStart) out.push(convo[firstUserIdx]!);
   out.push({ role: 'assistant', content: note });
+  const directiveIdx = pinnedDirectiveIndex(convo, tailTurns);
+  if (directiveIdx >= 0) out.push(convo[directiveIdx]!);
   out.push(...convo.slice(tailStart));
   return out;
 }
@@ -639,7 +661,7 @@ async function summarizeMiddle(
         {
           role: 'system',
           content:
-            'You compress an in-progress AI agent transcript into a concise MEMORY the agent keeps working from. Capture: the task, concrete facts/answers discovered, tool results that matter (ids, paths, values), decisions made, and what still remains to do. Be information-dense; drop pleasantries. No preamble.',
+            'You compress an in-progress AI agent transcript into a concise MEMORY the agent keeps working from. Capture: the CURRENT outstanding instruction from the user (the most recent user message is authoritative — earlier requests it supersedes are history, not the active task), concrete facts/answers discovered, tool results that matter (ids, paths, values), decisions made, and what still remains to do. Be information-dense; drop pleasantries. No preamble.',
         },
         { role: 'user', content: renderForSummary(msgs) },
       ],
@@ -915,6 +937,50 @@ async function recordCodeChangeTicket(chatId: number, c: RunCell, req: BrainRunR
 }
 
 /**
+ * Deterministic chat↔work link for an item a create tool just produced. If `out` is
+ * the result of a recognised create tool (see {@link workItemLinkFromCreate}), fire
+ * the shared `builtin_chats_link_ticket` tool — via the run's own dispatcher so it
+ * rides the same gateway MCP relay the model uses — so the new Epic / task / OKR /
+ * spec is tied to this conversation for traceability. Idempotent (re-linking is a
+ * no-op update), best-effort (never fails the run), and recorded as a durable step so
+ * the auto-link is visible on the timeline. Marks the run as having recorded a ticket
+ * so the from_delta backstop stays quiet.
+ */
+async function autoLinkCreatedItem(
+  chatId: number,
+  c: RunCell,
+  persistence: BrainRunPersistence,
+  runTool: (name: string, args: unknown) => Promise<unknown>,
+  toolName: string,
+  out: unknown,
+): Promise<void> {
+  const link = workItemLinkFromCreate(toolName, out);
+  if (!link) return;
+  const toolStart = nowMs();
+  let result: unknown;
+  try {
+    result = await runTool('builtin_chats_link_ticket', {
+      chatId,
+      kind: link.kind,
+      ref: link.ref,
+      linkType: link.linkType,
+    });
+  } catch (e) {
+    result = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  if (!isFailedToolResult(result)) c.ticketRecorded = true;
+  pushDurableStep(c, chatId, persistence, {
+    ts: nowIso(),
+    category: 'tool',
+    label: 'builtin_chats_link_ticket',
+    durationMs: nowMs() - toolStart,
+    args: { chatId, kind: link.kind, ref: link.ref, linkType: link.linkType, auto: true },
+    result: result ?? null,
+    isError: isFailedToolResult(result),
+  });
+}
+
+/**
  * Framework-free entry point for the Brain agent loop — a documented alias of
  * {@link startRun}. A non-React host (e.g. the native VS Code chat participant)
  * drives a run by calling `runBrainLoop(chatId, req)` and observing it with
@@ -1158,6 +1224,13 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           if (f && !c.touchedFiles.includes(f)) c.touchedFiles.push(f);
         }
         if (isTicketRecordingTool(tc.name)) c.ticketRecorded = true;
+        // Deterministic traceability: whenever this turn CREATED a work item via an
+        // MCP create tool (task/epic/gap, objective, spec, portfolio, initiative),
+        // tie it to THIS conversation right now — instead of relying on the model to
+        // remember the advisory builtin_chats_link_ticket call (which it often skips,
+        // leaving the item created but orphaned from the chat). Fires the same shared
+        // link tool the model would, tied to the run's resolved chatId.
+        if (runTool) await autoLinkCreatedItem(chatId, c, persistence, runTool, tc.name, out);
         // The MODEL transcript gets a size-capped copy so a big list result can't
         // flood the context window; the TRACE keeps the full result (bounded by
         // MAX_TRACE_EVENTS) for the timeline + triage copy, plus the pre-trim byte
