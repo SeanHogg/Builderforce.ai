@@ -133,6 +133,18 @@
     codebase scan/knowledge → learned routing). Out of scope: Visual Studio (C#/VSIX) and JetBrains —
     same backend, separate clients.
 
+15. **[15 — Resource Estimation: Human & AI Capacity Analysis](./15-resource-estimation.md)**
+    A **one-time capacity deliverable** (refresh per-sprint) that maps the remaining multi-project
+    backlog to the team of **1 human (Sean) + 4 cloud agents (Kevin BA/PM, Mike QA, Bob Developer,
+    John Coder)**. Inventories every open task across all active projects with a story-point estimate
+    (~196 SP), sizes the **50 cloud-agent validation gaps** (doc 09) as a standalone 42-SP workstream
+    (17 P0 / 22 P1 / 11 P2), computes per-agent utilization + idle/overload risk, identifies the
+    bottlenecks (🔴 human-review funnel blocks 48% of backlog; 🟡 no agent covers cloud security/infra
+    GAP-G*; 🟡 Dev→QA handoff serialization), and models **Scenario A (status quo, ~64–78 days)** vs.
+    **Scenario B (+2 agents, ~38–48 days, −37–41%)**. Concludes: **yes — add 1 infra/security agent
+    + 1 generalist coder**, reduce Sean's review load by delegation, and lists the top-3 next-sprint
+    actions. Reads doc 09 for the gap source-of-truth.
+
 > **Decision log.** PM + Agile = Phase 1 (BuilderForce owns data, autonomous dev agents, thin
 > embed shells, Tenant→Segment isolation with BurnRateOS as IdP). Security/Governance = Phase 2
 > (doc 07), same model. DSR/suppression re-home per-Segment; BurnRateOS keeps its own
