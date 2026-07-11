@@ -289,7 +289,8 @@
       "myDashboard": "Mein Dashboard",
       "myWorkspace": "Mein Bereich",
       "marketplace": "Marktplatz",
-      "incidents": "Vorfälle"
+      "incidents": "Vorfälle",
+      "monitoring": "Überwachung"
     },
     "tab": {
       "projects": "Projekte",
@@ -362,7 +363,9 @@
       "incidents": "Vorfälle",
       "oncall": "Bereitschaft",
       "escalation": "Eskalation",
-      "contacts": "Kontakte"
+      "contacts": "Kontakte",
+      "boards": "Boards",
+      "reporting": "Berichte"
     }
   },
   "alerts": {
@@ -645,6 +648,34 @@
     }
   },
   "ide": {
+    "modalityProject": "{label}-Projekt",
+    "modality": {
+      "designer": {
+        "label": "Designer",
+        "tagline": "Generiere und baue Apps mit Vorschau, Code und einem Live-Dev-Server.",
+        "runLabel": "Ausführen"
+      },
+      "video": {
+        "label": "Video",
+        "tagline": "Erzeuge kurze Videos clientseitig auf deiner eigenen GPU per Diffusion.",
+        "runLabel": "Ausführen"
+      },
+      "evermind": {
+        "label": "Evermind",
+        "tagline": "Lass ein lebendiges Evermind-Modell wachsen, das aus jedem Projekt lernt — bring ihm etwas bei und sieh zu, wie sich seine Wissenskarte füllt.",
+        "runLabel": "Ausführen"
+      },
+      "finetune": {
+        "label": "Feinabstimmung",
+        "tagline": "Entwirf Datensätze und trainiere ein eigenes LoRA-Modell, dann bewerte, veröffentliche und exportiere es.",
+        "runLabel": "Ausführen"
+      },
+      "voice": {
+        "label": "Stimme",
+        "tagline": "Klone und gestalte eine eigene Stimme und synthetisiere daraus Sprache.",
+        "runLabel": "Generieren"
+      }
+    },
     "all": "Alle",
     "filteredTo": "Gefiltert auf {name}",
     "clearProjectFilter": "Projektfilter zurücksetzen",
@@ -3315,13 +3346,7 @@
     "ide": {
       "builds": "Projekte",
       "buildsSub": "IDE-Projekte",
-      "noProjects": "Noch keine IDE-Projekte",
-      "modality": {
-        "designer": "Designer",
-        "video": "Video",
-        "llm": "LLM",
-        "voice": "Sprache"
-      }
+      "noProjects": "Noch keine IDE-Projekte"
     },
     "obs": {
       "noFirings": "Noch keine Auslösungen",
@@ -3574,7 +3599,10 @@
     "detailVersion": "Version",
     "detailWeight": "Gewicht",
     "detailWhen": "Wann",
-    "recallMethod": "{method, select, embedding {Semantischer Abruf} other {Lexikalischer Abruf (Fallback)}}"
+    "recallMethod": "{method, select, embedding {Semantischer Abruf} other {Lexikalischer Abruf (Fallback)}}",
+    "regDelta": "{pct}% vs. vorher",
+    "regFlat": "keine Änderung",
+    "regTooltip": "Regressionsprüfung für v{version}: Holdout-Verlust {base} → {next} über {size, plural, one {# frühere Aufgabe} other {# frühere Aufgaben}}."
   },
   "evermindStatus": {
     "label": "Evermind",
@@ -5926,7 +5954,10 @@
     "hideDetail": "Detail ausblenden",
     "detailPromptLabel": "Aufgabe",
     "detailTextLabel": "Gelernt",
-    "validateMethod": "{method, select, embedding {Semantischer Abruf} other {Lexikalischer Abruf (Fallback)}}"
+    "validateMethod": "{method, select, embedding {Semantischer Abruf} other {Lexikalischer Abruf (Fallback)}}",
+    "evalDelta": "{pct}% vs. vorher",
+    "evalFlat": "keine Änderung",
+    "evalTooltip": "Regressionsprüfung für v{version}: Holdout-Verlust {base} → {next} über {size, plural, one {# frühere Aufgabe} other {# frühere Aufgaben}}."
   },
   "topbar": {
     "cart": "Warenkorb",
@@ -5956,11 +5987,26 @@
     "type": {
       "label": "Manager-Rolle",
       "help": "Die Funktion des Managers — sie bestimmt, welche Arbeit er höher bewertet und priorisiert.",
-      "general": { "label": "Allgemeiner Manager", "description": "Domänenneutrale Backlog-Verwaltung über die gesamte Arbeit." },
-      "delivery": { "label": "Entwicklungsmanager", "description": "Liefert Funktionen — priorisiert Code-Arbeit, löst Abhängigkeiten auf und bringt Pull Requests zum Merge." },
-      "qa": { "label": "QA-Manager", "description": "Verantwortlich für Qualität — priorisiert Fehler, Abdeckungslücken, instabile Tests und releaseblockierende Bugs." },
-      "service_desk": { "label": "IT-Service-Desk-Manager", "description": "Leitet den Support — priorisiert Incidents und Anfragen zuerst nach SLA und Kundenauswirkung." },
-      "devops": { "label": "DevOps- / IT-Operations-Manager", "description": "Schützt die Zuverlässigkeit — priorisiert Deployments, Infrastruktur, Monitoring und Betriebsrisiko." }
+      "general": {
+        "label": "Allgemeiner Manager",
+        "description": "Domänenneutrale Backlog-Verwaltung über die gesamte Arbeit."
+      },
+      "delivery": {
+        "label": "Entwicklungsmanager",
+        "description": "Liefert Funktionen — priorisiert Code-Arbeit, löst Abhängigkeiten auf und bringt Pull Requests zum Merge."
+      },
+      "qa": {
+        "label": "QA-Manager",
+        "description": "Verantwortlich für Qualität — priorisiert Fehler, Abdeckungslücken, instabile Tests und releaseblockierende Bugs."
+      },
+      "service_desk": {
+        "label": "IT-Service-Desk-Manager",
+        "description": "Leitet den Support — priorisiert Incidents und Anfragen zuerst nach SLA und Kundenauswirkung."
+      },
+      "devops": {
+        "label": "DevOps- / IT-Operations-Manager",
+        "description": "Schützt die Zuverlässigkeit — priorisiert Deployments, Infrastruktur, Monitoring und Betriebsrisiko."
+      }
     },
     "coaching": {
       "title": "Den Manager coachen",
@@ -9113,5 +9159,110 @@
     "oncallSubtitle": "Bereitschaftsrotationen legen fest, wer bei einem Vorfall zuerst alarmiert wird.",
     "escalationSubtitle": "Eskalationsrichtlinien durchlaufen Ziele und Kanäle, bis jemand reagiert.",
     "contactsSubtitle": "Geschäftskontakte, die Sie während eines Vorfalls alarmieren oder eskalieren können."
+  },
+  "monitoring": {
+    "boardsTitle": "Aktive Überwachung",
+    "boardsSubtitle": "Laden Sie ein Architekturdiagramm hoch und platzieren Sie Monitor-Markierungen darauf. Wenn ein Monitor auslöst, wird automatisch ein Vorfall eröffnet.",
+    "reportingTitle": "Überwachungsbericht",
+    "reportingSubtitle": "Vorfall- und Monitor-Kennzahlen über alle Boards hinweg zusammengefasst.",
+    "loading": "Wird geladen…",
+    "needManager": "Manager-Rolle erforderlich",
+    "boardNamePlaceholder": "Name des neuen Boards",
+    "newBoard": "Neues Board",
+    "emptyBoards": "Noch keine Überwachungs-Boards. Erstellen Sie eines, um zu beginnen.",
+    "monitorsCount": "{count} Monitore",
+    "breachedCount": "{count} ausgelöst",
+    "backToBoards": "Zurück zu den Boards",
+    "addMonitor": "Monitor hinzufügen",
+    "exitAddMode": "Abbrechen",
+    "addMonitorHint": "Klicken Sie auf eine Stelle im Diagramm, um dort einen neuen Monitor zu platzieren.",
+    "uploading": "Wird hochgeladen…",
+    "changeImage": "Bild ändern",
+    "uploadImage": "Diagramm hochladen",
+    "dropImageHint": "Zum Durchsuchen klicken oder ein Bild hierher ziehen",
+    "uploadFailed": "Hochladen fehlgeschlagen",
+    "deleteBoardConfirm": "Board „{name}“ und alle zugehörigen Monitore löschen?",
+    "newMonitor": "Neuer Monitor",
+    "editMonitor": "Monitor bearbeiten",
+    "validationLabel": "Eine Bezeichnung ist erforderlich",
+    "fieldLabel": "Bezeichnung",
+    "labelPlaceholder": "z. B. Zustand der Zahlungs-API",
+    "fieldDescription": "Beschreibung",
+    "fieldType": "Monitortyp",
+    "fieldIntervalSeconds": "Intervall (Sekunden)",
+    "fieldUrl": "URL",
+    "fieldExpectedStatus": "Erwarteter Status",
+    "fieldMetric": "Kennzahl",
+    "fieldComparator": "Vergleichsoperator",
+    "fieldThreshold": "Schwellenwert",
+    "fieldWindowDays": "Zeitfenster (Tage)",
+    "fieldSystem": "Betroffenes System",
+    "systemPlaceholder": "z. B. Zahlungen",
+    "fieldSeverity": "Schweregrad",
+    "fieldEscalation": "Eskalationsrichtlinie",
+    "noEscalation": "Keine",
+    "position": "Position",
+    "fieldActive": "Aktiv",
+    "signalUrlLabel": "Signal-Webhook-URL",
+    "signalUrlHint": "Externe Tools senden hier ein POST, um diesen Monitor zu signalisieren.",
+    "copy": "Kopieren",
+    "copied": "Kopiert",
+    "testSignal": "Testsignal",
+    "sendOk": "OK senden",
+    "sendBreach": "Auslösung senden",
+    "viewIncident": "Offenen Vorfall anzeigen",
+    "recentEvents": "Letzte Ereignisse",
+    "noEvents": "Noch keine Ereignisse",
+    "create": "Erstellen",
+    "deleteMonitorConfirm": "Monitor „{name}“ löschen?",
+    "noData": "Noch keine Daten",
+    "openIncidents": "Offene Vorfälle",
+    "totalIncidents": "{count} insgesamt",
+    "mttr": "MTTR",
+    "minutesValue": "{m} Min.",
+    "monitorsOk": "Monitore OK",
+    "monitorsBreached": "Ausgelöste Monitore",
+    "monitorsUnknown": "Unbekannte Monitore",
+    "monitorsTotal": "Monitore gesamt",
+    "bySeverity": "Vorfälle nach Schweregrad",
+    "bySystem": "Vorfälle nach System",
+    "bySource": "Vorfälle nach Quelle",
+    "uncategorized": "Nicht kategorisiert",
+    "noIncidents": "Keine Vorfälle",
+    "recentIncidents": "Letzte Vorfälle",
+    "na": "k. A.",
+    "status": {
+      "ok": "OK",
+      "breached": "Ausgelöst",
+      "unknown": "Unbekannt"
+    },
+    "severity": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "type": {
+      "heartbeat": "Heartbeat",
+      "http_check": "HTTP-Prüfung",
+      "webhook": "Webhook",
+      "metric_threshold": "Kennzahl-Schwellenwert",
+      "manual": "Manuell"
+    },
+    "metric": {
+      "token_spend_usd": "Token-Ausgaben (USD)",
+      "token_spend_pct_of_cap": "Token-Ausgaben (% des Limits)",
+      "cost_per_merged_pr_usd": "Kosten pro zusammengeführtem PR (USD)",
+      "dora_change_failure_rate": "Änderungsfehlerrate (DORA)",
+      "dora_lead_time_hours": "Vorlaufzeit (Stunden, DORA)",
+      "ai_effectiveness_score": "KI-Wirksamkeitswert",
+      "eval_drift": "Evaluierungsabweichung"
+    },
+    "comparator": {
+      "gt": "Größer als (>)",
+      "lt": "Kleiner als (<)",
+      "gte": "Mindestens (≥)",
+      "lte": "Höchstens (≤)"
+    }
   }
 }

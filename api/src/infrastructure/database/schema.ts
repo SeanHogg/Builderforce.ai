@@ -5514,6 +5514,74 @@ export const businessContacts = pgTable('business_contacts', {
   byTenant: index('idx_business_contacts_tenant').on(t.tenantId, t.name),
 }));
 
+// ---------------------------------------------------------------------------
+// Active monitoring: diagram boards + monitor pins + monitor history (migration 0329)
+// ---------------------------------------------------------------------------
+
+/** An uploaded diagram / architecture image the team overlays monitor pins on. The
+ *  image itself lives in R2 (via /api/brain/upload); we keep the key + dimensions. */
+export const monitoringBoards = pgTable('monitoring_boards', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  name:        varchar('name', { length: 255 }).notNull(),
+  imageKey:    varchar('image_key', { length: 512 }),   // R2 key
+  imageWidth:  integer('image_width'),
+  imageHeight: integer('image_height'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant: index('idx_monitoring_boards_tenant').on(t.tenantId),
+}));
+
+/** A monitor pinned on a board. pos_x/pos_y are 0..1 fractions of the image. A breach
+ *  opens an incident (current_incident_id) and pages on-call. */
+export const monitors = pgTable('monitors', {
+  id:                  uuid('id').primaryKey().defaultRandom(),
+  tenantId:            integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:           uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  boardId:             uuid('board_id').notNull().references(() => monitoringBoards.id, { onDelete: 'cascade' }),
+  projectId:           integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  label:               varchar('label', { length: 255 }).notNull(),
+  description:         text('description'),
+  posX:                real('pos_x').notNull().default(0.5),
+  posY:                real('pos_y').notNull().default(0.5),
+  monitorType:         varchar('monitor_type', { length: 20 }).notNull().default('webhook'), // heartbeat|http_check|webhook|metric_threshold|manual
+  config:              jsonb('config').notNull().default(sql`'{}'::jsonb`),
+  affectedSystem:      varchar('affected_system', { length: 120 }),
+  severity:            varchar('severity', { length: 16 }).notNull().default('sev3'),
+  escalationPolicyId:  uuid('escalation_policy_id'),
+  status:              varchar('status', { length: 16 }).notNull().default('unknown'), // ok|breached|unknown
+  consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+  lastSignalAt:        timestamp('last_signal_at'),
+  lastCheckedAt:       timestamp('last_checked_at'),
+  lastStatusChangeAt:  timestamp('last_status_change_at'),
+  currentIncidentId:   uuid('current_incident_id'),
+  webhookSecret:       varchar('webhook_secret', { length: 64 }),
+  active:              boolean('active').notNull().default(true),
+  createdAt:           timestamp('created_at').notNull().defaultNow(),
+  updatedAt:           timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byBoard:  index('idx_monitors_board').on(t.boardId),
+  byStatus: index('idx_monitors_tenant_status').on(t.tenantId, t.status),
+  byActive: index('idx_monitors_active').on(t.active, t.monitorType),
+}));
+
+/** A monitor's own signal/breach/recovery history (its incidents live in prodIncidents). */
+export const monitorEvents = pgTable('monitor_events', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  monitorId:  uuid('monitor_id').notNull().references(() => monitors.id, { onDelete: 'cascade' }),
+  kind:       varchar('kind', { length: 16 }).notNull().default('signal'), // signal|breach|recovery|check|error
+  status:     varchar('status', { length: 16 }),
+  message:    text('message'),
+  incidentId: uuid('incident_id'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byMonitor: index('idx_monitor_events_monitor').on(t.monitorId, t.createdAt),
+}));
+
 /** Append-only incident timeline + notification log (the war-room feed + paging
  *  audit). */
 export const incidentEvents = pgTable('incident_events', {

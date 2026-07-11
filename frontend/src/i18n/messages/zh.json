@@ -289,7 +289,8 @@
       "myDashboard": "我的仪表盘",
       "myWorkspace": "我的工作台",
       "marketplace": "市场",
-      "incidents": "事件"
+      "incidents": "事件",
+      "monitoring": "监控"
     },
     "tab": {
       "projects": "项目",
@@ -362,7 +363,9 @@
       "incidents": "事件",
       "oncall": "值班",
       "escalation": "升级",
-      "contacts": "联系人"
+      "contacts": "联系人",
+      "boards": "看板",
+      "reporting": "报告"
     }
   },
   "alerts": {
@@ -645,6 +648,34 @@
     }
   },
   "ide": {
+    "modalityProject": "{label} 项目",
+    "modality": {
+      "designer": {
+        "label": "设计器",
+        "tagline": "通过预览、代码和实时开发服务器生成并构建应用。",
+        "runLabel": "运行"
+      },
+      "video": {
+        "label": "视频",
+        "tagline": "通过扩散模型在你自己的 GPU 上于客户端生成短视频。",
+        "runLabel": "运行"
+      },
+      "evermind": {
+        "label": "Evermind",
+        "tagline": "培育一个会从每个项目中学习的鲜活 Evermind 模型——教导它，并看着它的知识图谱逐渐充实。",
+        "runLabel": "运行"
+      },
+      "finetune": {
+        "label": "微调",
+        "tagline": "设计数据集并训练自定义 LoRA 模型，然后进行基准测试、发布和导出。",
+        "runLabel": "运行"
+      },
+      "voice": {
+        "label": "语音",
+        "tagline": "克隆并设计自定义语音，然后用它合成语音。",
+        "runLabel": "生成"
+      }
+    },
     "all": "全部",
     "filteredTo": "已筛选至 {name}",
     "clearProjectFilter": "清除项目筛选",
@@ -3315,13 +3346,7 @@
     "ide": {
       "builds": "个构建",
       "buildsSub": "IDE 构建",
-      "noProjects": "暂无 IDE 构建",
-      "modality": {
-        "designer": "设计器",
-        "video": "视频",
-        "llm": "大模型",
-        "voice": "语音"
-      }
+      "noProjects": "暂无 IDE 构建"
     },
     "obs": {
       "noFirings": "暂无触发",
@@ -3574,7 +3599,10 @@
     "detailVersion": "版本",
     "detailWeight": "权重",
     "detailWhen": "时间",
-    "recallMethod": "{method, select, embedding {语义召回} other {词法召回（回退）}}"
+    "recallMethod": "{method, select, embedding {语义召回} other {词法召回（回退）}}",
+    "regDelta": "相比上版 {pct}%",
+    "regFlat": "无变化",
+    "regTooltip": "对 v{version} 的回归检查：在 {size, plural, other {# 个先前任务}} 上的留出损失 {base} → {next}。"
   },
   "evermindStatus": {
     "label": "Evermind",
@@ -5926,7 +5954,10 @@
     "hideDetail": "隐藏详情",
     "detailPromptLabel": "任务",
     "detailTextLabel": "已学内容",
-    "validateMethod": "{method, select, embedding {语义召回} other {词法召回（回退）}}"
+    "validateMethod": "{method, select, embedding {语义召回} other {词法召回（回退）}}",
+    "evalDelta": "相比上版 {pct}%",
+    "evalFlat": "无变化",
+    "evalTooltip": "对 v{version} 的回归检查：在 {size, plural, other {# 个先前任务}} 上的留出损失 {base} → {next}。"
   },
   "topbar": {
     "cart": "购物车",
@@ -5956,11 +5987,26 @@
     "type": {
       "label": "管理器角色",
       "help": "管理器的职能——决定它更看重和优先处理哪些工作。",
-      "general": { "label": "通用管理器", "description": "对所有工作进行领域中立的待办管理。" },
-      "delivery": { "label": "开发管理器", "description": "交付功能——优先处理代码工作、解除依赖阻塞，并推动合并请求合入。" },
-      "qa": { "label": "QA 管理器", "description": "负责质量——优先处理缺陷、覆盖率缺口、不稳定测试和阻塞发布的错误。" },
-      "service_desk": { "label": "IT 服务台管理器", "description": "运营支持——先按 SLA 和客户影响对事件和请求进行分级。" },
-      "devops": { "label": "DevOps / IT 运维管理器", "description": "守护可靠性——优先处理部署、基础设施、监控和运维风险。" }
+      "general": {
+        "label": "通用管理器",
+        "description": "对所有工作进行领域中立的待办管理。"
+      },
+      "delivery": {
+        "label": "开发管理器",
+        "description": "交付功能——优先处理代码工作、解除依赖阻塞，并推动合并请求合入。"
+      },
+      "qa": {
+        "label": "QA 管理器",
+        "description": "负责质量——优先处理缺陷、覆盖率缺口、不稳定测试和阻塞发布的错误。"
+      },
+      "service_desk": {
+        "label": "IT 服务台管理器",
+        "description": "运营支持——先按 SLA 和客户影响对事件和请求进行分级。"
+      },
+      "devops": {
+        "label": "DevOps / IT 运维管理器",
+        "description": "守护可靠性——优先处理部署、基础设施、监控和运维风险。"
+      }
     },
     "coaching": {
       "title": "指导管理器",
@@ -9113,5 +9159,110 @@
     "oncallSubtitle": "值班轮换决定当事件触发时最先呼叫谁。",
     "escalationSubtitle": "升级策略会依次通过各目标和渠道升级，直到有人响应。",
     "contactsSubtitle": "在事件期间可呼叫或升级至的业务联系人。"
+  },
+  "monitoring": {
+    "boardsTitle": "主动监控",
+    "boardsSubtitle": "上传架构图并在其上叠加监控标记。当某个监控触发告警时，会自动创建一个事故。",
+    "reportingTitle": "监控报告",
+    "reportingSubtitle": "汇总所有看板的事故与监控指标。",
+    "loading": "加载中…",
+    "needManager": "需要管理员角色",
+    "boardNamePlaceholder": "新看板名称",
+    "newBoard": "新建看板",
+    "emptyBoards": "暂无监控看板。创建一个以开始使用。",
+    "monitorsCount": "{count} 个监控",
+    "breachedCount": "{count} 个告警",
+    "backToBoards": "返回看板",
+    "addMonitor": "添加监控",
+    "exitAddMode": "取消",
+    "addMonitorHint": "在架构图上点击某处以在该位置放置新的监控。",
+    "uploading": "上传中…",
+    "changeImage": "更换图片",
+    "uploadImage": "上传架构图",
+    "dropImageHint": "点击浏览或将图片拖放到此处",
+    "uploadFailed": "上传失败",
+    "deleteBoardConfirm": "删除看板“{name}”及其所有监控？",
+    "newMonitor": "新建监控",
+    "editMonitor": "编辑监控",
+    "validationLabel": "标签为必填项",
+    "fieldLabel": "标签",
+    "labelPlaceholder": "例如：支付 API 健康状况",
+    "fieldDescription": "描述",
+    "fieldType": "监控类型",
+    "fieldIntervalSeconds": "间隔（秒）",
+    "fieldUrl": "URL",
+    "fieldExpectedStatus": "预期状态码",
+    "fieldMetric": "指标",
+    "fieldComparator": "比较符",
+    "fieldThreshold": "阈值",
+    "fieldWindowDays": "时间窗口（天）",
+    "fieldSystem": "受影响系统",
+    "systemPlaceholder": "例如：payments",
+    "fieldSeverity": "严重级别",
+    "fieldEscalation": "升级策略",
+    "noEscalation": "无",
+    "position": "位置",
+    "fieldActive": "启用",
+    "signalUrlLabel": "信号 Webhook URL",
+    "signalUrlHint": "外部工具向此地址 POST 以向该监控发送信号。",
+    "copy": "复制",
+    "copied": "已复制",
+    "testSignal": "测试信号",
+    "sendOk": "发送正常",
+    "sendBreach": "发送告警",
+    "viewIncident": "查看未解决事故",
+    "recentEvents": "近期事件",
+    "noEvents": "暂无事件",
+    "create": "创建",
+    "deleteMonitorConfirm": "删除监控“{name}”？",
+    "noData": "暂无数据",
+    "openIncidents": "未解决事故",
+    "totalIncidents": "共 {count} 个",
+    "mttr": "平均修复时间",
+    "minutesValue": "{m} 分钟",
+    "monitorsOk": "正常监控",
+    "monitorsBreached": "告警监控",
+    "monitorsUnknown": "未知监控",
+    "monitorsTotal": "监控总数",
+    "bySeverity": "按严重级别划分的事故",
+    "bySystem": "按系统划分的事故",
+    "bySource": "按来源划分的事故",
+    "uncategorized": "未分类",
+    "noIncidents": "无事故",
+    "recentIncidents": "近期事故",
+    "na": "不适用",
+    "status": {
+      "ok": "正常",
+      "breached": "告警",
+      "unknown": "未知"
+    },
+    "severity": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "type": {
+      "heartbeat": "心跳",
+      "http_check": "HTTP 检查",
+      "webhook": "Webhook",
+      "metric_threshold": "指标阈值",
+      "manual": "手动"
+    },
+    "metric": {
+      "token_spend_usd": "Token 花费（美元）",
+      "token_spend_pct_of_cap": "Token 花费（占上限百分比）",
+      "cost_per_merged_pr_usd": "每个合并 PR 成本（美元）",
+      "dora_change_failure_rate": "变更失败率（DORA）",
+      "dora_lead_time_hours": "交付周期（小时，DORA）",
+      "ai_effectiveness_score": "AI 有效性评分",
+      "eval_drift": "评估漂移"
+    },
+    "comparator": {
+      "gt": "大于（>）",
+      "lt": "小于（<）",
+      "gte": "不小于（≥）",
+      "lte": "不大于（≤）"
+    }
   }
 }

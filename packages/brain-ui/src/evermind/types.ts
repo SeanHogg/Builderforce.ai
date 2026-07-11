@@ -46,6 +46,18 @@ export interface EvermindValidateResult {
   method: 'embedding' | 'lexical';
 }
 
+/** The latest automatic pre/post regression check: the previous vs merged model scored
+ *  on the same held-out set of prior taught examples. `delta = baseLoss - newLoss`. */
+export interface EvermindEvalPoint {
+  version: number;
+  at: number;
+  baseLoss: number;
+  newLoss: number;
+  /** positive = improved / retained on prior tasks; negative = regressed. */
+  delta: number;
+  evalSize: number;
+}
+
 /** The head summary + live learning activity for a project's Evermind. */
 export interface EvermindConsoleData {
   version: number;
@@ -58,6 +70,8 @@ export interface EvermindConsoleData {
   /** Contributions queued but not yet merged (in the coordinator's debounce window). */
   pending: number;
   recent: EvermindRecentEntry[];
+  /** Latest automatic regression check (▲/▼ vs the previous version), or null. */
+  eval?: EvermindEvalPoint | null;
 }
 
 /** A published Studio Evermind model that can seed a project's learnable base. */
@@ -105,6 +119,10 @@ export interface EvermindConsoleLabels {
   // Status
   statusSeeded: (version: number) => string;
   statusUnseeded: string;
+  // Regression check (▲/▼ vs previous version)
+  evalDelta: (pct: string) => string;
+  evalFlat: string;
+  evalTooltip: (version: number, base: string, next: string, size: number) => string;
   // Seed (unseeded state)
   pickModelLabel: string;
   noModels: string;
@@ -201,6 +219,9 @@ export const DEFAULT_EVERMIND_LABELS: EvermindConsoleLabels = {
   managerOnlyHint: 'Only a project manager can change these settings.',
   statusSeeded: (v) => `Learning · v${v}`,
   statusUnseeded: 'Not set up',
+  evalDelta: (pct) => `${pct}% vs prev`,
+  evalFlat: 'no change',
+  evalTooltip: (version, base, next, size) => `Regression check on v${version}: held-out loss ${base} → ${next} across ${size} prior task(s).`,
   pickModelLabel: 'Base model',
   noModels: 'No published Evermind models to start from yet. Train and publish one in Studio first.',
   notSetUp: 'This project’s Evermind hasn’t been set up yet. A project manager can enable it.',

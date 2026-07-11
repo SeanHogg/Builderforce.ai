@@ -38,9 +38,7 @@ export interface ModalityDef {
    *  active modality. Dynamic context (open file, etc.) is appended by the Brain. */
   brainSystemPrompt: string;
   /** Brain input placeholder for this modality. */
-  brainPlaceholder: string;
   /** Brain empty-state hint for this modality. */
-  brainEmptyState: string;
   /** Right-panel tabs relevant to this modality, in display order. */
   rightTabs: RightTab[];
   /** Whether the green run button applies. Designer runs the WebContainer dev
@@ -76,8 +74,6 @@ export const MODALITIES: ModalityDef[] = [
       'When suggesting new or existing files, use a code block with the file path as the language tag so the user can create the file in one click. Examples: ```package.json (then JSON content), ```src/index.js (then JS content), ```.gitignore (then content).',
       'When you write code for the currently open file, use a normal code block (e.g. ```javascript) so the user can apply it.',
     ].join('\n'),
-    brainPlaceholder: 'Ask AI to build, explain, or refactor…',
-    brainEmptyState: 'Open a file for context, or ask me to generate an app or create files.',
     rightTabs: ['files', 'agent', 'train', 'publish', 'state'],
     showRunButton: true,
     runLabel: 'Run',
@@ -94,8 +90,6 @@ export const MODALITIES: ModalityDef[] = [
       'Help them craft vivid, shot-level visual prompts covering: subject, action, environment, lighting, colour palette, camera angle, and a visual style descriptor (cinematic, anime, photoreal, etc.).',
       'When the user asks for a video, reply with a single refined prompt paragraph they can paste straight into the generator — no preamble, under 220 characters.',
     ].join('\n'),
-    brainPlaceholder: 'Describe the video you want…',
-    brainEmptyState: "Describe a scene and I'll craft a video prompt — use it in the generator on the left.",
     rightTabs: ['files', 'state'],
     showRunButton: false,
     runLabel: 'Run',
@@ -111,8 +105,6 @@ export const MODALITIES: ModalityDef[] = [
       'Help the user teach it: draft facts, skills, and examples to feed it, reason about what it has learned, and interpret its Knowledge Map (neocortex / hippocampus / limbic regions).',
       'This is NOT classic fine-tuning — the model updates in place as it learns. Keep guidance oriented around teaching and recall, not training runs or LoRA adapters.',
     ].join('\n'),
-    brainPlaceholder: 'Teach your Evermind, or ask what it has learned…',
-    brainEmptyState: 'Teach your Evermind in the console on the left — each lesson lands on the Knowledge Map. Ask me what to teach it next.',
     rightTabs: ['files', 'publish', 'state'],
     showRunButton: false,
     runLabel: 'Run',
@@ -127,8 +119,6 @@ export const MODALITIES: ModalityDef[] = [
       'You are assisting with building and fine-tuning a custom LLM inside Builderforce.ai. This is the classic pipeline: design a dataset, train a LoRA adapter in-browser (WebGPU), benchmark it, then publish and export it.',
       'Help the user draft instruction/response pairs, choose a base model and training hyperparameters, and reason about training runs and benchmark results.',
     ].join('\n'),
-    brainPlaceholder: 'Ask about datasets, training, or benchmarks…',
-    brainEmptyState: 'Design your dataset and training run here — then fine-tune in the Train tab and ship from Publish.',
     rightTabs: ['files', 'train', 'publish', 'state'],
     showRunButton: false,
     runLabel: 'Run',
@@ -144,8 +134,6 @@ export const MODALITIES: ModalityDef[] = [
       'The user enrolls a reference sample to clone a voice (SSM/WebGPU acoustic model) and then synthesizes speech from typed text.',
       'Help them write natural, well-punctuated lines to synthesize, and advise on pacing, emphasis, and tone.',
     ].join('\n'),
-    brainPlaceholder: 'Describe the voice or the lines to synthesize…',
-    brainEmptyState: 'Write the lines to narrate (or ask me to), pick a voice in the panel, then press Generate.',
     rightTabs: ['voice', 'files', 'state'],
     showRunButton: true,
     runLabel: 'Generate',

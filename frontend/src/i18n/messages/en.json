@@ -289,7 +289,8 @@
       "myDashboard": "My Dashboard",
       "myWorkspace": "My Workspace",
       "marketplace": "Marketplace",
-      "incidents": "Incidents"
+      "incidents": "Incidents",
+      "monitoring": "Monitoring"
     },
     "tab": {
       "projects": "Projects",
@@ -362,7 +363,9 @@
       "incidents": "Incidents",
       "oncall": "On-call",
       "escalation": "Escalation",
-      "contacts": "Contacts"
+      "contacts": "Contacts",
+      "boards": "Boards",
+      "reporting": "Reporting"
     }
   },
   "alerts": {
@@ -645,6 +648,34 @@
     }
   },
   "ide": {
+    "modalityProject": "{label} project",
+    "modality": {
+      "designer": {
+        "label": "Designer",
+        "tagline": "Generate and build apps with Preview, Code, and a live dev server.",
+        "runLabel": "Run"
+      },
+      "video": {
+        "label": "Video",
+        "tagline": "Generate short videos client-side on your own GPU via diffusion.",
+        "runLabel": "Run"
+      },
+      "evermind": {
+        "label": "Evermind",
+        "tagline": "Grow a living Evermind model that learns from every project — teach it and watch its Knowledge Map fill in.",
+        "runLabel": "Run"
+      },
+      "finetune": {
+        "label": "Fine-tune",
+        "tagline": "Design datasets and train a custom LoRA model, then benchmark, publish, and export it.",
+        "runLabel": "Run"
+      },
+      "voice": {
+        "label": "Voice",
+        "tagline": "Clone and design a custom voice, then synthesize speech from it.",
+        "runLabel": "Generate"
+      }
+    },
     "all": "All",
     "filteredTo": "Filtered to {name}",
     "clearProjectFilter": "Clear project filter",
@@ -3315,13 +3346,7 @@
     "ide": {
       "builds": "builds",
       "buildsSub": "IDE builds",
-      "noProjects": "No IDE builds yet",
-      "modality": {
-        "designer": "Designer",
-        "video": "Video",
-        "llm": "LLM",
-        "voice": "Voice"
-      }
+      "noProjects": "No IDE builds yet"
     },
     "obs": {
       "noFirings": "No firings yet",
@@ -3574,7 +3599,10 @@
     "detailVersion": "Version",
     "detailWeight": "Weight",
     "detailWhen": "When",
-    "recallMethod": "{method, select, embedding {Semantic recall} other {Lexical recall (fallback)}}"
+    "recallMethod": "{method, select, embedding {Semantic recall} other {Lexical recall (fallback)}}",
+    "regDelta": "{pct}% vs prev",
+    "regFlat": "no change",
+    "regTooltip": "Regression check on v{version}: held-out loss {base} → {next} across {size, plural, one {# prior task} other {# prior tasks}}."
   },
   "evermindStatus": {
     "label": "Evermind",
@@ -5926,7 +5954,10 @@
     "hideDetail": "Hide detail",
     "detailPromptLabel": "Task",
     "detailTextLabel": "Learned",
-    "validateMethod": "{method, select, embedding {Semantic recall} other {Lexical recall (fallback)}}"
+    "validateMethod": "{method, select, embedding {Semantic recall} other {Lexical recall (fallback)}}",
+    "evalDelta": "{pct}% vs prev",
+    "evalFlat": "no change",
+    "evalTooltip": "Regression check on v{version}: held-out loss {base} → {next} across {size, plural, one {# prior task} other {# prior tasks}}."
   },
   "topbar": {
     "cart": "Shopping cart",
@@ -5956,11 +5987,26 @@
     "type": {
       "label": "Manager role",
       "help": "The manager’s function — it shapes what work it values and prioritizes.",
-      "general": { "label": "General manager", "description": "Domain-neutral backlog management across all work." },
-      "delivery": { "label": "Development manager", "description": "Ships features — prioritizes code work, unblocking dependencies, and getting pull requests merged." },
-      "qa": { "label": "QA manager", "description": "Owns quality — prioritizes defects, coverage gaps, flaky tests, and release-blocking bugs." },
-      "service_desk": { "label": "IT Service Desk manager", "description": "Runs support — triages incidents and requests by SLA and customer impact first." },
-      "devops": { "label": "DevOps / IT Operations manager", "description": "Guards reliability — prioritizes deploys, infrastructure, monitoring, and operational risk." }
+      "general": {
+        "label": "General manager",
+        "description": "Domain-neutral backlog management across all work."
+      },
+      "delivery": {
+        "label": "Development manager",
+        "description": "Ships features — prioritizes code work, unblocking dependencies, and getting pull requests merged."
+      },
+      "qa": {
+        "label": "QA manager",
+        "description": "Owns quality — prioritizes defects, coverage gaps, flaky tests, and release-blocking bugs."
+      },
+      "service_desk": {
+        "label": "IT Service Desk manager",
+        "description": "Runs support — triages incidents and requests by SLA and customer impact first."
+      },
+      "devops": {
+        "label": "DevOps / IT Operations manager",
+        "description": "Guards reliability — prioritizes deploys, infrastructure, monitoring, and operational risk."
+      }
     },
     "coaching": {
       "title": "Coach the manager",
@@ -9113,5 +9159,110 @@
     "oncallSubtitle": "On-call rotations decide who gets paged first when an incident fires.",
     "escalationSubtitle": "Escalation policies climb through targets and channels until someone responds.",
     "contactsSubtitle": "Business contacts you can page or escalate to during an incident."
+  },
+  "monitoring": {
+    "boardsTitle": "Active Monitoring",
+    "boardsSubtitle": "Upload an architecture diagram and overlay monitor pins on it. When a monitor breaches, an incident is opened automatically.",
+    "reportingTitle": "Monitoring Report",
+    "reportingSubtitle": "Incident and monitor metrics rolled up across all boards.",
+    "loading": "Loading…",
+    "needManager": "Manager role required",
+    "boardNamePlaceholder": "New board name",
+    "newBoard": "New board",
+    "emptyBoards": "No monitoring boards yet. Create one to get started.",
+    "monitorsCount": "{count} monitors",
+    "breachedCount": "{count} breached",
+    "backToBoards": "Back to boards",
+    "addMonitor": "Add monitor",
+    "exitAddMode": "Cancel",
+    "addMonitorHint": "Click a spot on the diagram to place a new monitor there.",
+    "uploading": "Uploading…",
+    "changeImage": "Change image",
+    "uploadImage": "Upload diagram",
+    "dropImageHint": "Click to browse or drop an image here",
+    "uploadFailed": "Upload failed",
+    "deleteBoardConfirm": "Delete board “{name}” and all its monitors?",
+    "newMonitor": "New monitor",
+    "editMonitor": "Edit monitor",
+    "validationLabel": "A label is required",
+    "fieldLabel": "Label",
+    "labelPlaceholder": "e.g. Payments API health",
+    "fieldDescription": "Description",
+    "fieldType": "Monitor type",
+    "fieldIntervalSeconds": "Interval (seconds)",
+    "fieldUrl": "URL",
+    "fieldExpectedStatus": "Expected status",
+    "fieldMetric": "Metric",
+    "fieldComparator": "Comparator",
+    "fieldThreshold": "Threshold",
+    "fieldWindowDays": "Window (days)",
+    "fieldSystem": "Affected system",
+    "systemPlaceholder": "e.g. payments",
+    "fieldSeverity": "Severity",
+    "fieldEscalation": "Escalation policy",
+    "noEscalation": "None",
+    "position": "Position",
+    "fieldActive": "Active",
+    "signalUrlLabel": "Signal webhook URL",
+    "signalUrlHint": "External tools POST here to signal this monitor.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "testSignal": "Test signal",
+    "sendOk": "Send OK",
+    "sendBreach": "Send breach",
+    "viewIncident": "View open incident",
+    "recentEvents": "Recent events",
+    "noEvents": "No events yet",
+    "create": "Create",
+    "deleteMonitorConfirm": "Delete monitor “{name}”?",
+    "noData": "No data yet",
+    "openIncidents": "Open incidents",
+    "totalIncidents": "{count} total",
+    "mttr": "MTTR",
+    "minutesValue": "{m} min",
+    "monitorsOk": "Monitors OK",
+    "monitorsBreached": "Monitors breached",
+    "monitorsUnknown": "Monitors unknown",
+    "monitorsTotal": "Monitors total",
+    "bySeverity": "Incidents by severity",
+    "bySystem": "Incidents by system",
+    "bySource": "Incidents by source",
+    "uncategorized": "Uncategorized",
+    "noIncidents": "No incidents",
+    "recentIncidents": "Recent incidents",
+    "na": "N/A",
+    "status": {
+      "ok": "OK",
+      "breached": "Breached",
+      "unknown": "Unknown"
+    },
+    "severity": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "type": {
+      "heartbeat": "Heartbeat",
+      "http_check": "HTTP check",
+      "webhook": "Webhook",
+      "metric_threshold": "Metric threshold",
+      "manual": "Manual"
+    },
+    "metric": {
+      "token_spend_usd": "Token spend (USD)",
+      "token_spend_pct_of_cap": "Token spend (% of cap)",
+      "cost_per_merged_pr_usd": "Cost per merged PR (USD)",
+      "dora_change_failure_rate": "Change failure rate (DORA)",
+      "dora_lead_time_hours": "Lead time (hours, DORA)",
+      "ai_effectiveness_score": "AI effectiveness score",
+      "eval_drift": "Eval drift"
+    },
+    "comparator": {
+      "gt": "Greater than (>)",
+      "lt": "Less than (<)",
+      "gte": "At least (≥)",
+      "lte": "At most (≤)"
+    }
   }
 }

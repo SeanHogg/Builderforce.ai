@@ -1532,6 +1532,9 @@ var DEFAULT_EVERMIND_LABELS = {
   managerOnlyHint: "Only a project manager can change these settings.",
   statusSeeded: (v) => `Learning \xB7 v${v}`,
   statusUnseeded: "Not set up",
+  evalDelta: (pct) => `${pct}% vs prev`,
+  evalFlat: "no change",
+  evalTooltip: (version, base, next, size) => `Regression check on v${version}: held-out loss ${base} \u2192 ${next} across ${size} prior task(s).`,
   pickModelLabel: "Base model",
   noModels: "No published Evermind models to start from yet. Train and publish one in Studio first.",
   notSetUp: "This project\u2019s Evermind hasn\u2019t been set up yet. A project manager can enable it.",
@@ -1708,6 +1711,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       scopeName
     ] }),
     !loadFailed && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { style: pill(seeded), children: seeded ? t.statusSeeded(data?.version ?? 0) : t.statusUnseeded }),
+    !loadFailed && seeded && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(RegressionChip, { t, evalPoint: data?.eval ?? null }),
     /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("button", { type: "button", onClick: () => void reload(), disabled: busy, style: ghostBtn, title: t.refresh, "aria-label": t.refresh, children: "\u21BB" })
   ] });
   if (loadFailed) {
@@ -1823,6 +1827,38 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     notice && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { style: { margin: 0, fontSize: "0.74rem", color: C.accent }, role: "status", children: notice }),
     error && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error })
   ] });
+}
+function RegressionChip({ t, evalPoint }) {
+  if (!evalPoint || !(evalPoint.baseLoss > 0)) return null;
+  const frac = evalPoint.delta / evalPoint.baseLoss;
+  const pct = Math.abs(frac) * 100;
+  const tone = pct < 0.5 ? "flat" : frac > 0 ? "up" : "down";
+  const arrow = tone === "up" ? "\u25B2" : tone === "down" ? "\u25BC" : "\u2248";
+  const color = tone === "up" ? "#22c55e" : tone === "down" ? "#f87171" : C.text2;
+  const label = tone === "flat" ? t.evalFlat : t.evalDelta(pct.toFixed(1));
+  const title = t.evalTooltip(evalPoint.version, evalPoint.baseLoss.toFixed(3), evalPoint.newLoss.toFixed(3), evalPoint.evalSize);
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+    "span",
+    {
+      title,
+      "aria-label": title,
+      style: {
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 3,
+        fontSize: 11,
+        fontWeight: 700,
+        color,
+        border: `1px solid ${color}`,
+        borderRadius: 999,
+        padding: "2px 8px"
+      },
+      children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { "aria-hidden": true, children: arrow }),
+        label
+      ]
+    }
+  );
 }
 function Section({ children, ...rest }) {
   return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(

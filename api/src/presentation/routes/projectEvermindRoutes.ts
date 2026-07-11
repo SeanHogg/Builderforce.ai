@@ -119,13 +119,14 @@ async function artifactCore(env: Env, db: Db, tenantId: number, projectId: numbe
 
 async function learnCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
   if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
-  const body = (await c.req.json<{ diff?: unknown; baseVersion?: unknown; weight?: unknown }>().catch(() => ({}))) as {
-    diff?: unknown; baseVersion?: unknown; weight?: unknown;
+  const body = (await c.req.json<{ diff?: unknown; baseVersion?: unknown; weight?: unknown; label?: unknown }>().catch(() => ({}))) as {
+    diff?: unknown; baseVersion?: unknown; weight?: unknown; label?: unknown;
   };
   const diff = typeof body.diff === 'string' ? body.diff : '';
   const baseVersion = typeof body.baseVersion === 'number' ? body.baseVersion : NaN;
   if (!diff || !Number.isInteger(baseVersion)) return json({ error: 'diff (base64) and baseVersion are required' }, 400);
-  const result = await dispatchProjectEvermindLearn(env, tenantId, projectId, diff, baseVersion, typeof body.weight === 'number' ? body.weight : undefined);
+  const label = typeof body.label === 'string' ? body.label : undefined;
+  const result = await dispatchProjectEvermindLearn(env, tenantId, projectId, diff, baseVersion, typeof body.weight === 'number' ? body.weight : undefined, label);
   return json(result.body, result.status);
 }
 

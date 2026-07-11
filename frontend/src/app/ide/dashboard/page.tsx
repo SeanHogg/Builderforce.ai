@@ -13,7 +13,8 @@ import {
   listIdeContainers,
 } from '@/lib/api';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
-import { MODALITIES, getModality, type ProjectModality } from '@/lib/modality';
+import { type ProjectModality } from '@/lib/modality';
+import { useModalityCopy, useLocalizedModalities } from '@/lib/useModalityCopy';
 import { EVERMIND_RECIPES, DEFAULT_EVERMIND_RECIPE, getEvermindRecipe, type EvermindRecipeId } from '@/lib/evermindRecipes';
 import { useLlmModels } from '@/lib/useLlmModels';
 import { listEvermindModels, type PublishedEvermindModel } from '@/lib/studioModelsApi';
@@ -37,6 +38,8 @@ type IdeView = 'grouped' | 'card' | 'table';
  */
 export default function IDEDashboardPage() {
   const t = useTranslations('ide');
+  const modalityCopy = useModalityCopy();
+  const localizedModalities = useLocalizedModalities();
   const confirm = useConfirm();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -234,7 +237,7 @@ export default function IDEDashboardPage() {
         <section style={{ marginTop: 24 }}>
           <h2 style={{ fontSize: '1rem', fontWeight: 600, margin: '0 0 12px', color: 'var(--text-secondary)' }}>{t('newIdeProject')}</h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16 }}>
-            {MODALITIES.map((m) => {
+            {localizedModalities.map((m) => {
               const disabled = !!m.comingSoon;
               return (
                 <button
@@ -271,7 +274,7 @@ export default function IDEDashboardPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <FilterChip label={t('all')} active={!typeParam} onClick={clearTypeFilter} />
-                {MODALITIES.map((m) => (
+                {localizedModalities.map((m) => (
                   <FilterChip
                     key={m.id}
                     label={`${m.icon} ${m.label}`}
@@ -349,15 +352,15 @@ export default function IDEDashboardPage() {
       <SlideOutPanel
         open={createType != null}
         onClose={() => setCreateType(null)}
-        title={createType ? t('newModalityProject', { label: getModality(createType).label }) : ''}
+        title={createType ? t('newModalityProject', { label: modalityCopy(createType).label }) : ''}
         width="min(480px, 96vw)"
       >
         {createType && (
           <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: 0 }}>{getModality(createType).tagline}</p>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: 0 }}>{modalityCopy(createType).tagline}</p>
             <form onSubmit={submitCreate} className="space-y-4">
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {MODALITIES.filter((m) => !m.comingSoon).map((m) => (
+                {localizedModalities.filter((m) => !m.comingSoon).map((m) => (
                   <FilterChip key={m.id} label={`${m.icon} ${m.label}`} active={createType === m.id} onClick={() => setCreateType(m.id)} />
                 ))}
               </div>
@@ -469,6 +472,7 @@ function IdeProjectTable({ items, onOpen, onDetails, onDelete }: {
   onDelete: (p: IdeProject) => void;
 }) {
   const t = useTranslations('ide');
+  const modalityCopy = useModalityCopy();
   return (
     <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -482,7 +486,7 @@ function IdeProjectTable({ items, onOpen, onDetails, onDelete }: {
         </thead>
         <tbody>
           {items.map((p) => {
-            const m = getModality(p.modality);
+            const m = modalityCopy(p.modality);
             return (
               <tr key={p.id} style={{ borderTop: '1px solid var(--border-subtle)', cursor: 'pointer' }} onClick={() => onOpen(p)}>
                 <td style={td}>

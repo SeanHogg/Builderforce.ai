@@ -32,6 +32,7 @@ import {
 import { mergeCheckpointDiffs } from '../../application/llm/evermindMerge';
 import { buildEvermindTrainingText, resolveEvermindTeacherModel } from '../../application/llm/evermindTeacher';
 import { embedTokens, cosineVec, packVec, unpackVec, EMBED_MAX_TOKENS } from '../../application/llm/evermindEmbed';
+import { meanEvalLoss, type EvalExample } from '../../application/llm/evermindEval';
 import type { Env } from '../../env';
 
 /** Debounce window — a burst of learns within this window folds into one merge. */
@@ -65,6 +66,12 @@ const RECENT_TEXT_CHARS = 2000;
 /** How many per-merge training points to retain for the Knowledge Map's training
  *  readout (a small sparkline of loss + weight movement across recent versions). */
 const TRAINING_MAX = 40;
+/** How many held-out taught examples to keep for the automatic regression check. */
+const EVAL_MAX = 6;
+/** Chars of each held-out example's text kept (eval only reads the first tokens). */
+const EVAL_TEXT_CHARS = 1000;
+/** How many per-version eval points to retain (the ▲/▼ history). */
+const EVAL_POINTS_MAX = 40;
 
 interface PendingEntry {
   id: number;
@@ -79,6 +86,10 @@ interface PendingEntry {
    *  is pinned, the teacher ANSWERS this prompt so the SSM learns (task → ideal
    *  answer) rather than refining the raw output. */
   prompt?: string;
+  /** Optional provenance for a DIFF-path contribution (which run/ticket produced the
+   *  delta) — text-path entries carry their task in {@link prompt}, but a pre-diffed
+   *  weight delta has no text, so this is the only thing that makes it inspectable. */
+  label?: string;
   /** Optional sample weight (e.g. tokens learned) for the FedAvg merge. */
   weight: number;
 }
@@ -104,6 +115,8 @@ interface LearnBody {
   baseVersion: number;
   diff: string; // base64 serialized RowDelta
   weight?: number;
+  /** Optional provenance shown on the delta's inspection row (run/ticket). */
+  label?: string;
 }
 
 interface LearnTextBody {
@@ -163,11 +176,34 @@ interface TrainingPoint {
   merged: number;
 }
 
+/** One automatic pre/post regression check: the PREVIOUS vs the MERGED model scored on
+ *  the SAME held-out set of the project's prior taught examples. `delta = baseLoss -
+ *  newLoss` (positive = the merge improved / retained on prior tasks; negative = it
+ *  regressed). Measured, never fabricated — the ▲/▼ the Knowledge Map + console show. */
+interface EvalPoint {
+  /** The version this check evaluated (the merge's result version). */
+  version: number;
+  /** Epoch ms the merge landed. */
+  at: number;
+  /** Mean held-out loss of the PREVIOUS version's model. */
+  baseLoss: number;
+  /** Mean held-out loss of the MERGED (new) version's model. */
+  newLoss: number;
+  /** baseLoss - newLoss (positive = improved / retained, negative = regressed). */
+  delta: number;
+  /** How many held-out examples the check scored. */
+  evalSize: number;
+}
+
 const PENDING_KEY = 'pending';
 const META_KEY = 'meta';
 const SEQ_KEY = 'seq';
 const RECENT_KEY = 'recent';
 const TRAINING_KEY = 'training';
+/** Held-out taught examples (rolling) used by the automatic regression check. */
+const EVAL_KEY = 'eval';
+/** Per-version eval points (the ▲/▼ history). */
+const EVAL_POINTS_KEY = 'evalPoints';
 
 function decodeBase64(b64: string): ArrayBuffer {
   const bin = atob(b64);
@@ -221,10 +257,13 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     const pending = (await this.state.storage.get<PendingEntry[]>(PENDING_KEY)) ?? [];
     const recent = (await this.state.storage.get<RecentEntry[]>(RECENT_KEY)) ?? [];
     const training = (await this.state.storage.get<TrainingPoint[]>(TRAINING_KEY)) ?? [];
+    const evalPoints = (await this.state.storage.get<EvalPoint[]>(EVAL_POINTS_KEY)) ?? [];
     // Strip the packed embedding — it's a recall-only internal, never part of the
     // inspection payload the console polls (keeps that read small).
     const lean = recent.map(({ emb, ...rest }) => rest);
-    return this.json({ pending: pending.length, recent: lean, training });
+    // `eval` = the LATEST regression check (the ▲/▼ the chip reads); null until the
+    // first merge that had a held-out set to score.
+    return this.json({ pending: pending.length, recent: lean, training, eval: evalPoints[0] ?? null });
   }
 
   /**
@@ -317,6 +356,13 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     await this.state.storage.put(TRAINING_KEY, next);
   }
 
+  /** Append one per-version eval (regression) point to the ring, newest first, capped. */
+  private async recordEval(point: EvalPoint): Promise<void> {
+    const current = (await this.state.storage.get<EvalPoint[]>(EVAL_POINTS_KEY)) ?? [];
+    const next = [point, ...current].slice(0, EVAL_POINTS_MAX);
+    await this.state.storage.put(EVAL_POINTS_KEY, next);
+  }
+
   private async handleLearn(request: Request): Promise<Response> {
     const body = (await request.json().catch(() => null)) as LearnBody | null;
     if (!body || typeof body.tenantId !== 'number' || typeof body.projectId !== 'number' || typeof body.diff !== 'string') {
@@ -340,8 +386,10 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       return this.json({ ok: false, error: 'stale base — rebase against current head', headVersion: head.version }, 409);
     }
 
+    const label = typeof body.label === 'string' && body.label.trim() ? body.label.trim().slice(0, RECENT_PROMPT_CHARS) : undefined;
     const { queued, dropped } = await this.enqueue(body.tenantId, body.projectId, head.version, {
       diffB64: body.diff,
+      ...(label ? { label } : {}),
       weight: typeof body.weight === 'number' && body.weight > 0 ? body.weight : 1,
     });
     return this.json({ ok: true, queued, baseVersion: head.version, ...(dropped ? { dropped } : {}) });
@@ -384,7 +432,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     tenantId: number,
     projectId: number,
     baseVersion: number,
-    entry: { diffB64?: string; text?: string; prompt?: string; weight: number },
+    entry: { diffB64?: string; text?: string; prompt?: string; label?: string; weight: number },
   ): Promise<{ queued: number; dropped: number }> {
     await this.state.storage.put(META_KEY, { tenantId, projectId } satisfies CoordMeta);
     const seq = ((await this.state.storage.get<number>(SEQ_KEY)) ?? 0) + 1;
@@ -398,6 +446,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       ...(entry.diffB64 ? { diffB64: entry.diffB64 } : {}),
       ...(entry.text ? { text: entry.text } : {}),
       ...(entry.prompt ? { prompt: entry.prompt } : {}),
+      ...(entry.label ? { label: entry.label } : {}),
     });
     // Cost guard: cap the queue, dropping the OLDEST contributions if a project is
     // firehosing learns faster than the debounce can merge them.
@@ -493,7 +542,10 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
           diffs.push(decodeBase64(e.diffB64));
           weights.push(e.weight);
           processedIds.push(e.id);
-          mergedMeta.push({ id: e.id, kind: 'delta', weight: e.weight });
+          // A pre-diffed delta has no text; its `label` (run/ticket provenance) is what
+          // makes the row inspectable — surface it in the same `prompt` slot text entries
+          // use, so the console/Learnings render it without a special case.
+          mergedMeta.push({ id: e.id, kind: 'delta', weight: e.weight, ...(e.label ? { prompt: e.label.slice(0, RECENT_PROMPT_CHARS) } : {}) });
         } else if (e.text && isLM) {
           if (textFits >= maxFits) continue; // defer — leave queued for next alarm
           processedIds.push(e.id); // consumed even if it yields no trainable window
@@ -590,6 +642,32 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
         deltaNorm,
         merged: mergedMeta.length,
       });
+
+      // Automatic regression check: score the PREVIOUS vs the MERGED model on the
+      // held-out set of examples taught BEFORE this merge, and record the loss delta so
+      // the version chip can show ▲ (improved / retained) or ▼ (regressed). Best-effort:
+      // any failure just skips the point, never the merge. Only meaningful for an LM.
+      if (isLM) {
+        try {
+          const evalSet = (await this.state.storage.get<EvalExample[]>(EVAL_KEY)) ?? [];
+          if (evalSet.length > 0) {
+            const baseEvalLM = basePkg.loadLM(); // fresh: the PREVIOUS version's weights
+            const baseLoss = meanEvalLoss(baseEvalLM, tok, evalSet);
+            const newLoss = meanEvalLoss(lm, tok, evalSet); // `lm` holds the merged weights
+            if (baseLoss != null && newLoss != null) {
+              await this.recordEval({ version: nextVersion, at, baseLoss, newLoss, delta: baseLoss - newLoss, evalSize: evalSet.length });
+            }
+          }
+          // Grow the held-out set with THIS merge's learned examples, for the NEXT merge's
+          // check (kept AFTER scoring so this batch never grades its own fit).
+          const fresh: EvalExample[] = mergedMeta
+            .filter((m) => m.kind === 'text' && !!m.text)
+            .map((m) => ({ ...(m.prompt ? { prompt: m.prompt } : {}), text: m.text!.slice(0, EVAL_TEXT_CHARS) }));
+          if (fresh.length > 0) {
+            await this.state.storage.put(EVAL_KEY, [...fresh, ...evalSet].slice(0, EVAL_MAX));
+          }
+        } catch { /* best-effort: never fail the merge over an eval point */ }
+      }
       return { merged: mergedMeta.length, newVersion: nextVersion };
     } finally {
       // Clear only what we consumed; anything that arrived mid-merge OR was deferred

@@ -655,6 +655,17 @@ interface EvermindValidateResult {
      *  or a lexical fallback when the model couldn't be reached. */
     method: 'embedding' | 'lexical';
 }
+/** The latest automatic pre/post regression check: the previous vs merged model scored
+ *  on the same held-out set of prior taught examples. `delta = baseLoss - newLoss`. */
+interface EvermindEvalPoint {
+    version: number;
+    at: number;
+    baseLoss: number;
+    newLoss: number;
+    /** positive = improved / retained on prior tasks; negative = regressed. */
+    delta: number;
+    evalSize: number;
+}
 /** The head summary + live learning activity for a project's Evermind. */
 interface EvermindConsoleData {
     version: number;
@@ -667,6 +678,8 @@ interface EvermindConsoleData {
     /** Contributions queued but not yet merged (in the coordinator's debounce window). */
     pending: number;
     recent: EvermindRecentEntry[];
+    /** Latest automatic regression check (▲/▼ vs the previous version), or null. */
+    eval?: EvermindEvalPoint | null;
 }
 /** A published Studio Evermind model that can seed a project's learnable base. */
 interface EvermindSeedModel {
@@ -712,6 +725,9 @@ interface EvermindConsoleLabels {
     managerOnlyHint: string;
     statusSeeded: (version: number) => string;
     statusUnseeded: string;
+    evalDelta: (pct: string) => string;
+    evalFlat: string;
+    evalTooltip: (version: number, base: string, next: string, size: number) => string;
     pickModelLabel: string;
     noModels: string;
     notSetUp: string;
