@@ -1,0 +1,18 @@
+{
+  "name": "@builderforce/knowledge-baseline",
+  "version": "2026.3.21",
+  "private": true,
+  "description": "BuilderForceAgents Knowledge Baseline — seed corpus ingestion, versioned knowledge-graph snapshots, and cryptographically sealed t0 baselines",
+  "type": "module",
+  "dependencies": {
+    "@sinclair/typebox": "0.34.48"
+  },
+  "devDependencies": {
+    "@seanhogg/builderforce-agents": "workspace:*"
+  },
+  "builderforce": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
