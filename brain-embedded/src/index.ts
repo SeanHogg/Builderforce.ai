@@ -112,6 +112,18 @@ export {
 } from './brainTriage';
 export type { BrainTraceEvent, BuildBrainTriageOptions, BrainDiagnostics, ByoUnresolvedEntry } from './brainTriage';
 
+// Chat ⇄ work linking — the directive that ties identified work / code changes to
+// the current chat, plus the predicates behind the "a code change is always tied to
+// a ticket" backstop (reused by non-React hosts driving the run loop directly).
+export {
+  chatWorkLinkingDirective,
+  isCodeChangeTool,
+  isTicketRecordingTool,
+  codeChangeFile,
+  CODE_CHANGE_TOOLS,
+  TICKET_RECORDING_TOOLS,
+} from './chatWorkLinking';
+
 // Landing-page → auth → replay handoff
 export { savePendingPrompt, takePendingPrompt } from './pendingPrompt';
 

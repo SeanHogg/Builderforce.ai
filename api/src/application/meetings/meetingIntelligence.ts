@@ -27,7 +27,8 @@ import type { Env } from '../../env';
 import {
   meetings, meetingTranscriptSegments, brainChatMessages, brainChats,
 } from '../../infrastructure/database/schema';
-import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
+import { readProxyChoice } from '../llm/LlmProxyService';
+import { tenantProxyForPlan } from '../llm/tenantProxy';
 import { resolveWorkforceModel, WORKFORCE_MODEL_REF_PREFIX } from '../agent/agentPrompt';
 import { broadcastRoom } from '../../infrastructure/relay/broadcastRoom';
 
@@ -129,7 +130,7 @@ You are attending a live ${meeting.kind} meeting titled "${meeting.title}" as ${
     : `It's your turn to speak. Give a brief, useful update or contribution for this ${meeting.kind}.`;
   const user = `${convo ? `Conversation so far:\n${convo}\n\n` : ''}${ask}`;
 
-  const proxy = ideProxy(env);
+  const { proxy } = await tenantProxyForPlan(env, meeting.tenantId, { codingOnly: true });
   const result = await proxy.complete({
     model: resolved?.baseModel ?? undefined,
     messages: [{ role: 'system', content: system }, { role: 'user', content: user }] as never,
@@ -169,7 +170,7 @@ export async function summarizeMeeting(
   const system = `You write concise, faithful meeting minutes. Given a raw transcript, produce short minutes in Markdown with, in order: a one-paragraph **Summary**; a **Decisions** section as a bullet list (omit the section entirely if there were none); and an **Action items** section as a checklist ("- [ ] Owner — task", omit if none). Only use what is in the transcript — never invent decisions, owners, or tasks.`;
   const user = `Meeting: "${meeting.title}" (${meeting.kind}).\n\nTranscript:\n${convo}`;
 
-  const proxy = ideProxy(env);
+  const { proxy } = await tenantProxyForPlan(env, meeting.tenantId, { codingOnly: true });
   const result = await proxy.complete({
     messages: [{ role: 'system', content: system }, { role: 'user', content: user }] as never,
     temperature: 0.3,

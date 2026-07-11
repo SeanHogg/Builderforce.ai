@@ -291,6 +291,54 @@ describe('useBrainConversation agent loop (injected transport + persistence)', (
     await waitFor(() => expect(hook.current.byoUnresolved).toEqual(['anthropic']));
   });
 
+  it('renders a truthful learn step from the server evermindLearn signal (no client recall)', async () => {
+    // The server reports it contributed THIS turn to the project's Evermind — even
+    // with NO client-side recall (the connected-but-empty case the old heuristic
+    // false-negatived). The learn step must come from the server signal, not a guess.
+    const withLearn = (learn: { learned: boolean; version: number } | null) =>
+      async (_c: number, msgs: Array<{ role: string; content: string; metadata?: string }>) =>
+        msgs.map((m) => ({
+          id: ++seq, role: m.role, content: m.content, metadata: m.metadata ?? null, seq, createdAt: '',
+          ...(learn && m.role === 'assistant' ? { evermindLearn: learn } : {}),
+        }));
+    vi.mocked(persistence.sendMessages)
+      .mockImplementationOnce(withLearn(null))                          // user turn
+      .mockImplementationOnce(withLearn({ learned: true, version: 2 })); // assistant turn carries the signal
+    mockStream.mockResolvedValueOnce(result({ text: 'a substantive answer that clears the teach floor with room to spare' }));
+
+    const { result: hook } = renderHook(
+      () => useBrainConversation({ chatId: 11, toolSpecs: [], runTool: vi.fn() }),
+      { wrapper },
+    );
+
+    await act(async () => { await hook.current.send('teach me'); });
+
+    await waitFor(() => {
+      const learn = hook.current.trace.find((e) => e.category === 'learn');
+      expect(learn).toBeTruthy();
+      expect((learn?.result as { version?: number } | undefined)?.version).toBe(2);
+    });
+  });
+
+  it('shows NO learn step when the server reports it did not contribute', async () => {
+    const noLearn = async (_c: number, msgs: Array<{ role: string; content: string; metadata?: string }>) =>
+      msgs.map((m) => ({
+        id: ++seq, role: m.role, content: m.content, metadata: m.metadata ?? null, seq, createdAt: '',
+        ...(m.role === 'assistant' ? { evermindLearn: { learned: false, version: 0 } } : {}),
+      }));
+    vi.mocked(persistence.sendMessages).mockImplementationOnce(noLearn).mockImplementationOnce(noLearn);
+    mockStream.mockResolvedValueOnce(result({ text: 'a plain answer on a non-project or unseeded chat' }));
+
+    const { result: hook } = renderHook(
+      () => useBrainConversation({ chatId: 12, toolSpecs: [], runTool: vi.fn() }),
+      { wrapper },
+    );
+
+    await act(async () => { await hook.current.send('hi'); });
+    await waitFor(() => expect(hook.current.messages.map((m) => m.content)).toEqual(['hi', 'a plain answer on a non-project or unseeded chat']));
+    expect(hook.current.trace.some((e) => e.category === 'learn')).toBe(false);
+  });
+
   it('captures a thrown tool error: feeds it back, records it, and surfaces it in the triage report', async () => {
     mockStream
       .mockResolvedValueOnce(result({ text: 'trying', toolCalls: [{ id: 'c1', name: 'do_thing', args: '{}' }], finishReason: 'tool_calls' }))

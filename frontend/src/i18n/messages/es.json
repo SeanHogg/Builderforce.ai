@@ -5589,6 +5589,19 @@
     "captureHasTrace": "Copiar esta ejecución (pasos del LLM, cadena de herramientas, errores y transcripción) al portapapeles",
     "captureNoTrace": "Aún no se ha capturado ninguna ejecución: envía primero un mensaje",
     "captureExecutionAria": "Capturar ejecución",
+    "consolidate": "Consolidar",
+    "consolidating": "Consolidando…",
+    "fork": "Bifurcar",
+    "forking": "Bifurcando…",
+    "forkOf": "Bifurcación de {title}",
+    "newChatFallback": "Nuevo chat",
+    "nothingToConsolidate": "Todavía no hay suficiente conversación para consolidar.",
+    "nothingToFork": "Todavía no hay suficiente conversación para bifurcar.",
+    "consolidateFailed": "Error al consolidar",
+    "forkFailed": "Error al bifurcar",
+    "memoryToggleLabel": "Memoria",
+    "memoryOnTooltip": "La memoria del proyecto está ACTIVADA: este chat recuerda y aprende del Evermind del proyecto",
+    "memoryOffTooltip": "La memoria del proyecto está DESACTIVADA para este chat: el recuerdo y el aprendizaje de Evermind están deshabilitados",
     "brainDefault": "Brain (predeterminado)",
     "noChatsYet": "Aún no hay chats. Haz clic en + Nuevo para empezar.",
     "noChatsMatch": "Ningún chat coincide con tu búsqueda.",
@@ -6009,7 +6022,8 @@
       "devops": {
         "label": "Gestor de DevOps / Operaciones TI",
         "description": "Protege la fiabilidad — prioriza despliegues, infraestructura, monitorización y riesgo operativo."
-      }
+      },
+      "fillsRole": "Ocupa el rol de {role} en el equipo"
     },
     "coaching": {
       "title": "Orientar al gestor",
@@ -6023,7 +6037,18 @@
       "activeTitle": "Directrices permanentes",
       "empty": "Aún no hay directrices permanentes.",
       "tenantWide": "Todo el espacio de trabajo",
-      "dismiss": "Descartar"
+      "dismiss": "Descartar",
+      "modeLabel": "Tipo de instrucción",
+      "modeDirective": "Directiva permanente",
+      "modeTask": "Tarea puntual",
+      "taskHint": "Asigna al manager una tarea concreta: la ejecuta una vez y continúa.",
+      "taskPlaceholder": "p. ej. Reorganiza la épica de pagos y prioriza su backlog.",
+      "taskSubmit": "Asignar tarea",
+      "expiryLabel": "Caduca en (días)",
+      "expiryPlaceholder": "Días (opcional)",
+      "expiresAt": "Caduca {when}",
+      "noExpiry": "Sin caducidad",
+      "markDone": "Hecho"
     },
     "autonomyPaused": {
       "title": "Gestión autónoma en pausa",
@@ -6734,6 +6759,7 @@
     "kindRole": "Rol",
     "kindReview": "Revisión",
     "kindDiagnostic": "Diagnóstico",
+    "diagnosticIdPlaceholder": "id de diagnóstico",
     "respOwner": "Responsable",
     "respReviewer": "Revisor",
     "respContributor": "Colaborador",

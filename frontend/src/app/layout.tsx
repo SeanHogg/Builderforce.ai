@@ -17,6 +17,7 @@ import { RolePreviewProvider } from '@/lib/RolePreviewContext';
 import { PermissionDebuggerProvider } from '@/lib/PermissionDebuggerContext';
 import ThemeProvider from './ThemeProvider';
 import { ConfirmProvider } from '@/components/ConfirmProvider';
+import { ToastProvider } from '@/components/ToastProvider';
 import ConditionalAppShell from '@/components/ConditionalAppShell';
 import { PwaUpdateBanner } from '@/components/PwaUpdateBanner';
 import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
@@ -189,7 +190,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     <RolePreviewProvider>
                       <PermissionDebuggerProvider>
                         <ConfirmProvider>
-                          <ConditionalAppShell>{children}</ConditionalAppShell>
+                          <ToastProvider>
+                            <ConditionalAppShell>{children}</ConditionalAppShell>
+                          </ToastProvider>
                         </ConfirmProvider>
                       </PermissionDebuggerProvider>
                     </RolePreviewProvider>

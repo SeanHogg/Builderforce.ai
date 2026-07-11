@@ -32,6 +32,7 @@ import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
 import { recordUsageRow, clampTokenCount } from '../llm/usageLedger';
 import { ensureTaskPrdRecord, appendTaskPrdRevision } from '../prd/taskPrd';
 import { loadCapabilityContext, loadPersonaSetpoints } from '../artifact/capabilityContext';
+import { recordPersonalityEvent, compilePersonalityApplication } from '../persona/recordPersonalityEvent';
 import { resolveArtifacts } from '../artifact/resolveArtifacts';
 import { pullPendingSteering, releasePendingSteers } from './executionSteering';
 import { notifyExecutionSubscribers } from './executionEvents';
@@ -1065,7 +1066,12 @@ export async function handleContainerOp(
       // or nothing for a model that doesn't support one (reasoningCapability drops it).
       // Only on a STRICT pin: an unpinned model may cascade to a different vendor that
       // would reject the param, so we attach it solely when the resolved model is fixed.
-      ...(pick.strict ? reasoningParamsForModel(pick.model, ctx.execParams) ?? {} : {}),
+      // First-turn detection: the container op has no assistant turn yet in its slice.
+      ...(pick.strict
+        ? reasoningParamsForModel(pick.model, ctx.execParams, {
+            isFirstTurn: !sendMessages.some((m) => (m as { role?: string }).role === 'assistant'),
+          }) ?? {}
+        : {}),
       useCase: 'task_execution',
     });
     // Shared post-`complete` processing (metering + telemetry) — identical to the
@@ -1653,10 +1659,16 @@ export async function runCloudToolLoop(
             // `reasoning_effort`), surviving to the vendor as extraBody. Attached ONLY
             // on a strict pin so it never rides a cascade onto a vendor that would 400
             // on an unknown key; unsupported models return nothing (no change). Note the
-            // direct-Anthropic vendor gates `thinking` OFF when tools are present (the
-            // coding loop always has tools), so in practice this lands `reasoning_effort`
-            // for a pinned OpenAI o-series/gpt-5 coder.
-            ...(strictPin ? reasoningParamsForModel(activeModel, opts?.execParams) ?? {} : {}),
+            // direct-Anthropic vendor enables `thinking` alongside tools on the FIRST
+            // (planning) turn — detected here as "no assistant turn yet in the persisted
+            // conversation" and threaded as the `isFirstTurn` hint — and keeps it off on
+            // continuation turns (whose thinking block was lost in the OpenAI round-trip);
+            // for a pinned OpenAI o-series/gpt-5 coder it lands `reasoning_effort`.
+            ...(strictPin
+              ? reasoningParamsForModel(activeModel, opts?.execParams, {
+                  isFirstTurn: !messages.some((m) => (m as { role?: string }).role === 'assistant'),
+                }) ?? {}
+              : {}),
             useCase: 'task_execution',
           },
           undefined,
@@ -2251,6 +2263,26 @@ export async function prepareCloudRun(
       result: `${cap.personas.length} persona(s), ${cap.skills.length} skill(s), ${cap.content.length} content`
         + (cap.missing.length ? ` · ${cap.missing.length} unresolved: ${cap.missing.join(', ')}` : ''),
     });
+  }
+
+  // Record a FIRST-CLASS personality-application event (Residual 1) the moment this run
+  // actually applies a personality — an in-process db write, NOT an HTTP self-call. Runs
+  // exactly ONCE per run (prepareCloudRun is the single prep site every cloud surface —
+  // Worker / durable DO / container — funnels through). Reuses the profile + merged exec
+  // levers already resolved above (one compile, no per-turn N+1). `compilePersonalityApplication`
+  // returns null when the agent's own psychometric yields no directives, so a V2 /
+  // neutral-profile run records nothing and stays byte-identical. The GET now derives
+  // only to backfill gaps. Best-effort — telemetry must never block a run.
+  if (cloudAgentRef) {
+    const application = compilePersonalityApplication({
+      agentPsychometric,
+      execParams: capabilities.execParams,
+      personaIds: capabilities.summary.personas,
+    });
+    if (application) {
+      await recordPersonalityEvent(env, db, tenantId, { agentRef: cloudAgentRef, executionId, ...application })
+        .catch(() => { /* telemetry only — never block the run */ });
+    }
   }
 
   // Auto-fix runs carry a remediation block (the post-merge build failure) in the

@@ -42,6 +42,12 @@
 import { Hono } from 'hono';
 import { and, desc, eq, gte } from 'drizzle-orm';
 import { compilePsychometricProfile, type LimbicPsychProfile } from '@builderforce/agent-tools';
+import {
+  recordPersonalityEvent,
+  personalityVersionKey,
+  parsePersonalityProfile,
+  summarizeDirectives,
+} from '../../application/persona/recordPersonalityEvent';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { tenantHasFeature } from '../middleware/featureGate';
 import {
@@ -55,7 +61,6 @@ import { runtimeHiredAgentsCacheKey } from './runtimeRoutes';
 import { assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
 import {
   sanitizePsychometricProfile,
-  sanitizeVector,
   VALID_DIMENSION_IDS,
 } from '../../application/persona/psychometricCatalog';
 import {
@@ -80,35 +85,19 @@ const SHORT_TTL = { kvTtlSeconds: 60, l1TtlMs: 15_000 };
 const clamp = (n: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, n));
 const clamp01 = (n: number): number => clamp(Number.isFinite(n) ? n : 0, 0, 1);
 
-/** Per-agent cache version token — bumped by every write so folded keys age out. */
-function personalityVersionKey(tenantId: number, agentRef: string): string {
-  return `personality-version:t:${tenantId}:a:${agentRef}`;
-}
-
-/** Parse a stored psychometric JSON string into a compiler-ready profile (or null). */
-function parseProfile(raw: string | null | undefined): LimbicPsychProfile | null {
-  if (!raw) return null;
-  try {
-    const o = JSON.parse(raw) as Record<string, unknown>;
-    const vector = sanitizeVector(o.vector);
-    const profile: LimbicPsychProfile = { vector };
-    if (typeof o.enneagramType === 'number') profile.enneagramType = o.enneagramType;
-    return profile;
-  } catch {
-    return null;
-  }
-}
+/** Parse a stored psychometric JSON string into a compiler-ready profile (or null).
+ *  DRY: the ONE parser lives in recordPersonalityEvent so read-through derivation and
+ *  first-class recording compile from identical input. */
+const parseProfile = parsePersonalityProfile;
 
 /** A short, human-readable summary of an agent's compiled personality directives. */
 function directivesSummaryFor(profile: LimbicPsychProfile | null): { summary: string; count: number; params: { thinkLevel?: string; reasoningLevel?: string; temperature?: number } } {
   if (!profile) return { summary: '', count: 0, params: {} };
   const { directives, params } = compilePsychometricProfile(profile);
-  // Take the leading phrase of the top few directives (before the colon) for a compact readout.
-  const heads = directives.slice(0, 3).map((d) => d.split(':')[0]?.trim()).filter(Boolean);
-  const summary = heads.join(' · ') + (directives.length > 3 ? ` +${directives.length - 3} more` : '');
+  const { summary, count } = summarizeDirectives(directives);
   return {
     summary,
-    count: directives.length,
+    count,
     params: {
       thinkLevel: params.thinkLevel,
       reasoningLevel: params.reasoningLevel === 'on' ? 'on' : undefined,
@@ -117,8 +106,9 @@ function directivesSummaryFor(profile: LimbicPsychProfile | null): { summary: st
   };
 }
 
-/** Map one run_model_outcomes row to the reinforcement signal vocabulary. Heuristic
- *  but grounded in the real fields the scorer already persists. */
+/** Map one run_model_outcomes row to the reinforcement signal vocabulary, reading the
+ *  LITERAL tool-error and human-rejection telemetry the scorer captures (migration
+ *  0333) rather than proxies. */
 function outcomeToSignal(row: {
   terminalStatus: string;
   merged: boolean;
@@ -126,16 +116,27 @@ function outcomeToSignal(row: {
   degraded: boolean;
   steps: number;
   hallucinationRate: number | null;
+  toolCalls: number | null;
+  toolErrors: number | null;
+  humanRejected: boolean | null;
 }): RunOutcomeSignal {
   const succeeded = row.terminalStatus === 'completed';
-  // Tool-error proxy: a degraded run (model floored after tool trouble) reads as
-  // high tool error; else fall back to the deliverable's hallucination rate.
-  const toolErrorRate = row.degraded ? 0.6 : clamp01(row.hallucinationRate ?? 0);
+  // LITERAL tool-error rate from the run's recorded tool-call telemetry:
+  // tool_errors / max(1, tool_calls). `tool_calls != null` marks a row scored AFTER
+  // migration 0333 (a zero-tool run reads a true 0). Only rows scored BEFORE 0333 have
+  // tool_calls NULL — those alone fall back to the old degraded/hallucination PROXY.
+  const toolErrorRate = row.toolCalls != null
+    ? clamp01((row.toolErrors ?? 0) / Math.max(1, row.toolCalls))
+    : (row.degraded ? 0.6 : clamp01(row.hallucinationRate ?? 0)); // pre-0333 historical proxy
   return {
     succeeded,
     toolErrorRate,
     humanAccepted: row.merged, // a merged PR = a human accepted the work
-    humanRejected: row.terminalStatus === 'cancelled', // a human cancelled the run
+    // LITERAL human-rejection flag: a human rejected a bubbled-up approval OR closed the
+    // PR without merging (migration 0333). Pre-0333 rows (NULL) fall back to the old
+    // cancelled-run proxy — cancellation is a weaker, conflated signal we no longer use
+    // for freshly-scored runs.
+    humanRejected: row.humanRejected != null ? row.humanRejected : row.terminalStatus === 'cancelled',
     retries: Math.max(0, Math.floor(row.steps ?? 0)),
   };
 }
@@ -273,6 +274,9 @@ export function createPersonalityRoutes(db: Db): Hono<HonoEnv> {
           degraded: runModelOutcomes.degraded,
           steps: runModelOutcomes.steps,
           hallucinationRate: runModelOutcomes.hallucinationRate,
+          toolCalls: runModelOutcomes.toolCalls,
+          toolErrors: runModelOutcomes.toolErrors,
+          humanRejected: runModelOutcomes.humanRejected,
         })
         .from(runModelOutcomes)
         .where(and(
@@ -494,26 +498,24 @@ export function createPersonalityRoutes(db: Db): Hono<HonoEnv> {
     const agent = await ownedAgentProfile(tenantId, agentRef);
     if (!agent) return c.json({ error: 'Agent not found' }, 404);
 
-    const [inserted] = await db
-      .insert(personalityEvents)
-      .values({
-        tenantId,
-        agentRef,
-        executionId: body.executionId ?? null,
-        runId: body.runId ?? null,
-        sessionKey: body.sessionKey ?? null,
-        profileSource: (body.profileSource ?? 'agent').slice(0, 24),
-        personaIds: Array.isArray(body.personaIds) ? JSON.stringify(body.personaIds.slice(0, 20)) : null,
-        directivesSummary: body.directivesSummary?.slice(0, 2000) ?? null,
-        directiveCount: Math.max(0, Math.floor(body.directiveCount ?? 0)),
-        thinkLevel: body.thinkLevel ?? null,
-        reasoningLevel: body.reasoningLevel ?? null,
-        temperature: typeof body.temperature === 'number' ? body.temperature : null,
-      })
-      .returning({ id: personalityEvents.id });
-
-    await invalidateAfterWrite(c.env as Env, tenantId, agentRef);
-    return c.json({ id: inserted?.id });
+    // DRY: the ONE durable insert + per-agent cache-token bump lives in the shared
+    // recorder (the cloud engine writes through the same path in-process). Recording a
+    // usage event changes no vector, so it does NOT bust the cross-surface profile
+    // caches (that is reserved for reinforcement apply/dismiss).
+    const id = await recordPersonalityEvent(c.env as Env, db, tenantId, {
+      agentRef,
+      executionId: body.executionId ?? null,
+      runId: body.runId ?? null,
+      sessionKey: body.sessionKey ?? null,
+      profileSource: body.profileSource,
+      personaIds: body.personaIds,
+      directivesSummary: body.directivesSummary,
+      directiveCount: body.directiveCount,
+      thinkLevel: body.thinkLevel,
+      reasoningLevel: body.reasoningLevel,
+      temperature: body.temperature,
+    });
+    return c.json({ id });
   });
 
   return router;

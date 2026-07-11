@@ -224,9 +224,10 @@ async function resolveRunModel(db: Db, executionId: number): Promise<{ model: st
   }
 }
 
-/** The latest PR row for a task → (merged, ciGreen). merged also covers a merged-by
- *  status without an explicit mergedAt timestamp. */
-async function resolveTaskPrSignal(db: Db, tenantId: number, taskId: number): Promise<{ merged: boolean; ciGreen: boolean }> {
+/** The latest PR row for a task → (merged, ciGreen, closedUnmerged). merged also covers
+ *  a merged-by status without an explicit mergedAt timestamp; closedUnmerged is a human
+ *  closing the PR without merging (a literal rejection of the deliverable). */
+async function resolveTaskPrSignal(db: Db, tenantId: number, taskId: number): Promise<{ merged: boolean; ciGreen: boolean; closedUnmerged: boolean }> {
   try {
     const [row] = await db
       .select({ status: pullRequests.status, mergedAt: pullRequests.mergedAt, buildStatus: pullRequests.buildStatus })
@@ -234,13 +235,36 @@ async function resolveTaskPrSignal(db: Db, tenantId: number, taskId: number): Pr
       .where(and(eq(pullRequests.taskId, taskId), eq(pullRequests.tenantId, tenantId)))
       .orderBy(sql`${pullRequests.number} is not null desc`, desc(pullRequests.createdAt))
       .limit(1);
-    if (!row) return { merged: false, ciGreen: false };
+    if (!row) return { merged: false, ciGreen: false, closedUnmerged: false };
+    const merged = row.status === 'merged' || row.mergedAt != null;
     return {
-      merged: row.status === 'merged' || row.mergedAt != null,
+      merged,
       ciGreen: row.buildStatus === 'success',
+      closedUnmerged: !merged && row.status === 'closed',
     };
   } catch {
-    return { merged: false, ciGreen: false };
+    return { merged: false, ciGreen: false, closedUnmerged: false };
+  }
+}
+
+/** Literal tool-use telemetry for a run: total tool calls (category='tool' audit rows
+ *  whose result is a JSON tool payload) and how many returned an error (`ok:false`).
+ *  ONE grouped query — no per-tool scan. */
+async function resolveToolCounts(db: Db, executionId: number): Promise<{ toolCalls: number; toolErrors: number }> {
+  try {
+    const [row] = await db
+      .select({
+        // Real tool executions stringify a JSON result (`{...}`); auxiliary 'tool'
+        // events (policy.blocked / finish.blocked) write plain-text results, excluded.
+        calls: sql<number>`count(*) FILTER (WHERE ${toolAuditEvents.result} LIKE '{%')::int`,
+        errors: sql<number>`count(*) FILTER (WHERE ${toolAuditEvents.result} LIKE '%"ok":false%')::int`,
+      })
+      .from(toolAuditEvents)
+      .where(and(eq(toolAuditEvents.executionId, executionId), eq(toolAuditEvents.category, 'tool')))
+      .limit(1);
+    return { toolCalls: Number(row?.calls) || 0, toolErrors: Number(row?.errors) || 0 };
+  } catch {
+    return { toolCalls: 0, toolErrors: 0 };
   }
 }
 
@@ -257,16 +281,22 @@ async function runWasDegraded(db: Db, executionId: number): Promise<boolean> {
   }
 }
 
-async function runWasApproved(db: Db, executionId: number): Promise<boolean> {
+/** Human review outcome for a run in ONE query: did a human APPROVE any bubbled-up
+ *  action (pins completion to full), and did a human REJECT one (a literal rejection
+ *  signal for trait reinforcement)? */
+async function resolveApprovalOutcome(db: Db, executionId: number): Promise<{ approved: boolean; rejected: boolean }> {
   try {
     const [row] = await db
-      .select({ n: sql<number>`count(*)::int` })
+      .select({
+        approved: sql<number>`count(*) FILTER (WHERE ${approvals.status} = 'approved')::int`,
+        rejected: sql<number>`count(*) FILTER (WHERE ${approvals.status} = 'rejected')::int`,
+      })
       .from(approvals)
-      .where(and(eq(approvals.executionId, executionId), eq(approvals.status, 'approved')))
+      .where(eq(approvals.executionId, executionId))
       .limit(1);
-    return (Number(row?.n) || 0) > 0;
+    return { approved: (Number(row?.approved) || 0) > 0, rejected: (Number(row?.rejected) || 0) > 0 };
   } catch {
-    return false;
+    return { approved: false, rejected: false };
   }
 }
 
@@ -307,13 +337,18 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       return lexicalEval({ question, answer });
     })();
 
-    const [{ model, steps, costMc }, pr, degraded, approved, plan] = await Promise.all([
+    const [{ model, steps, costMc }, pr, degraded, approval, toolCounts, plan] = await Promise.all([
       resolveRunModel(db, args.executionId),
       resolveTaskPrSignal(db, exec.tenantId, exec.taskId),
       runWasDegraded(db, args.executionId),
-      runWasApproved(db, args.executionId),
+      resolveApprovalOutcome(db, args.executionId),
+      resolveToolCounts(db, args.executionId),
       resolveTenantPlan(env, exec.tenantId).then((p) => p.effectivePlan).catch(() => 'free' as const),
     ]);
+    const approved = approval.approved;
+    // Literal human-rejection: a bubbled-up approval was rejected OR the PR was closed
+    // without merging. Consumed by trait reinforcement (was the cancelled-run proxy).
+    const humanRejected = approval.rejected || pr.closedUnmerged;
 
     const { score } = computeOutcomeScore({
       terminalStatus,
@@ -342,6 +377,10 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       steps,
       costUsdMillicents: costMc,
       terminalStatus,
+      // Literal reinforcement signals (migration 0333).
+      toolCalls: toolCounts.toolCalls,
+      toolErrors: toolCounts.toolErrors,
+      humanRejected,
       faithfulness: evalScores?.faithfulness ?? null,
       answerRelevance: evalScores?.answerRelevance ?? null,
       hallucinationRate: evalScores?.hallucinationRate ?? null,
@@ -362,6 +401,8 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
         .update(runModelOutcomes)
         .set({
           score, merged: pr.merged, ciGreen: pr.ciGreen, degraded, steps, costUsdMillicents: costMc, resolvedModel, plan,
+          // Refresh the literal signals on re-score too (a late PR-close / approval lands here).
+          toolCalls: toolCounts.toolCalls, toolErrors: toolCounts.toolErrors, humanRejected,
           // Re-evaluate on re-score too (the deliverable text may have settled).
           ...(evalScores
             ? {

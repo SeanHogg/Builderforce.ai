@@ -355,7 +355,7 @@ export function TaskMgmtContent({
   // "update task" action in the docked drawer), the write lands via the API but
   // this board holds its own state — so listen on the brain-data bus and refetch
   // to reflect the change live instead of going stale until a manual reload.
-  useBrainDataRefresh(['tasks', 'executions', 'projects'], () => { void load({ background: true }); });
+  useBrainDataRefresh(['tasks', 'executions', 'projects', 'boards'], () => { void load({ background: true }); });
 
   useEffect(() => {
     if (view === 'board') {

@@ -5589,6 +5589,19 @@
     "captureHasTrace": "将本次运行（大模型步骤、工具链、错误和会话记录）复制到剪贴板",
     "captureNoTrace": "尚未捕获任何执行——请先发送一条消息",
     "captureExecutionAria": "捕获执行",
+    "consolidate": "整合",
+    "consolidating": "整合中…",
+    "fork": "分支",
+    "forking": "分支中…",
+    "forkOf": "{title} 的分支",
+    "newChatFallback": "新对话",
+    "nothingToConsolidate": "对话内容还不足以整合。",
+    "nothingToFork": "对话内容还不足以分支。",
+    "consolidateFailed": "整合失败",
+    "forkFailed": "分支失败",
+    "memoryToggleLabel": "记忆",
+    "memoryOnTooltip": "项目记忆已开启——此对话会从项目的 Evermind 中回忆并学习",
+    "memoryOffTooltip": "此对话的项目记忆已关闭——已停用 Evermind 的回忆与学习",
     "brainDefault": "Brain（默认）",
     "noChatsYet": "还没有会话。点击“+ 新建”开始。",
     "noChatsMatch": "没有匹配搜索的会话。",
@@ -6009,7 +6022,8 @@
       "devops": {
         "label": "DevOps / IT 运维管理器",
         "description": "守护可靠性——优先处理部署、基础设施、监控和运维风险。"
-      }
+      },
+      "fillsRole": "在团队中担任 {role} 角色"
     },
     "coaching": {
       "title": "指导管理器",
@@ -6023,7 +6037,18 @@
       "activeTitle": "长期指示",
       "empty": "暂无长期指示。",
       "tenantWide": "全工作区",
-      "dismiss": "忽略"
+      "dismiss": "忽略",
+      "modeLabel": "指导类型",
+      "modeDirective": "长期指令",
+      "modeTask": "一次性任务",
+      "taskHint": "给经理一个具体任务——执行一次后继续其他工作。",
+      "taskPlaceholder": "例如：重新整理支付史诗并对其待办列表排序。",
+      "taskSubmit": "分配任务",
+      "expiryLabel": "有效期（天）",
+      "expiryPlaceholder": "天数（可选）",
+      "expiresAt": "{when} 到期",
+      "noExpiry": "永不过期",
+      "markDone": "完成"
     },
     "autonomyPaused": {
       "title": "自主管理已暂停",
@@ -6734,6 +6759,7 @@
     "kindRole": "角色",
     "kindReview": "评审",
     "kindDiagnostic": "诊断",
+    "diagnosticIdPlaceholder": "诊断 ID",
     "respOwner": "负责人",
     "respReviewer": "评审者",
     "respContributor": "贡献者",

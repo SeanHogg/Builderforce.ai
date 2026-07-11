@@ -1,4 +1,14 @@
 import * as vscode from "vscode";
+import {
+  streamChatCompletion,
+  chatWorkLinkingDirective,
+  isCodeChangeTool,
+  isTicketRecordingTool,
+  codeChangeFile,
+  type BrainTransport,
+  type ChatCompletionMessage,
+  type BrainToolSpec,
+} from "@seanhogg/builderforce-brain-embedded";
 import { ChatMessage, getApiKey, getBaseUrl } from "./gateway";
 import { describeTool, TOOL_DEFS, type ToolDef } from "./fileTools";
 import { listPlatformTools, describePlatformTool } from "./platformTools";
@@ -18,6 +28,14 @@ export interface AgentDeps {
   root?: string;
   /** Active project. Scopes the shared write-through memory (recall + remember_fact). */
   projectId?: number;
+  /**
+   * The session's Brain chat id. Binds the run's work to a conversation exactly as
+   * the webview Brain does: the chat-work-linking directive is injected with this id
+   * (so the model links created work + code-change deltas to THIS chat), and the
+   * post-run "a code change is always tied to a ticket" backstop passes it to
+   * from_delta. Omit for a chat-less run (the backstop still mints an unlinked ticket).
+   */
+  chatId?: number;
   model?: string;
   permissionMode: "ask" | "acceptEdits";
   /** Returns true if the user approves a mutating tool call. */
@@ -96,6 +114,53 @@ export async function runAgent(
   if (governance) messages.unshift({ role: "system", content: governance });
   const policyAsked = new Set<string>();
 
+  // Bind this run's work to the conversation, mirroring the shared webview/web Brain
+  // loop (brainRunStore): tell the model its chatId so identified work is CREATED +
+  // linked to the chat and code changes are recorded via from_delta tied to it. The
+  // deterministic backstop below guarantees the code-change half regardless.
+  if (deps.chatId != null) {
+    messages.unshift({ role: "system", content: chatWorkLinkingDirective(deps.chatId) });
+  }
+  // Backstop bookkeeping: whether a workspace file-change tool succeeded, whether the
+  // model itself recorded a ticket (from_delta / link / review), and which files it
+  // touched — so a code-changing turn that never linked its work gets a ticket minted.
+  let codeChanged = false;
+  let ticketRecorded = false;
+  const touchedFiles: string[] = [];
+
+  // Guarantee a code change is tied to a ticket: if the run CHANGED code but never
+  // recorded/linked one itself, mint a ticket now via the platform from_delta tool
+  // (tied to the chat when we have one), so an edit is never invisible or unlinked —
+  // the native-participant twin of the webview loop's backstop. Best-effort: never
+  // throws, never blocks the reply, skipped on cancel or with no project scope.
+  const flushCodeChangeTicket = async (): Promise<void> => {
+    if (!codeChanged || ticketRecorded || deps.projectId == null || deps.signal.aborted) return;
+    const fromDelta = toolDefs.find((d) => d.name === "builtin_tickets_from_delta");
+    if (!fromDelta) return;
+    const files = touchedFiles.slice(0, 50);
+    const summary = files.length
+      ? `Code change (${files.length} file${files.length === 1 ? "" : "s"}) from the BuilderForce chat`
+      : "Code change from the BuilderForce chat";
+    try {
+      await fromDelta.execute(
+        {
+          projectId: deps.projectId,
+          summary,
+          detail:
+            "Auto-captured: this chat changed code without recording a ticket, so the platform minted one to keep the work visible on the board and linked to the conversation.",
+          files,
+          kind: "improvement",
+          modality: "ide",
+          ...(deps.chatId != null ? { chatId: deps.chatId } : {}),
+        },
+        deps.root ?? "",
+      );
+      events.onToolResult("recorded code change as a ticket", true);
+    } catch {
+      /* backstop is best-effort — never surface an error for it */
+    }
+  };
+
   // Evermind recall: inject facts relevant to the latest user message as a
   // system block, before the first turn. Self-updating memory the agent reads
   // each request (write side is the `remember_fact` tool above). Best-effort.
@@ -110,12 +175,56 @@ export async function runAgent(
     }
   }
 
+  // The ONE shared, tool-capable streaming client (brain-embedded's
+  // streamChatCompletion) — the same transport the web + webview Brain use. The
+  // duplicate in-extension SSE parser is retired. Auth, the `vsix` surface tag, and
+  // the human-readable gateway error mapping are injected via this BrainTransport;
+  // the tool loop and MAX_ITERATIONS below are unchanged.
+  const key = await getApiKey(deps.secrets);
+  if (!key) {
+    events.onError("not_signed_in");
+    return;
+  }
+  const transport: BrainTransport = {
+    baseUrl: getBaseUrl(),
+    getToken: () => key,
+    // Inject the host fetch purely so the `x-builderforce-surface: vsix` header rides
+    // every request (streamChatCompletion doesn't set it) — the gateway meters BYO
+    // usage from the extension (which runs on the user's own machine) as free off this
+    // tag, never charged against the plan allowance. Otherwise the global fetch.
+    fetch: (input, reqInit) =>
+      fetch(input, {
+        ...reqInit,
+        headers: {
+          ...((reqInit.headers as Record<string, string>) ?? {}),
+          "x-builderforce-surface": "vsix",
+        },
+      }),
+    // Preserve the extension's clean gateway-error prose (auth hints, quota, HTTP).
+    mapError: async (res) => {
+      const txt = await res.text().catch(() => "");
+      return new Error(prettyGatewayError(res.status, txt));
+    },
+  };
+
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     if (deps.signal.aborted) return;
 
     let turn: { content: string; toolCalls: RawToolCall[] };
     try {
-      turn = await streamTurn(messages, tools, deps, events);
+      // messages carries assistant tool-call turns with `content: null` (valid to the
+      // gateway) — the cast is exact; streamChatCompletion only reads the array.
+      const result = await streamChatCompletion(
+        {
+          messages: messages as unknown as ChatCompletionMessage[],
+          tools: tools as BrainToolSpec[] | undefined,
+          model: deps.model,
+          signal: deps.signal,
+          transport,
+        },
+        { onTextDelta: (delta) => events.onText(delta) },
+      );
+      turn = { content: result.text, toolCalls: result.toolCalls };
     } catch (e) {
       const err = e as { name?: string; message?: string };
       if (err.name === "AbortError") return;
@@ -125,6 +234,7 @@ export async function runAgent(
 
     if (turn.toolCalls.length === 0) {
       messages.push({ role: "assistant", content: turn.content });
+      await flushCodeChangeTicket();
       return;
     }
 
@@ -195,6 +305,15 @@ export async function runAgent(
         const result = await def.execute(args, deps.root ?? "");
         events.onToolResult(label, true);
         messages.push({ role: "tool", tool_call_id: toolCallId, content: result });
+        // Backstop bookkeeping (see flushCodeChangeTicket): a successful workspace
+        // file-change marks the run as code-changing; the model recording its own
+        // delta/link/review clears the need for the auto-capture.
+        if (isCodeChangeTool(def.name)) {
+          codeChanged = true;
+          const f = codeChangeFile(args);
+          if (f && !touchedFiles.includes(f)) touchedFiles.push(f);
+        }
+        if (isTicketRecordingTool(def.name)) ticketRecorded = true;
       } catch (e) {
         const msg = (e as { message?: string }).message ?? String(e);
         events.onToolResult(`${label} — ${msg}`, false);
@@ -202,6 +321,10 @@ export async function runAgent(
       }
     }
   }
+
+  // Budget exhausted — still guarantee any code changed this run is tied to a ticket
+  // before we surface the dispatch hint.
+  await flushCodeChangeTicket();
 
   // Hit the inline step budget without finishing — this is the signal the job is too
   // large for an in-editor chat. Point at the dispatch path (persona's handoff
@@ -212,92 +335,4 @@ export async function runAgent(
       `(I'll create a task with the full instructions and assign a cloud agent to run it to completion), ` +
       `or narrow the scope.`,
   );
-}
-
-/** One streamed turn: accumulates assistant text and any tool-call deltas. */
-async function streamTurn(
-  messages: ChatMessage[],
-  tools: ReturnType<typeof toOpenAiTools> | undefined,
-  deps: AgentDeps,
-  events: AgentEvents,
-): Promise<{ content: string; toolCalls: RawToolCall[] }> {
-  const key = await getApiKey(deps.secrets);
-  if (!key) throw new Error("not_signed_in");
-
-  const body: Record<string, unknown> = { messages, stream: true };
-  if (deps.model) body.model = deps.model;
-  if (tools) {
-    body.tools = tools;
-    body.tool_choice = "auto";
-  }
-
-  const res = await fetch(`${getBaseUrl()}/llm/v1/chat/completions`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${key}`,
-      // Tag the surface so BYO usage from the extension (which runs on the user's
-      // own machine) is metered as free — never charged against the plan token
-      // allowance the way cloud-agent usage is. See the gateway's usage `surface`.
-      "x-builderforce-surface": "vsix",
-    },
-    body: JSON.stringify(body),
-    signal: deps.signal,
-  });
-  if (!res.ok || !res.body) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(prettyGatewayError(res.status, txt));
-  }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let content = "";
-  const calls: RawToolCall[] = [];
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      const t = line.trim();
-      if (!t.startsWith("data:")) continue;
-      const payload = t.slice(5).trim();
-      if (payload === "[DONE]") return { content, toolCalls: calls.filter(Boolean) };
-      try {
-        const json = JSON.parse(payload) as {
-          choices?: Array<{
-            delta?: {
-              content?: string;
-              tool_calls?: Array<{
-                index?: number;
-                id?: string;
-                function?: { name?: string; arguments?: string };
-              }>;
-            };
-          }>;
-        };
-        const delta = json.choices?.[0]?.delta;
-        if (delta?.content) {
-          content += delta.content;
-          events.onText(delta.content);
-        }
-        if (delta?.tool_calls) {
-          for (const tc of delta.tool_calls) {
-            const idx = tc.index ?? 0;
-            const slot = (calls[idx] ??= { id: "", name: "", args: "" });
-            if (tc.id) slot.id = tc.id;
-            if (tc.function?.name) slot.name += tc.function.name;
-            if (tc.function?.arguments) slot.args += tc.function.arguments;
-          }
-        }
-      } catch {
-        /* keepalive / partial frame */
-      }
-    }
-  }
-
-  return { content, toolCalls: calls.filter(Boolean) };
 }

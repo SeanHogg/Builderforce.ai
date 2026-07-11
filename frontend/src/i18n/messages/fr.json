@@ -5589,6 +5589,19 @@
     "captureHasTrace": "Copier cette exécution (étapes du LLM, chaîne d'outils, erreurs et transcription) dans le presse-papiers",
     "captureNoTrace": "Aucune exécution capturée pour l'instant — envoyez d'abord un message",
     "captureExecutionAria": "Capturer l'exécution",
+    "consolidate": "Consolider",
+    "consolidating": "Consolidation…",
+    "fork": "Bifurquer",
+    "forking": "Bifurcation…",
+    "forkOf": "Bifurcation de {title}",
+    "newChatFallback": "Nouvelle conversation",
+    "nothingToConsolidate": "Pas encore assez d'échanges pour consolider.",
+    "nothingToFork": "Pas encore assez d'échanges pour bifurquer.",
+    "consolidateFailed": "Échec de la consolidation",
+    "forkFailed": "Échec de la bifurcation",
+    "memoryToggleLabel": "Mémoire",
+    "memoryOnTooltip": "La mémoire du projet est ACTIVÉE — cette conversation se souvient et apprend de l'Evermind du projet",
+    "memoryOffTooltip": "La mémoire du projet est DÉSACTIVÉE pour cette conversation — le rappel et l'apprentissage Evermind sont désactivés",
     "brainDefault": "Brain (par défaut)",
     "noChatsYet": "Aucune discussion pour le moment. Cliquez sur + Nouveau pour commencer.",
     "noChatsMatch": "Aucune discussion ne correspond à votre recherche.",
@@ -6009,7 +6022,8 @@
       "devops": {
         "label": "Gestionnaire DevOps / Opérations IT",
         "description": "Protège la fiabilité — priorise les déploiements, l’infrastructure, la supervision et le risque opérationnel."
-      }
+      },
+      "fillsRole": "Occupe le rôle {role} dans l’équipe"
     },
     "coaching": {
       "title": "Coacher le gestionnaire",
@@ -6023,7 +6037,18 @@
       "activeTitle": "Consignes permanentes",
       "empty": "Aucune consigne permanente pour l’instant.",
       "tenantWide": "Tout l’espace de travail",
-      "dismiss": "Ignorer"
+      "dismiss": "Ignorer",
+      "modeLabel": "Type de coaching",
+      "modeDirective": "Directive permanente",
+      "modeTask": "Tâche ponctuelle",
+      "taskHint": "Confiez au manager une tâche précise : il l’exécute une fois, puis passe à la suite.",
+      "taskPlaceholder": "p. ex. Réorganisez l’épopée paiements et priorisez son backlog.",
+      "taskSubmit": "Assigner la tâche",
+      "expiryLabel": "Expire dans (jours)",
+      "expiryPlaceholder": "Jours (facultatif)",
+      "expiresAt": "Expire {when}",
+      "noExpiry": "Sans expiration",
+      "markDone": "Terminé"
     },
     "autonomyPaused": {
       "title": "Gestion autonome en pause",
@@ -6734,6 +6759,7 @@
     "kindRole": "Rôle",
     "kindReview": "Revue",
     "kindDiagnostic": "Diagnostic",
+    "diagnosticIdPlaceholder": "id du diagnostic",
     "respOwner": "Responsable",
     "respReviewer": "Relecteur",
     "respContributor": "Contributeur",

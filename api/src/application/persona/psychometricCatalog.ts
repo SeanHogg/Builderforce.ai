@@ -7,7 +7,7 @@
  * both sides key on now come from ONE shared map (`@builderforce/agent-tools`
  * PSYCH_DIM), re-exported here as `DIM` so existing api consumers are unchanged.
  */
-import { PSYCH_DIM } from '@builderforce/agent-tools';
+import { PSYCH_DIM, type LimbicPsychProfile } from '@builderforce/agent-tools';
 import { clampScore } from '../../domain/shared/numbers';
 
 // Dimension ids — the single shared map (was duplicated here + in agent-runtime).
@@ -389,6 +389,42 @@ export function sanitizeVector(raw: unknown): Record<string, number> {
     out[key] = clampScore(Math.round(n));
   }
   return out;
+}
+
+/**
+ * Mean-average a set of psychometric profiles into ONE aggregate profile — the
+ * collective resting temperament of a group (e.g. the agents assigned to a project),
+ * used as the neutral-replacing setpoint for a project Evermind that carries no
+ * personality of its own.
+ *
+ * Each dimension is averaged only over the profiles that ACTUALLY carry it: an absent
+ * dimension is ignored (never counted as a neutral 50), so a partial profile still
+ * contributes exactly the traits it defines. Profiles with no usable trait signal
+ * (empty/absent/traitless vector — a "neutral-only" agent) drop out via
+ * {@link sanitizeVector}. Returns `undefined` when NO profile carries any trait, so a
+ * caller's neutral fallback holds and no dead/unset signal is fabricated.
+ *
+ * Pure. Dimension ids are never hardcoded — {@link sanitizeVector} whitelists them
+ * from the shared {@link DIM}/`PSYCH_DIM` map, so this tracks the catalog automatically.
+ */
+export function aggregateProjectPsychometric(
+  profiles: Array<LimbicPsychProfile | undefined | null>,
+): LimbicPsychProfile | undefined {
+  const acc = new Map<string, { total: number; count: number }>();
+  for (const profile of profiles) {
+    if (!profile) continue;
+    const vector = sanitizeVector(profile.vector);
+    for (const [dim, value] of Object.entries(vector)) {
+      const cur = acc.get(dim) ?? { total: 0, count: 0 };
+      cur.total += value;
+      cur.count += 1;
+      acc.set(dim, cur);
+    }
+  }
+  if (acc.size === 0) return undefined;
+  const vector: Record<string, number> = {};
+  for (const [dim, { total, count }] of acc) vector[dim] = Math.round(total / count);
+  return { vector };
 }
 
 /**

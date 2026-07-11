@@ -37,6 +37,7 @@ import type {
 } from './streamChatCompletion';
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
 import { withProvenanceMetadata, type ProvenanceAccount } from './provenance';
+import { chatWorkLinkingDirective, isCodeChangeTool, isTicketRecordingTool, codeChangeFile } from './chatWorkLinking';
 import {
   formatEvermindMemoryBlock,
   countReconciledMemories,
@@ -183,6 +184,14 @@ export interface BrainRunRequest {
   /** The user turn that triggered this run, appended to the transcript. */
   userTurn?: string | ContentPart[];
   /**
+   * The chat's project. Enables the post-run "a code change is always tied to a
+   * ticket" backstop: when an IDE run changed code but never recorded a ticket, the
+   * loop mints one via `builtin_tickets_from_delta` for THIS project, linked to the
+   * chat. Omit (or null) for a non-project chat / the web Brain (which has no file
+   * tools, so the backstop never fires there anyway).
+   */
+  projectId?: number | null;
+  /**
    * Project-Evermind memory hooks (bound to the active chat's project by the
    * host). When present, the loop recalls learned memories before answering,
    * injects them into the system prompt, and records recall/learn/reconcile
@@ -262,6 +271,15 @@ interface RunCell {
   /** Connected-but-unresolved BYO providers accumulated across this run's turns. */
   byoUnresolved: string[];
   /**
+   * Backstop bookkeeping for the current run (reset each {@link startRun}): whether a
+   * workspace code-change tool succeeded, whether the model itself recorded a ticket
+   * (from_delta / link / review), and the files it touched — so a code-changing run
+   * that never linked its work gets a ticket minted for it. IDE-only in practice.
+   */
+  codeChanged: boolean;
+  ticketRecorded: boolean;
+  touchedFiles: string[];
+  /**
    * Cached compressed-memory of the run's older turns. When the transcript exceeds
    * {@link HISTORY_TOKEN_BUDGET} the loop SUMMARIZES the bulky middle (instead of
    * dropping it, which made a weak model re-read and thrash into "LOOP EXHAUSTED"),
@@ -320,6 +338,9 @@ function makeCell(): RunCell {
     listeners: new Set(),
     abort: null,
     byoUnresolved: [],
+    codeChanged: false,
+    ticketRecorded: false,
+    touchedFiles: [],
     compactMemo: null,
     snapshot: EMPTY_SNAPSHOT,
   };
@@ -812,6 +833,10 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
   c.error = '';
   c.streamingText = '';
   c.byoUnresolved = []; // fresh per run — a reconnected account clears the banner
+  // Fresh backstop bookkeeping per run (see the finally block below).
+  c.codeChanged = false;
+  c.ticketRecorded = false;
+  c.touchedFiles = [];
   // Fresh abort handle for this run, so Stop can cancel the LLM stream and unwind
   // the loop (a stale, already-aborted controller never bleeds into a new run).
   c.abort = new AbortController();
@@ -832,11 +857,61 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
     // this guards the rare throw that races the abort.)
     if (!c.abort?.signal.aborted) c.error = e instanceof Error ? e.message : 'Reply failed';
   } finally {
+    const aborted = c.abort?.signal.aborted ?? false;
     c.running = false;
     c.streamingText = '';
     c.abort = null;
+    // Guarantee a code change is tied to a ticket: if this run CHANGED code (an IDE
+    // file tool succeeded) but never itself recorded/linked one, mint a ticket now
+    // via from_delta, tied to this chat — so an edit is never invisible or unlinked.
+    // Best-effort and IDE-only (the web Brain has no file tools → codeChanged stays
+    // false). Skipped on a user Stop. Runs before the final emit so the auto-recorded
+    // step is part of the settled run.
+    if (!aborted && c.codeChanged && !c.ticketRecorded && req.projectId != null && req.runTool) {
+      await recordCodeChangeTicket(chatId, c, req).catch(() => { /* never fail the run on the backstop */ });
+    }
     emit(c);
   }
+}
+
+/**
+ * Post-run backstop for the "a code change is always tied to a ticket" guarantee.
+ * Calls the shared platform tool `builtin_tickets_from_delta` (via the run's own
+ * `runTool` dispatcher, so it rides the same gateway MCP relay the model uses),
+ * passing the chatId so the minted ticket is linked to this conversation. Records a
+ * durable tool step so the auto-capture is visible on the timeline. Never throws.
+ */
+async function recordCodeChangeTicket(chatId: number, c: RunCell, req: BrainRunRequest): Promise<void> {
+  if (!req.runTool || req.projectId == null) return;
+  const files = c.touchedFiles.slice(0, 50);
+  const summary = files.length
+    ? `Code change (${files.length} file${files.length === 1 ? '' : 's'}) from Brain chat #${chatId}`
+    : `Code change from Brain chat #${chatId}`;
+  const toolStart = nowMs();
+  let out: unknown;
+  try {
+    out = await req.runTool('builtin_tickets_from_delta', {
+      projectId: req.projectId,
+      summary,
+      detail:
+        'Auto-captured: this chat changed code without recording a ticket, so the platform minted one to keep the work visible on the board and linked to the conversation.',
+      files,
+      kind: 'improvement',
+      modality: 'ide',
+      chatId,
+    });
+  } catch (e) {
+    out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  pushDurableStep(c, chatId, req.persistence, {
+    ts: nowIso(),
+    category: 'tool',
+    label: 'builtin_tickets_from_delta',
+    durationMs: nowMs() - toolStart,
+    args: { projectId: req.projectId, summary, files, auto: true, chatId },
+    result: out ?? null,
+    isError: isFailedToolResult(out),
+  });
 }
 
 /**
@@ -898,6 +973,14 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       // ignore — proceed without the augmentation
     }
   }
+
+  // Bind this run's work to the conversation: tell the model its chatId and that
+  // work it identifies or code it changes must become a ticket LINKED to this chat.
+  // This is the enabler the chat-scoped + from_delta tools need — without the id
+  // they are advertised but the model has no chatId to pass. Injected here (with the
+  // guaranteed-resolved id) so it rides BOTH the web Brain and the VS Code webview
+  // Brain, mirroring the server-side @agent reply loop (BrainService.agentReply).
+  systemPrompt = `${systemPrompt}\n\n${chatWorkLinkingDirective(chatId)}`;
 
   // Read-only tool calls whose (name+args) exactly repeat within a run return a
   // "already returned above" stub instead of re-fetching + re-injecting the full
@@ -1065,6 +1148,16 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: 'tool', label: tc.name, durationMs: nowMs() - toolStart, args, result: out, isError: true });
           continue;
         }
+        // Backstop bookkeeping (see startRun's finally): a successful workspace
+        // file-change marks the run as code-changing (and remembers the file), while
+        // the model recording its own delta/link/review clears the need for the
+        // auto-capture. A failed call above `continue`d out, so this counts successes.
+        if (isCodeChangeTool(tc.name)) {
+          c.codeChanged = true;
+          const f = codeChangeFile(args);
+          if (f && !c.touchedFiles.includes(f)) c.touchedFiles.push(f);
+        }
+        if (isTicketRecordingTool(tc.name)) c.ticketRecorded = true;
         // The MODEL transcript gets a size-capped copy so a big list result can't
         // flood the context window; the TRACE keeps the full result (bounded by
         // MAX_TRACE_EVENTS) for the timeline + triage copy, plus the pre-trim byte

@@ -96,6 +96,8 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
   // Coaching-session state (the human directs the manager).
   const [coachText, setCoachText] = useState('');
   const [coachScope, setCoachScope] = useState<'project' | 'tenant'>('project');
+  const [coachMode, setCoachMode] = useState<'directive' | 'task'>('directive');
+  const [coachExpiryDays, setCoachExpiryDays] = useState('');
   const [coaching, setCoaching] = useState(false);
   // Assignee pools that back the "who manages this" designation select.
   const [hosts, setHosts] = useState<AgentHost[]>([]);
@@ -218,20 +220,28 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
     setCoaching(true);
     setError(null);
     try {
-      await managerApi.coach(projectId, { directive, scope: coachScope });
+      const days = Number(coachExpiryDays);
+      await managerApi.coach(projectId, {
+        directive,
+        mode: coachMode,
+        ...(coachMode === 'directive'
+          ? { scope: coachScope, ...(Number.isFinite(days) && days > 0 ? { expiresInDays: days } : {}) }
+          : {}),
+      });
       setCoachText('');
+      setCoachExpiryDays('');
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : t('error.body'));
     } finally {
       setCoaching(false);
     }
-  }, [projectId, coaching, coachText, coachScope, load, t]);
+  }, [projectId, coaching, coachText, coachMode, coachScope, coachExpiryDays, load, t]);
 
-  const dismissDirective = useCallback(async (id: string) => {
+  const setDirectiveStatus = useCallback(async (id: string, status: 'dismissed' | 'done') => {
     if (projectId == null) return;
     try {
-      await managerApi.dismissDirective(projectId, id);
+      await managerApi.dismissDirective(projectId, id, status);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : t('error.body'));
@@ -254,6 +264,17 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
   const managerValue = policy.managerRef ?? '';
   const capWindow = autonomy?.reason === 'monthly_exhausted' ? 'monthly' : 'daily';
   const activeDirectives = directives.filter((d) => d.status === 'active');
+
+  // A manager type is a built-in DOMAIN (localized by id) or a tenant CUSTOM-role type
+  // (`role:<key>`, rendered by its tenant-authored label). One helper keeps the two
+  // sources one concept in the UI.
+  const isBuiltinType = (id: string) => !id.startsWith('role:');
+  const typeLabel = (mt: { id: string; label: string }) =>
+    isBuiltinType(mt.id) ? t(`type.${mt.id}.label`) : mt.label;
+  const currentType = managerTypes.find((m) => m.id === policy.managerType);
+  const currentTypeDescription = currentType
+    ? (isBuiltinType(currentType.id) ? t(`type.${currentType.id}.description`) : currentType.description)
+    : '';
 
   const priorityChart: BarDatum[] = PRIORITIES.map((p) => ({
     key: p,
@@ -398,10 +419,17 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
               style={controlStyle}
             >
               {managerTypes.map((mt) => (
-                <option key={mt.id} value={mt.id}>{t(`type.${mt.id}.label`)}</option>
+                <option key={mt.id} value={mt.id}>{typeLabel(mt)}</option>
               ))}
             </Select>
-            <div style={{ ...mutedStyle, marginTop: 8 }}>{t(`type.${policy.managerType}.description`)}</div>
+            {currentTypeDescription && (
+              <div style={{ ...mutedStyle, marginTop: 8 }}>{currentTypeDescription}</div>
+            )}
+            {currentType?.roleKey && (
+              <div style={{ ...mutedStyle, marginTop: 6, fontSize: '0.72rem' }}>
+                {t('type.fillsRole', { role: currentType.roleKey })}
+              </div>
+            )}
           </div>
 
           {/* Toggles */}
@@ -466,32 +494,70 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
       <RoleGate capability="manager.manage" variant="block">
         <div style={panelStyle}>
           <div style={{ ...sectionTitleStyle, marginBottom: 4 }}>{t('coaching.title')}</div>
-          <div style={{ ...mutedStyle, marginBottom: 12 }}>{t('coaching.subtitle')}</div>
+          <div style={{ ...mutedStyle, marginBottom: 12 }}>
+            {coachMode === 'task' ? t('coaching.taskHint') : t('coaching.subtitle')}
+          </div>
+
+          {/* Mode — standing directive vs a one-off task the manager executes once. */}
+          <div role="radiogroup" aria-label={t('coaching.modeLabel')} style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 6, border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 4, marginBottom: 10 }}>
+            {(['directive', 'task'] as const).map((m) => {
+              const active = coachMode === m;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => setCoachMode(m)}
+                  style={{
+                    padding: '7px 12px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                    background: active ? 'var(--accent, #2563eb)' : 'transparent',
+                    color: active ? '#fff' : 'var(--text-secondary)', fontWeight: 600, fontSize: '0.82rem',
+                  }}
+                >
+                  {t(`coaching.mode${m === 'task' ? 'Task' : 'Directive'}`)}
+                </button>
+              );
+            })}
+          </div>
 
           <textarea
             value={coachText}
             onChange={(e) => setCoachText(e.target.value)}
-            placeholder={t('coaching.placeholder')}
+            placeholder={coachMode === 'task' ? t('coaching.taskPlaceholder') : t('coaching.placeholder')}
             rows={3}
             style={{ ...controlStyle, width: '100%', minWidth: 0, resize: 'vertical', fontFamily: 'inherit' }}
           />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginTop: 10 }}>
-            <Select
-              value={coachScope}
-              onChange={(e) => setCoachScope(e.target.value as 'project' | 'tenant')}
-              style={{ ...controlStyle, minWidth: 200 }}
-              aria-label={t('coaching.scopeLabel')}
-            >
-              <option value="project">{t('coaching.scopeProject')}</option>
-              <option value="tenant">{t('coaching.scopeTenant')}</option>
-            </Select>
+            {coachMode === 'directive' && (
+              <>
+                <Select
+                  value={coachScope}
+                  onChange={(e) => setCoachScope(e.target.value as 'project' | 'tenant')}
+                  style={{ ...controlStyle, minWidth: 180 }}
+                  aria-label={t('coaching.scopeLabel')}
+                >
+                  <option value="project">{t('coaching.scopeProject')}</option>
+                  <option value="tenant">{t('coaching.scopeTenant')}</option>
+                </Select>
+                <input
+                  type="number"
+                  min={0}
+                  value={coachExpiryDays}
+                  onChange={(e) => setCoachExpiryDays(e.target.value)}
+                  placeholder={t('coaching.expiryPlaceholder')}
+                  aria-label={t('coaching.expiryLabel')}
+                  style={{ ...controlStyle, width: 150 }}
+                />
+              </>
+            )}
             <button
               type="button"
               style={{ ...primaryBtn, opacity: coaching || coachText.trim().length < 3 ? 0.6 : 1 }}
               disabled={coaching || coachText.trim().length < 3}
               onClick={coachNow}
             >
-              {coaching ? t('coaching.sending') : t('coaching.submit')}
+              {coaching ? t('coaching.sending') : coachMode === 'task' ? t('coaching.taskSubmit') : t('coaching.submit')}
             </button>
           </div>
 
@@ -514,22 +580,41 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
                     <span aria-hidden style={{ flexShrink: 0 }}>🎯</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{d.directive}</div>
-                      {d.projectId == null && (
-                        <span style={{ ...mutedStyle, fontSize: '0.72rem' }}>{t('coaching.tenantWide')}</span>
-                      )}
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {d.projectId == null && (
+                          <span style={{ ...mutedStyle, fontSize: '0.72rem' }}>{t('coaching.tenantWide')}</span>
+                        )}
+                        <span style={{ ...mutedStyle, fontSize: '0.72rem' }}>
+                          {d.expiresAt ? t('coaching.expiresAt', { when: relative(d.expiresAt) }) : t('coaching.noExpiry')}
+                        </span>
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => dismissDirective(d.id)}
-                      title={t('coaching.dismiss')}
-                      aria-label={t('coaching.dismiss')}
-                      style={{
-                        flexShrink: 0, background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 6,
-                        color: 'var(--text-muted)', cursor: 'pointer', padding: '2px 8px', fontSize: '0.75rem',
-                      }}
-                    >
-                      {t('coaching.dismiss')}
-                    </button>
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      <button
+                        type="button"
+                        onClick={() => setDirectiveStatus(d.id, 'done')}
+                        title={t('coaching.markDone')}
+                        aria-label={t('coaching.markDone')}
+                        style={{
+                          background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 6,
+                          color: 'var(--text-muted)', cursor: 'pointer', padding: '2px 8px', fontSize: '0.75rem',
+                        }}
+                      >
+                        {t('coaching.markDone')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDirectiveStatus(d.id, 'dismissed')}
+                        title={t('coaching.dismiss')}
+                        aria-label={t('coaching.dismiss')}
+                        style={{
+                          background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 6,
+                          color: 'var(--text-muted)', cursor: 'pointer', padding: '2px 8px', fontSize: '0.75rem',
+                        }}
+                      >
+                        {t('coaching.dismiss')}
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
