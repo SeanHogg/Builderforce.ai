@@ -51,6 +51,9 @@ export default function PsychometricEditor({ value, onChange, forceUnlocked = fa
   const enneagram = catalog?.enneagram ?? [];
 
   const [tab, setTab] = useState<Tab>('sliders');
+  // Basic (quick, free) vs advanced (full battery) questionnaire split. Defaults to
+  // the short basic test so a first-time user isn't faced with the whole battery.
+  const [testTier, setTestTier] = useState<'basic' | 'advanced'>('basic');
   const [vector, setVector] = useState<Record<string, number>>(value?.vector ?? {});
   const [enneagramType, setEnneagramType] = useState<number | undefined>(value?.enneagramType);
   const [mbti, setMbti] = useState(value?.mbti ?? '');
@@ -82,10 +85,16 @@ export default function PsychometricEditor({ value, onChange, forceUnlocked = fa
     setBusy(true);
     setNotice('');
     try {
-      const { vector: scored } = await psychometricApi.score(answers);
+      const { vector: scored, mbti: scoredMbti, enneagramType: scoredEnn } = await psychometricApi.score(answers);
       const next = { ...vector, ...scored };
       setVector(next);
-      emit({ vector: next, source: 'questionnaire' });
+      // The questionnaire now also derives the categorical MBTI / Enneagram skins —
+      // fold them in when the answered items produced them (else keep the existing).
+      const nextMbti = scoredMbti ?? mbti;
+      const nextEnn = typeof scoredEnn === 'number' ? scoredEnn : enneagramType;
+      if (scoredMbti) setMbti(scoredMbti);
+      if (typeof scoredEnn === 'number') setEnneagramType(scoredEnn);
+      emit({ vector: next, mbti: nextMbti || undefined, enneagramType: nextEnn, source: 'questionnaire' });
       setTab('sliders');
       setNotice(t('noticeScored'));
     } catch (e) {
@@ -120,6 +129,14 @@ export default function PsychometricEditor({ value, onChange, forceUnlocked = fa
   const signalCount = useMemo(
     () => Object.values(vector).filter((v) => v !== NEUTRAL_SCORE).length + (enneagramType ? 1 : 0) + (mbti ? 1 : 0),
     [vector, enneagramType, mbti],
+  );
+
+  // The questionnaire items for the active tier. Basic shows only the high-signal
+  // spine (tier === 'basic'); advanced shows the full battery. Older catalogs omit
+  // `tier` → those items fall into advanced only.
+  const visibleQuestions = useMemo(
+    () => (testTier === 'basic' ? questions.filter((qn) => qn.tier === 'basic') : questions),
+    [questions, testTier],
   );
 
   if (loading) return <div style={{ color: 'var(--muted)', fontSize: 13 }}>{t('loading')}</div>;
@@ -234,8 +251,25 @@ export default function PsychometricEditor({ value, onChange, forceUnlocked = fa
 
       {tab === 'questionnaire' && (
         <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {(['basic', 'advanced'] as const).map((tier) => (
+                <button
+                  key={tier}
+                  type="button"
+                  className={`btn btn-sm ${testTier === tier ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setTestTier(tier)}
+                >
+                  {tier === 'basic' ? t('tierBasic') : t('tierAdvanced')}
+                </button>
+              ))}
+            </div>
+            <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+              {testTier === 'basic' ? t('tierBasicHint') : t('tierAdvancedHint')}
+            </span>
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 320, overflowY: 'auto' }}>
-            {questions.map((qn) => (
+            {visibleQuestions.map((qn) => (
               <div key={qn.id}>
                 <div style={{ fontSize: 12, marginBottom: 4 }}>{qn.text}</div>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>

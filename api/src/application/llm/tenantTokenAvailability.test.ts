@@ -4,8 +4,10 @@ import type { Db } from '../../infrastructure/database/connection';
 
 /**
  * Minimal fake drizzle query builder: each terminal chain resolves to the next
- * queued result. getTenantTokenAvailability issues at most two selects — the
- * tenant row, then (only if capped) the usage scan — so we queue results in order.
+ * queued result. For a CAPPED tenant getTenantTokenAvailability issues the tenant
+ * row, an optional acting-user superadmin lookup, a tenant-superadmin-member lookup
+ * (empty = none), then the usage scan — so we queue results in that order. An
+ * already-unlimited tenant stops after the tenant row.
  */
 function fakeDb(results: unknown[][]): Db {
   let i = 0;
@@ -37,8 +39,10 @@ describe('getTenantTokenAvailability', () => {
 
   it('reports daily_exhausted when today usage is at/over an explicit daily grant', async () => {
     // override 1000 → daily cap 1000, monthly unlimited. Usage day 1000 >= cap.
+    // Selects: tenant row, tenant-superadmin lookup (none), usage scan.
     const db = fakeDb([
       [{ ...activePro, tokenDailyLimitOverride: 1000 }],
+      [],
       [{ day: 1000, month: 1000 }],
     ]);
     const a = await getTenantTokenAvailability(db, 1);
@@ -49,6 +53,7 @@ describe('getTenantTokenAvailability', () => {
   it('has tokens when usage is under the cap', async () => {
     const db = fakeDb([
       [{ ...activePro, tokenDailyLimitOverride: 1000 }],
+      [],
       [{ day: 10, month: 10 }],
     ]);
     const a = await getTenantTokenAvailability(db, 1);
@@ -59,6 +64,7 @@ describe('getTenantTokenAvailability', () => {
   it('a free (billing none) tenant resolves to the free plan copy', async () => {
     const db = fakeDb([
       [{ plan: 'pro', billingStatus: 'none', trialEndsAt: null, tokenDailyLimitOverride: null }],
+      [],
       [{ day: 0, month: 0 }],
     ]);
     const a = await getTenantTokenAvailability(db, 1);
@@ -68,7 +74,7 @@ describe('getTenantTokenAvailability', () => {
 
   it('a superadmin acting user is unlimited even on a capped free tenant (no usage scan)', async () => {
     // Order of selects with actingUserId: tenant row, then users.isSuperadmin. The
-    // superadmin short-circuit skips the usage scan entirely, so none is queued.
+    // superadmin short-circuit skips both the tenant-member lookup and the usage scan.
     const db = fakeDb([
       [{ plan: 'free', billingStatus: 'none', trialEndsAt: null, tokenDailyLimitOverride: null }],
       [{ isSuperadmin: true }],
@@ -80,10 +86,28 @@ describe('getTenantTokenAvailability', () => {
     expect(a.monthlyLimit).toBe(-1);
   });
 
+  it('a tenant OWNED by a superadmin is unlimited with NO acting user (the cron path)', async () => {
+    // The fix: cron sweeps call with `db` only (no actingUserId). A capped free tenant
+    // whose active membership includes a superadmin must still be unlimited, so the
+    // manager sweep + autonomous executor never freeze a superadmin-owned account.
+    // Selects: tenant row, then tenant-superadmin lookup (FOUND) → no usage scan.
+    const db = fakeDb([
+      [{ plan: 'free', billingStatus: 'none', trialEndsAt: null, tokenDailyLimitOverride: null }],
+      [{ isSuperadmin: true }],
+    ]);
+    const a = await getTenantTokenAvailability(db, 1);
+    expect(a.hasTokens).toBe(true);
+    expect(a.reason).toBeNull();
+    expect(a.dailyLimit).toBe(-1);
+    expect(a.monthlyLimit).toBe(-1);
+  });
+
   it('a non-superadmin acting user is still gated by the tenant cap', async () => {
+    // Selects: tenant row, acting-user superadmin (false), tenant-superadmin (none), usage.
     const db = fakeDb([
       [{ ...activePro, tokenDailyLimitOverride: 1000 }],
       [{ isSuperadmin: false }],
+      [],
       [{ day: 1000, month: 1000 }],
     ]);
     const a = await getTenantTokenAvailability(db, 1, { actingUserId: 'user_dev' });
@@ -96,6 +120,7 @@ describe('checkTenantTokenGate', () => {
   it('returns null (proceed) when the tenant has budget', async () => {
     const db = fakeDb([
       [{ ...activePro, tokenDailyLimitOverride: 1000 }],
+      [],
       [{ day: 10, month: 10 }],
     ]);
     expect(await checkTenantTokenGate(db, 1)).toBeNull();
@@ -104,6 +129,7 @@ describe('checkTenantTokenGate', () => {
   it('returns a 429 block with the gateway daily code when the daily cap is hit', async () => {
     const db = fakeDb([
       [{ ...activePro, tokenDailyLimitOverride: 1000 }],
+      [],
       [{ day: 1000, month: 1000 }],
     ]);
     const block = await checkTenantTokenGate(db, 1);

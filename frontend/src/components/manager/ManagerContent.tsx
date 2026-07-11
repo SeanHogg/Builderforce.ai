@@ -212,7 +212,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
 
   const { policy, stats, backlog, actions, runTasks, autonomy } = data;
   const managerValue = policy.managerRef ?? '';
-  const window = autonomy?.reason === 'monthly_exhausted' ? 'monthly' : 'daily';
+  const capWindow = autonomy?.reason === 'monthly_exhausted' ? 'monthly' : 'daily';
 
   const priorityChart: BarDatum[] = PRIORITIES.map((p) => ({
     key: p,
@@ -271,7 +271,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
               {t('autonomyPaused.title')}
             </div>
             <div style={{ ...mutedStyle, marginTop: 4 }}>
-              {t(`autonomyPaused.${window}`)}
+              {t(`autonomyPaused.${capWindow}`)}
             </div>
           </div>
         </div>

@@ -1,8 +1,8 @@
 import * as vscode from "vscode";
-import { getTenantJwt } from "./bfApi";
+import { getTenantJwt, getCurrentUserId } from "./bfApi";
 import { TOOL_DEFS } from "./fileTools";
 import { contributeProjectEvermind } from "./evermindLearn";
-import { getBaseUrl, SECRET_KEY } from "./gateway";
+import { getBaseUrl, SECRET_KEY, fetchPersonalityBlock } from "./gateway";
 import { getGroundingSummary } from "./grounding";
 import { getEditorContext, watchEditorContext } from "./editorContext";
 import { resolveEffectiveModel } from "./modelState";
@@ -333,6 +333,21 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
         /* names are best-effort */
       }
     }
+    // The signed-in user's PERSONALITY-only directive block — fetched once per
+    // session (cached in the gateway helper) and injected into the webview's
+    // ambient system channel, so the Brain chat's tone reflects the user. The
+    // webview can't bundle the shared compiler (--no-dependencies), so the host
+    // fetches the compiled block from the gateway. '' when the user has no
+    // profile (a no-op) or offline.
+    let personalityBlock = "";
+    if (signedIn) {
+      try {
+        const userId = (await getCurrentUserId(this.ctx.secrets)) ?? undefined;
+        personalityBlock = await fetchPersonalityBlock(this.ctx.secrets, userId ? { userId } : undefined);
+      } catch {
+        /* personality is best-effort — never blocks init */
+      }
+    }
     void this.panel.webview.postMessage({
       type: "init",
       baseUrl: getBaseUrl(),
@@ -352,6 +367,8 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
       // scope newly-created chats. Re-pushed on project change via refresh().
       project: getSelectedProject(),
       projectNames,
+      // Static personality tone for the chat's system prompt (see above).
+      personalityBlock,
       // The local file tools, forwarded so the model can call them over the bridge.
       // (The shared platform catalog is fetched by the webview directly from the gateway.)
       tools: TOOL_DEFS.map((d) => ({

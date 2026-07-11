@@ -181,19 +181,21 @@ export function createPersonaRoutes(db: Db): Hono<HonoEnv> {
 
   // -------------------------------------------------------------------------
   // POST /api/personas/psychometric/score
-  // Body: { answers: { [questionId]: 1..5 } } -> { vector }
+  // Body: { answers: { [questionId]: 1..5 } } -> { vector, mbti?, enneagramType? }
   //
   // Pure, side-effect-free scoring. NOT plan-gated: this same endpoint powers
   // every user's own (universal, free) personality test on /settings as well as
   // the Pro agent/persona editor. The paid gate lives where a vector is ATTACHED
-  // to an agent/persona, not on the math.
+  // to an agent/persona, not on the math. Beyond the trait vector it also derives
+  // the categorical MBTI type (all four dichotomies answered) and Enneagram core
+  // type (highest-agreement typing item).
   // -------------------------------------------------------------------------
   router.post('/psychometric/score', authMiddleware, async (c) => {
     const body = await c.req
       .json<{ answers?: Record<string, number> }>()
       .catch(() => ({ answers: {} as Record<string, number> }));
-    const vector = scoreQuestionnaire(body.answers ?? {});
-    return c.json({ vector, source: 'questionnaire' });
+    const result = scoreQuestionnaire(body.answers ?? {});
+    return c.json({ ...result, source: 'questionnaire' });
   });
 
   // -------------------------------------------------------------------------

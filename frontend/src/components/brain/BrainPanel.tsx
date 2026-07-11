@@ -52,6 +52,7 @@ import { dispatchBrainDataChanged } from '@/lib/brain/brainDataEvent';
 import { loadAgentPoolCached, type PoolAgent } from '@/lib/agentPool';
 import { MODALITIES, getModality } from '@/lib/modality';
 import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';
+import { usePersonalityBlock } from '@/lib/usePersonalityBlock';
 
 function formatTime(ts: string) {
   const d = new Date(ts);
@@ -266,9 +267,15 @@ export function BrainPanel({
   // status dot (running / needs-answer) that stays live even when another chat is
   // focused. Scoped when a project is in context, tenant-wide on the Brain Storm page.
   const attn = useAttention(ctxProjectId ?? undefined);
+  // The signed-in user's personality — fetched once per session and folded into
+  // the ambient system channel so the web Brain chat's TONE reflects the user.
+  // '' (a no-op) when they have no profile. This is the web half of Gap 2/3; the
+  // VS Code surfaces inject the equivalent block via the gateway helper.
+  const personalityBlock = usePersonalityBlock();
   const ambientSystem = useMemo(() => {
     const parts: string[] = [];
     if (extraSystem) parts.push(extraSystem);
+    if (personalityBlock) parts.push(personalityBlock);
     if (ctxProjectId != null) {
       const name = projects.find((p) => p.id === ctxProjectId)?.name;
       parts.push(`The current project is ${name ? `"${name}" ` : ''}(projectId ${ctxProjectId}). When the user asks to create, list, or operate on tasks, specs, or other project-scoped items without naming a project, use projectId ${ctxProjectId} by default. To take them to the result, call navigate_to — do not write out absolute URLs.`);
@@ -1133,11 +1140,4 @@ function ConversationHeader({ chat, projects, projectName, onAssign, onNewProjec
         ) : (
           <>
             <span style={{ fontSize: 12, color: 'var(--muted)' }}>{projectName(chat.projectId)}</span>
-            <Link href={`/workflows?project=${chat.projectId}`} style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)' }}>{tBrain('workflowsArrow')}</Link>
-            <Link href={`/ide/${chat.projectId}?chat=${chat.id}`} style={{ fontSize: 12, fontWeight: 600, color: 'var(--coral-bright)', textDecoration: 'none', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--coral-bright)' }}>{tBrain('openInIde')}</Link>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
+            <Link href={`/workflows?project=${chat.projectId}`} style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px

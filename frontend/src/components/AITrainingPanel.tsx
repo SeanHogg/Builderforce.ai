@@ -265,10 +265,12 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
       appendLog(t('logEvalReasoning', { value: ((result.reasoning_quality ?? 0) * 100).toFixed(1) }));
       appendLog(t('logEvalHallucination', { value: ((result.hallucination_rate ?? 0) * 100).toFixed(1) }));
       appendLog(t('logEvalDetails', { details: result.details }));
+      // Reload jobs so the now-persisted eval breakdown renders durably on the card.
+      listTrainingJobs(projectId).then(setJobs).catch(() => { });
     } catch (e) {
       appendLog(t('logEvalFailed', { error: e instanceof Error ? e.message : t('errUnknown') }));
     }
-  }, [appendLog, t]);
+  }, [appendLog, t, projectId]);
 
   /** Mamba Full-Model Training — trains the actual Mamba model weights via the builderforce-memory engine */
   const handleMambaModelTraining = useCallback(async () => {
@@ -741,8 +743,29 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
                     onClick={() => handleEvaluate(job.id)}
                     className="text-xs bg-purple-700 hover:bg-purple-600 text-white px-2 py-0.5 rounded"
                   >
-                    🧪 {t('evaluate')}
+                    🧪 {job.eval_score != null ? t('reEvaluate') : t('evaluate')}
                   </button>
+                )}
+                {job.eval_score != null && (
+                  <div className="mt-1 rounded bg-gray-900 border border-gray-700 p-1.5 space-y-0.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-400">{t('evalScoreLabel')}</span>
+                      <span className="font-semibold tabular-nums text-gray-100">{(job.eval_score * 100).toFixed(0)}%</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-500">{t('evalCodeLabel')}</span>
+                      <span className="tabular-nums text-gray-300">{((job.eval_code_correctness ?? 0) * 100).toFixed(0)}%</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-500">{t('evalReasoningLabel')}</span>
+                      <span className="tabular-nums text-gray-300">{((job.eval_reasoning_quality ?? 0) * 100).toFixed(0)}%</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-500">{t('evalHallucinationLabel')}</span>
+                      <span className="tabular-nums text-gray-300">{((job.eval_hallucination_rate ?? 0) * 100).toFixed(0)}%</span>
+                    </div>
+                    {job.eval_details && <div className="text-xs text-gray-500 pt-0.5 leading-snug">{job.eval_details}</div>}
+                  </div>
                 )}
                 {job.error_message && (
                   <div className="text-xs text-red-400 mt-1">{job.error_message}</div>

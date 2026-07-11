@@ -1159,10 +1159,13 @@ export interface AgentManifest {
 export const psychometric = {
   catalog: () => request<import('./psychometric').PsychometricCatalog>(`/api/personas/psychometric/catalog`),
   score: (answers: Record<string, number>) =>
-    request<{ vector: Record<string, number>; source: string }>(`/api/personas/psychometric/score`, {
-      method: 'POST',
-      body: JSON.stringify({ answers }),
-    }),
+    request<{ vector: Record<string, number>; mbti?: string; enneagramType?: number; source: string }>(
+      `/api/personas/psychometric/score`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ answers }),
+      },
+    ),
   import: (vector: Record<string, number>) =>
     request<{ vector: Record<string, number>; source: string }>(`/api/personas/psychometric/import`, {
       method: 'POST',

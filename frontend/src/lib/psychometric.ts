@@ -27,6 +27,15 @@ export interface CatalogQuestion {
   dimension: string;
   text: string;
   reverse?: boolean;
+  /**
+   * Which test the item belongs to: `basic` = the quick, free, high-signal spine
+   * (finishable in ~2 min); `advanced` = the full psychology-aligned battery.
+   * The editor filters the questionnaire on this. Older catalogs omit it → treated
+   * as `advanced` (shown only in the full test).
+   */
+  tier?: 'basic' | 'advanced';
+  /** Item family — `mbti`/`enneagram` items derive a categorical skin, not a vector score. */
+  kind?: 'dimension' | 'mbti' | 'enneagram';
 }
 
 export interface EnneagramType {

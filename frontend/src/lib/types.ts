@@ -235,6 +235,15 @@ export interface TrainingJob {
   current_loss?: number;
   r2_artifact_key?: string;
   error_message?: string;
+  /** Persisted AI-judge evaluation breakdown (migration 0323) — null until the job
+   *  is evaluated. Lets the training panel show correctness/reasoning/hallucination
+   *  durably instead of only in an ephemeral log line. */
+  eval_score?: number | null;
+  eval_code_correctness?: number | null;
+  eval_reasoning_quality?: number | null;
+  eval_hallucination_rate?: number | null;
+  eval_details?: string | null;
+  evaluated_at?: string | null;
   created_at: string;
   updated_at: string;
 }

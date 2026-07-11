@@ -469,13 +469,16 @@ function Chat({ init }: { init: InitData }) {
   useEffect(() => onEditorContext(setEditorCtx), []);
   const editorDirective = useMemo(() => editorContextDirective(editorCtx) ?? '', [editorCtx]);
 
-  // Fold the composer toggles (effort / thinking / web) and the live editor context
-  // into the same system channel as the project context, so the next turn honors them.
+  // Fold the composer toggles (effort / thinking / web), the live editor context,
+  // and the user's PERSONALITY block into the same system channel as the project
+  // context, so the next turn honors them. The personality block (host-fetched
+  // once per session) rides the ambient channel — parity with the web Brain and
+  // the native chat participant — and is '' (a no-op) when the user has no profile.
   const extraSystem = useMemo(
-    () => [projectDirective, editorDirective, buildComposerDirectives({ effort, thinking, web: webBrowsing })]
+    () => [projectDirective, editorDirective, buildComposerDirectives({ effort, thinking, web: webBrowsing }), init.personalityBlock ?? '']
       .filter(Boolean)
       .join('\n\n'),
-    [projectDirective, editorDirective, effort, thinking, webBrowsing],
+    [projectDirective, editorDirective, effort, thinking, webBrowsing, init.personalityBlock],
   );
 
   // Project-Evermind memory hooks: recall the chat's project learnings before

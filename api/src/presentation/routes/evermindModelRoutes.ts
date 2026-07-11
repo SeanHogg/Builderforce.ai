@@ -23,6 +23,7 @@ import { zipSync, type Zippable } from 'fflate';
 import {
   EVERMIND_MODEL_ROOT,
   evermindGenerate,
+  evermindGenerateMedia,
   buildEvermindCompletion,
   benchmarkEvermind,
   exportEvermindArtifact,

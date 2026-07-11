@@ -212,15 +212,33 @@ export async function complete(
 }
 
 /**
- * Fetch the limbic affective-state directive block for a task/request from the
- * gateway (`/api/limbic/block`). The block makes the built-in agent execute
- * under the same affective layer as the cloud (V3) and on-prem agents. Logic
- * lives once in the shared compiler server-side — this is pure transport.
- * Best-effort: returns '' on any error so the agent always works offline.
+ * Personality/persona context sent to `POST /api/limbic/block` so the returned
+ * directive block carries PERSONALITY (setpoints + psychometric directives), not
+ * just the affective appraisal of the text. Every field is optional and
+ * backward-compatible — an empty body still yields the neutral limbic block.
+ *
+ *   - `userId`      : the signed-in HUMAN whose personality shapes chat TONE. The
+ *                     gateway resolves their stored psychometric profile.
+ *   - `psychometric`: an explicit profile, when the caller already holds it.
+ *   - `agentId`     : the active agent persona, when the chat runs AS an agent.
+ *   - `personaId`   : a saved platform persona id, when one is active.
  */
-export async function fetchLimbicBlock(
+export interface PersonaContext {
+  userId?: string;
+  psychometric?: unknown;
+  agentId?: string | number;
+  personaId?: string | number;
+}
+
+/**
+ * The ONE transport to the affective/personality block endpoint
+ * (`/api/limbic/block`). Both the per-turn limbic fetch and the cached
+ * personality-only fetch route through here so the request/auth logic lives in a
+ * single place (DRY). Best-effort: '' on any error so the agent works offline.
+ */
+async function postAffectiveBlock(
   secrets: vscode.SecretStorage,
-  text: string,
+  body: Record<string, unknown>,
 ): Promise<string> {
   try {
     const key = await getApiKey(secrets);
@@ -228,7 +246,7 @@ export async function fetchLimbicBlock(
     const res = await fetch(`${getBaseUrl()}/api/limbic/block`, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) return "";
     const json = (await res.json()) as { block?: string };
@@ -236,4 +254,51 @@ export async function fetchLimbicBlock(
   } catch {
     return "";
   }
+}
+
+/**
+ * Fetch the affective-state + PERSONALITY directive block for a task/request from
+ * the gateway (`/api/limbic/block`). The block makes the built-in agent execute
+ * under the same affective layer AND personality tone as the cloud (V3) and
+ * on-prem agents. Pass a {@link PersonaContext} (e.g. the signed-in user's
+ * `userId`) so the returned block carries personality; omit it for a
+ * text-only (neutral-personality) appraisal. Logic lives once in the shared
+ * compiler server-side — this is pure transport.
+ */
+export async function fetchLimbicBlock(
+  secrets: vscode.SecretStorage,
+  text: string,
+  persona?: PersonaContext,
+): Promise<string> {
+  return postAffectiveBlock(secrets, { text, ...(persona ?? {}) });
+}
+
+// Session cache for the STATIC personality-only block (text is empty, so no
+// per-message limbic appraisal — only the personality directives vary, and only
+// when the persona context changes). Keyed on the persona context so a user /
+// persona switch re-fetches, but repeated turns in a session reuse it. This is
+// the perf seam that keeps the webview from re-fetching personality per message.
+let personalityCache: { key: string; block: string } | undefined;
+
+/**
+ * Fetch the signed-in user's (or an agent persona's) PERSONALITY-only directive
+ * block, cached for the session. Used where personality is static across the
+ * conversation (the Brain webview), so it is injected once via ambient system
+ * context rather than re-fetched per turn. Returns '' when the profile is neutral
+ * or unavailable (a no-op).
+ */
+export async function fetchPersonalityBlock(
+  secrets: vscode.SecretStorage,
+  persona?: PersonaContext,
+): Promise<string> {
+  const key = JSON.stringify(persona ?? {});
+  if (personalityCache && personalityCache.key === key) return personalityCache.block;
+  const block = await postAffectiveBlock(secrets, { text: "", ...(persona ?? {}) });
+  personalityCache = { key, block };
+  return block;
+}
+
+/** Drop the cached personality block (e.g. on sign-out or a personality change). */
+export function clearPersonalityBlockCache(): void {
+  personalityCache = undefined;
 }

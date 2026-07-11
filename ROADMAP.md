@@ -82,6 +82,10 @@
 
 ## Consolidated Gap Register
 
+### 🔑 Gateway token cap is a parallel implementation, not the shared entry (consistency)
+
+- **`enforceTokenCaps` (llmRoutes.ts:342) re-implements the cap instead of calling `getTenantTokenAvailability`.** It resolves `resolveTokenLimits` + the usage scan itself and keys the superadmin bypass off the ACTING principal's `access.isSuperadmin` only — so a NON-superadmin teammate of a superadmin-OWNED tenant is still capped on the gateway, unlike the cron/manager/run paths which now honor the account-owner rule via `tenantHasSuperadminMember` (fixed 2026-07-11). Fix: fold `enforceTokenCaps` onto the single `getTenantTokenAvailability` entry (it already OR-s in the tenant-owner superadmin), or OR `tenantHasSuperadminMember` into the gateway's cached `access.isSuperadmin` resolution, so "an account owned by a superadmin is unlimited everywhere" holds on the HTTP gateway too. Needs cache-key care (the gateway membership resolve is KV-cached per tenant+user on the LLM hot path).
+
 ### 🧠 Teaching metrics computed-then-discarded — sweep 2026-07-11 (same pattern as the Knowledge-Map fix)
 
 > A two-repo sweep for the "train/adapt/distill computes a metric, then drops it" pattern (the one the Knowledge-Map training telemetry just fixed) found these live instances. Ranked by value of surfacing. Each is the metric existing at a site and being thrown away, not new computation.
