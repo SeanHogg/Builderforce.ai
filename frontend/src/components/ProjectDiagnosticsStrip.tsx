@@ -60,6 +60,23 @@ export function ProjectDiagnosticsStrip({ diagnostics, variant = 'chips', onOpen
   const ariaFor = (d: ProjectDiagnosticSummary) =>
     t('itemAria', { name: d.name, score: scoreText(d), label: d.scoreLabel ?? t('notScored'), gaps: gapText(d) });
 
+  // The honest remediation signal for the gauge badge. A diagnostic with a filed
+  // remediation ticket shows its real PR/merge state (matching the marketing SOC 2
+  // gauge); one with no ticket falls back to the gap count.
+  type BadgeTone = 'good' | 'progress' | 'warn';
+  const remediationBadge = (d: ProjectDiagnosticSummary): { label: string; tone: BadgeTone } => {
+    const state = d.remediation?.state ?? 'none';
+    if (state === 'resolved') return { label: `✓ ${t('remediationResolved')}`, tone: 'good' };
+    if (state === 'pr_open') return { label: `✓ ${t('remediationPrOpen')}`, tone: 'good' };
+    if (state === 'filed') return { label: t('remediationFiled', { count: d.remediation.open }), tone: 'progress' };
+    return d.gapCount > 0 ? { label: gapText(d), tone: 'warn' } : { label: `✓ ${t('noGaps')}`, tone: 'good' };
+  };
+  const BADGE_TONE: Record<BadgeTone, { fg: string; bg: string; border: string }> = {
+    good: { fg: '#22c55e', bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.4)' },
+    progress: { fg: '#3b82f6', bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.4)' },
+    warn: { fg: '#f59e0b', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.4)' },
+  };
+
   // ── chips: dense score pills for the project card / list row ────────────────
   if (variant === 'chips') {
     const shown = ordered.slice(0, maxChips);
@@ -68,17 +85,23 @@ export function ProjectDiagnosticsStrip({ diagnostics, variant = 'chips', onOpen
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }} aria-label={t('title')}>
         {shown.map((d) => {
           const color = d.score == null ? 'var(--text-muted)' : diagnosticScoreColor(d.score);
+          // Status dot: a remediation PR in flight / merged reads as "handled"
+          // (green), outstanding gaps read as "attention" (coral); otherwise none.
+          const remState = d.remediation?.state ?? 'none';
+          const dot = (remState === 'pr_open' || remState === 'resolved')
+            ? { color: '#22c55e', title: remediationBadge(d).label }
+            : d.gapCount > 0 ? { color: 'var(--coral-bright)', title: gapText(d) } : null;
           const chip = (
             <>
               <span aria-hidden style={{ fontSize: 13 }}>{d.icon}</span>
               <span style={{ fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>
                 {d.score == null ? '—' : d.score.toFixed(1)}
               </span>
-              {d.gapCount > 0 && (
+              {dot && (
                 <span
                   aria-hidden
-                  title={gapText(d)}
-                  style={{ width: 6, height: 6, borderRadius: 999, background: 'var(--coral-bright)', flexShrink: 0 }}
+                  title={dot.title}
+                  style={{ width: 6, height: 6, borderRadius: 999, background: dot.color, flexShrink: 0 }}
                 />
               )}
             </>
@@ -124,15 +147,20 @@ export function ProjectDiagnosticsStrip({ diagnostics, variant = 'chips', onOpen
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}>{d.name}</span>
                 </div>
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600,
-                  color: d.gapCount > 0 ? '#f59e0b' : '#22c55e',
-                  background: d.gapCount > 0 ? 'rgba(245,158,11,0.12)' : 'rgba(34,197,94,0.12)',
-                  border: `1px solid ${d.gapCount > 0 ? 'rgba(245,158,11,0.4)' : 'rgba(34,197,94,0.4)'}`,
-                  borderRadius: 999, padding: '3px 9px',
-                }}>
-                  {d.gapCount > 0 ? gapText(d) : `✓ ${t('noGaps')}`}
-                </span>
+                {(() => {
+                  const badge = remediationBadge(d);
+                  const tone = BADGE_TONE[badge.tone];
+                  return (
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600,
+                      color: tone.fg, background: tone.bg, border: `1px solid ${tone.border}`,
+                      borderRadius: 999, padding: '3px 9px', maxWidth: '100%',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {badge.label}
+                    </span>
+                  );
+                })()}
               </div>
             </>
           );

@@ -3782,7 +3782,10 @@
     "gaps": "{count} 项差距",
     "noGaps": "无差距",
     "more": "+{count}",
-    "itemAria": "{name}：{score}，{label}，{gaps}"
+    "itemAria": "{name}：{score}，{label}，{gaps}",
+    "remediationResolved": "修复已合并",
+    "remediationPrOpen": "已提交修复 PR",
+    "remediationFiled": "{count, plural, =0 {已创建修复工单} other {已创建 # 个工单}}"
   },
   "marketing": {
     "ctaGetStartedFree": "免费开始使用",
@@ -6778,7 +6781,8 @@
     "tierBasic": "基础",
     "tierAdvanced": "进阶",
     "tierBasicHint": "涵盖核心人格特质的 2 分钟快速测试。",
-    "tierAdvancedHint": "覆盖所有框架的完整心理学测评题库。"
+    "tierAdvancedHint": "覆盖所有框架的完整心理学测评题库。",
+    "derivedBanner": "根据你的回答得出"
   },
   "workforceRoles": {
     "title": "角色",
@@ -8187,7 +8191,31 @@
     "teamChatScope": "团队聊天",
     "teamChatProject": "项目团队聊天",
     "teamChatTenant": "工作区团队聊天",
-    "teamChatHint": "选择此会议关联的对话——某个指定团队的聊天，或其范围的默认聊天。"
+    "teamChatHint": "选择此会议关联的对话——某个指定团队的聊天，或其范围的默认聊天。",
+    "shrinkTile": "缩小",
+    "expandTile": "放大",
+    "cameraSize": "摄像头大小",
+    "sizeSmall": "小",
+    "sizeLarge": "大",
+    "transcript": "文字记录",
+    "minutesTitle": "会议纪要",
+    "noTranscript": "暂无文字记录。打开麦克风即可开始字幕转写。",
+    "captionsUnsupported": "实时字幕需要 Chrome 或 Edge；文字记录仍会捕获其他参与者和智能体的发言。",
+    "close": "关闭",
+    "agentVoice": "智能体语音",
+    "agentThinking": "{name} 正在思考…",
+    "askForUpdate": "请 {name} 发言",
+    "askWhichAgent": "选择智能体",
+    "askAgentPlaceholder": "向智能体提问…",
+    "askSend": "提问",
+    "agentTurnFailed": "智能体无法回应。",
+    "generateMinutes": "生成会议纪要",
+    "generatingMinutes": "正在生成会议纪要…",
+    "minutesReady": "会议纪要已生成并发布到团队聊天。",
+    "minutesFailed": "无法生成会议纪要。",
+    "pastMeetings": "历史会议",
+    "minutesAvailable": "纪要已就绪",
+    "viewNotes": "查看纪要"
   },
   "brainLauncher": {
     "open": "打开 Brain 助手",
@@ -9264,5 +9292,27 @@
       "gte": "不小于（≥）",
       "lte": "不大于（≤）"
     }
+  },
+  "installAgents": {
+    "intro": "在你的设备上下载并安装 BuilderForce Agents 代理。它会自动注册到你的工作区，让你可以立即委派任务。",
+    "tokenPreconfigured": "你的工作区令牌已预先配置——代理将在首次运行时自动注册。",
+    "laterHint": "你也可以稍后在<link>工作团队</link>页面完成此操作。"
+  },
+  "inviteMembers": {
+    "intro": "通过电子邮件将队友添加到你的工作区。如果他们已有 Builderforce 账户，将立即加入；否则邀请将保持<strong>待处理</strong>状态，并在他们首次使用该邮箱登录时自动加入。",
+    "emailPlaceholder": "teammate@company.com",
+    "invite": "邀请",
+    "roles": {
+      "developer": "开发者",
+      "manager": "管理者",
+      "viewer": "查看者"
+    },
+    "statusSending": "发送中…",
+    "statusAdded": "已添加",
+    "statusInvited": "已邀请 · 待处理",
+    "statusInvitedHint": "尚无账户——注册后将自动加入",
+    "statusError": "错误",
+    "errFailed": "邀请失败",
+    "laterHint": "你也可以稍后在<link>工作团队</link>邀请队友。"
   }
 }

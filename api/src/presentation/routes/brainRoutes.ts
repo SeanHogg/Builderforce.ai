@@ -14,13 +14,13 @@ import { fetchWebDocument } from '../../application/web/webFetch';
 import { recordOutboundFetch, enforceOutboundFetchCap } from '../../application/web/outboundFetchLedger';
 import { agentHosts, users } from '../../infrastructure/database/schema';
 import { ChatTicketService } from '../../application/brain/ChatTicketService';
-import { getCacheVersion, getOrSetCached, ticketSearchVersionKey } from '../../infrastructure/cache/readThroughCache';
+import { bumpCacheVersion, getCacheVersion, getOrSetCached, ticketSearchVersionKey } from '../../infrastructure/cache/readThroughCache';
 import { notify } from '../../application/notifications/notify';
 import { sendChatInviteEmail } from '../../infrastructure/email/EmailService';
 import { isKeyOwnedByTenant } from '../../domain/shared/r2Keys';
 import type { Env, HonoEnv } from '../../env';
-import type { BrainService } from '../../application/brain/BrainService';
-import { learnFromBrainTurn } from '../../application/brain/brainEvermindLearning';
+import type { BrainService, BrainTraceEventInput } from '../../application/brain/BrainService';
+import { evaluateBrainLearnGate, dispatchBrainLearn } from '../../application/brain/brainEvermindLearning';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 
@@ -33,6 +33,10 @@ function parseId(raw: string): number | null {
   const n = Number(raw);
   return Number.isNaN(n) || n <= 0 ? null : n;
 }
+
+/** Per-chat version token for the cached trace read — bumped on every append so
+ *  the next GET /chats/:id/trace re-loads (the trace keyspace folds this token in). */
+const traceVersionKey = (chatId: number): string => `brain-trace-version:chat:${chatId}`;
 
 // ---------------------------------------------------------------------------
 // Route factory
@@ -192,12 +196,51 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
 
     // Train the project's Evermind FROM this conversation (not just agent runs):
     // a persisted assistant turn in a project chat whose Evermind is seeded +
-    // connected is contributed to learning. Fire-and-forget; self-gates otherwise.
+    // connected is contributed to learning. The GATE is evaluated synchronously (a
+    // cached head read) so the response reports the TRUTHFUL outcome — the client
+    // renders its `learn` step off this instead of guessing from its pre-turn recall;
+    // the slow coordinator contribution is dispatched in the background.
+    const learnGate = await evaluateBrainLearnGate(c.env as Env, db, id, tenantId, result).catch(
+      () => ({ outcome: { learned: false, version: 0 }, projectId: null, assistant: null }),
+    );
     c.executionCtx.waitUntil(
-      learnFromBrainTurn(c.env as Env, db, id, tenantId, result).catch(() => { /* never fail the write */ }),
+      dispatchBrainLearn(c.env as Env, db, id, tenantId, result, learnGate).catch(() => { /* never fail the write */ }),
     );
 
-    return c.json({ messages: result }, 201);
+    return c.json({ messages: result, evermindLearn: learnGate.outcome }, 201);
+  });
+
+  // GET /chats/:id/trace — the persisted tool/LLM-turn timeline (survives reload).
+  // Cached read-through, keyed by a per-chat version token bumped on every append.
+  router.get('/chats/:id/trace', async (c) => {
+    const id = parseId(c.req.param('id'));
+    if (!id) return c.json({ error: 'Invalid chat id' }, 400);
+
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string;
+    if (!(await brainService.canAccess(id, tenantId, userId))) return c.json({ error: 'Chat not found' }, 404);
+
+    const limit = Math.min(Math.max(1, Number(c.req.query('limit') ?? 500)), 2000);
+    const token = await getCacheVersion(c.env as Env, traceVersionKey(id));
+    const key = `brain-trace:chat:${id}:v:${token}:l:${limit}`;
+    const trace = await getOrSetCached(c.env as Env, key, () => brainService.getTrace(id, limit));
+    return c.json({ trace });
+  });
+
+  // POST /chats/:id/trace — persist tool-turn trace events for this chat.
+  router.post('/chats/:id/trace', async (c) => {
+    const id = parseId(c.req.param('id'));
+    if (!id) return c.json({ error: 'Invalid chat id' }, 400);
+
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string;
+    if (!(await brainService.canAccess(id, tenantId, userId))) return c.json({ error: 'Chat not found' }, 404);
+
+    const body = await c.req.json<{ events?: BrainTraceEventInput[] }>().catch(() => ({} as { events?: BrainTraceEventInput[] }));
+    const result = await brainService.appendTrace(id, body.events ?? []);
+    // Invalidate the cached read so the next GET reflects these events.
+    await bumpCacheVersion(c.env as Env, traceVersionKey(id)).catch(() => {});
+    return c.json(result, 201);
   });
 
   // POST /chats/:id/summarize

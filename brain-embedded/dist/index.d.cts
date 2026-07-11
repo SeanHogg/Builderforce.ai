@@ -705,6 +705,14 @@ interface BrainTraceEvent {
     label: string;
     /** Wall-clock duration of the step, when measured. */
     durationMs?: number;
+    /**
+     * `llm` steps: time-to-first-token (ms) — the delay from issuing the
+     * completion request to the FIRST streamed text delta of the turn. Undefined
+     * when no token arrived (a pure tool-call / empty turn). The timeline uses it
+     * for the "Thought for Xs" thinking node so it reflects latency-to-first-token
+     * rather than the full-turn duration.
+     */
+    ttftMs?: number;
     /** Tool arguments / completion request summary. */
     args?: unknown;
     /** Tool result / completion summary / error message. */
@@ -1027,6 +1035,93 @@ declare function useBrainConversation(options: UseBrainConversationOptions): Use
  * This module owns NO React — `useBrainConversation` is the thin binding.
  */
 
+/** Streaming fn shape (matches BrainRuntime.stream). */
+type BrainStreamFn = (opts: Omit<StreamChatOptions, 'transport'>, handlers?: StreamHandlers) => Promise<StreamChatResult>;
+/** Persistence subset the loop needs (matches BrainPersistenceAdapter). */
+interface BrainRunPersistence {
+    sendMessages(chatId: number, messages: Array<{
+        role: string;
+        content: string;
+        metadata?: string;
+    }>): Promise<BrainMessage[]>;
+}
+/** Everything a single run needs, captured at start time (survives navigation). */
+interface BrainRunRequest {
+    resolvedSystemPrompt: string;
+    tools?: BrainToolSpec[];
+    model?: string;
+    runTool?: (name: string, args: unknown) => Promise<unknown>;
+    /** Pure predicate: true → pause the loop for an explicit user confirmation. */
+    needsConfirm?: (req: {
+        name: string;
+        args: unknown;
+    }) => boolean;
+    stream: BrainStreamFn;
+    persistence: BrainRunPersistence;
+    onActivity?: (chatId: number) => void;
+    /** Seed the rich transcript from prior persisted history (first turn only). */
+    seed?: ChatCompletionMessage[];
+    /** The user turn that triggered this run, appended to the transcript. */
+    userTurn?: string | ContentPart[];
+    /**
+     * Project-Evermind memory hooks (bound to the active chat's project by the
+     * host). When present, the loop recalls learned memories before answering,
+     * injects them into the system prompt, and records recall/learn/reconcile
+     * steps into the trace so the chat SHOWS the project memory being used. Omit
+     * for a non-project chat (nothing memory-related happens).
+     */
+    evermind?: EvermindRunHooks;
+    /**
+     * Optional per-turn system-prompt augmentation — the LIMBIC parity seam.
+     *
+     * Called once at loop start (alongside Evermind recall) with the latest user
+     * text; a non-empty return is appended to the system prompt with a leading
+     * `\n\n`. This lets a host inject a per-turn dynamic block (e.g. a limbic /
+     * affective state fetched from the gateway) that the synchronous
+     * `resolvedSystemPrompt` resolver cannot produce. Best-effort: a throw is
+     * swallowed and the turn proceeds without the augmentation, exactly like a
+     * failed Evermind recall.
+     */
+    augmentSystemPrompt?: (userText: string) => Promise<string | undefined>;
+}
+/** Live, observable snapshot of a chat's run (what the hook renders). */
+interface BrainRunSnapshot {
+    running: boolean;
+    streamingText: string;
+    error: string;
+    pendingConfirm: {
+        name: string;
+        args: unknown;
+    } | null;
+    /** Bumped whenever a new assistant message is persisted. */
+    messagesEpoch: number;
+    /**
+     * Every assistant message this run has persisted, in order (narration turns +
+     * the final answer). Delivered as a list — not a single "last" value — so a
+     * mounted view merges them all by id even when React coalesces the rapid
+     * mid-run emits into one render and never sees the intermediate snapshots.
+     */
+    appended: BrainMessage[];
+    hasTrace: boolean;
+    /**
+     * The live execution trace (LLM turns + tool calls + errors), in order. The
+     * same array `getRunTrace` returns — exposed on the snapshot so a mounted view
+     * (e.g. the timeline transcript) can render each step AS IT HAPPENS. The
+     * snapshot object identity changes on every `emit` (including every
+     * `pushTrace`), so consumers re-render even though the array reference is
+     * stable; they read it fresh each render. Bounded by {@link MAX_TRACE_EVENTS}.
+     */
+    trace: BrainTraceEvent[];
+    /**
+     * Providers the tenant CONNECTED but the gateway could NOT resolve on any turn of
+     * this run (from `x-builderforce-byo-unresolved`) — e.g. a connected Claude
+     * subscription whose token expired, so the run silently used the shared pool
+     * instead of the tenant's own Opus. A mounted view shows a passive "reconnect your
+     * account" banner off this, so the degrade is visible WITHOUT copying triage. Empty
+     * when everything resolved (or nothing is connected).
+     */
+    byoUnresolved: string[];
+}
 /**
  * A snapshot of which chats are live right now, split by whether they are actively
  * executing (`running`) or paused on a human-in-the-loop confirm (`awaiting` — the
@@ -1050,6 +1145,40 @@ declare function subscribeRunStore(listener: () => void): () => void;
  * of the bounded cell map); callers debounce via a stable key of the two lists.
  */
 declare function getGlobalRunState(): GlobalRunState;
+/** Subscribe to a chat's run state. Returns an unsubscribe fn. */
+declare function subscribeRun(chatId: number, listener: () => void): () => void;
+/** Current snapshot (referentially stable until something changes). */
+declare function getRunSnapshot(chatId: number | null): BrainRunSnapshot;
+declare function isRunning(chatId: number | null): boolean;
+/** The accumulated execution trace for a chat (for the capture/triage report). */
+declare function getRunTrace(chatId: number | null): BrainTraceEvent[];
+/**
+ * Stop a chat's in-flight run. Aborts the streaming LLM request (which rejects
+ * the in-flight `stream()` — the loop treats an aborted signal as a clean exit,
+ * surfacing no error) and resolves any paused human-in-the-loop confirmation as
+ * declined so a loop waiting on the gate can also unwind. Records a `stopped`
+ * trace step for triage. No-op if nothing is running for this chat.
+ *
+ * `running` flips to false when `runLoop` unwinds and `startRun`'s `finally`
+ * fires; we emit here too so the Stop is reflected immediately.
+ */
+declare function stopRun(chatId: number): void;
+/**
+ * Clear a chat's surfaced run error so the UI's error banner can be dismissed.
+ * The error lives on the run cell (set when the LLM stream / tool loop threw),
+ * so the hook's local `setError('')` can't reach it — this is the store-side
+ * companion `clearError()` calls. No-op when there's no cell or no error.
+ */
+declare function clearRunError(chatId: number | null): void;
+/** Resolve a pending human-in-the-loop confirmation. No-op if none is pending. */
+declare function resolveRunConfirm(chatId: number, ok: boolean): void;
+/**
+ * Start (or no-op join) the agent loop for a chat. Single-flight per chat: if a
+ * run is already in flight the call returns immediately, so a second mounted
+ * Brain instance can never spawn a duplicate loop. The claim is synchronous
+ * (set before any await), so two callers in the same tick can't both pass it.
+ */
+declare function startRun(chatId: number, req: BrainRunRequest): Promise<void>;
 
 /** Persist a landing-page prompt for replay after authentication. No-ops on empty input or SSR. */
 declare function savePendingPrompt(text: string): void;
@@ -1170,4 +1299,4 @@ declare function parseMessageProvenance(msg: {
  */
 declare function withProvenanceMetadata(provenance: MessageProvenance | null | undefined, base?: Record<string, unknown>): string | undefined;
 
-export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type McpToolResultInfo, type MentionToken, type MessageProvenance, PROVENANCE_META_KEY, type PreparedImage, type ProvenanceAccount, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, accountUsedInTrace, activeMentionToken, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, filterMentionCandidates, formatBrainDiagnostics, formatBrainProvenance, formatEvermindMemoryBlock, getGlobalRunState, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, isStepMessage, lastConsolidationIndex, mentionRecipient, modelsUsedInTrace, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, prepareImageDataUrl, resolveRecipient, savePendingPrompt, scopeToConsolidation, streamChatCompletion, subscribeRunStore, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata };
+export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type McpToolResultInfo, type MentionToken, type MessageProvenance, PROVENANCE_META_KEY, type PreparedImage, type ProvenanceAccount, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, accountUsedInTrace, activeMentionToken, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, clearRunError, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, filterMentionCandidates, formatBrainDiagnostics, formatBrainProvenance, formatEvermindMemoryBlock, getGlobalRunState, getRunSnapshot, getRunTrace, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, isRunning, isStepMessage, lastConsolidationIndex, mentionRecipient, modelsUsedInTrace, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, prepareImageDataUrl, resolveRecipient, resolveRunConfirm, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, startRun, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata };

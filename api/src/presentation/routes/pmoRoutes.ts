@@ -45,7 +45,7 @@ import {
 } from '../../application/pmo/portfolioRollup';
 import { computeValueStream } from '../../application/pmo/valueStream';
 import { invalidateProjectsList, projectsListVersionKey } from './projectRoutes';
-import { convertWorkItemType, ConvertError } from '../../application/workitem/convertWorkItemType';
+import { convertWorkItemType, promoteOrphanOkrEpics, ConvertError } from '../../application/workitem/convertWorkItemType';
 import { TaskService } from '../../application/task/TaskService';
 import { notSystemTask } from '../../application/task/taskScope';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
@@ -354,6 +354,20 @@ export function createPmoRoutes(db: Db): Hono<HonoEnv> {
       if (e instanceof ConvertError) return c.json({ error: e.message }, 400);
       throw e;
     }
+  });
+
+  // POST /api/pmo/objectives/promote-orphans — bulk-promote every Epic titled "OKR …"
+  // into a real OKR Objective (the inverse of leaving OKRs modelled as board Epics).
+  // Optional projectId scopes the sweep to one board. Shared logic in convertWorkItemType.
+  router.post('/objectives/promote-orphans', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId } = scope(c);
+    const body = await c.req.json<{ projectId?: number | null }>().catch(() => ({} as { projectId?: number | null }));
+    const result = await promoteOrphanOkrEpics(
+      { db, tasks: new TaskService(new TaskRepository(db), new ProjectRepository(db)), env: c.env as Env },
+      { tenantId, projectId: body.projectId ?? undefined },
+    );
+    await bumpCacheVersion(c.env as Env, pmoVersionKey(tenantId)).catch(() => {});
+    return c.json(result);
   });
 
   // ── CRUD for the four PMO entities (generic tracker factory) ────────────────

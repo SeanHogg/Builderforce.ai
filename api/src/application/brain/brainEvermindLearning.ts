@@ -25,20 +25,42 @@ const MIN_TEACH_CHARS = 40;
 interface TurnMessage { role: string; content: string }
 
 /**
- * Contribute the newest assistant turn in `inserted` to the project's Evermind.
- * No-ops unless the chat is project-scoped and its Evermind is seeded + connected.
+ * Truthful outcome of the learn gate for a persisted turn — surfaced to the client
+ * (send-messages response) so the Brain run loop renders a `learn` step exactly when
+ * the server DID contribute, instead of guessing from the client's pre-turn recall.
  */
-export async function learnFromBrainTurn(
+export interface BrainLearnOutcome {
+  learned: boolean;
+  version: number;
+}
+
+/** The gate outcome PLUS the resolved contribution inputs, so the dispatch step can
+ *  reuse them without re-reading (the gate is computed once, in the route handler). */
+export interface BrainLearnGate {
+  outcome: BrainLearnOutcome;
+  projectId: number | null;
+  /** The teachable assistant turn's content (≥ {@link MIN_TEACH_CHARS}), else null. */
+  assistant: string | null;
+}
+
+/**
+ * Evaluate the learn gate for the newest teachable assistant turn in `inserted`:
+ * project-scoped chat + seeded, connected Evermind head (the same "Learn from every
+ * run" switch that gates agent runs). Cheap enough to AWAIT before responding — the
+ * head read is served through the project-Evermind read-through cache. Does NOT
+ * dispatch (the slow coordinator contribution runs in {@link dispatchBrainLearn}).
+ */
+export async function evaluateBrainLearnGate(
   env: Env,
   db: Db,
   chatId: number,
   tenantId: number,
   inserted: ReadonlyArray<TurnMessage>,
-): Promise<void> {
+): Promise<BrainLearnGate> {
   const assistant = [...inserted].reverse().find(
     (m) => m.role === 'assistant' && typeof m.content === 'string' && m.content.trim().length >= MIN_TEACH_CHARS,
-  );
-  if (!assistant) return;
+  )?.content ?? null;
+  if (!assistant) return { outcome: { learned: false, version: 0 }, projectId: null, assistant: null };
 
   const [chat] = await db
     .select({ projectId: brainChats.projectId })
@@ -46,15 +68,29 @@ export async function learnFromBrainTurn(
     .where(eq(brainChats.id, chatId))
     .limit(1);
   const projectId = chat?.projectId ?? null;
-  if (projectId == null) return; // only a project chat feeds a project Evermind
+  if (projectId == null) return { outcome: { learned: false, version: 0 }, projectId: null, assistant }; // only a project chat feeds a project Evermind
 
-  // Respect the project's learning switches (same gate as an agent run): the head
-  // read is served through the project-Evermind read-through cache, so this is cheap.
   const head = await getProjectEvermindHead(env, db, tenantId, projectId);
-  if (head.version < 1 || head.mode !== 'connected') return; // unseeded or frozen → no contribution
+  const learned = head.version >= 1 && head.mode === 'connected'; // seeded + connected → will contribute
+  return { outcome: { learned, version: head.version }, projectId, assistant };
+}
 
-  // Task prompt = the user message this turn answered — from the batch first, else
-  // the chat's most recent user message.
+/**
+ * Dispatch the actual contribution to the project's Evermind coordinator (the slow
+ * call — run in `waitUntil`). No-ops unless the pre-computed `gate` says it will
+ * contribute. Resolves the task prompt = the user message this turn answered (from the
+ * batch first, else the chat's most recent user message).
+ */
+export async function dispatchBrainLearn(
+  env: Env,
+  db: Db,
+  chatId: number,
+  tenantId: number,
+  inserted: ReadonlyArray<TurnMessage>,
+  gate: BrainLearnGate,
+): Promise<void> {
+  if (!gate.outcome.learned || gate.projectId == null || !gate.assistant) return;
+
   let prompt = [...inserted].reverse().find(
     (m) => m.role === 'user' && typeof m.content === 'string' && m.content.trim().length > 0,
   )?.content ?? null;
@@ -68,5 +104,5 @@ export async function learnFromBrainTurn(
     prompt = lastUser?.content ?? null;
   }
 
-  await dispatchProjectEvermindLearnText(env, tenantId, projectId, assistant.content, undefined, prompt);
+  await dispatchProjectEvermindLearnText(env, tenantId, gate.projectId, gate.assistant, undefined, prompt);
 }

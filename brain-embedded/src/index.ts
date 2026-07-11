@@ -78,6 +78,23 @@ export type { UseBrainConversation, UseBrainConversationOptions } from './useBra
 export { subscribeRunStore, getGlobalRunState } from './brainRunStore';
 export type { GlobalRunState } from './brainRunStore';
 
+// Framework-free run-loop entry + observation — a non-React host (e.g. the native
+// VS Code chat participant) drives a run with `runBrainLoop`/`startRun` and observes
+// it via `subscribeRun` + `getRunSnapshot`/`getRunTrace`, the same store the React
+// `useBrainConversation` hook reads, without pulling in React.
+export {
+  startRun,
+  runBrainLoop,
+  stopRun,
+  isRunning,
+  subscribeRun,
+  getRunSnapshot,
+  getRunTrace,
+  clearRunError,
+  resolveRunConfirm,
+} from './brainRunStore';
+export type { BrainRunRequest, BrainRunSnapshot } from './brainRunStore';
+
 // Execution triage — capture the Brain run (LLM/tool/error trace) as a report.
 export {
   buildBrainTriageReport,
@@ -134,5 +151,5 @@ export {
 export type { MessageProvenance, ProvenanceAccount } from './provenance';
 
 // Shared data shapes
-export type { BrainChat, BrainMessage, BrainModality, ChatInputAttachment } from './types';
+export type { BrainChat, BrainMessage, BrainModality, ChatInputAttachment, EvermindLearnOutcome } from './types';
 export { STEP_MESSAGE_ROLE, isStepMessage } from './types';

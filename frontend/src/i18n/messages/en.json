@@ -3782,7 +3782,10 @@
     "gaps": "{count, plural, one {# gap} other {# gaps}}",
     "noGaps": "No gaps",
     "more": "+{count}",
-    "itemAria": "{name}: {score}, {label}, {gaps}"
+    "itemAria": "{name}: {score}, {label}, {gaps}",
+    "remediationResolved": "Remediation merged",
+    "remediationPrOpen": "Remediation PR opened",
+    "remediationFiled": "{count, plural, =0 {Remediation filed} one {# ticket filed} other {# tickets filed}}"
   },
   "marketing": {
     "ctaGetStartedFree": "Get Started Free",
@@ -6778,7 +6781,8 @@
     "tierBasic": "Basic",
     "tierAdvanced": "Advanced",
     "tierBasicHint": "A quick 2-minute test covering the core personality traits.",
-    "tierAdvancedHint": "The full psychology-aligned battery across every framework."
+    "tierAdvancedHint": "The full psychology-aligned battery across every framework.",
+    "derivedBanner": "Derived from your answers"
   },
   "workforceRoles": {
     "title": "Roles",
@@ -8187,7 +8191,31 @@
     "teamChatScope": "Team chat",
     "teamChatProject": "Project team chat",
     "teamChatTenant": "Workspace team chat",
-    "teamChatHint": "Choose which conversation this meeting is backed by — a named team's chat, or the default for its scope."
+    "teamChatHint": "Choose which conversation this meeting is backed by — a named team's chat, or the default for its scope.",
+    "shrinkTile": "Shrink",
+    "expandTile": "Expand",
+    "cameraSize": "Camera size",
+    "sizeSmall": "Small",
+    "sizeLarge": "Large",
+    "transcript": "Transcript",
+    "minutesTitle": "Minutes",
+    "noTranscript": "No transcript yet. Turn on your mic to start captioning.",
+    "captionsUnsupported": "Live captions need Chrome or Edge; the transcript still captures other participants and agents.",
+    "close": "Close",
+    "agentVoice": "Agent voice",
+    "agentThinking": "{name} is thinking…",
+    "askForUpdate": "Ask {name}",
+    "askWhichAgent": "Which agent",
+    "askAgentPlaceholder": "Ask an agent a question…",
+    "askSend": "Ask",
+    "agentTurnFailed": "The agent could not respond.",
+    "generateMinutes": "Generate minutes",
+    "generatingMinutes": "Generating minutes…",
+    "minutesReady": "Minutes generated and posted to the team chat.",
+    "minutesFailed": "Could not generate minutes.",
+    "pastMeetings": "Past meetings",
+    "minutesAvailable": "Minutes ready",
+    "viewNotes": "View notes"
   },
   "brainLauncher": {
     "open": "Open Brain assistant",
@@ -9264,5 +9292,27 @@
       "gte": "At least (≥)",
       "lte": "At most (≤)"
     }
+  },
+  "installAgents": {
+    "intro": "Download and install the BuilderForce Agents agent on your machine. It will automatically register with your workspace so you can delegate tasks immediately.",
+    "tokenPreconfigured": "Your workspace token is pre-configured — the agent will register automatically on first run.",
+    "laterHint": "You can also do this later from the <link>Workforce</link> page."
+  },
+  "inviteMembers": {
+    "intro": "Add teammates to your workspace by email. If they already have a Builderforce account they join right away; if not, the invite stays <strong>pending</strong> and they join automatically the first time they sign in with that email.",
+    "emailPlaceholder": "teammate@company.com",
+    "invite": "Invite",
+    "roles": {
+      "developer": "Developer",
+      "manager": "Manager",
+      "viewer": "Viewer"
+    },
+    "statusSending": "Sending…",
+    "statusAdded": "Added",
+    "statusInvited": "Invited · pending",
+    "statusInvitedHint": "No account yet — joins automatically when they sign up",
+    "statusError": "Error",
+    "errFailed": "Failed to invite",
+    "laterHint": "You can also invite teammates later from <link>Workforce</link>."
   }
 }

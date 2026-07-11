@@ -18,12 +18,12 @@
  *
  * All IO lives here; the scanners (`auditScanners.ts`) stay pure/testable.
  */
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, ne, inArray } from 'drizzle-orm';
 import type { neon } from '@neondatabase/serverless';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { TaskType } from '../../domain/shared/types';
-import { projectRepositories, socControls, objectives, keyResults, projects } from '../../infrastructure/database/schema';
+import { TaskType, TaskStatus } from '../../domain/shared/types';
+import { projectRepositories, socControls, objectives, keyResults, projects, tasks } from '../../infrastructure/database/schema';
 import { resolveRepoCredential, isResolveError } from '../repos/resolveRepoCredential';
 import { listRepoFiles } from '../repos/readRepoContents';
 import { notify } from '../notifications/notify';
@@ -224,10 +224,17 @@ export class AuditRunner {
       if (audit.ticketPerFinding && result.recommendations.length) {
         // One independently-resolvable ticket per gap (like the Security agent's
         // per-finding tickets), so each obligation is assigned + closed on its own.
+        // Dedup: skip any gap that already has an OPEN remediation ticket, so
+        // re-running the audit before a gap is fixed doesn't spam the board with
+        // duplicates. Cheap one-shot lookup of the project's open task titles.
+        const openTitles = await this.openTaskTitles(args.projectId);
         for (const rec of result.recommendations) {
+          const title = `${audit.name}: ${rec.title}`.slice(0, 500);
+          const titleKey = title.trim().toLowerCase();
+          if (openTitles.has(titleKey)) continue; // an open ticket for this gap already exists
           const task = await this.taskService.createTask({
             projectId: args.projectId,
-            title: `${audit.name}: ${rec.title}`.slice(0, 500),
+            title,
             description:
               `${rec.detail}\n\n` +
               `Filed by the ${audit.name} diagnostic against ${ctx.projectName} (${result.headline}). ` +
@@ -236,6 +243,7 @@ export class AuditRunner {
             persona: audit.agentWorkflow,
           }, args.tenantId);
           agentTasks.push({ taskId: Number(task.id), status: task.status });
+          openTitles.add(titleKey); // guard against duplicate gaps within one run
         }
       } else {
         const task = await this.taskService.createTask({
@@ -259,6 +267,28 @@ export class AuditRunner {
 
     const agentTask = agentTasks[0];
     return { started: true, auditId: audit.id, mode: agentTasks.length ? 'agent' : 'deterministic', run, agentTask, agentTasks };
+  }
+
+  /**
+   * Lowercased titles of every OPEN (non-archived, not-Done) task in a project —
+   * the dedup set for per-gap remediation filing. Best-effort: if the read fails
+   * (or no db, as in unit tests) it returns an empty set so filing falls back to
+   * the prior always-file behaviour rather than throwing.
+   */
+  private async openTaskTitles(projectId: number): Promise<Set<string>> {
+    try {
+      const rows = await this.db
+        .select({ title: tasks.title })
+        .from(tasks)
+        .where(and(
+          eq(tasks.projectId, projectId),
+          eq(tasks.archived, false),
+          ne(tasks.status, TaskStatus.DONE),
+        ));
+      return new Set(rows.map((r) => r.title.trim().toLowerCase()));
+    } catch {
+      return new Set();
+    }
   }
 }
 

@@ -483,9 +483,11 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
   // POST /api/auth/magic-link   — request a magic sign-in link
   // -------------------------------------------------------------------------
   router.post('/magic-link', async (c) => {
-    const body = await c.req.json<{ email?: string; redirect?: string }>();
+    const body = await c.req.json<{ email?: string; redirect?: string; anonId?: string }>();
     const normalizedEmail = normalizeEmail(body.email ?? '');
     const redirect = body.redirect || '/dashboard';
+    // Optional landing anon-id — threaded into the link so a cross-device open adopts it.
+    const anonId = typeof body.anonId === 'string' && body.anonId.trim() ? body.anonId.trim() : undefined;
 
     // Always return 200 — never reveal whether an account exists
     if (normalizedEmail) {
@@ -523,6 +525,7 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
           normalizedEmail,
           user.displayName ?? user.username ?? normalizedEmail,
           magicUrl,
+          anonId,
         );
       }
     }

@@ -1150,9 +1150,10 @@ export const projectManagerConfigs = pgTable('project_manager_configs', {
   autoAssign:        boolean('auto_assign').notNull().default(true),
   autoBusinessValue: boolean('auto_business_value').notNull().default(true),
   autoPrioritize:    boolean('auto_prioritize').notNull().default(true),
-  /** The manager's DOMAIN focus/persona (see managerTypes.ts): 'general' | 'delivery'
-   *  | 'qa' | 'service_desk' | 'devops' | … . Shapes what it values + prioritizes. */
-  managerType:       varchar('manager_type', { length: 32 }).notNull().default('general'),
+  /** The manager's DOMAIN focus/persona (see managerTypes.ts): a built-in ('general' |
+   *  'delivery' | 'qa' | 'service_desk' | 'devops') or a `role:<key>` custom-role type
+   *  (up to a 60-char role key). Shapes what it values + prioritizes. */
+  managerType:       varchar('manager_type', { length: 80 }).notNull().default('general'),
   lastRunAt:         timestamp('last_run_at'),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
@@ -2315,6 +2316,39 @@ export const brainChatMessages = pgTable('brain_chat_messages', {
   seq:       integer('seq').notNull().default(0),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
+
+// ---------------------------------------------------------------------------
+// Brain chat TRACE (0330) — the tool/LLM-turn timeline that survives a reload.
+// A Brain run streams a sequence of trace events (llm | tool | recall | learn |
+// reconcile | message | error) that the webview renders as the "thinking" /
+// tool-call timeline. Those events lived only in the browser, so reopening a
+// chat lost every tool turn. This table persists them (append-only, per chat)
+// so the frontend can rehydrate the timeline on chat load. Kept deliberately
+// simple: one row per event, JSON args/result as text, durations for the UI.
+// ---------------------------------------------------------------------------
+
+export const brainChatTrace = pgTable('brain_chat_trace', {
+  id:         serial('id').primaryKey(),
+  chatId:     integer('chat_id').notNull().references(() => brainChats.id, { onDelete: 'cascade' }),
+  /** Monotonic per-run turn ordinal (groups events of the same assistant turn). */
+  turnSeq:    integer('turn_seq'),
+  /** 'llm'|'tool'|'message'|'recall'|'learn'|'reconcile'|'error'. */
+  kind:       varchar('kind', { length: 24 }).notNull(),
+  /** Short human label (tool name, model id, step name). */
+  label:      varchar('label', { length: 120 }),
+  /** JSON-as-text: the tool/LLM call arguments (bounded by the caller). */
+  argsJson:   text('args_json'),
+  /** JSON-as-text: the tool/LLM result (bounded by the caller). */
+  resultJson: text('result_json'),
+  isError:    boolean('is_error').notNull().default(false),
+  /** Full-step wall time (ms). */
+  durationMs: integer('duration_ms'),
+  /** Time-to-first-token (ms) for an 'llm' step; null otherwise. */
+  ttftMs:     integer('ttft_ms'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_brain_chat_trace_chat').on(t.chatId, t.id),
+]);
 
 // ---------------------------------------------------------------------------
 // OAuth accounts — one user → many providers (added by migration 0034)
@@ -3543,8 +3577,31 @@ export const meetings = pgTable('meetings', {
   calendarHtmlLink: text('calendar_html_link'),
   startedAt:        timestamp('started_at', { withTimezone: true }),
   endedAt:          timestamp('ended_at', { withTimezone: true }),
+  /** Recording/transcription (0330): the generated minutes (recap + decisions +
+   *  action items) built from the transcript on meeting end. Also posted into the
+   *  linked team chat as the durable artifact. Null until summarized. */
+  summary:            text('summary'),
+  summaryGeneratedAt: timestamp('summary_generated_at', { withTimezone: true }),
   createdAt:        timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt:        timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * meeting_transcript_segments (0330) — the running transcript of a live meeting.
+ * One row per spoken line: a human line captured client-side (browser
+ * SpeechRecognition) or an AGENT line produced by an LLM turn. Ordered by `atMs`
+ * (ms since the meeting started).
+ */
+export const meetingTranscriptSegments = pgTable('meeting_transcript_segments', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  meetingId:   uuid('meeting_id').notNull().references(() => meetings.id, { onDelete: 'cascade' }),
+  speakerRef:  varchar('speaker_ref', { length: 64 }).notNull(),
+  speakerName: varchar('speaker_name', { length: 255 }).notNull(),
+  speakerKind: varchar('speaker_kind', { length: 16 }).notNull().default('human'), // human|agent
+  text:        text('text').notNull(),
+  atMs:        bigint('at_ms', { mode: 'number' }).notNull().default(0),
+  createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const meetingAttendees = pgTable('meeting_attendees', {

@@ -219,7 +219,10 @@ export function buildSettledTimeline(messages: BrainMessage[], trace: BrainTrace
   trace.forEach((ev, i) => {
     const ts = parseTs(ev.ts, 1e15 + i); // unparseable trace sorts after dated content
     if (ev.category === 'llm') {
-      nodes.push({ key: `trace-${i}`, kind: 'thinking', ts, order: ORDER.thinking, durationMs: ev.durationMs, step: step++ });
+      // "Thought for Xs" = time-to-first-token when the loop captured it (the
+      // latency before the model started answering), falling back to the full
+      // turn duration for older traces that predate ttftMs.
+      nodes.push({ key: `trace-${i}`, kind: 'thinking', ts, order: ORDER.thinking, durationMs: ev.ttftMs ?? ev.durationMs, step: step++ });
     } else if (ev.category === 'message') {
       // 'message' trace events are intentionally dropped — the durable assistant
       // message already renders that text.

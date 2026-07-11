@@ -22,10 +22,10 @@ import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import {
   getManagerConfigRow, getEffectiveManagerPolicy, upsertManagerConfig,
   listManagerActions, runManagerForProject, createManagerRunTask, finalizeManagerRunTask,
-  recordManagerAction,
+  recordManagerAction, createManagerCoachingTask, syncManagerRosterRole,
 } from '../../application/manager/ManagerService';
 import { normalizePrMergePolicy } from '../../application/manager/managerPolicy';
-import { MANAGER_TYPES, normalizeManagerType } from '../../application/manager/managerTypes';
+import { resolveManagerTypesForTenant, normalizeManagerType } from '../../application/manager/managerTypes';
 import {
   addManagerDirective, listManagerDirectives, setManagerDirectiveStatus,
   type ManagerDirectiveStatus,
@@ -112,9 +112,12 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       effectivePlan: tokenAvailability?.effectivePlan ?? null,
     };
 
-    // The manager-type catalog (ids only — the UI localizes label/description by id)
-    // and the standing coaching directives that steer this project's passes.
-    const managerTypes = MANAGER_TYPES.map((mt) => ({ id: mt.id }));
+    // The manager-type catalog: built-in domains PLUS one type per tenant CUSTOM job
+    // role (id `role:<key>`) — so a manager's type and its roster role are one concept.
+    // Built-ins carry their roster roleKey; the UI localizes their label/description by
+    // id, and renders custom types by the (already tenant-authored) label/description.
+    const managerTypes = (await resolveManagerTypesForTenant(c.env as Env, db, tenantId).catch(() => []))
+      .map((mt) => ({ id: mt.id, roleKey: mt.roleKey, builtin: mt.builtin, label: mt.label, description: mt.description }));
     const directives = await listManagerDirectives(db, tenantId, projectId, 50).catch(() => []);
 
     // The manager's OWN run tasks (source = 'manager') — every "Backlog management
@@ -169,6 +172,10 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
     };
     const body = (await c.req.json<ConfigBody>().catch(() => ({} as ConfigBody)));
 
+    // Capture the designation BEFORE the upsert so the roster sync can move the
+    // manager's role pin if the manager (or its type) changed.
+    const prior = await getManagerConfigRow(db, tenantId, projectId);
+
     const config = await upsertManagerConfig(db, tenantId, projectId, {
       ...(body.managerRef !== undefined ? { managerRef: body.managerRef === '' ? null : body.managerRef } : {}),
       ...(body.enabled !== undefined ? { enabled: !!body.enabled } : {}),
@@ -178,6 +185,12 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
       ...(body.autoPrioritize !== undefined ? { autoPrioritize: !!body.autoPrioritize } : {}),
       ...(body.managerType !== undefined ? { managerType: normalizeManagerType(body.managerType) } : {}),
     });
+
+    // A manager is a team member: keep its roster role in lock-step with its type.
+    await syncManagerRosterRole(c.env as Env, db, tenantId, projectId,
+      prior ? { managerRef: prior.managerRef, managerType: prior.managerType } : null,
+      { managerRef: config.managerRef, managerType: config.managerType });
+
     const policy = await getEffectiveManagerPolicy(db, tenantId, projectId);
     return c.json({ config, policy });
   });
@@ -233,10 +246,14 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
   });
 
   // POST /api/manager/:projectId/coach — the human coaches the manager (managers only).
-  // The guidance becomes a standing directive the background pass honors on every run
-  // (see ManagerService's composed directive). `scope: 'tenant'` makes it apply to
-  // every project the manager runs; default is this project. Records to the manager
-  // feed + the unified activity log so the coaching is visible + auditable.
+  // Two modes share one entry:
+  //   • mode 'directive' (default) — STANDING guidance the background pass honors on
+  //     EVERY run (see ManagerService's composed directive). `scope: 'tenant'` applies it
+  //     to every project the manager runs; default is this project. `expiresInDays`
+  //     time-boxes it so it self-retires.
+  //   • mode 'task' — a DISCRETE task the manager executes ONCE (owned by the designated
+  //     manager, dispatchable) — the "assign a task to the manager" half of a session.
+  // Either way it is recorded to the manager feed + the unified audit timeline.
   router.post('/:projectId/coach', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId');
     const userId = (c as { get(k: 'userId'): string | undefined }).get('userId');
@@ -244,14 +261,42 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
     if (!Number.isFinite(projectId) || !(await ownProject(tenantId, projectId))) {
       return c.json({ error: 'Project not found' }, 404);
     }
-    type CoachBody = { directive?: string; scope?: 'project' | 'tenant' };
+    type CoachBody = { directive?: string; scope?: 'project' | 'tenant'; mode?: 'directive' | 'task'; expiresInDays?: number };
     const body = await c.req.json<CoachBody>().catch(() => ({} as CoachBody));
     const directive = (body.directive ?? '').trim();
     if (directive.length < 3) return c.json({ error: 'directive is required' }, 400);
+    const mode = body.mode === 'task' ? 'task' : 'directive';
+    const actor = await resolveActorFromContext(c.env as Env, db, c as never);
+
+    // mode 'task' — spawn a one-off ticket the manager executes once.
+    if (mode === 'task') {
+      const taskId = await createManagerCoachingTask(c.env as Env, db, runtimeService, {
+        tenantId, projectId, directive, createdBy: userId ?? null,
+      });
+      if (taskId == null) return c.json({ error: 'could not create task' }, 500);
+      await recordManagerAction(db, {
+        tenantId, projectId, taskId, actionType: 'flag',
+        summary: `Coaching task: “${directive.slice(0, 200)}”.`,
+      });
+      await recordActivity(c.env as Env, db, {
+        tenantId, projectId, actor,
+        verb: 'manager.coach',
+        targetType: 'task', targetId: taskId,
+        summary: `Assigned the manager a task: ${directive.slice(0, 280)}`,
+        metadata: { mode: 'task' },
+      });
+      return c.json({ mode: 'task', taskId, started: true });
+    }
+
+    // mode 'directive' — standing guidance, optionally scoped tenant-wide + time-boxed.
     const scopeProjectId = body.scope === 'tenant' ? null : projectId;
+    const days = Number(body.expiresInDays);
+    const expiresAt = Number.isFinite(days) && days > 0
+      ? new Date(Date.now() + Math.min(365, days) * 86_400_000)
+      : null;
 
     const id = await addManagerDirective(db, {
-      tenantId, projectId: scopeProjectId, directive, createdBy: userId ?? null, source: 'coach',
+      tenantId, projectId: scopeProjectId, directive, createdBy: userId ?? null, source: 'coach', expiresAt,
     });
     if (!id) return c.json({ error: 'could not record directive' }, 500);
 
@@ -262,13 +307,13 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
     });
     await recordActivity(c.env as Env, db, {
       tenantId, projectId: scopeProjectId ?? projectId,
-      actor: await resolveActorFromContext(c.env as Env, db, c as never),
+      actor,
       verb: 'manager.coach',
       targetType: 'project', targetId: projectId,
       summary: `Coached the manager: ${directive.slice(0, 280)}`,
-      metadata: { scope: scopeProjectId == null ? 'tenant' : 'project' },
+      metadata: { scope: scopeProjectId == null ? 'tenant' : 'project', mode: 'directive', expiresAt: expiresAt?.toISOString() ?? null },
     });
-    return c.json({ id, started: true });
+    return c.json({ mode: 'directive', id, started: true });
   });
 
   // GET /api/manager/:projectId/directives — the standing coaching directives.

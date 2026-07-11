@@ -20,6 +20,9 @@ import { authMiddleware, isManager } from '../middleware/authMiddleware';
 import { scope } from './segmentTrackerRoutes';
 import { meetings, meetingAttendees, userAvailability } from '../../infrastructure/database/schema';
 import { relayToRoom } from './realtimeRelay';
+import {
+  runAgentTurn, summarizeMeeting, appendTranscriptLine, loadTranscript,
+} from '../../application/meetings/meetingIntelligence';
 import { pushMeetingEvent, deleteMeetingEvent } from '../../application/calendar/calendarService';
 import type { CalendarProviderName } from '../../application/calendar/calendarProviders';
 import { loadExternalBusy, mergeBusy } from '../../application/calendar/calendarFreeBusy';
@@ -337,6 +340,77 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     return c.body(null, 204);
   });
 
+  // ── Transcript + AI (recording/transcription + agent voice) ───────────────────
+  // The live transcript is captured client-side (browser SpeechRecognition) and
+  // appended here; each line fans out as a caption to remote peers and feeds the
+  // post-meeting minutes. Agent attendees "speak" via runAgentTurn.
+
+  /** Load a meeting the caller may access (participant / organizer / manager). */
+  async function loadForAccess(c: Context<HonoEnv>, id: string) {
+    const { tenantId } = scope(c);
+    const [m] = await db.select().from(meetings).where(and(eq(meetings.id, id), eq(meetings.tenantId, tenantId)));
+    if (!m) return { error: 'Not found' as const, code: 404 as const };
+    const attendees = await db.select().from(meetingAttendees).where(eq(meetingAttendees.meetingId, id));
+    if (!(await canAccess(c, m, attendees))) return { error: 'Not authorized for this meeting' as const, code: 403 as const };
+    return { meeting: m, attendees };
+  }
+
+  // GET /:id/transcript — the meeting's transcript in spoken order (+ any minutes).
+  r.get('/:id/transcript', async (c) => {
+    const res = await loadForAccess(c, c.req.param('id'));
+    if ('error' in res) return c.json({ error: res.error }, res.code);
+    const segments = await loadTranscript(db, res.meeting.id);
+    return c.json({
+      segments: segments.map((s) => ({
+        id: s.id, speakerRef: s.speakerRef, speakerName: s.speakerName,
+        speakerKind: s.speakerKind, text: s.text, atMs: s.atMs, createdAt: s.createdAt,
+      })),
+      summary: res.meeting.summary ?? null,
+      summaryGeneratedAt: res.meeting.summaryGeneratedAt ?? null,
+    });
+  });
+
+  // POST /:id/transcript — append one final caption line (from the caller's own STT).
+  r.post('/:id/transcript', async (c) => {
+    const userId = (c.get('userId') as string) ?? '';
+    const res = await loadForAccess(c, c.req.param('id'));
+    if ('error' in res) return c.json({ error: res.error }, res.code);
+    const { text } = await c.req.json<{ text?: string }>().catch(() => ({} as { text?: string }));
+    if (!text || !text.trim()) return c.json({ error: 'Empty caption' }, 400);
+    const mine = res.attendees.find((a) => a.memberRef === userId);
+    const row = await appendTranscriptLine(db, c.env as Env, res.meeting, {
+      speakerRef: userId, speakerName: mine?.memberName || 'Guest', speakerKind: 'human', text,
+    });
+    return c.json({ ok: true, id: row?.id ?? null });
+  });
+
+  // POST /:id/agent-turn — an agent attendee speaks (LLM turn → caption + voice).
+  r.post('/:id/agent-turn', async (c) => {
+    const res = await loadForAccess(c, c.req.param('id'));
+    if ('error' in res) return c.json({ error: res.error }, res.code);
+    if (res.meeting.status !== 'live') return c.json({ error: 'Meeting is not live' }, 409);
+    const { agentRef, prompt } = await c.req.json<{ agentRef?: string; prompt?: string }>().catch(() => ({} as { agentRef?: string; prompt?: string }));
+    const agent = res.attendees.find((a) => a.memberRef === agentRef && a.memberKind !== 'human');
+    if (!agent) return c.json({ error: 'Not an agent attendee of this meeting' }, 404);
+    try {
+      const { text, atMs } = await runAgentTurn(db, c.env as Env, res.meeting, { ref: agent.memberRef, name: agent.memberName }, prompt);
+      if (!text) return c.json({ error: 'The agent had nothing to add.' }, 422);
+      return c.json({ text, atMs, agentRef: agent.memberRef, agentName: agent.memberName });
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : 'Agent turn failed' }, 502);
+    }
+  });
+
+  // POST /:id/summarize — generate + store minutes from the transcript (any participant).
+  r.post('/:id/summarize', async (c) => {
+    const { tenantId } = scope(c);
+    const res = await loadForAccess(c, c.req.param('id'));
+    if ('error' in res) return c.json({ error: res.error }, res.code);
+    const out = await summarizeMeeting(db, c.env as Env, res.meeting);
+    if ('error' in out) return c.json({ error: out.error }, 422);
+    return c.json({ summary: out.summary, meeting: await hydrate(tenantId, res.meeting.id) });
+  });
+
   // ── RSVP ─────────────────────────────────────────────────────────────────────
   r.post('/:id/rsvp', async (c) => {
     const { tenantId } = scope(c);
@@ -365,6 +439,10 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
     if ('error' in res) return c.json({ error: res.error }, res.code);
     const now = new Date();
     await db.update(meetings).set({ status: 'ended', endedAt: now, updatedAt: now }).where(eq(meetings.id, res.meeting.id));
+    // Auto-generate minutes from the transcript (best-effort: never block ending).
+    if (!res.meeting.summary) {
+      try { await summarizeMeeting(db, c.env as Env, { ...res.meeting, status: 'ended', endedAt: now }); } catch { /* honest no-op */ }
+    }
     return c.json(await hydrate(tenantId, res.meeting.id));
   });
 

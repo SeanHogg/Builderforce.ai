@@ -2,6 +2,7 @@ import { eq, and, or, desc, isNull, inArray, sql } from 'drizzle-orm';
 import {
   brainChats,
   brainChatMessages,
+  brainChatTrace,
   chatMemories,
   chatMembers,
   chatSessions,
@@ -154,6 +155,36 @@ const messageColumns = {
   seq: brainChatMessages.seq,
   createdAt: brainChatMessages.createdAt,
 } as const;
+
+const traceColumns = {
+  id: brainChatTrace.id,
+  turnSeq: brainChatTrace.turnSeq,
+  kind: brainChatTrace.kind,
+  label: brainChatTrace.label,
+  argsJson: brainChatTrace.argsJson,
+  resultJson: brainChatTrace.resultJson,
+  isError: brainChatTrace.isError,
+  durationMs: brainChatTrace.durationMs,
+  ttftMs: brainChatTrace.ttftMs,
+  createdAt: brainChatTrace.createdAt,
+} as const;
+
+/** Per-blob cap for a persisted trace arg/result (chars) — a runaway tool result
+ *  can't bloat a row; the model already gets the full result live. */
+const TRACE_JSON_MAX_CHARS = 20_000;
+
+/** One persisted Brain trace event (tool/LLM-turn timeline). Shape mirrors the
+ *  webview's BrainTraceEvent, minus the fields we derive on insert. */
+export interface BrainTraceEventInput {
+  kind: string;
+  label?: string;
+  args?: unknown;
+  result?: unknown;
+  isError?: boolean;
+  durationMs?: number;
+  ttftMs?: number;
+  turnSeq?: number;
+}
 
 type MessageFeedback = 'up' | 'down' | null;
 
@@ -675,6 +706,57 @@ export class BrainService {
       .where(eq(brainChats.id, chatId));
 
     return inserted;
+  }
+
+  // -----------------------------------------------------------------------
+  // Trace (persisted tool/LLM-turn timeline — survives a reload; migration 0330)
+  // -----------------------------------------------------------------------
+
+  /** Verify the caller may read/write this chat (shared-access guard, 0288).
+   *  Public so the trace routes can gate before the cached read/append without
+   *  the service having to re-plumb tenantId/userId through every trace call. */
+  async canAccess(chatId: number, tenantId: number, userId: string): Promise<boolean> {
+    return (await this.canAccessChat(chatId, tenantId, userId)) != null;
+  }
+
+  /** Bulk-append trace events to a chat (append-only, NO access check — the route
+   *  gates first). Neon-http has no interactive transactions, so this is a single
+   *  multi-row INSERT (one statement). Bounds each JSON blob so a runaway tool
+   *  result can't bloat a row. Returns the number of rows written. */
+  async appendTrace(chatId: number, events: BrainTraceEventInput[]): Promise<{ appended: number }> {
+    if (!Array.isArray(events) || events.length === 0) return { appended: 0 };
+    const clamp = (v: unknown): string | null => {
+      if (v == null) return null;
+      const s = typeof v === 'string' ? v : JSON.stringify(v);
+      return s.length > TRACE_JSON_MAX_CHARS ? s.slice(0, TRACE_JSON_MAX_CHARS) : s;
+    };
+    const rows = events
+      .filter((e) => e && typeof e.kind === 'string' && e.kind.length > 0)
+      .map((e) => ({
+        chatId,
+        turnSeq: Number.isFinite(e.turnSeq as number) ? Number(e.turnSeq) : null,
+        kind: String(e.kind).slice(0, 24),
+        label: e.label != null ? String(e.label).slice(0, 120) : null,
+        argsJson: clamp(e.args),
+        resultJson: clamp(e.result),
+        isError: e.isError === true,
+        durationMs: Number.isFinite(e.durationMs as number) ? Number(e.durationMs) : null,
+        ttftMs: Number.isFinite(e.ttftMs as number) ? Number(e.ttftMs) : null,
+      }));
+    if (rows.length === 0) return { appended: 0 };
+    await this.db.insert(brainChatTrace).values(rows);
+    return { appended: rows.length };
+  }
+
+  /** Read a chat's persisted trace timeline, oldest-first (insert order). NO access
+   *  check — the route gates + wraps this in the read-through cache. */
+  async getTrace(chatId: number, limit = 500) {
+    return this.db
+      .select(traceColumns)
+      .from(brainChatTrace)
+      .where(eq(brainChatTrace.chatId, chatId))
+      .orderBy(brainChatTrace.id)
+      .limit(Math.min(Math.max(1, limit), 2000));
   }
 
   // -----------------------------------------------------------------------

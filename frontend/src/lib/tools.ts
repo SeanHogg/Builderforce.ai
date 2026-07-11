@@ -51,6 +51,20 @@ export type ToolDefinition =
   | (ToolSummary & { kind: 'questionnaire'; about: string; scale: ScaleAnchor[]; sections: QuestionnaireSection[] })
   | (ToolSummary & { kind: 'quiz'; about: string; levels: QuizLevel[]; questions: QuizQuestion[] });
 
+/** Remediation lifecycle a diagnostic's filed ticket(s) are in (mirrors the
+ *  backend `RemediationState`). `none` = no remediation ticket → fall back to gaps. */
+export type RemediationState = 'none' | 'filed' | 'pr_open' | 'resolved';
+
+/** Real remediation status for a diagnostic, derived from its filed tickets
+ *  (mirrors the backend `RemediationSummary`). Drives the "Remediation PR opened"
+ *  badge on the diagnostics strip. */
+export interface RemediationSummary {
+  state: RemediationState;
+  total: number;
+  open: number;
+  prUrl: string | null;
+}
+
 export interface ToolMetric { label: string; value: string; hint?: string; tier?: number }
 export interface ToolRecommendation { title: string; detail: string }
 export interface ToolResult {
@@ -84,6 +98,8 @@ export interface ProjectDiagnostic {
   headline: string;
   /** Number of open gaps (recommendations) the latest run flagged. */
   gapCount: number;
+  /** Real remediation status derived from the diagnostic's filed ticket(s). */
+  remediation: RemediationSummary;
   kind: string;
   createdAt: string;
   /** The full latest run result, for the per-diagnostic results view. */
@@ -106,6 +122,8 @@ export interface ProjectDiagnosticSummary {
   score: number | null;
   scoreLabel: string | null;
   gapCount: number;
+  /** Real remediation status (filed / PR-open / resolved) for the card badge. */
+  remediation: RemediationSummary;
 }
 
 export interface TenantProjectScore {

@@ -3782,7 +3782,10 @@
     "gaps": "{count, plural, one {# brecha} other {# brechas}}",
     "noGaps": "Sin brechas",
     "more": "+{count}",
-    "itemAria": "{name}: {score}, {label}, {gaps}"
+    "itemAria": "{name}: {score}, {label}, {gaps}",
+    "remediationResolved": "Remediación fusionada",
+    "remediationPrOpen": "PR de remediación abierta",
+    "remediationFiled": "{count, plural, =0 {Remediación registrada} one {# ticket creado} other {# tickets creados}}"
   },
   "marketing": {
     "ctaGetStartedFree": "Comienza gratis",
@@ -6778,7 +6781,8 @@
     "tierBasic": "Básico",
     "tierAdvanced": "Avanzado",
     "tierBasicHint": "Una prueba rápida de 2 minutos que cubre los rasgos de personalidad principales.",
-    "tierAdvancedHint": "La batería completa alineada con la psicología, en todos los marcos."
+    "tierAdvancedHint": "La batería completa alineada con la psicología, en todos los marcos.",
+    "derivedBanner": "Derivado de tus respuestas"
   },
   "workforceRoles": {
     "title": "Roles",
@@ -8187,7 +8191,31 @@
     "teamChatScope": "Chat de equipo",
     "teamChatProject": "Chat de equipo del proyecto",
     "teamChatTenant": "Chat de equipo del espacio",
-    "teamChatHint": "Elige con qué conversación se respalda esta reunión: el chat de un equipo concreto o el predeterminado de su ámbito."
+    "teamChatHint": "Elige con qué conversación se respalda esta reunión: el chat de un equipo concreto o el predeterminado de su ámbito.",
+    "shrinkTile": "Reducir",
+    "expandTile": "Ampliar",
+    "cameraSize": "Tamaño de cámara",
+    "sizeSmall": "Pequeño",
+    "sizeLarge": "Grande",
+    "transcript": "Transcripción",
+    "minutesTitle": "Acta",
+    "noTranscript": "Aún no hay transcripción. Activa tu micrófono para empezar a subtitular.",
+    "captionsUnsupported": "Los subtítulos en vivo requieren Chrome o Edge; la transcripción sigue capturando a los demás participantes y agentes.",
+    "close": "Cerrar",
+    "agentVoice": "Voz del agente",
+    "agentThinking": "{name} está pensando…",
+    "askForUpdate": "Pedir a {name}",
+    "askWhichAgent": "Qué agente",
+    "askAgentPlaceholder": "Haz una pregunta a un agente…",
+    "askSend": "Preguntar",
+    "agentTurnFailed": "El agente no pudo responder.",
+    "generateMinutes": "Generar acta",
+    "generatingMinutes": "Generando acta…",
+    "minutesReady": "Acta generada y publicada en el chat del equipo.",
+    "minutesFailed": "No se pudo generar el acta.",
+    "pastMeetings": "Reuniones anteriores",
+    "minutesAvailable": "Acta lista",
+    "viewNotes": "Ver notas"
   },
   "brainLauncher": {
     "open": "Abrir el asistente Brain",
@@ -9264,5 +9292,27 @@
       "gte": "Al menos (≥)",
       "lte": "Como máximo (≤)"
     }
+  },
+  "installAgents": {
+    "intro": "Descarga e instala el agente BuilderForce Agents en tu equipo. Se registrará automáticamente en tu espacio de trabajo para que puedas delegar tareas de inmediato.",
+    "tokenPreconfigured": "Tu token del espacio de trabajo está preconfigurado: el agente se registrará automáticamente en la primera ejecución.",
+    "laterHint": "También puedes hacerlo más tarde desde la página de <link>Equipo</link>."
+  },
+  "inviteMembers": {
+    "intro": "Añade compañeros a tu espacio de trabajo por correo. Si ya tienen una cuenta de Builderforce, se unen al instante; si no, la invitación queda <strong>pendiente</strong> y se unen automáticamente la primera vez que inicien sesión con ese correo.",
+    "emailPlaceholder": "companero@empresa.com",
+    "invite": "Invitar",
+    "roles": {
+      "developer": "Desarrollador",
+      "manager": "Gerente",
+      "viewer": "Observador"
+    },
+    "statusSending": "Enviando…",
+    "statusAdded": "Añadido",
+    "statusInvited": "Invitado · pendiente",
+    "statusInvitedHint": "Aún sin cuenta: se une automáticamente cuando se registre",
+    "statusError": "Error",
+    "errFailed": "No se pudo invitar",
+    "laterHint": "También puedes invitar a compañeros más tarde desde <link>Equipo</link>."
   }
 }

@@ -390,6 +390,9 @@ export interface BrainMessage {
   metadata: string | null;
   seq: number;
   createdAt: string;
+  /** Transient (not persisted): the send-messages learn-gate outcome for this turn,
+   *  attached to the assistant reply so the Brain run loop renders a truthful learn step. */
+  evermindLearn?: { learned: boolean; version: number };
 }
 
 export const brain = {
@@ -436,10 +439,17 @@ export const brain = {
   },
 
   sendMessages: (chatId: number, messages: Array<{ role: string; content: string; metadata?: string }>) =>
-    request<{ messages: BrainMessage[] }>(`/api/brain/chats/${chatId}/messages`, {
+    request<{ messages: BrainMessage[]; evermindLearn?: { learned: boolean; version: number } }>(`/api/brain/chats/${chatId}/messages`, {
       method: 'POST',
       body: JSON.stringify({ messages }),
-    }).then((r) => r.messages),
+    }).then((r) => {
+      // Attach the server's TRUTHFUL learn-gate outcome (transient, not persisted) to
+      // the assistant turn(s) this POST persisted, so the Brain run loop renders a
+      // learn step exactly when the server contributed — not from a client heuristic.
+      const learn = r.evermindLearn;
+      if (!learn) return r.messages;
+      return r.messages.map((m) => (m.role === 'assistant' ? { ...m, evermindLearn: learn } : m));
+    }),
 
   /** Set thumbs up/down on a message. feedback: 'up' | 'down' | null. */
   setMessageFeedback: (messageId: number, feedback: 'up' | 'down' | null) =>
@@ -3973,6 +3983,10 @@ export interface Meeting {
   calendarHtmlLink: string | null;
   startedAt: string | null;
   endedAt: string | null;
+  /** Recording/transcription (0330): generated minutes (recap + decisions + action
+   *  items), also posted into the linked team chat. Null until summarized. */
+  summary: string | null;
+  summaryGeneratedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -3989,6 +4003,20 @@ export interface MeetingAttendee {
   leftAt: string | null;
 }
 export interface MeetingDetail { meeting: Meeting; attendees: MeetingAttendee[]; }
+export interface MeetingTranscriptSegment {
+  id: string;
+  speakerRef: string;
+  speakerName: string;
+  speakerKind: 'human' | 'agent';
+  text: string;
+  atMs: number;
+  createdAt: string;
+}
+export interface MeetingTranscript {
+  segments: MeetingTranscriptSegment[];
+  summary: string | null;
+  summaryGeneratedAt: string | null;
+}
 export interface MeetingJoinInfo {
   roomKey: string;
   videoEnabled: boolean;
@@ -4034,6 +4062,18 @@ export const meetingsApi = {
   end: (id: string): Promise<MeetingDetail> => request(`${MEETINGS_BASE}/${id}/end`, { method: 'POST' }),
   cancel: (id: string): Promise<MeetingDetail> => request(`${MEETINGS_BASE}/${id}/cancel`, { method: 'POST' }),
   ice: (): Promise<{ iceServers: unknown[] }> => request(`${MEETINGS_BASE}/ice`),
+
+  // Recording / transcription + agent voice (0330).
+  transcript: (id: string): Promise<MeetingTranscript> => request(`${MEETINGS_BASE}/${id}/transcript`),
+  /** Append one final caption line (from the caller's own browser speech-to-text). */
+  appendTranscript: (id: string, text: string): Promise<{ ok: boolean; id: string | null }> =>
+    request(`${MEETINGS_BASE}/${id}/transcript`, { method: 'POST', body: JSON.stringify({ text }) }),
+  /** Have an agent attendee speak (LLM turn → caption + browser voice). */
+  agentTurn: (id: string, agentRef: string, prompt?: string): Promise<{ text: string; atMs: number; agentRef: string; agentName: string }> =>
+    request(`${MEETINGS_BASE}/${id}/agent-turn`, { method: 'POST', body: JSON.stringify({ agentRef, prompt }) }),
+  /** Generate + store meeting minutes from the transcript (posts into the team chat). */
+  summarize: (id: string): Promise<{ summary: string; meeting: MeetingDetail }> =>
+    request(`${MEETINGS_BASE}/${id}/summarize`, { method: 'POST' }),
 
   // Availability (bookable working hours) + "find a time".
   myAvailability: (): Promise<AvailabilityProfile> => request(`${MEETINGS_BASE}/availability/me`),

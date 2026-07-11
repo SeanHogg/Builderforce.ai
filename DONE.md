@@ -4,6 +4,19 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-11 — Diagnostics strip: per-gap dedup, real remediation-PR badge, viewer-visible scores (api + frontend)
+
+Closed the four P3 diagnostics-strip gaps in one pass.
+
+- **Per-gap audit dedup.** `AuditRunner.runAudit` now looks up the project's OPEN task titles once (`openTaskTitles`, non-archived + not-Done) and skips filing a per-gap `ticketPerFinding` ticket whose `${audit.name}: ${gap}` title already exists — re-running the Privacy audit before a gap is fixed no longer spams duplicate tickets. Best-effort (empty set on read failure → prior always-file behaviour). Covered by `privacyDedup.test.ts`.
+- **Real remediation-PR badge.** New `remediationStatus.ts` (`deriveRemediation`) joins a project's tasks back to a diagnostic BY TITLE PREFIX (no schema change) and collapses them to a lifecycle state — `none` / `filed` / `pr_open` / `resolved`. `ToolService.getProjectScore` + `getTenantRollup` carry a `remediation` summary on each `ProjectDiagnostic(Summary)` (one task read per rollup/score, inside the existing 5-min read-through cache). `ProjectDiagnosticsStrip` gauges render the true badge (green "Remediation PR opened" / "merged", blue "N tickets filed"), falling back to the gap count when no ticket exists — matching the marketing SOC 2 gauge. Covered by `remediationStatus.test.ts`.
+- **Viewer-visible diagnostics.** `GET /api/tools/rollup` + `GET /api/tools/projects/:id/score` relaxed from `requireRole(MANAGER)` → `requireRole(VIEWER)`; read-only diagnostic scores are now visible to every workspace member (running audits + raw finding tickets stay role-gated).
+- **Onboarding child-step localization.** `InstallBuilderForceAgents` + `InviteTeamMembers` now route every string through `useTranslations` (`installAgents.*`, `inviteMembers.*`) with real zh/es/fr/de in all 5 catalogs (the three `Wizard*Step` children were already localized). `diagnosticsStrip.*` gained the three remediation labels in all 5 catalogs.
+- **Verified.** api `tsgo --noEmit` clean · 7 tool tests pass (dedup + remediation + existing privacy lifecycle) · frontend `tsgo --noEmit` clean for touched files (pre-existing unrelated `useMediaRoom.ts` error remains) · localize-guard passes both components · all 5 catalogs parse.
+- **Known follow-up:** the remediation badge (like the existing `gapCount`) can lag task PR-state changes by up to the 5-min score/rollup cache TTL — a task PR merge doesn't actively invalidate `tools:projectscore`/`tools:rollup`. Bounded and consistent with the pre-existing gap-count staleness; logged in the roadmap.
+
+---
+
 ## ✅ RESOLVED 2026-07-11 — Active monitoring: a diagram-overlay monitoring canvas whose breaches auto-start the on-call investigation (api 2026.7.74 · frontend 2026.7.50)
 
 The proactive front-door to incident management — the last loop (reporting + active monitoring). The team uploads a diagram / architecture image, overlays monitor pins on it, and a monitor breach opens an incident that fires the existing on-call → escalation → triage → RCA → Evermind loop. No new response plumbing — monitoring is purely a new incident *source*.

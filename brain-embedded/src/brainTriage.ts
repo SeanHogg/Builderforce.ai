@@ -30,6 +30,14 @@ export interface BrainTraceEvent {
   label: string;
   /** Wall-clock duration of the step, when measured. */
   durationMs?: number;
+  /**
+   * `llm` steps: time-to-first-token (ms) — the delay from issuing the
+   * completion request to the FIRST streamed text delta of the turn. Undefined
+   * when no token arrived (a pure tool-call / empty turn). The timeline uses it
+   * for the "Thought for Xs" thinking node so it reflects latency-to-first-token
+   * rather than the full-turn duration.
+   */
+  ttftMs?: number;
   /** Tool arguments / completion request summary. */
   args?: unknown;
   /** Tool result / completion summary / error message. */
