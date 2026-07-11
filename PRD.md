@@ -1,44 +1,60 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #196
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# PRD: CI/CD Failure Root Cause Analysis Dashboard
 
-## 1. Problem & Goal
+## Problem & Goal
+**Problem:**
+Engineering teams waste significant time manually digging through CI/CD logs to identify why a pipeline failed. The lack of aggregated, actionable root-cause summaries leads to:
+- Repeated failures of the same type going undetected
+- Slow MTTR (Mean Time To Recovery)
+- Frustration among developers and DevOps engineers
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+**Goal:**
+Provide a real-time dashboard that automatically surfaces every failed CI/CD job, labels it with the most likely root cause, and suggests the next troubleshooting step. The dashboard must reduce MTT-diagnosis by at least 50 % within 30 days of launch.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+## Target Users / ICP Roles
+| Role                  | Pain Point                                  |
+|-----------------------|--------------------------------------------|
+| DevOps Engineer        | Fatigue from same-class failures re-occurring |
+| Developer (IC)         | Context-switching to diagnose failures        |
+| Engineering Manager    | Lack of data to drive process improvements   |
+| SRE                    | Blind spots in error budget tracking         |
 
-## 2. Target Users / ICP Roles
+## Scope
+### In Scope
+- All GitHub Actions, GitLab CI/CD, CircleCI, and Jenkins pipelines originating from our organization’s git repos.
+- Failures triggered in the last 90 days; searchable archive.
+- First-class root causes: flaky tests, infra quota, syntax error, plugin mis-configuration, test data, environment drift.
+- Basic trend charts (weekly rollup) and filter-by-repo-team.
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+### Out of Scope
+- Pipelines outside the org’s git repos.
+- Failures older than 90 days at GA.
+- Custom root-cause taxonomies defined by individual teams (defer until v2).
+- Auto-retry or auto-fix workflows (defer until v3).
+- Security scanning of pipeline artifacts.
 
-## 3. Scope
+## Functional Requirements
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+| ID   | Requirement                                                                 | Priority |
+|------|-----------------------------------------------------------------------------|----------|
+| FR-1 | Ingest real-time failure events from GitHub Actions, GitLab CI/CD, CircleCI, Jenkins. | P0       |
+| FR-2 | Display failures in reverse-chronological table; columns: timestamp, repo, pipeline ID, stage, root-cause label, suggested next step. | P0       |
+| FR-3 | Root-cause classifier: assign one of the 6 canonical labels listed in Scope. | P0       |
+| FR-4 | Tooltip exposed on root-cause label showing the classifier’s confidence score and excerpt of log lines that triggered the label. | P1       |
+| FR-5 | Trend chart: time-series showing absolute failure count and % of total jobs that failed, aggregated weekly. | P1       |
+| FR-6 | Filter pane: repo, team, root-cause label, time window (last 7/30/90d), stage name. | P1       |
+| FR-7 | Export: copy failure record to clipboard as markdown table row; JSON bulk export for offline analysis. | P2       |
 
-## 4. Functional Requirements
+## Acceptance Criteria
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
-
-## 5. Acceptance Criteria
-
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
-
-## 6. Out of Scope
-
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+| Item                          | Criteria                                                                 |
+|-------------------------------|-------------------------------------------------------------------------|
+| Event ingestion               | Within 5 minutes of pipeline completion, failure events appear in dashboard for all 4 supported CI/CD systems. |
+| Root-cause labelling          | ≥ 90 % precision on eval set of 200 labelled failures curated by DevOps. |
+| Real-time liveness            | No intervention required; failures appear at rate ≤ pipeline churn.     |
+| Search & filter               | All filters listed in FR-6 work without errors.                         |
+| Trend chart                   | Weekly roll-ups rendered within 10 s; updates within 1 hour of new data.|
+| Export                        | Clipboard & JSON exports contain all table columns and timestamp.       |
+| Performance                   | Dashboard loads ≤ 2 s on internal AWS network with < 20 % error rate.    |
