@@ -54,6 +54,7 @@ export const PROVIDER_META: Record<IntegrationProvider, ProviderMeta> = {
   jira: { label: 'Jira', baseUrl: 'required', secrets: [{ key: 'email', label: 'Account email', type: 'text' }, { key: 'apiToken', label: 'API token' }], board: { externalId: 'optional', hint: 'Project key (e.g. ENG) — blank syncs all' } },
   confluence: { label: 'Confluence', baseUrl: 'required', secrets: [{ key: 'email', label: 'Account email', type: 'text' }, { key: 'apiToken', label: 'API token' }] },
   freshservice: { label: 'Freshservice', baseUrl: 'required', secrets: [{ key: 'apiKey', label: 'API key' }], board: { externalId: 'optional', hint: 'Workspace ID (optional) — blank syncs all tickets' } },
+  freshdesk: { label: 'Freshdesk', baseUrl: 'required', secrets: [{ key: 'apiKey', label: 'API key' }], board: { externalId: 'optional', hint: 'Freshdesk domain (e.g. https://yourco.freshdesk.com)' } },
   servicenow: { label: 'ServiceNow', baseUrl: 'required', secrets: [{ key: 'username', label: 'Username', type: 'text' }, { key: 'password', label: 'Password' }], board: { externalId: 'optional', hint: 'Table name (default: incident)' } },
   linear: { label: 'Linear', baseUrl: false, secrets: [{ key: 'apiKey', label: 'API key', placeholder: 'lin_api_…' }], board: { externalId: 'optional', hint: 'Team ID (optional) — blank syncs all teams' } },
   sentry: { label: 'Sentry', baseUrl: 'optional', secrets: [{ key: 'token', label: 'Auth token', placeholder: 'sntrys_…' }], board: { externalId: 'required', hint: 'organization-slug/project-slug' } },

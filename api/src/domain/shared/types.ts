@@ -63,6 +63,11 @@ export enum TaskType {
    *  Service Criterion, and access-restricted via security_ticket_access — visible
    *  only to allowlisted/opted-in audiences plus Owner/Admin. */
   SECURITY = 'security',
+  /** Opened by the Incident Manager agent for a help-desk ticket that reads as an
+   *  incident (migration 0325). A first-class, schedulable board item carrying the
+   *  incident's severity, status and affected system, bridged to a prodIncidents
+   *  record (task.incidentId) that owns the MTTR/escalation lifecycle. */
+  INCIDENT = 'incident',
 }
 
 export enum AgentType {

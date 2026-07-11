@@ -42,6 +42,7 @@ export const BOARD_PROVIDERS: readonly BoardProviderMeta[] = [
   { id: 'gitlab',       label: 'GitLab Issues', category: 'scm',      externalBoardId: 'required', externalBoardIdHint: 'Project id or path (e.g. group/repo)', supportsWebhook: false, supportsDiscovery: true },
   { id: 'bitbucket',    label: 'Bitbucket Issues', category: 'scm',   externalBoardId: 'required', externalBoardIdHint: 'workspace/repo_slug', supportsWebhook: false, supportsDiscovery: true },
   { id: 'freshservice', label: 'Freshservice',  category: 'itsm',     externalBoardId: 'optional', externalBoardIdHint: 'Workspace ID (optional) — blank syncs all tickets', supportsWebhook: false, supportsDiscovery: false },
+  { id: 'freshdesk',    label: 'Freshdesk',     category: 'itsm',     externalBoardId: 'optional', externalBoardIdHint: 'Blank syncs all help-desk tickets', supportsWebhook: false, supportsDiscovery: false },
   { id: 'servicenow',   label: 'ServiceNow',    category: 'itsm',     externalBoardId: 'optional', externalBoardIdHint: 'Table name (default: incident)', supportsWebhook: false, supportsDiscovery: false },
   { id: 'sentry',       label: 'Sentry',        category: 'incident', externalBoardId: 'required', externalBoardIdHint: 'organization-slug/project-slug', supportsWebhook: true,  supportsDiscovery: false },
   { id: 'pagerduty',    label: 'PagerDuty',     category: 'incident', externalBoardId: 'optional', externalBoardIdHint: 'Service ID (optional) — blank syncs all services', supportsWebhook: true,  supportsDiscovery: false },

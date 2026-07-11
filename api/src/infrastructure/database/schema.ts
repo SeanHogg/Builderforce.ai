@@ -59,6 +59,9 @@ export const agentTypeEnum = pgEnum('agent_type', [
 // into child tasks (parent_task_id) — see migration 0112.
 export const taskTypeEnum = pgEnum('task_type', [
   'task', 'epic', 'gap', 'security',
+  // Incident ticket (migration 0325): a first-class board card the Incident Manager
+  // agent works, bridged to a prod_incidents record.
+  'incident',
   // Hireable work-item kinds (migration 0293): a full product/scope brief a
   // Product-Manager agent authors + publishes for a fixed-bid build, and a UI/UX
   // design (or design-review) gig. Both are publishable to the Gig Marketplace.
@@ -1010,6 +1013,15 @@ export const tasks = pgTable('tasks', {
   securitySeverity:      varchar('security_severity', { length: 12 }),
   securityTsc:           varchar('security_tsc', { length: 32 }),
   securityAuditId:       integer('security_audit_id'),
+  /** Incident metadata (migration 0325) — set on an INCIDENT-typed task the Incident
+   *  Manager agent opens. severity is 'sev1'..'sev4'; status is
+   *  'triage'|'investigating'|'mitigated'|'resolved'; incidentSystem is the
+   *  classified affected system; incidentId links to the {@link prodIncidents}
+   *  record. Null on ordinary task/epic/gap/security rows. */
+  incidentSeverity:      varchar('incident_severity', { length: 16 }),
+  incidentStatus:        varchar('incident_status', { length: 20 }),
+  incidentSystem:        varchar('incident_system', { length: 120 }),
+  incidentId:            uuid('incident_id'),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 });
@@ -2342,6 +2354,7 @@ export const emailVerificationCodes = pgTable('email_verification_codes', {
 
 export const integrationProviderEnum = pgEnum('integration_provider', [
   'github', 'gitlab', 'bitbucket', 'jira', 'confluence', 'freshservice', 'rally', 'freshworks',
+  'freshdesk',
   'google_calendar',
   // 0221 — single-pane / migration connectors
   'servicenow', 'linear', 'sentry', 'pagerduty', 'monday', 'asana', 'clickup',
@@ -5365,12 +5378,130 @@ export const prodIncidents = pgTable('prod_incidents', {
   impact:         text('impact'),
   rootCause:      text('root_cause'),
   postmortemUrl:  varchar('postmortem_url', { length: 512 }),
+  // Active-response fields (migration 0325): the bridge to the board + war-room +
+  // escalation state that turns this metrics record into a live incident.
+  boardTaskId:        integer('board_task_id'),               // linked 'incident' kanban task
+  affectedSystem:     varchar('affected_system', { length: 120 }),
+  assignedAgentRef:   varchar('assigned_agent_ref', { length: 64 }),
+  warRoomChatId:      integer('war_room_chat_id'),            // → brainChats.id (serial)
+  escalationPolicyId: uuid('escalation_policy_id'),           // → escalationPolicies.id
+  escalationLevel:    integer('escalation_level').notNull().default(0),
+  lastEscalatedAt:    timestamp('last_escalated_at'),
+  externalUrl:        varchar('external_url', { length: 512 }),
   createdAt:      timestamp('created_at').notNull().defaultNow(),
   updatedAt:      timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ({
   byStarted: index('idx_prod_incidents_started').on(t.tenantId, t.startedAt),
   byStatus:  index('idx_prod_incidents_status').on(t.tenantId, t.status),
   uqExternal: uniqueIndex('uq_prod_incidents_external').on(t.tenantId, t.source, t.externalRef),
+}));
+
+// ---------------------------------------------------------------------------
+// Incident management: on-call, escalation, contacts, timeline (migration 0325)
+// ---------------------------------------------------------------------------
+
+/** A named on-call list. Who is on call NOW is resolved from the ordered
+ *  {@link onCallMembers}: 'manual' → currentIndex; 'daily'/'weekly' → time-sliced
+ *  round-robin. */
+export const onCallRotations = pgTable('on_call_rotations', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:    integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  name:         varchar('name', { length: 255 }).notNull(),
+  description:  text('description'),
+  rotationKind: varchar('rotation_kind', { length: 16 }).notNull().default('manual'), // manual|daily|weekly
+  currentIndex: integer('current_index').notNull().default(0),
+  active:       boolean('active').notNull().default(true),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant: index('idx_on_call_rotations_tenant').on(t.tenantId, t.active),
+}));
+
+/** An ordered participant of an on-call rotation. memberRef is assignee-encoded:
+ *  'u:<userId>' | 'c:<agentRef>' | 'contact:<businessContactId>'. */
+export const onCallMembers = pgTable('on_call_members', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  rotationId:  uuid('rotation_id').notNull().references(() => onCallRotations.id, { onDelete: 'cascade' }),
+  memberRef:   varchar('member_ref', { length: 72 }).notNull(),
+  displayName: varchar('display_name', { length: 255 }),
+  position:    integer('position').notNull().default(0),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byRotation: index('idx_on_call_members_rotation').on(t.rotationId, t.position),
+}));
+
+/** A timed escalation policy. Matches incidents (optionally by severity); its
+ *  {@link escalationLevels} fire in order until the incident is acknowledged. */
+export const escalationPolicies = pgTable('escalation_policies', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:     integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  name:          varchar('name', { length: 255 }).notNull(),
+  description:   text('description'),
+  matchSeverity: varchar('match_severity', { length: 16 }), // null = any
+  active:        boolean('active').notNull().default(true),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant: index('idx_escalation_policies_tenant').on(t.tenantId, t.active),
+}));
+
+/** One timed step of an escalation policy: at afterMinutes past the incident start,
+ *  if still unacknowledged, page targetKind/targetRef through the enabled channels. */
+export const escalationLevels = pgTable('escalation_levels', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  policyId:     uuid('policy_id').notNull().references(() => escalationPolicies.id, { onDelete: 'cascade' }),
+  level:        integer('level').notNull().default(1),
+  afterMinutes: integer('after_minutes').notNull().default(15),
+  targetKind:   varchar('target_kind', { length: 24 }).notNull().default('oncall_rotation'), // oncall_rotation|user|contact|team_chat
+  targetRef:    varchar('target_ref', { length: 72 }),
+  notifyTeams:  boolean('notify_teams').notNull().default(true),
+  notifySlack:  boolean('notify_slack').notNull().default(true),
+  notifyEmail:  boolean('notify_email').notNull().default(true),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byPolicy: index('idx_escalation_levels_policy').on(t.policyId, t.level),
+}));
+
+/** A business contact — a stakeholder to talk to during an incident. */
+export const businessContacts = pgTable('business_contacts', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  name:      varchar('name', { length: 255 }).notNull(),
+  roleTitle: varchar('role_title', { length: 255 }),
+  company:   varchar('company', { length: 255 }),
+  email:     varchar('email', { length: 255 }),
+  phone:     varchar('phone', { length: 64 }),
+  teamsId:   varchar('teams_id', { length: 255 }),
+  notes:     text('notes'),
+  tags:      jsonb('tags').notNull().default(sql`'[]'::jsonb`),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant: index('idx_business_contacts_tenant').on(t.tenantId, t.name),
+}));
+
+/** Append-only incident timeline + notification log (the war-room feed + paging
+ *  audit). */
+export const incidentEvents = pgTable('incident_events', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  incidentId: uuid('incident_id').notNull().references(() => prodIncidents.id, { onDelete: 'cascade' }),
+  kind:       varchar('kind', { length: 24 }).notNull().default('note'), // created|classified|assigned|escalated|notified|status_change|note|resolved
+  actorRef:   varchar('actor_ref', { length: 72 }),
+  message:    text('message'),
+  channel:    varchar('channel', { length: 16 }),
+  target:     varchar('target', { length: 255 }),
+  level:      integer('level'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byIncident: index('idx_incident_events_incident').on(t.incidentId, t.createdAt),
 }));
 
 /** A customer-support ticket — Support Issues / Tech Support Tix / Support-Tix-

@@ -1,0 +1,848 @@
+'use client';
+
+/**
+ * IncidentsPageClient — the Incident Management surface. Four sub-views selected
+ * via the shared <PillTabs> (?tab=): live Incident war rooms, On-call rotations,
+ * Escalation policies, and a Business-contact directory. Detail / create flows use
+ * the canonical <SlideOutPanel> (never a modal) and destructive removals go through
+ * useConfirm(). Writes are gated to manager+ (mirrors the API requireRole(MANAGER)).
+ * Fully localized (incidents namespace) + theme-driven (never one-theme hex).
+ */
+
+import { useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
+import { useSearchParams } from 'next/navigation';
+import PageContainer from '@/components/PageContainer';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { Select } from '@/components/Select';
+import { useConfirm } from '@/components/ConfirmProvider';
+import { useRole, hasMinRole } from '@/lib/rbac';
+import {
+  incidentsApi,
+  type Incident,
+  type IncidentEvent,
+  type IncidentSeverity,
+  type IncidentStatus,
+  type OnCallRotation,
+  type RotationKind,
+  type EscalationPolicy,
+  type EscalationTargetKind,
+  type BusinessContact,
+} from '@/lib/builderforceApi';
+
+const card: React.CSSProperties = {
+  background: 'var(--bg-base)',
+  border: '1px solid var(--border-subtle)',
+  borderRadius: 12,
+  padding: 16,
+};
+
+const SEVERITIES: IncidentSeverity[] = ['sev1', 'sev2', 'sev3', 'sev4'];
+const SEVERITY_BADGE: Record<IncidentSeverity, string> = {
+  sev1: 'badge-red',
+  sev2: 'badge-orange',
+  sev3: 'badge-amber',
+  sev4: 'badge-blue',
+};
+const STATUS_BADGE: Record<IncidentStatus, string> = {
+  open: 'badge-red',
+  acknowledged: 'badge-amber',
+  mitigated: 'badge-blue',
+  resolved: 'badge-green',
+};
+const ROTATION_KINDS: RotationKind[] = ['manual', 'daily', 'weekly'];
+const TARGET_KINDS: EscalationTargetKind[] = ['oncall_rotation', 'user', 'contact', 'team_chat'];
+
+function fmt(dt: string | null | undefined): string {
+  if (!dt) return '—';
+  const d = new Date(dt);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+}
+
+export default function IncidentsPageClient() {
+  const t = useTranslations('incidents');
+  const tc = useTranslations('common');
+  const tab = useSearchParams().get('tab') ?? '';
+  const role = useRole();
+  const canManage = hasMinRole(role, 'manager');
+
+  const heading = tab === 'oncall'
+    ? { title: t('tab.oncall'), subtitle: t('oncallSubtitle') }
+    : tab === 'escalation'
+      ? { title: t('tab.escalation'), subtitle: t('escalationSubtitle') }
+      : tab === 'contacts'
+        ? { title: t('tab.contacts'), subtitle: t('contactsSubtitle') }
+        : { title: t('title'), subtitle: t('subtitle') };
+
+  return (
+    <PageContainer>
+      <div style={{ marginBottom: 18 }}>
+        <h1 style={{ fontSize: 'clamp(22px,3vw,30px)', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 6px' }}>{heading.title}</h1>
+        <p style={{ color: 'var(--text-secondary)', fontSize: 14, margin: 0, maxWidth: 640 }}>{heading.subtitle}</p>
+      </div>
+
+      {tab === 'oncall' ? (
+        <OnCallSection t={t} tc={tc} canManage={canManage} />
+      ) : tab === 'escalation' ? (
+        <EscalationSection t={t} tc={tc} canManage={canManage} />
+      ) : tab === 'contacts' ? (
+        <ContactsSection t={t} tc={tc} canManage={canManage} />
+      ) : (
+        <IncidentsSection t={t} tc={tc} canManage={canManage} />
+      )}
+    </PageContainer>
+  );
+}
+
+type T = ReturnType<typeof useTranslations>;
+interface SectionProps { t: T; tc: T; canManage: boolean; }
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)' }}>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function Loader({ t }: { t: T }) {
+  return <div style={{ ...card, color: 'var(--text-muted)' }}>{t('loading')}</div>;
+}
+function ErrorCard({ msg }: { msg: string }) {
+  return <div style={{ ...card, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)' }}>{msg}</div>;
+}
+function EmptyCard({ msg }: { msg: string }) {
+  return <div style={{ ...card, color: 'var(--text-muted)', textAlign: 'center', padding: 32 }}>{msg}</div>;
+}
+
+/* ─────────────────────────── Incidents ─────────────────────────── */
+
+function IncidentsSection({ t, tc, canManage }: SectionProps) {
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [activeOnly, setActiveOnly] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    incidentsApi.list(activeOnly)
+      .then(setIncidents)
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [activeOnly]);
+
+  useEffect(() => { load(); }, [load]);
+
+  return (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
+          <input type="checkbox" checked={activeOnly} onChange={(e) => setActiveOnly(e.target.checked)} />
+          {t('activeOnly')}
+        </label>
+        <button type="button" className="btn btn-primary" onClick={() => setCreateOpen(true)} disabled={!canManage} title={canManage ? undefined : t('needManager')}>
+          {t('newIncident')}
+        </button>
+      </div>
+
+      {loading && <Loader t={tc} />}
+      {error && <ErrorCard msg={error} />}
+      {!loading && !error && (incidents.length === 0
+        ? <EmptyCard msg={t('emptyIncidents')} />
+        : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {incidents.map((inc) => (
+              <button
+                key={inc.id}
+                type="button"
+                onClick={() => setSelectedId(inc.id)}
+                style={{ ...card, cursor: 'pointer', textAlign: 'left', width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span className={SEVERITY_BADGE[inc.severity]}>{t(`severity.${inc.severity}`)}</span>
+                  <span className={STATUS_BADGE[inc.status]}>{t(`status.${inc.status}`)}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: 15, flex: 1, minWidth: 0 }}>{inc.title}</span>
+                </div>
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, color: 'var(--text-muted)' }}>
+                  <span>{t('colSystem')}: {inc.affectedSystem || '—'}</span>
+                  <span>{t('colStarted')}: {fmt(inc.startedAt)}</span>
+                  <span>{t('escalationLevel', { level: inc.escalationLevel })}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )
+      )}
+
+      {selectedId && (
+        <IncidentDetailPanel
+          t={t}
+          tc={tc}
+          canManage={canManage}
+          incidentId={selectedId}
+          onClose={() => setSelectedId(null)}
+          onChanged={load}
+        />
+      )}
+
+      <CreateIncidentPanel
+        t={t}
+        tc={tc}
+        canManage={canManage}
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={() => { setCreateOpen(false); load(); }}
+      />
+    </>
+  );
+}
+
+function CreateIncidentPanel({ t, tc, canManage, open, onClose, onCreated }: SectionProps & { open: boolean; onClose: () => void; onCreated: () => void }) {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [severity, setSeverity] = useState<IncidentSeverity>('sev3');
+  const [affectedSystem, setAffectedSystem] = useState('');
+  const [openWarRoom, setOpenWarRoom] = useState(false);
+  const [page, setPage] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setTitle(''); setDescription(''); setSeverity('sev3'); setAffectedSystem('');
+      setOpenWarRoom(false); setPage(false); setError(null);
+    }
+  }, [open]);
+
+  const submit = async () => {
+    if (!title.trim()) { setError(t('validationTitle')); return; }
+    setSaving(true); setError(null);
+    try {
+      await incidentsApi.create({
+        title: title.trim(),
+        description: description.trim() || undefined,
+        severity,
+        affectedSystem: affectedSystem.trim() || undefined,
+        openWarRoom,
+        page,
+      });
+      onCreated();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Create failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <SlideOutPanel open={open} onClose={onClose} title={t('newIncident')}>
+      <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {error && <ErrorCard msg={error} />}
+        <Field label={t('fieldTitle')}>
+          <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('titlePlaceholder')} />
+        </Field>
+        <Field label={t('fieldDescription')}>
+          <textarea className="input" style={{ minHeight: 80 }} value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t('descriptionPlaceholder')} />
+        </Field>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+          <Field label={t('fieldSeverity')}>
+            <Select className="input" value={severity} onChange={(e) => setSeverity(e.target.value as IncidentSeverity)}>
+              {SEVERITIES.map((s) => <option key={s} value={s}>{t(`severity.${s}`)}</option>)}
+            </Select>
+          </Field>
+          <Field label={t('fieldSystem')}>
+            <input className="input" value={affectedSystem} onChange={(e) => setAffectedSystem(e.target.value)} placeholder={t('systemPlaceholder')} />
+          </Field>
+        </div>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
+          <input type="checkbox" checked={openWarRoom} onChange={(e) => setOpenWarRoom(e.target.checked)} />
+          {t('openWarRoomCheck')}
+        </label>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
+          <input type="checkbox" checked={page} onChange={(e) => setPage(e.target.checked)} />
+          {t('pageOnCallCheck')}
+        </label>
+        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+          <button type="button" className="btn btn-primary" onClick={submit} disabled={saving || !canManage}>
+            {saving ? tc('saving') : t('create')}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>{tc('cancel')}</button>
+        </div>
+      </div>
+    </SlideOutPanel>
+  );
+}
+
+function IncidentDetailPanel({ t, tc, canManage, incidentId, onClose, onChanged }: SectionProps & { incidentId: string; onClose: () => void; onChanged: () => void }) {
+  const [incident, setIncident] = useState<Incident | null>(null);
+  const [timeline, setTimeline] = useState<IncidentEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState('');
+  const [classifyValue, setClassifyValue] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    incidentsApi.get(incidentId)
+      .then(({ incident, timeline }) => { setIncident(incident); setTimeline(timeline); setClassifyValue(incident.affectedSystem ?? ''); })
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [incidentId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const run = async (fn: () => unknown) => {
+    setBusy(true); setError(null);
+    try { await fn(); load(); onChanged(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Action failed'); }
+    finally { setBusy(false); }
+  };
+
+  const actionBtn = (label: string, fn: () => unknown, primary = false) => (
+    <button type="button" className={primary ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'} disabled={busy || !canManage} onClick={() => run(fn)}>
+      {label}
+    </button>
+  );
+
+  return (
+    <SlideOutPanel open onClose={onClose} title={incident ? `${t('warRoomTitle')} — ${incident.title}` : t('warRoomTitle')} width="min(680px, 96vw)">
+      <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {loading && <Loader t={tc} />}
+        {error && <ErrorCard msg={error} />}
+        {incident && (
+          <>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <span className={SEVERITY_BADGE[incident.severity]}>{t(`severity.${incident.severity}`)}</span>
+              <span className={STATUS_BADGE[incident.status]}>{t(`status.${incident.status}`)}</span>
+              <span className="badge-muted">{t('escalationLevel', { level: incident.escalationLevel })}</span>
+            </div>
+
+            {/* Fields */}
+            <div style={{ ...card, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+              <DetailRow label={t('colSystem')} value={incident.affectedSystem || '—'} />
+              <DetailRow label={t('colSource')} value={incident.source || '—'} />
+              <DetailRow label={t('startedAt')} value={fmt(incident.startedAt)} />
+              <DetailRow label={t('acknowledgedAt')} value={fmt(incident.acknowledgedAt)} />
+              <DetailRow label={t('resolvedAt')} value={fmt(incident.resolvedAt)} />
+              <DetailRow label={t('impact')} value={incident.impact || '—'} />
+              <DetailRow label={t('rootCause')} value={incident.rootCause || '—'} />
+            </div>
+
+            {/* Actions */}
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8 }}>{t('actions')}</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {incident.status !== 'resolved' && actionBtn(t('acknowledge'), () => incidentsApi.update(incident.id, { status: 'acknowledged' }))}
+                {incident.status !== 'resolved' && actionBtn(t('resolve'), () => incidentsApi.update(incident.id, { status: 'resolved' }), true)}
+                {actionBtn(t('pageOncall'), () => incidentsApi.page(incident.id))}
+                {actionBtn(t('openWarRoom'), () => incidentsApi.warRoom(incident.id))}
+                {actionBtn(t('runTriage'), () => incidentsApi.triage(incident.id))}
+              </div>
+            </div>
+
+            {/* Classify */}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 180 }}>
+                <Field label={t('classifySystem')}>
+                  <input className="input" value={classifyValue} onChange={(e) => setClassifyValue(e.target.value)} placeholder={t('systemPlaceholder')} />
+                </Field>
+              </div>
+              {actionBtn(t('classify'), () => incidentsApi.classify(incident.id, classifyValue.trim()))}
+            </div>
+
+            {/* Add note */}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 180 }}>
+                <Field label={t('addNote')}>
+                  <input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('notePlaceholder')} />
+                </Field>
+              </div>
+              {actionBtn(t('addNoteBtn'), async () => { if (note.trim()) { await incidentsApi.addNote(incident.id, note.trim()); setNote(''); } })}
+            </div>
+
+            {/* Timeline */}
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8 }}>{t('timeline')}</div>
+              {timeline.length === 0 ? (
+                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('noEvents')}</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {timeline.map((ev) => (
+                    <div key={ev.id} style={{ display: 'flex', gap: 10, fontSize: 13, borderLeft: '2px solid var(--border-subtle)', paddingLeft: 10 }}>
+                      <span style={{ color: 'var(--text-muted)', fontSize: 11, whiteSpace: 'nowrap' }}>{fmt(ev.createdAt)}</span>
+                      <span style={{ color: 'var(--text-primary)' }}>
+                        <strong style={{ fontWeight: 600 }}>{ev.kind}</strong>
+                        {ev.message ? ` — ${ev.message}` : ''}
+                        {ev.actorRef ? ` (${ev.actorRef})` : ''}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </SlideOutPanel>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>{label}</span>
+      <span style={{ fontSize: 13, color: 'var(--text-primary)', wordBreak: 'break-word' }}>{value}</span>
+    </div>
+  );
+}
+
+/* ─────────────────────────── On-call ─────────────────────────── */
+
+function OnCallSection({ t, tc, canManage }: SectionProps) {
+  const confirm = useConfirm();
+  const [rotations, setRotations] = useState<OnCallRotation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [rotationKind, setRotationKind] = useState<RotationKind>('manual');
+  const [saving, setSaving] = useState(false);
+
+  // Add-member draft, keyed by rotation id
+  const [memberDraft, setMemberDraft] = useState<Record<string, { displayName: string; memberRef: string }>>({});
+
+  const load = useCallback(() => {
+    setLoading(true); setError(null);
+    incidentsApi.listRotations()
+      .then(setRotations)
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const createRotation = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      await incidentsApi.createRotation({ name: name.trim(), description: description.trim() || undefined, rotationKind });
+      setCreateOpen(false); setName(''); setDescription(''); setRotationKind('manual');
+      load();
+    } catch (e) { setError(e instanceof Error ? e.message : 'Create failed'); }
+    finally { setSaving(false); }
+  };
+
+  const removeRotation = async (r: OnCallRotation) => {
+    if (!(await confirm({ message: t('deleteRotationConfirm', { name: r.name }), destructive: true }))) return;
+    try { await incidentsApi.removeRotation(r.id); load(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Delete failed'); }
+  };
+
+  const addMember = async (r: OnCallRotation) => {
+    const d = memberDraft[r.id];
+    if (!d?.memberRef.trim()) return;
+    try {
+      await incidentsApi.addRotationMember(r.id, { memberRef: d.memberRef.trim(), displayName: d.displayName.trim() || undefined });
+      setMemberDraft((prev) => ({ ...prev, [r.id]: { displayName: '', memberRef: '' } }));
+      load();
+    } catch (e) { setError(e instanceof Error ? e.message : 'Add failed'); }
+  };
+
+  const removeMember = async (r: OnCallRotation, memberId: string) => {
+    if (!(await confirm({ message: t('deleteMemberConfirm'), destructive: true }))) return;
+    try { await incidentsApi.removeRotationMember(r.id, memberId); load(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Delete failed'); }
+  };
+
+  return (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+        <button type="button" className="btn btn-primary" onClick={() => setCreateOpen(true)} disabled={!canManage} title={canManage ? undefined : t('needManager')}>
+          {t('newRotation')}
+        </button>
+      </div>
+
+      {loading && <Loader t={tc} />}
+      {error && <ErrorCard msg={error} />}
+      {!loading && !error && (rotations.length === 0
+        ? <EmptyCard msg={t('emptyRotations')} />
+        : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {rotations.map((r) => {
+              const d = memberDraft[r.id] ?? { displayName: '', memberRef: '' };
+              return (
+                <div key={r.id} style={{ ...card, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>{r.name}</span>
+                    <span className="badge-muted">{t(`rotationKind.${r.rotationKind}`)}</span>
+                    <span style={{ flex: 1 }} />
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                      {t('currentlyOnCall')}: <strong style={{ color: 'var(--text-primary)' }}>{r.onCall ? (r.onCall.displayName || r.onCall.memberRef) : t('noOneOnCall')}</strong>
+                    </span>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeRotation(r)} disabled={!canManage}>{tc('delete')}</button>
+                  </div>
+                  {r.description && <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{r.description}</div>}
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>{t('members')}</span>
+                    {r.members.length === 0
+                      ? <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('noMembers')}</span>
+                      : r.members.map((m) => (
+                        <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                          <span style={{ color: 'var(--text-primary)' }}>{m.displayName || m.memberRef}</span>
+                          <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{m.memberRef}</span>
+                          <span style={{ flex: 1 }} />
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeMember(r, m.id)} disabled={!canManage} aria-label={t('removeMember')}>✕</button>
+                        </div>
+                      ))}
+                  </div>
+
+                  {canManage && (
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                      <div style={{ flex: 1, minWidth: 140 }}>
+                        <Field label={t('memberDisplayName')}>
+                          <input className="input" value={d.displayName} onChange={(e) => setMemberDraft((p) => ({ ...p, [r.id]: { ...d, displayName: e.target.value } }))} />
+                        </Field>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 140 }}>
+                        <Field label={t('memberRef')}>
+                          <input className="input" value={d.memberRef} onChange={(e) => setMemberDraft((p) => ({ ...p, [r.id]: { ...d, memberRef: e.target.value } }))} placeholder={t('memberRefPlaceholder')} />
+                        </Field>
+                      </div>
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => addMember(r)}>{t('addMember')}</button>
+                    </div>
+                  )}
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>{t('memberRefHelp')}</p>
+                </div>
+              );
+            })}
+          </div>
+        )
+      )}
+
+      <SlideOutPanel open={createOpen} onClose={() => setCreateOpen(false)} title={t('newRotation')}>
+        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Field label={t('rotationName')}>
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <Field label={t('rotationDescription')}>
+            <textarea className="input" style={{ minHeight: 60 }} value={description} onChange={(e) => setDescription(e.target.value)} />
+          </Field>
+          <Field label={t('rotationKindLabel')}>
+            <Select className="input" value={rotationKind} onChange={(e) => setRotationKind(e.target.value as RotationKind)}>
+              {ROTATION_KINDS.map((k) => <option key={k} value={k}>{t(`rotationKind.${k}`)}</option>)}
+            </Select>
+          </Field>
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            <button type="button" className="btn btn-primary" onClick={createRotation} disabled={saving || !canManage}>{saving ? tc('saving') : t('createRotation')}</button>
+            <button type="button" className="btn btn-secondary" onClick={() => setCreateOpen(false)}>{tc('cancel')}</button>
+          </div>
+        </div>
+      </SlideOutPanel>
+    </>
+  );
+}
+
+/* ─────────────────────────── Escalation ─────────────────────────── */
+
+function EscalationSection({ t, tc, canManage }: SectionProps) {
+  const confirm = useConfirm();
+  const [policies, setPolicies] = useState<EscalationPolicy[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [matchSeverity, setMatchSeverity] = useState<string>('');
+  const [saving, setSaving] = useState(false);
+
+  // Add-level draft keyed by policy id
+  const [levelDraft, setLevelDraft] = useState<Record<string, { afterMinutes: string; targetKind: EscalationTargetKind; targetRef: string; notifyTeams: boolean; notifySlack: boolean; notifyEmail: boolean }>>({});
+  const emptyLevel = { afterMinutes: '5', targetKind: 'oncall_rotation' as EscalationTargetKind, targetRef: '', notifyTeams: false, notifySlack: false, notifyEmail: true };
+
+  const load = useCallback(() => {
+    setLoading(true); setError(null);
+    incidentsApi.listPolicies()
+      .then(setPolicies)
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const createPolicy = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      await incidentsApi.createPolicy({
+        name: name.trim(),
+        description: description.trim() || undefined,
+        matchSeverity: matchSeverity ? (matchSeverity as IncidentSeverity) : undefined,
+      });
+      setCreateOpen(false); setName(''); setDescription(''); setMatchSeverity('');
+      load();
+    } catch (e) { setError(e instanceof Error ? e.message : 'Create failed'); }
+    finally { setSaving(false); }
+  };
+
+  const removePolicy = async (p: EscalationPolicy) => {
+    if (!(await confirm({ message: t('deletePolicyConfirm', { name: p.name }), destructive: true }))) return;
+    try { await incidentsApi.removePolicy(p.id); load(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Delete failed'); }
+  };
+
+  const addLevel = async (p: EscalationPolicy) => {
+    const d = levelDraft[p.id] ?? emptyLevel;
+    const mins = Number(d.afterMinutes);
+    if (Number.isNaN(mins)) return;
+    try {
+      await incidentsApi.addPolicyLevel(p.id, {
+        afterMinutes: mins,
+        targetKind: d.targetKind,
+        targetRef: d.targetRef.trim() || undefined,
+        notifyTeams: d.notifyTeams,
+        notifySlack: d.notifySlack,
+        notifyEmail: d.notifyEmail,
+      });
+      setLevelDraft((prev) => ({ ...prev, [p.id]: emptyLevel }));
+      load();
+    } catch (e) { setError(e instanceof Error ? e.message : 'Add failed'); }
+  };
+
+  const removeLevel = async (levelId: string) => {
+    if (!(await confirm({ message: t('deleteLevelConfirm'), destructive: true }))) return;
+    try { await incidentsApi.removeLevel(levelId); load(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Delete failed'); }
+  };
+
+  const channelsLabel = (lv: EscalationPolicy['levels'][number]) => {
+    const ch: string[] = [];
+    if (lv.notifyTeams) ch.push(t('notifyTeams'));
+    if (lv.notifySlack) ch.push(t('notifySlack'));
+    if (lv.notifyEmail) ch.push(t('notifyEmail'));
+    return ch.join(', ') || '—';
+  };
+
+  return (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+        <button type="button" className="btn btn-primary" onClick={() => setCreateOpen(true)} disabled={!canManage} title={canManage ? undefined : t('needManager')}>
+          {t('newPolicy')}
+        </button>
+      </div>
+
+      {loading && <Loader t={tc} />}
+      {error && <ErrorCard msg={error} />}
+      {!loading && !error && (policies.length === 0
+        ? <EmptyCard msg={t('emptyPolicies')} />
+        : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {policies.map((p) => {
+              const d = levelDraft[p.id] ?? emptyLevel;
+              return (
+                <div key={p.id} style={{ ...card, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>{p.name}</span>
+                    <span className="badge-muted">{p.matchSeverity ? t(`severity.${p.matchSeverity}`) : t('anySeverity')}</span>
+                    <span style={{ flex: 1 }} />
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => removePolicy(p)} disabled={!canManage}>{tc('delete')}</button>
+                  </div>
+                  {p.description && <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{p.description}</div>}
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>{t('levels')}</span>
+                    {p.levels.length === 0
+                      ? <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('noLevels')}</span>
+                      : [...p.levels].sort((a, b) => a.level - b.level).map((lv) => (
+                        <div key={lv.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                          <span style={{ color: 'var(--text-primary)' }}>
+                            {t('levelRule', {
+                              minutes: lv.afterMinutes,
+                              target: `${t(`targetKind.${lv.targetKind}`)}${lv.targetRef ? ` (${lv.targetRef})` : ''}`,
+                              channels: channelsLabel(lv),
+                            })}
+                          </span>
+                          <span style={{ flex: 1 }} />
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeLevel(lv.id)} disabled={!canManage} aria-label={t('removeLevel')}>✕</button>
+                        </div>
+                      ))}
+                  </div>
+
+                  {canManage && (
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap', borderTop: '1px solid var(--border-subtle)', paddingTop: 10 }}>
+                      <div style={{ width: 110 }}>
+                        <Field label={t('afterMinutes')}>
+                          <input className="input" type="number" min={0} value={d.afterMinutes} onChange={(e) => setLevelDraft((prev) => ({ ...prev, [p.id]: { ...d, afterMinutes: e.target.value } }))} />
+                        </Field>
+                      </div>
+                      <div style={{ minWidth: 150 }}>
+                        <Field label={t('targetKind_')}>
+                          <Select className="input" value={d.targetKind} onChange={(e) => setLevelDraft((prev) => ({ ...prev, [p.id]: { ...d, targetKind: e.target.value as EscalationTargetKind } }))}>
+                            {TARGET_KINDS.map((k) => <option key={k} value={k}>{t(`targetKind.${k}`)}</option>)}
+                          </Select>
+                        </Field>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 140 }}>
+                        <Field label={t('targetRef')}>
+                          <input className="input" value={d.targetRef} onChange={(e) => setLevelDraft((prev) => ({ ...prev, [p.id]: { ...d, targetRef: e.target.value } }))} />
+                        </Field>
+                      </div>
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', fontSize: 12, color: 'var(--text-secondary)' }}>
+                        <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}><input type="checkbox" checked={d.notifyTeams} onChange={(e) => setLevelDraft((prev) => ({ ...prev, [p.id]: { ...d, notifyTeams: e.target.checked } }))} />{t('notifyTeams')}</label>
+                        <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}><input type="checkbox" checked={d.notifySlack} onChange={(e) => setLevelDraft((prev) => ({ ...prev, [p.id]: { ...d, notifySlack: e.target.checked } }))} />{t('notifySlack')}</label>
+                        <label style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}><input type="checkbox" checked={d.notifyEmail} onChange={(e) => setLevelDraft((prev) => ({ ...prev, [p.id]: { ...d, notifyEmail: e.target.checked } }))} />{t('notifyEmail')}</label>
+                      </div>
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => addLevel(p)}>{t('addLevel')}</button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )
+      )}
+
+      <SlideOutPanel open={createOpen} onClose={() => setCreateOpen(false)} title={t('newPolicy')}>
+        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Field label={t('policyName')}>
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <Field label={t('policyDescription')}>
+            <textarea className="input" style={{ minHeight: 60 }} value={description} onChange={(e) => setDescription(e.target.value)} />
+          </Field>
+          <Field label={t('matchSeverity')}>
+            <Select className="input" value={matchSeverity} onChange={(e) => setMatchSeverity(e.target.value)}>
+              <option value="">{t('anySeverity')}</option>
+              {SEVERITIES.map((s) => <option key={s} value={s}>{t(`severity.${s}`)}</option>)}
+            </Select>
+          </Field>
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            <button type="button" className="btn btn-primary" onClick={createPolicy} disabled={saving || !canManage}>{saving ? tc('saving') : t('createPolicy')}</button>
+            <button type="button" className="btn btn-secondary" onClick={() => setCreateOpen(false)}>{tc('cancel')}</button>
+          </div>
+        </div>
+      </SlideOutPanel>
+    </>
+  );
+}
+
+/* ─────────────────────────── Contacts ─────────────────────────── */
+
+const EMPTY_CONTACT = { name: '', roleTitle: '', company: '', email: '', phone: '', teamsId: '', notes: '' };
+
+function ContactsSection({ t, tc, canManage }: SectionProps) {
+  const confirm = useConfirm();
+  const [contacts, setContacts] = useState<BusinessContact[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [editing, setEditing] = useState<BusinessContact | null>(null);
+  const [draft, setDraft] = useState(EMPTY_CONTACT);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true); setError(null);
+    incidentsApi.listContacts()
+      .then(setContacts)
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const openCreate = () => { setEditing(null); setDraft(EMPTY_CONTACT); setPanelOpen(true); };
+  const openEdit = (c: BusinessContact) => {
+    setEditing(c);
+    setDraft({ name: c.name, roleTitle: c.roleTitle ?? '', company: c.company ?? '', email: c.email ?? '', phone: c.phone ?? '', teamsId: c.teamsId ?? '', notes: c.notes ?? '' });
+    setPanelOpen(true);
+  };
+
+  const save = async () => {
+    if (!draft.name.trim()) { setError(t('validationName')); return; }
+    setSaving(true); setError(null);
+    try {
+      if (editing) await incidentsApi.updateContact(editing.id, draft);
+      else await incidentsApi.createContact({ ...draft, name: draft.name.trim() });
+      setPanelOpen(false); load();
+    } catch (e) { setError(e instanceof Error ? e.message : 'Save failed'); }
+    finally { setSaving(false); }
+  };
+
+  const remove = async (c: BusinessContact) => {
+    if (!(await confirm({ message: t('deleteContactConfirm', { name: c.name }), destructive: true }))) return;
+    try { await incidentsApi.removeContact(c.id); load(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Delete failed'); }
+  };
+
+  return (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+        <button type="button" className="btn btn-primary" onClick={openCreate} disabled={!canManage} title={canManage ? undefined : t('needManager')}>
+          {t('newContact')}
+        </button>
+      </div>
+
+      {loading && <Loader t={tc} />}
+      {error && <ErrorCard msg={error} />}
+      {!loading && !error && (contacts.length === 0
+        ? <EmptyCard msg={t('emptyContacts')} />
+        : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+            {contacts.map((c) => (
+              <div key={c.id} style={{ ...card, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', flex: 1, minWidth: 0 }}>{c.name}</span>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEdit(c)} disabled={!canManage}>{tc('edit')}</button>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => remove(c)} disabled={!canManage}>{tc('delete')}</button>
+                </div>
+                {(c.roleTitle || c.company) && <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{[c.roleTitle, c.company].filter(Boolean).join(' · ')}</div>}
+                {c.email && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{c.email}</div>}
+                {c.phone && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{c.phone}</div>}
+                {c.teamsId && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Teams: {c.teamsId}</div>}
+                {c.notes && <div style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'pre-wrap' }}>{c.notes}</div>}
+              </div>
+            ))}
+          </div>
+        )
+      )}
+
+      <SlideOutPanel open={panelOpen} onClose={() => setPanelOpen(false)} title={editing ? t('editContact') : t('newContact')}>
+        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {error && <ErrorCard msg={error} />}
+          <Field label={t('contactName')}>
+            <input className="input" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+          </Field>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+            <Field label={t('contactRole')}>
+              <input className="input" value={draft.roleTitle} onChange={(e) => setDraft({ ...draft, roleTitle: e.target.value })} />
+            </Field>
+            <Field label={t('contactCompany')}>
+              <input className="input" value={draft.company} onChange={(e) => setDraft({ ...draft, company: e.target.value })} />
+            </Field>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+            <Field label={t('contactEmail')}>
+              <input className="input" type="email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} />
+            </Field>
+            <Field label={t('contactPhone')}>
+              <input className="input" value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} />
+            </Field>
+          </div>
+          <Field label={t('contactTeamsId')}>
+            <input className="input" value={draft.teamsId} onChange={(e) => setDraft({ ...draft, teamsId: e.target.value })} />
+          </Field>
+          <Field label={t('contactNotes')}>
+            <textarea className="input" style={{ minHeight: 70 }} value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
+          </Field>
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            <button type="button" className="btn btn-primary" onClick={save} disabled={saving || !canManage}>{saving ? tc('saving') : tc('save')}</button>
+            <button type="button" className="btn btn-secondary" onClick={() => setPanelOpen(false)}>{tc('cancel')}</button>
+          </div>
+        </div>
+      </SlideOutPanel>
+    </>
+  );
+}

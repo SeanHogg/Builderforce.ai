@@ -149,6 +149,19 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'collectors', labelKey: 'tab.collectors', icon: '🔌' },
     ],
   },
+  {
+    // Incident Management: live incident war rooms + on-call rotations + escalation
+    // policies + business-contact directory. Sub-views are ?tab= pills on the page.
+    id: 'incidents', labelKey: 'group.incidents', icon: '🚨', href: '/incidents',
+    match: ['/incidents'],
+    tabKind: 'query', basePath: '/incidents',
+    tabs: [
+      { id: '', labelKey: 'tab.incidents', icon: '🚨' },
+      { id: 'oncall', labelKey: 'tab.oncall', icon: '📟' },
+      { id: 'escalation', labelKey: 'tab.escalation', icon: '⏫' },
+      { id: 'contacts', labelKey: 'tab.contacts', icon: '📇' },
+    ],
+  },
   // Knowledge is now ONE destination. SOPs / Processes / Documents / Training are
   // no longer separate tabs — they are a single template-driven library with the
   // training + compliance lens surfaced on the home. The former "Library" group is

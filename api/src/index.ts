@@ -182,6 +182,8 @@ import { runParkedWorkflowSweep } from './application/swimlane/resumeParkedWorkf
 import { runQaExplorationSweep } from './application/qa/runQaExplorationSweep';
 import { runValidatorReviewSweep } from './application/validation/validationDispatch';
 import { runSecurityAuditSweep } from './application/security/securityDispatch';
+import { runEscalationSweep } from './application/incident/runEscalationSweep';
+import { createIncidentRoutes } from './presentation/routes/incidentRoutes';
 import { runDueReports } from './application/reports/runDueReports';
 import { handleInboundEmail } from './application/workflow/inboundEmail';
 // ── Insights-everywhere + enterprise-lens extensions (integration batch) ──
@@ -559,6 +561,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/git-proxy',         createGitProxyRoutes(db));
   app.route('/api/agent-assignments', createAgentAssignmentRoutes(db));
   app.route('/api/security',          createSecurityReviewRoutes(db));
+  app.route('/api/incidents',         createIncidentRoutes(db));
   app.route('/api/knowledge',         createKnowledgeRoutes(db));
   app.route('/api/knowledge-market',  createKnowledgeMarketRoutes(db)); // PUBLIC browse (logged-out)
 
@@ -699,6 +702,14 @@ export default {
         reapStaleExecutions(env).catch((err) => {
           console.error('[cron:exec-reaper] failed', err);
         }),
+      );
+      // Incident escalation sweep — for every still-open (unacknowledged) incident,
+      // fire the next escalation tier whose timer has elapsed (Teams/Slack/email).
+      // Frequent tick so time-based escalation has sub-daily granularity.
+      ctx.waitUntil(
+        runEscalationSweep(env)
+          .then((r) => { if (r.escalated > 0) console.log(`[cron:escalation] open=${r.openIncidents} escalated=${r.escalated}`); })
+          .catch((err) => { console.error('[cron:escalation] failed', err); }),
       );
       // Always-on autonomous executor — across ALL tenants/projects, start every
       // agent-owned, non-terminal ticket that has no live run (token-gated; a tenant

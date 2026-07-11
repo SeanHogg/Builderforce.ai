@@ -94,11 +94,14 @@ export function activate(context: vscode.ExtensionContext): void {
     const m = managerAttention();
     if (!m.lastRunAt) { managerStatus.hide(); return; }
     const agoMs = Date.now() - new Date(m.lastRunAt).getTime();
-    const ago = agoMs < 60_000 ? "just now"
-      : agoMs < 3_600_000 ? `${Math.floor(agoMs / 60_000)}m ago`
-      : agoMs < 86_400_000 ? `${Math.floor(agoMs / 3_600_000)}h ago` : `${Math.floor(agoMs / 86_400_000)}d ago`;
-    managerStatus.text = m.recentlyActive ? "$(compass) Manager active" : `$(compass) Manager · ${ago}`;
-    managerStatus.tooltip = `AI Manager — last managed ${ago}. Click to open the Manager.`;
+    const ago = agoMs < 60_000 ? vscode.l10n.t("just now")
+      : agoMs < 3_600_000 ? vscode.l10n.t("{0}m ago", Math.floor(agoMs / 60_000))
+      : agoMs < 86_400_000 ? vscode.l10n.t("{0}h ago", Math.floor(agoMs / 3_600_000))
+      : vscode.l10n.t("{0}d ago", Math.floor(agoMs / 86_400_000));
+    managerStatus.text = m.recentlyActive
+      ? `$(compass) ${vscode.l10n.t("Manager active")}`
+      : `$(compass) ${vscode.l10n.t("Manager · {0}", ago)}`;
+    managerStatus.tooltip = vscode.l10n.t("AI Manager — last managed {0}. Click to open the Manager.", ago);
     managerStatus.show();
   };
 

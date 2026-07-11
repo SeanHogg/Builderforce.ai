@@ -16,8 +16,55 @@ import type { Env } from '../../env';
 import { supportTickets } from '../../infrastructure/database/schema';
 import { bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { qualityVersionKey } from '../insights/versionKeys';
+import { incidentVersionKey } from '../insights/versionKeys';
+import { IncidentService } from '../incident/IncidentService';
+import { EscalationService } from '../incident/EscalationService';
+import { findTenantIncidentManagerRef, dispatchIncidentTriage } from '../incident/incidentDispatch';
 import type { BoardProvider, NormalizedTicket } from './providers';
 import type { BoardSyncStore } from './SyncEngine';
+
+const str2 = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
+
+/**
+ * Fork incident-type help-desk tickets into the incident-management flow: open an
+ * incident (idempotent, bridged to a board task), fire the initial on-call page, and
+ * dispatch the Incident Manager agent to triage. Runs only when the tenant has an
+ * Incident Manager agent (opt-in by presence, like the Security agent). Best-effort —
+ * never blocks the support_tickets sync.
+ */
+async function forkIncidentsFromTickets(db: Db, env: Env, conn: ItsmConnection, tickets: NormalizedTicket[]): Promise<void> {
+  const incidentRef = await findTenantIncidentManagerRef(db, conn.tenantId);
+  if (!incidentRef) return;
+  const incidents = new IncidentService(db);
+  const escalation = new EscalationService(db);
+  for (const ticket of tickets) {
+    const f = ticket.fields ?? {};
+    try {
+      const opened = await incidents.ingestFromTicket(conn.tenantId, {
+        source: ticket.source,
+        externalRef: ticket.externalId,
+        externalUrl: ticket.externalUrl,
+        title: ticket.title || `${ticket.source} ${ticket.externalId}`,
+        body: ticket.body,
+        priority: str2(f.priority),
+        ticketType: str2(f.ticketType) ?? str2(f.category),
+      }, incidentRef);
+      if (opened?.created) {
+        await escalation.pageInitial(env, conn.tenantId, opened.incidentId).catch(() => {});
+        // Enrich with an agent triage run against the incident's board task.
+        const detail = await incidents.getIncident(conn.tenantId, opened.incidentId);
+        await dispatchIncidentTriage(env, db, {
+          tenantId: conn.tenantId,
+          incidentId: opened.incidentId,
+          boardTaskId: detail?.incident.boardTaskId ?? null,
+          incidentRef,
+        }).catch(() => {});
+      }
+    } catch (err) {
+      console.error('[itsm] incident fork failed', ticket.externalId, err);
+    }
+  }
+}
 
 const CLOSED_STATES = new Set(['resolved', 'closed', 'done', 'completed', 'fixed']);
 
@@ -105,6 +152,14 @@ export async function syncItsmConnection(
       await db.batch(upserts as unknown as Parameters<typeof db.batch>[0]);
     }
 
+    // Fork incident-type tickets into the incident-management flow (best-effort,
+    // opt-in by the tenant having an Incident Manager agent).
+    if (page.tickets.length > 0) {
+      await forkIncidentsFromTickets(db, env, conn, page.tickets).catch((err) => {
+        console.error('[itsm] incident fork sweep failed', conn.id, err);
+      });
+    }
+
     await store.advanceCursor(conn.id, page.nextCursor);
     await store.writeSyncLog({
       connectionId: conn.id,
@@ -116,7 +171,10 @@ export async function syncItsmConnection(
       cursorAfter: page.nextCursor,
       durationMs: Date.now() - start,
     });
-    if (page.tickets.length > 0) await bumpCacheVersion(env, qualityVersionKey(conn.tenantId));
+    if (page.tickets.length > 0) {
+      await bumpCacheVersion(env, qualityVersionKey(conn.tenantId));
+      await bumpCacheVersion(env, incidentVersionKey(conn.tenantId));
+    }
 
     return { processed: page.tickets.length, cursorAfter: page.nextCursor };
   } catch (err) {
@@ -136,5 +194,5 @@ export async function syncItsmConnection(
 
 /** True when a provider id is an ITSM connector that feeds support_tickets. */
 export function isItsmProvider(provider: string): boolean {
-  return provider === 'freshservice' || provider === 'servicenow';
+  return provider === 'freshservice' || provider === 'freshdesk' || provider === 'servicenow';
 }
