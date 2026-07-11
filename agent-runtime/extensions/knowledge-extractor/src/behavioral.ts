@@ -12,6 +12,7 @@ import type {
   ExtractorConfig,
   AnticipatedAction,
   TraceAction,
+  DivergenceClass,
 } from "./types.js";
 
 import { createLearningId, getExtractorVersion, nowISO } from "./utils.js";
