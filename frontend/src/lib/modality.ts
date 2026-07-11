@@ -62,7 +62,17 @@ export const RIGHT_TAB_LABELS: Record<RightTab, string> = {
   state: '🔬 State',
 };
 
-export const MODALITIES: ModalityDef[] = [
+/**
+ * Cross-modality strategy note appended to EVERY modality's Brain system prompt.
+ * Whatever the project mode, strategy/goals are modeled as OKRs/Objectives in
+ * their own tables (Portfolio ▸ OKRs) — NOT as tasks on the Kanban board — and the
+ * assistant can create/link them via the platform tools. Single source so no
+ * modality prompt drifts on how goals are represented. See [[okr-objectives-vs-epics]].
+ */
+const STRATEGY_OKR_NOTE =
+  'Strategy and goals live as OKRs/Objectives (Objectives + Key Results) in their own tables — not as tasks on the Kanban board. When the user talks about goals, outcomes, or strategy, you can create and link Objectives and Key Results, and promote an epic titled like "OKR …" into a real Objective, using the platform tools.';
+
+const BASE_MODALITIES: ModalityDef[] = [
   {
     id: 'designer',
     label: 'Designer',
@@ -140,6 +150,13 @@ export const MODALITIES: ModalityDef[] = [
     showChecks: false,
   },
 ];
+
+/** The public registry — every modality's Brain prompt carries the shared
+ *  strategy/OKR note (baked once here so getModality and direct reads agree). */
+export const MODALITIES: ModalityDef[] = BASE_MODALITIES.map((m) => ({
+  ...m,
+  brainSystemPrompt: `${m.brainSystemPrompt}\n${STRATEGY_OKR_NOTE}`,
+}));
 
 export const DEFAULT_MODALITY: ProjectModality = 'designer';
 

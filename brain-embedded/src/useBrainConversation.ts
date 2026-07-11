@@ -46,6 +46,13 @@ import {
 export interface UseBrainConversationOptions {
   chatId: number | null;
   modality?: BrainModality;
+  /**
+   * The chat's project. Forwarded to the run so the loop's "a code change is always
+   * tied to a ticket" backstop can mint a `from_delta` ticket for this project when
+   * an IDE run changed code without recording one. Omit for a non-project chat / the
+   * web Brain (no file tools → the backstop never fires).
+   */
+  projectId?: number | null;
   /** Extra system-prompt context (e.g. an IDE's open file + content). */
   extraSystem?: string;
   /** Override the system prompt entirely (e.g. a fixed Brain Storm persona). */
@@ -76,6 +83,16 @@ export interface UseBrainConversationOptions {
    * Omit for a non-project chat.
    */
   evermind?: EvermindRunHooks;
+  /**
+   * Optional async per-turn system-prompt augment, called at run start with the
+   * latest user text. Its non-empty return is appended to the system prompt for
+   * that run. This is the seam a host uses for a PER-TURN async fetch the sync
+   * `resolveSystemPrompt` / `extraSystem` cannot do — e.g. a fresh limbic/affect
+   * block appraised against this turn's prompt (VS Code parity). Best-effort: a
+   * throw / empty return just skips it. Omit when the static `extraSystem`
+   * personality block is enough.
+   */
+  augmentSystemPrompt?: (userText: string) => Promise<string | undefined>;
 }
 
 export interface UseBrainConversation {
@@ -152,6 +169,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   const {
     chatId,
     modality = 'designer',
+    projectId,
     extraSystem,
     systemPrompt,
     model,
@@ -161,6 +179,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     ensureChatId,
     onActivity,
     evermind,
+    augmentSystemPrompt,
   } = options;
 
   const [messages, setMessages] = useState<BrainMessage[]>([]);
@@ -256,10 +275,12 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       persistence,
       onActivity,
       evermind,
+      augmentSystemPrompt,
       seed,
       userTurn,
+      projectId,
     }),
-    [fullSystemPrompt, toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind],
+    [fullSystemPrompt, toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId],
   );
 
   const send = useCallback(

@@ -570,7 +570,59 @@ export const brain = {
    */
   requestAgentReply: (chatId: number, input: { agentRef: string; agentName?: string }) =>
     request<{ message: BrainMessage }>(`/api/brain/chats/${chatId}/agent-reply`, { method: 'POST', body: JSON.stringify(input) }).then((r) => r.message),
+
+  // --- Persisted run trace (tool/LLM turns survive reload) ---
+
+  /** Persist a batch of run-trace events (tool/LLM/error turns) for this chat, so
+   *  the timeline can rehydrate them after a reload. Best-effort; the caller drops
+   *  the promise. Clears the local read cache so the next GET reflects the append. */
+  appendChatTrace: (chatId: number, events: BrainChatTraceEventInput[]) => {
+    brainTraceCache.delete(chatId);
+    return request<{ appended: number }>(`/api/brain/chats/${chatId}/trace`, {
+      method: 'POST',
+      body: JSON.stringify({ events }),
+    });
+  },
+
+  /** Load a chat's persisted run trace (oldest-first). Cached per-chat client-side
+   *  (invalidated by appendChatTrace) so switching chats back and forth is cheap. */
+  getChatTrace: async (chatId: number): Promise<BrainChatTraceRow[]> => {
+    const cached = brainTraceCache.get(chatId);
+    if (cached) return cached;
+    const { trace } = await request<{ trace: BrainChatTraceRow[] }>(`/api/brain/chats/${chatId}/trace`);
+    brainTraceCache.set(chatId, trace);
+    return trace;
+  },
 };
+
+/** A persisted run-trace row as returned by GET /api/brain/chats/:id/trace. */
+export interface BrainChatTraceRow {
+  id: number;
+  turnSeq: number | null;
+  kind: string;
+  label: string | null;
+  argsJson: string | null;
+  resultJson: string | null;
+  isError: boolean;
+  durationMs: number | null;
+  ttftMs: number | null;
+  createdAt: string;
+}
+
+/** A run-trace event to persist via POST /api/brain/chats/:id/trace. */
+export interface BrainChatTraceEventInput {
+  kind: string;
+  label?: string;
+  args?: unknown;
+  result?: unknown;
+  isError?: boolean;
+  durationMs?: number;
+  ttftMs?: number;
+  turnSeq?: number;
+}
+
+/** Per-chat client cache for the persisted trace GET (cleared on append). */
+const brainTraceCache = new Map<number, BrainChatTraceRow[]>();
 
 /** A work-item kind a chat can be tied to (planning spine + roadmap + spec + gap). */
 export type TicketKind = 'portfolio' | 'objective' | 'initiative' | 'roadmap' | 'spec' | 'epic' | 'gap' | 'task';
@@ -1596,8 +1648,21 @@ export interface ManagerConfig {
   lastRunAt: string | null;
 }
 
-/** The AI Manager's domain type / functional role (see api managerTypes.ts). */
-export type ManagerTypeId = 'general' | 'delivery' | 'qa' | 'service_desk' | 'devops';
+/** The AI Manager's domain type / functional role (see api managerTypes.ts). A stored
+ *  type is a built-in id OR a `role:<key>` id derived from a tenant custom job role. */
+export type ManagerTypeBuiltinId = 'general' | 'delivery' | 'qa' | 'service_desk' | 'devops';
+export type ManagerTypeId = ManagerTypeBuiltinId | (string & {});
+
+/** One selectable manager type: a built-in domain or a custom-role-derived type. The UI
+ *  localizes built-ins by id; custom types render by their tenant-authored label. */
+export interface ManagerTypeOption {
+  id: ManagerTypeId;
+  /** The roster role (roleCatalog key) this type fills, or null when none maps. */
+  roleKey: string | null;
+  builtin: boolean;
+  label: string;
+  description: string;
+}
 
 /** Effective policy (config merged with defaults + resolved manager kind). */
 export interface ManagerPolicy {
@@ -1697,8 +1762,8 @@ export interface ManagerOverview {
   runTasks: ManagerRunTask[];
   /** Autonomy health — whether the cron sweeps are paused (e.g. tenant out of tokens). */
   autonomy: ManagerAutonomy;
-  /** The available manager-type ids (the UI localizes label/description by id). */
-  managerTypes: Array<{ id: ManagerTypeId }>;
+  /** The available manager types: built-in domains + tenant custom-role types. */
+  managerTypes: ManagerTypeOption[];
   /** Standing coaching directives that steer this project's passes (incl. tenant-wide). */
   directives: ManagerDirective[];
 }
@@ -1737,10 +1802,15 @@ export const managerApi = {
   run: (projectId: number): Promise<{ started: boolean; reason?: 'disabled' }> =>
     request<{ started: boolean; reason?: 'disabled' }>(`/api/manager/${projectId}/run`, { method: 'POST' }),
 
-  /** Coach the manager — record a standing directive it honors on every pass.
-   *  `scope: 'tenant'` applies it to every project the manager runs. */
-  coach: (projectId: number, body: { directive: string; scope?: 'project' | 'tenant' }): Promise<{ id: string; started: boolean }> =>
-    request<{ id: string; started: boolean }>(`/api/manager/${projectId}/coach`, { method: 'POST', body: JSON.stringify(body) }),
+  /** Coach the manager. mode 'directive' (default) records a STANDING directive it honors
+   *  on every pass (`scope: 'tenant'` applies to every project; `expiresInDays` time-boxes
+   *  it). mode 'task' hands the manager ONE discrete task to execute once. */
+  coach: (
+    projectId: number,
+    body: { directive: string; scope?: 'project' | 'tenant'; mode?: 'directive' | 'task'; expiresInDays?: number },
+  ): Promise<{ mode: 'directive' | 'task'; id?: string; taskId?: number; started: boolean }> =>
+    request<{ mode: 'directive' | 'task'; id?: string; taskId?: number; started: boolean }>(
+      `/api/manager/${projectId}/coach`, { method: 'POST', body: JSON.stringify(body) }),
 
   /** Retire a coaching directive (dismissed / done). */
   dismissDirective: (projectId: number, directiveId: string, status: 'dismissed' | 'done' = 'dismissed'): Promise<{ ok: boolean }> =>
@@ -5590,6 +5660,21 @@ function getAnonId(): string {
 }
 
 export const pendingPromptsApi = {
+  /** The anon id this browser uses to correlate a pre-auth landing prompt with the
+   *  authenticated user (cross-device via `claim`). Exposed so a cross-device link
+   *  can seed it (see setAnonId). */
+  getAnonId,
+
+  /** Adopt an anon id carried on a cross-device link (`?aid=`) so a signup/verify
+   *  link opened on a second device claims the FIRST device's typed prompt. Validated
+   *  + capped to 64 chars; ignores empty/oversized values. Must run BEFORE `claim`. */
+  setAnonId(id: string | null | undefined): void {
+    if (typeof window === 'undefined') return;
+    const clean = (id ?? '').trim().slice(0, 64);
+    if (!clean) return;
+    try { window.localStorage.setItem(ANON_ID_KEY, clean); } catch { /* storage blocked */ }
+  },
+
   /** Record an anonymous landing prompt server-side (best-effort, fire-and-forget). */
   save(prompt: string, path?: string): void {
     const anonId = getAnonId();

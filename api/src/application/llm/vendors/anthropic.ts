@@ -303,15 +303,37 @@ function prepareAnthropicRequest(
     ? req.tools.map((t, i) => (i === req.tools!.length - 1 ? { ...t, cache_control: CACHE } : t))
     : undefined;
   // Extended thinking: honor a caller-supplied `thinking:{type:'enabled',budget_tokens}`
-  // (produced ONLY by `reasoningCapability` for direct-Anthropic `claude-*` models),
-  // but ONLY on a request with NO tools. The gateway round-trips assistant turns
-  // through the OpenAI shape, which can't carry Anthropic `thinking` blocks; in a
-  // multi-turn TOOL loop that stripping makes Anthropic 400 (a tool_use turn must be
-  // preceded by its thinking block once thinking is enabled). A tool-less single-shot
-  // call has no such round-trip, so thinking is safe there. Anthropic also requires
-  // `max_tokens > thinking.budget_tokens`, so the output cap is bumped to fit.
+  // (produced ONLY by `reasoningCapability` for direct-Anthropic `claude-*` models).
+  //
+  // Thinking is always safe with NO tools. It is ALSO valid alongside tools on the
+  // FIRST (planning) turn of a loop — there is no prior assistant/thinking turn to
+  // preserve, so Anthropic won't 400. On CONTINUATION turns (a prior assistant tool_use
+  // turn is present but its thinking block was stripped by the gateway's OpenAI-shaped
+  // round-trip) it WOULD 400, so thinking stays OFF there.
+  //
+  // The HARD safety invariant is message inspection: if THIS request carries no
+  // assistant turn, it is definitionally a first turn and thinking-with-tools cannot
+  // 400. The cloud loop ALSO threads an explicit `firstTurn` hint (via
+  // reasoningCapability → extraBody); the hint can only NARROW past the invariant
+  // (a caller may veto with `false`), never widen it. If in doubt we do NOT enable
+  // (fail safe, never 400).
+  //
+  // NOTE — inherent API-shape constraint, an ENHANCEMENT not a bug: full CONTINUATION-
+  // turn thinking would require a NATIVE Anthropic Messages round-trip that preserves
+  // the assistant message history WITH each thinking block's signature. The gateway
+  // round-trips assistant turns through the OpenAI chat shape, which cannot carry
+  // Anthropic thinking blocks, so continuation-turn thinking is intentionally left
+  // disabled here rather than emitting a request Anthropic rejects. Closing that gap
+  // fully is a separate native-Messages path, not a fix to this translator.
+  //
+  // Anthropic also requires `max_tokens > thinking.budget_tokens`, so the output cap is
+  // bumped to fit when thinking is enabled.
   const requestedThinking = (params.extraBody ?? {}).thinking as { type?: string; budget_tokens?: number } | undefined;
-  const enableThinking = requestedThinking?.type === 'enabled' && !(tools && tools.length);
+  const hasTools = !!(tools && tools.length);
+  const noPriorAssistantTurn = !req.messages.some((m) => m.role === 'assistant');
+  const firstTurnHint = (params.extraBody ?? {}).firstTurn;
+  const firstTurnWithTools = noPriorAssistantTurn && firstTurnHint !== false;
+  const enableThinking = requestedThinking?.type === 'enabled' && (!hasTools || firstTurnWithTools);
   let thinking: Record<string, unknown> = { type: 'disabled' };
   let effectiveMaxTokens = maxTokens;
   if (enableThinking) {

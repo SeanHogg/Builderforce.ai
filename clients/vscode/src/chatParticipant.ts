@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { runAgent } from "./agent";
 import { ChatMessage, SECRET_KEY, fetchLimbicBlock } from "./gateway";
-import { getCurrentUserId } from "./bfApi";
+import { getCurrentUserId, createBrainChat, appendBrainMessages } from "./bfApi";
 import { contributeProjectEvermind } from "./evermindLearn";
 import { getGroundingSummary } from "./grounding";
 import { getEditorContext } from "./editorContext";
@@ -11,6 +11,23 @@ import { getSelectedProject } from "./projectState";
 import { buildSystemMessages } from "./prompt";
 
 const PARTICIPANT_ID = "builderforce.agent";
+
+/**
+ * Recover the session's Brain chat id from the native chat history: it is stashed in
+ * every prior response turn's `result.metadata.brainChatId` (the Chat Participant
+ * API's per-session state channel — there is no stable session id in the stable API).
+ * The most recent one wins. Returns undefined on the first turn of a session.
+ */
+function priorBrainChatId(history: readonly vscode.ChatRequestTurn[] | readonly unknown[]): number | undefined {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const turn = history[i];
+    if (turn instanceof vscode.ChatResponseTurn) {
+      const id = (turn.result?.metadata as { brainChatId?: unknown } | undefined)?.brainChatId;
+      if (typeof id === "number") return id;
+    }
+  }
+  return undefined;
+}
 
 /**
  * The shared chat request handler — drives the agent loop and streams into a
@@ -71,12 +88,23 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
     let assistantText = "";
 
     const activeProject = getSelectedProject();
+    // Resolve THIS session's Brain chat: reuse the one carried in prior turns'
+    // response metadata, else create one lazily (scoped to the active project) so the
+    // work this chat does — created tickets, from_delta code-change captures — links
+    // back to a real conversation, exactly like the webview Brain. Best-effort: a null
+    // id just runs unlinked (the code-change backstop still mints a ticket).
+    let brainChatId = priorBrainChatId(context.history);
+    if (brainChatId == null) {
+      const title = request.prompt.trim().slice(0, 80) || "VS Code chat";
+      brainChatId = (await createBrainChat(ctx.secrets, { title, projectId: activeProject?.id ?? null })) ?? undefined;
+    }
     await runAgent(
       messages,
       {
         secrets: ctx.secrets,
         root,
         ...(activeProject ? { projectId: activeProject.id } : {}),
+        ...(brainChatId != null ? { chatId: brainChatId } : {}),
         model,
         permissionMode,
         approve: async (summary) => {
@@ -106,7 +134,18 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
       void contributeProjectEvermind(ctx.secrets, project.id, `${request.prompt}\n\n${assistantText}`);
     }
 
-    return {};
+    // Persist the turn into the SAME Brain store the webview + web app read, so the
+    // linked chat carries the actual conversation (not just ticket lineage). Best-
+    // effort — swallows its own errors and never blocks the reply.
+    if (brainChatId != null) {
+      const turns: Array<{ role: string; content: string }> = [{ role: "user", content: request.prompt }];
+      if (assistantText.trim()) turns.push({ role: "assistant", content: assistantText });
+      void appendBrainMessages(ctx.secrets, brainChatId, turns);
+    }
+
+    // Return the chat id in the result metadata so the NEXT turn of this session
+    // resolves the same conversation (see priorBrainChatId).
+    return brainChatId != null ? { metadata: { brainChatId } } : {};
   };
 }
 

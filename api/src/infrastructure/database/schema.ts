@@ -4695,6 +4695,19 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
   steps:            integer('steps').notNull().default(0),
   costUsdMillicents: integer('cost_usd_millicents').notNull().default(0),
   terminalStatus:   varchar('terminal_status', { length: 16 }).notNull(), // completed|failed|cancelled
+  // ── Literal tool-use + human-review telemetry (migration 0333) ─────────────
+  // Captured by the scorer from tool_audit_events / approvals / the PR row so trait
+  // reinforcement reads REAL counts (toolErrorRate = tool_errors/tool_calls;
+  // humanRejected = an approval rejected OR the PR closed unmerged) instead of the old
+  // degraded/cancelled PROXIES. NULLABLE on purpose: rows scored BEFORE 0333 stay NULL
+  // and `outcomeToSignal` falls back to the historical proxy for those alone.
+  /** Total tool calls the run made (category='tool' audit events). */
+  toolCalls:        integer('tool_calls'),
+  /** How many of those tool calls returned an error (`ok:false`). */
+  toolErrors:       integer('tool_errors'),
+  /** A human rejected the work: a bubbled-up approval was rejected OR the PR was
+   *  closed without merging. */
+  humanRejected:    boolean('human_rejected'),
   // ── Semantic evaluation (Layer 6 — eval, migration 0222) ──────────────────
   // Quality scores for the run's deliverable, 0..1. Nullable: populated by the
   // evaluator on terminal (lexical, inline, zero-cost) or upgraded by the

@@ -18,7 +18,7 @@
  * per-project version token bumped on every seed / merge, so a learn never serves
  * a stale head.
  */
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { EvermindLM, EvermindModelPackage, BPETokenizer } from '@seanhogg/builderforce-memory-engine';
 import {
   deriveLimbicSetpoints,
@@ -30,8 +30,10 @@ import {
   basalGangliaExploreBias,
   type LimbicState,
   type LimbicSetpoints,
+  type LimbicPsychProfile,
 } from '@builderforce/agent-tools';
-import { projectEvermind } from '../../infrastructure/database/schema';
+import { projectEvermind, ideAgents } from '../../infrastructure/database/schema';
+import { aggregateProjectPsychometric } from '../persona/psychometricCatalog';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
@@ -615,11 +617,17 @@ export interface ProjectEvermindAffect {
  * mirroring how the runtime's amygdala/thalamus appraise a run. Pure + cheap (folds
  * the bounded recent ring), so it runs inside the cached contributions read.
  */
-export function computeProjectAffect(recent: ProjectEvermindRecentEntry[]): ProjectEvermindAffect {
-  // No project-level personality is stored today, so the setpoints are the neutral
-  // resting baseline; wired through `deriveLimbicSetpoints` so a future project
-  // personality flows in without touching the brain map.
-  const setpoints = deriveLimbicSetpoints(undefined);
+export function computeProjectAffect(
+  recent: ProjectEvermindRecentEntry[],
+  restProfile?: LimbicPsychProfile,
+): ProjectEvermindAffect {
+  // The resting setpoints come from the project's aggregate temperament — the mean
+  // personality of the agents assigned to it (see `loadProjectRestingProfile`) —
+  // giving each project a REAL baseline instead of a shared neutral one. Wired through
+  // `deriveLimbicSetpoints`, and falling back to the neutral baseline when no
+  // contributing agent carries a personality (restProfile === undefined), so the brain
+  // map is unchanged for a project with no psychometric signal.
+  const setpoints = deriveLimbicSetpoints(restProfile);
   let state: LimbicState = { ...setpoints };
   const ordered = [...recent].sort((a, b) => a.at - b.at);
   for (const e of ordered) {
@@ -634,6 +642,45 @@ export function computeProjectAffect(recent: ProjectEvermindRecentEntry[]): Proj
     attentionGain: thalamusGate(state),
     exploreBias: basalGangliaExploreBias(state),
   };
+}
+
+/**
+ * The project Evermind's resting temperament: the MEAN personality of the agents
+ * assigned to the project (`ide_agents.psychometric`, migration 0289). A project has
+ * no personality column of its own, so its baseline is composed from the agents that
+ * work it — no new schema, no unset/dead column.
+ *
+ * ONE batched query (no N+1): all of the project's psychometric-bearing agents load in
+ * a single `WHERE tenant_id = … AND project_id = … AND psychometric IS NOT NULL` read,
+ * projecting only the `psychometric` column. It runs INSIDE the read-through-cached
+ * contributions read (keyed by the per-project version token, 10s TTL), so this stable
+ * data is aggregated at most once per cache window, never per request. Returns
+ * `undefined` when no assigned agent carries a personality, so the neutral fallback
+ * holds.
+ */
+async function loadProjectRestingProfile(
+  db: Db,
+  tenantId: number,
+  projectId: number,
+): Promise<LimbicPsychProfile | undefined> {
+  const rows = await db
+    .select({ psychometric: ideAgents.psychometric })
+    .from(ideAgents)
+    .where(
+      and(
+        eq(ideAgents.tenantId, tenantId),
+        eq(ideAgents.projectId, projectId),
+        isNotNull(ideAgents.psychometric),
+      ),
+    );
+  const profiles = rows.map((r) => {
+    try {
+      return JSON.parse(r.psychometric as string) as LimbicPsychProfile;
+    } catch {
+      return undefined;
+    }
+  });
+  return aggregateProjectPsychometric(profiles);
 }
 
 /** The Evermind console's read payload: the head summary + live learning activity. */
@@ -676,6 +723,7 @@ export async function getProjectEvermindContributions(
     async (): Promise<ProjectEvermindContributions> => {
       const head = await getProjectEvermindHead(env, db, tenantId, projectId);
       const activity = await getProjectEvermindActivity(env, tenantId, projectId);
+      const restProfile = await loadProjectRestingProfile(db, tenantId, projectId);
       return {
         version: head.version,
         seeded: head.version > 0,
@@ -688,7 +736,7 @@ export async function getProjectEvermindContributions(
         recent: activity.recent,
         training: activity.training,
         eval: activity.eval,
-        affect: computeProjectAffect(activity.recent),
+        affect: computeProjectAffect(activity.recent, restProfile),
       };
     },
     { kvTtlSeconds: 10 },

@@ -6,6 +6,7 @@ import {
   VALID_DIMENSION_IDS,
   scoreQuestionnaire,
   sanitizeVector,
+  aggregateProjectPsychometric,
 } from './psychometricCatalog';
 
 describe('psychometric catalog', () => {
@@ -110,5 +111,59 @@ describe('sanitizeVector', () => {
   it('returns {} for non-object input', () => {
     expect(sanitizeVector(null)).toEqual({});
     expect(sanitizeVector('x')).toEqual({});
+  });
+});
+
+describe('aggregateProjectPsychometric', () => {
+  it('mean-averages a dimension across profiles that carry it', () => {
+    const agg = aggregateProjectPsychometric([
+      { vector: { [DIM.openness]: 80, [DIM.grit]: 40 } },
+      { vector: { [DIM.openness]: 40 } },
+    ]);
+    // openness averages over BOTH profiles (80, 40) -> 60.
+    expect(agg?.vector?.[DIM.openness]).toBe(60);
+    // grit only appears in one profile -> its own value, not diluted toward neutral.
+    expect(agg?.vector?.[DIM.grit]).toBe(40);
+  });
+
+  it('ignores absent dimensions rather than counting them as neutral', () => {
+    // openness present in one profile only; absence in the other must NOT pull it to 50.
+    const agg = aggregateProjectPsychometric([
+      { vector: { [DIM.openness]: 90 } },
+      { vector: { [DIM.grit]: 10 } },
+    ]);
+    expect(agg?.vector?.[DIM.openness]).toBe(90);
+    expect(agg?.vector?.[DIM.grit]).toBe(10);
+  });
+
+  it('rounds fractional means to an integer trait score', () => {
+    const agg = aggregateProjectPsychometric([
+      { vector: { [DIM.openness]: 50 } },
+      { vector: { [DIM.openness]: 51 } },
+    ]);
+    expect(agg?.vector?.[DIM.openness]).toBe(51); // 50.5 -> 51
+  });
+
+  it('drops unknown dims via sanitizeVector before averaging', () => {
+    const agg = aggregateProjectPsychometric([
+      { vector: { [DIM.openness]: 70, bogus: 100 } as Record<string, number> },
+    ]);
+    expect(agg?.vector).toEqual({ [DIM.openness]: 70 });
+  });
+
+  it('skips null/undefined and traitless (neutral-only) profiles', () => {
+    const agg = aggregateProjectPsychometric([
+      null,
+      undefined,
+      { vector: {} },
+      { vector: { [DIM.grit]: 20 } },
+    ]);
+    expect(agg?.vector).toEqual({ [DIM.grit]: 20 });
+  });
+
+  it('returns undefined when there is no trait signal (neutral fallback holds)', () => {
+    expect(aggregateProjectPsychometric([])).toBeUndefined();
+    expect(aggregateProjectPsychometric([null, undefined, { vector: {} }])).toBeUndefined();
+    expect(aggregateProjectPsychometric([{ vector: { bogus: 50 } as Record<string, number> }])).toBeUndefined();
   });
 });

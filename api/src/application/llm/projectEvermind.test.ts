@@ -170,6 +170,17 @@ describe('computeProjectAffect (limbic state for the brain map)', () => {
     expect(risky.state.arousal).toBeGreaterThan(base.state.arousal);
   });
 
+  it('shifts the resting setpoints when a project resting profile is supplied', () => {
+    const neutral = computeProjectAffect([]);
+    // A high-openness aggregate temperament must lift the curiosity/exploration
+    // setpoints above the neutral baseline (P4: per-project resting temperament).
+    const curious = computeProjectAffect([], { vector: { 'hexaco.openness': 100 } });
+    expect(curious.setpoints.driveCuriosity).toBeGreaterThan(neutral.setpoints.driveCuriosity);
+    expect(curious.setpoints.exploration).toBeGreaterThan(neutral.setpoints.exploration);
+    // With no activity the state rests AT those non-neutral setpoints.
+    expect(curious.state.driveCuriosity).toBeCloseTo(curious.setpoints.driveCuriosity, 5);
+  });
+
   it('keeps every affective dim within its bounds', () => {
     const a = computeProjectAffect([
       entry({ at: 1, weight: 3, prompt: 'risky migration with rm -rf' }),

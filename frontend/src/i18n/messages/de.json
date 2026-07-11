@@ -5589,6 +5589,19 @@
     "captureHasTrace": "Diesen Lauf (LLM-Schritte, Tool-Kette, Fehler und Transkript) in die Zwischenablage kopieren",
     "captureNoTrace": "Noch keine Ausführung erfasst – sende zuerst eine Nachricht",
     "captureExecutionAria": "Ausführung erfassen",
+    "consolidate": "Zusammenfassen",
+    "consolidating": "Wird zusammengefasst…",
+    "fork": "Abzweigen",
+    "forking": "Wird abgezweigt…",
+    "forkOf": "Abzweigung von {title}",
+    "newChatFallback": "Neuer Chat",
+    "nothingToConsolidate": "Noch nicht genug Konversation zum Zusammenfassen.",
+    "nothingToFork": "Noch nicht genug Konversation zum Abzweigen.",
+    "consolidateFailed": "Zusammenfassen fehlgeschlagen",
+    "forkFailed": "Abzweigen fehlgeschlagen",
+    "memoryToggleLabel": "Gedächtnis",
+    "memoryOnTooltip": "Projektgedächtnis ist AN — dieser Chat erinnert sich und lernt aus dem Evermind des Projekts",
+    "memoryOffTooltip": "Projektgedächtnis ist für diesen Chat AUS — Evermind-Erinnerung und -Lernen sind deaktiviert",
     "brainDefault": "Brain (Standard)",
     "noChatsYet": "Noch keine Chats. Klicke auf + Neu, um zu beginnen.",
     "noChatsMatch": "Keine Chats entsprechen deiner Suche.",
@@ -6009,7 +6022,8 @@
       "devops": {
         "label": "DevOps- / IT-Operations-Manager",
         "description": "Schützt die Zuverlässigkeit — priorisiert Deployments, Infrastruktur, Monitoring und Betriebsrisiko."
-      }
+      },
+      "fillsRole": "Übernimmt die Rolle {role} im Team"
     },
     "coaching": {
       "title": "Den Manager coachen",
@@ -6023,7 +6037,18 @@
       "activeTitle": "Dauerhafte Vorgaben",
       "empty": "Noch keine dauerhaften Vorgaben.",
       "tenantWide": "Arbeitsbereichsweit",
-      "dismiss": "Verwerfen"
+      "dismiss": "Verwerfen",
+      "modeLabel": "Coaching-Typ",
+      "modeDirective": "Daueranweisung",
+      "modeTask": "Einmalige Aufgabe",
+      "taskHint": "Geben Sie dem Manager eine konkrete Aufgabe – er führt sie einmal aus und fährt dann fort.",
+      "taskPlaceholder": "z. B. Das Zahlungs-Epic neu ordnen und dessen Backlog priorisieren.",
+      "taskSubmit": "Aufgabe zuweisen",
+      "expiryLabel": "Läuft ab in (Tage)",
+      "expiryPlaceholder": "Tage (optional)",
+      "expiresAt": "Läuft {when} ab",
+      "noExpiry": "Kein Ablauf",
+      "markDone": "Erledigt"
     },
     "autonomyPaused": {
       "title": "Autonome Verwaltung pausiert",
@@ -6734,6 +6759,7 @@
     "kindRole": "Rolle",
     "kindReview": "Review",
     "kindDiagnostic": "Diagnose",
+    "diagnosticIdPlaceholder": "Diagnose-ID",
     "respOwner": "Verantwortlich",
     "respReviewer": "Prüfer",
     "respContributor": "Mitwirkender",

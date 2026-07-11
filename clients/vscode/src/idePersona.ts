@@ -159,18 +159,3 @@ export function editorContextDirective(ctx?: EditorContext): string | undefined 
   );
 }
 
-/**
- * The work-visibility directive — nudges the IDE agent to record code it adds or
- * changes as a board ticket via the server-side `builtin_tickets_from_delta`
- * platform tool, so IDE work shows up on the board like any other task. Injected
- * through the SAME ambient `extraSystem` channel as `activeProjectDirective`.
- */
-export function deltaVisibilityDirective(): string {
-  return (
-    'Work visibility: when your turn ADDS or CHANGES code in this workspace that is not already ' +
-    'tracked by an existing ticket, record it before you finish — call the `builtin_tickets_from_delta` ' +
-    'tool with a one-line summary, the kind (improvement | fix | bug), the files you touched, the ' +
-    'current projectId, and modality "ide", so the change becomes a visible board ticket that ' +
-    'completes when merged and deployed.'
-  );
-}

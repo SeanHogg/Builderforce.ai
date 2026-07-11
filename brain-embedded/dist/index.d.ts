@@ -15,6 +15,18 @@ interface BrainChat {
     createdAt: string;
     updatedAt: string;
 }
+/**
+ * Truthful, server-reported outcome of the project-Evermind LEARN gate for a
+ * just-persisted assistant turn: whether the server WILL contribute this turn to the
+ * project's Evermind (the same gate `learnFromBrainTurn` applies — project-scoped +
+ * seeded + connected head) and the head version it contributes to. The run loop uses
+ * it to render a TRUTHFUL `learn` step, replacing the old client-side heuristic guess
+ * (which both false-positived and, for a connected-but-empty Evermind, false-negatived).
+ */
+interface EvermindLearnOutcome {
+    learned: boolean;
+    version: number;
+}
 /** A single message within a chat. */
 interface BrainMessage {
     id: number;
@@ -23,6 +35,13 @@ interface BrainMessage {
     metadata: string | null;
     seq: number;
     createdAt: string;
+    /**
+     * Transient (NOT persisted, NOT returned by getMessages): the learn-gate outcome
+     * the send-messages response computed for THIS turn, attached to the returned
+     * assistant message so the run loop can render a truthful learn step. Absent on
+     * loaded/historical messages and on non-assistant turns.
+     */
+    evermindLearn?: EvermindLearnOutcome;
 }
 /**
  * The message role used for durable tool/memory STEP rows the agent loop persists
@@ -900,6 +919,13 @@ declare function buildBrainTriageReport(opts: BuildBrainTriageOptions): string;
 interface UseBrainConversationOptions {
     chatId: number | null;
     modality?: BrainModality;
+    /**
+     * The chat's project. Forwarded to the run so the loop's "a code change is always
+     * tied to a ticket" backstop can mint a `from_delta` ticket for this project when
+     * an IDE run changed code without recording one. Omit for a non-project chat / the
+     * web Brain (no file tools → the backstop never fires).
+     */
+    projectId?: number | null;
     /** Extra system-prompt context (e.g. an IDE's open file + content). */
     extraSystem?: string;
     /** Override the system prompt entirely (e.g. a fixed Brain Storm persona). */
@@ -933,6 +959,16 @@ interface UseBrainConversationOptions {
      * Omit for a non-project chat.
      */
     evermind?: EvermindRunHooks;
+    /**
+     * Optional async per-turn system-prompt augment, called at run start with the
+     * latest user text. Its non-empty return is appended to the system prompt for
+     * that run. This is the seam a host uses for a PER-TURN async fetch the sync
+     * `resolveSystemPrompt` / `extraSystem` cannot do — e.g. a fresh limbic/affect
+     * block appraised against this turn's prompt (VS Code parity). Best-effort: a
+     * throw / empty return just skips it. Omit when the static `extraSystem`
+     * personality block is enough.
+     */
+    augmentSystemPrompt?: (userText: string) => Promise<string | undefined>;
 }
 interface UseBrainConversation {
     messages: BrainMessage[];
@@ -1064,6 +1100,14 @@ interface BrainRunRequest {
     /** The user turn that triggered this run, appended to the transcript. */
     userTurn?: string | ContentPart[];
     /**
+     * The chat's project. Enables the post-run "a code change is always tied to a
+     * ticket" backstop: when an IDE run changed code but never recorded a ticket, the
+     * loop mints one via `builtin_tickets_from_delta` for THIS project, linked to the
+     * chat. Omit (or null) for a non-project chat / the web Brain (which has no file
+     * tools, so the backstop never fires there anyway).
+     */
+    projectId?: number | null;
+    /**
      * Project-Evermind memory hooks (bound to the active chat's project by the
      * host). When present, the loop recalls learned memories before answering,
      * injects them into the system prompt, and records recall/learn/reconcile
@@ -1179,6 +1223,55 @@ declare function resolveRunConfirm(chatId: number, ok: boolean): void;
  * (set before any await), so two callers in the same tick can't both pass it.
  */
 declare function startRun(chatId: number, req: BrainRunRequest): Promise<void>;
+
+/**
+ * Chat ⇄ work linking — the single source for (a) the system-prompt directive that
+ * tells the Brain to turn work it identifies or code it changes into a ticket LINKED
+ * to the current conversation, and (b) the tool-name predicates that back the
+ * deterministic "a code change is always tied to a ticket" guarantee.
+ *
+ * Why it lives here: the shared agent loop ({@link ./brainRunStore}) drives BOTH the
+ * web Brain and the VS Code webview Brain, and it is the one place that always knows
+ * the RESOLVED chatId of the run. Injecting the directive there (with the real id)
+ * gives the primary Brain loop the same behaviour the server-side `@agent` reply loop
+ * already has (BrainService.agentReply bakes the chatId in), so:
+ *   1. when the agent's investigation determines work must be done, it CREATES the
+ *      work item and links it to this chat (lineage), instead of only describing it;
+ *   2. when the agent changes code, that change becomes a ticket linked to this chat.
+ *
+ * The predicates are also consumed by the loop's post-run backstop: if a run changed
+ * code (a workspace file tool succeeded) but never itself recorded a ticket, the loop
+ * mints one via `builtin_tickets_from_delta` tied to the chat — so an IDE edit is
+ * never left invisible or unlinked.
+ *
+ * Kept framework-free (pure strings + Sets) so it is safe in every bundle.
+ */
+/**
+ * Advertised (gateway `builtin_*`) names of the platform tools that RECORD work
+ * against the chat. If the model calls any of these itself during a run, the turn
+ * already tied its work to a ticket and the deterministic backstop stays quiet.
+ */
+declare const TICKET_RECORDING_TOOLS: ReadonlySet<string>;
+/**
+ * Local workspace tools whose success means the agent CHANGED code on disk — the
+ * surface-specific signal that a ticket must exist. Only the VS Code (IDE) surface
+ * exposes these; the web Brain has no file tools, so a web run never trips the
+ * backstop. `run_command` is intentionally excluded: it usually runs tests / build /
+ * lint, not a durable code change, so treating it as one would mint spurious tickets.
+ */
+declare const CODE_CHANGE_TOOLS: ReadonlySet<string>;
+declare function isCodeChangeTool(name: string): boolean;
+declare function isTicketRecordingTool(name: string): boolean;
+/** The workspace-relative path a code-change tool touched (for delta provenance),
+ *  or null when the args carry no usable `path`. */
+declare function codeChangeFile(args: unknown): string | null;
+/**
+ * The system-prompt block that binds a chat's work to the conversation. Encodes BOTH
+ * operator requirements: investigation-identified work → create + link; and a code
+ * change → from_delta tied to this chat. Uses the advertised `builtin_*` tool names
+ * the model actually sees on the gateway MCP relay.
+ */
+declare function chatWorkLinkingDirective(chatId: number): string;
 
 /** Persist a landing-page prompt for replay after authentication. No-ops on empty input or SSR. */
 declare function savePendingPrompt(text: string): void;
@@ -1299,4 +1392,4 @@ declare function parseMessageProvenance(msg: {
  */
 declare function withProvenanceMetadata(provenance: MessageProvenance | null | undefined, base?: Record<string, unknown>): string | undefined;
 
-export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type McpToolResultInfo, type MentionToken, type MessageProvenance, PROVENANCE_META_KEY, type PreparedImage, type ProvenanceAccount, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, accountUsedInTrace, activeMentionToken, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, clearRunError, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, filterMentionCandidates, formatBrainDiagnostics, formatBrainProvenance, formatEvermindMemoryBlock, getGlobalRunState, getRunSnapshot, getRunTrace, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, isRunning, isStepMessage, lastConsolidationIndex, mentionRecipient, modelsUsedInTrace, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, prepareImageDataUrl, resolveRecipient, resolveRunConfirm, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, startRun, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata };
+export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type EvermindLearnOutcome, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type McpToolResultInfo, type MentionToken, type MessageProvenance, PROVENANCE_META_KEY, type PreparedImage, type ProvenanceAccount, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, accountUsedInTrace, activeMentionToken, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, chatWorkLinkingDirective, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, filterMentionCandidates, formatBrainDiagnostics, formatBrainProvenance, formatEvermindMemoryBlock, getGlobalRunState, getRunSnapshot, getRunTrace, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, mentionRecipient, modelsUsedInTrace, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, prepareImageDataUrl, resolveRecipient, resolveRunConfirm, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, startRun, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata };

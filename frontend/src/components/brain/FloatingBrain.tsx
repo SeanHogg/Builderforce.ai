@@ -37,6 +37,18 @@ export function FloatingBrain() {
   // A page-published seed (e.g. the IDE `?prompt=`) wins over the sign-in handoff.
   const initialPrompt = ctxInitialPrompt ?? pendingPrompt;
 
+  // Cross-device handoff: a signup/verify link carries the FIRST device's anon id
+  // as `?aid=` (appended by the auth emails). Adopt it into this browser's storage
+  // BEFORE the pending-prompt `claim` below runs, so a prompt typed on the phone is
+  // claimed by the laptop that opened the email. Runs once, synchronously on mount,
+  // ahead of the claim effect. [1517]
+  useEffect(() => {
+    try {
+      const aid = new URLSearchParams(window.location.search).get('aid');
+      if (aid) pendingPromptsApi.setAnonId(aid);
+    } catch { /* no-op if URL/storage is unavailable */ }
+  }, []);
+
   // A page that publishes an initialPrompt OR an auto-link ticket into the Brain
   // context wants the drawer open so BrainPanel can act on it.
   useEffect(() => {

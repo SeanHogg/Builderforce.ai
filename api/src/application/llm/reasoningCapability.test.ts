@@ -55,4 +55,31 @@ describe('reasoningParamsForModel', () => {
     expect(reasoningParamsForModel('claude-opus-4-8', undefined)).toBeUndefined();
     expect(reasoningParamsForModel('openai/o3', { thinkLevel: 'off' })).toBeUndefined();
   });
+
+  it('threads the first-turn hint ONLY onto the Anthropic thinking path', () => {
+    // First turn → firstTurn:true rides alongside the thinking budget.
+    expect(reasoningParamsForModel('claude-opus-4-8', { thinkLevel: 'high' }, { isFirstTurn: true })).toEqual({
+      thinking: { type: 'enabled', budget_tokens: 16384 },
+      firstTurn: true,
+    });
+    // Continuation turn → firstTurn:false (the vendor keeps thinking off with tools).
+    expect(reasoningParamsForModel('claude-opus-4-8', { thinkLevel: 'high' }, { isFirstTurn: false })).toEqual({
+      thinking: { type: 'enabled', budget_tokens: 16384 },
+      firstTurn: false,
+    });
+    // No hint → unchanged shape (existing callers unaffected).
+    expect(reasoningParamsForModel('claude-opus-4-8', { thinkLevel: 'high' }, {})).toEqual({
+      thinking: { type: 'enabled', budget_tokens: 16384 },
+    });
+  });
+
+  it('never leaks the first-turn hint onto the OpenAI reasoning path', () => {
+    expect(reasoningParamsForModel('openai/o3', { thinkLevel: 'high' }, { isFirstTurn: true })).toEqual({
+      reasoning_effort: 'high',
+    });
+  });
+
+  it('emits no hint when the model does not want thinking (even with a first-turn hint)', () => {
+    expect(reasoningParamsForModel('claude-opus-4-8', { thinkLevel: 'medium' }, { isFirstTurn: true })).toBeUndefined();
+  });
 });

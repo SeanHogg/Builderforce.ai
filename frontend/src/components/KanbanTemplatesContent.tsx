@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { kanbanApi } from '@/lib/builderforceApi';
+import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import { usePermission } from '@/lib/rbac';
 import { ROLE_DISCIPLINES, useRoles, type UseRoles } from '@/lib/useRoles';
 import type {
@@ -64,6 +65,11 @@ export function KanbanTemplatesContent() {
   }, [reloadRoles]);
 
   useEffect(() => { void reload(); }, [reload]);
+
+  // Brain-driven writes to boards/tasks (e.g. approving a "create board" action in
+  // the docked drawer) land via the API but this view holds its own state — listen
+  // on the brain-data bus and refetch live instead of going stale.
+  useBrainDataRefresh(['boards', 'tasks'], () => { void reload(); });
 
   const openEditor = async (id: string) => {
     setError(null);
@@ -282,7 +288,7 @@ function TemplateEditor({ template, roles, onClose, onSaved }: {
                     <option value="diagnostic">{t('kindDiagnostic')}</option>
                   </select>
                   {req.kind === 'diagnostic' ? (
-                    <input style={{ ...input, flex: '1 1 140px' }} placeholder="diagnostic id" value={req.ref} onChange={(e) => updateReq(li, ri, { ref: e.target.value })} />
+                    <input style={{ ...input, flex: '1 1 140px' }} placeholder={t('diagnosticIdPlaceholder')} value={req.ref} onChange={(e) => updateReq(li, ri, { ref: e.target.value })} />
                   ) : (
                     <select style={input} value={req.ref} onChange={(e) => updateReq(li, ri, { ref: e.target.value })}>
                       {roles.map((r) => <option key={r.key} value={r.key}>{r.name}</option>)}

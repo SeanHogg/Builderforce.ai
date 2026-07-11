@@ -17,10 +17,15 @@
 import { useEffect, useState } from 'react';
 import { getStoredWebToken, getMe } from './auth';
 import { fetchPersonalityBlock } from './personalityApi';
+import type { PsychometricProfile } from './psychometric';
 
-// Session cache: resolved block ('' = resolved-but-empty), and the in-flight
-// promise so concurrent mounts coalesce into a single round-trip.
+// Session cache: resolved block ('' = resolved-but-empty), the raw psychometric
+// profile behind it (null = resolved-but-absent), and the in-flight promise so
+// concurrent mounts coalesce into a single round-trip. The profile is cached
+// alongside the block so a PER-TURN consumer (augmentSystemPrompt) can appraise
+// each message against the SAME once-per-session `/me` fetch — never re-fetching.
 let sessionBlock: string | undefined;
+let sessionProfile: PsychometricProfile | null | undefined;
 let inflight: Promise<string> | undefined;
 
 async function loadOnce(): Promise<string> {
@@ -29,10 +34,12 @@ async function loadOnce(): Promise<string> {
   inflight = (async () => {
     try {
       const token = getStoredWebToken();
-      if (!token) return '';
+      if (!token) { sessionProfile = null; return ''; }
       const me = await getMe(token);
+      sessionProfile = me.psychometric ?? null;
       return await fetchPersonalityBlock(me.psychometric);
     } catch {
+      sessionProfile = null;
       return '';
     }
   })()
@@ -44,6 +51,18 @@ async function loadOnce(): Promise<string> {
       inflight = undefined;
     });
   return inflight;
+}
+
+/**
+ * The signed-in user's cached psychometric profile — resolved by the SAME
+ * once-per-session `/me` fetch that backs {@link usePersonalityBlock}. Awaiting
+ * this coalesces with (or reuses) that fetch, so a per-turn caller pays only the
+ * appraisal round-trip, never a second `/me`. Resolves `null` when the user has
+ * no profile (or isn't signed in).
+ */
+export async function getSessionPsychometric(): Promise<PsychometricProfile | null> {
+  await loadOnce();
+  return sessionProfile ?? null;
 }
 
 /**
@@ -69,5 +88,6 @@ export function usePersonalityBlock(): string {
  *  edits their personality) so the next mount re-fetches it. */
 export function clearPersonalityBlockCache(): void {
   sessionBlock = undefined;
+  sessionProfile = undefined;
   inflight = undefined;
 }

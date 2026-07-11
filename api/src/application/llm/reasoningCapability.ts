@@ -118,6 +118,19 @@ function openaiReasoningParams(execParams: AgentExecParams): Record<string, unkn
   return { reasoning_effort: effort };
 }
 
+/** Per-call hints that refine the reasoning param beyond the model + exec levers. */
+export interface ReasoningParamOpts {
+  /** True when this is the FIRST (planning) turn of a tool loop — the request carries
+   *  no prior assistant/thinking turn. ONLY meaningful for the direct-Anthropic
+   *  `thinking` path: it is threaded to `vendors/anthropic.ts` as a `firstTurn` hint so
+   *  the vendor can safely enable extended thinking on that planning turn even though
+   *  tools are present (a continuation turn, whose thinking block was lost in the
+   *  OpenAI round-trip, would 400 — so thinking stays off there). Ignored by the OpenAI
+   *  `reasoning_effort` path (valid on every turn). Because the hint only rides the
+   *  anthropic branch, it never reaches an OpenAI-compatible vendor. */
+  isFirstTurn?: boolean;
+}
+
 /**
  * Map a model id + desired execution levers to the CORRECT vendor reasoning param,
  * or `undefined` when the model family is unknown OR the levers don't ask for
@@ -130,11 +143,17 @@ function openaiReasoningParams(execParams: AgentExecParams): Record<string, unkn
 export function reasoningParamsForModel(
   modelId: string | undefined | null,
   execParams: AgentExecParams | undefined,
+  opts?: ReasoningParamOpts,
 ): Record<string, unknown> | undefined {
   if (!execParams) return undefined;
   switch (detectReasoningSupport(modelId).kind) {
-    case 'anthropic-thinking':
-      return anthropicThinkingParams(execParams);
+    case 'anthropic-thinking': {
+      const params = anthropicThinkingParams(execParams);
+      if (!params) return undefined;
+      // Thread the first-turn hint to vendors/anthropic.ts. It rides ONLY this
+      // (anthropic) branch, so it can never leak to an OpenAI-compatible vendor.
+      return opts?.isFirstTurn != null ? { ...params, firstTurn: opts.isFirstTurn } : params;
+    }
     case 'openai-reasoning':
       return openaiReasoningParams(execParams);
     default:

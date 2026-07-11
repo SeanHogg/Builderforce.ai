@@ -25,18 +25,22 @@ __export(src_exports, {
   BrainActionsProvider: () => BrainActionsProvider,
   BrainContextProvider: () => BrainContextProvider,
   BrainProvider: () => BrainProvider,
+  CODE_CHANGE_TOOLS: () => CODE_CHANGE_TOOLS,
   CONSOLIDATION_MARKER_PREFIX: () => CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META: () => CONSOLIDATION_META,
   EVERMIND_LEARN_MIN_CHARS: () => EVERMIND_LEARN_MIN_CHARS,
   PROVENANCE_META_KEY: () => PROVENANCE_META_KEY,
   STEP_MESSAGE_ROLE: () => STEP_MESSAGE_ROLE,
+  TICKET_RECORDING_TOOLS: () => TICKET_RECORDING_TOOLS,
   accountUsedInTrace: () => accountUsedInTrace,
   activeMentionToken: () => activeMentionToken,
   buildBrainTriageReport: () => buildBrainTriageReport,
   byoReasonHint: () => byoReasonHint,
   byoUnresolvedInTrace: () => byoUnresolvedInTrace,
   byoUnresolvedSummary: () => byoUnresolvedSummary,
+  chatWorkLinkingDirective: () => chatWorkLinkingDirective,
   clearRunError: () => clearRunError,
+  codeChangeFile: () => codeChangeFile,
   computeBrainDiagnostics: () => computeBrainDiagnostics,
   consolidationMarkerContent: () => consolidationMarkerContent,
   consolidationMetadata: () => consolidationMetadata,
@@ -48,6 +52,7 @@ __export(src_exports, {
   getGlobalRunState: () => getGlobalRunState,
   getRunSnapshot: () => getRunSnapshot,
   getRunTrace: () => getRunTrace,
+  isCodeChangeTool: () => isCodeChangeTool,
   isConnectedAccountUnused: () => isConnectedAccountUnused,
   isConsolidationMarker: () => isConsolidationMarker,
   isDirectedToParticipant: () => isDirectedToParticipant,
@@ -55,6 +60,7 @@ __export(src_exports, {
   isFailedToolResult: () => isFailedToolResult,
   isRunning: () => isRunning,
   isStepMessage: () => isStepMessage,
+  isTicketRecordingTool: () => isTicketRecordingTool,
   lastConsolidationIndex: () => lastConsolidationIndex,
   mentionRecipient: () => mentionRecipient,
   modelsUsedInTrace: () => modelsUsedInTrace,
@@ -1271,6 +1277,37 @@ function withProvenanceMetadata(provenance, base) {
   return Object.keys(meta).length > 0 ? JSON.stringify(meta) : void 0;
 }
 
+// src/chatWorkLinking.ts
+var TICKET_RECORDING_TOOLS = /* @__PURE__ */ new Set([
+  "builtin_tickets_from_delta",
+  "builtin_chats_link_ticket",
+  "builtin_reviews_record"
+]);
+var CODE_CHANGE_TOOLS = /* @__PURE__ */ new Set([
+  "write_file",
+  "edit_file",
+  "delete_file"
+]);
+function isCodeChangeTool(name) {
+  return CODE_CHANGE_TOOLS.has(name);
+}
+function isTicketRecordingTool(name) {
+  return TICKET_RECORDING_TOOLS.has(name);
+}
+function codeChangeFile(args) {
+  if (args && typeof args === "object" && "path" in args) {
+    const p = args.path;
+    if (typeof p === "string" && p.trim()) return p;
+  }
+  return null;
+}
+function chatWorkLinkingDirective(chatId) {
+  return `You are working inside Brain chat #${chatId}. Tie the work of this conversation back to it:
+\u2022 When your investigation concludes that something needs to be DONE \u2014 a bug to fix, a missing capability, a follow-up, or a gap you identified \u2014 do not merely describe it. Create the work item now (builtin_tasks_create with taskType "task", "epic", or "gap"; or the matching builtin_*_create for an objective, spec, or roadmap item) AND link it to this conversation with builtin_chats_link_ticket (chatId=${chatId}, linkType="created"). To hand a large or long-horizon job off to run autonomously, set assignedAgentRef on the created task.
+\u2022 When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide") so the change becomes a ticket linked to this chat that completes when it ships.
+\u2022 Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked before creating a duplicate. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat.`;
+}
+
 // src/brainRunStore.ts
 function provenanceMetadata(result) {
   const model = result.resolvedModel;
@@ -1338,6 +1375,9 @@ function makeCell() {
     listeners: /* @__PURE__ */ new Set(),
     abort: null,
     byoUnresolved: [],
+    codeChanged: false,
+    ticketRecorded: false,
+    touchedFiles: [],
     compactMemo: null,
     snapshot: EMPTY_SNAPSHOT
   };
@@ -1609,6 +1649,9 @@ async function startRun(chatId, req) {
   c.error = "";
   c.streamingText = "";
   c.byoUnresolved = [];
+  c.codeChanged = false;
+  c.ticketRecorded = false;
+  c.touchedFiles = [];
   c.abort = new AbortController();
   if (req.seed && c.transcript.length === 0) c.transcript = req.seed.slice();
   if (req.userTurn !== void 0) c.transcript.push({ role: "user", content: req.userTurn });
@@ -1618,11 +1661,45 @@ async function startRun(chatId, req) {
   } catch (e) {
     if (!c.abort?.signal.aborted) c.error = e instanceof Error ? e.message : "Reply failed";
   } finally {
+    const aborted = c.abort?.signal.aborted ?? false;
     c.running = false;
     c.streamingText = "";
     c.abort = null;
+    if (!aborted && c.codeChanged && !c.ticketRecorded && req.projectId != null && req.runTool) {
+      await recordCodeChangeTicket(chatId, c, req).catch(() => {
+      });
+    }
     emit(c);
   }
+}
+async function recordCodeChangeTicket(chatId, c, req) {
+  if (!req.runTool || req.projectId == null) return;
+  const files = c.touchedFiles.slice(0, 50);
+  const summary = files.length ? `Code change (${files.length} file${files.length === 1 ? "" : "s"}) from Brain chat #${chatId}` : `Code change from Brain chat #${chatId}`;
+  const toolStart = nowMs2();
+  let out;
+  try {
+    out = await req.runTool("builtin_tickets_from_delta", {
+      projectId: req.projectId,
+      summary,
+      detail: "Auto-captured: this chat changed code without recording a ticket, so the platform minted one to keep the work visible on the board and linked to the conversation.",
+      files,
+      kind: "improvement",
+      modality: "ide",
+      chatId
+    });
+  } catch (e) {
+    out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  pushDurableStep(c, chatId, req.persistence, {
+    ts: nowIso(),
+    category: "tool",
+    label: "builtin_tickets_from_delta",
+    durationMs: nowMs2() - toolStart,
+    args: { projectId: req.projectId, summary, files, auto: true, chatId },
+    result: out ?? null,
+    isError: isFailedToolResult(out)
+  });
 }
 async function runLoop(chatId, c, req) {
   const { resolvedSystemPrompt, tools: toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind } = req;
@@ -1666,6 +1743,9 @@ ${extra}`;
     } catch {
     }
   }
+  systemPrompt = `${systemPrompt}
+
+${chatWorkLinkingDirective(chatId)}`;
   const readDedupe = /* @__PURE__ */ new Set();
   for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
     if (c.abort?.signal.aborted) return;
@@ -1799,6 +1879,12 @@ ${extra}`;
           pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: "tool", label: tc.name, durationMs: nowMs2() - toolStart, args, result: out, isError: true });
           continue;
         }
+        if (isCodeChangeTool(tc.name)) {
+          c.codeChanged = true;
+          const f = codeChangeFile(args);
+          if (f && !c.touchedFiles.includes(f)) c.touchedFiles.push(f);
+        }
+        if (isTicketRecordingTool(tc.name)) c.ticketRecorded = true;
         const trimmedOut = trimToolResult(out ?? null);
         convo.push({ role: "tool", tool_call_id: tc.id, content: trimmedOut.content });
         pushDurableStep(c, chatId, persistence, {
@@ -1823,20 +1909,21 @@ ${extra}`;
     c.streamingText = "";
     recordAppended(c, assistantMsg);
     emit(c);
-    if (recalled?.seeded && recalled.mode === "connected" && finalText.trim().length >= EVERMIND_LEARN_MIN_CHARS) {
+    const learn = assistantMsg?.evermindLearn;
+    if (learn?.learned) {
       pushDurableStep(c, chatId, persistence, {
         ts: nowIso(),
         category: "learn",
         label: "evermind.learn",
-        result: { version: recalled.version, queued: true }
+        result: { version: learn.version, queued: true }
       });
-      const reconciled = countReconciledMemories(recalled.items, finalText);
+      const reconciled = recalled?.items ? countReconciledMemories(recalled.items, finalText) : 0;
       if (reconciled > 0) {
         pushDurableStep(c, chatId, persistence, {
           ts: nowIso(),
           category: "reconcile",
           label: "evermind.reconcile",
-          result: { count: reconciled, version: recalled.version }
+          result: { count: reconciled, version: learn.version }
         });
       }
     }
@@ -1912,6 +1999,7 @@ function useBrainConversation(options) {
   const {
     chatId,
     modality = "designer",
+    projectId,
     extraSystem,
     systemPrompt,
     model,
@@ -1920,7 +2008,8 @@ function useBrainConversation(options) {
     needsConfirm,
     ensureChatId,
     onActivity,
-    evermind
+    evermind,
+    augmentSystemPrompt
   } = options;
   const [messages, setMessages] = (0, import_react6.useState)([]);
   const [loadingMessages, setLoadingMessages] = (0, import_react6.useState)(false);
@@ -1993,10 +2082,12 @@ ${extraSystem}` : resolvedSystemPrompt;
       persistence,
       onActivity,
       evermind,
+      augmentSystemPrompt,
       seed,
-      userTurn
+      userTurn,
+      projectId
     }),
-    [fullSystemPrompt, toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind]
+    [fullSystemPrompt, toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId]
   );
   const send = (0, import_react6.useCallback)(
     async (text, opts) => {
@@ -2209,18 +2300,22 @@ function takePendingPrompt() {
   BrainActionsProvider,
   BrainContextProvider,
   BrainProvider,
+  CODE_CHANGE_TOOLS,
   CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META,
   EVERMIND_LEARN_MIN_CHARS,
   PROVENANCE_META_KEY,
   STEP_MESSAGE_ROLE,
+  TICKET_RECORDING_TOOLS,
   accountUsedInTrace,
   activeMentionToken,
   buildBrainTriageReport,
   byoReasonHint,
   byoUnresolvedInTrace,
   byoUnresolvedSummary,
+  chatWorkLinkingDirective,
   clearRunError,
+  codeChangeFile,
   computeBrainDiagnostics,
   consolidationMarkerContent,
   consolidationMetadata,
@@ -2232,6 +2327,7 @@ function takePendingPrompt() {
   getGlobalRunState,
   getRunSnapshot,
   getRunTrace,
+  isCodeChangeTool,
   isConnectedAccountUnused,
   isConsolidationMarker,
   isDirectedToParticipant,
@@ -2239,6 +2335,7 @@ function takePendingPrompt() {
   isFailedToolResult,
   isRunning,
   isStepMessage,
+  isTicketRecordingTool,
   lastConsolidationIndex,
   mentionRecipient,
   modelsUsedInTrace,

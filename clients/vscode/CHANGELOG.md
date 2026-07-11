@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.7.60] — Chat work always becomes a linked ticket (every chat surface)
+
+- **What you fix or plan in chat now lands on the board, tied to the conversation.** The chat assistant now knows which conversation it is in, so when its investigation concludes that something needs doing — a bug, a gap, a follow-up — it creates the work item and links it back to this chat, instead of only describing it. And when the assistant changes code, that change is recorded as a ticket linked to the chat (it opens in review and completes automatically once the change ships). If a turn edits code but doesn't record a ticket itself, the extension mints one for you, so an edit is never invisible or unlinked. Every item is traceable from the chat that produced it.
+- **Now covers the native `@builderforce` chat too.** The native chat participant previously had no conversation of its own, so its work couldn't be linked back. Each `@builderforce` session now gets its own Brain conversation (created on the first message, reused for the rest of the session, and persisted so you can reopen it), and the same "work becomes a linked ticket" guarantee applies there as in the sidebar Brain.
+
 ## [2026.7.45] — Works on locked-down work networks
 
 - **Fixed: the extension now reaches BuilderForce through the primary domain.** Some corporate networks whitelist `builderforce.ai` but block the `api.` subdomain, so the extension's calls to `api.builderforce.ai` were being dropped on those machines — sign-in and chat would silently fail. It now talks to the API over the same whitelisted host you already trust, at `https://builderforce.ai/gateway`, so it works behind those firewalls with no per-machine configuration. If you'd previously set a custom **BuilderForce: Base URL**, it's still honoured; clear it to pick up the new default. Self-hosted and direct-`api.` setups keep working via the same setting.

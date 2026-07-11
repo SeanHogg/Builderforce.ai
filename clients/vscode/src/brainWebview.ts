@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { getTenantJwt, getCurrentUserId } from "./bfApi";
 import { TOOL_DEFS } from "./fileTools";
 import { contributeProjectEvermind } from "./evermindLearn";
-import { getBaseUrl, SECRET_KEY, fetchPersonalityBlock } from "./gateway";
+import { getBaseUrl, SECRET_KEY, fetchPersonalityBlock, fetchLimbicBlock } from "./gateway";
 import { getGroundingSummary } from "./grounding";
 import { getEditorContext, watchEditorContext } from "./editorContext";
 import { resolveEffectiveModel } from "./modelState";
@@ -252,6 +252,27 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
       case "context.pick": {
         const picked = await this.pickContext();
         this.respond(msg.id, true, picked);
+        break;
+      }
+      // Per-turn LIMBIC parity: the webview can't call the gateway's affective
+      // endpoint with the user's personality directly, so it round-trips the turn's
+      // text here. We fetch the fresh affect + PERSONALITY block (signed-in user's
+      // id → their tone) so the next turn runs under the SAME limbic layer as the
+      // native participant + cloud/on-prem agents. Best-effort: '' on any failure so
+      // the run proceeds unaugmented.
+      case "fetchLimbic": {
+        let block = "";
+        try {
+          const userId = (await getCurrentUserId(this.ctx.secrets)) ?? undefined;
+          block = await fetchLimbicBlock(
+            this.ctx.secrets,
+            typeof msg.text === "string" ? msg.text : "",
+            userId ? { userId } : undefined,
+          );
+        } catch {
+          /* affective layer is best-effort — never blocks the turn */
+        }
+        this.respond(msg.id, true, { block });
         break;
       }
     }

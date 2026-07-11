@@ -11,8 +11,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
-import { BrainTimeline, Avatar } from '@seanhogg/builderforce-brain-ui';
+import { BrainTimeline, Avatar, ConsolidateForkControl } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
+import {
+  consolidationMarkerContent,
+  consolidationMetadata,
+  subscribeRun,
+  getRunSnapshot,
+  getRunTrace,
+  type BrainTraceEvent,
+} from '@seanhogg/builderforce-brain-embedded';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { ChatInput } from '@/components/ChatInput';
 import { EvermindStatusBadge } from '@/components/ide/EvermindStatusBadge';
@@ -47,20 +55,56 @@ import {
   type DirectedRecipient,
   type RecipientChoice,
 } from '@/lib/brain';
-import type { BrainChat, BrainMessage } from '@/lib/builderforceApi';
+import type { BrainChat, BrainMessage, BrainChatTraceRow } from '@/lib/builderforceApi';
 import { agentAssignmentsApi, reposApi, runtimeApi, brain, type AgentAssignment, type ProjectRepository, type ChatAgentInvite, type ChatMemberInfo, type TicketKind } from '@/lib/builderforceApi';
 import { dispatchBrainDataChanged } from '@/lib/brain/brainDataEvent';
 import { loadAgentPoolCached, type PoolAgent } from '@/lib/agentPool';
 import { getModality } from '@/lib/modality';
 import { useModalityCopy, useLocalizedModalities } from '@/lib/useModalityCopy';
 import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';
-import { usePersonalityBlock } from '@/lib/usePersonalityBlock';
+import { usePersonalityBlock, getSessionPsychometric } from '@/lib/usePersonalityBlock';
+import { fetchLimbicBlock } from '@/lib/personalityApi';
 
 function formatTime(ts: string) {
   const d = new Date(ts);
   const now = new Date();
   if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+/** localStorage key for the per-chat "use project memory" toggle. */
+const MEMORY_KEY = (chatId: number) => `bf_brain_memory:${chatId}`;
+
+function safeJsonParse(s: string | null): unknown {
+  if (s == null) return undefined;
+  try { return JSON.parse(s); } catch { return s; }
+}
+
+/** Live run-trace event → the persistence input shape (kind = the event category). */
+function traceEventToInput(ev: BrainTraceEvent) {
+  return {
+    kind: ev.category,
+    label: ev.label,
+    args: ev.args,
+    result: ev.result,
+    isError: ev.isError,
+    durationMs: ev.durationMs,
+    ttftMs: ev.ttftMs,
+  };
+}
+
+/** A persisted trace row → a timeline BrainTraceEvent, so tool/LLM turns survive reload. */
+function traceRowToEvent(r: BrainChatTraceRow): BrainTraceEvent {
+  return {
+    ts: r.createdAt ?? new Date().toISOString(),
+    category: r.kind as BrainTraceEvent['category'],
+    label: r.label ?? '',
+    durationMs: r.durationMs ?? undefined,
+    ttftMs: r.ttftMs ?? undefined,
+    args: safeJsonParse(r.argsJson),
+    result: safeJsonParse(r.resultJson),
+    isError: r.isError || undefined,
+  };
 }
 
 export interface BrainPanelProps {
@@ -292,6 +336,21 @@ export function BrainPanel({
     return parts.length > 0 ? parts.join('\n') : undefined;
   }, [ctxProjectId, projects, extraSystem, autoApprove, effort, thinking, webBrowsing, personalityBlock]);
 
+  // Per-turn limbic affect (VS Code webview parity). The static personality tone
+  // above (`ambientSystem` ← personalityBlock) sets the user's baseline voice;
+  // this seam adds a FRESH per-message affect block the sync system prompt can't:
+  // it appraises THIS turn's text (seeded from the user's psychometric) and folds
+  // the dynamic `block` into that run's system prompt. Reuses the profile cached
+  // by usePersonalityBlock's once-per-session `/me` fetch — only the appraisal
+  // POST varies per turn. Best-effort: '' when there's no profile or on any error
+  // (a no-op that never blocks the chat), so static + per-turn coexist.
+  const augmentSystemPrompt = useCallback(async (userText: string): Promise<string> => {
+    if (!userText.trim()) return '';
+    const psychometric = await getSessionPsychometric();
+    if (!psychometric) return '';
+    return fetchLimbicBlock(psychometric, userText);
+  }, []);
+
   // Project-Evermind memory hooks: recall the active chat's project learnings
   // before answering (grounding the reply + surfacing recall/learn/reconcile
   // steps). Bound to the chat's project (falling back to the pinned/viewing one a
@@ -304,6 +363,28 @@ export function BrainPanel({
     [evermindProjectId],
   );
 
+  // Per-chat memory switch: whether THIS chat passes the project-Evermind hooks
+  // (recall + learn). Default ON; persisted per-chat in localStorage so it sticks
+  // across reloads. Turning it off makes the chat a scratch space that neither
+  // recalls nor writes back to the project's learned memory.
+  const [memoryEnabled, setMemoryEnabled] = useState(true);
+  useEffect(() => {
+    const cid = chats.activeChatId;
+    if (cid == null) { setMemoryEnabled(true); return; }
+    try {
+      const v = window.localStorage.getItem(MEMORY_KEY(cid));
+      setMemoryEnabled(v == null ? true : v !== '0');
+    } catch { setMemoryEnabled(true); }
+  }, [chats.activeChatId]);
+  const toggleMemory = useCallback((on: boolean) => {
+    setMemoryEnabled(on);
+    const cid = chats.activeChatId;
+    if (cid == null) return;
+    try { window.localStorage.setItem(MEMORY_KEY(cid), on ? '1' : '0'); } catch { /* storage blocked */ }
+  }, [chats.activeChatId]);
+  // Gate the Evermind hooks on the per-chat switch — off ⇒ no recall/learn this chat.
+  const gatedEvermind = memoryEnabled ? evermind : undefined;
+
   const conv = useBrainConversation({
     chatId: chats.activeChatId,
     modality,
@@ -315,7 +396,8 @@ export function BrainPanel({
     needsConfirm,
     ensureChatId,
     onActivity: chats.touch,
-    evermind,
+    evermind: gatedEvermind,
+    augmentSystemPrompt,
   });
 
   const { pendingConfirm, resolveConfirm } = conv;
@@ -324,6 +406,111 @@ export function BrainPanel({
     setAutoApproveMode(true);
     resolveConfirm(true);
   }, [setAutoApproveMode, resolveConfirm]);
+
+  // ---- Consolidate / Fork -------------------------------------------------
+  // Consolidate: summarize the whole chat into ONE compact assistant message
+  // tagged as a consolidation marker. The conversation loop seeds the next turn
+  // FROM this marker, so a long chat sends its summary as base context instead of
+  // the full history. Fork does the same but into a NEW chat it then switches to.
+  // (Web parity for the VS Code webview App.tsx consolidate/fork actions.)
+  const [consolidating, setConsolidating] = useState(false);
+  const [forking, setForking] = useState(false);
+  const canConsolidate = chats.activeChatId != null && conv.messages.length >= 2 && !conv.sending;
+
+  const consolidate = useCallback(async () => {
+    const chatId = chats.activeChatId;
+    if (chatId == null || consolidating || forking) return;
+    setConsolidating(true);
+    conv.clearError();
+    try {
+      const result = await brain.summarizeChat(chatId);
+      if ('error' in result || !result.summary) {
+        conv.setError(('error' in result && result.error) || tBrain('nothingToConsolidate'));
+        return;
+      }
+      await brain.sendMessages(chatId, [{
+        role: 'assistant',
+        content: consolidationMarkerContent(result.summary),
+        metadata: consolidationMetadata(),
+      }]);
+      conv.reloadMessages();
+      void chats.reload();
+    } catch (e) {
+      conv.setError(e instanceof Error ? e.message : tBrain('consolidateFailed'));
+    } finally {
+      setConsolidating(false);
+    }
+  }, [chats, consolidating, forking, conv, tBrain]);
+
+  const fork = useCallback(async () => {
+    const chatId = chats.activeChatId;
+    if (chatId == null || forking || consolidating) return;
+    setForking(true);
+    conv.clearError();
+    try {
+      const result = await brain.summarizeChat(chatId);
+      if ('error' in result || !result.summary) {
+        conv.setError(('error' in result && result.error) || tBrain('nothingToFork'));
+        return;
+      }
+      const sourceTitle = chats.activeChat?.title || tBrain('newChatFallback');
+      const projectId = chats.activeChat?.projectId ?? pinnedProjectId ?? viewingProjectId ?? null;
+      const forkTitle = tBrain('forkOf', { title: sourceTitle }).slice(0, 80);
+      const created = await chats.create({ title: forkTitle, projectId });
+      if (!created) return;
+      await brain.sendMessages(created.id, [{
+        role: 'assistant',
+        content: consolidationMarkerContent(result.summary),
+        metadata: consolidationMetadata(),
+      }]);
+      conv.reloadMessages();
+      void chats.reload();
+    } catch (e) {
+      conv.setError(e instanceof Error ? e.message : tBrain('forkFailed'));
+    } finally {
+      setForking(false);
+    }
+  }, [chats, forking, consolidating, conv, pinnedProjectId, viewingProjectId, tBrain]);
+
+  // ---- Run-trace persist + rehydrate --------------------------------------
+  // Rehydrate: on chat load, pull the persisted tool/LLM-turn trace so those steps
+  // survive a reload. Shown when there's no live trace this session (a live run
+  // repopulates conv.trace, which then wins).
+  const [persistedTrace, setPersistedTrace] = useState<BrainTraceEvent[]>([]);
+  useEffect(() => {
+    const cid = chats.activeChatId;
+    if (cid == null) { setPersistedTrace([]); return; }
+    let live = true;
+    brain.getChatTrace(cid)
+      .then((rows) => { if (live) setPersistedTrace(rows.map(traceRowToEvent)); })
+      .catch(() => { if (live) setPersistedTrace([]); });
+    return () => { live = false; };
+  }, [chats.activeChatId]);
+  const timelineTrace = conv.trace.length > 0 ? conv.trace : persistedTrace;
+
+  // Persist: when a run settles (running flips true→false with a non-empty trace),
+  // POST only the events not yet persisted this session (tracked per-chat) so tool
+  // turns are durable and don't double-post.
+  const persistedLenRef = useRef<Map<number, number>>(new Map());
+  const wasRunningRef = useRef<Map<number, boolean>>(new Map());
+  useEffect(() => {
+    const cid = chats.activeChatId;
+    if (cid == null) return;
+    wasRunningRef.current.set(cid, getRunSnapshot(cid).running);
+    const onChange = () => {
+      const snap = getRunSnapshot(cid);
+      const prev = wasRunningRef.current.get(cid) ?? false;
+      wasRunningRef.current.set(cid, snap.running);
+      if (!prev || snap.running) return; // only act on running → settled
+      const full = getRunTrace(cid);
+      const already = persistedLenRef.current.get(cid) ?? 0;
+      if (full.length <= already) return;
+      const events = full.slice(already).map(traceEventToInput);
+      persistedLenRef.current.set(cid, full.length);
+      void brain.appendChatTrace(cid, events).catch(() => { /* best-effort */ });
+    };
+    return subscribeRun(cid, onChange);
+  }, [chats.activeChatId]);
 
   // Multi-party chat: the invited participants of the active chat, resolved to
   // display names via the (already-loaded, cached) agent pool — so a message can
@@ -840,7 +1027,7 @@ export function BrainPanel({
           <div className="bs-messages" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <BrainTimeline
               messages={conv.messages}
-              trace={conv.trace}
+              trace={timelineTrace}
               streamingText={conv.sending ? conv.streamingText : ''}
               isRunning={conv.sending}
               loading={conv.loadingMessages}
@@ -899,6 +1086,45 @@ export function BrainPanel({
                   </Select>
                 </>
               )}
+              {/* Compress a long chat into a summary marker (Consolidate) or branch
+                  that summary into a fresh chat (Fork). Shared presentational control;
+                  the summarize + marker-append logic lives here (web brain client). */}
+              <ConsolidateForkControl
+                canConsolidate={canConsolidate}
+                consolidating={consolidating}
+                forking={forking}
+                onConsolidate={consolidate}
+                onFork={fork}
+                labels={{
+                  consolidate: tBrain('consolidate'),
+                  consolidating: tBrain('consolidating'),
+                  fork: tBrain('fork'),
+                  forking: tBrain('forking'),
+                }}
+              />
+              {/* Per-chat memory switch: gate whether this chat recalls/learns from
+                  the project's Evermind. Default ON; persisted per chat. */}
+              <button
+                type="button"
+                onClick={() => toggleMemory(!memoryEnabled)}
+                aria-pressed={memoryEnabled}
+                title={memoryEnabled ? tBrain('memoryOnTooltip') : tBrain('memoryOffTooltip')}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  fontSize: 12,
+                  padding: '3px 8px',
+                  borderRadius: 6,
+                  border: '1px solid var(--border-subtle)',
+                  background: memoryEnabled ? 'var(--bg-elevated)' : 'var(--bg-base)',
+                  color: memoryEnabled ? 'var(--text-secondary)' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                }}
+              >
+                <span aria-hidden>{memoryEnabled ? '🧠' : '🚫'}</span>
+                <span>{tBrain('memoryToggleLabel')}</span>
+              </button>
               {/* Honest Evermind posture: this planning chat doesn't train the model —
                   agent runs do. Self-gates to nothing until the project's Evermind exists. */}
               <span style={{ marginLeft: 'auto' }}><EvermindStatusBadge projectId={ctxProjectId} /></span>

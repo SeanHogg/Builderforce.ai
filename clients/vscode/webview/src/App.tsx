@@ -20,6 +20,7 @@ import {
   type RecipientChoice,
   type GlobalRunState,
   type EvermindRecallResult,
+  type BrainTraceEvent,
 } from '@seanhogg/builderforce-brain-embedded';
 import { authedFetch } from './authedFetch';
 import {
@@ -50,7 +51,7 @@ import { EvermindScreen } from './EvermindScreen';
 import { createPersistence } from './persistence';
 import { buildHostTools } from './hostTools';
 import { buildIdeSystemPrompt } from './systemPrompt';
-import { activeProjectDirective, deltaVisibilityDirective, editorContextDirective } from '../../src/idePersona';
+import { activeProjectDirective, editorContextDirective } from '../../src/idePersona';
 import { buildTranscript, hasTranscriptContent } from './transcript';
 
 /** Read a localized string from the host's bundle, falling back to English. */
@@ -92,6 +93,39 @@ function timelineLabels(labels: LabelBundle): Partial<BrainTimelineLabels> {
 
 /** How hard the model should work on the next turn — surfaced in the `/` menu. */
 type Effort = 'quick' | 'balanced' | 'thorough';
+
+/** A persisted Brain trace row as returned by GET /api/brain/chats/:id/trace. */
+interface PersistedTraceRow {
+  turnSeq: number | null;
+  kind: string;
+  label: string | null;
+  argsJson: string | null;
+  resultJson: string | null;
+  isError: boolean;
+  durationMs: number | null;
+  ttftMs: number | null;
+  createdAt: string;
+}
+
+/** Best-effort JSON parse of a persisted arg/result blob (falls back to the raw string). */
+function parseTraceJson(s: string | null): unknown {
+  if (s == null) return undefined;
+  try { return JSON.parse(s); } catch { return s; }
+}
+
+/** Map a persisted trace row back into the in-memory BrainTraceEvent the timeline renders. */
+function persistedToTraceEvent(row: PersistedTraceRow): BrainTraceEvent {
+  return {
+    ts: row.createdAt,
+    category: row.kind as BrainTraceEvent['category'],
+    label: row.label ?? '',
+    durationMs: row.durationMs ?? undefined,
+    ttftMs: row.ttftMs ?? undefined,
+    isError: row.isError,
+    args: parseTraceJson(row.argsJson),
+    result: parseTraceJson(row.resultJson),
+  };
+}
 
 /**
  * Turn the composer's Effort / Thinking / Browse-the-web toggles into extra
@@ -363,6 +397,12 @@ function Chat({ init }: { init: InitData }) {
   const [effort, setEffort] = useState<Effort>('balanced');
   const [thinking, setThinking] = useState(false);
   const [webBrowsing, setWebBrowsing] = useState(false);
+  // The per-turn LIMBIC/affective block for the CURRENT turn — fetched from the host
+  // (which calls the gateway's affective endpoint with the user's personality) on each
+  // submit and folded into extraSystem, so the next run executes under the SAME limbic
+  // layer as the native participant + cloud/on-prem agents. Lingers as the last computed
+  // block until the next submit refreshes it; '' when neutral / offline (a no-op).
+  const [turnLimbic, setTurnLimbic] = useState('');
   // Speech-to-text (dictation) via the Web Speech API. Capability-gated: the mic
   // button only renders where the runtime exposes SpeechRecognition, so it is
   // never a dead control (see the gap register re: a universal transcription path).
@@ -370,6 +410,10 @@ function Chat({ init }: { init: InitData }) {
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
   const speechSupported = typeof window !== 'undefined'
     && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
+
+  // The webview reaches /api/brain directly (CORS allows the webview origin), the same
+  // path persistence uses — a shared bearer fetch for the trace persist + rehydrate below.
+  const apiReq = useMemo(() => authedFetch(init.baseUrl, getToken, () => void refreshToken()), [init.baseUrl]);
 
   // Scope the conversation dropdown to the sidebar's active project so its list
   // MATCHES the Sessions tree (which filters by project). With no project selected
@@ -455,10 +499,14 @@ function Chat({ init }: { init: InitData }) {
   // Ambient project context — the SAME `extraSystem` channel the web Brain uses to
   // tell the model the current project, so platform tools (repos.*/tasks.*/…)
   // default to it instead of asking for a projectId. Updates on project switch.
+  // Ambient project context only. The work-visibility instruction (record code
+  // changes as tickets) is now folded into the shared run loop's chat-work-linking
+  // directive — injected with the resolved chatId so the created ticket actually
+  // links to THIS conversation — so we no longer append the id-less
+  // `deltaVisibilityDirective` here (it was strictly weaker: no chatId, no
+  // investigation-work coverage).
   const projectDirective = useMemo(
-    () => [activeProjectDirective(init.project), deltaVisibilityDirective()]
-      .filter(Boolean)
-      .join('\n\n'),
+    () => activeProjectDirective(init.project) ?? '',
     [init.project?.id, init.project?.name],
   );
 
@@ -470,15 +518,17 @@ function Chat({ init }: { init: InitData }) {
   const editorDirective = useMemo(() => editorContextDirective(editorCtx) ?? '', [editorCtx]);
 
   // Fold the composer toggles (effort / thinking / web), the live editor context,
-  // and the user's PERSONALITY block into the same system channel as the project
-  // context, so the next turn honors them. The personality block (host-fetched
-  // once per session) rides the ambient channel — parity with the web Brain and
-  // the native chat participant — and is '' (a no-op) when the user has no profile.
+  // and the user's affective/PERSONALITY block into the same system channel as the
+  // project context, so the next turn honors them. The DYNAMIC per-turn limbic block
+  // (fetched on submit) wins when present — it already carries the personality tone
+  // plus this turn's affect, giving webview per-turn limbic parity with the native
+  // participant; before the first send it falls back to the STATIC personality block
+  // (host-fetched once per session). '' (a no-op) when the user has no profile.
   const extraSystem = useMemo(
-    () => [projectDirective, editorDirective, buildComposerDirectives({ effort, thinking, web: webBrowsing }), init.personalityBlock ?? '']
+    () => [projectDirective, editorDirective, buildComposerDirectives({ effort, thinking, web: webBrowsing }), turnLimbic || init.personalityBlock || '']
       .filter(Boolean)
       .join('\n\n'),
-    [projectDirective, editorDirective, effort, thinking, webBrowsing, init.personalityBlock],
+    [projectDirective, editorDirective, effort, thinking, webBrowsing, turnLimbic, init.personalityBlock],
   );
 
   // Project-Evermind memory hooks: recall the chat's project learnings before
@@ -503,6 +553,11 @@ function Chat({ init }: { init: InitData }) {
   const conv = useBrainConversation({
     chatId,
     modality: 'ide',
+    // The chat's project (falls back to the IDE's open project) — powers the run
+    // loop's "a code change is always tied to a ticket" backstop, which mints a
+    // from_delta ticket for this project (linked to the chat) when a turn changed
+    // code without recording one.
+    projectId: evermindProjectId,
     model: init.model,
     extraSystem,
     toolSpecs,
@@ -512,6 +567,38 @@ function Chat({ init }: { init: InitData }) {
     onActivity: reloadChats,
     evermind,
   });
+
+  // Trace rehydrate (parity with the web app): on chat open, load the persisted
+  // tool/LLM-turn timeline so tool turns survive a reload — the module-level run store
+  // is empty after a webview reload, so without this a reopened chat shows only the
+  // durable user/assistant messages and loses its tool steps. We show the persisted
+  // trace ONLY when this session's live trace for the chat is empty, so a fresh run's
+  // live trace always wins and steps are never double-rendered.
+  const [persistedTrace, setPersistedTrace] = useState<BrainTraceEvent[]>([]);
+  useEffect(() => {
+    if (chatId == null) { setPersistedTrace([]); return; }
+    let cancelled = false;
+    apiReq<{ trace?: PersistedTraceRow[] }>(`/api/brain/chats/${chatId}/trace`)
+      .then((r) => { if (!cancelled) setPersistedTrace((r.trace ?? []).map(persistedToTraceEvent)); })
+      .catch(() => { if (!cancelled) setPersistedTrace([]); });
+    return () => { cancelled = true; };
+  }, [chatId, apiReq]);
+  const displayTrace = conv.trace.length > 0 ? conv.trace : persistedTrace;
+
+  // Per-turn limbic round-trip: fetch a fresh affective/personality block for THIS
+  // turn's text from the host (which calls the gateway), with a short timeout so a
+  // slow/offline gateway never stalls the send. Best-effort → '' on any failure.
+  const requestLimbic = useCallback(async (text: string): Promise<string> => {
+    try {
+      const r = await Promise.race([
+        request<{ block?: string }>('fetchLimbic', { text }),
+        new Promise<{ block?: string }>((res) => window.setTimeout(() => res({}), 4000)),
+      ]);
+      return r?.block ?? '';
+    } catch {
+      return '';
+    }
+  }, []);
 
   // Chat↔ticket panel data adapter — same gateway endpoints as the web app's
   // panel, over the webview's bearer fetch (see chatTicketsAdapter).
@@ -655,9 +742,29 @@ function Chat({ init }: { init: InitData }) {
         // teacher distils (task → answer), matching cloud + on-prem.
         prompt: conv.messages.find((m) => m.role === 'user')?.content ?? '',
       });
+      // Persist this run's execution trace so its tool/LLM turns survive a reload (the
+      // web app does the same via POST /chats/:id/trace). Best-effort — a failed persist
+      // never affects the chat; the live trace stays visible via conv.trace this session.
+      const chatIdNow = chatId;
+      if (chatIdNow != null && conv.trace.length > 0) {
+        void apiReq(`/api/brain/chats/${chatIdNow}/trace`, {
+          method: 'POST',
+          body: JSON.stringify({
+            events: conv.trace.map((e) => ({
+              kind: e.category,
+              label: e.label,
+              args: e.args,
+              result: e.result,
+              isError: e.isError,
+              durationMs: e.durationMs,
+              ttftMs: e.ttftMs,
+            })),
+          }),
+        }).catch(() => {});
+      }
     }
     prevSending.current = conv.sending;
-  }, [conv.sending, conv.messages, conv.trace, conv.error, init.model]);
+  }, [conv.sending, conv.messages, conv.trace, conv.error, init.model, chatId, apiReq]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachFiles = useCallback((files: FileList | File[] | null) => {
@@ -715,17 +822,43 @@ function Chat({ init }: { init: InitData }) {
     if (imgs.length) { e.preventDefault(); attachFiles(imgs); }
   }, [attachFiles]);
 
+  // A send queued behind its per-turn limbic fetch. We can't call conv.send
+  // synchronously in submit(): the fresh limbic block must land in extraSystem (→ the
+  // run request's system prompt) FIRST. So submit fetches the block, sets turnLimbic +
+  // bumps this nonce, and the effect runs the send on the NEXT render — where `conv`
+  // already reflects the new system prompt. This is the webview's per-turn limbic seam.
+  const pendingSendRef = useRef<{ text: string; recipient: DirectedRecipient | null } | null>(null);
+  const [sendNonce, setSendNonce] = useState(0);
+  useEffect(() => {
+    if (sendNonce === 0) return;
+    const queued = pendingSendRef.current;
+    if (!queued) return;
+    pendingSendRef.current = null;
+    // Restore the typed text if the send fails before it's persisted (e.g. the token
+    // expired) so the user's message is never silently lost. `addressedTo` routes the
+    // turn: a participant is talked to (no BRAIN run); null (default) runs the BRAIN.
+    void conv.send(queued.text, { addressedTo: queued.recipient }).then((ok) => {
+      if (!ok) setInput((cur) => cur || queued.text);
+    });
+    // Keyed only on the nonce: `conv` is read fresh from this render's closure, which
+    // already carries the just-set turnLimbic in its system prompt.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sendNonce]);
+
   const submit = useCallback(() => {
     const text = input.trim();
     if (!text || conv.sending) return;
     setInput('');
-    // Restore the typed text if the send fails before it's persisted (e.g. the
-    // token expired) so the user's message is never silently lost — they can
-    // just hit Send again once reconnected. Guard against clobbering anything
-    // they've started typing in the meantime. `addressedTo` routes the turn: a
-    // participant is talked to (no BRAIN run); null (the default) runs the BRAIN.
-    void conv.send(text, { addressedTo: recipient }).then((ok) => { if (!ok) setInput((cur) => cur || text); });
-  }, [input, conv, recipient]);
+    // Fetch this turn's fresh limbic block, fold it into extraSystem, THEN queue the
+    // send (the effect above fires it once the new system prompt is committed) — so the
+    // webview run executes under the same per-turn affective layer as the native chat.
+    void (async () => {
+      const block = await requestLimbic(text);
+      setTurnLimbic(block);
+      pendingSendRef.current = { text, recipient };
+      setSendNonce((n) => n + 1);
+    })();
+  }, [input, conv, recipient, requestLimbic]);
 
   // Answering an agent's ask_user card posts the chosen option(s) as the user's next
   // turn — same send path as the composer, so the question and answer stay in order.
@@ -959,7 +1092,7 @@ function Chat({ init }: { init: InitData }) {
       <div className="bf-body">
         <BrainTimeline
           messages={conv.messages}
-          trace={conv.trace}
+          trace={displayTrace}
           streamingText={conv.sending ? conv.streamingText : ''}
           isRunning={conv.sending}
           loading={conv.loadingMessages}

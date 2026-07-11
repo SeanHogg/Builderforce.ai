@@ -664,6 +664,50 @@ export async function listBrainChats(
   }
 }
 
+/**
+ * Create a Brain conversation (POST /api/brain/chats) and return its id — the SAME
+ * unified store the webview + web app use. The native `@builderforce` chat handler
+ * creates one lazily for a session so the work it does (created tickets, from_delta
+ * code-change captures) links back to a real conversation, exactly like the webview
+ * Brain. Returns null when signed out / unreachable (the handler then runs unlinked).
+ */
+export async function createBrainChat(
+  secrets: vscode.SecretStorage,
+  input: { title?: string; projectId?: number | null },
+): Promise<number | null> {
+  try {
+    const r = await authed<{ id?: number }>(secrets, `/api/brain/chats`, {
+      method: "POST",
+      body: JSON.stringify({ title: input.title, projectId: input.projectId ?? null }),
+    });
+    return typeof r?.id === "number" ? r.id : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Append turns to a Brain conversation (POST /api/brain/chats/:id/messages) so the
+ * native chat's transcript is persisted into the SAME store the webview + web app
+ * read — the linked chat then carries the actual conversation, not just ticket
+ * lineage. Best-effort: swallows errors so it never breaks the chat turn.
+ */
+export async function appendBrainMessages(
+  secrets: vscode.SecretStorage,
+  chatId: number,
+  messages: Array<{ role: string; content: string }>,
+): Promise<void> {
+  if (messages.length === 0) return;
+  try {
+    await authed(secrets, `/api/brain/chats/${chatId}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ messages }),
+    });
+  } catch {
+    /* best-effort persistence — never blocks the chat turn */
+  }
+}
+
 /** Cross-surface "needs attention" state for a work item (GET /api/runtime/attention).
  *  `awaiting_input` = an agent paused on ask_human and a person must answer;
  *  `running` = actively executing. Idle items are omitted. */

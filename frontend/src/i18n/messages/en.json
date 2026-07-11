@@ -5589,6 +5589,19 @@
     "captureHasTrace": "Copy this run — LLM steps, tool chain, errors, and transcript — to the clipboard",
     "captureNoTrace": "No execution captured yet — send a message first",
     "captureExecutionAria": "Capture execution",
+    "consolidate": "Consolidate",
+    "consolidating": "Consolidating…",
+    "fork": "Fork",
+    "forking": "Forking…",
+    "forkOf": "Fork of {title}",
+    "newChatFallback": "New chat",
+    "nothingToConsolidate": "Not enough conversation to consolidate yet.",
+    "nothingToFork": "Not enough conversation to fork yet.",
+    "consolidateFailed": "Consolidate failed",
+    "forkFailed": "Fork failed",
+    "memoryToggleLabel": "Memory",
+    "memoryOnTooltip": "Project memory is ON — this chat recalls and learns from the project's Evermind",
+    "memoryOffTooltip": "Project memory is OFF for this chat — Evermind recall and learning are disabled",
     "brainDefault": "Brain (default)",
     "noChatsYet": "No chats yet. Click + New to start.",
     "noChatsMatch": "No chats match your search.",
@@ -6009,7 +6022,8 @@
       "devops": {
         "label": "DevOps / IT Operations manager",
         "description": "Guards reliability — prioritizes deploys, infrastructure, monitoring, and operational risk."
-      }
+      },
+      "fillsRole": "Fills the {role} role on the team"
     },
     "coaching": {
       "title": "Coach the manager",
@@ -6023,7 +6037,18 @@
       "activeTitle": "Standing directives",
       "empty": "No standing directives yet.",
       "tenantWide": "Workspace-wide",
-      "dismiss": "Dismiss"
+      "dismiss": "Dismiss",
+      "modeLabel": "Coaching type",
+      "modeDirective": "Standing directive",
+      "modeTask": "One-off task",
+      "taskHint": "Hand the manager one discrete task — it executes it once, then moves on.",
+      "taskPlaceholder": "e.g. Reorganize the payments epic and rank its backlog.",
+      "taskSubmit": "Assign task",
+      "expiryLabel": "Expires in (days)",
+      "expiryPlaceholder": "Days (optional)",
+      "expiresAt": "Expires {when}",
+      "noExpiry": "No expiry",
+      "markDone": "Done"
     },
     "autonomyPaused": {
       "title": "Autonomous management paused",
@@ -6734,6 +6759,7 @@
     "kindRole": "Role",
     "kindReview": "Review",
     "kindDiagnostic": "Diagnostic",
+    "diagnosticIdPlaceholder": "diagnostic id",
     "respOwner": "Owner",
     "respReviewer": "Reviewer",
     "respContributor": "Contributor",
