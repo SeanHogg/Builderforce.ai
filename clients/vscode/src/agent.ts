@@ -5,6 +5,7 @@ import {
   isCodeChangeTool,
   isTicketRecordingTool,
   codeChangeFile,
+  linkedTicketsToAdvance,
   type BrainTransport,
   type ChatCompletionMessage,
   type BrainToolSpec,
@@ -161,6 +162,34 @@ export async function runAgent(
     }
   };
 
+  // Keep the board honest about STATUS: when this run CHANGED code, advance any
+  // task/epic/gap linked to this chat that is still in a not-started lane
+  // (backlog/todo/ready) to in_progress — the IDE twin of the webview loop's
+  // status backstop, so "started work on a linked bug ticket but never moved it off
+  // backlog" can't happen silently. Best-effort, chat-scoped, never throws. Runs
+  // AFTER flushCodeChangeTicket so a freshly-minted review-status ticket isn't touched.
+  const flushLinkedTicketProgress = async (): Promise<void> => {
+    if (!codeChanged || deps.chatId == null || deps.projectId == null || deps.signal.aborted) return;
+    const listTool = toolDefs.find((d) => d.name === "builtin_chats_list_tickets");
+    const updateTool = toolDefs.find((d) => d.name === "builtin_tasks_update");
+    if (!listTool || !updateTool) return;
+    try {
+      const listed = await listTool.execute({ chatId: deps.chatId }, deps.root ?? "");
+      for (const t of linkedTicketsToAdvance(listed)) {
+        const id = Number(t.ref);
+        if (!Number.isInteger(id)) continue;
+        try {
+          await updateTool.execute({ id, status: "in_progress" }, deps.root ?? "");
+          events.onToolResult(`advanced ticket #${id} to in progress`, true);
+        } catch {
+          /* best-effort per ticket */
+        }
+      }
+    } catch {
+      /* backstop is best-effort — never surface an error for it */
+    }
+  };
+
   // Evermind recall: inject facts relevant to the latest user message as a
   // system block, before the first turn. Self-updating memory the agent reads
   // each request (write side is the `remember_fact` tool above). Best-effort.
@@ -235,6 +264,7 @@ export async function runAgent(
     if (turn.toolCalls.length === 0) {
       messages.push({ role: "assistant", content: turn.content });
       await flushCodeChangeTicket();
+      await flushLinkedTicketProgress();
       return;
     }
 
@@ -323,8 +353,9 @@ export async function runAgent(
   }
 
   // Budget exhausted — still guarantee any code changed this run is tied to a ticket
-  // before we surface the dispatch hint.
+  // AND that worked linked tickets are off the backlog before we surface the dispatch hint.
   await flushCodeChangeTicket();
+  await flushLinkedTicketProgress();
 
   // Hit the inline step budget without finishing — this is the signal the job is too
   // large for an in-editor chat. Point at the dispatch path (persona's handoff

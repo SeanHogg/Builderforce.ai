@@ -2,7 +2,6 @@ import * as vscode from "vscode";
 import { getTenantJwt, getCurrentUserId } from "./bfApi";
 import { TOOL_DEFS } from "./fileTools";
 import { getBaseUrl, getWebBaseUrl, SECRET_KEY, fetchPersonalityBlock, fetchLimbicBlock } from "./gateway";
-import { BoardPanel } from "./boardPanel";
 import { getGroundingSummary } from "./grounding";
 import { getEditorContext, watchEditorContext } from "./editorContext";
 import { resolveEffectiveModel } from "./modelState";
@@ -138,6 +137,11 @@ function buildLabels(): Record<string, string> {
     "app.working": t("Working…"),
     "app.send": t("Send"),
     "app.stop": t("Stop"),
+    // Queue-while-running: messages composed during an in-flight run are queued and
+    // drained one per completed run instead of being dropped.
+    "app.queueSend": t("Queue message — sends when the current run finishes"),
+    "app.queuedLabel": t("Queued messages"),
+    "app.queuedHint": t("Queued — sends when the run finishes"),
     "app.placeholder": t("Ask BuilderForce to build or change something…"),
     "app.confirmRun": t("Run {name}?"),
     "app.approve": t("Approve"),
@@ -234,12 +238,13 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
         void vscode.window.showInformationMessage(vscode.l10n.t("Chat transcript copied to clipboard."));
         break;
       // Open a linked work item (clicked in the ChatTicketsPanel) in its own view:
-      // board tiers reveal the native BoardPanel when the item's project is active;
-      // strategy tiers + specs open the web portal to the surface they live on.
+      // a task/epic/gap deep-links to its detail drawer (assignee/status/PRD) in the
+      // web portal; strategy tiers + specs open the web page they live on.
       case "open.artifact":
         this.openArtifact(
           typeof msg.kind === "string" ? msg.kind : "",
           typeof msg.projectId === "number" ? msg.projectId : undefined,
+          typeof msg.ref === "string" ? msg.ref : undefined,
         );
         break;
       // Run the existing connection-diagnostics command (opens the output channel).
@@ -285,27 +290,25 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
   }
 
   /**
-   * Reveal a linked work item the user opened from the ChatTicketsPanel. Board tiers
-   * (task/epic/gap) open the native BoardPanel when the item belongs to the active
-   * project (kept in-IDE); everything else — a different project's board, or the
-   * strategy tiers (objective/initiative/portfolio) + specs that only have a web
-   * surface — opens the web portal to the page the item lives on. Mirrors the web
-   * app's own onOpenTicket routing so "Open" behaves the same on both surfaces.
+   * Reveal a linked work item the user opened from the ChatTicketsPanel. A task/epic/gap
+   * opens its DETAIL view — the ticket's assignee/status/PRD drawer — via the web portal
+   * deep-link (`&task=<ref>`), which is the only surface that renders those details (the
+   * native BoardPanel is a Kanban board with no detail drawer, so it can't satisfy "open
+   * the ticket details"). The strategy tiers (objective/initiative/portfolio) + specs
+   * open the web page they live on. Mirrors the web app's own onOpenTicket routing so
+   * "Open" behaves the same on both surfaces.
    */
-  private openArtifact(kind: string, projectId?: number): void {
-    if ((kind === "task" || kind === "epic" || kind === "gap") && projectId != null) {
-      const sel = getSelectedProject();
-      if (sel && sel.id === projectId) {
-        BoardPanel.open(this.ctx, sel.id, sel.name);
-        return;
-      }
+  private openArtifact(kind: string, projectId?: number, ref?: string): void {
+    let path: string;
+    if (kind === "objective" || kind === "initiative" || kind === "portfolio") {
+      path = "/projects?tab=portfolio";
+    } else {
+      const base = projectId != null ? `/projects?tab=tasks&project=${projectId}` : "/projects?tab=tasks";
+      // task/epic/gap → deep-link straight into the ticket's detail drawer.
+      path = (kind === "task" || kind === "epic" || kind === "gap") && ref
+        ? `${base}&task=${encodeURIComponent(ref)}`
+        : base;
     }
-    const path =
-      kind === "objective" || kind === "initiative" || kind === "portfolio"
-        ? "/projects?tab=portfolio"
-        : projectId != null
-          ? `/projects?tab=tasks&project=${projectId}`
-          : "/projects?tab=tasks";
     void vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}${path}`));
   }
 

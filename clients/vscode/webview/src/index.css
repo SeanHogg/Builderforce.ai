@@ -332,6 +332,29 @@ body {
   padding: 0;
 }
 
+.bf-queued {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.bf-queued__hint {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
+
+/* A queued follow-up: dashed outline + accent tint so it reads as "pending", not sent. */
+.bf-chip--queued {
+  max-width: 240px;
+  border-style: dashed;
+  border-color: var(--bf-accent, var(--vscode-focusBorder));
+  background: color-mix(in srgb, var(--bf-accent, var(--vscode-focusBorder)) 12%, transparent);
+}
+
 .bf-input {
   width: 100%;
   box-sizing: border-box;

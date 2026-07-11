@@ -4,6 +4,7 @@
  * Uses tenant JWT from auth.
  */
 
+import { attachEvermindLearn } from '@seanhogg/builderforce-brain-embedded';
 import {
   AUTH_API_URL,
   checkUnauthorizedAndRedirect,
@@ -442,14 +443,11 @@ export const brain = {
     request<{ messages: BrainMessage[]; evermindLearn?: { learned: boolean; version: number } }>(`/api/brain/chats/${chatId}/messages`, {
       method: 'POST',
       body: JSON.stringify({ messages }),
-    }).then((r) => {
       // Attach the server's TRUTHFUL learn-gate outcome (transient, not persisted) to
       // the assistant turn(s) this POST persisted, so the Brain run loop renders a
-      // learn step exactly when the server contributed — not from a client heuristic.
-      const learn = r.evermindLearn;
-      if (!learn) return r.messages;
-      return r.messages.map((m) => (m.role === 'assistant' ? { ...m, evermindLearn: learn } : m));
-    }),
+      // learn/skip step exactly when the server contributed — not from a client
+      // heuristic. Shared with the VS Code webview adapter so the two never drift.
+    }).then((r) => attachEvermindLearn(r.messages, r.evermindLearn)),
 
   /** Set thumbs up/down on a message. feedback: 'up' | 'down' | null. */
   setMessageFeedback: (messageId: number, feedback: 'up' | 'down' | null) =>

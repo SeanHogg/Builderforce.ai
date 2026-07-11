@@ -2,8 +2,9 @@
 
 import { Select } from '@/components/Select';
 
-import { useState, useEffect, useCallback, useMemo, Fragment, type CSSProperties } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment, type CSSProperties } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { RoleGate } from '@/components/RoleGate';
@@ -249,6 +250,29 @@ export function TaskMgmtContent({
     setDrawerTab(tab);
     setDrawerTask(t);
   }, []);
+
+  // Deep-link to a ticket's DETAIL drawer via a `?task=<id>` query param — the target
+  // the Brain ChatTicketsPanel "Open" now routes to for a linked task/epic/gap (so the
+  // chip opens the ticket's details, not just the board). Opens once per id after the
+  // matching task has loaded, then strips the param so closing the drawer doesn't
+  // re-open it and the URL stays clean. A ref guards against re-opening on re-render.
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const deepLinkedTaskRef = useRef<string | null>(null);
+  useEffect(() => {
+    const raw = searchParams?.get('task');
+    if (!raw || deepLinkedTaskRef.current === raw) return;
+    const id = Number(raw);
+    if (!Number.isInteger(id)) return;
+    const match = tasks.find((t) => t.id === id);
+    if (!match) return; // not on this board yet — wait for load (or a foreign id we ignore)
+    deepLinkedTaskRef.current = raw;
+    openTask(match);
+    const params = new URLSearchParams(Array.from(searchParams.entries()));
+    params.delete('task');
+    const qs = params.toString();
+    router.replace(qs ? `?${qs}` : '?', { scroll: false });
+  }, [searchParams, tasks, openTask, router]);
 
   // Load whether the open ticket is already published to the marketplace, so the
   // drawer can show a "Published" badge + Unpublish, or offer to publish. Best-effort:

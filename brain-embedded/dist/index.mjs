@@ -855,6 +855,10 @@ var STEP_MESSAGE_ROLE = "tool";
 function isStepMessage(m) {
   return m.role === STEP_MESSAGE_ROLE;
 }
+function attachEvermindLearn(messages, outcome) {
+  if (!outcome) return messages;
+  return messages.map((m) => m.role === "assistant" ? { ...m, evermindLearn: outcome } : m);
+}
 
 // src/consolidation.ts
 var CONSOLIDATION_META = { consolidation: true };
@@ -1259,6 +1263,31 @@ function workItemLinkFromCreate(toolName, result) {
 function isTicketRecordingTool(name) {
   return TICKET_RECORDING_TOOLS.has(name);
 }
+var NOT_STARTED_TASK_STATUSES = /* @__PURE__ */ new Set(["backlog", "todo", "ready"]);
+var TASK_TIER_KINDS = /* @__PURE__ */ new Set(["task", "epic", "gap"]);
+function linkedTicketsToAdvance(listResult) {
+  let rows = listResult;
+  if (typeof rows === "string") {
+    try {
+      rows = JSON.parse(rows);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(rows)) return [];
+  const out = [];
+  for (const r of rows) {
+    if (!r || typeof r !== "object") continue;
+    const row = r;
+    if (typeof row.kind !== "string" || !TASK_TIER_KINDS.has(row.kind)) continue;
+    if (row.exists === false) continue;
+    const ref = typeof row.ref === "number" ? String(row.ref) : typeof row.ref === "string" && row.ref.trim() ? row.ref : null;
+    if (!ref) continue;
+    if (typeof row.status !== "string" || !NOT_STARTED_TASK_STATUSES.has(row.status.toLowerCase())) continue;
+    out.push({ kind: row.kind, ref });
+  }
+  return out;
+}
 function codeChangeFile(args) {
   if (args && typeof args === "object" && "path" in args) {
     const p = args.path;
@@ -1270,7 +1299,8 @@ function chatWorkLinkingDirective(chatId) {
   return `You are working inside Brain chat #${chatId}. Tie the work of this conversation back to it:
 \u2022 When your investigation concludes that something needs to be DONE \u2014 a bug to fix, a missing capability, a follow-up, or a gap you identified \u2014 do not merely describe it. Create the work item now (builtin_tasks_create with taskType "task", "epic", or "gap"; or the matching builtin_*_create for an objective, spec, or roadmap item) AND link it to this conversation with builtin_chats_link_ticket (chatId=${chatId}, linkType="created"). To hand a large or long-horizon job off to run autonomously, set assignedAgentRef on the created task.
 \u2022 When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide") so the change becomes a ticket linked to this chat that completes when it ships.
-\u2022 Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked before creating a duplicate. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat.`;
+\u2022 Keep the board honest about STATUS. The MOMENT you start actively working an existing linked task/epic/gap \u2014 investigating its fix, editing code for it, or driving it \u2014 move it out of the backlog with builtin_tasks_update (id=<the ticket's ref>, status="in_progress"). When the work is finished and shipped, advance it to "in_review" (or "done" if it needs no review). Never leave a ticket you are actively working sitting in backlog.
+\u2022 Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked \u2014 both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.`;
 }
 
 // src/brainRunStore.ts
@@ -1636,6 +1666,10 @@ async function startRun(chatId, req) {
       await recordCodeChangeTicket(chatId, c, req).catch(() => {
       });
     }
+    if (!aborted && c.codeChanged && req.projectId != null && req.runTool) {
+      await advanceLinkedTickets(chatId, c, req).catch(() => {
+      });
+    }
     emit(c);
   }
 }
@@ -1667,6 +1701,36 @@ async function recordCodeChangeTicket(chatId, c, req) {
     result: out ?? null,
     isError: isFailedToolResult(out)
   });
+}
+async function advanceLinkedTickets(chatId, c, req) {
+  if (!req.runTool) return;
+  let listed;
+  try {
+    listed = await req.runTool("builtin_chats_list_tickets", { chatId });
+  } catch {
+    return;
+  }
+  const toAdvance = linkedTicketsToAdvance(listed);
+  for (const t of toAdvance) {
+    const id = Number(t.ref);
+    if (!Number.isInteger(id)) continue;
+    const toolStart = nowMs2();
+    let out;
+    try {
+      out = await req.runTool("builtin_tasks_update", { id, status: "in_progress" });
+    } catch (e) {
+      out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+    pushDurableStep(c, chatId, req.persistence, {
+      ts: nowIso(),
+      category: "tool",
+      label: "builtin_tasks_update",
+      durationMs: nowMs2() - toolStart,
+      args: { id, status: "in_progress", auto: true, reason: "worked-ticket-off-backlog" },
+      result: out ?? null,
+      isError: isFailedToolResult(out)
+    });
+  }
 }
 async function autoLinkCreatedItem(chatId, c, persistence, runTool, toolName, out) {
   const link = workItemLinkFromCreate(toolName, out);
@@ -1920,6 +1984,13 @@ ${chatWorkLinkingDirective(chatId)}`;
           result: { count: reconciled, version: learn.version }
         });
       }
+    } else if (learn && learn.reason && learn.reason !== "too-short") {
+      pushDurableStep(c, chatId, persistence, {
+        ts: nowIso(),
+        category: "learn",
+        label: "evermind.learn",
+        result: { version: learn.version, skipped: true, reason: learn.reason }
+      });
     }
     onActivity?.(chatId);
     return;
@@ -2300,11 +2371,13 @@ export {
   CONSOLIDATION_META,
   DEFAULT_CHAT_TITLE,
   EVERMIND_LEARN_MIN_CHARS,
+  NOT_STARTED_TASK_STATUSES,
   PROVENANCE_META_KEY,
   STEP_MESSAGE_ROLE,
   TICKET_RECORDING_TOOLS,
   accountUsedInTrace,
   activeMentionToken,
+  attachEvermindLearn,
   buildBrainTriageReport,
   byoReasonHint,
   byoUnresolvedInTrace,
@@ -2334,6 +2407,7 @@ export {
   isStepMessage,
   isTicketRecordingTool,
   lastConsolidationIndex,
+  linkedTicketsToAdvance,
   mentionRecipient,
   modelsUsedInTrace,
   parseByoUnresolved,
