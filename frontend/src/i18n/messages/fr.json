@@ -5917,6 +5917,26 @@
     "detailPromptLabel": "Tâche",
     "detailTextLabel": "Appris"
   },
+  "topbar": {
+    "cart": "Panier",
+    "cartWithCount": "Panier, {count, plural, one {# article} other {# articles}}",
+    "openMenu": "Ouvrir le menu",
+    "marketplace": "Place de marché",
+    "previewingAs": "Aperçu en tant que {role} — frontend uniquement, aucun appel API affecté",
+    "previewBadge": "Aperçu : {role}",
+    "exitPreview": "Quitter l’aperçu de rôle",
+    "previewSelectTitle": "Aperçu en tant que rôle (frontend uniquement)",
+    "previewPlaceholder": "Aperçu de rôle…",
+    "signOut": "Se déconnecter",
+    "brandAlt": "Builderforce",
+    "brandName": "Builderforce.ai",
+    "betaBadge": "BETA"
+  },
+  "managerStatus": {
+    "active": "Gestionnaire actif",
+    "lastManaged": "Géré {when}",
+    "ariaLabel": "Statut du gestionnaire IA"
+  },
   "manager": {
     "title": "Manager IA",
     "subtitle": "Laissez un manager IA garder ce backlog en bonne santé : il évalue la valeur métier de chaque ticket, classe le travail, attribue les responsables et pilote les pull requests pour que votre équipe sache toujours ce qui compte le plus ensuite.",

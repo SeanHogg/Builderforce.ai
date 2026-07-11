@@ -4,6 +4,19 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-11 — AI Manager activity is now visible cross-surface: ambient status indicator (web + VSIX) + unified audit (api 2026.7.70 · frontend 2026.7.47 · vscode 2026.7.56)
+
+The manager runs in the background (cron every ~5 min + manual) managing tasks/agents across one project OR the whole tenant, but a human on any other screen had **zero** visibility — activity lived only on the `/projects?tab=manager` feed (which didn't even auto-refresh), there was no toast/indicator, and nothing at all in the VSIX. Fixed by riding the rails that already exist rather than new plumbing:
+
+- **Unified audit (server)** — `runManagerForProject` now emits ONE per-pass event to the unified `activity_log` via `recordActivity` (verb `manager.pass`, attributed to the actual manager agent when one is designated, else system "AI Manager"), so every pass shows in the cross-surface audit timeline / `AuditTrailPanel`. One summary event per pass (not one per scored ticket) keeps the trail meaningful; skipped on an idle pass.
+- **One cross-surface live signal** — `GET /api/runtime/attention` (the ONE signal web + VSIX already poll) now returns `manager: { lastRunAt, recentlyActive }`, computed as `MAX(last_run_at)` across the manager's scope (the requested project, or tenant-wide when none) — so it correctly handles a manager scoped to one project OR the whole tenant. `recentlyActive` = a pass within the last 3 min.
+- **Web** — self-deciding `ManagerStatusIndicator` in the TopBar (returns null until a manager has run): a pulsing "Manager active" chip while a pass is fresh, else "Managed {relative}", linking to the Manager tab. Reuses `useAttention` (tenant-wide). The Manager tab feed now auto-refreshes every 20 s so cron passes appear live, not just manual runs. TopBar fully localized in this pass (new `topbar` + `managerStatus` namespaces, all 5 catalogs).
+- **VSIX** — `AttentionPoller` carries the manager cadence (`managerAttention()`); a right-aligned status bar item shows "$(compass) Manager active" / "Manager · {ago}" (hidden until a pass has run), clicking opens the web Manager tab (`builderforce.openManager`, `appUrl` now exported from auth).
+- **Verified** — api + frontend + vscode-host typecheck clean; runtime + manager + token-gate suites green (27 tests); all 5 i18n catalogs parse.
+- **Next (logged in ROADMAP):** the human→manager **Coaching Session** (chat with the manager in web Brain + VSIX that turns guidance into manager directives/tasks) — a distinct larger feature, designed but not built here.
+
+---
+
 ## ✅ RESOLVED 2026-07-11 — Evermind video/image generation goes live end-to-end: engine published + api media serving (engine npm `2026.7.11` · api)
 
 Closed the last non-compute gap: a published media Evermind model is now servable over HTTP. The engine codec/artifact work was published to npm as `2026.7.11` (Release CI on tag `v2026.7.11`), and the api now loads + serves it:

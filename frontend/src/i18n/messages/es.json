@@ -5917,6 +5917,26 @@
     "detailPromptLabel": "Tarea",
     "detailTextLabel": "Aprendido"
   },
+  "topbar": {
+    "cart": "Carrito de compras",
+    "cartWithCount": "Carrito de compras, {count, plural, one {# artículo} other {# artículos}}",
+    "openMenu": "Abrir menú",
+    "marketplace": "Marketplace",
+    "previewingAs": "Vista previa como {role} — solo frontend, sin afectar llamadas a la API",
+    "previewBadge": "Vista previa: {role}",
+    "exitPreview": "Salir de la vista previa de rol",
+    "previewSelectTitle": "Vista previa como rol (solo frontend)",
+    "previewPlaceholder": "Vista previa de rol…",
+    "signOut": "Cerrar sesión",
+    "brandAlt": "Builderforce",
+    "brandName": "Builderforce.ai",
+    "betaBadge": "BETA"
+  },
+  "managerStatus": {
+    "active": "Gestor activo",
+    "lastManaged": "Gestionado {when}",
+    "ariaLabel": "Estado del gestor de IA"
+  },
   "manager": {
     "title": "Manager IA",
     "subtitle": "Deja que un manager de IA mantenga sano este backlog: puntúa el valor de negocio de cada ticket, ordena el trabajo, asigna responsables y gestiona los pull requests para que tu equipo siempre sepa qué es lo más importante a continuación.",

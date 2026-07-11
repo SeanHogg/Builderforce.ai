@@ -82,6 +82,14 @@
 
 ## Consolidated Gap Register
 
+### 🧭 Manager Coaching Session — human ↔ AI-Manager chat that assigns work TO the manager (designed 2026-07-11, not built)
+
+> Follow-on to the manager cross-surface visibility work (shipped — see DONE.md). Today the human can SEE what the manager did; they cannot DIRECT it in-conversation. The ask: a "Coaching Session" — a chat with the manager (in web Brain AND the VSIX AI chat) where the human gives guidance ("focus the payments epic", "hold merges on release/*", "deprioritize infra") and that guidance becomes durable **manager directives** the background pass then honors, plus optional discrete tasks the manager executes. Concrete design:
+> - **Directive store** — new `manager_directives` (tenantId, projectId NULL = tenant-wide, text, status active|done|dismissed, createdBy, createdAt, expiresAt?) so a manager scoped to a project OR the whole tenant can carry standing guidance. `runManagerForProject` loads active directives and threads them into the AI scoring/ranking persona (`identity.personaDirective`) and the PR/assign policy, so coaching actually changes behavior. Each consumed directive journals to the `manager.pass` audit metadata.
+> - **Chat surface** — the manager is already an addressable agent when `managerRef = c:<agentRef>`; reuse the existing agent chat (team-chat `agentReply` / Brain) so "chat with the manager" needs no new modality. Give that agent an MCP tool `manager.coach(directive|task)` that writes to `manager_directives` (or creates a `source='manager'` task), so the conversation turns guidance into stored directives/tasks. For a system (non-agent) manager, a thin `/api/manager/:projectId/coach` endpoint accepts the same.
+> - **Surfacing** — coaching turns + resulting directives show in the Manager activity feed + the unified `activity_log` (verb `manager.coach`), and active directives render on the Manager tab (dismissable). VSIX: the existing AI chat can DM the manager; the status bar item's menu could deep-link "Coach the manager".
+> Unblocks: closed-loop steering (see → direct → the manager acts), which is the point of a manager you don't have to micromanage on the board.
+
 ### 🧬 Personality subsystem — residual polish (post 2026-07-11 8-gap closeout)
 
 > The 8 audited personality gaps shipped 2026-07-11 (see DONE.md). These are the non-blocking follow-ups noted during that work; each has a live/working path today and only wants an upgrade.
