@@ -225,6 +225,19 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
     await invalidate(c, tenantId);
     return c.json({ chatId });
   });
+  router.post('/:id/postmortem', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const b = (await c.req.json().catch(() => ({}))) as {
+      summary?: string; rootCause?: string; impact?: string; contributingFactors?: string; resolution?: string;
+      whatWentWell?: string; whatWentWrong?: string; docType?: 'postmortem' | 'known_error';
+      actionItems?: Array<{ title: string; detail?: string }>;
+    };
+    const res = await new IncidentService(db).publishPostmortem(tenantId, c.req.param('id'), {
+      ...b, actorRef: `u:${c.get('userId') as string | undefined ?? 'system'}`,
+    }, c.env);
+    await invalidate(c, tenantId);
+    return c.json(res, 201);
+  });
   router.post('/:id/triage', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const detail = await new IncidentService(db).getIncident(tenantId, c.req.param('id'));

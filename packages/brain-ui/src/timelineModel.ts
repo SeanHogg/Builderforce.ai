@@ -9,7 +9,7 @@
  * verbatim across surfaces.
  */
 
-import type { BrainMessage, BrainTraceEvent, ChatInputAttachment, EvermindRecallItem } from '@seanhogg/builderforce-brain-embedded';
+import { isStepMessage, type BrainMessage, type BrainTraceEvent, type ChatInputAttachment, type EvermindRecallItem } from '@seanhogg/builderforce-brain-embedded';
 
 export interface TimelineImage {
   url: string;
@@ -194,7 +194,7 @@ export function buildSettledTimeline(messages: BrainMessage[], trace: BrainTrace
         text: stripImageRefs(message.content, imageNames),
         images,
       });
-    } else if (message.role === 'tool') {
+    } else if (isStepMessage(message)) {
       // A durable tool/memory STEP row — reconstruct its timeline node so it survives
       // a reload. Skip when the live trace already carries this exact step (dedup), or
       // when the metadata isn't a step (never render a tool row as an assistant bubble).

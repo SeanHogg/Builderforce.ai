@@ -40,6 +40,7 @@ import {
   parseSuggestedActions,
   mentionRecipient,
   resolveRecipient,
+  isStepMessage,
   type SuggestedAction,
   type BrainModality,
   type BrainEffort,
@@ -1100,7 +1101,7 @@ function MessageActions({ msg, conv, projectId, suggestions, onRunSuggestion }: 
         onFeedback={(value) => conv.submitFeedback(msg, value)}
         projectId={projectId}
         assistantContent={msg.content}
-        conversationMessages={conv.messages.map((m) => ({ role: m.role, content: m.content }))}
+        conversationMessages={conv.messages.filter((m) => !isStepMessage(m)).map((m) => ({ role: m.role, content: m.content }))}
       />
     </>
   );

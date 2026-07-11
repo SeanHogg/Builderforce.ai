@@ -25,7 +25,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useBrainConfig } from './config';
-import type { BrainMessage, BrainModality, ChatInputAttachment } from './types';
+import { isStepMessage, type BrainMessage, type BrainModality, type ChatInputAttachment } from './types';
 import type { BrainToolSpec, ChatCompletionMessage, ContentPart } from './streamChatCompletion';
 import type { EvermindRunHooks } from './evermindMemory';
 import { prepareImageDataUrl } from './imagePrep';
@@ -342,10 +342,10 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         // Scoped to the last consolidation marker: a consolidated chat sends the
         // summary as its base context instead of the full (large) history.
         const seed: ChatCompletionMessage[] = scopeToConsolidation(messages)
-          // Durable tool/memory STEP rows (role:'tool', persisted for the timeline)
-          // are NOT model turns — exclude them so a reload never re-sends an orphaned
-          // tool message (which 400s strict vendors) into the transcript.
-          .filter((m) => m.role !== 'tool')
+          // Durable tool/memory STEP rows (persisted for the timeline) are NOT model
+          // turns — exclude them so a reload never re-sends an orphaned tool message
+          // (which 400s strict vendors) into the transcript.
+          .filter((m) => !isStepMessage(m))
           .map((m) => ({
             role: m.role as ChatCompletionMessage['role'],
             content: m.content,
@@ -383,7 +383,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     setLocalError('');
     const seed: ChatCompletionMessage[] = scopeToConsolidation(messages.slice(0, -1))
       // Exclude durable tool/memory STEP rows (see the send() seed above).
-      .filter((m) => m.role !== 'tool')
+      .filter((m) => !isStepMessage(m))
       .map((m) => ({
         role: m.role as ChatCompletionMessage['role'],
         content: m.content,

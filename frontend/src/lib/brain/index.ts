@@ -26,6 +26,7 @@ export {
   useMcpExtensions,
   buildBrainTriageReport,
   isFailedToolResult,
+  isStepMessage,
   mentionRecipient,
   resolveRecipient,
 } from '@seanhogg/builderforce-brain-embedded';

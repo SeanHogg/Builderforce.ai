@@ -93,6 +93,10 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
+  // Coaching-session state (the human directs the manager).
+  const [coachText, setCoachText] = useState('');
+  const [coachScope, setCoachScope] = useState<'project' | 'tenant'>('project');
+  const [coaching, setCoaching] = useState(false);
   // Assignee pools that back the "who manages this" designation select.
   const [hosts, setHosts] = useState<AgentHost[]>([]);
   const [cloudAgents, setCloudAgents] = useState<CloudAgentTarget[]>([]);
@@ -207,6 +211,33 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
     [hosts, cloudAgents, members],
   );
 
+  const coachNow = useCallback(async () => {
+    if (projectId == null || coaching) return;
+    const directive = coachText.trim();
+    if (directive.length < 3) return;
+    setCoaching(true);
+    setError(null);
+    try {
+      await managerApi.coach(projectId, { directive, scope: coachScope });
+      setCoachText('');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('error.body'));
+    } finally {
+      setCoaching(false);
+    }
+  }, [projectId, coaching, coachText, coachScope, load, t]);
+
+  const dismissDirective = useCallback(async (id: string) => {
+    if (projectId == null) return;
+    try {
+      await managerApi.dismissDirective(projectId, id);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('error.body'));
+    }
+  }, [projectId, load, t]);
+
   // ── Empty / loading / error states (all localized) ──
   if (projectId == null) {
     return <Notice title={t('noProject.title')} body={t('noProject.body')} />;
@@ -219,9 +250,10 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
   }
   if (!data) return null;
 
-  const { policy, stats, backlog, actions, runTasks, autonomy } = data;
+  const { policy, stats, backlog, actions, runTasks, autonomy, managerTypes, directives } = data;
   const managerValue = policy.managerRef ?? '';
   const capWindow = autonomy?.reason === 'monthly_exhausted' ? 'monthly' : 'daily';
+  const activeDirectives = directives.filter((d) => d.status === 'active');
 
   const priorityChart: BarDatum[] = PRIORITIES.map((p) => ({
     key: p,
@@ -353,6 +385,25 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
             </Select>
           </div>
 
+          {/* Manager TYPE / role — Development, QA, Service Desk, DevOps … */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ display: 'block', fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: 4 }}>
+              {t('type.label')}
+            </label>
+            <div style={{ ...mutedStyle, marginBottom: 8 }}>{t('type.help')}</div>
+            <Select
+              value={policy.managerType}
+              disabled={saving}
+              onChange={(e) => savePatch({ managerType: e.target.value as typeof policy.managerType })}
+              style={controlStyle}
+            >
+              {managerTypes.map((mt) => (
+                <option key={mt.id} value={mt.id}>{t(`type.${mt.id}.label`)}</option>
+              ))}
+            </Select>
+            <div style={{ ...mutedStyle, marginTop: 8 }}>{t(`type.${policy.managerType}.description`)}</div>
+          </div>
+
           {/* Toggles */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 20 }}>
             <ToggleRow
@@ -407,6 +458,82 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
               })}
             </div>
             <div style={{ ...mutedStyle, marginTop: 8 }}>{t(`policy.prMerge.${policy.prMergePolicy}.help`)}</div>
+          </div>
+        </div>
+      </RoleGate>
+
+      {/* ── Coaching session — the human directs the manager ── */}
+      <RoleGate capability="manager.manage" variant="block">
+        <div style={panelStyle}>
+          <div style={{ ...sectionTitleStyle, marginBottom: 4 }}>{t('coaching.title')}</div>
+          <div style={{ ...mutedStyle, marginBottom: 12 }}>{t('coaching.subtitle')}</div>
+
+          <textarea
+            value={coachText}
+            onChange={(e) => setCoachText(e.target.value)}
+            placeholder={t('coaching.placeholder')}
+            rows={3}
+            style={{ ...controlStyle, width: '100%', minWidth: 0, resize: 'vertical', fontFamily: 'inherit' }}
+          />
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginTop: 10 }}>
+            <Select
+              value={coachScope}
+              onChange={(e) => setCoachScope(e.target.value as 'project' | 'tenant')}
+              style={{ ...controlStyle, minWidth: 200 }}
+              aria-label={t('coaching.scopeLabel')}
+            >
+              <option value="project">{t('coaching.scopeProject')}</option>
+              <option value="tenant">{t('coaching.scopeTenant')}</option>
+            </Select>
+            <button
+              type="button"
+              style={{ ...primaryBtn, opacity: coaching || coachText.trim().length < 3 ? 0.6 : 1 }}
+              disabled={coaching || coachText.trim().length < 3}
+              onClick={coachNow}
+            >
+              {coaching ? t('coaching.sending') : t('coaching.submit')}
+            </button>
+          </div>
+
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: 8 }}>
+              {t('coaching.activeTitle')}
+            </div>
+            {activeDirectives.length === 0 ? (
+              <div style={mutedStyle}>{t('coaching.empty')}</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {activeDirectives.map((d) => (
+                  <div
+                    key={d.id}
+                    style={{
+                      display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 10px',
+                      border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-base)',
+                    }}
+                  >
+                    <span aria-hidden style={{ flexShrink: 0 }}>🎯</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{d.directive}</div>
+                      {d.projectId == null && (
+                        <span style={{ ...mutedStyle, fontSize: '0.72rem' }}>{t('coaching.tenantWide')}</span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => dismissDirective(d.id)}
+                      title={t('coaching.dismiss')}
+                      aria-label={t('coaching.dismiss')}
+                      style={{
+                        flexShrink: 0, background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 6,
+                        color: 'var(--text-muted)', cursor: 'pointer', padding: '2px 8px', fontSize: '0.75rem',
+                      }}
+                    >
+                      {t('coaching.dismiss')}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </RoleGate>

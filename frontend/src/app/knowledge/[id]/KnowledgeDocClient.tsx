@@ -33,7 +33,7 @@ import {
   statusColorStyle,
 } from '../KnowledgeClient';
 
-const DOC_TYPES: DocType[] = ['sop', 'process', 'doc'];
+const DOC_TYPES: DocType[] = ['sop', 'process', 'doc', 'postmortem', 'known_error'];
 
 export default function KnowledgeDocClient({ docId }: { docId: string }) {
   const t = useTranslations('knowledge');

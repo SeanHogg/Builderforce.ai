@@ -46,16 +46,13 @@ import {
 } from '../../application/knowledge/knowledgeNotifier';
 import { STANDARD_LIBRARY, standardItem, computeCoverage } from '../../application/knowledge/standardLibrary';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
+import { knowledgeVersionKey } from '../../application/insights/versionKeys';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
-const DOC_TYPES = ['sop', 'process', 'doc'] as const;
+const DOC_TYPES = ['sop', 'process', 'doc', 'postmortem', 'known_error'] as const;
 type DocType = (typeof DOC_TYPES)[number];
 const STATUSES = ['draft', 'published', 'archived'] as const;
-
-function knowledgeVersionKey(tenantId: number): string {
-  return `knowledge:${tenantId}`;
-}
 
 // ---------------------------------------------------------------------------
 // Pure helpers (unit-tested) — compliance / training rollups.

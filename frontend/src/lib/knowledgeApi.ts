@@ -5,7 +5,7 @@
  */
 import { apiRequest, apiRequestStream } from './apiClient';
 
-export type DocType = 'sop' | 'process' | 'doc';
+export type DocType = 'sop' | 'process' | 'doc' | 'postmortem' | 'known_error';
 export type DocStatus = 'draft' | 'published' | 'archived';
 export type ComplianceState = 'acknowledged' | 'pending' | 'overdue' | 'not_required';
 export type DocAccess = 'manager' | 'editor' | 'viewer' | 'none';

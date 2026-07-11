@@ -50,6 +50,7 @@ export async function recallSops(
   tenantId: number,
   query: string,
   topK: number = SOP_RECALL_TOP_K,
+  docTypes: readonly string[] = SOP_DOC_TYPES,
 ): Promise<SopRecallHit[]> {
   if (!query.trim()) return [];
 
@@ -66,7 +67,7 @@ export async function recallSops(
       and(
         eq(knowledgeDocuments.tenantId, tenantId),
         eq(knowledgeDocuments.status, 'published'),
-        inArray(knowledgeDocuments.docType, SOP_DOC_TYPES as unknown as string[]),
+        inArray(knowledgeDocuments.docType, docTypes as string[]),
       ),
     )
     .orderBy(desc(knowledgeDocuments.updatedAt))

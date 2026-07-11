@@ -15,8 +15,8 @@ import { knowledgeApi, type KnowledgeListing, type DocType } from '@/lib/knowled
  * sign in.
  */
 
-const TYPE_LABEL: Record<DocType, string> = { sop: 'type_sop', process: 'type_process', doc: 'type_doc' };
-const TYPE_ICON: Record<DocType, string> = { sop: '📋', process: '🔁', doc: '📄' };
+const TYPE_LABEL: Record<DocType, string> = { sop: 'type_sop', process: 'type_process', doc: 'type_doc', postmortem: 'type_postmortem', known_error: 'type_known_error' };
+const TYPE_ICON: Record<DocType, string> = { sop: '📋', process: '🔁', doc: '📄', postmortem: '🔬', known_error: '⚠️' };
 
 export function KnowledgeMarketSection() {
   const t = useTranslations('knowledge');

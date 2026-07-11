@@ -19,7 +19,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { useBrainChats, useBrainConversation } from '@/lib/brain';
+import { useBrainChats, useBrainConversation, isStepMessage } from '@/lib/brain';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
 import { mintGuestSession, getGuestUsage } from '@/lib/guestChatApi';
 
@@ -128,7 +128,7 @@ export function GuestBrainPanel({ variant, initialPrompt, onClose }: GuestBrainP
                 <div className="gb-empty-body">{t('emptyBody')}</div>
               </div>
             )}
-            {conv.messages.map((m) => (
+            {conv.messages.filter((m) => !isStepMessage(m)).map((m) => (
               <div key={m.id} className={`gb-msg gb-msg-${m.role === 'user' ? 'user' : 'assistant'}`}>
                 {m.role === 'user'
                   ? <div className="gb-bubble gb-bubble-user">{m.content}</div>

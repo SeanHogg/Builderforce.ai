@@ -68,7 +68,7 @@ module.exports = __toCommonJS(src_exports);
 
 // src/BrainTimeline.tsx
 var import_react3 = __toESM(require("react"), 1);
-var import_builderforce_brain_embedded = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded2 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/Markdown.tsx
 var import_react = __toESM(require("react"), 1);
@@ -310,6 +310,7 @@ function QuestionCard({
 }
 
 // src/timelineModel.ts
+var import_builderforce_brain_embedded = require("@seanhogg/builderforce-brain-embedded");
 var ORDER = {
   user: 0,
   recall: 1,
@@ -407,7 +408,7 @@ function buildSettledTimeline(messages, trace) {
         text: stripImageRefs(message.content, imageNames),
         images
       });
-    } else if (message.role === "tool") {
+    } else if ((0, import_builderforce_brain_embedded.isStepMessage)(message)) {
       const parsed = parseStepMessage(message.metadata);
       if (!parsed) return;
       if (traceStepSigs.has(stepSig(parsed.step.category, parsed.step.label, parsed.tsIso))) return;
@@ -682,7 +683,7 @@ function BrainTimelineInner({
     /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("ol", { className: "bf-tl", ref: contentRef, children: [
       nodes.map((node) => {
         if (node.kind === "user") {
-          const to = (0, import_builderforce_brain_embedded.parseDirectedRecipient)(node.message);
+          const to = (0, import_builderforce_brain_embedded2.parseDirectedRecipient)(node.message);
           return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("li", { className: "bf-tl__item bf-tl__item--user", children: [
             /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__dot", children: dotIcon("user") }) }),
             /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "bf-tl__body", children: [
@@ -700,10 +701,10 @@ function BrainTimelineInner({
           ] }, node.key);
         }
         if (node.kind === "assistant") {
-          const author = (0, import_builderforce_brain_embedded.parseMessageAuthor)(node.message);
+          const author = (0, import_builderforce_brain_embedded2.parseMessageAuthor)(node.message);
           const card = onAnswerQuestion ? parseAskUser(node.text) : null;
           const bodyText = card ? stripAskUser(node.text) : node.text;
-          const prov = (0, import_builderforce_brain_embedded.parseMessageProvenance)(node.message);
+          const prov = (0, import_builderforce_brain_embedded2.parseMessageProvenance)(node.message);
           return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("li", { className: "bf-tl__item bf-tl__item--assistant", children: [
             /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__dot", children: author ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Avatar, { name: author.name, kind: author.kind, size: 16 }) : dotIcon("assistant") }) }),
             /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "bf-tl__body", children: [
@@ -1377,14 +1378,14 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
 
 // src/mention/MentionAutocomplete.tsx
 var import_react6 = require("react");
-var import_builderforce_brain_embedded2 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded3 = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime7 = require("react/jsx-runtime");
 function useMentionAutocomplete(opts) {
   const { textareaRef, value, setValue, participants, onPick, labels, disabled } = opts;
   const [token, setToken] = (0, import_react6.useState)(null);
   const [index, setIndex] = (0, import_react6.useState)(0);
   const matches = (0, import_react6.useMemo)(
-    () => token && !disabled ? (0, import_builderforce_brain_embedded2.filterMentionCandidates)(participants, token.query) : [],
+    () => token && !disabled ? (0, import_builderforce_brain_embedded3.filterMentionCandidates)(participants, token.query) : [],
     [token, participants, disabled]
   );
   const open = !disabled && token != null && matches.length > 0;
@@ -1394,7 +1395,7 @@ function useMentionAutocomplete(opts) {
       setToken(null);
       return;
     }
-    const next = (0, import_builderforce_brain_embedded2.activeMentionToken)(el.value, el.selectionStart ?? el.value.length);
+    const next = (0, import_builderforce_brain_embedded3.activeMentionToken)(el.value, el.selectionStart ?? el.value.length);
     setToken(next);
     setIndex(0);
   }, [textareaRef, disabled, participants.length]);
@@ -1403,7 +1404,7 @@ function useMentionAutocomplete(opts) {
   }, [value, recompute]);
   const choose = (0, import_react6.useCallback)((r) => {
     const el = textareaRef.current;
-    const tk = token ?? (el ? (0, import_builderforce_brain_embedded2.activeMentionToken)(el.value, el.selectionStart ?? 0) : null);
+    const tk = token ?? (el ? (0, import_builderforce_brain_embedded3.activeMentionToken)(el.value, el.selectionStart ?? 0) : null);
     if (tk) {
       let after = value.slice(tk.end);
       if (after.startsWith(" ")) after = after.slice(1);

@@ -242,6 +242,7 @@ function QuestionCard({
 }
 
 // src/timelineModel.ts
+import { isStepMessage } from "@seanhogg/builderforce-brain-embedded";
 var ORDER = {
   user: 0,
   recall: 1,
@@ -339,7 +340,7 @@ function buildSettledTimeline(messages, trace) {
         text: stripImageRefs(message.content, imageNames),
         images
       });
-    } else if (message.role === "tool") {
+    } else if (isStepMessage(message)) {
       const parsed = parseStepMessage(message.metadata);
       if (!parsed) return;
       if (traceStepSigs.has(stepSig(parsed.step.category, parsed.step.label, parsed.tsIso))) return;

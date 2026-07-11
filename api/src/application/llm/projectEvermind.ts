@@ -824,6 +824,33 @@ export async function recallProjectEvermindMemory(
   return { seeded: true, version: head.version, mode: head.mode, items };
 }
 
+/**
+ * Recall the project's Evermind lessons relevant to `query` and render them as a cloud-
+ * run prompt block, so an agent is grounded in prior experience — past run outcomes AND
+ * the causes of past incidents (contributed by incident post-mortems) — and does not
+ * repeat mistakes that caused incidents. Best-effort '' when unseeded / empty / failed.
+ */
+export async function buildEvermindLessonsBlock(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+  query: string,
+  topK = 4,
+): Promise<string> {
+  try {
+    const res = await recallProjectEvermindMemory(env, db, tenantId, projectId, query);
+    if (!res.seeded || res.items.length === 0) return '';
+    const lines = res.items.slice(0, topK).map((i) => `- ${i.text.slice(0, 320)}`);
+    if (lines.length === 0) return '';
+    return `## Prior lessons for this work (from past runs & incident post-mortems)\n\n`
+      + `The project's Evermind memory recalled these lessons relevant to this task. Apply them, and do NOT repeat the mistakes or incident causes described:\n\n`
+      + lines.join('\n');
+  } catch {
+    return '';
+  }
+}
+
 export async function flushProjectEvermind(
   env: Env,
   tenantId: number,

@@ -23,6 +23,7 @@ import { type ToolSchema } from '@builderforce/agent-tools';
 import type { Db } from '../../infrastructure/database/connection';
 import { ProjectService } from '../project/ProjectService';
 import { TaskService } from '../task/TaskService';
+import { addManagerDirective } from '../manager/managerDirectives';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
 import { ProjectStatus, TaskPriority, TaskType, TenantRole } from '../../domain/shared/types';
@@ -54,6 +55,7 @@ import { SecurityAuditService, type FindingSeverity, type TrustCriterion } from 
 import { IncidentService, type IncidentSeverity, type IncidentStatus } from '../incident/IncidentService';
 import { OnCallService } from '../incident/OnCallService';
 import { EscalationService } from '../incident/EscalationService';
+import { recallSops } from '../knowledge/recallSops';
 import { SecurityTicketAccessService } from '../security/SecurityTicketAccessService';
 import { recallProjectFacts, upsertProjectFact } from './projectFacts';
 import type { Task } from '../../domain/task/Task';
@@ -683,6 +685,44 @@ const CATALOG: BuiltinTool[] = [
     },
   },
   { tool: 'oncall.list', mutates: false, description: 'List on-call rotations and who is currently on call for each.', parameters: obj({}), run: (ctx) => new OnCallService(ctx.db).listRotations(ctx.tenantId) },
+  {
+    tool: 'incidents.postmortem', mutates: true,
+    description: 'Publish a post-incident review (RCA / lessons-learned) for a RESOLVED incident. Authors a first-class, versioned Knowledge article (docType "postmortem", or "known_error" for a documented known error + workaround), files each action item as a linked remediation task, and back-links the incident. Also feeds the learning into Evermind so the workforce stops repeating the cause. Do this once the incident is resolved and you understand the root cause. Params: incidentId (required), summary, rootCause, impact, contributingFactors, resolution, whatWentWell, whatWentWrong, actionItems[{title,detail}], docType.',
+    parameters: obj({
+      incidentId: S, summary: S, rootCause: S, impact: S, contributingFactors: S, resolution: S, whatWentWell: S, whatWentWrong: S,
+      docType: { type: 'string', enum: ['postmortem', 'known_error'] },
+      actionItems: { type: 'array', items: obj({ title: S, detail: S }, ['title']) },
+    }, ['incidentId']),
+    run: async (ctx, a) => {
+      const actionItems = Array.isArray(a.actionItems)
+        ? (a.actionItems as Json[]).map((g) => ({ title: str(g.title), detail: g.detail != null ? str(g.detail) : null })).filter((g) => g.title)
+        : [];
+      const res = await new IncidentService(ctx.db).publishPostmortem(ctx.tenantId, str(a.incidentId), {
+        summary: a.summary != null ? str(a.summary) : null,
+        rootCause: a.rootCause != null ? str(a.rootCause) : null,
+        impact: a.impact != null ? str(a.impact) : null,
+        contributingFactors: a.contributingFactors != null ? str(a.contributingFactors) : null,
+        resolution: a.resolution != null ? str(a.resolution) : null,
+        whatWentWell: a.whatWentWell != null ? str(a.whatWentWell) : null,
+        whatWentWrong: a.whatWentWrong != null ? str(a.whatWentWrong) : null,
+        actionItems,
+        docType: a.docType != null ? (str(a.docType) as 'postmortem' | 'known_error') : undefined,
+        actorRef: 'agent',
+      }, ctx.env);
+      return res;
+    },
+  },
+  {
+    tool: 'knowledge.search', mutates: false,
+    description: 'Search the workspace Knowledge base (published docs) for the most relevant articles — SOPs, processes, and especially prior incident RCAs / known-errors. Use this DURING triage to find how a similar issue was handled before, so a recurring incident is resolved fast instead of from scratch. Returns ranked { id, title, docType, excerpt }[]. Params: query (required), topK (default 5), includePostmortems (default true).',
+    parameters: obj({ query: S, topK: N, includePostmortems: B }, ['query']),
+    run: (ctx, a) => {
+      const docTypes = a.includePostmortems === false
+        ? ['sop', 'process']
+        : ['sop', 'process', 'doc', 'postmortem', 'known_error'];
+      return recallSops(ctx.db, ctx.tenantId, str(a.query), a.topK != null ? num(a.topK) : 5, docTypes);
+    },
+  },
 
   // ---- Workflows (read) — tenant-scoped direct queries [1296] ----
   { tool: 'workflows.list', mutates: false, description: 'List workflows in the workspace.', parameters: obj({}), run: (ctx) => ctx.db.select().from(workflows).where(eq(workflows.tenantId, ctx.tenantId)).orderBy(desc(workflows.updatedAt)).limit(200) },
@@ -1223,6 +1263,25 @@ const CATALOG: BuiltinTool[] = [
       // authz + the single cloud-run dispatcher (no duplicated dispatch logic).
       await replayRoute(ctx, 'PATCH', `/api/tasks/${num(a.taskId)}`, { assignedAgentRef: str(a.agentRef) });
       return replayRoute(ctx, 'POST', `/api/tasks/${num(a.taskId)}/run-now`, {});
+    },
+  },
+
+  // ---- AI Manager: coaching (chat → standing directive) ----
+  // Turns a "coaching session" (the human telling the manager how to manage) into a
+  // durable directive the background manager pass honors on every run — the chat-side
+  // twin of the Manager tab's coaching box. Same store, so guidance given in chat and
+  // guidance given on the tab are one list.
+  { tool: 'manager.coach', mutates: true,
+    description: "Give the AI Manager standing direction it will honor on every backlog pass — e.g. 'focus the payments epic', 'hold merges on release/* until QA signs off', 'deprioritize infra this sprint'. Use when the human tells you how they want work managed or prioritized. scope='tenant' applies it to EVERY project the manager runs; default ('project') applies to the given projectId only.",
+    parameters: obj({ projectId: N, directive: S, scope: { type: 'string', enum: ['project', 'tenant'] } }, ['projectId', 'directive']),
+    run: async (ctx, a) => {
+      const scopeProjectId = a.scope === 'tenant' ? null : num(a.projectId);
+      const id = await addManagerDirective(ctx.db, {
+        tenantId: ctx.tenantId, projectId: scopeProjectId, directive: str(a.directive),
+        createdBy: ctx.userId ?? null, source: 'chat',
+      });
+      if (!id) throw new Error('directive is too short');
+      return { id, scope: scopeProjectId == null ? 'tenant' : 'project', directive: str(a.directive) };
     },
   },
 
@@ -2276,7 +2335,10 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   // system, page/escalate on-call, and post war-room updates. NOT the on-call/policy
   // CRUD — configuring rotations & escalation policies is a human/admin action.
   'incidents.open', 'incidents.classify', 'incidents.update', 'incidents.add_note',
-  'incidents.list', 'incidents.get', 'oncall.page', 'oncall.list',
+  'incidents.list', 'incidents.get', 'incidents.postmortem', 'oncall.page', 'oncall.list',
+  // Knowledge recall — any agent can search the KB (SOPs, processes, prior RCAs /
+  // known-errors) so it learns from documented practice + past incidents mid-run.
+  'knowledge.search',
   // Gig Marketplace: a Product-Manager/Designer agent may publish work, run the hiring
   // funnel, evaluate proposals with AI, and schedule review/interview meetings.
   'marketplace.publish_ticket', 'marketplace.unpublish_ticket',
