@@ -98,7 +98,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
     // (which does NOT token-gate) still works. Surface the gate verdict so a stale
     // "last managed" reads as "autonomy paused — out of tokens", not a silent break.
     // Fail OPEN (treat an unknown as "has budget") — same contract as the sweep.
-    const tokenAvailability = await getTenantTokenAvailability(db, tenantId).catch(() => null);
+    const tokenAvailability = await getTenantTokenAvailability(db, tenantId, undefined, c.env as Env).catch(() => null);
     const autonomy = {
       tokenBlocked: tokenAvailability ? !tokenAvailability.hasTokens : false,
       reason: tokenAvailability?.reason ?? null,

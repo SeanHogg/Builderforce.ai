@@ -99,18 +99,17 @@ import type { FailoverEvent } from '../../application/llm/LlmProxyService';
 import { verifyJwt, signJwt } from '../../infrastructure/auth/JwtService';
 import { hashSecret } from '../../infrastructure/auth/HashService';
 import { TenantRole, TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
-import { getLimits, resolveImageCreditsDailyLimit, resolveTokenLimits, GUEST_CHAT_LIMITS } from '../../domain/tenant/PlanLimits';
+import { getLimits, resolveImageCreditsDailyLimit, GUEST_CHAT_LIMITS } from '../../domain/tenant/PlanLimits';
 import { evaluateFrontierAccess } from '../../domain/tenant/planFeatures';
 import { GuestChatService } from '../../application/guest/GuestChatService';
 import { verifyGuestToken, guestBrainEnabled, GUEST_TOKEN_PREFIX } from '../../application/guest/guestToken';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import {
   utcDayStart,
-  utcMonthStart,
   secondsUntilNextUtcMonth,
   sumTenantTextTokens,
-  sumTenantTextTokensDayAndMonth,
 } from '../../application/llm/tokenUsage';
+import { getTenantTokenAvailability } from '../../application/llm/tenantTokenAvailability';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -334,40 +333,50 @@ interface TokenCapUsage {
  * send (a cap exceeded), or the usage numbers for the response headers when the
  * request may proceed.
  *
- * Limits come from the single resolver {@link resolveTokenLimits} and usage from
- * the single accountant {@link sumTenantTextTokens} / {@link sumTenantTextTokensDayAndMonth},
- * so the cap enforced here is exactly the one the consumption meter displays.
- * Both totals are **cache-discounted** (cache_read ~0.1x, cache_creation ~1.25x).
+ * The plan cap decision + the superadmin(-owned-account) bypass are NOT implemented
+ * here — they come from the ONE shared entry {@link getTenantTokenAvailability} (the
+ * same the cron sweeps + Run-now use), so there is no parallel cap logic to drift.
+ * This function only layers the gateway-specific per-agentHost daily cap on top and
+ * shapes the 429 bodies. Usage totals are **cache-discounted** (cache_read ~0.1x,
+ * cache_creation ~1.25x) inside the shared accountant.
  */
 async function enforceTokenCaps(
   c: Context<HonoEnv>,
   access: TenantAccess,
 ): Promise<{ blocked: Response } | TokenCapUsage> {
-  const { dailyLimit, monthlyLimit } = resolveTokenLimits({
-    effectivePlan: toTenantPlan(access.effectivePlan),
-    tokenDailyLimitOverride: access.tokenDailyLimitOverride,
-    isSuperadmin: access.isSuperadmin,
-  });
-  // `-1` = unlimited (gate skipped). The host cap is independent of the plan cap.
-  const planDailyLimit = dailyLimit > 0 ? dailyLimit : 0;
-  const planMonthlyLimit = monthlyLimit > 0 ? monthlyLimit : 0;
-  const hasHostCap = access.agentHostId !== null && access.agentHostTokenDailyLimit !== null;
-  const needsDaily = planDailyLimit > 0 || hasHostCap;
+  const db = buildDatabase(c.env);
 
-  let usageToday = 0;
-  let usageMonth = 0;
-  if (planMonthlyLimit > 0) {
-    // One scan covers both windows (month outer, day a FILTER) — cheaper than two.
-    const db = buildDatabase(c.env);
-    const usage = await sumTenantTextTokensDayAndMonth(db, access.tenantId, utcDayStart(), utcMonthStart());
-    usageToday = usage.day;
-    usageMonth = usage.month;
-  } else if (needsDaily) {
-    const db = buildDatabase(c.env);
+  // Plan-level caps + the superadmin(-owned-account) bypass come from the ONE shared
+  // entry — the SAME `getTenantTokenAvailability` the cron manager sweep, autonomous
+  // executor, and Run-now gate use — so there is a single definition of "out of
+  // tokens" and the superadmin rule can never diverge between paths. We hand it the
+  // already-resolved principal superadmin flag (`access.isSuperadmin` — covers the
+  // `bfk_*` key-creator that has no user row, so no user query is issued) and the
+  // acting user id; the resolver additionally treats a tenant OWNED by a superadmin as
+  // unlimited (cached), and only scans usage for a genuinely capped tenant.
+  const availability = await getTenantTokenAvailability(
+    db,
+    access.tenantId,
+    { actingUserId: access.userId, actingIsSuperadmin: access.isSuperadmin },
+    c.env,
+  );
+
+  // Header/meter convention: `-1` (unlimited) surfaces as 0.
+  const planDailyLimit = availability.dailyLimit > 0 ? availability.dailyLimit : 0;
+  const planMonthlyLimit = availability.monthlyLimit > 0 ? availability.monthlyLimit : 0;
+  const planUnlimited = availability.dailyLimit <= 0 && availability.monthlyLimit <= 0;
+
+  // Per-agentHost daily cap — a gateway-only operational limit set per agentHost in the
+  // portal, INDEPENDENT of the tenant plan (so it still applies even to an unlimited /
+  // superadmin tenant, unchanged from before). It needs today's usage: the shared
+  // resolver already scanned it for a capped tenant; for an unlimited tenant it returns
+  // 0, so scan once here only when a host cap is actually set.
+  const hasHostCap = access.agentHostId !== null && access.agentHostTokenDailyLimit !== null;
+  let usageToday = availability.usageToday;
+  const usageMonth = availability.usageMonth;
+  if (hasHostCap && planUnlimited) {
     usageToday = await sumTenantTextTokens(db, access.tenantId, utcDayStart());
   }
-
-  // Per-agentHost daily cap (optional, set per-agentHost in portal)
   if (hasHostCap && usageToday >= (access.agentHostTokenDailyLimit as number)) {
     return {
       blocked: c.json({
@@ -379,8 +388,8 @@ async function enforceTokenCaps(
     };
   }
 
-  // Plan daily cap
-  if (planDailyLimit > 0 && usageToday >= planDailyLimit) {
+  // Plan caps — the exhaustion verdict is the shared resolver's (daily precedence).
+  if (!availability.hasTokens && availability.reason === 'daily_exhausted') {
     const upgradeHint = access.effectivePlan === 'free'
       ? ' Upgrade to Pro at builderforce.ai/pricing.'
       : access.effectivePlan === 'pro'
@@ -402,7 +411,7 @@ async function enforceTokenCaps(
   // Plan monthly cap — the consumption-meter allowance. Graceful backpressure:
   // the tenant's already-processed data stays fully queryable; only NEW gateway
   // spend on our pool is paused until the month resets (or they upgrade).
-  if (planMonthlyLimit > 0 && usageMonth >= planMonthlyLimit) {
+  if (!availability.hasTokens && availability.reason === 'monthly_exhausted') {
     const upgradeHint = access.effectivePlan === 'free'
       ? ' Upgrade to Pro at builderforce.ai/pricing for a higher monthly allowance.'
       : access.effectivePlan === 'pro'

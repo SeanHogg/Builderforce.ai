@@ -343,7 +343,8 @@ export async function evermindGenerateMedia(
   const prompt_tokens = promptTokens.length;
   const completion_tokens = tokens.length;
   return {
-    modality,
+    // loadEvermindMediaModel guarantees video|image (it throws on 'text').
+    modality: modality as 'video' | 'image',
     width: codec.width,
     height: codec.height,
     channels: codec.channels,

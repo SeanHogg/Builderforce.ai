@@ -55,21 +55,31 @@ function planString(plan: TenantPlan): 'free' | 'pro' | 'teams' {
 }
 
 /**
- * Resolve a tenant's live token availability. Unlimited callers short-circuit to
- * `hasTokens: true` without a usage scan: a tenant on a plan with no cap (or a
- * `tokenDailyLimitOverride` of -1), OR a superadmin acting user (pass
- * `opts.actingUserId`) — the platform operator is never gated, mirroring the LLM
- * gateway's `enforceTokenCaps`, where `users.isSuperadmin` is the sole,
- * revocation-safe source of truth. Otherwise a single day+month scan decides it.
+ * Resolve a tenant's live token availability. THE single entry every cap path calls
+ * (cron sweeps, interactive Run-now, and the LLM gateway's `enforceTokenCaps`), so
+ * "out of tokens" and the superadmin bypass are defined exactly once.
+ *
+ * Unlimited callers short-circuit to `hasTokens: true` without a usage scan: a tenant
+ * on a plan with no cap (or a `tokenDailyLimitOverride` of -1), OR a superadmin. The
+ * superadmin verdict is granted from — in order — (1) `opts.actingIsSuperadmin` when
+ * the caller already resolved its principal (the gateway passes `access.isSuperadmin`,
+ * covering `bfk_*` key-creators with no user row); (2) `opts.actingUserId` resolved
+ * against `users.isSuperadmin` (interactive paths that only have a user id); and
+ * (3) the tenant's OWN active membership ({@link tenantHasSuperadminMember}) — so an
+ * account OWNED/operated by a superadmin is unlimited even on the cron sweeps, which
+ * pass no principal. `users.isSuperadmin` is the sole, revocation-safe source of truth.
+ * The superadmin lookups run ONLY for an already-capped tenant, so unlimited tenants
+ * pay nothing. Pass `env` to serve the (stable) tenant-owner lookup through the
+ * read-through cache on hot paths.
  *
  * Best-effort by contract: the caller (cron) treats a throw as "unknown" and skips
- * rather than blocks — see the sweep. Cron callers omit `actingUserId` (no acting
- * user), so their tenant-only gating is unchanged.
+ * rather than blocks — see the sweep.
  */
 export async function getTenantTokenAvailability(
   db: Db,
   tenantId: number,
-  opts?: { actingUserId?: string | null },
+  opts?: { actingUserId?: string | null; actingIsSuperadmin?: boolean },
+  env?: Env,
 ): Promise<TenantTokenAvailability> {
   const [row] = await db
     .select({
@@ -112,8 +122,10 @@ export async function getTenantTokenAvailability(
   //       unlimited" rule lives; every caller (cron + interactive) inherits it.
   // `users.isSuperadmin` is the sole, revocation-safe source of truth (fresh per
   // call). Only consulted for a capped tenant, so unlimited tenants pay nothing.
-  let isSuperadmin = false;
-  if (opts?.actingUserId) {
+  let isSuperadmin = opts?.actingIsSuperadmin === true;
+  // Only resolve the principal from a user id when the caller DIDN'T already hand us a
+  // resolved flag (the gateway does — via `access.isSuperadmin` — so we skip the query).
+  if (!isSuperadmin && opts?.actingIsSuperadmin === undefined && opts?.actingUserId) {
     try {
       const [u] = await db
         .select({ isSuperadmin: users.isSuperadmin })
@@ -125,7 +137,7 @@ export async function getTenantTokenAvailability(
       isSuperadmin = false;
     }
   }
-  if (!isSuperadmin) isSuperadmin = await tenantHasSuperadminMember(db, tenantId);
+  if (!isSuperadmin) isSuperadmin = await tenantHasSuperadminMember(db, tenantId, env);
   if (isSuperadmin) {
     const superLimits = resolveTokenLimits({
       effectivePlan: effectivePlanEnum,
@@ -163,25 +175,34 @@ export async function getTenantTokenAvailability(
  * bypass the interactive paths grant via `actingUserId`. Single indexed join on
  * `tenant_members(tenant_id)` → `users.is_superadmin`; only ever called for an
  * already-capped tenant (so it adds no cost to unlimited tenants and, when true,
- * short-circuits the heavier usage scan). Best-effort: false on any error so a
- * lookup failure falls back to the normal plan gate rather than granting bypass.
+ * short-circuits the heavier usage scan).
+ *
+ * The result is tenant-stable, so pass `env` to serve it through the read-through
+ * cache (5-min TTL — the same freshness window the gateway's membership cache uses;
+ * a superadmin grant/revoke is rare and tolerates that lag). Callers without `env`
+ * (unit tests) get the raw query. Best-effort: false on any error so a lookup
+ * failure falls back to the normal plan gate rather than accidentally granting bypass.
  */
-export async function tenantHasSuperadminMember(db: Db, tenantId: number): Promise<boolean> {
-  try {
-    const [row] = await db
-      .select({ isSuperadmin: users.isSuperadmin })
-      .from(tenantMembers)
-      .innerJoin(users, eq(users.id, tenantMembers.userId))
-      .where(and(
-        eq(tenantMembers.tenantId, tenantId),
-        eq(tenantMembers.isActive, true),
-        eq(users.isSuperadmin, true),
-      ))
-      .limit(1);
-    return !!row;
-  } catch {
-    return false;
-  }
+export async function tenantHasSuperadminMember(db: Db, tenantId: number, env?: Env): Promise<boolean> {
+  const compute = async (): Promise<boolean> => {
+    try {
+      const [row] = await db
+        .select({ isSuperadmin: users.isSuperadmin })
+        .from(tenantMembers)
+        .innerJoin(users, eq(users.id, tenantMembers.userId))
+        .where(and(
+          eq(tenantMembers.tenantId, tenantId),
+          eq(tenantMembers.isActive, true),
+          eq(users.isSuperadmin, true),
+        ))
+        .limit(1);
+      return !!row;
+    } catch {
+      return false;
+    }
+  };
+  if (!env) return compute();
+  return getOrSetCached(env, `tenant:superadmin-member:${tenantId}`, compute, { kvTtlSeconds: 300 });
 }
 
 /** The 429 body an interactive run path returns when the tenant is out of tokens.
@@ -223,11 +244,12 @@ function tokenGateUpgradeHint(effectivePlan: 'free' | 'pro' | 'teams', window: '
 export async function checkTenantTokenGate(
   db: Db,
   tenantId: number,
-  opts?: { actingUserId?: string | null },
+  opts?: { actingUserId?: string | null; actingIsSuperadmin?: boolean },
+  env?: Env,
 ): Promise<TokenGateBlock | null> {
   let availability: TenantTokenAvailability;
   try {
-    availability = await getTenantTokenAvailability(db, tenantId, opts);
+    availability = await getTenantTokenAvailability(db, tenantId, opts, env);
   } catch {
     return null; // fail open
   }

@@ -102,6 +102,32 @@ describe('getTenantTokenAvailability', () => {
     expect(a.monthlyLimit).toBe(-1);
   });
 
+  it('a caller-provided superadmin principal (the gateway) is unlimited with NO user query', async () => {
+    // The gateway passes actingIsSuperadmin (already resolved from `access`), which also
+    // covers bfk_* key-creators that have no user row. Only the tenant row is read —
+    // no users.isSuperadmin query, no tenant-member lookup, no usage scan.
+    const db = fakeDb([
+      [{ plan: 'free', billingStatus: 'none', trialEndsAt: null, tokenDailyLimitOverride: null }],
+    ]);
+    const a = await getTenantTokenAvailability(db, 1, { actingIsSuperadmin: true });
+    expect(a.hasTokens).toBe(true);
+    expect(a.dailyLimit).toBe(-1);
+    expect(a.monthlyLimit).toBe(-1);
+  });
+
+  it('a caller-provided non-superadmin principal skips the user query but still checks tenant ownership', async () => {
+    // actingIsSuperadmin=false → NO users.isSuperadmin query; the tenant-member lookup
+    // (empty here) is the only superadmin resolution, then the usage scan.
+    const db = fakeDb([
+      [{ ...activePro, tokenDailyLimitOverride: 1000 }],
+      [],
+      [{ day: 1000, month: 1000 }],
+    ]);
+    const a = await getTenantTokenAvailability(db, 1, { actingUserId: 'u', actingIsSuperadmin: false });
+    expect(a.hasTokens).toBe(false);
+    expect(a.reason).toBe('daily_exhausted');
+  });
+
   it('a non-superadmin acting user is still gated by the tenant cap', async () => {
     // Selects: tenant row, acting-user superadmin (false), tenant-superadmin (none), usage.
     const db = fakeDb([

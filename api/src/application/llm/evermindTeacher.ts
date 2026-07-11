@@ -161,7 +161,7 @@ export async function resolveEvermindTeacherModel(
     // A connected BYO frontier account funds the teacher itself → never budget-gate it.
     const byoConnected = (await listTenantProviderKeys(env, tenantId).catch(() => [])).length > 0;
     if (byoConnected) return model;
-    const availability = await getTenantTokenAvailability(db, tenantId);
+    const availability = await getTenantTokenAvailability(db, tenantId, undefined, env);
     if (!availability.hasTokens) return null;
   } catch {
     /* fail open — keep the teacher */
