@@ -1,44 +1,64 @@
-> **PRD** — drafted by Bob Developer (V2 (Container)) · task #89
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #154
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Avatar Filter Row Placement
+# Product Requirements Document: Onboarding Wizard UX
 
-## 1. Problem & Goal
+## Problem & Goal
 
-**Problem:** The current placement of the avatar filter, separated from the priorities dropdown, disrupts the logical grouping of filtering options. Users must scan different areas of the UI to apply related filters, leading to a less efficient and intuitive user experience.
+**Problem:** New and existing PMs/leaders lack a streamlined, guided experience to connect their tools, ingest project data, understand project health, and receive actionable resolution plans within the platform. The current process is manual and disconnected, leading to friction and delayed time-to-value.
 
-**Goal:** To improve the user experience by consolidating related filtering options into a single, contiguous row, thereby enhancing discoverability, reducing cognitive load, and increasing the speed at which users can apply filters.
+**Goal:** To provide a seamless, guided, and AI-assisted onboarding wizard that enables PMs/leaders to quickly set up a project, connect relevant integrations, ingest data, diagnose project health, and generate an actionable resolution and resource plan, all within a single, resumable flow.
 
-## 2. Target Users / ICP Roles
+## Target Users / ICP Roles
 
-*   **Project Managers:** Need to quickly filter tasks by assignee (avatar) and priority to understand workload distribution and identify high-priority items.
-*   **Team Leads:** Require efficient filtering to monitor team progress and allocate resources based on task priority and individual contribution (avatar).
-*   **Individual Contributors:** Benefit from a cleaner interface to focus on their assigned tasks and understand their priority within the project context.
+*   **PM/Leader:** Individuals responsible for project oversight, team management, strategic planning, and delivery outcomes.
 
-## 3. Scope
+## Scope
 
-This document covers the functional requirements and acceptance criteria for moving the existing avatar filter component to reside on the same UI row as the priorities dropdown. This includes adjustments to layout, styling, and ensuring the filter's functionality remains intact.
+The scope covers the implementation of an end-to-end, multi-step onboarding wizard designed to guide users from initial project setup through to a comprehensive project health and resolution plan. The wizard will be characterized by its resumability, progressive disclosure of information, actionable outputs, and integrated AI assistance.
 
-## 4. Functional Requirements
+## Functional Requirements
 
-*   **FR1: Layout Adjustment:** The avatar filter component shall be repositioned to occupy a space adjacent to the priorities dropdown within the primary filtering bar.
-*   **FR2: Visual Consistency:** The avatar filter shall maintain its current visual appearance and interaction patterns (e.g., dropdown behavior, selection indicators) after being moved.
-*   **FR3: Responsive Design:** The integrated avatar and priorities filter row shall adapt appropriately across different screen sizes and resolutions, maintaining usability.
-*   **FR4: Filter Functionality:** Applying a filter via the avatar selector shall continue to correctly filter the displayed data (e.g., tasks, issues), and this filtering shall be independent of or complementary to the priorities filter.
+The onboarding wizard shall provide the following core functionality:
 
-## 5. Acceptance Criteria
+1.  **Welcome & Project Setup (Step 1)**
+    *   Allow users to input Project Name, Description, associate a Team, and define Key Deadlines.
+2.  **Integration Connection (Step 2)**
+    *   Provide guided setup for critical integrations: GitHub, Jira, Slack, CI/CD tools, Monitoring solutions.
+    *   Include real-time validation to confirm successful connection and data flow for each integration.
+3.  **Data Ingestion (Step 3)**
+    *   Trigger initial data synchronization from connected integrations.
+    *   Display progress of data ingestion and identify any data gaps or missing information.
+4.  **Diagnostic Interview (Step 4)**
+    *   Present a structured interview with questions regarding project status, risks, and priorities (leveraging inputs from US-1).
+    *   Support AI assistance for answering questions, suggesting options, and filling gaps.
+5.  **Health Assessment (Step 5)**
+    *   Automatically generate a comprehensive project health scorecard based on ingested data and diagnostic input (leveraging outputs from US-3).
+6.  **Resolution Plan (Step 6)**
+    *   Provide AI-generated recommendations for addressing identified health issues and risks (leveraging outputs from US-5).
+7.  **Resource Plan (Step 7)**
+    *   Generate capacity and cost estimates associated with the proposed resolution plan (leveraging outputs from US-6).
+8.  **Next Steps (Step 8)**
+    *   Present a prioritized list of actionable steps.
+    *   Include a one-click "Accept and Execute" option to initiate the proposed plan.
+9.  **Resumability:** Allow users to save their progress at any point and resume the onboarding flow later.
+10. **Progressive Disclosure:** Reveal subsequent steps or information as preceding data becomes available or complete.
+11. **Actionable Outputs:** Ensure every step culminates in a tangible output or moves the user closer to the final deliverables.
+12. **AI Assistance:** Integrate AI agent capabilities throughout the flow to assist with suggestions, auto-filling information, and detecting data gaps.
+13. **Quick Start Mode:** Provide an option for experienced users to skip directly to the Diagnostic Interview (Step 4).
 
-*   **AC1: Avatar Filter Visible in Row:** The avatar filter is visibly present on the same horizontal line as the priorities dropdown.
-*   **AC2: Filter Functionality Preserved:** Selecting an avatar from the new location correctly filters the displayed items.
-*   **AC3: Priorities Filter Functionality Preserved:** Selecting a priority from its dropdown continues to filter the displayed items, and its interaction is unaffected by the avatar filter's new position.
-*   **AC4: Combined Filtering Works:** Applying both an avatar filter and a priorities filter simultaneously yields the correct, combined results.
-*   **AC5: No Visual Overlap or Distortion:** The avatar filter and priorities dropdown do not overlap each other or other UI elements in the filtering bar, and the overall layout remains clean and undistorted.
-*   **AC6: Responsiveness Verified:** On smaller screen sizes, the combined filter row is still usable, potentially with a different arrangement if necessary (e.g., stacking if horizontal space is too limited, though the primary goal is horizontal).
+## Acceptance Criteria
 
-## 6. Out of Scope
+*   The end-to-end onboarding wizard, comprising all 8 defined steps, is fully functional.
+*   Users can save their progress and resume the onboarding flow from their last completed step.
+*   Integration connection validation is performed and clearly communicated at each relevant integration step.
+*   AI assistance (suggestions, auto-fill, gap detection) is visibly integrated and helpful throughout the wizard.
+*   Upon completion, the wizard successfully generates and presents a Project Health Report, a Resolution Plan, and a Resource Plan.
+*   The "Quick Start" mode correctly allows users to bypass initial steps and proceed directly to the Diagnostic Interview.
 
-*   **New Avatar Filter Features:** Any enhancements or new functionalities to the avatar filter itself (e.g., search within avatars, multi-select avatars) are out of scope for this task.
-*   **New Priorities Filter Features:** Any enhancements or new functionalities to the priorities dropdown are out of scope.
-*   **Other Filter Components:** Moving or modifying any other filter components not explicitly mentioned (e.g., date filters, status filters) is out of scope.
-*   **Backend Changes:** Any backend changes related to how filters are processed or stored are out of scope, assuming the existing backend APIs can handle the current filtering logic.
-*   **Performance Optimization:** Significant performance optimizations related to filtering are out of scope, unless directly caused by the layout change.
+## Out of Scope
+
+*   Detailed implementation specifics of US-1 (Diagnostic Interview questions), US-3 (Health Scorecard generation logic), US-5 (AI recommendation engine), and US-6 (Capacity & cost estimation algorithms) beyond their integration points within the wizard.
+*   Full-fledged project management features (e.g., task assignment, detailed tracking) beyond the "Accept and Execute" trigger.
+*   User customization of the onboarding flow (e.g., adding/removing custom steps).
+*   Deep integration with external billing systems for resource cost estimation (focus is on internal estimates).
