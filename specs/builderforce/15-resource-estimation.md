@@ -26,6 +26,7 @@ Estimates use modified Fibonacci story points (1 / 2 / 3 / 5 / 8 / 13). Tasks wi
 | 3 | RumbleDating | Format for readability | Medium | Kevin (BA/PM) | 1 | |
 | 4 | RumbleDating | Confirm actionable tone | Medium | Kevin (BA/PM) | 1 | |
 | 5 | Hired.Video | Pull README.md from GitHub repo | Medium | Sean (human) | 2 | Needs repo access setup |
+| — | — | — | — | — | — | — |
 | 6 | Hired.Video | Verify file access for README.md | Medium | Sean (human) | 1 | Blocked on #5 |
 | 7 | Hired.Video | Localize in Spanish | Medium | Bob (Developer) | 3 | |
 | 8 | BuilderForce.AI | Architecture Analysis (in review) | High | Bob/John | 8 | Currently in_review |
