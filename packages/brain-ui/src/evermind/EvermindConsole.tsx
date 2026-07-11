@@ -18,6 +18,7 @@ import {
   type EvermindConsoleAdapter,
   type EvermindConsoleData,
   type EvermindConsoleLabels,
+  type EvermindEvalPoint,
   type EvermindRecentEntry,
   type EvermindSeedModel,
   type EvermindTeacherOptions,
@@ -159,6 +160,7 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
       <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: C.text }}>{t.title}</h3>
       {scopeName && <span style={{ fontSize: '0.8rem', color: C.text2 }} title={scopeName}>· {scopeName}</span>}
       {!loadFailed && <span style={pill(seeded)}>{seeded ? t.statusSeeded(data?.version ?? 0) : t.statusUnseeded}</span>}
+      {!loadFailed && seeded && <RegressionChip t={t} evalPoint={data?.eval ?? null} />}
       <button type="button" onClick={() => void reload()} disabled={busy} style={ghostBtn} title={t.refresh} aria-label={t.refresh}>↻</button>
     </header>
   );
@@ -268,6 +270,34 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
 }
 
 /* ── Sub-sections ─────────────────────────────────────────────────────────── */
+
+/**
+ * The automatic pre/post regression chip beside the status pill: ▲ when the latest
+ * merge LOWERED held-out loss on the project's prior taught examples (improved /
+ * retained), ▼ when it raised it (regressed), ≈ when flat. Renders nothing until a
+ * merge had a held-out set to score. `delta = baseLoss - newLoss`.
+ */
+function RegressionChip({ t, evalPoint }: { t: EvermindConsoleLabels; evalPoint: EvermindEvalPoint | null }) {
+  if (!evalPoint || !(evalPoint.baseLoss > 0)) return null;
+  const frac = evalPoint.delta / evalPoint.baseLoss;
+  const pct = Math.abs(frac) * 100;
+  const tone: 'up' | 'down' | 'flat' = pct < 0.5 ? 'flat' : frac > 0 ? 'up' : 'down';
+  const arrow = tone === 'up' ? '▲' : tone === 'down' ? '▼' : '≈';
+  const color = tone === 'up' ? '#22c55e' : tone === 'down' ? '#f87171' : C.text2;
+  const label = tone === 'flat' ? t.evalFlat : t.evalDelta(pct.toFixed(1));
+  const title = t.evalTooltip(evalPoint.version, evalPoint.baseLoss.toFixed(3), evalPoint.newLoss.toFixed(3), evalPoint.evalSize);
+  return (
+    <span
+      title={title} aria-label={title}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700,
+        color, border: `1px solid ${color}`, borderRadius: 999, padding: '2px 8px',
+      }}
+    >
+      <span aria-hidden>{arrow}</span>{label}
+    </span>
+  );
+}
 
 function Section({ children, ...rest }: React.PropsWithChildren<React.HTMLAttributes<HTMLElement>>) {
   return (

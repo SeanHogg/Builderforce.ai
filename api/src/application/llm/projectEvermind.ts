@@ -446,13 +446,17 @@ export async function dispatchProjectEvermindLearn(
   diffB64: string,
   baseVersion: number,
   weight?: number,
+  /** Optional provenance (run/ticket) shown on the delta's inspection row — a diff has
+   *  no text, so this is what makes it inspectable. Text-path uses `prompt` instead. */
+  label?: string | null,
 ): Promise<LearnDispatchResult> {
   const stub = coordinatorStub(env, tenantId, projectId);
   if (!stub) return { ok: false, status: 503, body: { error: 'concurrent learning not configured (no coordinator binding)' } };
+  const labelTrimmed = (label ?? '').trim();
   const res = await stub.fetch('https://coordinator/learn', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tenantId, projectId, diff: diffB64, baseVersion, ...(weight != null ? { weight } : {}) }),
+    body: JSON.stringify({ tenantId, projectId, diff: diffB64, baseVersion, ...(weight != null ? { weight } : {}), ...(labelTrimmed ? { label: labelTrimmed.slice(0, 800) } : {}) }),
   });
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   return { ok: res.ok, status: res.status, body };
@@ -519,12 +523,29 @@ export interface ProjectEvermindTrainingPoint {
   merged: number;
 }
 
+/** The latest automatic regression check (mirrors the DO's EvalPoint): the PREVIOUS vs
+ *  MERGED model scored on the same held-out set of prior taught examples. */
+export interface ProjectEvermindEvalPoint {
+  version: number;
+  at: number;
+  /** Mean held-out loss of the previous version's model. */
+  baseLoss: number;
+  /** Mean held-out loss of the merged (new) version's model. */
+  newLoss: number;
+  /** baseLoss - newLoss (positive = improved / retained on prior tasks, negative = regressed). */
+  delta: number;
+  /** How many held-out examples were scored. */
+  evalSize: number;
+}
+
 /** The coordinator's live learning snapshot: queued count + recent merged contributions. */
 export interface ProjectEvermindActivity {
   pending: number;
   recent: ProjectEvermindRecentEntry[];
   /** Per-version training telemetry (newest first) — loss + weight movement. */
   training: ProjectEvermindTrainingPoint[];
+  /** The latest pre/post regression check, or null until a merge had a held-out set. */
+  eval: ProjectEvermindEvalPoint | null;
 }
 
 /**
@@ -539,22 +560,23 @@ export async function getProjectEvermindActivity(
   projectId: number,
 ): Promise<ProjectEvermindActivity> {
   const stub = coordinatorStub(env, tenantId, projectId);
-  if (!stub) return { pending: 0, recent: [], training: [] };
+  if (!stub) return { pending: 0, recent: [], training: [], eval: null };
   try {
     const res = await stub.fetch('https://coordinator/recent');
-    if (!res.ok) return { pending: 0, recent: [], training: [] };
+    if (!res.ok) return { pending: 0, recent: [], training: [], eval: null };
     const body = (await res.json().catch(() => ({}))) as Partial<ProjectEvermindActivity>;
     // Backfill a stable id for legacy ring entries written before ids were stamped,
     // so every entry the console sees can be targeted (Validate highlight / detail).
     const recent = Array.isArray(body.recent)
       ? body.recent.map((e) => ({ ...e, id: typeof e.id === 'number' ? e.id : e.at }))
       : [];
-    // `training` is absent from rings written before this telemetry shipped — degrade
-    // to empty so an older project simply shows no training readout yet.
+    // `training`/`eval` are absent from rings written before those shipped — degrade to
+    // empty/null so an older project simply shows no training readout / no delta yet.
     const training = Array.isArray(body.training) ? body.training : [];
-    return { pending: typeof body.pending === 'number' ? body.pending : 0, recent, training };
+    const evalPoint = body.eval && typeof body.eval.delta === 'number' ? body.eval : null;
+    return { pending: typeof body.pending === 'number' ? body.pending : 0, recent, training, eval: evalPoint };
   } catch {
-    return { pending: 0, recent: [], training: [] };
+    return { pending: 0, recent: [], training: [], eval: null };
   }
 }
 
@@ -628,6 +650,8 @@ export interface ProjectEvermindContributions {
   /** Per-version training telemetry (newest first) — loss + weight movement, the
    *  real data behind each neocortex update, surfaced on the Knowledge Map. */
   training: ProjectEvermindTrainingPoint[];
+  /** The latest automatic regression check (▲/▼ vs the previous version), or null. */
+  eval: ProjectEvermindEvalPoint | null;
   /** Current affective (limbic) state — powers the brain-map's limbic regions. */
   affect: ProjectEvermindAffect;
 }
@@ -663,6 +687,7 @@ export async function getProjectEvermindContributions(
         pending: activity.pending,
         recent: activity.recent,
         training: activity.training,
+        eval: activity.eval,
         affect: computeProjectAffect(activity.recent),
       };
     },

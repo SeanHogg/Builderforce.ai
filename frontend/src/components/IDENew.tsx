@@ -29,6 +29,7 @@ import { isBrainAutoApprove } from '@/lib/brain/autoApprove';
 import { useRegisterBrainActions, useBrainContext, savePrd, saveTasks, type BrainAction } from '@/lib/brain';
 import { PrdReviewModal, TasksReviewModal } from './ArtifactReviewModals';
 import { getModality, RIGHT_TAB_LABELS, type ProjectModality, type RightTab } from '@/lib/modality';
+import { useModalityCopy } from '@/lib/useModalityCopy';
 import { getStoredTenantToken } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/apiClient';
 import { useVoiceStudio } from '@/lib/voiceStudio';
@@ -76,6 +77,8 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
   // The IDE is scoped to its project's type: modality is fixed at creation, not
   // switchable in-session, so it's derived (and clamped) rather than state.
   const modality: ProjectModality = getModality(project.modality).id;
+  // Localized modality copy (label / runLabel) for the header + run button.
+  const modalityCopy = useModalityCopy()(modality);
   // Modalities that dock the Brain in the left panel (vs. the floating drawer):
   // the coding Designer and the Voice studio both drive work from the chat.
   const hasDockedBrain = modality === 'designer' || modality === 'voice';
@@ -973,7 +976,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         {/* Modality label — the IDE is scoped to this project's type (set at
             creation), so it's shown, not switchable. */}
         <span
-          title={`${getModality(modality).label} project`}
+          title={t('modalityProject', { label: modalityCopy.label })}
           style={{
             display: 'flex', alignItems: 'center', gap: 5, marginLeft: 8, flexShrink: 0,
             padding: '4px 10px', fontSize: '0.78rem', fontWeight: 600,
@@ -981,8 +984,8 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
             background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8,
           }}
         >
-          <span>{getModality(modality).icon}</span>
-          {getModality(modality).label}
+          <span>{modalityCopy.icon}</span>
+          {modalityCopy.label}
         </span>
 
         {/* Spacer */}
@@ -1050,7 +1053,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         {getModality(modality).showRunButton && (() => {
           // Voice generates speech (voice.synth); Designer runs the dev server.
           const isVoice = modality === 'voice';
-          const label = getModality(modality).runLabel;
+          const label = modalityCopy.runLabel;
           const active = isVoice ? voice.busy : isRunning;
           const disabled = active || (isVoice && !voice.selectedCloneId);
           return (

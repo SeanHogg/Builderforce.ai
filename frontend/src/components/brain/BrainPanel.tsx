@@ -51,7 +51,8 @@ import type { BrainChat, BrainMessage } from '@/lib/builderforceApi';
 import { agentAssignmentsApi, reposApi, runtimeApi, brain, type AgentAssignment, type ProjectRepository, type ChatAgentInvite, type ChatMemberInfo, type TicketKind } from '@/lib/builderforceApi';
 import { dispatchBrainDataChanged } from '@/lib/brain/brainDataEvent';
 import { loadAgentPoolCached, type PoolAgent } from '@/lib/agentPool';
-import { MODALITIES, getModality } from '@/lib/modality';
+import { getModality } from '@/lib/modality';
+import { useModalityCopy, useLocalizedModalities } from '@/lib/useModalityCopy';
 import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';
 import { usePersonalityBlock } from '@/lib/usePersonalityBlock';
 
@@ -602,14 +603,16 @@ export function BrainPanel({
   // the clipboard — the Brain twin of the Observability/Logs "Copy triage info"
   // button, so a misbehaving run can be dropped straight into a bug report.
   const [captureState, setCaptureState] = useState<'idle' | 'copied' | 'error'>('idle');
+  const modalityCopy = useModalityCopy();
+  const localizedModalities = useLocalizedModalities();
   const personaLabel = useMemo(() => {
-    if (personaSel.startsWith('modality:')) return tBrain('brainModality', { modality: getModality(personaSel.slice('modality:'.length)).label });
+    if (personaSel.startsWith('modality:')) return tBrain('brainModality', { modality: modalityCopy(personaSel.slice('modality:'.length)).label });
     if (personaSel.startsWith('agent:')) {
       const a = brainAgents.find((x) => `agent:${x.agentKind}:${x.agentRef}` === personaSel);
       return a ? tBrain('brainAs', { name: agentName(a) }) : tBrain('brainTitle');
     }
     return tBrain('brainDefault');
-  }, [personaSel, brainAgents, agentName, tBrain]);
+  }, [personaSel, brainAgents, agentName, tBrain, modalityCopy]);
   const captureExecution = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(conv.buildTriageReport(personaLabel));
@@ -865,8 +868,8 @@ export function BrainPanel({
               >
                 <option value="default">{tBrain('defaultBrain')}</option>
                 <optgroup label={tBrain('personas')}>
-                  {MODALITIES.map((m) => (
-                    <option key={m.id} value={`modality:${m.id}`}>{m.label ?? m.id}</option>
+                  {localizedModalities.map((m) => (
+                    <option key={m.id} value={`modality:${m.id}`}>{m.label}</option>
                   ))}
                 </optgroup>
                 {brainAgents.length > 0 && (

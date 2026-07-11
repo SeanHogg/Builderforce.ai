@@ -35,6 +35,7 @@ import {
 } from '@/lib/builderforceApi';
 import type { Project, IdeProject } from '@/lib/types';
 import { MODALITIES, getModality } from '@/lib/modality';
+import { useModalityCopy } from '@/lib/useModalityCopy';
 import { useSharedSource } from '@/lib/widgets/sharedSource';
 import { WidgetStat as Stat, WidgetMuted as Muted } from '@/components/widgets/widgetBody';
 import { InsightStat } from '@/components/dashboard/InsightStat';
@@ -148,16 +149,18 @@ function PendingApprovalsCard(_props: WidgetCardProps) {
 /** IDE projects split by modality — the IDE-portfolio composition view. */
 function IdeByModalityCard(_props: WidgetCardProps) {
   const t = useTranslations('widgets');
+  const modalityCopy = useModalityCopy();
   const { data, error } = useSharedSource<IdeProject[]>('core:ide-projects', () => listIdeProjects());
   if (error) return <Muted>{error}</Muted>;
   if (!data) return <Muted>{t('loading')}</Muted>;
   if (data.length === 0) return <Muted>{t('ide.noProjects')}</Muted>;
-  // Keep modality order stable per MODALITIES; translate the label by id.
+  // Keep modality order stable per MODALITIES; label comes from the shared,
+  // localized modality copy (single source, aliases legacy `llm` -> evermind).
   const counts = new Map<string, number>();
   for (const p of data) counts.set(getModality(p.modality).id, (counts.get(getModality(p.modality).id) ?? 0) + 1);
   const segments = MODALITIES
     .filter((m) => (counts.get(m.id) ?? 0) > 0)
-    .map((m, i) => ({ key: m.id, label: t(`ide.modality.${m.id}`), value: counts.get(m.id) ?? 0, color: colorAt(i) }));
+    .map((m, i) => ({ key: m.id, label: modalityCopy(m.id).label, value: counts.get(m.id) ?? 0, color: colorAt(i) }));
   return (
     <DonutChart
       segments={segments}

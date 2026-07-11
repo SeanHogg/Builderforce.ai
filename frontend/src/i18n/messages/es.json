@@ -289,7 +289,8 @@
       "myDashboard": "Mi panel",
       "myWorkspace": "Mi espacio",
       "marketplace": "Mercado",
-      "incidents": "Incidentes"
+      "incidents": "Incidentes",
+      "monitoring": "Monitorización"
     },
     "tab": {
       "projects": "Proyectos",
@@ -362,7 +363,9 @@
       "incidents": "Incidentes",
       "oncall": "De guardia",
       "escalation": "Escalación",
-      "contacts": "Contactos"
+      "contacts": "Contactos",
+      "boards": "Tableros",
+      "reporting": "Informes"
     }
   },
   "alerts": {
@@ -645,6 +648,34 @@
     }
   },
   "ide": {
+    "modalityProject": "Proyecto {label}",
+    "modality": {
+      "designer": {
+        "label": "Diseñador",
+        "tagline": "Genera y crea aplicaciones con Vista previa, Código y un servidor de desarrollo en vivo.",
+        "runLabel": "Ejecutar"
+      },
+      "video": {
+        "label": "Vídeo",
+        "tagline": "Genera vídeos cortos en el cliente en tu propia GPU mediante difusión.",
+        "runLabel": "Ejecutar"
+      },
+      "evermind": {
+        "label": "Evermind",
+        "tagline": "Haz crecer un modelo Evermind vivo que aprende de cada proyecto: enséñalo y observa cómo se completa su Mapa de Conocimiento.",
+        "runLabel": "Ejecutar"
+      },
+      "finetune": {
+        "label": "Ajuste fino",
+        "tagline": "Diseña conjuntos de datos y entrena un modelo LoRA personalizado; luego evalúalo, publícalo y expórtalo.",
+        "runLabel": "Ejecutar"
+      },
+      "voice": {
+        "label": "Voz",
+        "tagline": "Clona y diseña una voz personalizada y luego sintetiza voz a partir de ella.",
+        "runLabel": "Generar"
+      }
+    },
     "all": "Todos",
     "filteredTo": "Filtrado a {name}",
     "clearProjectFilter": "Quitar filtro de proyecto",
@@ -3315,13 +3346,7 @@
     "ide": {
       "builds": "proyectos",
       "buildsSub": "proyectos del IDE",
-      "noProjects": "Sin proyectos del IDE aún",
-      "modality": {
-        "designer": "Diseñador",
-        "video": "Vídeo",
-        "llm": "LLM",
-        "voice": "Voz"
-      }
+      "noProjects": "Sin proyectos del IDE aún"
     },
     "obs": {
       "noFirings": "Sin disparos aún",
@@ -3574,7 +3599,10 @@
     "detailVersion": "Versión",
     "detailWeight": "Peso",
     "detailWhen": "Cuándo",
-    "recallMethod": "{method, select, embedding {Recuperación semántica} other {Recuperación léxica (alternativa)}}"
+    "recallMethod": "{method, select, embedding {Recuperación semántica} other {Recuperación léxica (alternativa)}}",
+    "regDelta": "{pct}% vs. anterior",
+    "regFlat": "sin cambios",
+    "regTooltip": "Comprobación de regresión en v{version}: pérdida reservada {base} → {next} en {size, plural, one {# tarea previa} other {# tareas previas}}."
   },
   "evermindStatus": {
     "label": "Evermind",
@@ -5926,7 +5954,10 @@
     "hideDetail": "Ocultar detalle",
     "detailPromptLabel": "Tarea",
     "detailTextLabel": "Aprendido",
-    "validateMethod": "{method, select, embedding {Recuperación semántica} other {Recuperación léxica (alternativa)}}"
+    "validateMethod": "{method, select, embedding {Recuperación semántica} other {Recuperación léxica (alternativa)}}",
+    "evalDelta": "{pct}% vs. anterior",
+    "evalFlat": "sin cambios",
+    "evalTooltip": "Comprobación de regresión en v{version}: pérdida reservada {base} → {next} en {size, plural, one {# tarea previa} other {# tareas previas}}."
   },
   "topbar": {
     "cart": "Carrito de compras",
@@ -5956,11 +5987,26 @@
     "type": {
       "label": "Rol del gestor",
       "help": "La función del gestor — determina qué trabajo valora y prioriza.",
-      "general": { "label": "Gestor general", "description": "Gestión del backlog sin sesgo de dominio, en todo el trabajo." },
-      "delivery": { "label": "Gestor de desarrollo", "description": "Entrega funciones — prioriza el trabajo de código, desbloquea dependencias y logra fusionar los pull requests." },
-      "qa": { "label": "Gestor de QA", "description": "Responsable de la calidad — prioriza defectos, brechas de cobertura, pruebas inestables y errores que bloquean la versión." },
-      "service_desk": { "label": "Gestor de Mesa de Servicio TI", "description": "Dirige el soporte — clasifica incidencias y solicitudes primero por SLA e impacto en el cliente." },
-      "devops": { "label": "Gestor de DevOps / Operaciones TI", "description": "Protege la fiabilidad — prioriza despliegues, infraestructura, monitorización y riesgo operativo." }
+      "general": {
+        "label": "Gestor general",
+        "description": "Gestión del backlog sin sesgo de dominio, en todo el trabajo."
+      },
+      "delivery": {
+        "label": "Gestor de desarrollo",
+        "description": "Entrega funciones — prioriza el trabajo de código, desbloquea dependencias y logra fusionar los pull requests."
+      },
+      "qa": {
+        "label": "Gestor de QA",
+        "description": "Responsable de la calidad — prioriza defectos, brechas de cobertura, pruebas inestables y errores que bloquean la versión."
+      },
+      "service_desk": {
+        "label": "Gestor de Mesa de Servicio TI",
+        "description": "Dirige el soporte — clasifica incidencias y solicitudes primero por SLA e impacto en el cliente."
+      },
+      "devops": {
+        "label": "Gestor de DevOps / Operaciones TI",
+        "description": "Protege la fiabilidad — prioriza despliegues, infraestructura, monitorización y riesgo operativo."
+      }
     },
     "coaching": {
       "title": "Orientar al gestor",
@@ -9113,5 +9159,110 @@
     "oncallSubtitle": "Las rotaciones de guardia deciden a quién se avisa primero cuando se dispara un incidente.",
     "escalationSubtitle": "Las políticas de escalación recorren objetivos y canales hasta que alguien responde.",
     "contactsSubtitle": "Contactos de negocio a los que puedes avisar o escalar durante un incidente."
+  },
+  "monitoring": {
+    "boardsTitle": "Monitorización activa",
+    "boardsSubtitle": "Sube un diagrama de arquitectura y superpón marcadores de monitor sobre él. Cuando un monitor se incumple, se abre una incidencia automáticamente.",
+    "reportingTitle": "Informe de monitorización",
+    "reportingSubtitle": "Métricas de incidencias y monitores agregadas de todos los tableros.",
+    "loading": "Cargando…",
+    "needManager": "Se requiere rol de responsable",
+    "boardNamePlaceholder": "Nombre del nuevo tablero",
+    "newBoard": "Nuevo tablero",
+    "emptyBoards": "Aún no hay tableros de monitorización. Crea uno para empezar.",
+    "monitorsCount": "{count} monitores",
+    "breachedCount": "{count} incumplidos",
+    "backToBoards": "Volver a tableros",
+    "addMonitor": "Añadir monitor",
+    "exitAddMode": "Cancelar",
+    "addMonitorHint": "Haz clic en un punto del diagrama para colocar allí un nuevo monitor.",
+    "uploading": "Subiendo…",
+    "changeImage": "Cambiar imagen",
+    "uploadImage": "Subir diagrama",
+    "dropImageHint": "Haz clic para explorar o suelta una imagen aquí",
+    "uploadFailed": "Error al subir",
+    "deleteBoardConfirm": "¿Eliminar el tablero «{name}» y todos sus monitores?",
+    "newMonitor": "Nuevo monitor",
+    "editMonitor": "Editar monitor",
+    "validationLabel": "La etiqueta es obligatoria",
+    "fieldLabel": "Etiqueta",
+    "labelPlaceholder": "p. ej. Salud de la API de pagos",
+    "fieldDescription": "Descripción",
+    "fieldType": "Tipo de monitor",
+    "fieldIntervalSeconds": "Intervalo (segundos)",
+    "fieldUrl": "URL",
+    "fieldExpectedStatus": "Estado esperado",
+    "fieldMetric": "Métrica",
+    "fieldComparator": "Comparador",
+    "fieldThreshold": "Umbral",
+    "fieldWindowDays": "Ventana (días)",
+    "fieldSystem": "Sistema afectado",
+    "systemPlaceholder": "p. ej. pagos",
+    "fieldSeverity": "Gravedad",
+    "fieldEscalation": "Política de escalado",
+    "noEscalation": "Ninguna",
+    "position": "Posición",
+    "fieldActive": "Activo",
+    "signalUrlLabel": "URL del webhook de señal",
+    "signalUrlHint": "Las herramientas externas envían un POST aquí para señalizar este monitor.",
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "testSignal": "Señal de prueba",
+    "sendOk": "Enviar OK",
+    "sendBreach": "Enviar incumplimiento",
+    "viewIncident": "Ver incidencia abierta",
+    "recentEvents": "Eventos recientes",
+    "noEvents": "Aún no hay eventos",
+    "create": "Crear",
+    "deleteMonitorConfirm": "¿Eliminar el monitor «{name}»?",
+    "noData": "Aún no hay datos",
+    "openIncidents": "Incidencias abiertas",
+    "totalIncidents": "{count} en total",
+    "mttr": "MTTR",
+    "minutesValue": "{m} min",
+    "monitorsOk": "Monitores OK",
+    "monitorsBreached": "Monitores incumplidos",
+    "monitorsUnknown": "Monitores desconocidos",
+    "monitorsTotal": "Monitores totales",
+    "bySeverity": "Incidencias por gravedad",
+    "bySystem": "Incidencias por sistema",
+    "bySource": "Incidencias por origen",
+    "uncategorized": "Sin categoría",
+    "noIncidents": "Sin incidencias",
+    "recentIncidents": "Incidencias recientes",
+    "na": "N/D",
+    "status": {
+      "ok": "OK",
+      "breached": "Incumplido",
+      "unknown": "Desconocido"
+    },
+    "severity": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "type": {
+      "heartbeat": "Latido",
+      "http_check": "Comprobación HTTP",
+      "webhook": "Webhook",
+      "metric_threshold": "Umbral de métrica",
+      "manual": "Manual"
+    },
+    "metric": {
+      "token_spend_usd": "Gasto en tokens (USD)",
+      "token_spend_pct_of_cap": "Gasto en tokens (% del límite)",
+      "cost_per_merged_pr_usd": "Coste por PR fusionado (USD)",
+      "dora_change_failure_rate": "Tasa de fallos de cambios (DORA)",
+      "dora_lead_time_hours": "Tiempo de entrega (horas, DORA)",
+      "ai_effectiveness_score": "Puntuación de eficacia de IA",
+      "eval_drift": "Deriva de evaluación"
+    },
+    "comparator": {
+      "gt": "Mayor que (>)",
+      "lt": "Menor que (<)",
+      "gte": "Al menos (≥)",
+      "lte": "Como máximo (≤)"
+    }
   }
 }

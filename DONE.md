@@ -4,6 +4,36 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-11 — Active monitoring: a diagram-overlay monitoring canvas whose breaches auto-start the on-call investigation (api 2026.7.74 · frontend 2026.7.50)
+
+The proactive front-door to incident management — the last loop (reporting + active monitoring). The team uploads a diagram / architecture image, overlays monitor pins on it, and a monitor breach opens an incident that fires the existing on-call → escalation → triage → RCA → Evermind loop. No new response plumbing — monitoring is purely a new incident *source*.
+
+- **Data model (mig 0329).** `monitoring_boards` (an uploaded diagram — R2 image key + natural dimensions), `monitors` (a pin at `pos_x`/`pos_y` 0..1 fractions of the image; type heartbeat | http_check | webhook | metric_threshold | manual; per-monitor `webhook_secret`; `status` ok/breached/unknown; `current_incident_id`), and `monitor_events` (its signal/breach/recovery history).
+- **Image upload reuses R2.** No new storage — the frontend uploads via the shared `POST /api/brain/upload` (R2 `UPLOADS`), stores the returned key on the board, and renders it via `GET /api/brain/uploads/<key>`.
+- **Breach → incident (idempotent).** `MonitoringService` opens an incident (`source='monitor'`, carrying the monitor's affected-system + severity + escalation policy), pages on-call (`EscalationService.pageInitial`), and dispatches the Incident Manager to triage (`dispatchIncidentTriage`) — one open incident per monitor at a time; recovery notes the incident but leaves closure/RCA to the responder.
+- **Monitor evaluation reuses the alerts primitives.** `runMonitorSweep` (frequent `*/5` cron, beside escalation) evaluates heartbeat staleness (`last_signal_at` vs interval), HTTP checks (fetch → non-2xx = breach), and metric thresholds (`evaluateMetric` + `comparatorMatches` from the alerts subsystem — one metric-eval implementation, not two).
+- **Inbound signal webhook.** `POST /api/monitor-webhooks/:monitorId` (mounted outside tenant auth, gated by the per-monitor token, tenant resolved from the row) accepts breach/heartbeat signals from Datadog/Grafana/cron/custom tools; a bare ping = healthy heartbeat.
+- **Reporting.** `GET /api/monitoring/report` (cached, folds the monitor + incident version tokens) rolls up open incidents, MTTR, breakdowns by severity/system/source, and monitor health.
+- **UI.** `/monitoring` page: Boards tab (board grid + the **canvas** — image with absolutely-positioned status-colored monitor pins, click-to-add, drag-to-reposition) with a monitor config SlideOutPanel (type-specific config, signal-URL copy, test-signal, event history, incident link), and a Reporting tab (stat tiles + bar breakdowns). Fully localized (all 5 catalogs, 75-key `monitoring` namespace) + nav group.
+- **Verified.** api `tsc --noEmit` clean · `check:schema` (290 tables, 0 new drift) · `check:migrations` (271 files) · frontend `tsgo --noEmit` clean · all 5 catalogs parse with the monitoring namespace.
+
+---
+
+## ✅ RESOLVED 2026-07-11 — Evermind Studio: automatic pre/post regression chip + delta-contribution provenance (CLOSES the last two Studio follow-ups) (api 2026.7.73 · brain-ui 2026.7.23)
+
+The final two Evermind Studio inspect/validate gaps.
+
+- **Automatic regression check (▲/▼ vs previous version).** New api util `application/llm/evermindEval.ts` (`meanEvalLoss` — mean next-token loss over a held-out set, using `EvermindLM.lossAndBackward`). At each merge the coordinator (`ProjectEvermindCoordinatorDO`) scores the PREVIOUS vs the just-MERGED model on the held-out set of examples taught BEFORE this merge (this batch's examples are appended only afterwards, so a merge never grades its own fit), and records an `EvalPoint {baseLoss,newLoss,delta,evalSize}` (rings `eval`/`evalPoints`). `delta = baseLoss − newLoss` (▲ improved/retained, ▼ regressed). Surfaced honestly: `contributions.eval` → a chip on the **Knowledge Map version stat** (`RegressionBadge` in `EvermindBrainMap`) and beside the **console status pill** (`RegressionChip` in the shared `EvermindConsole`), with a tooltip showing `loss base → new across N prior tasks`. Localized in all 5 catalogs (`evermindBrain.reg*` + `projectEvermind.eval*`, ICU plural on task count).
+- **Delta-contribution provenance.** The diff-path `/learn` now accepts an optional `label` (run/ticket) threaded `LearnBody → PendingEntry → RecentEntry` (`dispatchProjectEvermindLearn(..., label)` + route). A pre-diffed weight delta has no text, so the label renders in the same `prompt` slot text memories use — making delta rows inspectable without a UI special-case. (Both in-repo producers — agent-runtime + VSIX — use the text-path, which already carries `prompt` provenance; this closes the diff-path, the only one that lacked it.)
+- **Perf/safety:** eval runs once per merge (write path, not per read); the contributions read stays cached + version-token-keyed. Eval is best-effort (never fails a merge) and skipped until a held-out set exists. `contributions.eval` degrades to `null` for pre-existing projects.
+- **Tests:** `evermindEval.test.ts` (null on empty, finite positive loss, skips too-short, and an end-to-end direction check — a model adapted on the eval text does not regress on it). 35 project-Evermind tests green; api + frontend + VS Code webview typecheck clean.
+
+---
+
+## ✅ RESOLVED 2026-07-11 — IDE modality copy fully localized (label/tagline/runLabel) via one shared source
+
+IDE modality labels/taglines were hardcoded English in the `MODALITIES` registry. Fixed by adding a localized `ide.modality.<id>` block (`label` + `tagline` + `runLabel`) to all 5 catalogs and a single DRY hook `lib/useModalityCopy.ts` (`useModalityCopy` / `useLocalizedModalities`) that every UI consumer now uses instead of inlining `getModality(id).label`. Wired: IDE dashboard chooser/filter/table (`app/ide/dashboard/page.tsx`), `IdeProjectCard`, `IdeProjectDetailsModal`, `IDENew` header + run button (+ new `ide.modalityProject` key), Brain persona dropdown (`BrainPanel`), and the modality-distribution donut (`coreWidgets`). Consolidation also fixed a latent bug: the widget's old `widgets.ide.modality` map still said `llm` and lacked `evermind`/`finetune` after the split — that stale key set was deleted. Dead `brainPlaceholder`/`brainEmptyState` registry fields (no consumers) removed in the same pass. Registry keeps English `label`/`tagline`/`runLabel` as defaults for the Brain system prompt + non-React contexts. tsc clean; 11 modality tests pass.
+
 ## ✅ RESOLVED 2026-07-11 — Incidents close the loop: RCA → Knowledge → Evermind, so the workforce learns and stops repeating incident causes (api 2026.7.72 · frontend 2026.7.49)
 
 The incident subsystem covered response but not *learning*. Now a resolved incident produces durable, reusable learning that actually changes future agent behaviour — the back half of ITIL incident management.

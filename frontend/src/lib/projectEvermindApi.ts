@@ -83,6 +83,21 @@ export interface ProjectEvermindTrainingPoint {
   merged: number;
 }
 
+/** The latest automatic regression check (mirrors api `ProjectEvermindEvalPoint`): the
+ *  previous vs merged model scored on the same held-out set of prior taught examples. */
+export interface ProjectEvermindEvalPoint {
+  version: number;
+  at: number;
+  /** Mean held-out loss of the previous version's model. */
+  baseLoss: number;
+  /** Mean held-out loss of the merged (new) version's model. */
+  newLoss: number;
+  /** baseLoss - newLoss (positive = improved / retained, negative = regressed). */
+  delta: number;
+  /** How many held-out examples were scored. */
+  evalSize: number;
+}
+
 /** The Evermind inspection console payload — head summary + live learning activity. */
 export interface ProjectEvermindContributions {
   version: number;
@@ -98,6 +113,9 @@ export interface ProjectEvermindContributions {
   /** Per-version training telemetry (newest first) — loss + weight movement, the real
    *  data behind each neocortex update. Empty for projects that predate this telemetry. */
   training: ProjectEvermindTrainingPoint[];
+  /** Latest automatic pre/post regression check (▲/▼ vs the previous version), or null
+   *  until a merge had a held-out set of prior taught examples to score. */
+  eval: ProjectEvermindEvalPoint | null;
   /** Current affective (limbic) state — powers the brain-map's limbic regions. */
   affect: ProjectEvermindAffect;
 }

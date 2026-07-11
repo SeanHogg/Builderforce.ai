@@ -4747,6 +4747,135 @@ export const incidentsApi = {
 };
 
 // ---------------------------------------------------------------------------
+// Active Monitoring — /api/monitoring (monitoring boards = an uploaded diagram
+// with monitor pins overlaid; a breach opens an incident). Reads require auth;
+// writes require MANAGER (server-enforced via requireRole → 402/403).
+// ---------------------------------------------------------------------------
+
+export type MonitorType = 'heartbeat' | 'http_check' | 'webhook' | 'metric_threshold' | 'manual';
+export type MonitorStatus = 'ok' | 'breached' | 'unknown';
+export type MonitorMetric =
+  | 'token_spend_usd'
+  | 'token_spend_pct_of_cap'
+  | 'cost_per_merged_pr_usd'
+  | 'dora_change_failure_rate'
+  | 'dora_lead_time_hours'
+  | 'ai_effectiveness_score'
+  | 'eval_drift';
+export type MonitorComparator = 'gt' | 'lt' | 'gte' | 'lte';
+
+export interface MonitoringBoard {
+  id: string;
+  name: string;
+  imageKey: string | null;
+  imageWidth: number | null;
+  imageHeight: number | null;
+  projectId: number | null;
+  monitorCount: number;
+  breachedCount: number;
+  updatedAt: string;
+}
+
+export interface Monitor {
+  id: string;
+  boardId: string;
+  label: string;
+  description: string | null;
+  posX: number;
+  posY: number;
+  monitorType: MonitorType;
+  config: Record<string, unknown>;
+  affectedSystem: string | null;
+  severity: IncidentSeverity;
+  escalationPolicyId: string | null;
+  status: MonitorStatus;
+  currentIncidentId: string | null;
+  lastSignalAt: string | null;
+  lastCheckedAt: string | null;
+  active: boolean;
+}
+
+export interface MonitorEvent {
+  id: string;
+  kind: string;
+  status: string | null;
+  message: string | null;
+  incidentId: string | null;
+  createdAt: string;
+}
+
+export interface MonitoringReport {
+  monitors: { total: number; ok: number; breached: number; unknown: number };
+  incidents: {
+    total: number;
+    open: number;
+    bySeverity: Record<string, number>;
+    bySystem: Record<string, number>;
+    bySource: Record<string, number>;
+    mttrMinutes: number | null;
+    recent: Incident[];
+  };
+}
+
+export interface CreateBoardBody {
+  name: string;
+  projectId?: number | null;
+  imageKey?: string | null;
+  imageWidth?: number | null;
+  imageHeight?: number | null;
+}
+
+export interface CreateMonitorBody {
+  label: string;
+  description?: string | null;
+  posX: number;
+  posY: number;
+  monitorType?: MonitorType;
+  config?: Record<string, unknown>;
+  affectedSystem?: string | null;
+  severity?: IncidentSeverity;
+  escalationPolicyId?: string | null;
+  active?: boolean;
+}
+
+export type UpdateMonitorBody = Partial<CreateMonitorBody> & { posX?: number; posY?: number };
+
+export const monitoringApi = {
+  getReport: (): Promise<MonitoringReport> =>
+    request('/api/monitoring/report'),
+
+  listBoards: (): Promise<MonitoringBoard[]> =>
+    request<{ boards: MonitoringBoard[] }>('/api/monitoring/boards').then((r) => r.boards ?? []),
+
+  createBoard: (body: CreateBoardBody): Promise<MonitoringBoard> =>
+    request<{ board: MonitoringBoard }>('/api/monitoring/boards', { method: 'POST', body: JSON.stringify(body) }).then((r) => r.board),
+
+  getBoard: (id: string): Promise<{ board: MonitoringBoard; monitors: Monitor[] }> =>
+    request(`/api/monitoring/boards/${id}`),
+
+  updateBoard: (id: string, body: Partial<CreateBoardBody>): Promise<{ board: MonitoringBoard }> =>
+    request(`/api/monitoring/boards/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  deleteBoard: (id: string): Promise<{ ok: boolean }> =>
+    request(`/api/monitoring/boards/${id}`, { method: 'DELETE' }),
+
+  createMonitor: (boardId: string, body: CreateMonitorBody): Promise<Monitor> =>
+    request<{ monitor: Monitor }>(`/api/monitoring/boards/${boardId}/monitors`, { method: 'POST', body: JSON.stringify(body) }).then((r) => r.monitor),
+
+  getMonitor: (id: string): Promise<{ monitor: Monitor; events: MonitorEvent[]; signalUrl: string | null }> =>
+    request(`/api/monitoring/monitors/${id}`),
+
+  updateMonitor: (id: string, body: UpdateMonitorBody): Promise<{ monitor: Monitor }> =>
+    request(`/api/monitoring/monitors/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  deleteMonitor: (id: string): Promise<{ ok: boolean }> =>
+    request(`/api/monitoring/monitors/${id}`, { method: 'DELETE' }),
+
+  testSignal: (id: string, body: { status?: 'ok' | 'breach'; value?: number; message?: string }): Promise<{ status: string }> =>
+    request(`/api/monitoring/monitors/${id}/test-signal`, { method: 'POST', body: JSON.stringify(body) }),
+};
+
+// ---------------------------------------------------------------------------
 // Project repositories — /api/repos/*
 // ---------------------------------------------------------------------------
 

@@ -184,6 +184,9 @@ import { runValidatorReviewSweep } from './application/validation/validationDisp
 import { runSecurityAuditSweep } from './application/security/securityDispatch';
 import { runEscalationSweep } from './application/incident/runEscalationSweep';
 import { createIncidentRoutes } from './presentation/routes/incidentRoutes';
+import { runMonitorSweep } from './application/monitoring/runMonitorSweep';
+import { createMonitoringRoutes } from './presentation/routes/monitoringRoutes';
+import { createMonitorWebhookRoutes } from './presentation/routes/monitorWebhookRoutes';
 import { runDueReports } from './application/reports/runDueReports';
 import { handleInboundEmail } from './application/workflow/inboundEmail';
 // ── Insights-everywhere + enterprise-lens extensions (integration batch) ──
@@ -390,6 +393,11 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // provider fetch an oversize image without the tenant JWT. No JWT here.
   app.route('/api/brain-files', createBrainFilesRoutes());
 
+  // Monitor-signal webhooks — public, gated per-monitor by a secret token; the
+  // tenant is resolved from the monitor row. External monitoring tools POST breach/
+  // heartbeat signals here. No tenant JWT.
+  app.route('/api/monitor-webhooks', createMonitorWebhookRoutes(db));
+
   // Published IDE (Designer) sites — public static hosting from R2. Served at
   // <sub>.builderforce.ai via the wildcard route; the path form
   // /api/sites/<sub>/... is the always-on fallback. No JWT (these are public websites).
@@ -562,6 +570,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/agent-assignments', createAgentAssignmentRoutes(db));
   app.route('/api/security',          createSecurityReviewRoutes(db));
   app.route('/api/incidents',         createIncidentRoutes(db));
+  app.route('/api/monitoring',        createMonitoringRoutes(db));
   app.route('/api/knowledge',         createKnowledgeRoutes(db));
   app.route('/api/knowledge-market',  createKnowledgeMarketRoutes(db)); // PUBLIC browse (logged-out)
 
@@ -710,6 +719,13 @@ export default {
         runEscalationSweep(env)
           .then((r) => { if (r.escalated > 0) console.log(`[cron:escalation] open=${r.openIncidents} escalated=${r.escalated}`); })
           .catch((err) => { console.error('[cron:escalation] failed', err); }),
+      );
+      // Active-monitoring sweep — evaluate heartbeat/http-check/metric monitors; a
+      // breach opens an incident + pages on-call. 5-min tick, like escalation.
+      ctx.waitUntil(
+        runMonitorSweep(env)
+          .then((r) => { if (r.breached > 0 || r.recovered > 0) console.log(`[cron:monitors] evaluated=${r.evaluated} breached=${r.breached} recovered=${r.recovered}`); })
+          .catch((err) => { console.error('[cron:monitors] failed', err); }),
       );
       // Always-on autonomous executor — across ALL tenants/projects, start every
       // agent-owned, non-terminal ticket that has no live run (token-gated; a tenant

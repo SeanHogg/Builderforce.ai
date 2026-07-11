@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
-import { getModality } from '@/lib/modality';
+import { useModalityCopy } from '@/lib/useModalityCopy';
 import { listIdeContainers, updateIdeProject } from '@/lib/api';
 import { workflowDefinitions, type WorkflowDefinitionSummary } from '@/lib/builderforceApi';
 import type { IdeProject, IdeContainerOption } from '@/lib/types';
@@ -26,7 +26,7 @@ export function IdeProjectDetailsModal({
   onSaved: (updated: IdeProject) => void;
 }) {
   const t = useTranslations('ide');
-  const m = getModality(ideProject.modality);
+  const m = useModalityCopy()(ideProject.modality);
 
   // Evermind projects (incl. legacy `llm`, which getModality aliases to evermind)
   // can attach an optional automation workflow.

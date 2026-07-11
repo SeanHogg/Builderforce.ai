@@ -162,6 +162,18 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'contacts', labelKey: 'tab.contacts', icon: '📇' },
     ],
   },
+  {
+    // Active Monitoring: upload an architecture diagram to a board, overlay
+    // monitor pins on it; a breach opens an incident. Reporting tab rolls up
+    // incident + monitor metrics. Sub-views are ?tab= pills on the page.
+    id: 'monitoring', labelKey: 'group.monitoring', icon: '📡', href: '/monitoring',
+    match: ['/monitoring'],
+    tabKind: 'query', basePath: '/monitoring',
+    tabs: [
+      { id: '', labelKey: 'tab.boards', icon: '🗺️' },
+      { id: 'reporting', labelKey: 'tab.reporting', icon: '📊' },
+    ],
+  },
   // Knowledge is now ONE destination. SOPs / Processes / Documents / Training are
   // no longer separate tabs — they are a single template-driven library with the
   // training + compliance lens surfaced on the home. The former "Library" group is

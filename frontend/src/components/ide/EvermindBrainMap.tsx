@@ -35,6 +35,7 @@ import type {
   ProjectEvermindContributions,
   ProjectEvermindRecentEntry,
   ProjectEvermindTrainingPoint,
+  ProjectEvermindEvalPoint,
 } from '@/lib/projectEvermindApi';
 import type { EvermindRegionKey } from '@/lib/evermindRegions';
 import { buildSparkline } from '@/lib/sparkline';
@@ -253,7 +254,7 @@ export function EvermindBrainMap({
       </header>
 
       <div style={statStripStyle}>
-        <Stat label={t('statVersion')} value={loaded ? `v${data?.version ?? 0}` : '…'} />
+        <Stat label={t('statVersion')} value={loaded ? `v${data?.version ?? 0}` : '…'} badge={<RegressionBadge evalPoint={data?.eval ?? null} />} />
         <Stat label={t('statLearned')} value={loaded ? String(data?.contributions ?? 0) : '…'} />
         <Stat label={t('statQueued')} value={loaded ? String(data?.pending ?? 0) : '…'} />
       </div>
@@ -421,12 +422,51 @@ function nodeTitle(t: ReturnType<typeof useTranslations>, e: ProjectEvermindRece
   return `${kind} · v${e.version}\n${head}`.slice(0, 220);
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, badge }: { label: string; value: string; badge?: React.ReactNode }) {
   return (
     <div style={statStyle}>
       <div style={{ fontSize: '0.62rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>{label}</div>
-      <div style={{ fontSize: '1.1rem', fontWeight: 700, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '1.1rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+        {badge}
+      </div>
     </div>
+  );
+}
+
+/**
+ * The automatic pre/post regression chip on the version stat: ▲ when the merge that
+ * produced this version LOWERED held-out loss on the project's prior taught examples
+ * (improved / retained), ▼ when it raised it (regressed), ≈ when flat. Renders nothing
+ * until a merge had a held-out set to score. `delta = baseLoss - newLoss`.
+ */
+function RegressionBadge({ evalPoint }: { evalPoint: ProjectEvermindEvalPoint | null }) {
+  const t = useTranslations('evermindBrain');
+  if (!evalPoint || !(evalPoint.baseLoss > 0)) return null;
+  const frac = evalPoint.delta / evalPoint.baseLoss; // positive ⇒ lower loss; negative ⇒ higher
+  const pct = Math.abs(frac) * 100;
+  const tone: 'up' | 'down' | 'flat' = pct < 0.5 ? 'flat' : frac > 0 ? 'up' : 'down';
+  const arrow = tone === 'up' ? '▲' : tone === 'down' ? '▼' : '≈';
+  const color = tone === 'up' ? '#22c55e' : tone === 'down' ? '#f87171' : 'var(--text-muted)';
+  const label = tone === 'flat' ? t('regFlat') : t('regDelta', { pct: pct.toFixed(1) });
+  const title = t('regTooltip', {
+    version: evalPoint.version,
+    base: evalPoint.baseLoss.toFixed(3),
+    next: evalPoint.newLoss.toFixed(3),
+    size: evalPoint.evalSize,
+  });
+  return (
+    <span
+      title={title}
+      aria-label={title}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.66rem', fontWeight: 700,
+        color, border: `1px solid ${color}`, borderRadius: 999, padding: '0px 6px',
+        fontVariantNumeric: 'tabular-nums',
+      }}
+    >
+      <span aria-hidden>{arrow}</span>{label}
+    </span>
   );
 }
 

@@ -289,7 +289,8 @@
       "myDashboard": "Mon tableau de bord",
       "myWorkspace": "Mon espace",
       "marketplace": "Marché",
-      "incidents": "Incidents"
+      "incidents": "Incidents",
+      "monitoring": "Surveillance"
     },
     "tab": {
       "projects": "Projets",
@@ -362,7 +363,9 @@
       "incidents": "Incidents",
       "oncall": "Astreinte",
       "escalation": "Escalade",
-      "contacts": "Contacts"
+      "contacts": "Contacts",
+      "boards": "Tableaux",
+      "reporting": "Rapports"
     }
   },
   "alerts": {
@@ -645,6 +648,34 @@
     }
   },
   "ide": {
+    "modalityProject": "Projet {label}",
+    "modality": {
+      "designer": {
+        "label": "Concepteur",
+        "tagline": "Générez et créez des applications avec Aperçu, Code et un serveur de dev en direct.",
+        "runLabel": "Lancer"
+      },
+      "video": {
+        "label": "Vidéo",
+        "tagline": "Générez de courtes vidéos côté client sur votre propre GPU par diffusion.",
+        "runLabel": "Lancer"
+      },
+      "evermind": {
+        "label": "Evermind",
+        "tagline": "Cultivez un modèle Evermind vivant qui apprend de chaque projet — enseignez-le et voyez sa Carte des connaissances se remplir.",
+        "runLabel": "Lancer"
+      },
+      "finetune": {
+        "label": "Réglage fin",
+        "tagline": "Concevez des jeux de données et entraînez un modèle LoRA personnalisé, puis évaluez-le, publiez-le et exportez-le.",
+        "runLabel": "Lancer"
+      },
+      "voice": {
+        "label": "Voix",
+        "tagline": "Clonez et concevez une voix personnalisée, puis synthétisez de la parole à partir d’elle.",
+        "runLabel": "Générer"
+      }
+    },
     "all": "Tous",
     "filteredTo": "Filtré sur {name}",
     "clearProjectFilter": "Effacer le filtre de projet",
@@ -3315,13 +3346,7 @@
     "ide": {
       "builds": "projets",
       "buildsSub": "projets IDE",
-      "noProjects": "Aucun projet IDE pour le moment",
-      "modality": {
-        "designer": "Concepteur",
-        "video": "Vidéo",
-        "llm": "LLM",
-        "voice": "Voix"
-      }
+      "noProjects": "Aucun projet IDE pour le moment"
     },
     "obs": {
       "noFirings": "Aucun déclenchement",
@@ -3574,7 +3599,10 @@
     "detailVersion": "Version",
     "detailWeight": "Poids",
     "detailWhen": "Quand",
-    "recallMethod": "{method, select, embedding {Rappel sémantique} other {Rappel lexical (repli)}}"
+    "recallMethod": "{method, select, embedding {Rappel sémantique} other {Rappel lexical (repli)}}",
+    "regDelta": "{pct}% vs préc.",
+    "regFlat": "aucun changement",
+    "regTooltip": "Contrôle de régression sur v{version} : perte réservée {base} → {next} sur {size, plural, one {# tâche antérieure} other {# tâches antérieures}}."
   },
   "evermindStatus": {
     "label": "Evermind",
@@ -5926,7 +5954,10 @@
     "hideDetail": "Masquer le détail",
     "detailPromptLabel": "Tâche",
     "detailTextLabel": "Appris",
-    "validateMethod": "{method, select, embedding {Rappel sémantique} other {Rappel lexical (repli)}}"
+    "validateMethod": "{method, select, embedding {Rappel sémantique} other {Rappel lexical (repli)}}",
+    "evalDelta": "{pct}% vs préc.",
+    "evalFlat": "aucun changement",
+    "evalTooltip": "Contrôle de régression sur v{version} : perte réservée {base} → {next} sur {size, plural, one {# tâche antérieure} other {# tâches antérieures}}."
   },
   "topbar": {
     "cart": "Panier",
@@ -5956,11 +5987,26 @@
     "type": {
       "label": "Rôle du gestionnaire",
       "help": "La fonction du gestionnaire — elle détermine le travail qu’il valorise et priorise.",
-      "general": { "label": "Gestionnaire général", "description": "Gestion du backlog sans biais de domaine, sur l’ensemble du travail." },
-      "delivery": { "label": "Gestionnaire de développement", "description": "Livre des fonctionnalités — priorise le travail de code, débloque les dépendances et fait fusionner les pull requests." },
-      "qa": { "label": "Gestionnaire QA", "description": "Responsable de la qualité — priorise les défauts, les lacunes de couverture, les tests instables et les bugs bloquant la version." },
-      "service_desk": { "label": "Gestionnaire de centre de services IT", "description": "Pilote le support — trie les incidents et demandes d’abord par SLA et impact client." },
-      "devops": { "label": "Gestionnaire DevOps / Opérations IT", "description": "Protège la fiabilité — priorise les déploiements, l’infrastructure, la supervision et le risque opérationnel." }
+      "general": {
+        "label": "Gestionnaire général",
+        "description": "Gestion du backlog sans biais de domaine, sur l’ensemble du travail."
+      },
+      "delivery": {
+        "label": "Gestionnaire de développement",
+        "description": "Livre des fonctionnalités — priorise le travail de code, débloque les dépendances et fait fusionner les pull requests."
+      },
+      "qa": {
+        "label": "Gestionnaire QA",
+        "description": "Responsable de la qualité — priorise les défauts, les lacunes de couverture, les tests instables et les bugs bloquant la version."
+      },
+      "service_desk": {
+        "label": "Gestionnaire de centre de services IT",
+        "description": "Pilote le support — trie les incidents et demandes d’abord par SLA et impact client."
+      },
+      "devops": {
+        "label": "Gestionnaire DevOps / Opérations IT",
+        "description": "Protège la fiabilité — priorise les déploiements, l’infrastructure, la supervision et le risque opérationnel."
+      }
     },
     "coaching": {
       "title": "Coacher le gestionnaire",
@@ -9113,5 +9159,110 @@
     "oncallSubtitle": "Les rotations d’astreinte déterminent qui est alerté en premier lorsqu’un incident se déclenche.",
     "escalationSubtitle": "Les politiques d’escalade parcourent les cibles et les canaux jusqu’à ce que quelqu’un réponde.",
     "contactsSubtitle": "Contacts professionnels que vous pouvez alerter ou vers qui escalader pendant un incident."
+  },
+  "monitoring": {
+    "boardsTitle": "Surveillance active",
+    "boardsSubtitle": "Téléversez un diagramme d’architecture et superposez-y des repères de moniteur. Lorsqu’un moniteur est en défaut, un incident est ouvert automatiquement.",
+    "reportingTitle": "Rapport de surveillance",
+    "reportingSubtitle": "Métriques d’incidents et de moniteurs agrégées sur tous les tableaux.",
+    "loading": "Chargement…",
+    "needManager": "Rôle de responsable requis",
+    "boardNamePlaceholder": "Nom du nouveau tableau",
+    "newBoard": "Nouveau tableau",
+    "emptyBoards": "Aucun tableau de surveillance pour l’instant. Créez-en un pour commencer.",
+    "monitorsCount": "{count} moniteurs",
+    "breachedCount": "{count} en défaut",
+    "backToBoards": "Retour aux tableaux",
+    "addMonitor": "Ajouter un moniteur",
+    "exitAddMode": "Annuler",
+    "addMonitorHint": "Cliquez sur un point du diagramme pour y placer un nouveau moniteur.",
+    "uploading": "Téléversement…",
+    "changeImage": "Changer l’image",
+    "uploadImage": "Téléverser un diagramme",
+    "dropImageHint": "Cliquez pour parcourir ou déposez une image ici",
+    "uploadFailed": "Échec du téléversement",
+    "deleteBoardConfirm": "Supprimer le tableau « {name} » et tous ses moniteurs ?",
+    "newMonitor": "Nouveau moniteur",
+    "editMonitor": "Modifier le moniteur",
+    "validationLabel": "Un libellé est requis",
+    "fieldLabel": "Libellé",
+    "labelPlaceholder": "ex. Santé de l’API de paiement",
+    "fieldDescription": "Description",
+    "fieldType": "Type de moniteur",
+    "fieldIntervalSeconds": "Intervalle (secondes)",
+    "fieldUrl": "URL",
+    "fieldExpectedStatus": "Statut attendu",
+    "fieldMetric": "Métrique",
+    "fieldComparator": "Comparateur",
+    "fieldThreshold": "Seuil",
+    "fieldWindowDays": "Fenêtre (jours)",
+    "fieldSystem": "Système affecté",
+    "systemPlaceholder": "ex. paiements",
+    "fieldSeverity": "Gravité",
+    "fieldEscalation": "Politique d’escalade",
+    "noEscalation": "Aucune",
+    "position": "Position",
+    "fieldActive": "Actif",
+    "signalUrlLabel": "URL du webhook de signal",
+    "signalUrlHint": "Les outils externes envoient une requête POST ici pour signaler ce moniteur.",
+    "copy": "Copier",
+    "copied": "Copié",
+    "testSignal": "Signal de test",
+    "sendOk": "Envoyer OK",
+    "sendBreach": "Envoyer défaut",
+    "viewIncident": "Voir l’incident ouvert",
+    "recentEvents": "Événements récents",
+    "noEvents": "Aucun événement pour l’instant",
+    "create": "Créer",
+    "deleteMonitorConfirm": "Supprimer le moniteur « {name} » ?",
+    "noData": "Aucune donnée pour l’instant",
+    "openIncidents": "Incidents ouverts",
+    "totalIncidents": "{count} au total",
+    "mttr": "MTTR",
+    "minutesValue": "{m} min",
+    "monitorsOk": "Moniteurs OK",
+    "monitorsBreached": "Moniteurs en défaut",
+    "monitorsUnknown": "Moniteurs inconnus",
+    "monitorsTotal": "Total des moniteurs",
+    "bySeverity": "Incidents par gravité",
+    "bySystem": "Incidents par système",
+    "bySource": "Incidents par source",
+    "uncategorized": "Non catégorisé",
+    "noIncidents": "Aucun incident",
+    "recentIncidents": "Incidents récents",
+    "na": "N/D",
+    "status": {
+      "ok": "OK",
+      "breached": "En défaut",
+      "unknown": "Inconnu"
+    },
+    "severity": {
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
+    },
+    "type": {
+      "heartbeat": "Battement",
+      "http_check": "Contrôle HTTP",
+      "webhook": "Webhook",
+      "metric_threshold": "Seuil de métrique",
+      "manual": "Manuel"
+    },
+    "metric": {
+      "token_spend_usd": "Dépense en tokens (USD)",
+      "token_spend_pct_of_cap": "Dépense en tokens (% du plafond)",
+      "cost_per_merged_pr_usd": "Coût par PR fusionnée (USD)",
+      "dora_change_failure_rate": "Taux d’échec des changements (DORA)",
+      "dora_lead_time_hours": "Délai de livraison (heures, DORA)",
+      "ai_effectiveness_score": "Score d’efficacité de l’IA",
+      "eval_drift": "Dérive d’évaluation"
+    },
+    "comparator": {
+      "gt": "Supérieur à (>)",
+      "lt": "Inférieur à (<)",
+      "gte": "Au moins (≥)",
+      "lte": "Au plus (≤)"
+    }
   }
 }

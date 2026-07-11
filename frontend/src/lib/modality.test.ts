@@ -29,8 +29,6 @@ describe('project modalities', () => {
       expect(m.label).toBeTruthy();
       expect(m.icon).toBeTruthy();
       expect(m.brainSystemPrompt).toBeTruthy();
-      expect(m.brainPlaceholder).toBeTruthy();
-      expect(m.brainEmptyState).toBeTruthy();
       expect(m.rightTabs.length).toBeGreaterThan(0);
     }
   });
