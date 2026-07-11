@@ -106,6 +106,8 @@ export interface ChatTicketsLabels {
   none: string;
   spawned: string;
   run: string;
+  /** Open the linked work item / artifact (board card, OKR, spec) in its own view. */
+  open: string;
   lineage: string;
   unlink: string;
   pickAgent: string;
@@ -160,6 +162,7 @@ export const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels = {
   none: 'No tickets linked yet.',
   spawned: 'spawned here',
   run: 'Run agent on ticket',
+  open: 'Open',
   lineage: 'Chat lineage',
   unlink: 'Unlink',
   pickAgent: 'Run as agent…',

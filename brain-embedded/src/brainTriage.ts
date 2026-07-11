@@ -101,6 +101,14 @@ const FILE_WRITE_TOOL = /(attachments|files?|project_files)[._](write|save|updat
 /** Assistant prose that CLAIMS a file/attachment was persisted. */
 const FILE_SAVE_CLAIM = /\b(saved|updated|wrote|written|edited|persisted|added)\b[^.!?\n]*\b(file|attachment|roadmap|document|upload|\.md|\.csv|\.txt|\.json)\b/i;
 
+/** Tool labels that CREATE or LINK a board work item. A "filed/created/linked the
+ *  ticket" claim is only honest if one of these SUCCEEDED this run. Covers the create
+ *  tools (tasks/objectives/specs/…) and the chat-link + from-delta tools. */
+const TICKET_WRITE_TOOL = /(tasks|objectives|key_results|initiatives|portfolios|specs|roadmap)[._]create|chats[._]link_ticket|tickets[._]from_delta/i;
+
+/** Assistant prose that CLAIMS a ticket/gap/task was created, filed, or linked. */
+const TICKET_CLAIM = /\b(created|filed|opened|logged|added|linked|tracked)\b[^.!?\n]*\b(ticket|task|gap|epic|issue|objective|bug|card|board)\b/i;
+
 /**
  * Structural honesty check for the "it said it updated the file but didn't" failure:
  * an assistant message that CLAIMS a file/attachment write while NO file-write tool
@@ -115,6 +123,23 @@ export function detectUnbackedWriteClaim(events: BrainTraceEvent[], messages: Br
   );
   if (wroteOk) return false;
   return messages.some((m) => m.role === 'assistant' && typeof m.content === 'string' && FILE_SAVE_CLAIM.test(m.content));
+}
+
+/**
+ * The ticket twin of {@link detectUnbackedWriteClaim}: an assistant turn that CLAIMS it
+ * created/filed/linked a ticket, gap, or task while NO create/link tool call succeeded
+ * this run — the "it said it linked the gap to the chat, but the chat shows no link"
+ * failure. The run loop links a REAL create deterministically (autoLinkCreatedItem), so
+ * a claim with no successful create/link tool means nothing was actually filed or
+ * linked. Pure over the recorded trace + visible messages, so both copy surfaces flag
+ * it identically.
+ */
+export function detectUnbackedTicketClaim(events: BrainTraceEvent[], messages: BrainMessage[]): boolean {
+  const filedOk = events.some(
+    (e) => e.category === 'tool' && TICKET_WRITE_TOOL.test(e.label) && !e.isError && !isFailedToolResult(e.result),
+  );
+  if (filedOk) return false;
+  return messages.some((m) => m.role === 'assistant' && typeof m.content === 'string' && TICKET_CLAIM.test(m.content));
 }
 
 function cap(s: unknown, n = 2000): string {
@@ -488,6 +513,9 @@ export function buildBrainTriageReport(opts: BuildBrainTriageOptions): string {
   // tool call this run (the "it said it updated the file but didn't" failure mode).
   if (detectUnbackedWriteClaim(events, messages)) {
     lines.push('', '⚠ UNBACKED WRITE CLAIM — an assistant turn claimed it saved/updated a file, but no file-write tool (attachments.write / project_files.save) succeeded in this run. The file was NOT modified.');
+  }
+  if (detectUnbackedTicketClaim(events, messages)) {
+    lines.push('', '⚠ UNBACKED TICKET CLAIM — an assistant turn claimed it created/filed/linked a ticket or gap, but no create/link tool (tasks.create / chats.link_ticket / tickets.from_delta) succeeded in this run. Nothing was filed or linked to the chat.');
   }
 
   if (errors.length) {

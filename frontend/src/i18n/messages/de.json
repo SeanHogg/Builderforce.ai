@@ -5526,6 +5526,7 @@
       "none": "Noch keine Tickets verknüpft.",
       "ringAria": "{label}: {pct}% erledigt",
       "spawned": "hier erstellt",
+      "open": "Öffnen",
       "run": "Agent auf dem Ticket ausführen",
       "lineage": "Chat-Herkunft",
       "unlink": "Verknüpfung lösen",

@@ -67,7 +67,7 @@ export {
 export type { BrainContextValue, BrainPageContext } from './BrainContext';
 
 // Conversation + chat-list hooks
-export { useBrainChats } from './useBrainChats';
+export { useBrainChats, deriveChatTitle, DEFAULT_CHAT_TITLE } from './useBrainChats';
 export type { UseBrainChats, UseBrainChatsOptions } from './useBrainChats';
 export { useBrainConversation } from './useBrainConversation';
 export type { UseBrainConversation, UseBrainConversationOptions } from './useBrainConversation';
@@ -120,9 +120,11 @@ export {
   isCodeChangeTool,
   isTicketRecordingTool,
   codeChangeFile,
+  workItemLinkFromCreate,
   CODE_CHANGE_TOOLS,
   TICKET_RECORDING_TOOLS,
 } from './chatWorkLinking';
+export type { CreatedWorkItemLink } from './chatWorkLinking';
 
 // Landing-page → auth → replay handoff
 export { savePendingPrompt, takePendingPrompt } from './pendingPrompt';

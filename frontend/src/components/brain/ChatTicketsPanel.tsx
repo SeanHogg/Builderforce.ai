@@ -10,10 +10,11 @@
  *   2. map the next-intl `brain.tickets` catalog into the shared labels bundle.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
   ChatTicketsPanel as SharedChatTicketsPanel,
-  type ChatTicketsAdapter, type ChatTicketsLabels,
+  type ChatTicketsAdapter, type ChatTicketsLabels, type TicketLinkVM,
 } from '@seanhogg/builderforce-brain-ui';
 import {
   brain, tasksApi,
@@ -29,6 +30,20 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
   onChanged?: () => void;
 }) {
   const t = useTranslations('brain.tickets');
+  const router = useRouter();
+
+  // Open a linked work item in its own view. Routes to the surface the item lives on
+  // (board for task/epic/gap + spec-in-project; Portfolio ▸ OKRs tab for the strategy
+  // tiers), reusing the same project-scoped board route the Brain's navigate_to uses.
+  const openTicket = useMemo(() => (tk: TicketLinkVM) => {
+    switch (tk.kind) {
+      case 'objective': case 'initiative': case 'portfolio':
+        router.push('/projects?tab=portfolio');
+        break;
+      default: // task | epic | gap | spec | roadmap → the project's board
+        router.push(projectId != null ? `/projects?tab=tasks&project=${projectId}` : '/projects?tab=tasks');
+    }
+  }, [router, projectId]);
 
   // Live-refresh when the Brain mutates work items via MCP tools (link/merge/
   // invite, or a task move that changes a health ring) — not just our own actions.
@@ -50,7 +65,7 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
   }, [chatId, refreshSignal]);
 
   const labels = useMemo<ChatTicketsLabels>(() => ({
-    none: t('none'), spawned: t('spawned'), run: t('run'), lineage: t('lineage'), unlink: t('unlink'),
+    none: t('none'), spawned: t('spawned'), run: t('run'), open: t('open'), lineage: t('lineage'), unlink: t('unlink'),
     pickAgent: t('pickAgent'), lineageTitle: t('lineageTitle'), lineageEmpty: t('lineageEmpty'), merged: t('merged'),
     runNoAgent: t('runNoAgent'), runFailed: t('runFailed'), link: t('link'), agents: t('agents'), merge: t('merge'),
     linkFailed: t('linkFailed'), kindLabel: t('kindLabel'), pickTicket: t('pickTicket'), searchTicket: t('searchTicket'),
@@ -106,6 +121,7 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
         refreshSignal={refreshSignal}
         visibility={visibility}
         onSetVisibility={isOwner ? async (v) => { await brain.updateChat(chatId, { visibility: v }); setVisibility(v); } : undefined}
+        onOpenTicket={openTicket}
       />
     </div>
   );

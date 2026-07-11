@@ -676,6 +676,15 @@ function useOptionalBrainContext() {
 
 // src/useBrainChats.ts
 import { useCallback as useCallback3, useEffect as useEffect4, useMemo as useMemo5, useRef as useRef3, useState as useState4 } from "react";
+var DEFAULT_CHAT_TITLE = "New chat";
+function deriveChatTitle(text) {
+  const firstLine = (text.split("\n").find((l) => l.trim()) ?? "").replace(/\s+/g, " ").trim();
+  if (!firstLine) return "";
+  if (firstLine.length <= 60) return firstLine;
+  const cut = firstLine.slice(0, 60);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > 30 ? cut.slice(0, lastSpace) : cut).trim()}\u2026`;
+}
 function useBrainChats(options = {}) {
   const { persistence } = useBrainConfig();
   const { filterProjectId, pinnedProjectId, activeChatId: controlledActiveId, onActiveChatChange } = options;
@@ -684,6 +693,9 @@ function useBrainChats(options = {}) {
   const [error, setError] = useState4("");
   const [internalActiveId, setInternalActiveId] = useState4(null);
   const assigningRef = useRef3(false);
+  const chatsRef = useRef3(chats);
+  chatsRef.current = chats;
+  const autoTitledRef = useRef3(/* @__PURE__ */ new Set());
   const isControlled = controlledActiveId !== void 0;
   const activeChatId = isControlled ? controlledActiveId ?? null : internalActiveId;
   const activeIdRef = useRef3(activeChatId);
@@ -756,6 +768,20 @@ function useBrainChats(options = {}) {
       setError(e instanceof Error ? e.message : "Rename failed");
     }
   }, [persistence]);
+  const autoTitle = useCallback3(async (id, firstUserText) => {
+    if (autoTitledRef.current.has(id)) return;
+    const chat = chatsRef.current.find((c) => c.id === id);
+    if (chat && chat.title && chat.title !== DEFAULT_CHAT_TITLE) return;
+    const title = deriveChatTitle(firstUserText);
+    if (!title) return;
+    autoTitledRef.current.add(id);
+    try {
+      const updated = await persistence.updateChat(id, { title });
+      setChats((prev) => prev.map((c) => c.id === id ? { ...c, title: updated.title } : c));
+    } catch {
+      autoTitledRef.current.delete(id);
+    }
+  }, [persistence]);
   const summarize = useCallback3(async (id) => {
     setError("");
     try {
@@ -812,6 +838,7 @@ function useBrainChats(options = {}) {
     select,
     create,
     rename,
+    autoTitle,
     summarize,
     remove,
     assignToProject,
@@ -933,12 +960,21 @@ function isFailedToolResult(result) {
 }
 var FILE_WRITE_TOOL = /(attachments|files?|project_files)[._](write|save|update)/i;
 var FILE_SAVE_CLAIM = /\b(saved|updated|wrote|written|edited|persisted|added)\b[^.!?\n]*\b(file|attachment|roadmap|document|upload|\.md|\.csv|\.txt|\.json)\b/i;
+var TICKET_WRITE_TOOL = /(tasks|objectives|key_results|initiatives|portfolios|specs|roadmap)[._]create|chats[._]link_ticket|tickets[._]from_delta/i;
+var TICKET_CLAIM = /\b(created|filed|opened|logged|added|linked|tracked)\b[^.!?\n]*\b(ticket|task|gap|epic|issue|objective|bug|card|board)\b/i;
 function detectUnbackedWriteClaim(events, messages) {
   const wroteOk = events.some(
     (e) => e.category === "tool" && FILE_WRITE_TOOL.test(e.label) && !e.isError && !isFailedToolResult(e.result)
   );
   if (wroteOk) return false;
   return messages.some((m) => m.role === "assistant" && typeof m.content === "string" && FILE_SAVE_CLAIM.test(m.content));
+}
+function detectUnbackedTicketClaim(events, messages) {
+  const filedOk = events.some(
+    (e) => e.category === "tool" && TICKET_WRITE_TOOL.test(e.label) && !e.isError && !isFailedToolResult(e.result)
+  );
+  if (filedOk) return false;
+  return messages.some((m) => m.role === "assistant" && typeof m.content === "string" && TICKET_CLAIM.test(m.content));
 }
 function cap(s, n = 2e3) {
   const str = typeof s === "string" ? s : JSON.stringify(s ?? "");
@@ -1124,6 +1160,9 @@ function buildBrainTriageReport(opts) {
   if (detectUnbackedWriteClaim(events, messages)) {
     lines.push("", "\u26A0 UNBACKED WRITE CLAIM \u2014 an assistant turn claimed it saved/updated a file, but no file-write tool (attachments.write / project_files.save) succeeded in this run. The file was NOT modified.");
   }
+  if (detectUnbackedTicketClaim(events, messages)) {
+    lines.push("", "\u26A0 UNBACKED TICKET CLAIM \u2014 an assistant turn claimed it created/filed/linked a ticket or gap, but no create/link tool (tasks.create / chats.link_ticket / tickets.from_delta) succeeded in this run. Nothing was filed or linked to the chat.");
+  }
   if (errors.length) {
     lines.push("", `--- Errors (${errors.length}) ---`);
     for (const ev of errors) {
@@ -1195,6 +1234,27 @@ var CODE_CHANGE_TOOLS = /* @__PURE__ */ new Set([
 ]);
 function isCodeChangeTool(name) {
   return CODE_CHANGE_TOOLS.has(name);
+}
+var CREATE_TOOL_KIND = {
+  builtin_objectives_create: "objective",
+  builtin_specs_create: "spec",
+  builtin_portfolios_create: "portfolio",
+  builtin_initiatives_create: "initiative"
+};
+function workItemLinkFromCreate(toolName, result) {
+  if (!result || typeof result !== "object") return null;
+  const row = result;
+  const id = row.id;
+  const ref = typeof id === "number" ? String(id) : typeof id === "string" && id.trim() ? id : null;
+  if (!ref) return null;
+  const linkType = row.deduped === true ? "linked" : "created";
+  if (toolName === "builtin_tasks_create") {
+    const t = typeof row.taskType === "string" ? row.taskType : "task";
+    const kind2 = t === "epic" || t === "gap" ? t : "task";
+    return { kind: kind2, ref, linkType };
+  }
+  const kind = CREATE_TOOL_KIND[toolName];
+  return kind ? { kind, ref, linkType } : null;
 }
 function isTicketRecordingTool(name) {
   return TICKET_RECORDING_TOOLS.has(name);
@@ -1411,18 +1471,20 @@ function compactTailStart(convo, tailTurns) {
   while (start < convo.length && convo[start].role === "tool") start += 1;
   return start;
 }
-function compactMiddleRange(convo, tailTurns) {
+function pinnedDirectiveIndex(convo, tailTurns) {
   const tailStart = compactTailStart(convo, tailTurns);
-  const firstUserIdx = convo.findIndex((m) => m.role === "user");
-  const start = firstUserIdx >= 0 && firstUserIdx < tailStart ? firstUserIdx + 1 : 0;
-  return { start, end: tailStart };
+  const lastUser = convo.map((m) => m.role).lastIndexOf("user");
+  return lastUser >= 0 && lastUser < tailStart ? lastUser : -1;
+}
+function compactMiddleRange(convo, tailTurns) {
+  return { start: 0, end: compactTailStart(convo, tailTurns) };
 }
 function assembleCompacted(systemPrompt, convo, note, tailTurns) {
   const tailStart = compactTailStart(convo, tailTurns);
-  const firstUserIdx = convo.findIndex((m) => m.role === "user");
   const out = [{ role: "system", content: systemPrompt }];
-  if (firstUserIdx >= 0 && firstUserIdx < tailStart) out.push(convo[firstUserIdx]);
   out.push({ role: "assistant", content: note });
+  const directiveIdx = pinnedDirectiveIndex(convo, tailTurns);
+  if (directiveIdx >= 0) out.push(convo[directiveIdx]);
   out.push(...convo.slice(tailStart));
   return out;
 }
@@ -1440,7 +1502,7 @@ async function summarizeMiddle(stream, model, msgs, signal) {
       messages: [
         {
           role: "system",
-          content: "You compress an in-progress AI agent transcript into a concise MEMORY the agent keeps working from. Capture: the task, concrete facts/answers discovered, tool results that matter (ids, paths, values), decisions made, and what still remains to do. Be information-dense; drop pleasantries. No preamble."
+          content: "You compress an in-progress AI agent transcript into a concise MEMORY the agent keeps working from. Capture: the CURRENT outstanding instruction from the user (the most recent user message is authoritative \u2014 earlier requests it supersedes are history, not the active task), concrete facts/answers discovered, tool results that matter (ids, paths, values), decisions made, and what still remains to do. Be information-dense; drop pleasantries. No preamble."
         },
         { role: "user", content: renderForSummary(msgs) }
       ],
@@ -1604,6 +1666,32 @@ async function recordCodeChangeTicket(chatId, c, req) {
     args: { projectId: req.projectId, summary, files, auto: true, chatId },
     result: out ?? null,
     isError: isFailedToolResult(out)
+  });
+}
+async function autoLinkCreatedItem(chatId, c, persistence, runTool, toolName, out) {
+  const link = workItemLinkFromCreate(toolName, out);
+  if (!link) return;
+  const toolStart = nowMs2();
+  let result;
+  try {
+    result = await runTool("builtin_chats_link_ticket", {
+      chatId,
+      kind: link.kind,
+      ref: link.ref,
+      linkType: link.linkType
+    });
+  } catch (e) {
+    result = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  if (!isFailedToolResult(result)) c.ticketRecorded = true;
+  pushDurableStep(c, chatId, persistence, {
+    ts: nowIso(),
+    category: "tool",
+    label: "builtin_chats_link_ticket",
+    durationMs: nowMs2() - toolStart,
+    args: { chatId, kind: link.kind, ref: link.ref, linkType: link.linkType, auto: true },
+    result: result ?? null,
+    isError: isFailedToolResult(result)
   });
 }
 async function runLoop(chatId, c, req) {
@@ -1790,6 +1878,7 @@ ${chatWorkLinkingDirective(chatId)}`;
           if (f && !c.touchedFiles.includes(f)) c.touchedFiles.push(f);
         }
         if (isTicketRecordingTool(tc.name)) c.ticketRecorded = true;
+        if (runTool) await autoLinkCreatedItem(chatId, c, persistence, runTool, tc.name, out);
         const trimmedOut = trimToolResult(out ?? null);
         convo.push({ role: "tool", tool_call_id: tc.id, content: trimmedOut.content });
         pushDurableStep(c, chatId, persistence, {
@@ -1913,6 +2002,7 @@ function useBrainConversation(options) {
     needsConfirm,
     ensureChatId,
     onActivity,
+    onFirstUserTurn,
     evermind,
     augmentSystemPrompt
   } = options;
@@ -2034,6 +2124,7 @@ ${refs}`;
         const [userMsg] = await persistence.sendMessages(id, [{ role: "user", content: displayContent, metadata }]);
         setMessages((prev) => [...prev, userMsg]);
         onActivity?.(id);
+        if (messages.length === 0) onFirstUserTurn?.(id, trimmed);
         if (addressedTo) {
           if (addressedTo.kind === "agent" && persistence.requestAgentReply) {
             try {
@@ -2060,7 +2151,7 @@ ${refs}`;
         setLocalSending(false);
       }
     },
-    [persistence, chatId, localSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity]
+    [persistence, chatId, localSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity, onFirstUserTurn]
   );
   useEffect5(() => {
     if (chatId == null || loadingMessages || localSending || messages.length === 0) return;
@@ -2207,6 +2298,7 @@ export {
   CODE_CHANGE_TOOLS,
   CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META,
+  DEFAULT_CHAT_TITLE,
   EVERMIND_LEARN_MIN_CHARS,
   PROVENANCE_META_KEY,
   STEP_MESSAGE_ROLE,
@@ -2224,6 +2316,7 @@ export {
   consolidationMarkerContent,
   consolidationMetadata,
   countReconciledMemories,
+  deriveChatTitle,
   filterMentionCandidates,
   formatBrainDiagnostics,
   formatBrainProvenance,
@@ -2268,6 +2361,7 @@ export {
   useOptionalBrainContext,
   useRegisterBrainActions,
   withDirectedMetadata,
-  withProvenanceMetadata
+  withProvenanceMetadata,
+  workItemLinkFromCreate
 };
 //# sourceMappingURL=index.mjs.map

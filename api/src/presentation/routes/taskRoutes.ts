@@ -233,6 +233,28 @@ export async function maybeAutoRunOnLaneEntry(
         });
       }
     }
+    // For every OTHER non-run reason (no_agent, human_gate, terminal_lane, no_lane,
+    // no_board, already_running, not_executable) the trigger previously returned
+    // false with no surfaced event, leaving a stuck ticket undiagnosable from the
+    // agent timeline. Emit one best-effort Observability event for any skip reason
+    // NOT already covered by the capability_mismatch loop above.
+    if (!evaln.canRunNow && evaln.reason !== 'capability_mismatch') {
+      const skipAgentRef =
+        evaln.decision.agentRef ??
+        evaln.staffedAgentRefs[0] ??
+        evaln.assignedAgentRef ??
+        args.submittedBy;
+      await recordCloudToolEvent(db, {
+        tenantId:      args.tenantId,
+        cloudAgentRef: skipAgentRef,
+        executionId:   null,
+        sessionKey:    `task:${args.taskId}`,
+        toolName:      'auto_run_skipped',
+        category:      'planning',
+        detail:        { taskId: args.taskId, lane: args.status, reason: evaln.reason },
+        result:        `Auto-run skipped (${evaln.reason}) for task ${args.taskId} on lane '${args.status}'.`.slice(0, 300),
+      }).catch(() => { /* best-effort telemetry — never block the trigger */ });
+    }
     if (!evaln.canRunNow) return false;
 
     // Hand the lane's agent + model to the single surface-aware dispatcher (the

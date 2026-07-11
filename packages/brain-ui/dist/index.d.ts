@@ -386,6 +386,8 @@ interface ChatTicketsLabels {
     none: string;
     spawned: string;
     run: string;
+    /** Open the linked work item / artifact (board card, OKR, spec) in its own view. */
+    open: string;
     lineage: string;
     unlink: string;
     pickAgent: string;
@@ -457,8 +459,13 @@ interface ChatTicketsPanelProps {
     visibility?: 'shared' | 'locked';
     /** Flip the chat's LOCK state (owner only). Omit to hide the toggle. */
     onSetVisibility?: (v: 'shared' | 'locked') => Promise<void>;
+    /** Open a linked work item / artifact in its own view — the host routes it (web:
+     *  SPA nav to the board/OKR/spec; VS Code: a bridge message the extension handles).
+     *  When provided, each ticket's label becomes a clickable "open the artifact" link
+     *  so every item the Brain created from this chat is one click from its board card. */
+    onOpenTicket?: (tk: TicketLinkVM) => void;
 }
-declare function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility }: ChatTicketsPanelProps): React.JSX.Element;
+declare function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket }: ChatTicketsPanelProps): React.JSX.Element;
 /**
  * Memoized: this panel sits directly under the composer, so it would otherwise
  * reconcile its whole subtree (health-ring SVGs, selects, link/merge/agents forms)

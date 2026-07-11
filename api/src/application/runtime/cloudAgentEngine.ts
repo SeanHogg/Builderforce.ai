@@ -43,7 +43,7 @@ import {
   CONTAINER_MAX_STEPS, assertsUnrunVerification, hasNoCodeDeliverable, type RawToolCall,
 } from './cloudAgentTools';
 import {
-  CURRENT_ENGINE_ID, evaluatePolicyGate, filterByGlob,
+  CURRENT_ENGINE_ID, evaluatePolicyGate, filterByGlob, applyStringEdit,
   appraiseTask, buildLimbicBlock, compileLimbicState, neutralState,
   applyDelta, appraiseAmygdala, homeostasis,
   type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type ToolControl, type LimbicState, type LimbicEvent, type PolicyGate, type AgentExecParams,
@@ -1330,17 +1330,19 @@ function buildCloudProvider(args: {
         const rf = await readRepoFile({ ...repoCtx, ref: readRef() }, path);
         if (!rf.ok) return { ok: false, error: `cannot edit '${path}': ${rf.reason}` };
         if (rf.truncated) return { ok: false, error: `'${path}' is too large to edit safely here — rewrite it with write_file instead` };
-        const count = rf.content.split(oldString).length - 1;
-        if (count === 0) return { ok: false, error: `old_string not found in '${path}' — read_file and copy the exact text (including indentation)` };
-        if (count > 1 && !replaceAll) return { ok: false, error: `old_string is not unique in '${path}' (${count} matches) — add surrounding context to make it unique, or set replace_all` };
-        const updated = replaceAll ? rf.content.split(oldString).join(newString) : rf.content.replace(oldString, newString);
+        // EOL-tolerant, EOL-preserving match (shared with the VS Code provider) so an
+        // agent that emits LF against a CRLF-committed file still edits it instead of
+        // failing with "old_string not found" and giving up.
+        const edit = applyStringEdit(rf.content, oldString, newString, replaceAll);
+        if (!edit.ok || edit.content == null) return { ok: false, error: `cannot edit '${path}': ${edit.error ?? 'old_string not found'}` };
+        const updated = edit.content;
         const firstWriteThisRun = !writtenPaths.has(path);
         const commit = await commitAgentFile(repoCtx, path, updated, `${firstWriteThisRun ? 'Edit' : 'Update'} ${path} — task #${taskRow.id} (${agentLabel})`);
         if (!commit.ok) return { ok: false, error: commit.reason };
         writtenPaths.add(path);
         await recordTaskFileChange(env, tenantId, taskRow.id, executionId, path, 'modified', agentLabel);
         notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change: 'modified', ts: new Date().toISOString() });
-        return { ok: true, branch: repoCtx.branch, commitUrl: commit.commitUrl, change: 'modified', replaced: replaceAll ? count : 1 };
+        return { ok: true, branch: repoCtx.branch, commitUrl: commit.commitUrl, change: 'modified', replaced: edit.replaced };
       },
       async deleteFile(path, reason) {
         if (!repoCtx) return { ok: false, error: noRepo() };

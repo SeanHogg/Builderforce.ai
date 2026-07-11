@@ -5526,6 +5526,7 @@
       "none": "尚未关联任何工单。",
       "ringAria": "{label}：完成 {pct}%",
       "spawned": "在此创建",
+      "open": "打开",
       "run": "让代理执行该工单",
       "lineage": "聊天脉络",
       "unlink": "取消关联",

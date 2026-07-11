@@ -882,6 +882,7 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
   none: "No tickets linked yet.",
   spawned: "spawned here",
   run: "Run agent on ticket",
+  open: "Open",
   lineage: "Chat lineage",
   unlink: "Unlink",
   pickAgent: "Run as agent\u2026",
@@ -930,7 +931,7 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
 // src/chatTickets/ChatTicketsPanel.tsx
 import { jsx as jsx7, jsxs as jsxs7 } from "react/jsx-runtime";
 var RUNNABLE = new Set(RUNNABLE_KINDS);
-function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility }) {
+function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket }) {
   const [tickets, setTickets] = useState4([]);
   const [agents, setAgents] = useState4([]);
   const [members, setMembers] = useState4([]);
@@ -999,7 +1000,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       return /* @__PURE__ */ jsxs7("div", { style: S.chip, children: [
         /* @__PURE__ */ jsx7(HealthRing, { percent: tk.progressPct, size: 36, caption: tk.total > 0 ? `${tk.done}/${tk.total}` : void 0, muted: !tk.exists, ariaLabel: labels.ringAria(tk.label, tk.progressPct) }),
         /* @__PURE__ */ jsxs7("div", { style: { display: "flex", flexDirection: "column", minWidth: 0, maxWidth: 160 }, children: [
-          /* @__PURE__ */ jsx7("span", { style: S.ticketLabel, title: tk.label, children: tk.label }),
+          onOpenTicket && tk.exists ? /* @__PURE__ */ jsx7("button", { type: "button", title: `${labels.open} \xB7 ${tk.label}`, onClick: () => onOpenTicket(tk), style: S.ticketLink, children: tk.label }) : /* @__PURE__ */ jsx7("span", { style: S.ticketLabel, title: tk.label, children: tk.label }),
           /* @__PURE__ */ jsxs7("span", { style: S.ticketMeta, children: [
             labels.kind[tk.kind],
             " \xB7 ",
@@ -1008,6 +1009,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
           ] })
         ] }),
         /* @__PURE__ */ jsxs7("div", { style: { display: "flex", gap: 2 }, children: [
+          onOpenTicket && tk.exists && /* @__PURE__ */ jsx7("button", { type: "button", title: `${labels.open} \xB7 ${tk.label}`, onClick: () => onOpenTicket(tk), style: S.icon, children: "\u2197" }),
           RUNNABLE.has(tk.kind) && tk.exists && /* @__PURE__ */ jsx7("button", { type: "button", title: labels.run, onClick: () => setRunKey(runKey === key ? null : key), style: S.icon, children: "\u25B6" }),
           /* @__PURE__ */ jsx7("button", { type: "button", title: labels.lineage, onClick: () => void openLineage(tk), style: S.icon, children: "\u2443" }),
           /* @__PURE__ */ jsx7("button", { type: "button", title: labels.unlink, disabled: busy, onClick: () => void unlink(tk), style: S.icon, children: "\u2715" })
@@ -1320,6 +1322,9 @@ var S = {
   muted: { fontSize: 12, color: V.muted },
   chip: { display: "flex", alignItems: "center", gap: 6, padding: "2px 6px", border: `1px solid ${V.border}`, borderRadius: 8 },
   ticketLabel: { fontSize: 12, fontWeight: 600, color: V.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  // Clickable variant of the label — opens the artifact. Underlined-on-hover link
+  // affordance, theme-driven accent, left-aligned and truncating like the span.
+  ticketLink: { fontSize: 12, fontWeight: 600, color: V.accent, background: "transparent", border: "none", padding: 0, textAlign: "left", cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: "underline", textUnderlineOffset: 2 },
   ticketMeta: { fontSize: 10, color: V.muted, textTransform: "uppercase", letterSpacing: 0.4 },
   drawer: { fontSize: 12, color: V.text2, borderTop: `1px dashed ${V.border}`, paddingTop: 6 },
   section: { display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", borderTop: `1px dashed ${V.border}`, paddingTop: 8 },

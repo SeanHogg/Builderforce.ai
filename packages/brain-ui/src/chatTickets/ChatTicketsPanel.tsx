@@ -40,11 +40,16 @@ export interface ChatTicketsPanelProps {
   visibility?: 'shared' | 'locked';
   /** Flip the chat's LOCK state (owner only). Omit to hide the toggle. */
   onSetVisibility?: (v: 'shared' | 'locked') => Promise<void>;
+  /** Open a linked work item / artifact in its own view — the host routes it (web:
+   *  SPA nav to the board/OKR/spec; VS Code: a bridge message the extension handles).
+   *  When provided, each ticket's label becomes a clickable "open the artifact" link
+   *  so every item the Brain created from this chat is one click from its board card. */
+  onOpenTicket?: (tk: TicketLinkVM) => void;
 }
 
 const RUNNABLE = new Set<TicketKind>(RUNNABLE_KINDS);
 
-function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility }: ChatTicketsPanelProps) {
+function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket }: ChatTicketsPanelProps) {
   const [tickets, setTickets] = useState<TicketLinkVM[]>([]);
   const [agents, setAgents] = useState<ChatAgentVM[]>([]);
   const [members, setMembers] = useState<ChatMemberVM[]>([]);
@@ -109,10 +114,17 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
             <div key={tk.linkId} style={S.chip}>
               <HealthRing percent={tk.progressPct} size={36} caption={tk.total > 0 ? `${tk.done}/${tk.total}` : undefined} muted={!tk.exists} ariaLabel={labels.ringAria(tk.label, tk.progressPct)} />
               <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, maxWidth: 160 }}>
-                <span style={S.ticketLabel} title={tk.label}>{tk.label}</span>
+                {onOpenTicket && tk.exists ? (
+                  <button type="button" title={`${labels.open} · ${tk.label}`} onClick={() => onOpenTicket(tk)} style={S.ticketLink}>{tk.label}</button>
+                ) : (
+                  <span style={S.ticketLabel} title={tk.label}>{tk.label}</span>
+                )}
                 <span style={S.ticketMeta}>{labels.kind[tk.kind]} · {tk.status}{tk.linkType === 'created' ? ` · ${labels.spawned}` : ''}</span>
               </div>
               <div style={{ display: 'flex', gap: 2 }}>
+                {onOpenTicket && tk.exists && (
+                  <button type="button" title={`${labels.open} · ${tk.label}`} onClick={() => onOpenTicket(tk)} style={S.icon}>↗</button>
+                )}
                 {RUNNABLE.has(tk.kind) && tk.exists && (
                   <button type="button" title={labels.run} onClick={() => setRunKey(runKey === key ? null : key)} style={S.icon}>▶</button>
                 )}
@@ -401,6 +413,9 @@ const S = {
   muted: { fontSize: 12, color: V.muted } as React.CSSProperties,
   chip: { display: 'flex', alignItems: 'center', gap: 6, padding: '2px 6px', border: `1px solid ${V.border}`, borderRadius: 8 } as React.CSSProperties,
   ticketLabel: { fontSize: 12, fontWeight: 600, color: V.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as React.CSSProperties,
+  // Clickable variant of the label — opens the artifact. Underlined-on-hover link
+  // affordance, theme-driven accent, left-aligned and truncating like the span.
+  ticketLink: { fontSize: 12, fontWeight: 600, color: V.accent, background: 'transparent', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'underline', textUnderlineOffset: 2 } as React.CSSProperties,
   ticketMeta: { fontSize: 10, color: V.muted, textTransform: 'uppercase', letterSpacing: 0.4 } as React.CSSProperties,
   drawer: { fontSize: 12, color: V.text2, borderTop: `1px dashed ${V.border}`, paddingTop: 6 } as React.CSSProperties,
   section: { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', borderTop: `1px dashed ${V.border}`, paddingTop: 8 } as React.CSSProperties,

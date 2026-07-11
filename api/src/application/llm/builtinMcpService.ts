@@ -273,6 +273,31 @@ function compactProject(plain: Record<string, unknown>): Record<string, unknown>
   return out;
 }
 
+/** Project a full spec/PRD row to identity + status, dropping the huge `prd` /
+ *  `archSpec` / `taskList` bodies (a single PRD can be tens of KB — listing 200 of
+ *  them in full is what blew the Brain's context window). The model gets the goal +
+ *  a short PRD snippet here and reads the full document with specs.get on demand. */
+const SPEC_LIST_FIELDS = ['id', 'projectId', 'goal', 'status', 'kind', 'createdAt', 'updatedAt'] as const;
+function compactSpec(plain: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const f of SPEC_LIST_FIELDS) if (plain[f] !== undefined) out[f] = plain[f];
+  const s = snippet(plain.prd);
+  if (s) out.prdSnippet = s;
+  return out;
+}
+
+/** Project a workflow-definition row to identity fields, dropping the serialized
+ *  `definition` graph JSON (unbounded — nodes+edges of a visual workflow). The model
+ *  reads the full graph with workflow_definitions.get when it actually needs it. */
+const WORKFLOW_DEF_LIST_FIELDS = ['id', 'name', 'projectId', 'runTargetRuntime', 'executionScope', 'createdAt', 'updatedAt'] as const;
+function compactWorkflowDef(plain: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const f of WORKFLOW_DEF_LIST_FIELDS) if (plain[f] !== undefined) out[f] = plain[f];
+  const s = snippet(plain.description);
+  if (s) out.descriptionSnippet = s;
+  return out;
+}
+
 /** Wrap a projected page in the standard `{ items, total, returned, truncated }`
  *  envelope so the model can see there's more and re-query with a tighter filter. */
 function listEnvelope<T>(key: string, all: T[], limit: number): Record<string, unknown> {
@@ -730,7 +755,7 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'workflows.get', mutates: false, description: 'Get one workflow by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => (await ctx.db.select().from(workflows).where(and(eq(workflows.id, str(a.id)), eq(workflows.tenantId, ctx.tenantId))).limit(1))[0] ?? null },
 
   // ---- Specs / PRDs (read) ----
-  { tool: 'specs.list', mutates: false, description: 'List specs / PRDs, optionally filtered by project.', parameters: obj({ projectId: N }), run: (ctx, a) => ctx.db.select().from(specs).where(a.projectId != null ? and(eq(specs.tenantId, ctx.tenantId), eq(specs.projectId, num(a.projectId))) : eq(specs.tenantId, ctx.tenantId)).orderBy(desc(specs.updatedAt)).limit(200) },
+  { tool: 'specs.list', mutates: false, description: 'List specs / PRDs (compact: id/projectId/goal/status/kind + a short PRD snippet), optionally filtered by project, capped by limit (default 50, max 200). Use specs.get for one spec\'s full PRD / arch-spec / task-list body.', parameters: obj({ projectId: N, limit: N }), run: async (ctx, a) => { const rows = await ctx.db.select().from(specs).where(a.projectId != null ? and(eq(specs.tenantId, ctx.tenantId), eq(specs.projectId, num(a.projectId))) : eq(specs.tenantId, ctx.tenantId)).orderBy(desc(specs.updatedAt)).limit(LIST_MAX_LIMIT); return listEnvelope('specs', rows.map((r) => compactSpec(r as unknown as Record<string, unknown>)), clampLimit(a.limit)); } },
   { tool: 'specs.get', mutates: false, description: 'Get one spec / PRD by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => (await ctx.db.select().from(specs).where(and(eq(specs.id, str(a.id)), eq(specs.tenantId, ctx.tenantId))).limit(1))[0] ?? null },
   {
     tool: 'specs.create', mutates: true,
@@ -1451,7 +1476,7 @@ const CATALOG: BuiltinTool[] = [
   // ---- Workflow DEFINITIONS (design-time graphs) — distinct from the `workflows` (RUNS) table the
   //       workflows.list/get tools above read. New `workflow_definitions` domain to avoid name collision.
   //       Segment-scoped. (run / import_yaml SKIPPED — they dispatch executions / parse YAML, not table ops.) ----
-  { tool: 'workflow_definitions.list', mutates: false, description: 'List workflow DEFINITIONS (the visually-authored agentic graphs), distinct from workflow runs.', parameters: obj({}), run: async (ctx) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return ctx.db.select().from(workflowDefinitions).where(and(eq(workflowDefinitions.tenantId, ctx.tenantId), eq(workflowDefinitions.segmentId, seg))).orderBy(desc(workflowDefinitions.updatedAt)).limit(200); } },
+  { tool: 'workflow_definitions.list', mutates: false, description: 'List workflow DEFINITIONS (the visually-authored agentic graphs; compact: id/name/projectId + snippet — the full node/edge graph is dropped here, read it with workflow_definitions.get), distinct from workflow runs. Capped by limit (default 50, max 200).', parameters: obj({ limit: N }), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.select().from(workflowDefinitions).where(and(eq(workflowDefinitions.tenantId, ctx.tenantId), eq(workflowDefinitions.segmentId, seg))).orderBy(desc(workflowDefinitions.updatedAt)).limit(LIST_MAX_LIMIT); return listEnvelope('workflowDefinitions', rows.map((r) => compactWorkflowDef(r as unknown as Record<string, unknown>)), clampLimit(a.limit)); } },
   { tool: 'workflow_definitions.get', mutates: false, description: 'Get one workflow definition (with its graph) by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return (await ctx.db.select().from(workflowDefinitions).where(and(eq(workflowDefinitions.id, str(a.id)), eq(workflowDefinitions.tenantId, ctx.tenantId), eq(workflowDefinitions.segmentId, seg))).limit(1))[0] ?? null; } },
   {
     tool: 'workflow_definitions.create', mutates: true,

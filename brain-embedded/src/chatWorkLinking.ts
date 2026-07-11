@@ -49,6 +49,53 @@ export function isCodeChangeTool(name: string): boolean {
   return CODE_CHANGE_TOOLS.has(name);
 }
 
+/**
+ * Advertised (gateway `builtin_*`) names of the platform tools that CREATE a
+ * chat-linkable work item, mapped to the `chat_ticket_links` kind their result
+ * represents. `builtin_tasks_create` is special-cased (its kind is the row's own
+ * `taskType`: task | epic | gap), so it is not in this table. Adding an entry here
+ * makes a create tool auto-link to the conversation — see {@link workItemLinkFromCreate}.
+ */
+const CREATE_TOOL_KIND: Readonly<Record<string, string>> = {
+  builtin_objectives_create: 'objective',
+  builtin_specs_create: 'spec',
+  builtin_portfolios_create: 'portfolio',
+  builtin_initiatives_create: 'initiative',
+};
+
+/** A work item a create tool just produced, in the shape `builtin_chats_link_ticket`
+ *  wants: which tier it is, its ref, and whether it was newly created vs. an
+ *  idempotent hit on a pre-existing item (so the link records the honest lineage). */
+export interface CreatedWorkItemLink {
+  kind: string;
+  ref: string;
+  linkType: 'created' | 'linked';
+}
+
+/**
+ * Derive the chat-link descriptor for the result of a work-item CREATE tool, or null
+ * when the tool is not a create (or the result carries no usable id). This is what
+ * makes "an item the Brain creates is always tied to the conversation" DETERMINISTIC:
+ * the run loop fires `builtin_chats_link_ticket` off this instead of hoping the model
+ * remembers to. An idempotent-hit result (`{ deduped: true, … }`) links as 'linked'
+ * (the item already existed) rather than 'created'.
+ */
+export function workItemLinkFromCreate(toolName: string, result: unknown): CreatedWorkItemLink | null {
+  if (!result || typeof result !== 'object') return null;
+  const row = result as Record<string, unknown>;
+  const id = row.id;
+  const ref = typeof id === 'number' ? String(id) : typeof id === 'string' && id.trim() ? id : null;
+  if (!ref) return null;
+  const linkType: 'created' | 'linked' = row.deduped === true ? 'linked' : 'created';
+  if (toolName === 'builtin_tasks_create') {
+    const t = typeof row.taskType === 'string' ? row.taskType : 'task';
+    const kind = t === 'epic' || t === 'gap' ? t : 'task';
+    return { kind, ref, linkType };
+  }
+  const kind = CREATE_TOOL_KIND[toolName];
+  return kind ? { kind, ref, linkType } : null;
+}
+
 export function isTicketRecordingTool(name: string): boolean {
   return TICKET_RECORDING_TOOLS.has(name);
 }

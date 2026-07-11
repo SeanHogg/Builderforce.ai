@@ -1,6 +1,6 @@
 {
   "name": "@seanhogg/builderforce-brain-ui",
-  "version": "2026.7.24",
+  "version": "2026.7.25",
   "description": "Shared React UI for the BuilderForce Brain — the <BrainTimeline> transcript (lineage/timeline dots, thinking steps, collapsible tool input/output, image bubbles), a <Markdown> renderer, and the <Project360View> whole-picture project health surface (two-ring sunburst, gaps, workforce). Presentational only; driven by the brain-embedded core / the /api/projects/:id/360 rollup, themed via CSS variables so the SAME components render identically on the web app and inside a VS Code webview.",
   "license": "MIT",
   "author": "Sean Hogg",

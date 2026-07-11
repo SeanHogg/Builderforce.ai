@@ -34,9 +34,26 @@ export function hasTranscriptContent(input: { messages: unknown[]; trace: unknow
   return input.messages.length > 0 || input.trace.length > 0 || !!input.error;
 }
 
+/**
+ * Per-payload cap for a tool Input/Output block. Without it a single verbose tool
+ * result (e.g. `builtin_llm_health` dumps ~40 models of JSON, ~15 KB) bloats the copied
+ * transcript so far that the downstream paste target hard-truncates the WHOLE report at
+ * a fixed size — cutting off the END, which is exactly where the failure being triaged
+ * lives. Capping each payload instead keeps every turn, tool call, and error present
+ * end-to-end, trimming only the oversized dumps (with an explicit marker). Generous
+ * (4 KB) so real content survives; the full result is still on the live timeline.
+ */
+const MAX_PAYLOAD_CHARS = 4_000;
+
+function capPayload(payload: string): string {
+  return payload.length <= MAX_PAYLOAD_CHARS
+    ? payload
+    : `${payload.slice(0, MAX_PAYLOAD_CHARS)}\n…(+${payload.length - MAX_PAYLOAD_CHARS} chars truncated — full result is on the live timeline)`;
+}
+
 function fenced(label: string, payload: string, lines: string[]): void {
   if (!payload) return;
-  lines.push(`${label}:`, '```', payload, '```');
+  lines.push(`${label}:`, '```', capPayload(payload), '```');
 }
 
 /** Serialize the live conversation into a Markdown transcript. */

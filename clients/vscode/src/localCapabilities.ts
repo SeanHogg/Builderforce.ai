@@ -17,7 +17,7 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { filterByGlob } from "@builderforce/agent-tools";
+import { filterByGlob, applyStringEdit } from "@builderforce/agent-tools";
 import type {
   Capability,
   CapabilityProvider,
@@ -252,15 +252,15 @@ export function buildLocalCapabilityProvider(root: string): CapabilityProvider {
     async editFile(p: string, oldString: string, newString: string, replaceAll?: boolean): Promise<RepoEditResult> {
       const abs = resolveInRoot(rootResolved, p);
       const current = await fs.readFile(abs, "utf-8");
-      const first = current.indexOf(oldString);
-      if (first === -1) return { ok: false, error: "oldString not found in file" };
-      if (!replaceAll && current.indexOf(oldString, first + oldString.length) !== -1) {
-        return { ok: false, error: "oldString is not unique; add more context or set replaceAll" };
-      }
-      const next = replaceAll ? current.split(oldString).join(newString) : current.replace(oldString, newString);
-      const replaced = replaceAll ? current.split(oldString).length - 1 : 1;
-      await fs.writeFile(abs, next, "utf-8");
-      return { ok: true, change: "modified", replaced };
+      // EOL-tolerant, EOL-preserving match (shared with the cloud provider): an agent
+      // that emits LF `oldString` against a CRLF file still matches, and the file's
+      // existing line endings survive — the naive `indexOf` here used to fail every
+      // surgical edit on a Windows/CRLF working tree ("it tried to change code and
+      // couldn't").
+      const edit = applyStringEdit(current, oldString, newString, replaceAll);
+      if (!edit.ok || edit.content == null) return { ok: false, error: edit.error ?? "oldString not found in file" };
+      await fs.writeFile(abs, edit.content, "utf-8");
+      return { ok: true, change: "modified", replaced: edit.replaced };
     },
   };
 
