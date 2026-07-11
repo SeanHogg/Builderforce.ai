@@ -1867,12 +1867,23 @@ export interface AttentionItem {
   executionId?: number;
   approvalId?: string;
 }
+/** AI Manager cadence carried on the same cross-surface attention signal, so any
+ *  screen can show an ambient "Manager active / last managed" indicator. Scope is
+ *  the requested project, or the whole tenant when no projectId is passed. */
+export interface AttentionManager {
+  /** ISO of the freshest manager pass in scope, or null if never managed. */
+  lastRunAt: string | null;
+  /** A pass landed in the last few minutes (pulse the indicator). */
+  recentlyActive: boolean;
+}
 export interface AttentionResponse {
   /** Keyed by task id. */
   tasks: Record<number, AttentionItem>;
   /** Keyed by Brain chat id (a chat inherits the state of its linked task). */
   chats: Record<number, AttentionItem & { taskId?: number }>;
   counts: { running: number; awaiting: number };
+  /** AI Manager cadence (present on every response). */
+  manager: AttentionManager;
 }
 
 export const runtimeApi = {

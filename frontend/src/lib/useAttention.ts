@@ -5,7 +5,7 @@ import { subscribeRunStore, getGlobalRunState, type GlobalRunState } from '@sean
 import { runtimeApi, type AttentionResponse, type AttentionState } from '@/lib/builderforceApi';
 import { useRealtimeRoom } from '@/lib/embed/useRealtimeRoom';
 
-const EMPTY: AttentionResponse = { tasks: {}, chats: {}, counts: { running: 0, awaiting: 0 } };
+const EMPTY: AttentionResponse = { tasks: {}, chats: {}, counts: { running: 0, awaiting: 0 }, manager: { lastRunAt: null, recentlyActive: false } };
 
 /** A stable key of the two live-chat lists, so a subscriber only re-renders when
  *  the SET of live chats changes — not on every streaming token (each of which
@@ -129,6 +129,7 @@ export function useAttention(projectId?: number, enabled = true): AttentionRespo
       tasks: data.tasks,
       chats,
       counts: { running: data.counts.running + addRunning, awaiting: data.counts.awaiting + addAwaiting },
+      manager: data.manager,
       refresh,
     };
   }, [enabled, data, local, refresh]);

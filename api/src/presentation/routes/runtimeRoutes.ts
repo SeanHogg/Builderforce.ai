@@ -6,7 +6,7 @@ import { resolveTicketRepoContext } from '../../application/repos/commitFileAsPe
 import { readRepoFile } from '../../application/repos/readRepoContents';
 import { importRepoContents } from '../../application/repos/importRepoContents';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { and, desc, eq, gte, inArray, isNull } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import {
   resolveCloudSurface, chooseCloudExecutor, probeContainerHealth, cloudAgentTypeLabel,
@@ -32,7 +32,7 @@ import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentHosts, boards, executions, projectInsightEvents, projectRepositories, projects, specs, tasks, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
-import { approvals, chatTicketLinks } from '../../infrastructure/database/schema';
+import { approvals, chatTicketLinks, projectManagerConfigs } from '../../infrastructure/database/schema';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { resolveProjectInferenceModel } from '../../application/llm/projectEvermind';
 import { executionTokenGate } from './executionTokenGate';
@@ -1335,6 +1335,24 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const tasksOut: Record<number, Item> = {};
     for (const [taskId, item] of taskState) tasksOut[taskId] = item;
 
+    // 5) AI Manager cadence — the freshest `last managed` stamp across the manager's
+    // scope, so a human on ANY screen sees an ambient "Manager active" pulse when a
+    // pass just ran (cron or manual). A manager can be scoped to one project OR the
+    // whole tenant, so: project-scoped attention reads that project's stamp; the
+    // tenant-wide view reads MAX(last_run_at) across all the tenant's managed
+    // projects. One bounded aggregate — consistent with this endpoint's other reads.
+    const mgrWhere = projectId != null && Number.isFinite(projectId)
+      ? and(eq(projectManagerConfigs.tenantId, tenantId), eq(projectManagerConfigs.projectId, projectId))
+      : eq(projectManagerConfigs.tenantId, tenantId);
+    const [mgrRow] = await db
+      .select({ lastRunAt: sql<Date | null>`max(${projectManagerConfigs.lastRunAt})` })
+      .from(projectManagerConfigs)
+      .where(mgrWhere);
+    const lastRunAt = mgrRow?.lastRunAt ? new Date(mgrRow.lastRunAt) : null;
+    // "Active" = a pass landed within the last 3 min (the cron cadence is 5 min, a
+    // pass is seconds long, so this reads as "the manager is working on schedule").
+    const recentlyActive = lastRunAt != null && Date.now() - lastRunAt.getTime() < 3 * 60_000;
+
     return c.json({
       tasks: tasksOut,
       chats: chatState,
@@ -1342,6 +1360,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         running: [...taskState.values()].filter((i) => i.state === 'running').length,
         awaiting: [...taskState.values()].filter((i) => i.state === 'awaiting_input').length,
       },
+      manager: { lastRunAt: lastRunAt ? lastRunAt.toISOString() : null, recentlyActive },
     });
   });
 

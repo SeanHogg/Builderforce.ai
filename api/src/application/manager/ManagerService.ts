@@ -51,6 +51,7 @@ import { pollPrCiStatus } from '../repos/pollPrCiStatus';
 import { dispatchTaskFinalize } from '../../presentation/routes/taskRoutes';
 import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
 import { TicketAuditService } from '../audit/ticketAuditService';
+import { recordActivity, cloudAgentActor, SYSTEM_ACTOR } from '../activity/activityLog';
 
 /** Non-terminal statuses whose tickets the manager grooms/ranks/assigns. */
 const NON_TERMINAL: string[] = [
@@ -584,6 +585,37 @@ export async function runManagerForProject(
       tenantId, projectId, runTaskId, actionType: 'manage',
       summary: `${identity.label} managed the board${identity.personaDirective ? ' with its persona' : ''}.`,
       detail: { managerRef: policy.managerRef, model: identity.model, hasPersona: !!identity.personaDirective },
+    });
+  }
+
+  // AUDIT: one per-pass event on the unified activity log so a human on ANY screen
+  // (the activity/audit timeline, cross-surface) can see the manager took action —
+  // not just someone sitting on the Manager tab. One summary event per pass (not one
+  // per scored ticket) keeps the audit trail meaningful, not flooded. Attributed to
+  // the actual manager agent when one is designated, else the system "AI Manager".
+  // Best-effort (recordActivity never throws). Skipped on an idle pass (nothing done).
+  const didSomething =
+    summary.scored || summary.ranked || summary.assigned ||
+    summary.dispatched || summary.prsConducted || summary.prsMerged || summary.flagged;
+  if (didSomething) {
+    const actor = identity.agentRef
+      ? cloudAgentActor(identity.agentRef, identity.label || 'AI Manager')
+      : { ...SYSTEM_ACTOR, name: 'AI Manager' };
+    await recordActivity(env, db, {
+      tenantId, projectId, actor,
+      verb: 'manager.pass',
+      targetType: 'project', targetId: projectId,
+      summary:
+        `Managed the backlog — scored ${summary.scored}, ranked ${summary.ranked}, ` +
+        `assigned ${summary.assigned}, dispatched ${summary.dispatched}, ` +
+        `PRs ${summary.prsConducted + summary.prsMerged}` +
+        `${summary.flagged ? `, flagged ${summary.flagged}` : ''}.`,
+      metadata: {
+        scored: summary.scored, ranked: summary.ranked, assigned: summary.assigned,
+        dispatched: summary.dispatched, prsConducted: summary.prsConducted,
+        prsMerged: summary.prsMerged, flagged: summary.flagged,
+        trigger: submittedBy,
+      },
     });
   }
 
