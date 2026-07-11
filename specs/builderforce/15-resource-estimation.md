@@ -173,7 +173,7 @@ Source: [09-prd-cloud-agent-validation.md](./09-prd-cloud-agent-validation.md) �
 | B2 | 50-gap P0 security/isolation | Capability gap | **🟡 High** | No current agent can validate cloud infra security; GA blocker |
 | B3 | Dev→QA handoff serialization | Inter-agent handoff | **🟡 High** | Large dev items (8–13 SP) gate QA cycles; no parallel work packaging |
 | B4 | Kevin underload | Idle risk | **🟢 Low** | ~85% idle capacity; reallocation opportunity |
-| B5 | bobrateos on-hold ambiguity | Decision block | **🟢 Low** | 18 SP frozen pending go/no-go decision |
+| B5 | burnrateos on-hold ambiguity | Decision block | **🟢 Low** | 18 SP frozen pending go/no-go decision |
 
 ---
 
