@@ -1,7 +1,6 @@
 import * as vscode from "vscode";
 import { getTenantJwt, getCurrentUserId } from "./bfApi";
 import { TOOL_DEFS } from "./fileTools";
-import { contributeProjectEvermind } from "./evermindLearn";
 import { getBaseUrl, getWebBaseUrl, SECRET_KEY, fetchPersonalityBlock, fetchLimbicBlock } from "./gateway";
 import { BoardPanel } from "./boardPanel";
 import { getGroundingSummary } from "./grounding";
@@ -225,18 +224,6 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
         const nums = (v: unknown): number[] =>
           Array.isArray(v) ? v.filter((n): n is number => typeof n === "number") : [];
         BrainWebview.hooks.onLocalRunsChanged?.({ running: nums(msg.running), awaiting: nums(msg.awaiting) });
-        break;
-      }
-      // A chat run finished — contribute what it learned back to the active
-      // project's Evermind (the same weight-delta loop cloud/on-prem run). Gated by
-      // the `builderforce.evermindLearning` setting + throttled inside the helper.
-      case "run.complete": {
-        const project = getSelectedProject();
-        if (project) void contributeProjectEvermind(
-          this.ctx.secrets, project.id,
-          typeof msg.text === "string" ? msg.text : "",
-          typeof msg.prompt === "string" ? msg.prompt : undefined,
-        );
         break;
       }
       // Triage: the webview built a full transcript (turns + tool I/O + errors);

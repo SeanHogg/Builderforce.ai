@@ -5518,6 +5518,11 @@
       "recallHint": "Das selbstlernende Evermind dieses Projekts hat diese früheren Erkenntnisse abgerufen und die Antwort darauf gestützt.",
       "learnTitle": "Dieser Beitrag wurde an Evermind v{version} übermittelt",
       "learnHint": "Dieser Beitrag wurde an das Projekt-Evermind zurückgegeben — er wird in das gelernte Modell eingemischt.",
+      "learnSkippedTitle": "Diese Runde nicht gelernt — {reason}",
+      "learnSkippedHint": "Diese Runde wurde nicht an das Projekt-Evermind beigetragen. „Lernen — Verbunden“ spiegelt das Modell des ausgewählten Projekts wider, nicht ob dieser Chat es speist.",
+      "learnSkipReasonNotAttached": "dieser Chat ist keinem Projekt zugeordnet",
+      "learnSkipReasonNotSeeded": "dieses Projekt hat noch kein Evermind-Modell",
+      "learnSkipReasonFrozen": "das Evermind dieses Projekts ist eingefroren (schreibgeschützt)",
       "reconcileTitle": "{count} gelernte Erinnerungen in Evermind v{version} abgeglichen",
       "reconcileHint": "Die Antwort hat diese abgerufenen Erkenntnisse neu formuliert und aktualisiert sie damit (Write-Through-Kognition).",
       "stop": "Stoppen"

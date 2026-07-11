@@ -5518,6 +5518,11 @@
       "recallHint": "El Evermind autoaprendiz de este proyecto recuperó estos aprendizajes previos y fundamentó la respuesta en ellos.",
       "learnTitle": "Este turno se aportó a Evermind v{version}",
       "learnHint": "Este turno se devolvió al Evermind del proyecto: se fusionará en el modelo aprendido.",
+      "learnSkippedTitle": "No se aprendió este turno — {reason}",
+      "learnSkippedHint": "Este turno no se contribuyó al Evermind del proyecto. «Aprendizaje — Conectado» refleja el modelo del proyecto seleccionado, no si este chat lo alimenta.",
+      "learnSkipReasonNotAttached": "este chat no está asociado a un proyecto",
+      "learnSkipReasonNotSeeded": "este proyecto aún no tiene un modelo Evermind",
+      "learnSkipReasonFrozen": "el Evermind de este proyecto está congelado (solo lectura)",
       "reconcileTitle": "Se reconciliaron {count} memorias aprendidas en Evermind v{version}",
       "reconcileHint": "La respuesta reformuló estos aprendizajes recuperados, por lo que los actualiza (cognición de escritura directa).",
       "stop": "Detener"

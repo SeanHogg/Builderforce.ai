@@ -5518,6 +5518,11 @@
       "recallHint": "本项目的自学习 Evermind 召回了这些既往学习内容，并据此生成了回答。",
       "learnTitle": "本轮已贡献给 Evermind v{version}",
       "learnHint": "本轮已回馈给项目 Evermind——它将被合并进已学习的模型。",
+      "learnSkippedTitle": "本轮未学习——{reason}",
+      "learnSkippedHint": "本轮未回馈给项目 Evermind。“学习—已连接”反映的是所选项目的模型，而非此对话是否会喂给它。",
+      "learnSkipReasonNotAttached": "此对话未关联到任何项目",
+      "learnSkipReasonNotSeeded": "该项目尚无 Evermind 模型",
+      "learnSkipReasonFrozen": "该项目的 Evermind 已冻结（只读）",
       "reconcileTitle": "已在 Evermind v{version} 中协调 {count} 条已学习记忆",
       "reconcileHint": "回答重述了这些召回的学习内容，因此会对其进行更新（写通式认知）。",
       "stop": "停止"

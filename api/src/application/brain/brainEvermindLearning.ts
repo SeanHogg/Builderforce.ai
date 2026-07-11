@@ -25,13 +25,31 @@ const MIN_TEACH_CHARS = 40;
 interface TurnMessage { role: string; content: string }
 
 /**
+ * Why a turn was NOT contributed — a machine key the client maps to a localized,
+ * muted "Evermind did not learn this turn" step so the negative case is EXPLAINED,
+ * never silent. `null` when the turn WAS contributed (`learned: true`).
+ *   - `not-attached` — the chat isn't bound to a project (the #1 real cause: a global
+ *      Brain chat, or one created before a project was selected). Only a project chat
+ *      feeds a project Evermind.
+ *   - `not-seeded`   — the project has no base Evermind yet (version 0).
+ *   - `frozen`       — the project's Evermind is offline-frozen (read-only), so runs
+ *      and replies don't contribute.
+ *   - `too-short`    — no assistant turn long enough to be a teaching signal.
+ */
+export type BrainLearnSkipReason = 'not-attached' | 'not-seeded' | 'frozen' | 'too-short';
+
+/**
  * Truthful outcome of the learn gate for a persisted turn — surfaced to the client
  * (send-messages response) so the Brain run loop renders a `learn` step exactly when
- * the server DID contribute, instead of guessing from the client's pre-turn recall.
+ * the server DID contribute, and an EXPLAINED skip step (with {@link reason}) when it
+ * did not — instead of guessing from the client's pre-turn recall or, worse, showing
+ * nothing at all (the silent non-learning that made "why isn't it learning?" unanswerable).
  */
 export interface BrainLearnOutcome {
   learned: boolean;
   version: number;
+  /** Why it did not contribute; null/absent when `learned` is true. */
+  reason?: BrainLearnSkipReason | null;
 }
 
 /** The gate outcome PLUS the resolved contribution inputs, so the dispatch step can
@@ -60,7 +78,7 @@ export async function evaluateBrainLearnGate(
   const assistant = [...inserted].reverse().find(
     (m) => m.role === 'assistant' && typeof m.content === 'string' && m.content.trim().length >= MIN_TEACH_CHARS,
   )?.content ?? null;
-  if (!assistant) return { outcome: { learned: false, version: 0 }, projectId: null, assistant: null };
+  if (!assistant) return { outcome: { learned: false, version: 0, reason: 'too-short' }, projectId: null, assistant: null };
 
   const [chat] = await db
     .select({ projectId: brainChats.projectId })
@@ -68,11 +86,15 @@ export async function evaluateBrainLearnGate(
     .where(eq(brainChats.id, chatId))
     .limit(1);
   const projectId = chat?.projectId ?? null;
-  if (projectId == null) return { outcome: { learned: false, version: 0 }, projectId: null, assistant }; // only a project chat feeds a project Evermind
+  // Only a project chat feeds a project Evermind. This is the most common real reason a
+  // turn "should learn" but doesn't: the "Learning — Connected" panel reflects the
+  // SELECTED project's head, not whether THIS chat is attached to it.
+  if (projectId == null) return { outcome: { learned: false, version: 0, reason: 'not-attached' }, projectId: null, assistant };
 
   const head = await getProjectEvermindHead(env, db, tenantId, projectId);
-  const learned = head.version >= 1 && head.mode === 'connected'; // seeded + connected → will contribute
-  return { outcome: { learned, version: head.version }, projectId, assistant };
+  if (head.version < 1) return { outcome: { learned: false, version: head.version, reason: 'not-seeded' }, projectId, assistant };
+  if (head.mode !== 'connected') return { outcome: { learned: false, version: head.version, reason: 'frozen' }, projectId, assistant };
+  return { outcome: { learned: true, version: head.version, reason: null }, projectId, assistant };
 }
 
 /**

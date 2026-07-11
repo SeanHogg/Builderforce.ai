@@ -5518,6 +5518,11 @@
       "recallHint": "This project's self-learning Evermind recalled these prior learnings and grounded the answer on them.",
       "learnTitle": "Contributed this turn to Evermind v{version}",
       "learnHint": "This turn was contributed back to the project Evermind — it will be merged into the learned model.",
+      "learnSkippedTitle": "Not learned this turn — {reason}",
+      "learnSkippedHint": "This turn wasn't contributed to the project Evermind. “Learning — Connected” reflects the selected project's model, not whether this chat feeds it.",
+      "learnSkipReasonNotAttached": "this chat isn’t attached to a project",
+      "learnSkipReasonNotSeeded": "this project has no Evermind model yet",
+      "learnSkipReasonFrozen": "this project’s Evermind is frozen (read-only)",
       "reconcileTitle": "Reconciled {count} learned memories in Evermind v{version}",
       "reconcileHint": "The answer restated these recalled learnings, so it updates them (write-through cognition).",
       "stop": "Stop"

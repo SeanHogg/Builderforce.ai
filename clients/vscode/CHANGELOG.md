@@ -2,6 +2,10 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.7.65] — Your chats now actually train the project's model
+
+- **Fixed: conversations that showed "Learning · Connected" weren't teaching the model anything.** The Evermind panel could say a chat was connected and learning while, under the hood, that conversation wasn't tied to a project — and the model only learns from project conversations. So the counter never moved no matter how much you discussed. Now, when you have a project open, an unscoped chat is automatically attached to it, so what you work through in chat genuinely trains the project's model (the "Last learned" and queued counts move as you'd expect). Existing older chats self-heal the next time you open them with a project selected.
+
 ## [2026.7.62] — Open any item the chat created, and it stays linked automatically
 
 - **Every task, epic, OKR, or spec the chat creates is now one click from its board card.** The linked-work strip under the chat header now shows each item as a clickable "Open" link (with a ↗ button) — click it to jump straight to the board it lives on. No more hunting for the thing the assistant just made.
