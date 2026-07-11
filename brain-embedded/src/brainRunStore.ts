@@ -1288,6 +1288,18 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
           result: { count: reconciled, version: learn.version },
         });
       }
+    } else if (learn && learn.reason && learn.reason !== 'too-short') {
+      // The turn did NOT feed the Evermind, for a project-level reason the user can act
+      // on (chat not attached to a project / not seeded / frozen). Surface it as an
+      // EXPLAINED muted step so "Connected, yet nothing learned" is never a silent
+      // mystery again — the same defect that sent the last debugging session in circles.
+      // `too-short` is mundane (a one-line turn) and intentionally not surfaced.
+      pushDurableStep(c, chatId, persistence, {
+        ts: nowIso(),
+        category: 'learn',
+        label: 'evermind.learn',
+        result: { version: learn.version, skipped: true, reason: learn.reason },
+      });
     }
 
     onActivity?.(chatId);

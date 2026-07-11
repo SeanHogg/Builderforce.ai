@@ -572,6 +572,28 @@ function Chat({ init }: { init: InitData }) {
     () => chats.find((c) => c.id === chatId)?.projectId ?? init.project?.id ?? null,
     [chats, chatId, init.project?.id],
   );
+
+  // Self-heal Evermind learning scope. The server's chat→Evermind learn gate keys on
+  // brain_chats.projectId (evaluateBrainLearnGate): a project-less chat NEVER
+  // contributes — even though the Evermind panel above shows the IDE project's model
+  // as connected, because it resolves evermindProjectId via the init.project FALLBACK.
+  // So a chat created before a project was selected (or any older/global chat) shows a
+  // "Learning · Connected" panel yet silently never trains the model. When the IDE has
+  // a resolved project and the open chat is project-less, adopt it onto the chat so its
+  // turns actually train the project's Evermind and the panel's claim becomes true.
+  // One-shot per chat (guarded), best-effort — a failure just leaves it unscoped.
+  const adoptedProjectRef = useRef<Set<number>>(new Set());
+  useEffect(() => {
+    const pid = init.project?.id;
+    if (chatId == null || pid == null || adoptedProjectRef.current.has(chatId)) return;
+    const chat = chats.find((c) => c.id === chatId);
+    if (!chat || chat.projectId != null) return;
+    adoptedProjectRef.current.add(chatId);
+    void persistence.updateChat(chatId, { projectId: pid })
+      .then(() => reloadChats())
+      .catch(() => { adoptedProjectRef.current.delete(chatId); });
+  }, [chatId, chats, init.project?.id, persistence, reloadChats]);
+
   const evermind = useMemo(() => {
     if (evermindProjectId == null) return undefined;
     const req = authedFetch(init.baseUrl, getToken, () => void refreshToken());
@@ -777,29 +799,16 @@ function Chat({ init }: { init: InitData }) {
     },
   });
 
-  // Feed the project's Evermind: when a run finishes (sending true→false) with
-  // content, hand the host this exchange so it can contribute what was learned back
-  // to the shared model — the same loop cloud/on-prem run. The host gates it behind
-  // the `builderforce.evermindLearning` setting + throttles, so this is a cheap
-  // best-effort signal (not every frame).
+  // When a run finishes (sending true→false) with content, persist its execution
+  // trace. Evermind learning is NOT triggered here: it happens authoritatively
+  // server-side on every message persist (`evaluateBrainLearnGate` on
+  // POST /brain/chats/:id/messages), so a chat turn always feeds the project's
+  // Evermind when the chat is attached + seeded + connected — no separate, throttled,
+  // opt-in client contribution (that path was redundant and has been removed).
   const prevSending = useRef(false);
   useEffect(() => {
     if (prevSending.current && !conv.sending
       && hasTranscriptContent({ messages: conv.messages, trace: conv.trace, error: conv.error })) {
-      // Only feed the project-Evermind when this chat's memory switch is on — an
-      // off chat neither recalls (gated above) nor contributes learnings back.
-      if (memoryEnabled) post('run.complete', {
-        text: buildTranscript({
-          messages: conv.messages,
-          trace: conv.trace,
-          assistantName: 'BuilderForce',
-          model: init.model,
-          error: conv.error,
-        }),
-        // The run's initiating user message (the "ticket") so the project-Evermind
-        // teacher distils (task → answer), matching cloud + on-prem.
-        prompt: conv.messages.find((m) => m.role === 'user')?.content ?? '',
-      });
       // Persist this run's execution trace so its tool/LLM turns survive a reload (the
       // web app does the same via POST /chats/:id/trace). Best-effort — a failed persist
       // never affects the chat; the live trace stays visible via conv.trace this session.

@@ -16,6 +16,15 @@ export interface TimelineImage {
   name?: string;
 }
 
+/** Why a turn did not feed the project Evermind (mirrors the api's `BrainLearnSkipReason`). */
+export type BrainLearnSkipReason = 'not-attached' | 'not-seeded' | 'frozen';
+
+const LEARN_SKIP_REASONS: readonly string[] = ['not-attached', 'not-seeded', 'frozen'];
+
+function isLearnSkipReason(v: unknown): v is BrainLearnSkipReason {
+  return typeof v === 'string' && LEARN_SKIP_REASONS.includes(v);
+}
+
 export type TimelineNode =
   | { key: string; kind: 'user'; ts: number; order: number; message: BrainMessage; text: string; images: TimelineImage[] }
   | { key: string; kind: 'assistant'; ts: number; order: number; message: BrainMessage; text: string }
@@ -24,7 +33,7 @@ export type TimelineNode =
   | { key: string; kind: 'error'; ts: number; order: number; label: string; message: string }
   // Project-Evermind memory steps — recall (before answering), learn + reconcile (after).
   | { key: string; kind: 'recall'; ts: number; order: number; version: number; count: number; items: EvermindRecallItem[] }
-  | { key: string; kind: 'learn'; ts: number; order: number; version: number }
+  | { key: string; kind: 'learn'; ts: number; order: number; version: number; skipped?: BrainLearnSkipReason }
   | { key: string; kind: 'reconcile'; ts: number; order: number; version: number; count: number }
   | { key: string; kind: 'streaming'; ts: number; order: number; text: string };
 
@@ -128,8 +137,9 @@ function stepNode(step: StepLike, ts: number, key: string): TimelineNode | null 
       return { key, kind: 'recall', ts, order: ORDER.recall, version: typeof r.version === 'number' ? r.version : 0, count: typeof r.count === 'number' ? r.count : (Array.isArray(r.items) ? r.items.length : 0), items: Array.isArray(r.items) ? r.items : [] };
     }
     case 'learn': {
-      const r = (step.result ?? {}) as { version?: number };
-      return { key, kind: 'learn', ts, order: ORDER.learn, version: typeof r.version === 'number' ? r.version : 0 };
+      const r = (step.result ?? {}) as { version?: number; skipped?: boolean; reason?: string };
+      const skipped = r.skipped && isLearnSkipReason(r.reason) ? r.reason : undefined;
+      return { key, kind: 'learn', ts, order: ORDER.learn, version: typeof r.version === 'number' ? r.version : 0, ...(skipped ? { skipped } : {}) };
     }
     case 'reconcile': {
       const r = (step.result ?? {}) as { count?: number; version?: number };

@@ -45,6 +45,13 @@ export interface BrainTimelineLabels {
   learnTitle: string;
   /** Tooltip on the learn step. */
   learnHint: string;
+  /** Evermind SKIPPED-learn step — the turn did NOT contribute, and why. Must contain
+   *  `{reason}` (filled from {@link learnSkipReason}). */
+  learnSkippedTitle: string;
+  /** Tooltip on the skipped-learn step. */
+  learnSkippedHint: string;
+  /** Human phrase per skip reason, substituted into {@link learnSkippedTitle}. */
+  learnSkipReason: { 'not-attached': string; 'not-seeded': string; frozen: string };
   /** Evermind reconcile step — the turn updated learned memories. Must contain
    *  `{count}` and `{version}`. */
   reconcileTitle: string;
@@ -77,6 +84,13 @@ export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
   recallHint: "This project's self-learning Evermind recalled these prior learnings and grounded the answer on them.",
   learnTitle: 'Contributed this turn to Evermind v{version}',
   learnHint: 'This turn was contributed back to the project Evermind — it will be merged into the learned model.',
+  learnSkippedTitle: 'Not learned this turn — {reason}',
+  learnSkippedHint: "This turn wasn't contributed to the project Evermind. “Learning — Connected” reflects the selected project's model, not whether this chat feeds it.",
+  learnSkipReason: {
+    'not-attached': 'this chat isn’t attached to a project',
+    'not-seeded': 'this project has no Evermind model yet',
+    frozen: 'this project’s Evermind is frozen (read-only)',
+  },
   reconcileTitle: 'Reconciled {count} learned memories in Evermind v{version}',
   reconcileHint: 'The answer restated these recalled learnings, so it updates them (write-through cognition).',
 };
@@ -511,14 +525,19 @@ function BrainTimelineInner({
             );
           }
           if (node.kind === 'learn') {
-            const title = labels.learnTitle.replace('{version}', String(node.version));
+            // Skipped: the turn did NOT feed the Evermind for a project-level reason —
+            // render an explained muted line so the absence is never a silent mystery.
+            const title = node.skipped
+              ? labels.learnSkippedTitle.replace('{reason}', labels.learnSkipReason[node.skipped])
+              : labels.learnTitle.replace('{version}', String(node.version));
+            const hint = node.skipped ? labels.learnSkippedHint : labels.learnHint;
             return (
               <li key={node.key} className="bf-tl__item bf-tl__item--memory">
                 <span className="bf-tl__gutter">
                   <span className="bf-tl__dot bf-tl__dot--muted">{dotIcon('learn')}</span>
                 </span>
                 <div className="bf-tl__body">
-                  <span className="bf-tl__memory-line" title={labels.learnHint}>{title}</span>
+                  <span className="bf-tl__memory-line" title={hint}>{title}</span>
                 </div>
               </li>
             );

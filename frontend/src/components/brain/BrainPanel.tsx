@@ -699,6 +699,13 @@ export function BrainPanel({
     recallHint: tTimeline('recallHint'),
     learnTitle: tTimeline('learnTitle'),
     learnHint: tTimeline('learnHint'),
+    learnSkippedTitle: tTimeline('learnSkippedTitle'),
+    learnSkippedHint: tTimeline('learnSkippedHint'),
+    learnSkipReason: {
+      'not-attached': tTimeline('learnSkipReasonNotAttached'),
+      'not-seeded': tTimeline('learnSkipReasonNotSeeded'),
+      frozen: tTimeline('learnSkipReasonFrozen'),
+    },
     reconcileTitle: tTimeline('reconcileTitle'),
     reconcileHint: tTimeline('reconcileHint'),
   }), [tTimeline]);

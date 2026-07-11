@@ -2,7 +2,6 @@ import * as vscode from "vscode";
 import { runAgent } from "./agent";
 import { ChatMessage, SECRET_KEY, fetchLimbicBlock } from "./gateway";
 import { getCurrentUserId, createBrainChat, appendBrainMessages } from "./bfApi";
-import { contributeProjectEvermind } from "./evermindLearn";
 import { getGroundingSummary } from "./grounding";
 import { getEditorContext } from "./editorContext";
 import { editorContextDirective } from "./idePersona";
@@ -126,17 +125,12 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
       },
     );
 
-    // Contribute this run's text to the active project's Evermind. Fire-and-forget:
-    // the contributor is off by default, throttled, and swallows all errors, so it
-    // never blocks or breaks the chat turn.
-    const project = getSelectedProject();
-    if (project) {
-      void contributeProjectEvermind(ctx.secrets, project.id, `${request.prompt}\n\n${assistantText}`);
-    }
-
     // Persist the turn into the SAME Brain store the webview + web app read, so the
-    // linked chat carries the actual conversation (not just ticket lineage). Best-
-    // effort — swallows its own errors and never blocks the reply.
+    // linked chat carries the actual conversation (not just ticket lineage). This is
+    // ALSO what feeds the project's Evermind: the server's learn gate
+    // (`evaluateBrainLearnGate`) fires on this persist when the chat is attached to a
+    // project — one authoritative learning path for every surface, no separate opt-in
+    // client contribution. Best-effort — swallows its own errors and never blocks the reply.
     if (brainChatId != null) {
       const turns: Array<{ role: string; content: string }> = [{ role: "user", content: request.prompt }];
       if (assistantText.trim()) turns.push({ role: "assistant", content: assistantText });

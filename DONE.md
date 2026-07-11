@@ -4,6 +4,24 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-11 — Evermind chat-learning: silent non-learning made visible + redundant client path deleted (api · brain-embedded · brain-ui · frontend · VSIX)
+
+Follow-up to the 2026.7.65 project-less-chat fix below. The operator was still burned by the SAME confusion because two things remained: (a) when a turn did NOT feed the Evermind, the gate returned `{learned:false}` with **no reason** and the chat rendered **nothing** — so "Connected, yet nothing learned" stayed an unexplained mystery (this is what sent a whole debugging session in circles); (b) a **second, redundant** learning path still existed and muddied the picture.
+
+**(a) Non-learning is now EXPLAINED, not silent.** `evaluateBrainLearnGate` (`api/src/application/brain/brainEvermindLearning.ts`) now returns a `reason` (`not-attached` | `not-seeded` | `frozen` | `too-short`) on every non-contributing turn (`BrainLearnOutcome.reason`), split out from the old combined boolean. `brainRunStore.runLoop` (`brain-embedded`) reads it off the persisted assistant message and, for the actionable project-level reasons (not the mundane `too-short`), pushes a muted **"Not learned this turn — <reason>"** timeline step. Rendered by `brain-ui` (`timelineModel.ts` `learn` node gains `skipped?`, `BrainTimeline.tsx` renders the skip line + `learnSkipReason` label map, English defaults in `DEFAULT_TIMELINE_LABELS`); localized in `frontend/src/components/brain/BrainPanel.tsx` + all 5 i18n catalogs (`learnSkippedTitle`/`learnSkippedHint`/`learnSkipReason*`). The panel reflects the SELECTED project's head; the chat now says out loud when *this* chat isn't feeding it and why.
+
+**(b) One learning path, not two (DRY + dead-code).** Deleted `clients/vscode/src/evermindLearn.ts` (`contributeProjectEvermind`) and both call sites (`brainWebview.ts` `run.complete` handler + `chatParticipant.ts`), the webview `post('run.complete', …)` producer (`clients/vscode/webview/src/App.tsx`), the `builderforce.evermindLearning` setting (`package.json`), and its 5 `config.evermindLearning.desc` NLS strings. That path POSTed to the SAME coordinator `/learn-text` door as the server gate but OFF by default + throttled 1/5min — so it was dead-by-default and would DOUBLE-learn when enabled, plus its opt-in setting falsely implied learning was manual. Learning is now authoritative in exactly ONE place: the server gate on `POST /brain/chats/:id/messages`, which fires for the webview, native participant (via `appendBrainMessages`), web app, cloud, and on-prem alike. Grep confirms zero remaining references; all 6 VSIX JSON files parse.
+
+Verified by code inspection (monorepo not buildable in this workspace). Remaining: coordinated version bumps + `vsce package` before it ships in the VSIX.
+
+## ✅ RESOLVED 2026-07-11 — VSIX Brain chat showed "Learning · Connected" but never trained the project Evermind (VSIX 2026.7.65)
+
+Operator (superadmin) asked: with Learning On + Connected, why didn't a self-diagnostic chat move the Evermind model (LAST LEARNED stuck 18h, QUEUED 0)? The prior chat mis-blamed the free-plan teacher model — **disproven**: agent runs learned 18h ago through the SAME coordinator `/learn-text` door, and `teacherModel` is OPTIONAL (the coordinator SSM adapts on raw text regardless).
+
+**Root cause (traced through code, not guessed):** the chat→Evermind pipeline is fully wired — VSIX webview `persistence.sendMessages` → `POST /api/brain/chats/:id/messages` → `evaluateBrainLearnGate` → (if learned) `dispatchBrainLearn` → coordinator. The gate (`api/src/application/brain/brainEvermindLearning.ts:53-76`) keys on **`brain_chats.projectId != null`**. For a long-reply chat on a seeded (v11) + `connected` (default `toMode`) project, the ONLY always-false condition is a **project-less chat row**. Meanwhile the VSIX Evermind panel/badge resolves its project via a FALLBACK — `evermindProjectId = activeChat?.projectId ?? init.project?.id ?? null` (`clients/vscode/webview/src/App.tsx:571`) — so a project-less chat still displays the sidebar project's Evermind as "Connected · v11", masking that the chat itself has no project and can never contribute. A chat's `projectId` is set ONCE at creation (`ensureChatId` uses `init.project?.id ?? null` = `getSelectedProject()`); a chat created before a project was selected (or any older chat) stays permanently project-less while the panel keeps claiming it learns. QUEUED never moved because the gate returned `learned:false` every turn — nothing was ever dispatched.
+
+**Fix (`clients/vscode/webview/src/App.tsx`):** self-heal — a one-shot effect (guarded by `adoptedProjectRef`) that, when the IDE has a resolved project and the open chat is project-less, PATCHes the chat's `projectId` (`persistence.updateChat` → PATCH `/chats/:id`, which `brainService.updateChat` honors after a tenant check) so the conversation the panel shows as connected actually trains the project's Evermind. New chats already scope via `ensureChatId`; this re-scopes legacy/global chats on open. Webview typecheck green; packaged `builderforce-ai-2026.7.65.vsix`. Open follow-up (web parity) tracked in ROADMAP.
+
 ## ✅ RESOLVED 2026-07-11 — Brain chat: couldn't edit CRLF files · triage copy truncated at 50K · chats stuck on "New chat" · unbacked ticket claims (agent-tools 2026.7.1 · brain-embedded 2026.7.26 · VSIX 2026.7.64)
 
 Second operator pass on the same VSIX chat #55 transcript, four concrete defects:
@@ -51,6 +69,17 @@ Sweeping up the remaining personality-touching roadmap items after the 8-gap + 5
 - **Reconciled stale claims (roadmap hygiene):** the old "cloud lacks thinkLevel/reasoning budget", "DIM ids in 3 places", and "cloud limbic off neutral setpoints" bullets were already resolved by this work (reasoningCapability mapping, single `PSYCH_DIM`, `/api/limbic/block` personality seeding) — trimmed to a ✅ note. The only remaining limbic item is inherent/blocked (GPU-trained models can't run in a Worker; activation needs the `@seanhogg/builderforce-memory` npm publish) and is tracked with the Evermind engine blockers, not as personality debt.
 
 Verified: api tsgo 0 · frontend tsgo 0 · brain-embedded tsc 0; 37 api persona/project-affect tests green. **ROADMAP grep for personality/psychometric/reinforcement/MBTI/Enneagram now returns zero actionable items.**
+
+---
+
+## ✅ RESOLVED 2026-07-11 — Brain / chat residual close-out (web per-turn limbic verified, VS Code webview per-chat memory toggle)
+
+Follow-up pass on the Brain/chat residuals.
+
+- **Web per-turn limbic — already live (verified).** Web `BrainPanel` wires an `augmentSystemPrompt(userText)` that fetches a fresh per-turn affect block (`getSessionPsychometric` → `fetchLimbicBlock`) and passes it to `useBrainConversation` (BrainPanel.tsx:347-352, 400). The shared hook now forwards `augmentSystemPrompt` through `buildRequest` (brain-embedded `useBrainConversation`), so the seam is a live API, not dead. Confirmed: frontend `tsgo --noEmit` clean; brain-embedded 106 tests + build green.
+- **VS Code webview per-chat memory toggle — shipped.** The webview Brain had the same Evermind seam as web (recall hook + `run.complete` learn post). Added a per-chat `memoryEnabled` (localStorage `bf_brain_memory:<chatId>`, default ON) gating BOTH recall (`gatedEvermind`) and learn, plus a `Memory` toggle in the composer controls (renders only when `evermindProjectId != null`, theme-var styled). Localized via `vscode.l10n` (`app.memory` / `app.memoryOnHint` / `app.memoryOffHint`) across en/de/es/fr/zh-cn bundles. **VSIX `builderforce-ai-2026.7.61.vsix`**; extension + webview typecheck/build clean.
+
+**Deferred by decision (kept in ROADMAP, not built):** on-device Mamba in the shared Brain (duplicates the server Evermind; in-browser SSM can't replace the gateway turn) and a real external-MCP client (new third-party-credential / SSRF / external-tool-injection surface — build deliberately, not in a close-out). DNS-rebinding TOCTOU stays a platform residual (Workers can't pin the resolved IP to the fetch connection). A stray nested duplicate `Builderforce.ai/Builderforce.ai/frontend/.../EvermindBrainMap.tsx` is logged in the Gap Register (deletion needs the path named explicitly).
 
 ---
 

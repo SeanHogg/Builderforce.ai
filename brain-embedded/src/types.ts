@@ -26,6 +26,14 @@ export interface BrainChat {
 export interface EvermindLearnOutcome {
   learned: boolean;
   version: number;
+  /**
+   * When `learned` is false, WHY the turn wasn't contributed — mirrors the api's
+   * `BrainLearnSkipReason` so the run loop can render an EXPLAINED (muted) skip step
+   * instead of silently showing nothing. Absent/null when the turn was contributed.
+   *   `not-attached` chat isn't bound to a project · `not-seeded` no base model yet ·
+   *   `frozen` Evermind is read-only · `too-short` no teachable assistant text.
+   */
+  reason?: 'not-attached' | 'not-seeded' | 'frozen' | 'too-short' | null;
 }
 
 /** A single message within a chat. */
