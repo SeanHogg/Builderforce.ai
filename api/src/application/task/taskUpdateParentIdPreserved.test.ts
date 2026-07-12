@@ -332,9 +332,6 @@ describe('Task.update() broader semantic guards', () => {
       },
       TENANT,
     );
-    const originalParent = child.parentTaskId as number;
-    const originalAgent = child.assignedAgentRef;
-
     // Two concurrent partial updates via different paths.
     const [updated1, updated2] = await Promise.all([
       service.updateTask(child.id as number, { assignedAgentRef: 'ide-agent-88' }),
