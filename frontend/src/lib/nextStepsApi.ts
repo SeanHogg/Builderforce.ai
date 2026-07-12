@@ -125,7 +125,20 @@ export interface ExecutionResponse {
   timestamp: number;
 }
 
-/** Payload for step.executedAt if the backend provides timing details */
+/**
+ * Execution response payload shape
+ * - Fields are typed to match ExecutionResponse; stepId and success are always present
+ */
+export interface ExecutionResultPayload {
+  Artifact?: { id: string; content: string };
+  Query?: { id: string; summary: string };
+  Task?: { id: string; url: string };
+  Agent?: { id: string; reportedChanges: boolean; logs: unknown[]; result: string };
+  Url?: string;
+  Prompt?: string;
+}
+
+/** UI timing metadata to associate with a step (FR-7) */
 export interface ExecutionTimingAttrs extends Pick<ExecutionResponse, 'durationMs'> {
   executedAt: number;
 }
