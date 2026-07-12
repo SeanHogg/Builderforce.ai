@@ -200,7 +200,9 @@ export interface EvermindBoardPayloadModel {
 
 export function boardModelFromPayload(payload: EvermindPayloadSnapshot): EvermindBoardPayloadModel {
   const d = payload.data;
-  const lastLearnedAt = d.lastLearnedAt?.toISOString() ?? 'never';
+  const lastLearnedAt = d.lastLearnedAt
+    ? new Date(d.lastLearnedAt).toLocaleString()
+    : 'never';
   const nextEval = d.eval
     ? { version: d.eval.version, delta: d.eval.delta }
     : null;
