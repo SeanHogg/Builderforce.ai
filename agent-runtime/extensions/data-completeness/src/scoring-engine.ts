@@ -16,6 +16,7 @@ import {
   DEFAULT_THRESHOLD_CRITICAL,
   DEFAULT_THRESHOLD_WARNING,
   DEFAULT_THRESHOLD_PASSING,
+  getTier,
 } from "./enums.js";
 
 /**
