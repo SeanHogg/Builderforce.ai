@@ -117,9 +117,31 @@ _Owned by the business-analyst — to be authored._
 
 _Owned by the architect — to be authored._
 
+**Read-Only Observation (code-creator as Design Owner):** The code that implements "agent assignment to a task" and "auto-run side effect trigger" is not present on this branch. On branch builderforce/task-691 of seanhogg/builderforce.ai, the tree contains agent-runtime/ (Swabble + chat extensions) and Builderforce.ai/frontend/src/components/ide/EvermindBrainMap.tsx. No API/backend code (task assignment endpoints), no board/domain models, no session/agent assignment service, and no auto-run trigger mechanism exist in this tree. This is the same repo-binding blocker noted for earlier tasks (#615, #668, #676, #677, #682, #687). Per task #673 and memory recalled via Task #673 notes, the platform's assignments and auto-run are expected to be modeled at the provider (e.g., platform backend) level with `assignedAgentRef` fields on Task domain objects, triggering side effects. That platform code is not in the bound checkout. The PRD’s scope (FR-1 list of assignment code paths, FR-3/FR-4 spy targets) is therefore unimplementable against the current repository state. This section documents the blocker and the code shown by list_files for FR-1/FR-3 grounding.
+
+### Codebase Coverage Analysis (FR-1 — Identification of the Side Effect and Trigger)
+
+Based on branch builderforce/task-691 of seanhogg/builderforce.ai at this run (verified via list_files):
+
+- agent-runtime/src (the agent CLI runtime) contains extensive orchestrator/hook code (platform name spottings: agent-settings, assigned-capabilities, sandbox-tool-policy), but no explicit "Task" aggregation entities, no assignment-to-task binding, and no "auto-run on assignment" trigger boxed as a registered side effect in this tree.
+- Builderforce.ai/frontend/src/components/ide/EvermindBrainMap.tsx: a brain map frontend component; it is a UI visualization, not a workspace execution engine nor a domain model for Task assignment.
+
+Because there is no Task domain object, no `assignedAgentRef` usage, and no command/tool that defines "agent assignment → auto-run side effect" in this checkout, FR-1.1 (exact side effect function/handler name, module, registration point) cannot be fulfilled in the current repo. Valid code paths for assignment (FR-1.2) are also missing from this checkout. The assignment trigger mechanism (FR-1.3) therefore cannot be enumerated here.
+
+---
+
 ## Implementation Notes
 
 _Owned by the developer — to be authored._
+
+**Read-Only Observation (code-creator, Implementation Owner):**
+
+- **Missing Platform Code:** The assignment side effect logic is not present in the bound repository. Documenting implementation details for side-effect registration/triggering would require referencing non-checked-out code that includes Task domain definitions, assignment APIs, and an auto-run trigger abstraction that wires to `assignedAgentRef` updates on create/modify.
+- **Test Infrastructure:** Implementation notes must specify the test harness: what mocking/spying layer provides counters for the assignment-to-auto-run wire, how to inject mocks at or upstream of the assignment, and how to instrument logging if production logging is intended.
+- **Flaky Factors (guarded from blind speculation):** FR-2.5 (idempotency boundary) may rely on defensive semantics at the workspace or platform (e.g., deduplication on receipt, or explicit flags on Task mutations). To pass AC-6 (happy-path assert exactly 1), a single well-scoped call into the existing auto-run hook is required.
+- **Scope Mitigated for PRD:** Because the work is blocked on code existence, the authoritative "Implementation Notes" section must be authored post-code discovery once the implementation is checked out (e.g., with Task routes, RuntimeService.registerOnAssign, or session-manager side-effect wiring). For now, a meta-note is present if the artifact is reopened after platform-provider is rejoined.
+
+---
 
 ## Review
 
