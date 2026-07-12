@@ -214,7 +214,12 @@ A complete, valid example payload MUST be included in the documentation and kept
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+List of business requirements to be satisfied by the current ratified version.
+
+- **R-1**: Define a canonical JSON schema version 1.0.0 for basis data that covers identity (basis_id, created_at, agent_id, session_id, parent_basis_id), claims (array with confidence, confidence_method, tags, status), evidence (payload-level array of evidence_id, claim_ids, type, weight, provenance), reasoning_chain (optional ordered steps), uncertainty (overall_confidence, known_unknowns, assumptions, contradictions), context (task_id, task_description, model_id, model_version, tool_calls[], environment), and extensions (reverse-DNS namespaces).
+- **R-2**: Provide and maintain JSON Schema (Draft 2020-12) artifact, reference documentation, and a full canonical example that pass all validation rules.
+- **R-3**: Publish zero-dependency validation harness that validates the canonical example and runs the AC test plan.
+- **R-4**: Ensure full traceability in PRD between FR/AC and implemented fields and behaviors.
 
 ## Design
 
