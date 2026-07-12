@@ -176,10 +176,9 @@ class BudgetEnforcement {
     await alertService.createAlert({
       constraintId,
       threshold: 100,
-      recipients: constraintId, // placeholder — callers can pass the actual owners list
+      recipients: constraint.owners,
       channel: 'in-app',
       status: 'pending',
-      // Not adding a 'message' field as it isn’t defined in BudgetConstraint.ts
     });
 
     await this.logEmergencyOverride(adminUserId, constraintId, action, justification);
