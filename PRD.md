@@ -1,55 +1,46 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #470
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# Product Requirements Document: README.md Restoration & Avatar Filter Documentation
 
-## Problem & Goal
+## 1. Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+**Problem:** The current `README.md` is incomplete, containing only a specific feature blurb (avatar filter) and lacking the comprehensive project documentation. This hinders new user onboarding, project understanding, and effective collaboration.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+**Goal:** Restore the `README.md` to its full, original project documentation state, ensuring it provides a complete overview of the project. Concurrently, integrate the avatar filter feature documentation into a logical section of the restored `README.md`.
 
-## Target users / ICP roles
+## 2. Target Users / ICP Roles
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+*   **New Users/Developers:** Individuals exploring the project for the first time, needing quick setup and usage instructions.
+*   **Existing Contributors:** Developers seeking project context, contribution guidelines, or specific feature details.
+*   **Project Maintainers:** Stakeholders responsible for project clarity and documentation quality.
 
-## Scope
+## 3. Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This task focuses solely on the modification and content update of the `README.md` file within the repository.
 
-## Functional Requirements
+## 4. Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+*   **FR1: Restore Original Project Content:** The `README.md` file MUST be updated to include all the core project documentation that existed prior to the current avatar-filter-only state. This includes, but is not limited to, project description, installation instructions, usage examples, contribution guidelines, and licensing information.
+*   **FR2: Integrate Avatar Filter Section:** A dedicated section detailing the "Avatar Filter" feature MUST be added to the `README.md`.
+    *   **FR2.1: Content:** This section MUST clearly describe the purpose, functionality, and usage (including any configuration or examples) of the avatar filter.
+*   **FR3: Logical Content Organization:** The restored project content and the new "Avatar Filter" section MUST be logically structured and presented within the `README.md` to ensure readability and ease of navigation. The avatar filter section can be appended to an existing "Features" or "Documentation" area, or placed in a newly created, appropriate section.
+*   **FR4: Markdown Compliance:** All content MUST adhere to GitHub-flavored Markdown syntax for correct rendering.
 
-## Acceptance Criteria
+## 5. Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+*   The `README.md` file exists and has been updated.
+*   The `README.md` file contains all essential project-level information (e.g., project title, description, installation, usage, contributing, license) as per the original project documentation.
+*   A clearly titled "Avatar Filter" section is present within the `README.md`.
+*   The "Avatar Filter" section accurately explains what the feature does and how to use it.
+*   The overall structure of the `README.md` is logical, coherent, and easy to read.
+*   All markdown formatting renders correctly on GitHub.
+*   There are no placeholder texts or incomplete sections within the final `README.md`.
 
-## Out of scope
+## 6. Out of Scope
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+*   Creating or updating documentation for any other project features not explicitly mentioned.
+*   Refactoring or re-writing existing project documentation content beyond what is necessary to integrate the avatar filter section smoothly.
+*   Changes to any source code files.
+*   Changes to any files other than `README.md`.
+*   Updating the functionality of the avatar filter itself.
