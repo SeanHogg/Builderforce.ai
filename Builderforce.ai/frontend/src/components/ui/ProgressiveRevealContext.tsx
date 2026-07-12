@@ -92,12 +92,16 @@ export function ProgressiveRevealOrchestrator({
 
   const getTimeout = (priority: PriorityTier): number => TIMEOUTS[priority] ?? 10000;
 
+  const cleanupStream = (stream: StreamBean) => {
+    if (stream.timeoutHandle) clearTimeout(stream.timeoutHandle);
+  };
+
   const register = (key: string, priority: PriorityTier, overrideTimeout?: number) => {
     const existing = state.streams.get(key);
     if (existing) return;
 
     const timeoutMs = overrideTimeout ?? getTimeout(priority);
-    const timeoutHandle =  setTimeout(() => {
+    const timeoutHandle = setTimeout(() => {
       const fresh = state.streams.get(key);
       if (!fresh || fresh.resolved) return;
       const err = new Error(`${key} timed out after ${timeoutMs}ms`);
@@ -116,9 +120,10 @@ export function ProgressiveRevealOrchestrator({
       }]]),
     }));
 
+    const tiers: PriorityTier[] = ['critical', 'secondary', 'deferred'];
     activitiesRef.current = {
       ...activitiesRef.current,
-      [priority as keyof typeof activitiesRef.current + 'Started']: activitiesRef.current[priority as keyof typeof activitiesRef.current + 'Started'] + 1,
+      [tiers.indexOf(priority)]: (activitiesRef.current[tiers.indexOf(priority)] ?? 0) + 1,
     };
 
     lastStateRef.current = {
