@@ -12,10 +12,66 @@ export enum DiagnosticCategory {
   CUSTOMER_IMPACT = "customer_impact",
   PROCESS_HEALTH = "process_health",
   DEPENDENCIES = "dependencies",
+  UNKNOWN = "unknown",
 }
 
 export const DIAGNOSTIC_CATEGORIES: Record<
   DiagnosticCategory,
+  { name: string; diagnosticQuestion: string }
+> = {
+  [DiagnosticCategory.UNKNOWN]: {
+    name: "Unknown",
+    diagnosticQuestion: "Field does not match any category rule.",
+  },
+  // Keep the following to preserve human-friendly keys for FR-1.
+  [DiagnosticCategory.QUALITY_BUGS]: {
+    name: "Quality & Bugs",
+    diagnosticQuestion:
+      "How many defects exist, and what is their severity distribution?",
+  },
+  [DiagnosticCategory.VELOCITY]: {
+    name: "Delivery Velocity",
+    diagnosticQuestion: "How fast is the team delivering work?",
+  },
+  [DiagnosticCategory.TECH_DEBT]: {
+    name: "Technical Debt",
+    diagnosticQuestion: "How much accumulated debt is slowing progress?",
+  },
+  [DiagnosticCategory.TEST_COVERAGE]: {
+    name: "Test Coverage",
+    diagnosticQuestion: "How well is the codebase covered by automated tests?",
+  },
+  [DiagnosticCategory.RELIABILITY]: {
+    name: "Reliability & Stability",
+    diagnosticQuestion: "How stable and available is the system in production?",
+  },
+  [DiagnosticCategory.SECURITY]: {
+    name: "Security & Compliance",
+    diagnosticQuestion: "Are there known vulnerabilities or compliance gaps?",
+  },
+  [DiagnosticCategory.DEV_EXPERIENCE]: {
+    name: "Developer Experience",
+    diagnosticQuestion: "How efficient and unblocked is the engineering workflow?",
+  },
+  [DiagnosticCategory.CUSTOMER_IMPACT]: {
+    name: "Customer Impact",
+    diagnosticQuestion: "How are defects or incidents affecting end users?",
+  },
+  [DiagnosticCategory.PROCESS_HEALTH]: {
+    name: "Process Health",
+    diagnosticQuestion:
+      "Are team processes (reviews, retros, planning) functioning well?",
+  },
+  [DiagnosticCategory.DEPENDENCIES]: {
+    name: "Dependency Health",
+    diagnosticQuestion: "Are third-party and internal dependencies up to date and low risk?",
+  },
+} as const;
+
+export type MaybeDiagnosticCategory = DiagnosticCategory | "unknown";
+
+export const DIAGNOSTIC_CATEGORIES_MAP: Record<
+  MaybeDiagnosticCategory,
   { name: string; diagnosticQuestion: string }
 > = {
   [DiagnosticCategory.QUALITY_BUGS]: {
