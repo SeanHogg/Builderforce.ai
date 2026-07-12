@@ -170,13 +170,31 @@ export function agentContextFromPayload(
   projectId: number,
 ): EvermindAgentContext {
   const d = payload.data;
-  return {
+  const ctx: EvermindAgentContext = {
     projectId,
     driverAffect: d.affect?.state ?? {},
     targetMode: d.mode,
     lastLearnedAt: d.lastLearnedAt ? Date.parse(d.lastLearnedAt) : null,
     inferenceEnabled: d.inferenceEnabled,
   };
+
+  // FR-2.2: Trace reasoning back to payload fields ( Logged per FR-6.2 )
+  console.debug('[EvermindAgentContext]', {
+    sdkVersion: 'builderforce/loading-facade',
+    payloadVersion: payload.version,
+    lastWinningAt: payload.lastWinningAt,
+    capturedAt: payload.capturedAt,
+    loadedAt: Date.now(),
+    payloadFields: {
+      projectId,
+      driverAffect: Object.keys(ctx.driverAffect),
+      targetMode: ctx.targetMode,
+      lastLearnedAt: ctx.lastLearnedAt,
+      inferenceEnabled: ctx.inferenceEnabled,
+    },
+  });
+
+  return ctx;
 }
 
 /**
