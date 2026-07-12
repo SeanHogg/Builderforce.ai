@@ -112,7 +112,7 @@ import { createTelemetryRoutes }    from './presentation/routes/telemetryRoutes'
 import { createQaRoutes }           from './presentation/routes/qaRoutes';
 import { createRepoAnalysisRoutes } from './presentation/routes/repoAnalysisRoutes';
 import { createStudioVoiceCloneRoutes } from './presentation/routes/studioVoiceCloneRoutes';
-import { createIntegrationRoutes }  from './presentation/routes/integrationRoutes';
+import { createIntegrationRoutes, createIntegrationHealthRoutes }  from './presentation/routes/integrationRoutes';
 import { createContributorRoutes }  from './presentation/routes/contributorRoutes';
 import { runRepoActivitySweep }      from './application/contributors/runRepoActivitySweep';
 import { createDevTeamRoutes }      from './presentation/routes/devTeamRoutes';
