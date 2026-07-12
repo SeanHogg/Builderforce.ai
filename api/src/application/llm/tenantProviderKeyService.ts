@@ -21,6 +21,7 @@ import { neon } from '@neondatabase/serverless';
 import type { HonoEnv } from '../../env';
 import { encryptSecretForStorage, decryptSecretFromStorage } from '../../infrastructure/auth/MfaService';
 import { refreshAnthropicToken, OAUTH_SAFETY_MARGIN_MS, type AnthropicOAuthTokens } from './anthropicOAuth';
+import { refreshOpenAICodexToken, type OpenAICodexOAuthTokens } from './openaiCodexOAuth';
 
 type Env = HonoEnv['Bindings'];
 
@@ -35,7 +36,7 @@ export type ProviderAuthType = 'api_key' | 'oauth';
  *  {@link resolveAnthropicOAuthToken}, so it isn't part of the api-key overlay. */
 export const PROVIDER_VENDOR_MAP: Record<LlmProvider, { vendorId: string; envKey: 'CLAUDE_API_KEY' | 'OPENAI_API_KEY' | 'GOOGLE_API_KEY' | 'META_API_KEY'; oauth: boolean }> = {
   anthropic: { vendorId: 'anthropic', envKey: 'CLAUDE_API_KEY', oauth: true },
-  openai:    { vendorId: 'openai',    envKey: 'OPENAI_API_KEY', oauth: false },
+  openai:    { vendorId: 'openai',    envKey: 'OPENAI_API_KEY', oauth: true },
   google:    { vendorId: 'googleai',  envKey: 'GOOGLE_API_KEY', oauth: false },
   meta:      { vendorId: 'meta',      envKey: 'META_API_KEY',   oauth: false },
 };
@@ -104,7 +105,7 @@ export async function setTenantProviderOAuth(
   env: Env,
   tenantId: number,
   provider: LlmProvider,
-  tokens: AnthropicOAuthTokens,
+  tokens: AnthropicOAuthTokens | OpenAICodexOAuthTokens,
   userId: string | null,
 ): Promise<void> {
   const keyEnc = await encryptSecretForStorage(JSON.stringify(tokens), env.JWT_SECRET);
@@ -115,6 +116,33 @@ export async function setTenantProviderOAuth(
     ON CONFLICT (tenant_id, provider)
     DO UPDATE SET key_enc = ${keyEnc}, auth_type = 'oauth', updated_at = NOW()
   `;
+}
+
+export interface OpenAICodexResolution {
+  auth: { accessToken: string; accountId: string } | null;
+  reason?: ByoUnresolvedReason;
+}
+
+/** Resolve and rotate a tenant's ChatGPT/Codex subscription credential. */
+export async function resolveOpenAICodexResolution(env: Env, tenantId: number): Promise<OpenAICodexResolution> {
+  const row = await loadProviderRow(env, tenantId, 'openai');
+  if (!row?.key_enc || (row.auth_type ?? 'api_key') !== 'oauth') return { auth: null };
+  let tokens: OpenAICodexOAuthTokens;
+  try {
+    tokens = JSON.parse(await decryptSecretFromStorage(row.key_enc, env.JWT_SECRET)) as OpenAICodexOAuthTokens;
+  } catch { return { auth: null, reason: 'undecryptable' }; }
+  if (!tokens.access || !tokens.refresh || !tokens.accountId) return { auth: null, reason: 'undecryptable' };
+  if (Date.now() < tokens.expires) return { auth: { accessToken: tokens.access, accountId: tokens.accountId } };
+  try {
+    const refreshed = await refreshOpenAICodexToken(tokens.refresh);
+    await setTenantProviderOAuth(env, tenantId, 'openai', refreshed, null);
+    return { auth: { accessToken: refreshed.access, accountId: refreshed.accountId } };
+  } catch (e) {
+    const status = (e as { status?: number }).status;
+    if (status === 401 || status === 403) return { auth: null, reason: 'revoked' };
+    if (Date.now() < tokens.expires + OAUTH_SAFETY_MARGIN_MS) return { auth: { accessToken: tokens.access, accountId: tokens.accountId } };
+    return { auth: null, reason: 'expired' };
+  }
 }
 
 interface ProviderKeyRow {

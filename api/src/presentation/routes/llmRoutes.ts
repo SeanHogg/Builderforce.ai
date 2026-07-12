@@ -64,6 +64,7 @@ import {
   setTenantProviderKey,
   setTenantProviderOAuth,
   resolveAnthropicAuth,
+  resolveOpenAICodexResolution,
   resolveTenantVendorKeys,
   resolveTenantLlmCredentials,
   listTenantProviderKeys,
@@ -88,6 +89,11 @@ import {
   withClaudeCodeSystemPrompt,
   ANTHROPIC_OAUTH_BETA,
 } from '../../application/llm/anthropicOAuth';
+import {
+  buildOpenAICodexAuthorizeUrl,
+  parseOpenAICodexCallback,
+  exchangeOpenAICodexCode,
+} from '../../application/llm/openaiCodexOAuth';
 import { parseAnthropicSseUsage } from '../../application/llm/anthropicSseUsage';
 import {
   anthropicToOpenAiRequest,
@@ -996,6 +1002,41 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     return c.json({ ok: true, provider: 'anthropic', authType: 'oauth' });
   });
 
+  const openAiOauthPkceKey = (tenantId: number, state: string): string => `openai_codex_oauth:${tenantId}:${state}`;
+
+  router.post('/provider-keys/openai/oauth/start', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const kv = (c.env as { AUTH_CACHE_KV?: KVNamespace }).AUTH_CACHE_KV;
+    if (!kv) return c.json({ error: 'OAuth connect unavailable (AUTH_CACHE_KV unbound)', code: 'oauth_unconfigured' }, 503);
+    const { verifier, challenge } = await generatePkce();
+    const state = generateState();
+    await kv.put(openAiOauthPkceKey(access.tenantId, state), verifier, { expirationTtl: OAUTH_PKCE_TTL_SECONDS });
+    return c.json({ authorizeUrl: buildOpenAICodexAuthorizeUrl({ state, challenge }), state });
+  });
+
+  router.post('/provider-keys/openai/oauth/complete', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const kv = (c.env as { AUTH_CACHE_KV?: KVNamespace }).AUTH_CACHE_KV;
+    if (!kv) return c.json({ error: 'OAuth connect unavailable (AUTH_CACHE_KV unbound)', code: 'oauth_unconfigured' }, 503);
+    const body = await c.req.json<{ code?: string; state?: string }>().catch(() => ({} as { code?: string; state?: string }));
+    const parsed = parseOpenAICodexCallback(body.code?.trim() ?? '');
+    const state = (parsed.state ?? body.state ?? '').trim();
+    if (!parsed.code || !state) return c.json({ error: 'Paste the full OpenAI redirect URL so code and state can be verified', code: 'oauth_missing_code_or_state' }, 400);
+    const key = openAiOauthPkceKey(access.tenantId, state);
+    const verifier = await kv.get(key);
+    if (!verifier) return c.json({ error: 'Connect session expired or invalid — start again.', code: 'oauth_state_expired' }, 400);
+    try {
+      const tokens = await exchangeOpenAICodexCode({ code: parsed.code, verifier });
+      await setTenantProviderOAuth(c.env, access.tenantId, 'openai', tokens, access.userId);
+      await kv.delete(key).catch(() => {});
+      return c.json({ ok: true, provider: 'openai', authType: 'oauth' });
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : 'OAuth exchange failed', code: 'oauth_exchange_failed' }, 502);
+    }
+  });
+
   router.delete('/provider-keys/:provider', async (c) => {
     let access: TenantAccess;
     try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
@@ -1003,6 +1044,44 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     if (!isSupportedProvider(provider)) return c.json({ error: 'unsupported provider' }, 400);
     await deleteTenantProviderKey(c.env, access.tenantId, provider);
     return c.json({ ok: true });
+  });
+
+  // OpenAI Responses-compatible surface backed by the tenant's own ChatGPT/Codex
+  // subscription. This is deliberately separate from /v1/chat/completions: Codex
+  // subscription tokens are valid for the Codex Responses backend, not the paid
+  // api.openai.com Chat Completions API used by an ordinary OpenAI API key.
+  router.post('/v1/responses', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const resolution = await resolveOpenAICodexResolution(c.env, access.tenantId);
+    if (!resolution.auth) {
+      return c.json({
+        error: {
+          message: resolution.reason
+            ? `OpenAI subscription credential is ${resolution.reason}; reconnect it in Settings → API keys.`
+            : 'Connect a ChatGPT/Codex subscription in Settings → API keys first.',
+          type: 'authentication_error',
+          code: `openai_subscription_${resolution.reason ?? 'not_connected'}`,
+        },
+      }, 401);
+    }
+    let body: Record<string, unknown>;
+    try { body = await c.req.json<Record<string, unknown>>(); }
+    catch { return c.json({ error: { message: 'Invalid JSON body', type: 'invalid_request_error' } }, 400); }
+    const upstream = await fetch('https://chatgpt.com/backend-api/codex/responses', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${resolution.auth.accessToken}`,
+        'ChatGPT-Account-Id': resolution.auth.accountId,
+        accept: c.req.header('accept') ?? 'application/json',
+      },
+      body: JSON.stringify({ ...body, store: false }),
+    });
+    const headers = new Headers(upstream.headers);
+    headers.delete('set-cookie');
+    headers.delete('content-encoding');
+    return new Response(upstream.body, { status: upstream.status, headers });
   });
 
   // -----------------------------------------------------------------------

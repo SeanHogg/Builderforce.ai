@@ -7635,10 +7635,15 @@
     "provider": {
       "anthropic": {
         "blurb": "Verbinden Sie Ihr Claude-Pro/Max-Abo (keine Abrechnung pro Token) oder fügen Sie einen Anthropic-API-Schlüssel ein.",
-        "subscription": "Claude-Abo"
+        "subscription": "Claude-Abo",
+        "pastePrompt": "Nach der Freigabe im Claude-Tab den vollständigen Wert <code>code#state</code> hier einfügen.",
+        "pastePlaceholder": "Claude-Code einfügen…"
       },
       "openai": {
-        "blurb": "Fügen Sie einen OpenAI-API-Schlüssel ein, um GPT-Modelle mit Ihrem eigenen OpenAI-Konto auszuführen."
+        "blurb": "Verbinden Sie Ihr ChatGPT/Codex-Abo oder fügen Sie einen OpenAI-API-Schlüssel ein.",
+        "subscription": "ChatGPT/Codex-Abo",
+        "pastePrompt": "Kopieren Sie nach der Anmeldung die vollständige URL <code>http://localhost:1455/auth/callback?code=…&state=…</code> aus der Adressleiste und fügen Sie sie hier ein.",
+        "pastePlaceholder": "OpenAI-Weiterleitungs-URL einfügen…"
       },
       "google": {
         "blurb": "Fügen Sie einen Google-AI-(Gemini-)API-Schlüssel ein, um Gemini-Modelle mit Ihrem eigenen Google-Konto auszuführen."

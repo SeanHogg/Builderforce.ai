@@ -7635,10 +7635,15 @@
     "provider": {
       "anthropic": {
         "blurb": "Conecta tu suscripción a Claude Pro/Max (sin facturación por token) o pega una clave de API de Anthropic.",
-        "subscription": "suscripción de Claude"
+        "subscription": "suscripción de Claude",
+        "pastePrompt": "¿Aprobaste en la pestaña de Claude? Pega el valor completo <code>code#state</code>.",
+        "pastePlaceholder": "Pega el código de Claude…"
       },
       "openai": {
-        "blurb": "Pega una clave de API de OpenAI para ejecutar modelos GPT en tu propia cuenta de OpenAI."
+        "blurb": "Conecta tu suscripción ChatGPT/Codex o pega una clave de API de OpenAI.",
+        "subscription": "suscripción ChatGPT/Codex",
+        "pastePrompt": "Después de iniciar sesión, copia la URL completa <code>http://localhost:1455/auth/callback?code=…&state=…</code> de la barra de direcciones y pégala aquí.",
+        "pastePlaceholder": "Pega la URL de redirección de OpenAI…"
       },
       "google": {
         "blurb": "Pega una clave de API de Google AI (Gemini) para ejecutar modelos Gemini en tu propia cuenta de Google."

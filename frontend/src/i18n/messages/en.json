@@ -7637,10 +7637,15 @@
     "provider": {
       "anthropic": {
         "blurb": "Connect your Claude Pro/Max subscription (no per-token billing) or paste an Anthropic API key.",
-        "subscription": "Claude subscription"
+        "subscription": "Claude subscription",
+        "pastePrompt": "Approved in the Claude tab? Paste the code it shows you (the full <code>code#state</code> value) below.",
+        "pastePlaceholder": "Paste code from Claude…"
       },
       "openai": {
-        "blurb": "Paste an OpenAI API key to run GPT models on your own OpenAI account."
+        "blurb": "Connect your ChatGPT/Codex subscription or paste an OpenAI API key to run GPT models on your own account.",
+        "subscription": "ChatGPT/Codex subscription",
+        "pastePrompt": "After signing in, your browser may show a localhost error. Copy the full <code>http://localhost:1455/auth/callback?code=…&state=…</code> URL from the address bar and paste it below.",
+        "pastePlaceholder": "Paste the full OpenAI redirect URL…"
       },
       "google": {
         "blurb": "Paste a Google AI (Gemini) API key to run Gemini models on your own Google account."
