@@ -7602,6 +7602,9 @@
       },
       "google": {
         "blurb": "Pega una clave de API de Google AI (Gemini) para ejecutar modelos Gemini en tu propia cuenta de Google."
+      },
+      "meta": {
+        "blurb": "Pega una clave de API de Meta AI para ejecutar modelos MUSE (muse-spark-1.1) en tu propia cuenta de Meta AI."
       }
     }
   },

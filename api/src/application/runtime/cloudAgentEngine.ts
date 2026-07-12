@@ -2493,9 +2493,14 @@ export async function runCloudExecution(
         .where(eq(executions.id, executionId))
         .catch(() => { /* best-effort */ });
       const paused = await runtimeService.getExecution(executionId).catch(() => null);
-      if (paused) notifyExecutionSubscribers(executionId, {
-        type: 'status_change', executionId, status: paused.status, execution: paused.toPlain(), ts: new Date().toISOString(),
-      });
+      if (paused) {
+        notifyExecutionSubscribers(executionId, {
+          type: 'status_change', executionId, status: paused.status, execution: paused.toPlain(), ts: new Date().toISOString(),
+        });
+        // Narrate the pause into the ticket's linked chats (this direct write bypasses
+        // RuntimeService.update's milestone emission). Best-effort; never blocks the pause.
+        await runtimeService.postLifecycleMilestone(paused, 'paused').catch(() => { /* best-effort */ });
+      }
       return;
     }
 

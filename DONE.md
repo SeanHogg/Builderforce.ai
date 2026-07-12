@@ -4,6 +4,20 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-11 — Evermind chat-learning scope + run-milestone lifecycle: closed ALL residuals (web self-heal + native-participant self-heal & visible learn step + web "Copy diagnostics" parity + paused/cancelled chat milestones) (api 2026.7.84 · brain-embedded 2026.7.31 · VSIX 2026.7.73 · frontend 2026.7.58)
+
+Fixed (not logged) the remaining "chat learns nothing / agents don't report back / can't see why" gaps so every surface reliably trains the project Evermind AND narrates its full lifecycle:
+
+- **Web Brain self-heal (project-less chat adoption).** `frontend/src/components/brain/BrainPanel.tsx` gained the same one-shot adopt-on-open the VSIX webview has: when the page has a resolved project (`pinnedProjectId ?? viewingProjectId`) and the open chat is project-less, it PATCHes `brain.updateChat(chatId, { projectId })` then reloads — so a web chat created before a project was scoped starts feeding that project's Evermind (the learn gate keys on `brain_chats.projectId`). This also makes the composer badge truthful (it already resolves chat-project first), closing the "momentary overclaim" concern.
+- **Native `@builderforce` participant self-heal + VISIBLE learn step.** `appendBrainMessages` (`clients/vscode/src/bfApi.ts`) now RETURNS the server's `evermindLearn` outcome (was `void`); `chatParticipant.ts` awaits it, and (a) if the outcome is `not-attached` and the IDE has an active project, adopts it via new `updateBrainChatProject` (PATCH) so the next turn trains it, and (b) streams a trailing status line via new shared `formatEvermindLearnStep(outcome)` — "🧠 Contributed this turn to the project Evermind (vN)" or "Not learned this turn — <reason>". The native chat streams Markdown (not `<BrainTimeline>`), so learning was previously invisible there.
+- **Web "Copy diagnostics" parity.** `BrainPanel.captureExecution` now gathers the same fields as the VSIX (chat's projectId vs page project, tenant/user via `getStoredTenant`/`getStoredUser`, `getProjectEvermindContributions`, `brain.listChatAgents`/`listChatTickets`, last-turn `evermindLearn`) and PREPENDS `formatChatDiagnostics(...)` to the triage report — so a web operator gets the identity + Evermind-state + Signals block too.
+
+- **PAUSED / CANCELLED run milestones now post to the chat** (the "agents attached don't send info back" complaint). The runtime posts started ▸ completed ▸ failed via `RuntimeService.update`, but the ask_human PAUSE (a direct `executions` write in `cloudAgentEngine.ts`) and `RuntimeService.cancel()` bypass it. New public `RuntimeService.postLifecycleMilestone(execution, 'paused'|'cancelled')` resolves the ticket+project (as `update` does) and fans out via the same `onRunMilestone` → `postRunMilestone` hook; called from both bypass sites. Shared `RunMilestonePhase` type (exported from `ChatTicketService`) now includes `paused`/`cancelled`, with "🙋 paused — waiting on a human answer" / "⏹️ cancelled" lines; per-execution+phase idempotent.
+
+DRY: new shared `formatEvermindLearnStep` (brain-embedded `types.ts`, exported) backs the native line; `formatChatDiagnostics` is the ONE serializer both surfaces call; `RunMilestonePhase` is the ONE phase union across RuntimeService + ChatTicketService. Verified: extension `tsc -p ./` clean, frontend + api `tsgo --noEmit` clean, brain-embedded rebuilt, packaged **`builderforce-ai-2026.7.73.vsix`**. Frontend + api changes ship on next push-to-main deploy.
+
+---
+
 ## ✅ RESOLVED 2026-07-11 — "Copy chat transcript" → "Copy chat diagnostics": dump the chat's identity + Evermind wiring state so "Connected yet nothing learns" is never a guess again (brain-embedded 2026.7.30 · VSIX 2026.7.71)
 
 Operator (superadmin) kept hitting the same wall: the Evermind panel shows "Learning · Connected v11" but the chat's learn step said "Contributed … **v0**", LAST LEARNED stayed frozen ~23h, and dispatched agents weren't posting back — with no way to see the ground truth (is the CHAT actually attached to project 11? which tenant? what's the real head? what did the learn gate return?). They asked to turn the "Copy dialogue" button into a **Copy diagnostics** that dumps all of it.

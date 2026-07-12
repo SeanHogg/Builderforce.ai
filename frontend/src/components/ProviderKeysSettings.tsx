@@ -34,6 +34,7 @@ const PROVIDERS: ProviderConfig[] = [
   { id: 'anthropic', label: 'Anthropic (Claude)', keyPlaceholder: 'sk-ant-…', supportsOauth: true },
   { id: 'openai',    label: 'OpenAI',             keyPlaceholder: 'sk-…',     supportsOauth: false },
   { id: 'google',    label: 'Google (Gemini)',    keyPlaceholder: 'AIza…',   supportsOauth: false },
+  { id: 'meta',      label: 'Meta AI (MUSE)',     keyPlaceholder: 'meta-…',  supportsOauth: false },
 ];
 
 const cardStyle: React.CSSProperties = {

@@ -192,6 +192,15 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     baseUrl: 'https://api.minimax.io/v1/chat/completions',
     models: ['MiniMax-M1', 'MiniMax-Text-01'],
   },
+  {
+    // Meta MUSE — OpenAI-compatible endpoint at api.meta.ai/v1.
+    // Tenant BYO key stored as LlmProvider 'meta'; maps to this vendor so that
+    // the gateway dispatches MUSE models on the tenant's own Meta AI account.
+    // Reachable via explicit `direct/meta/<model-id>` pin or the BYO auto-seed.
+    id: 'meta', brand: 'Meta AI', apiKeyEnv: 'META_API_KEY',
+    baseUrl: 'https://api.meta.ai/v1/chat/completions',
+    models: ['muse-spark-1.1'],
+  },
 ];
 
 /** All factory-built OpenAI-compatible vendor modules, in declaration order. */

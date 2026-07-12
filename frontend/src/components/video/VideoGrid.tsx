@@ -65,7 +65,6 @@ export function VideoGrid({
   const captionFor = (it: Item) => (it.ref ? captions?.[it.ref] : undefined) ?? null;
   const speakingFor = (it: Item) => (it.ref ? speaking?.has(it.ref) ?? false : false);
   const tileProps = (it: Item, expanded: boolean) => ({
-    key: it.id,
     name: it.name,
     stream: it.stream,
     camOn: it.camOn,
@@ -111,7 +110,7 @@ export function VideoGrid({
         width: '100%',
       }}
     >
-      {items.map((it) => <VideoTile {...tileProps(it, false)} />)}
+      {items.map((it) => <VideoTile key={it.id} {...tileProps(it, false)} />)}
     </div>
   );
 }

@@ -864,7 +864,7 @@ export default {
           'Access-Control-Allow-Headers': 'Content-Type,Authorization,Idempotency-Key,X-Emulation-Token,X-AgentHost-Signature',
           // Echo the daily-budget snapshot headers so SDK consumers in the
           // browser can pre-emptively throttle without a second fetch.
-          'Access-Control-Expose-Headers': 'x-request-id,x-builderforce-model,x-builderforce-account,x-builderforce-byo-unresolved,x-builderforce-retries,x-builderforce-product,x-builderforce-effective-plan,x-builderforce-daily-tokens-used,x-builderforce-daily-tokens-limit,x-builderforce-daily-tokens-remaining',
+          'Access-Control-Expose-Headers': 'x-request-id,x-builderforce-model,x-builderforce-account,x-builderforce-byo-unresolved,x-builderforce-provider-cap,x-builderforce-retries,x-builderforce-product,x-builderforce-effective-plan,x-builderforce-daily-tokens-used,x-builderforce-daily-tokens-limit,x-builderforce-daily-tokens-remaining',
           'Access-Control-Max-Age': '86400',
           Vary: 'Origin',
         },

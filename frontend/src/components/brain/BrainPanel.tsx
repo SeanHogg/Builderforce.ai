@@ -19,12 +19,15 @@ import {
   subscribeRun,
   getRunSnapshot,
   getRunTrace,
+  formatChatDiagnostics,
   type BrainTraceEvent,
+  type ChatDiagnosticsData,
 } from '@seanhogg/builderforce-brain-embedded';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { ChatInput } from '@/components/ChatInput';
 import { EvermindStatusBadge } from '@/components/ide/EvermindStatusBadge';
-import { recallProjectEvermind } from '@/lib/projectEvermindApi';
+import { recallProjectEvermind, getProjectEvermindContributions } from '@/lib/projectEvermindApi';
+import { getStoredTenant, getStoredUser } from '@/lib/auth';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
 import { ChatMessageActions } from '@/components/ChatMessageActions';
 import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
@@ -364,6 +367,26 @@ export function BrainPanel({
       : { recall: (query: string) => recallProjectEvermind(evermindProjectId, query).catch(() => null) }),
     [evermindProjectId],
   );
+
+  // Self-heal Evermind learning scope (web parity with the VS Code webview). The server's
+  // chat→Evermind learn gate keys on `brain_chats.projectId`: a project-less chat NEVER
+  // contributes even while the composer badge/panel shows the page's project as connected
+  // (they resolve via the pinned/viewing FALLBACK). So a chat created before a project was
+  // scoped (or any older/global chat) silently never trains the model. When the page has a
+  // resolved project and the open chat is project-less, adopt it onto the chat so its turns
+  // actually train that project's Evermind. One-shot per chat (guarded), best-effort.
+  const adoptedProjectRef = useRef<Set<number>>(new Set());
+  useEffect(() => {
+    const pid = pinnedProjectId ?? viewingProjectId ?? null;
+    const chatId = chats.activeChatId;
+    const active = chats.activeChat;
+    if (chatId == null || pid == null || active == null || active.projectId != null) return;
+    if (adoptedProjectRef.current.has(chatId)) return;
+    adoptedProjectRef.current.add(chatId);
+    brain.updateChat(chatId, { projectId: pid })
+      .then(() => chats.reload())
+      .catch(() => { adoptedProjectRef.current.delete(chatId); });
+  }, [chats.activeChatId, chats.activeChat, chats.reload, pinnedProjectId, viewingProjectId]);
 
   // Per-chat memory switch: whether THIS chat passes the project-Evermind hooks
   // (recall + learn). Default ON; persisted per-chat in localStorage so it sticks
@@ -812,13 +835,54 @@ export function BrainPanel({
   }, [personaSel, brainAgents, agentName, tBrain, modalityCopy]);
   const captureExecution = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(conv.buildTriageReport(personaLabel));
+      // Prepend a Chat diagnostics block (identity + Evermind wiring state + Signals) so a
+      // pasted report answers "what STATE was this chat in?" — the CHAT's own project (what
+      // the learn gate keys on) vs the page's project, tenant/user, the Evermind head
+      // (version/mode/learned/queued/last-learned), the last turn's learn-gate outcome, the
+      // invited agents, and the linked tickets. Shared serializer with the VSIX. Best-effort
+      // per source: a failed fetch degrades to null/[] so the copy never breaks.
+      const chatId = chats.activeChatId;
+      const chatProjectId = chats.activeChat?.projectId ?? null;
+      const [agents, tickets, contrib] = await Promise.all([
+        chatId != null ? brain.listChatAgents(chatId).catch(() => []) : Promise.resolve([]),
+        chatId != null ? brain.listChatTickets(chatId).catch(() => []) : Promise.resolve([]),
+        chatProjectId != null ? getProjectEvermindContributions(chatProjectId).catch(() => null) : Promise.resolve(null),
+      ]);
+      const lastLearn = [...conv.messages].reverse().find((m) => m.role === 'assistant' && m.evermindLearn)?.evermindLearn ?? null;
+      const tenant = getStoredTenant();
+      const user = getStoredUser();
+      const diagnostics: ChatDiagnosticsData = {
+        surface: 'Web',
+        chatId,
+        chatTitle: chats.activeChat?.title ?? null,
+        projectId: chatProjectId,
+        projectName: projects.find((p) => p.id === chatProjectId)?.name ?? null,
+        selectedProjectId: pinnedProjectId ?? viewingProjectId ?? null,
+        tenantId: tenant?.id ?? null,
+        userId: user?.id ?? null,
+        evermind: contrib
+          ? {
+              version: contrib.version,
+              mode: contrib.mode,
+              inferenceEnabled: contrib.inferenceEnabled,
+              teacherModel: contrib.teacherModel,
+              contributions: contrib.contributions,
+              pending: contrib.pending,
+              lastLearnedAt: contrib.lastLearnedAt,
+            }
+          : null,
+        lastLearn,
+        agents: agents.map((a) => ({ agentRef: a.agentRef, role: a.role })),
+        tickets: tickets.map((tk) => ({ kind: tk.kind, ref: tk.ref, label: tk.label, linkType: tk.linkType, status: tk.status })),
+      };
+      const diagBlock = formatChatDiagnostics(diagnostics).join('\n');
+      await navigator.clipboard.writeText(`${diagBlock}\n\n${conv.buildTriageReport(personaLabel)}`);
       setCaptureState('copied');
     } catch {
       setCaptureState('error');
     }
     setTimeout(() => setCaptureState('idle'), 2000);
-  }, [conv, personaLabel]);
+  }, [conv, personaLabel, chats.activeChatId, chats.activeChat, projects, pinnedProjectId, viewingProjectId]);
 
   // Shared chrome for the "capture execution" icon button (page + docked headers).
   const captureButton = (
