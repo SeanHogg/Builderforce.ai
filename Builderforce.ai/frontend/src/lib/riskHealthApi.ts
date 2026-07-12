@@ -4,6 +4,7 @@
  * Provides summaries, item lists, and utilities to consume the score (FR-2) and drill-down (FR-3).
  */
 
+import { useCallback, useState } from 'react';
 import type {
   RiskCategory,
   RiskHealthStatus,
@@ -14,7 +15,7 @@ import type {
   RiskItem,
   IntegrationConfig,
   RiskClassificationRule,
-} from '../api/routes/v2/risk-health';
+} from './api/risk/types';
 
 const API_BASE_PATH = '/api/v2';
 
