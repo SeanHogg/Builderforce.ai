@@ -1,0 +1,115 @@
+# Quality Augmentation Configuration
+# Bug-Driven Triage & Remediation suggestions
+
+# Thresholds for triggering analysis
+thresholds:
+  repository: 50  # Bugs in entire repo
+  module: 15      # Bugs in any module
+  file: 3         # Bugs in any single file
+
+# Weighted severity levels for defect density calculation
+weights:
+  critical: 3
+  major: 2
+  minor: 1
+
+# Defect density formula (see bugs for derivation)
+metrics:
+  defect_density:
+    formula: "(weighted_bugs) / (cyclomatic_complexity OR lines_of_code)"
+    use_complexity: true  # prefer complexity over LOC for small modules
+
+# Recommendation generation settings
+recommendation:
+  top_n: 5         # Max recommendations per analysis
+  effort_tiers:
+    S: "Lines < 100, low complexity - quick fix"
+    M: "Lines 100-300, medium complexity - moderate effort"
+    L: "Lines > 300, high complexity - significant refactoring"
+    XL: "Critical paths, cross-cutting concerns - enterprise impact"
+
+# Human approval gate
+approval_gate:
+  require_human_review: true
+  require_double_signature: false
+  auto_expire_hours: 72
+
+# Effectiveness tracking
+tracking:
+  record_actions: true
+  track_defect_density_delta: true
+  time_horizon: 30  # Days to measure impact
+
+# Integrations
+integrations:
+  # Issue tracker adapters
+  issue_trackers:
+    github:
+      enabled: true
+      token: ${GITHUB_TOKEN}
+      repo: seanhogg/builderforce.ai
+    jira:
+      enabled: false
+      token: ${JIRA_TOKEN}
+    linear:
+      enabled: false
+      token: ${LINEAR_TOKEN}
+    azure_devops:
+      enabled: false
+      token: ${ADO_TOKEN}
+
+  # Communication channels
+  slack:
+    enabled: true
+    webhook_url: ${SLACK_WEBHOOK}
+    channel: "#engineers"
+    mentions:
+      enabled: true
+      users: '@engineering, @devops'
+
+  teams:
+    enabled: false
+    webhook_url: ${TEAMS_WEBHOOK}
+    connector: "QualityBot"
+
+  # Quality server API
+  quality_server:
+    enabled: true
+    api_endpoint: /api/v1/quality
+    cors_origins:
+      - http://localhost:3000
+      - https://builderforce.ai
+
+logging:
+  level: info
+  format: json
+  output_files:
+    - path: /var/log/quality-triage/ingest.log
+    - path: /var/log/quality-triage/analysis.log
+    - path: /var/log/quality-triage/recommendations.log
+
+# Security
+security:
+  # RBAC roles
+  roles:
+    viewer: ["read:recommendations", "read:hotspots"]
+    engineer: ["read:recommendations", "apply:recommendation"]
+    manager: ["read:recommendations", "approve:recommendation", "read:metrics"]
+    admin: ["*"]
+
+  # Token scopes for agent access
+  agent_scopes:
+    - name: basic
+      permissions: ["read:hotspots"]
+    - name: action
+      permissions: ["read:hotspots", "apply:recommendation"]
+    - name: admin
+      permissions: ["*"]
+    - name: human
+      permissions: ["read:recommendations", "approve:recommendation"]
+
+  # Rate limiting
+  rate_limits:
+    ingestion: 100 IP/hour
+    recommendations: 50 per-minute
+    api_calls: 1000 per-hour
