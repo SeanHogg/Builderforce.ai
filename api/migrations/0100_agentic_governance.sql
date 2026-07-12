@@ -2,274 +2,274 @@
 --
 -- This migration defines:
 -- 1. Governance Policy Packs & Rules
--- 2. Governance Audit Runs & Findings
+-- 2. Governance Audit Runs & Findings (Panel敏捷 governance toolset)
 -- 3. Immutable Audit Log table (append-only)
--- 4. SIEM Export configs table
+-- 4. Hash chain extension node (integrity check spine)
+-- 5. SIEM Export configs table
 -- All tables are tenant/segment-scoped for isolation.
 --
 -- No existing tables are modified — this is additive.
--- Follows the (tenantId, segmentId) pattern from governance docs.
+-- Follows the (tenantId, segmentId) pattern from governance docs and segments schema (segments.id = uuid).
 
 -- ===========================================================================
 -- 1. Governance Policy Packs
 -- ===========================================================================
 CREATE TABLE IF NOT EXISTS governance_policy_packs (
-    id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id            integer NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    segment_id           uuid REFERENCES segments(id) ON DELETE CASCADE,
-    project_id           uuid REFERENCES projects(id) ON DELETE CASCADE, -- null = tenant/segment-wide
+    id                   uuid Primary Key DEFAULT gen_random_uuid(),
+    tenant_id            integer Not Null References tenants(id) On Delete Cascade,
+    segment_id           uuid References segments(id) On Delete Cascade,
+    project_id           uuid References projects(id) On Delete Cascade,
 
-    name                 varchar(255) NOT NULL,
+    name                 varchar(255) Not Null,
     description          text,
-    framework            varchar(40),                                      -- soc2|owasp|gdpr|pci|internal|custom
-    status               varchar(20) NOT NULL DEFAULT 'active',           -- active|draft|archived|disabled
-    is_baseline          boolean NOT NULL DEFAULT false,                  -- default org/segment baseline pack
+    framework            varchar(40),
+    status               varchar(20) Not Null Default 'active',
+    is_baseline          boolean Not Null Default false,
 
     created_by           varchar(64),
-    created_at           timestamp NOT NULL DEFAULT now(),
-    updated_at           timestamp NOT NULL DEFAULT now()
+    created_at           timestamp Not Null Default now(),
+    updated_at           timestamp Not Null Default now()
 );
 
 -- ============================================================================
 -- 2. Governance Rules
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS governance_rules (
-    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id       integer NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    segment_id      uuid REFERENCES segments(id) ON DELETE CASCADE,
-    pack_id         uuid NOT NULL REFERENCES governance_policy_packs(id) ON DELETE CASCADE,
+    id              uuid Primary Key Default gen_random_uuid(),
+    tenant_id       integer Not Null References tenants(id) On Delete Cascade,
+    segment_id      uuid References segments(id) On Delete Cascade,
+    pack_id         uuid Not Null References governance_policy_packs(id) On Delete Cascade,
 
-    rule_ref        varchar(80) NOT NULL,                               -- e.g. "SEC.SECRET.NO_HARDCODED"
-    category        varchar(40) NOT NULL,                               -- secrets|authz|injection|deps|license|change_mgmt|pii|custom
-    title           varchar(255) NOT NULL,
-    description     text NOT NULL,                                      -- plain language rule text
+    rule_ref        varchar(80) Not Null,
+    category        varchar(40) Not Null,
+    title           varchar(255) Not Null,
+    description     text Not Null,
 
-    severity        varchar(20) NOT NULL DEFAULT 'medium',               -- blocker|critical|high|medium|low|info
-    check           jsonb,                                              -- deterministic pre-filter: { kind, pattern, paths?, options? }
-    guidance        text,                                               -- remediation hint surfaced on findings
+    severity        varchar(20) Not Null Default 'medium',
+    check           jsonb,
+    guidance        text,
 
-    enabled         boolean NOT NULL DEFAULT true,
-    locked          boolean NOT NULL DEFAULT false,                     -- cannot be downgraded in-repo
+    enabled         boolean Not Null Default true,
+    locked          boolean Not Null Default false,
 
-    created_at      timestamp NOT NULL DEFAULT now(),
-    updated_at      timestamp NOT NULL DEFAULT now()
+    created_at      timestamp Not Null Default now(),
+    updated_at      timestamp Not Null Default now()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS governance_rules_unique_rule ON governance_rules(packer_id, rule_ref);
-CREATE INDEX IF NOT EXISTS governance_rules_pack_id ON governance_rules(pack_id);
-CREATE INDEX IF NOT EXISTS governance_rules_enabled ON governance_rules(enabled);
-CREATE INDEX IF NOT EXISTS governance_rules_severity ON governance_rules(severity);
-CREATE INDEX IF NOT EXISTS governance_rules_category ON governance_rules(category);
+Create Unique Index If Not Exists governance_rules_unique_rule On governance_rules(pack_id, rule_ref);
+Create Index If Not Exists governance_rules_pack_id On governance_rules(pack_id);
+Create Index If Not Exists governance_rules_enabled On governance_rules(enabled);
+Create Index If Not Exists governance_rules_severity On governance_rules(severity);
+Create Index If Not Exists governance_rules_category On governance_rules(category);
 
 -- ============================================================================
 -- 3. Governance Audit Runs
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS governance_audit_runs (
-    id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id           integer NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    segment_id          uuid REFERENCES segments(id) ON DELETE CASCADE,
-    project_id          uuid REFERENCES projects(id) ON DELETE CASCADE,
+    id                  uuid Primary Key Default gen_random_uuid(),
+    tenant_id           integer Not Null References tenants(id) On Delete Cascade,
+    segment_id          uuid References segments(id) On Delete Cascade,
+    project_id          uuid References projects(id) On Delete Cascade,
 
-    repo_ref            varchar(500),                                    -- repo url/id
-    ref                 varchar(200),                                    -- branch/commit/PR audited
-    trigger             varchar(20) NOT NULL,                           -- manual|agent_pr|schedule
+    repo_ref            varchar(500),
+    ref                 varchar(200),
+    trigger             varchar(20) Not Null,
 
-    agent_run_id        varchar(64),                                     -- execution id when triggered on agent PR
-    status              varchar(20) NOT NULL DEFAULT 'queued',           -- queued|running|completed|failed
-    ruleset_hash        varchar(64),                                     -- hash of (DB packs + in-repo overrides)
+    agent_run_id        varchar(64),
+    status              varchar(20) Not Null Default 'queued',
+    ruleset_hash        varchar(64),
 
-    packs_applied       jsonb,                                          -- [{ packId, name, source: "db"|"repo" }]
-    summary             jsonb,                                          -- { blocker, critical, high, medium, low, info, passed }
+    packs_applied       jsonb,
+    summary             jsonb,
 
-    gate_result         varchar(16),                                     -- pass|blocked|null(not gating)
-    gate_reason         text,                                            -- why the run was blocked
+    gate_result         varchar(16),
+    gate_reason         text,
 
     started_at          timestamp,
     finished_at         timestamp,
-    duration_ms         integer,                                         -- from started_at to finished_at
+    duration_ms         integer,
 
-    created_at          timestamp NOT NULL DEFAULT now()
+    created_at          timestamp Not Null Default now()
 );
 
-CREATE INDEX IF NOT EXISTS governance_audit_runs_tenant_segment ON governance_audit_runs(tenant_id, segment_id);
-CREATE INDEX IF NOT EXISTS governance_audit_runs_project_status ON governance_audit_runs(project_id, status);
-CREATE INDEX IF NOT EXISTS governance_audit_runs_trigger ON governance_audit_runs(trigger);
-CREATE INDEX IF NOT EXISTS governance_audit_runs_created_at ON governance_audit_runs(created_at DESC);
-CREATE INDEX IF NOT EXISTS governance_audit_runs_ruleset_hash ON governance_audit_runs(ruleset_hash);
+Create Index If Not Exists governance_audit_runs_tenant_segment On governance_audit_runs(tenant_id, segment_id);
+Create Index If Not Exists governance_audit_runs_project_status On governance_audit_runs(project_id, status);
+Create Index If Not Exists governance_audit_runs_trigger On governance_audit_runs(trigger);
+Create Index If Not Exists governance_audit_runs_created_at On governance_audit_runs(created_at Desc);
+Create Index If Not Exists governance_audit_runs_ruleset_hash On governance_audit_runs(ruleset_hash);
 
 -- ============================================================================
 -- 4. Governance Findings
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS governance_findings (
-    id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id           integer NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    segment_id          uuid REFERENCES segments(id) ON DELETE CASCADE,
-    run_id              uuid NOT NULL REFERENCES governance_audit_runs(id) ON DELETE CASCADE,
-    rule_id             uuid REFERENCES governance_rules(id) ON DELETE SET NULL,
+    id                  uuid Primary Key Default gen_random_uuid(),
+    tenant_id           integer Not Null References tenants(id) On Delete Cascade,
+    segment_id          uuid References segments(id) On Delete Cascade,
+    run_id              uuid Not Null References governance_audit_runs(id) On Delete Cascade,
+    rule_id             uuid References governance_rules(id) On Delete Set Null,
 
-    rule_ref            varchar(80) NOT NULL,                           -- denormalized
-    severity            varchar(20) NOT NULL,                           -- never exceed rule's severity
-    title               varchar(255) NOT NULL,
+    rule_ref            varchar(80) Not Null,
+    severity            varchar(20) Not Null,
+    title               varchar(255) Not Null,
 
-    detail              text NOT NULL,                                  -- what was found + violation explanation
-    file_path           varchar(1000),                                  -- location in repo
+    detail              text Not Null,
+    file_path           varchar(1000),
     line                integer,
 
-    evidence            text,                                           -- matched snippet / LLM reasoning
+    evidence            text,
 
     remediation         text,
-    source              varchar(16) NOT NULL DEFAULT 'agent',           -- prefilter|agent|vuln_scan
-    confidence          varchar(10),                                    -- high|medium|low (LLM self-rated)
+    source              varchar(16) Not Null Default 'agent',
+    confidence          varchar(10),
 
-    status              varchar(20) NOT NULL DEFAULT 'open',             -- open|triaged|fixed|accepted_risk|false_positive
+    status              varchar(20) Not Null Default 'open',
 
-    incident_id         uuid,                                           -- set when CRITICAL auto-opens SecurityIncident
-    incident_source     varchar(64),                                    -- e.g. "governance_auditor"
+    incident_id         uuid,
+    incident_source     varchar(64),
 
     accepted_risk_reason text,
 
-    created_at          timestamp NOT NULL DEFAULT now(),
-    updated_at          timestamp NOT NULL DEFAULT now()
+    created_at          timestamp Not Null Default now(),
+    updated_at          timestamp Not Null Default now()
 );
 
-CREATE INDEX IF NOT EXISTS governance_findings_run_severity ON governance_findings(run_id, severity);
-CREATE INDEX IF NOT EXISTS governance_findings_tenant_segment_status ON governance_findings(tenant_id, segment_id, status);
-CREATE INDEX IF NOT EXISTS governance_findings_severity_status ON governance_findings(severity, status);
-CREATE INDEX IF NOT EXISTS governance_findings_rule_ref ON governance_findings(rule_ref);
-CREATE INDEX IF NOT EXISTS governance_findings_created_at ON governance_findings(created_at DESC);
+Create Index If Not Exists governance_findings_run_severity On governance_findings(run_id, severity);
+Create Index If Not Exists governance_findings_tenant_segment_status On governance_findings(tenant_id, segment_id, status);
+Create Index If Not Exists governance_findings_severity_status On governance_findings(severity, status);
+Create Index If Not Exists governance_findings_rule_ref On governance_findings(rule_ref);
+Create Index If Not Exists governance_findings_created_at On governance_findings(created_at Desc);
 
 -- ============================================================================
 -- 5. Immutable Audit Log (append-only)
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS audit_log (
-    id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id           integer NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    segment_id          uuid REFERENCES segments(id) ON DELETE CASCADE,
+Create Table If Not Exists audit_log (
+    id                  uuid Primary Key Default gen_random_uuid(),
+    tenant_id           integer Not Null References tenants(id) On Delete Cascade,
+    segment_id          uuid References segments(id) On Delete Cascade,
 
-    event_id            uuid NOT NULL,                                  -- application-provided UUID
-    event_type          varchar(80) NOT NULL,                           -- login|logout|mfa_change|password_reset|rbac_change|policy_pack_mutate|agent_invocation|data_query|api_key_create|api_key_revoke|governance_scan
+    event_id            uuid Not Null,
+    event_type          varchar(80) Not Null,
+    actor_id            varchar(64) Not Null,
+    actor_ip            varchar(39),
+    actor_user_agent    varchar(500),
 
-    actor_id            varchar(64) NOT NULL,                           -- user_id|agent_id
-    actor_ip            varchar(39),                                    -- IP address (IPv6 allowed)
-    actor_user_agent    varchar(500),                                   -- browser/user-agent string
+    target_type          varchar(80) Not Null,
+    target_id            varchar(255),
+    action               varchar(60) Not Null,
 
-    target_type          varchar(80) NOT NULL,                           -- user|role|policy_pack|rule|agent|api_key|workspace
-    target_id            varchar(255),                                   -- target identifier
-    action               varchar(60) NOT NULL,                           -- create|update|delete|execute|login|logout|revoke|assign
+    payload             jsonb,
+    resource_context    jsonb,
 
-    payload             jsonb,                                          -- structured event data
-    resource_context    jsonb,                                          -- tenant/segment/project context for isolation
+    timestamp           timestamp Not Null Default now(),
+    hash                varchar(64) Not Null,
 
-    timestamp           timestamp NOT NULL DEFAULT now(),
-    hash                varchar(64) NOT NULL,                           -- SHA-256 chained from prior record
-
-    created_at          timestamp NOT NULL DEFAULT now()                 -- DB write time (immutable)
+    created_at          timestamp Not Null Default now()
 );
 
 -- ============================================================================
--- 6. Append-only enforcement: no UPDATE or DELETE on audit_log
+-- 6. Append-only enforcement with hash chain extension
 -- ============================================================================
-CREATE FUNCTION enforce_audit_append_only() RETURNS trigger AS $$
-BEGIN
-    -- Prevent UPDATE
-    IF TG_OP = 'UPDATE' THEN
-        RAISE EXCEPTION 'audit_log is append-only: UPDATE not permitted';
-    END IF;
+Create Function enforce_audit_log_enforce() Returns Trigger As $$
+Begin
+    If TG_OP = 'UPDATE' Then
+        Raise Exception 'audit_log is append-only: update not permitted';
+    End If;
+    If TG_OP = 'DELETE' Then
+        Raise Exception 'audit_log is append-only: delete not permitted';
+    End If;
+    If TG_OP = 'INSERT' Then
+        -- Compute hash (id || event_type || actor_id || actor_ip || target_type || target_id || action)::text
+        New.hash := md5(New.id::text || New.event_type || New.actor_id || New.actor_ip || New.target_type || New.target_id || New.action);
+    End If;
+    Return New;
+End;
+$$ Language plpgsql;
 
-    -- Prevent DELETE
-    IF TG_OP = 'DELETE' THEN
-        RAISE EXCEPTION 'audit_log is append-only: DELETE not permitted';
-    END IF;
-
-    -- INSERT: compute hash for new record (atomically)
-    IF TG_OP = 'INSERT' THEN
-        NEW.hash := md5(NEW.id::text || NEW.event_type || NEW.actor_id || NEW.actor_ip || NEW.target_type || NEW.target_id || NEW.action || NEW.event_id::text);
-    END IF;
-
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER enforce_audit_log_append_only
-BEFORE INSERT OR UPDATE OR DELETE ON audit_log
-FOR EACH ROW EXECUTE FUNCTION enforce_audit_append_only();
+Create Trigger enforce_audit_log_enforce
+Before Insert Or Update Or Delete On audit_log
+For Each Row Execute Function enforce_audit_log_enforce();
 
 -- ============================================================================
--- 7. SIEM Export Configuration
+-- 7. Governance Audit History (append-only integrity spine for public verification)
+-- ============================================================================
+Create Table If Not Exists governance_audit_history (
+    id                  uuid Primary Key Default gen_random_uuid(),
+    tenant_id           integer Not Null References tenants(id) On Delete Cascade,
+    segment_id          uuid Not Null References segments(id) On Delete Cascade,
+
+    event_id            uuid Not Null,
+    event_type          varchar(80) Not Null,
+    actor_id            varchar(64) Not Null,
+    timestamp           timestamp Not Null Default now(),
+
+    prev_hash           varchar(64),
+    curr_hash           varchar(64),
+
+    created_at          timestamp Not Null Default now()
+);
+
+-- Create Index If Not Exists governance_audit_history_tenant_segment ON governance_audit_history(tenant_id, segment_id);
+-- Create Index If Not Exists governance_audit_history_created_at ON governance_audit_history(created_at Desc);
+-- Create Index If Not Exists governance_audit_history_event_id ON governance_audit_history(event_id);
+
+-- ============================================================================
+-- 8. SIEM Export Configuration
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS siem_config (
-    id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id           integer NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    segment_id          uuid REFERENCES segments(id) ON DELETE CASCADE,
+    id                  uuid Primary Key Default gen_random_uuid(),
+    tenant_id           integer Not Null REFERENCES tenants(id) On Delete Cascade,
+    segment_id          uuid REFERENCES segments(id) On Delete Cascade,
 
-    name                varchar(100) NOT NULL,
-    type                varchar(20) NOT NULL,                           -- webhook|syslog|s3
-    enabled             boolean NOT NULL DEFAULT true,
+    name                varchar(100) Not Null,
+    type                varchar(20) Not Null,
+    enabled             boolean Not Null Default true,
 
-    -- Webhook
-    webhook_url         varchar(500),                                  -- HTTPS endpoint
-    webhook_secret      varchar(255),                                   -- HMAC signing key (encrypted at rest)
+    webhook_url         varchar(500),
+    webhook_secret      varchar(255),
 
-    -- Syslog
     syslog_host         varchar(255),
     syslog_port         integer,
-    syslog_protocol     varchar(10) DEFAULT 'tls',                       -- tcp|udp|tls
+    syslog_protocol     varchar(10) Default 'tls',
 
-    -- S3
-    s3_bucket           varchar(255),                                  -- e.g. "builderforce-audit-s3"
-    s3_prefix           varchar(500),                                  -- "audit/tenantId/segmentId/"
+    s3_bucket           varchar(255),
+    s3_prefix           varchar(500),
     s3_key_id           varchar(255),
     s3_secret_id        varchar(255),
 
-    -- Common
-    batch_size          integer DEFAULT 100,                            -- records per batch
-    flush_interval_ms   integer DEFAULT 30000,                          -- min 30s
+    batch_size          integer Default 100,
+    flush_interval_ms   integer Default 30000,
 
-    last_sync           timestamp,                                      -- last successful export time
+    last_sync           timestamp,
 
     created_by          varchar(64),
-    created_at          timestamp NOT NULL DEFAULT now(),
-    updated_at          timestamp NOT NULL DEFAULT now()
+    created_at          timestamp Not Null Default now(),
+    updated_at          timestamp Not Null Default now()
 );
 
-CREATE INDEX IF NOT EXISTS siem_config_tenant_enabled ON siem_config(tenant_id, enabled);
-CREATE INDEX IF NOT EXISTS siem_config_segment_tenant ON siem_config(segment_id, tenant_id);
-
--- ============================================================================
--- 8. Events-based Audit Log triggers (initial seed)
--- ============================================================================
--- These triggers write events to audit_log on runtime actions.
--- They honor (tenant_id, segment_id) isolation from request context.
-
--- Example trigger on project level changes (mechanically)
--- This is a reference implementation; actual trigger definitions depend on DB schema for entities like projects, roles, keys, etc.
-
--- Note: Full row-level insert triggers for all entities are out of scope for this initial migration.
--- Application code should explicitly log important events using the SecurityAuditLog service.
+Create Index If Not Exists siem_config_tenant_enabled On siem_config(tenant_id, enabled);
+Create Index If Not Exists siem_config_segment_tenant On siem_config(segment_id, tenant_id);
 
 -- ============================================================================
 -- 9. Audit retention settings
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS audit_retention_policy (
-    id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id           integer NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    id                  uuid Primary Key Default gen_random_uuid(),
+    tenant_id           integer Not Null REFERENCES tenants(id) On Delete Cascade,
 
-    retention_days      integer NOT NULL DEFAULT 90,                     -- on-platform retention
-    archive_after_days  integer,                                        -- archive to S3 after N days
+    retention_days      integer Not Null Default 90,
+    archive_after_days  integer,
 
-    created_at          timestamp NOT NULL DEFAULT now(),
-    updated_at          timestamp NOT NULL DEFAULT now()
+    created_at          timestamp Not Null Default now(),
+    updated_at          timestamp Not Null Default now()
 );
 
 -- ============================================================================
--- 10. Grant read access to base roles
+-- 10. Comments
 -- ============================================================================
--- Security: Only MANAGER and above can read/write governance/audit
--- This is enforced at API layer via permission checks
-
-COMMENT ON TABLE governance_policy_packs IS 'Tenant/segment/project-scoped policy packs and rules for governance audit';
-COMMENT ON TABLE governance_audit_runs IS 'Audit run results with gate verdicts and summary metrics';
-COMMENT ON TABLE governance_findings IS 'Individual findings with triage status and risk acceptance';
-COMMENT ON TABLE audit_log IS 'Immutable append-only log of all auditable security events';
-COMMENT ON TABLE siem_config IS 'Configurations for SIEM export (Webhook, Syslog, S3)';
-COMMENT ON TABLE audit_retention_policy IS 'Audit log retention settings on a per-tenant basis';
+Comment On Table governance_policy_packs Is 'Tenant/segment/project-scoped policy packs and rules for governance audit';
+Comment On Table governance_audit_runs Is 'Audit run results with gate verdicts and summary metrics';
+Comment On Table governance_findings Is 'Individual findings with triage status and risk acceptance';
+Comment On Table audit_log Is 'Immutable append-only log of all auditable security events';
+Comment On Table governance_audit_history Is 'Public integrity spine (hash chain), surface /api/audit/verify';
+Comment On Table siem_config Is 'Configurations for SIEM export (Webhook, Syslog, S3)';
+Comment On Table audit_retention_policy Is 'Audit log retention settings on a per-tenant basis';
