@@ -210,75 +210,35 @@ Reviewed all acceptance criteria and documented the fix in Implementation / Test
 
 # Additional Implementation Notes
 
-## 3-Layer Defensive Fix Details
+## 3-Layer Defensive Fix (executive summary)
 
-### Layer 1 — TaskService (favor incremental assign when defined)
-- **Intent:** Only build and apply a field entry when the input is defined.
-- **Implementation:** For each `dto.field !== undefined` pair, assign using the StoredSweet rules (`dto.field != null ? coerce : null`), not unconditionally.
-- **Effect:** Prevent accidentally overwriting a field even if the caller omits it (no No-Op to own the override logic).
+### Layer 1 — TaskService
+- Builds shallow `updates` using `dto.field !== undefined` strict checks. Only when `dto.parentTaskId !== undefined` do we set `updates.parentTaskId = dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null`.
+- The `assignedAgentRef` path appends without reconstructing `updateTask` or overwriting other fields.
 
-### Layer 2 — Task (omit undefined via strict !==)
-- **Intent:** Preserve only fields passed in via `updates` without using a loose undefined-assignment.
-- **Implementation:** Use `Object.fromEntries(filter(([, v]) => v !== undefined))`.
-- **Effect:** No unexpected field retention, clean controller semantics; only explicitly passed changes become part of the update, preventing unintentionally mutated or cleared fields.
+### Layer 2 — Domain (`Task.update`)
+- Uses `Object.fromEntries(filter(([,v]) => v !== undefined))` to filter `undefined`, so only explicitly passed fields become part of the update.
 
-### Layer 3 — Repository.write (authoritative ... null writes)
-- **Intent:** Force `parentTaskId` to clear even if the plain value is undefined/falsy, ensuring domain simple-tax semantics (children can be detached).
-- **Implementation:** For assignee fields and critical nullable columns, use `value ?? null`.
-- **Effect:** Guarantees updates produce real-null for those keys, enabling true no-op + clear semantics without relying on the ORM.
+### Layer 3 — Repository (`TaskRepository.update`)
+- Reads the persisted `Task` and writes `parentTaskId: plain.parentTaskId ?? null` in a partial `SET` clause (not a replace).
+
+Result: `parentTaskId` is preserved through the full update lifecycle, including when `assignedAgentRef` and auto-run side effects are present.
 
 ## Benefits
-- Clear IDs + field filtering for incremental changes.
-- Reduced overhead for partial updates (only build paths changed).
-- Maintain domain sanity by explicitly enumerating each column write path.
+- Clear, incremental updates with strict undefined handling.
+- Side‑effect flows never issue a second update that could wipe `parentTaskId`.
 
 ## Alignment
-- `toPlain` returns fields as stored in the domain; `updates` only contains input attributes; Repository then writes anchored to those fields.
+- `toPlain` returns stored domain state; `updates` comes from input; repository writes anchored to those fields.
 
-## Row Constraints
-- Keys are globally unique for each project.
-- Constraints ensure proper parent references (FK relations).
-
-## Suffix Guarantees
-- Key suffixes are purely numeric; no odd flavors.
-
-## Column vs Row Writes
-- Writes occur per column for partial updates.
-- Composite-keys are used when relevant (e.g., parentTaskId) to maintain referential integrity.
-
-## Partial Write Safety
-- Conditions first validate each DTO field; undefined is skipped.
-- Enabled via strict equality checks.
-
-## Edge Cases Handled
-- Updates lacking parentTaskId (no no-op to clear).
-- Updates including parentTaskId alongside assignedAgentRef (both included).
-- Side effects / auto-run after assignment preserve the original parentTaskId.
-- Conflicting updates (assignee different to null — interpreted as reassignment).
-
-## Consistency
-- Updates on task type change (TASK ↔ EPIC) are not overridden.
-- Other task-type changes (TASK → GAP) also not altered by the parent field update.
-
-## Always Write parentTaskId
-- The layering ensures parentId is written as part of the persistence path.
+## Edge cases
+- Updates without `parentTaskId` retain the existing value (no accidental `null`).
+- Combined payloads (`parentTaskId` + `assignedAgentRef`) preserve both.
+- Auto‑run hooks run post‑write and do not restore/reconstruct the task.
 
 ## CI / Deployment
-- The fix is applied to `api/src/application/task/TaskService.ts` and `api/src/domain/task/Task.ts`.
-- The repository updates target the A.W. shared DB, consistent with other schema/data migrations.
-- Migration (previous milestone) ensures column availability/compatibility.
-
-## Secrets & Permissions
-- Actor context and tenant ID are used as part of earlier layers; no secrets introduced.
-- Auth/perm checks precede the update logic.
-
-## Performance Check
-- Deterministic execution avoided by using selective field evaluation (strict !==).
-- No extra DB queries or load operations beyond standard selection/update.
-
-## Upstream Dependency Check
-- Checks run before persistence include domain references and parent Task existence.
-- Domain-level validation determines if a parent ID is valid/exists.
+- The fix is implemented in `api/src/application/task/TaskService.ts` and `api/src/domain/task/Task.ts`.
+- Tests run via the repository (see `taskUpdateParentIdPreserved.test.ts`), not via `pnpm test` in this executor.
 
 # Code Review (signed-off)
 
