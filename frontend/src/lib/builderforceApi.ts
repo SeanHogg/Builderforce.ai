@@ -2524,16 +2524,16 @@ export const providerKeysApi = {
 
   /** Begin connecting a Claude subscription — returns the Claude.ai authorize URL
    *  the user opens to grant access (PKCE verifier is held server-side). */
-  oauthStart: (): Promise<{ authorizeUrl: string; state: string }> =>
-    request<{ authorizeUrl: string; state: string }>('/llm/provider-keys/anthropic/oauth/start', {
+  oauthStart: (provider: LlmProvider): Promise<{ authorizeUrl: string; state: string }> =>
+    request<{ authorizeUrl: string; state: string }>(`/llm/provider-keys/${provider}/oauth/start`, {
       method: 'POST',
     }),
 
   /** Finish connecting a Claude subscription with the `code#state` the user
    *  pasted from Claude.ai's consent page. */
-  oauthComplete: (code: string): Promise<{ ok: true; provider: LlmProvider; authType: ProviderAuthType }> =>
+  oauthComplete: (provider: LlmProvider, code: string): Promise<{ ok: true; provider: LlmProvider; authType: ProviderAuthType }> =>
     request<{ ok: true; provider: LlmProvider; authType: ProviderAuthType }>(
-      '/llm/provider-keys/anthropic/oauth/complete',
+      `/llm/provider-keys/${provider}/oauth/complete`,
       { method: 'POST', body: JSON.stringify({ code }) },
     ),
 };
