@@ -4,7 +4,7 @@
   "title": "Agent/Board Basis Payload",
   "description": "Canonical JSON payload structure for agent-issued basis data (facts, sources, weights, reasoning context) consumed by boards and other agents.",
   "type": "object",
-  "required": ["schema_version", "basis_id", "agent_id", "claims"],
+  "required": ["schema_version", "basis_id", "agent_id", "claims", "evidence"],
   "properties": {
     "schema_version": {
       "type": "string",
