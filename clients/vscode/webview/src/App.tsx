@@ -1019,6 +1019,12 @@ function Chat({ init }: { init: InitData }) {
   const byoOtherWorkspace = byoEntries.length > 0 && byoEntries.every((e) => e.reason === 'other-workspace');
   const showByoNotice = conv.byoUnresolved.length > 0 && dismissedByo !== byoKey;
 
+  // Provider usage-cap notice: shown when a BYO provider's key hit its billing limit.
+  // Keyed on the provider set so a different capped provider re-shows it.
+  const [dismissedProviderCap, setDismissedProviderCap] = useState('');
+  const providerCapKey = conv.providerCap.join(',');
+  const showProviderCapNotice = conv.providerCap.length > 0 && dismissedProviderCap !== providerCapKey;
+
   // Triage helpers: copy the full transcript (turns + tool I/O + errors) so a
   // "No response" turn can be shared with its underlying system output, and run
   // the host's connection diagnostics. The host owns the clipboard + the
@@ -1290,6 +1296,27 @@ function Chat({ init }: { init: InitData }) {
             <button
               className="bf-btn bf-btn--icon"
               onClick={() => setDismissedByo(byoKey)}
+              title={t('app.dismiss', 'Dismiss')}
+              aria-label={t('app.dismiss', 'Dismiss')}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showProviderCapNotice && (
+        <div className="bf-notice" role="status">
+          <span className="bf-error__msg">
+            {t(
+              'app.providerCapHit',
+              'Your {providers} API key hit its usage limit this run, so it fell back to the shared model pool. Manage your API keys in the web app under Settings ▸ API Keys.',
+            ).replace('{providers}', conv.providerCap.join(', '))}
+          </span>
+          <div className="bf-error__actions">
+            <button
+              className="bf-btn bf-btn--icon"
+              onClick={() => setDismissedProviderCap(providerCapKey)}
               title={t('app.dismiss', 'Dismiss')}
               aria-label={t('app.dismiss', 'Dismiss')}
             >

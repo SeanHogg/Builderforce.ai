@@ -96,6 +96,17 @@ function accrueByoUnresolved(c: RunCell, raw: string | undefined): void {
   for (const p of raw.split(',').map((s) => s.trim()).filter(Boolean)) next.add(p);
   if (next.size !== before) c.byoUnresolved = [...next];
 }
+
+/** Fold a `x-builderforce-provider-cap` header value (comma-separated providers)
+ *  into the run cell's accumulated set, updating only when it grows so the banner
+ *  appears the moment a BYO provider's usage cap is hit. */
+function accrueProviderCap(c: RunCell, raw: string | undefined): void {
+  if (!raw) return;
+  const before = c.providerCap.length;
+  const next = new Set(c.providerCap);
+  for (const p of raw.split(',').map((s) => s.trim()).filter(Boolean)) next.add(p);
+  if (next.size !== before) c.providerCap = [...next];
+}
 /**
  * Token budget for the working transcript sent to the model each turn. This is
  * the real backstop against the "Brain dies after several executions" failure:
@@ -256,6 +267,14 @@ export interface BrainRunSnapshot {
    * when everything resolved (or nothing is connected).
    */
   byoUnresolved: string[];
+  /**
+   * BYO providers whose key hit a usage/capacity cap on any turn of this run
+   * (from `x-builderforce-provider-cap`) — e.g. the tenant's Anthropic key hit its
+   * monthly spend limit, or Meta MUSE quota was exhausted. A mounted view shows a
+   * "manage your API keys" banner so the user knows to top up or switch providers.
+   * Accumulated across turns; reset fresh each run. Empty when no cap was hit.
+   */
+  providerCap: string[];
 }
 
 interface RunCell {
@@ -279,6 +298,8 @@ interface RunCell {
   abort: AbortController | null;
   /** Connected-but-unresolved BYO providers accumulated across this run's turns. */
   byoUnresolved: string[];
+  /** BYO providers that hit a capacity/usage cap accumulated across this run's turns. */
+  providerCap: string[];
   /**
    * Backstop bookkeeping for the current run (reset each {@link startRun}): whether a
    * workspace code-change tool succeeded, whether the model itself recorded a ticket
@@ -331,6 +352,7 @@ const EMPTY_SNAPSHOT: BrainRunSnapshot = {
   hasTrace: false,
   trace: [],
   byoUnresolved: [],
+  providerCap: [],
 };
 
 function makeCell(): RunCell {
@@ -347,6 +369,7 @@ function makeCell(): RunCell {
     listeners: new Set(),
     abort: null,
     byoUnresolved: [],
+    providerCap: [],
     codeChanged: false,
     ticketRecorded: false,
     touchedFiles: [],
@@ -399,6 +422,7 @@ function emit(c: RunCell): void {
     hasTrace: c.trace.length > 0,
     trace: c.trace,
     byoUnresolved: c.byoUnresolved,
+    providerCap: c.providerCap,
   };
   for (const l of c.listeners) l();
   // Cross-chat subscribers (the dropdown / session-list indicators) see every
@@ -864,6 +888,7 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
   c.error = '';
   c.streamingText = '';
   c.byoUnresolved = []; // fresh per run — a reconnected account clears the banner
+  c.providerCap = [];   // fresh per run — a topped-up account clears the banner
   // Fresh backstop bookkeeping per run (see the finally block below).
   c.codeChanged = false;
   c.ticketRecorded = false;
@@ -1156,6 +1181,8 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     // Surface a connected-but-unresolved BYO account for a live banner (and reset
     // clears it when the account is reconnected). Emit happens with the trace below.
     accrueByoUnresolved(c, result.byoUnresolved);
+    // Surface any BYO provider usage cap so the user knows to manage their keys.
+    accrueProviderCap(c, result.providerCap);
     // Silent-downgrade detection: the gateway can fail over mid-run to a
     // different (often smaller-window) model than we requested. That's a prime
     // context-exhaustion symptom, so surface it as its own warning step instead
@@ -1394,6 +1421,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         { onTextDelta: (d) => { if (closeFirstTokenAt === undefined) closeFirstTokenAt = nowMs(); c.streamingText += d; emit(c); } },
       );
       accrueByoUnresolved(c, closing.byoUnresolved);
+      accrueProviderCap(c, closing.providerCap);
       pushTrace(c, {
         ts: nowIso(),
         category: 'llm',

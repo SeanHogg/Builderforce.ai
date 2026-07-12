@@ -5611,6 +5611,8 @@
     "brainDefault": "Brain (default)",
     "noChatsYet": "No chats yet. Click + New to start.",
     "noChatsMatch": "No chats match your search.",
+    "providerCapBanner": "Your {providers} API key hit its usage limit — this run fell back to the shared model pool.",
+    "manageApiKeys": "Manage your API keys →",
     "rename": "Rename",
     "summarize": "Summarize",
     "deleteChatConfirm": "Delete \"{title}\"? This cannot be undone.",
