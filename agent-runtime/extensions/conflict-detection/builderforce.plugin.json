@@ -1,0 +1,12 @@
+{
+  "name": "builderforce-conflict-detection",
+  "version": "1.0.0",
+  "description": "Conflict Detection Rules and Alerts system - detects prioritization conflicts between stakeholders",
+  "main": "index.ts",
+  "types": "index.ts",
+  "configSchema": "config-schema.ts",
+  "bandwagon": {
+    "products": ["BuilderForce.AI"],
+    "teamId": null
+  }
+}
