@@ -43,6 +43,20 @@ function parseLaneKey(payload: string | null): string | undefined {
   }
 }
 
+/** Recover the ROLE a dispatch ran AS from its payload — the reviewer round-trip
+ *  stamps `reviewRole`; a role-attributed producer dispatch stamps `actAsRole`.
+ *  Drives manifest attribution at finalize (which role participated). */
+function parseActAsRole(payload: string | null): string | undefined {
+  if (!payload) return undefined;
+  try {
+    const obj = JSON.parse(payload) as { actAsRole?: unknown; reviewRole?: unknown };
+    const role = typeof obj.actAsRole === 'string' ? obj.actAsRole : typeof obj.reviewRole === 'string' ? obj.reviewRole : undefined;
+    return role && role.trim() ? role.trim() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * RuntimeService — the execution engine.
  *
@@ -136,6 +150,17 @@ export class RuntimeService {
       agentRef: string | null; executionId: number;
       phase: RunMilestonePhase;
       toStatus?: string | null; resultText?: string | null; errorMessage?: string | null;
+    }) => Promise<void>,
+    /**
+     * Optional attribution sink invoked when a run reaches a TERMINAL status — so the
+     * Coordinated Role Participation manifest can record that "role X participated"
+     * (linked to the execution it ran as) and mark it completed when evidence lands.
+     * Wired at the composition root to the manifest attribution handler. Best-effort:
+     * called after all lane/metrics side-effects and must never block them.
+     */
+    private readonly onRunFinalized?: (info: {
+      tenantId: number; taskId: number; projectId: number; executionId: number;
+      status: 'completed' | 'failed'; actAsRole: string | null; laneServed: string | null;
     }) => Promise<void>,
   ) {}
 
@@ -412,6 +437,18 @@ export class RuntimeService {
         }
 
         await this.onTaskStatusSync?.({ tenantId, taskId: Number(execution.taskId), projectId, fromStatus, toStatus, terminal });
+
+        // Manifest attribution (PRD §5.6): a terminal run records that the role it ran
+        // AS participated on the ticket (linked to this execution), and — with producer
+        // evidence — completes that role's manifest slot. Best-effort, never blocks.
+        if (terminal) {
+          await this.onRunFinalized?.({
+            tenantId, taskId: Number(execution.taskId), projectId, executionId: Number(saved.id),
+            status: dto.status === ExecutionStatus.COMPLETED ? 'completed' : 'failed',
+            actAsRole: parseActAsRole(execution.payload) ?? null,
+            laneServed: parseLaneKey(execution.payload) ?? fromStatus,
+          }).catch(() => {});
+        }
 
         // Autonomous chaining: this agent just advanced the ticket into a NEW
         // non-terminal lane. Fire the same lane auto-run trigger a human board-drag

@@ -25,6 +25,7 @@ import { syncExecutionTaskLifecycle } from './application/task/taskLifecycle';
 import { maybeAutoRunOnLaneEntry } from './presentation/routes/taskRoutes';
 import { resolveNextTaskStatus } from './application/swimlane/nextLane';
 import { ChatTicketService } from './application/brain/ChatTicketService';
+import { attributeRunToManifest } from './application/kanban/attributeRunToManifest';
 
 export function buildRuntimeService(env: Env, db: Db): RuntimeService {
   // eslint-disable-next-line prefer-const -- the lane-auto callback closes over the
@@ -68,6 +69,10 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
       phase: info.phase, executionId: info.executionId,
       toStatus: info.toStatus, resultText: info.resultText, errorMessage: info.errorMessage,
     }).catch(() => {}),
+    // Coordinated Role Participation attribution: a terminal run records that the role
+    // it ran AS participated on the ticket's manifest (linked to the execution), and —
+    // for a producer with PR evidence — completes that slot. Best-effort.
+    (info) => attributeRunToManifest(env, db, info),
   );
   return runtimeService;
 }

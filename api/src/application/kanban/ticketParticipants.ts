@@ -137,28 +137,40 @@ export class TicketParticipantsService {
   }
 
   /**
-   * Attribution (§5.6): mark a role's manifest participant as `in_progress`, linked to
-   * the execution it ran as, when that role is dispatched to work the ticket. Best-effort
-   * and non-destructive — only advances a not-yet-active slot (pending/assigned/unstaffed)
-   * so it never overwrites a completed/changes_requested state. No-op if the manifest
-   * isn't derived yet (accountability derives + syncs on read). Bumps the cache.
+   * Attribution (§5.6): record that a role's manifest participant ran on the ticket,
+   * linked to the execution it ran AS. Best-effort and non-destructive — only advances a
+   * not-yet-terminal slot (pending/assigned/unstaffed/in_progress) and never downgrades a
+   * completed/changes_requested/waived state. A PRODUCER (owner/contributor) slot with PR
+   * evidence completes; everything else advances to `in_progress` (a reviewer completes
+   * via its sign-off, not merely by finishing a run). No-op until the manifest is derived.
    */
-  async markRoleInProgress(env: Env, tenantId: number, taskId: number, roleKey: string, stageKey: string | null, executionId: number): Promise<void> {
+  async recordRunAttribution(env: Env, tenantId: number, taskId: number, opts: { roleKey: string; stageKey?: string | null; executionId?: number; prUrl?: string }): Promise<void> {
     const all = await this.db
-      .select({ id: ticketParticipants.id, stageKey: ticketParticipants.stageKey, state: ticketParticipants.state, evidence: ticketParticipants.evidence })
+      .select({ id: ticketParticipants.id, stageKey: ticketParticipants.stageKey, state: ticketParticipants.state, responsibility: ticketParticipants.responsibility, evidence: ticketParticipants.evidence })
       .from(ticketParticipants)
-      .where(and(eq(ticketParticipants.tenantId, tenantId), eq(ticketParticipants.taskId, taskId), eq(ticketParticipants.roleKey, roleKey)));
+      .where(and(eq(ticketParticipants.tenantId, tenantId), eq(ticketParticipants.taskId, taskId), eq(ticketParticipants.roleKey, opts.roleKey)));
     if (!all.length) return;
-    const advanceable = new Set<ParticipantState>(['pending', 'assigned', 'unstaffed']);
-    // Prefer the slot for this exact stage; fall back to any advanceable slot for the role.
-    const exact = all.filter((r) => r.stageKey === stageKey && advanceable.has(r.state as ParticipantState));
+    const advanceable = new Set<ParticipantState>(['pending', 'assigned', 'unstaffed', 'in_progress']);
+    // Prefer the slot for the exact stage the run served; else any advanceable slot.
+    const exact = opts.stageKey != null ? all.filter((r) => r.stageKey === opts.stageKey && advanceable.has(r.state as ParticipantState)) : [];
     const targets = exact.length ? exact : all.filter((r) => advanceable.has(r.state as ParticipantState));
     if (!targets.length) return;
     for (const r of targets) {
-      const evidence = { ...(r.evidence && typeof r.evidence === 'object' ? r.evidence : {}), executionId };
-      await this.db.update(ticketParticipants).set({ state: 'in_progress', evidence, updatedAt: new Date() }).where(eq(ticketParticipants.id, r.id));
+      const isProducer = r.responsibility === 'owner' || r.responsibility === 'contributor';
+      const state: ParticipantState = isProducer && opts.prUrl ? 'completed' : 'in_progress';
+      const evidence = {
+        ...(r.evidence && typeof r.evidence === 'object' ? r.evidence : {}),
+        ...(opts.executionId != null ? { executionId: opts.executionId } : {}),
+        ...(opts.prUrl ? { prUrl: opts.prUrl } : {}),
+      };
+      await this.db.update(ticketParticipants).set({ state, evidence, updatedAt: new Date() }).where(eq(ticketParticipants.id, r.id));
     }
     await this.bump(env, taskId);
+  }
+
+  /** Thin wrapper: mark a dispatched role `in_progress` with its execution (no evidence). */
+  async markRoleInProgress(env: Env, tenantId: number, taskId: number, roleKey: string, stageKey: string | null, executionId: number): Promise<void> {
+    await this.recordRunAttribution(env, tenantId, taskId, { roleKey, stageKey, executionId });
   }
 
   /**

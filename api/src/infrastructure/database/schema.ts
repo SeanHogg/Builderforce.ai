@@ -1902,6 +1902,11 @@ export const workflows = pgTable('workflows', {
   projectId:    integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   /** Source definition this run was instantiated from (0094); null for ad-hoc runs. */
   workflowDefinitionId: uuid('workflow_definition_id').references(() => workflowDefinitions.id, { onDelete: 'set null' }),
+  /** Reliability linkage (0330): the incident/monitor whose event fired this run —
+   *  set on event-trigger runs and on a manual runbook launched from an incident, so
+   *  the incident detail can list "workflows run for this incident". Null otherwise. */
+  sourceIncidentId: uuid('source_incident_id').references(() => prodIncidents.id, { onDelete: 'set null' }),
+  sourceMonitorId:  uuid('source_monitor_id').references(() => monitors.id, { onDelete: 'set null' }),
   /** Where this run executes: 'host' (self-hosted agentHost) | 'cloud' (builderforce-hosted). */
   runtime:      varchar('runtime', { length: 16 }).notNull().default('host'),
   /** ide_agents.id of the cloud agent serving the run when runtime='cloud'. */
@@ -2008,7 +2013,7 @@ export const workflowTriggers = pgTable('workflow_triggers', {
   segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   definitionId:  uuid('definition_id').notNull().references(() => workflowDefinitions.id, { onDelete: 'cascade' }),
   nodeId:        varchar('node_id', { length: 128 }).notNull(),
-  triggerType:   varchar('trigger_type', { length: 32 }).notNull(),  // schedule|webhook|rss|inbound-email
+  triggerType:   varchar('trigger_type', { length: 32 }).notNull(),  // schedule|webhook|rss|inbound-email|monitor-breach|incident-created|incident-resolved|incident-status-change
   enabled:       boolean('enabled').notNull().default(true),
   config:        text('config').notNull().default('{}'),             // JSON of the trigger node config
   // Run target snapshot, inherited from the definition at sync time.
@@ -4116,6 +4121,11 @@ export const boards = pgTable('boards', {
    *  built-in slug ('standard-swe') or a kanban_templates.id. Null = the legacy
    *  hardcoded default lanes. Records provenance; re-applying overwrites lanes. */
   templateId:          varchar('template_id', { length: 120 }),
+  /** Lifecycle-managed (PRD §5.5): when true the ticket's Assignee is the COORDINATOR
+   *  and is never the default per-stage executor — the owner→executor auto-run fallback
+   *  is suppressed and the per-stage producer is resolved by role capability. Default
+   *  false = legacy behaviour (migration 0335). */
+  lifecycleManaged:    boolean('lifecycle_managed').notNull().default(false),
   createdAt:            timestamp('created_at').notNull().defaultNow(),
   updatedAt:            timestamp('updated_at').notNull().defaultNow(),
 });
@@ -4270,6 +4280,9 @@ export const kanbanTemplateLaneRequirements = pgTable('kanban_template_lane_requ
   isRequired:     boolean('is_required').notNull().default(true),
   description:    text('description'),
   position:       integer('position').notNull().default(0),
+  ticketType:     varchar('ticket_type', { length: 32 }),      // null = all ticket types
+  quorum:         integer('quorum'),                            // N-of-M; null = all required
+  condition:      varchar('condition', { length: 48 }),        // small enum predicate
   createdAt:      timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -4286,6 +4299,9 @@ export const swimlaneRequirements = pgTable('swimlane_requirements', {
   isRequired:     boolean('is_required').notNull().default(true),
   description:    text('description'),
   position:       integer('position').notNull().default(0),
+  ticketType:     varchar('ticket_type', { length: 32 }),      // null = all ticket types
+  quorum:         integer('quorum'),                            // N-of-M; null = all required
+  condition:      varchar('condition', { length: 48 }),        // small enum predicate
   createdAt:      timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -5535,6 +5551,25 @@ export const prodIncidents = pgTable('prod_incidents', {
   byStatus:  index('idx_prod_incidents_status').on(t.tenantId, t.status),
   uqExternal: uniqueIndex('uq_prod_incidents_external').on(t.tenantId, t.source, t.externalRef),
 }));
+
+/** Incident → implicated DELIVERY ticket(s) (PRD §5.10): the ticket(s) whose change
+ *  caused an incident, so RCA can pull their Accountability Reports and see where the
+ *  process was skipped/waived. Distinct from `boardTaskId` (the incident's OWN ticket)
+ *  and from remediation follow-ups (`tasks.incidentId`). Migration 0335. */
+export const prodIncidentImplicatedTasks = pgTable('prod_incident_implicated_tasks', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  incidentId: uuid('incident_id').notNull().references(() => prodIncidents.id, { onDelete: 'cascade' }),
+  taskId:     integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  relation:   varchar('relation', { length: 24 }).notNull().default('implicated'), // implicated | suspected | ruled_out
+  note:       text('note'),
+  createdBy:  varchar('created_by', { length: 36 }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uidx_incident_implicated_task').on(t.incidentId, t.taskId),
+  index('idx_incident_implicated_incident').on(t.incidentId),
+  index('idx_incident_implicated_tenant').on(t.tenantId),
+]);
 
 // ---------------------------------------------------------------------------
 // Incident management: on-call, escalation, contacts, timeline (migration 0325)

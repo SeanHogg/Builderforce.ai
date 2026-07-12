@@ -153,27 +153,20 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    // Incident Management: live incident war rooms + on-call rotations + escalation
-    // policies + business-contact directory. Sub-views are ?tab= pills on the page.
-    id: 'incidents', labelKey: 'group.incidents', icon: '🚨', href: '/incidents',
-    match: ['/incidents'],
+    // Reliability: the detect→respond loop under ONE destination — active Monitoring
+    // (diagram boards + monitor pins; a breach opens an incident) folded together with
+    // Incident Management (war rooms + on-call + escalation + contacts). Sub-views are
+    // ?tab= pills on the /incidents page; the retired /monitoring route redirects into
+    // ?tab=monitors so old deep links still resolve (kept in `match` for highlighting).
+    id: 'reliability', labelKey: 'group.reliability', icon: '🚨', href: '/incidents',
+    match: ['/incidents', '/monitoring'],
     tabKind: 'query', basePath: '/incidents',
     tabs: [
       { id: '', labelKey: 'tab.incidents', icon: '🚨' },
+      { id: 'monitors', labelKey: 'tab.monitors', icon: '📡' },
       { id: 'oncall', labelKey: 'tab.oncall', icon: '📟' },
       { id: 'escalation', labelKey: 'tab.escalation', icon: '⏫' },
       { id: 'contacts', labelKey: 'tab.contacts', icon: '📇' },
-    ],
-  },
-  {
-    // Active Monitoring: upload an architecture diagram to a board, overlay
-    // monitor pins on it; a breach opens an incident. Reporting tab rolls up
-    // incident + monitor metrics. Sub-views are ?tab= pills on the page.
-    id: 'monitoring', labelKey: 'group.monitoring', icon: '📡', href: '/monitoring',
-    match: ['/monitoring'],
-    tabKind: 'query', basePath: '/monitoring',
-    tabs: [
-      { id: '', labelKey: 'tab.boards', icon: '🗺️' },
       { id: 'reporting', labelKey: 'tab.reporting', icon: '📊' },
     ],
   },

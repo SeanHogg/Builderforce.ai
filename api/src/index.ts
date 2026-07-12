@@ -250,7 +250,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // --- Application ---
   const projectService  = new ProjectService(projectRepo, taskRepo);
   const taskService     = new TaskService(taskRepo, projectRepo, llmEpicDecomposer(env),
-    (projectId) => recommendTopAssignee(env, db, projectId));
+    (projectId, roleKey) => recommendTopAssignee(env, db, projectId, roleKey ? { roleKey } : {}));
   const tenantService   = new TenantService(tenantRepo, paymentProvider);
   const toolService     = new ToolService(db);
   const auditRunner     = new AuditRunner(db, toolService, taskService);
