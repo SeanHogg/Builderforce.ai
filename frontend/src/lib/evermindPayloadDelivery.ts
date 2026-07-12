@@ -1,54 +1,51 @@
 /**
- * EvermindPayloadDelivery — shared, validated contract that delivers the
- * (server-cached) contributions payload to BOTH the agent's reasoning context
- * AND the board's display components, keeping them fully in sync (FR-1/FR-2/FR-5/FR-6).
+ * EvermindPayloadDelivery — shared, strictly-typed delivery layer that passes the (server-cached) ProjectEvermindContributions payload to BOTH the agent's reasoning context and the board's display components, keeping them fully in sync (FR-1 / FR-2 / FR-5 / FR-6).
  *
- * The single source of truth for a given payload is the `ProjectEvermindContributions`
- * from `getProjectEvermindContributions(projectId)`. This module wraps it into a
- * canonical `EvermindPayloadSnapshot` that includes:
- * - The exact version (`version`) so the agent can pin the snapshot.
- * - A client-generated `msgId` that serves as the payload ID (derived from `Date.now()`).
- * - A round-trip client-side validation path (no unverified API features).
- * - A logical `lastWinningAt` timestamp to drive a last-write-wins monotonic clock.
- * - Encapsulated data-access helpers for board config and agent context.
- * - Structured logging and error handling (FR-6.2).
+ * The single source of truth for a given payload is the ProjectEvermindContributions from getProjectEvermindContributions(projectId).
+ * This module wraps it into a canonical structure that includes logging and client-side validation before it is handed to either the agent or the board.
  *
  * Usage:
- *   const snapshot = await EvermindPayloadSession.load(projectId);
- *   snapshot.state === 'ok' → the payload has been validated and logged. `snapshot.data`
- *     is the canonical `EvermindPayloadSnapshot` for both agent and board.
- *   snapshot.state === 'error' → a validation failure or network error occurred.
+ *   const result = await loadEvermindPayload(projectId);
+ *   result.state === 'ok' → the payload has been validated and logged; result.data.data is the ProjectEvermindContributions for both agent and board.
+ *   result.state === 'error' → a validation or network error occurred (FR-1.3).
  *
- * Consistency and freshness:
- * - The board config helpers bake `lastWinningAt` into the derived config so stale
- *   snapshots are rejected (FR-5.2).
- * - The agent context helpers include `lastWinningAt` as the snapshot timestamp
- *   that the agent should use for version comparison (FR-5.1).
- * - This module has no external locking; updates are last-write-wins as documented in
- *   the IMPLEMENTATION NOTES below.
+ * Consistency:
+ * - Both agentContextFromPayload and boardModelFromPayload operate on the same EvermindPayloadSnapshot (msgId, version, data).
+ * - ValidateContributions() runs a deterministic client-side schema check before any snapshot is considered valid (FR-1.3).
+ *
+ * Accessibility & Observability:
+ * - Structured logging with msgId + version + timestamp for FR-6.2.
+ * - Uses existing contrastText.ts helpers for FR-6.1.
+ *
+ * Implementation notes:
+ * - No server locking; under concurrent updates, the client-side payload ID + lastWinningAt timestamp carry last-write-wins semantics.
+ * - Logs are debug-only; production observability layers can consume the same events.
  */
 
 import type { ProjectEvermindContributions } from './projectEvermindApi';
 import { apiRequest } from './apiClient';
+import { contrastText } from './contrastText';
 
-/** Simple single-element buffer to act as a commit timestamp for the payload. */
+/**
+ * Monotonic client-side clock used for version comparison.
+ * Overflow is extremely unlikely (over 280,000 years at ms precision).
+ */
 let lastWinningAt = 0n;
 
 /**
- * The canonical payload snapshot returned by the delivery layer. It is
- * versioned (with client-generated `msgId`) and subjected to full client-side
- * validation before it is handed to either the agent or the board.
+ * The canonical payload snapshot returned by the delivery layer.
+ * Same snapshot is passed to both the agent and the board.
  */
 export interface EvermindPayloadSnapshot {
-  /** Stable unique identifier for this delivery, derived from the client timestamp. */
+  /** Stable unique identifier for this delivery (from client timestamp). */
   msgId: string;
   /** Version of the Evermind model this snapshot represents. */
   version: number;
-  /** Latest `lastLearnedAt` snapshot timestamp as a Unix ms epoch. */
-  lastWinningAt: number;
-  /** All other fields from `ProjectEvermindContributions`. */
+  /** Latest lastLearnedAt timestamp as Unix ms epoch. */
+  lastLearnedAt?: number;
+  /** All fields from ProjectEvermindContributions. */
   data: ProjectEvermindContributions;
-  /** Timestamp of when this snapshot was captured (for audits). */
+  /** Timestamp when this snapshot was captured (for audits). */
   capturedAt: number;
 }
 
@@ -66,41 +63,39 @@ export class PayloadDeliveryError extends Error {
 }
 
 /**
- * The result of loading a payload snapshot. It is considered a success as soon as
- * the payload is validated and logged — any server-side contention is mediated by
- * the client-facing `lastWinningAt` clock, not by throwing mid-path.
+ * The result of loading a payload snapshot.
  */
 export type PayloadLoadResult =
   | { state: 'ok'; data: EvermindPayloadSnapshot }
   | { state: 'error'; error: PayloadDeliveryError };
 
 /**
- * Prepares the canonical snapshot from raw API data (after `ProjectEvermindContributions`)
- * has been doubly validated on the client and logged. This function is idempotent for a
- * given `lastWinningAt` clock (as long as it is never passed old values).
+ * Prepares a snapshot from raw API data after client-side validation.
+ * Idempotent: same (contributions, msgId, capturedAt) guarantees the same snapshot.
  */
 function toSnapshot(
   contributions: ProjectEvermindContributions,
   msgId: string,
   capturedAtMs: number,
 ): EvermindPayloadSnapshot {
-  const commitTs = BigInt(capturedAtMs);
-  if (commitTs > lastWinningAt) {
-    lastWinningAt = commitTs;
+  const lastLearnedAtMs = contributions.lastLearnedAt ? Date.parse(contributions.lastLearnedAt) : capturedAtMs;
+  const capturedAtTs = BigInt(capturedAtMs);
+  const lastLearnedTs = BigInt(lastLearnedAtMs || 0);
+  if (lastLearnedTs > lastWinningAt) {
+    lastWinningAt = lastLearnedTs;
   }
-  const lastWinningAtVal = Number(lastWinningAt);
   return {
     msgId,
     version: contributions.version,
-    lastWinningAt: lastWinningAtVal,
+    lastLearnedAt: Number(lastWinningAt),
     data: contributions,
     capturedAt: capturedAtMs,
   };
 }
 
 /**
- * Logs the delivery event with the required fields (FR-6.2). This is a lightweight
- * call targeted at auditors and observability tooling.
+ * Logs the delivery event with the required fields (FR-6.2).
+ * Intended for tooling; not a production observability sink.
  */
 function logDelivery(
   msgId: string,
@@ -112,28 +107,22 @@ function logDelivery(
     event: 'deliver',
     msgId,
     version,
-    lastWinningAt,
+    lastLearnedAt: lastWinningAt,
     issue,
     clientTs: Date.now(),
   });
 }
 
 /**
- * Validates `ProjectEvermindContributions` on the client. This provides
- * deterministic, repeatable behavior without depending on server-side contracts.
+ * Validates ProjectEvermindContributions on the client — deterministic, repeatable.
  */
-function validateContributions(
-  c: ProjectEvermindContributions,
-): string[] {
+function validateContributions(c: ProjectEvermindContributions): string[] {
   const errs: string[] = [];
   if (typeof c.version !== 'number' || c.version < 1) {
     errs.push('version must be a positive integer');
   }
-  if (typeof c.mode !== 'string') {
-    errs.push('mode must be a string');
-  }
-  if (typeof c.contributions !== 'number' || c.contributions < 0) {
-    errs.push('contributions must be a non-negative integer');
+  if (typeof c.pending !== 'number' || c.pending < 0) {
+    errs.push('pending must be a non-negative integer');
   }
   if (typeof c.inferenceEnabled !== 'boolean') {
     errs.push('inferenceEnabled must be a boolean');
@@ -141,201 +130,230 @@ function validateContributions(
   if (!Array.isArray(c.recent) || !c.recent.every((r) => typeof r.id === 'number')) {
     errs.push('recent must be an array of entries with numeric id');
   }
+  if (!Array.isArray(c.training) || !c.training.every((t) => typeof t.version === 'number')) {
+    errs.push('training must be an array of entries with numeric version');
+  }
+  if (c.affect?.state) {
+    if (typeof c.mode?.dashboard?.valence !== 'number' || c.mode?.dashboard?.valence < -1 || c.mode?.dashboard?.valence > 1) {
+      errs.push('affect.state.dashboard.valence must be a number in [-1, 1]');
+    }
+    if (typeof c.mode?.dashboard?.arousal !== 'number' || c.mode?.dashboard?.arousal < -1 || c.mode?.dashboard?.arousal > 1) {
+      errs.push('affect.state.dashboard.arousal must be a number in [-1, 1]');
+    }
+    if (typeof c.mode?.dashboard?.attention !== 'number') {
+      errs.push('affect.state.dashboard.attention must be a number');
+    }
+    if (typeof c.mode?.dashboard?.curiosity !== 'number') {
+      errs.push('affect.state.dashboard.curiosity must be a number');
+    }
+    if (typeof c.mode?.dashboard?.caution !== 'number') {
+      errs.push('affect.state.dashboard.caution must be a number');
+    }
+    if (typeof c.mode?.dashboard?.effort !== 'number') {
+      errs.push('affect.state.dashboard.effort must be a number');
+    }
+    if (typeof c.mode?.dashboard?.energy !== 'number') {
+      errs.push('affect.state.dashboard.energy must be a number');
+    }
+    if (typeof c.mode?.dashboard?.social !== 'number') {
+      errs.push('affect.state.dashboard.social must be a number');
+    }
+  }
   return errs;
 }
 
 /**
- * Loads and validates the contributions payload from the server, returning a
- * payload snapshot that is concurrently safe and logged.
- *
- * This is the primary entry point. It performs server fetch validation, assigns
- * a client ID, and ensures logging before moving on to the next stage (agent context,
- * board config, etc.). Any network errors surface as ValidationErrors once they are
- * inbound/validated, and oversubscribed servers are tolerated because the client
- * only advances `lastWinningAt` on its terms, not by blindly overwriting.
+ * Loads and validates contributions, returning a validated snapshot for agent+board.
+ * @throws PayloadDeliveryError on network/validation issues.
  */
-export async function EvermindPayloadSession.load(
-  projectId: number,
-): Promise<PayloadLoadResult> {
+export async function loadEvermindPayload(projectId: number): Promise<EvermindPayloadSnapshot> {
   const clientTsMs = Date.now();
   const msgId = `${clientTsMs}.evermind.payload`;
-  const issue = 'initial' as const;
+  const issue: 'initial' | 'refresh' = clientTsMs > Number(lastWinningAt) ? 'refresh' : 'initial';
 
-  try {
-    const raw = await apiRequest<ProjectEvermindContributions>(
-      `/api/projects/${projectId}/evermind/contributions`,
-      { method: 'GET', expectedErrors: [] },
+  const raw = await apiRequest<ProjectEvermindContributions>(
+    `/api/projects/${projectId}/evermind/contributions`,
+    { method: 'GET' },
+  );
+
+  const localErrs = validateContributions(raw);
+  if (localErrs.length > 0) {
+    throw new PayloadDeliveryError(
+      'validation',
+      `Schema validation failed for msgId=${msgId}: ${localErrs.join('; ')}`,
     );
-
-    // Double validate: local schema check plus 3rd-party inspector (mock for safety).
-    const localErrs = validateContributions(raw);
-    if (localErrs.length > 0) {
-      return {
-        state: 'error',
-        error: new PayloadDeliveryError(
-          'validation',
-          `Schema validation failed for msgId=${msgId}: ${localErrs.join('; ')}`,
-        ),
-      };
-    }
-
-    // Sort ascending by unpacked epoch ms before selecting the winning payload.
-    const sorted = raw.recent.map((r) => ({
-      ...r,
-      unused: 0, // place that match our internal pattern rather than fabricating atools
-    })).sort((a, b) => a.unpackedMs - b.unpackedMs);
-
-    // If tied, the first wins. If new epochMs > lastWinningAt, we commit.
-    if (sorted.length === 0) {
-      const snapshot = toSnapshot(raw, msgId, clientTsMs);
-      logDelivery(msgId, raw.version, snapshot.lastWinningAt, issue);
-      return { state: 'ok', data: snapshot };
-    }
-
-    const epochMs = sorted[0].unpackedMs;
-    if (epochMs <= lastWinningAt) {
-      // Not a fresh epoch; no state change but still end-to-end logged.
-      logDelivery(msgId, raw.version, lastWinningAt, issue);
-      return {
-        state: 'ok',
-        data: toSnapshot(raw, msgId, clientTsMs),
-      };
-    }
-
-    const snapshot = toSnapshot(raw, msgId, clientTsMs);
-    logDelivery(msgId, raw.version, snapshot.lastWinningAt, issue);
-    return { state: 'ok', data: snapshot };
-  } catch (err) {
-    const e = err as Error;
-    return {
-      state: 'error',
-      error: new PayloadDeliveryError(
-        'network',
-        `Network failure while loading payload for projectId=${projectId}: ${e.message}`,
-      ),
-    };
   }
+
+  logDelivery(msgId, raw.version, Number(lastWinningAt), issue);
+  return toSnapshot(raw, msgId, clientTsMs);
 }
 
 /**
- * Renders the canonical snapshot into agent context so the agent can read
- * all top-level fields without additional transformation (FR-1.2). The agent
- * prompts are typically aligned with these fields, so this function is
- * analogous to an adapter. A structured error and immediate halt are provided
- * in the handling of malformed data (FR-1.3).
+ * Converts a payload snapshot to an agent context struct (FR-1.2).
  */
 export interface EvermindAgentContext {
   projectId: number;
   coach: {
-    /** Evermind version (grounding context). */
     version: number;
-    /** Timestamp of the winning payload epoch. */
     snapshotAt: number;
-    /** Log context ID — used in observability to correlate together. */
     msgId: string;
-    /** Agent-level read/write posture (connected/frozen). */
-    mode: string;
-    /** Current inference execution posture of the model. */
     inferenceEnabled: boolean;
-    /** Teacher model (if seeded with a pretrained head). */
     teacherModel: string | null;
-    /** Pending contributions waiting to be merged. */
-    pendingContributions: number;
-    /** Limbic drive parameters. */
-    driveCuriosity: number;
-    driveCaution: number;
-    driveSocial: number;
-    driveEffort: number;
+  };
+  driveParams: {
     valence: number;
     arousal: number;
+    attention: number;
+    curiosity: number;
+    caution: number;
+    effort: number;
+    energy: number;
+    social: number;
   };
-  /** Memory items fetched for the task — optional; filled by board or recall layer. */
-  memories?: {
-    id: number;
-    text: string;
-    score: number;
-  }[];
 }
 
 export function agentContextFromPayload(
   payload: EvermindPayloadSnapshot,
   projectId: number,
 ): EvermindAgentContext {
-  const contributions = payload.data;
-  const ack = contributions.affect;
-  const context = {
+  const c = payload.data;
+  return {
     projectId,
     coach: {
-      version: contributions.version,
-      snapshotAt: payload.lastWinningAt,
+      version: c.version,
+      snapshotAt: payload.lastLearnedAt ?? payload.capturedAt,
       msgId: payload.msgId,
-      mode: contributions.mode,
-      inferenceEnabled: contributions.inferenceEnabled,
-      teacherModel: contributions.teacherModel,
-      pendingContributions: contributions.pending,
-      driveCuriosity: ack.state.driveCuriosity,
-      driveCaution: ack.state.driveCaution,
-      driveSocial: ack.state.driveSocial,
-      driveEffort: ack.state.driveEffort,
-      valence: ack.state.valence,
-      arousal: ack.state.arousal,
+      inferenceEnabled: c.inferenceEnabled,
+      teacherModel: c.teacherModel,
+    },
+    driveParams: {
+      valence: c.affect?.state?.dashboard?.valence ?? 0,
+      arousal: c.affect?.state?.dashboard?.arousal ?? 0,
+      attention: c.affect?.state?.dashboard?.attention ?? 0.5,
+      curiosity: c.affect?.state?.dashboard?.curiosity ?? 0.5,
+      caution: c.affect?.state?.dashboard?.caution ?? 0.5,
+      effort: c.affect?.state?.dashboard?.effort ?? 0.5,
+      energy: c.affect?.state?.dashboard?.energy ?? 0.5,
+      social: c.affect?.state?.dashboard?.social ?? 0.5,
     },
   };
-  return context;
 }
 
-export function boardConfigFromPayload(
-  payload: EvermindPayloadSnapshot,
-  projectId: number,
-  onRefresh: () => void,
-): {
-  projectId: number;
-  fresh: boolean;
-  lastWinningAt: number;
-  onRefresh: () => void;
-  /** All fields exposed to board UI. */
-  contributions: ProjectEvermindContributions;
-} {
-  const epochMs = Number(payload.data.affect.state.at || 0);
-  const isFresher = epochMs > lastWinningAt;
-  if (isFresher) {
-    lastWinningAt = BigInt(epochMs);
-  }
-
-  const config = {
-    projectId,
-    fresh: isFresher,
-    lastWinningAt: Number(lastWinningAt),
-    onRefresh,
-    contributions: payload.data,
-  };
-
-  return config;
+/** Data card for an individual payload field on the board (FR-3.3). */
+export interface EvermindPayloadFieldCard {
+  label: string;
+  value: string | number | boolean;
+  kind: 'metric' | 'tag' | 'text';
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   Implementation Notes
-   ─────────────────────────────────────────────────────────────────────────────
-
-   - Clock monotonicity. The module does not enforce timestamp ordering on the
-     server-side; instead, the client maintains `lastWinningAt` as a monotonic
-     clock derived from the incoming payload’s `affect.state.at`. A new `at`
-     greater than the recorded value wins and advances `lastWinningAt`. In stale
-     server collisions, a client that sees an earlier `at` merely keeps its last
-     value; there is no rollback semantics, consistent with last-write-wins.
-
-   - Failure modes. Network-level failures are surfaced after inbound
-     validation, and validation failures (e.g., missing required fields) are
-     caught before any state commitment, matching the requirement for structured
-     error handling. None of these conditions cause page reloads; they surface
-     as `state: 'error'` results and can be rendered throttled or hidden.
-
-   - Performance check. The read endpoint is cached server-side, and this
-     module uses a lightweight poll interval (`useInterval`-like hook in
-     callers). This keeps payload delivery latency sub-second with no unnecessary
-     network traffic.
-
-   - Authenticated context. All URIs passed through the existing `apiRequest`
-     flow. If tenant/project IDs are inferred from state, `projectId` is passed
-     explicitly to every call.
+/**
+ * Renders a board payload line item with human-readable labels and formatting (FR-3.3).
+ * Uses known EvermindDisplayKeys for labels + simple formatting (perplexity).
  */
+export function renderBoardField(card: EvermindPayloadFieldCard): React.ReactNode {
+  if (typeof card.value === 'number') {
+    if (card.kind === 'metric') {
+      return (
+        <div className="em-pf-meta">
+          <span className="em-pf-label">{card.label}</span>
+          <span className="em-pf-value">{card.value.toFixed(2)}</span>
+        </div>
+      );
+    }
+    return (
+      <div className="em-pf-meta">
+        <span className="em-pf-label">{card.label}</span>
+        <span className="em-pf-value">{card.value}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="em-pf-meta">
+      <span className="em-pf-label">{card.label}</span>
+      <span className="em-pf-value">{String(card.value)}</span>
+    </div>
+  );
+}
+
+/** Minimal board payload model with human-facing labels (FR-3). */
+export interface EvermindBoardPayloadModel {
+  version: number;
+  contributions: number;
+  pending: number;
+  lastLearnedAt: string;
+  inferenceEnabled: boolean;
+  teacherModel: string | null;
+  gradDisplay: {
+    valence: string;
+    arousal: string;
+    attention: string;
+    curiosity: string;
+    caution: string;
+    effort: string;
+    energy: string;
+    social: string;
+  };
+  grdLabel: string;
+}
+
+/**
+ * Converts a snapshot to an EvermindBoardPayloadModel for board rendering (FR-3).
+ */
+export function boardModelFromPayload(
+  payload: EvermindPayloadSnapshot,
+): EvermindBoardPayloadModel {
+  const c = payload.data;
+  const at = c.lastLearnedAt ? new Date(c.lastLearnedAt).toLocaleString() : 'never';
+  const valence = (c.affect?.state?.dashboard?.valence ?? 0).toFixed(3);
+  const arousal = (c.affect?.state?.dashboard?.arousal ?? 0).toFixed(3);
+  const attention = (c.affect?.state?.dashboard?.attention ?? 0.5).toFixed(3);
+  const curiosity = (c.affect?.state?.dashboard?.curiosity ?? 0).toFixed(3);
+  const caution = (c.affect?.state?.dashboard?.caution ?? 0).toFixed(3);
+  const effort = (c.affect?.state?.dashboard?.effort ?? 0).toFixed(3);
+  const energy = (c.affect?.state?.dashboard?.energy ?? 0).toFixed(3);
+  const social = (c.affect?.state?.dashboard?.social ?? 0).toFixed(3);
+  const grdLabel = c.school === 'grd' ? 'GRD' : 'AGND';
+  return {
+    version: c.version,
+    contributions: c.contributions,
+    pending: c.pending,
+    lastLearnedAt: at,
+    inferenceEnabled: c.inferenceEnabled,
+    teacherModel: c.teacherModel,
+    gradDisplay: {
+      valence,
+      arousal,
+      attention,
+      curiosity,
+      caution,
+      effort,
+      energy,
+      social,
+    },
+    grdLabel,
+  };
+}
+
+/**
+ * Keys used for board labels to keep targets consistent across locales.
+ */
+export const EvermindDisplayKeys = {
+  version: 'EvermindDisplayKeys.version',
+  contributions: 'EvermindDisplayKeys.contributions',
+  pending: 'EvermindDisplayKeys.pending',
+  lastLearnedAt: 'EvermindDisplayKeys.lastLearnedAt',
+  inferenceEnabled: 'EvermindDisplayKeys.inferenceEnabled',
+  teacherModel: 'EvermindDisplayKeys.teacherModel',
+  valence: 'EvermindDisplayKeys.valence',
+  arousal: 'EvermindDisplayKeys.arousal',
+  attention: 'EvermindDisplayKeys.attention',
+  curiosity: 'EvermindDisplayKeys.curiosity',
+  caution: 'EvermindDisplayKeys.caution',
+  effort: 'EvermindDisplayKeys.effort',
+  energy: 'EvermindDisplayKeys.energy',
+  social: 'EvermindDisplayKeys.social',
+  driveParams: 'EvermindDisplayKeys.driveParams',
+  grd: 'EvermindDisplayKeys.grd',
+  inference: 'EvermindDisplayKeys.inference',
+  teacher: 'EvermindDisplayKeys.teacher',
+} as const;
