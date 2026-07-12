@@ -1,124 +1,203 @@
 /**
  * Project Health Baseline Types
  *
- * Domain models for baseline creation, versioning, comparison, and lifecycle management.
- * These are framework-agnostic TypeScript interfaces and enums.
+ * Core domain models for baseline creation, versioning, comparison,
+ * and lifecycle management. Framework-agnostic TypeScript interfaces.
+ *
+ * @see PRD #294 — Responses Saved as Project Health Baseline
  */
 
-/** Baseline stream status: active or archived */
+/** Baseline lifecycle status */
 export type BaselineStatus = 'active' | 'archived';
 
-export const BaselineStatus: Record<
-  BaselineStatus,
-  { label: string; readonly: boolean }
-> = {
-  active: { label: 'Active', readonly: false },
-  archived: { label: 'Archived', readonly: true },
+/** Baseline status metadata */
+export const BASELINE_STATUS_LABELS: Record<BaselineStatus, string> = {
+  active: 'Active',
+  archived: 'Archived',
 };
 
-/** Baseline version numbers (monotonically incrementing) */
-export type BaselineVersion = 'v1' | 'v2' | 'v3' | 'v4';
+/** Version number — monotonically incrementing integer scoped to (projectId, streamName) */
+export type VersionNumber = number;
 
-export const BaselineVersion: Record<
-  BaselineVersion,
-  { label: string; isLatest: boolean }
-> = {
-  v1: { label: 'v1', isLatest: false },
-  v2: { label: 'v2', isLatest: true },
-  v3: { label: 'v3', isLatest: true },
-  v4: { label: 'v4', isLatest: true },
-};
+/** Lifecycle actions recorded in the audit trail */
+export type AuditAction = 'CREATE' | 'PROMOTE' | 'ARCHIVE' | 'VIEW' | 'COMPARE';
 
-/** Version inference for newly created baselines */
-export const inferBaselineVersion = (existingVersions: number): BaselineVersion => {
-  switch (existingVersions) {
-    case 0:
-      return 'v1';
-    case 1:
-      return 'v2';
-    case 2:
-      return 'v3';
-    case 3:
-      return 'v4';
-    default:
-      return 'v4'; // Cap at v4 to minimize cyclomatic complexity
-  }
-};
-
-/** Context metadata attached to an AI response */
+/** Metadata attached to the original AI response that was saved */
 export interface ResponseMetadata {
-  /** LLM model used (e.g., 'builderforce-llm-gpt-4') */
+  /** LLM model that generated the response (e.g. 'builderforce-llm-gpt-4') */
   model: string;
-  /** Optional timestamp when the response was generated */
+  /** ISO 8601 timestamp when the response was generated */
   timestamp?: string;
-  /** Optional context mode (e.g., 'code-review', 'test-coverage-analysis') */
+  /** Context mode (e.g. 'code-review', 'test-coverage-analysis') */
   contextMode?: string;
-  /** Optional project-specific context */
+  /** Free-form project context at time of capture */
   projectContext?: string;
-  /** Optional additional fields (flexible JSON) */
+  /** Extensible metadata */
   [key: string]: unknown;
 }
 
-/** Baseline metadata */
+/** User-visible metadata describing a baseline */
 export interface BaselineMetadata {
   /** Project ID (integer key per platform convention) */
   projectId: number;
-  /** Stream name (e.g., 'performance-baseline') */
+  /** Stream name (e.g. 'performance-baseline', 'security-baseline') */
   baselineName: string;
   /** Optional human-readable description */
   description?: string;
-  /** Optional tags for filtering (e.g., ['security', 'refactor']) */
+  /** Tags for filtering (e.g. ['security', 'refactor', 'v2-migration']) */
   tags: string[];
 }
 
-/** Content composed of an AI response */
+/** The AI response content that was captured */
 export interface BaselineContent {
-  /** Full response text (UTF-8, split at paragraph boundaries) */
+  /** Full response text (UTF-8, preserved as-is) */
   responseText: string;
   /** Original response metadata */
   responseMetadata: ResponseMetadata;
 }
 
-/** Author information */
+/** Author who created this baseline */
 export interface BaselineAuthor {
-  /** User ID (platform user identifier) */
+  /** Platform user identifier */
   userId: string;
   /** Display name */
   name: string;
 }
 
-/** Audit entry for compliance */
+/** A single audit log entry for a baseline lifecycle event */
 export interface BaselineAuditEntry {
-  /** Unique audit entry ID */
+  /** Unique audit entry ID (UUID v4) */
   id: string;
-  /** Lifecycle action performed */
-  action: 'CREATE' | 'PROMOTE' | 'ARCHIVE' | 'VIEW' | 'COMPARE';
+  /** Lifecycle action */
+  action: AuditAction;
   /** Who performed the action (userId) */
   performedBy: string;
-  /** When the action occurred (ISO 8601) */
+  /** ISO 8601 timestamp of the action */
   timestamp: string;
-  /** Optional additional details (e.g., diff stats) */
+  /** Optional additional details (diff stats, old status, etc.) */
   details?: unknown;
 }
 
-/** Complete baseline entity with immutable core fields */
+/** Immutable baseline entity. Once created, `content` and `author` never change. */
 export interface Baseline {
-  /** Primary key (integer key per platform convention) */
+  /** Primary key (integer per platform convention) */
   id: number;
-  /** Stream version */
-  version: BaselineVersion;
-  /** Stream status */
+  /** Stream version — monotonically incrementing per (projectId, streamName) */
+  version: VersionNumber;
+  /** Lifecycle status */
   status: BaselineStatus;
-  /** Baseline metadata */
+  /** User-visible metadata */
   metadata: BaselineMetadata;
-  /** Persistent response content */
+  /** Immutable captured response content */
   content: BaselineContent;
-  /** Author who created this baseline */
+  /** Immutable author info */
   author: BaselineAuthor;
-  /** When created (ISO 8601) */
+  /** ISO 8601 creation timestamp */
   createdAt: string;
-  /** When updated (ISO 8601) */
+  /** ISO 8601 last-updated timestamp (status changes only) */
   updatedAt: string;
-  /** Immutable content-only audit trail */
+  /** Append-only audit trail */
   auditTrail: BaselineAuditEntry[];
 }
+
+/** Input for creating a new baseline */
+export interface CreateBaselineInput {
+  /** Project ID */
+  projectId: number;
+  /** Stream name (e.g. 'performance-baseline') */
+  baselineName: string;
+  /** Optional description */
+  description?: string;
+  /** Tags for filtering */
+  tags?: string[];
+  /** Full response text to capture */
+  responseText: string;
+  /** Response metadata */
+  responseMetadata: ResponseMetadata;
+  /** Author info */
+  author: BaselineAuthor;
+}
+
+/** Input for updating baseline metadata (status changes only via promote/archive) */
+export interface UpdateBaselineInput {
+  status?: BaselineStatus;
+  description?: string;
+  tags?: string[];
+}
+
+/** Filter parameters for listing baselines */
+export interface BaselineFilter {
+  projectId: number;
+  status?: BaselineStatus;
+  tags?: string[];
+  name?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  author?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/** Paginated baseline list response */
+export interface BaselineListResponse {
+  baselines: Baseline[];
+  total: number;
+  returned: number;
+  truncated: boolean;
+}
+
+/** A single diff block between two baseline response texts */
+export interface DiffBlock {
+  type: 'added' | 'removed' | 'unchanged';
+  content: string;
+  position: {
+    startLine: number;
+    endLine: number;
+  };
+}
+
+/** Result of a baseline comparison */
+export interface BaselineDiffResult {
+  baseline1: {
+    id: number;
+    baselineName: string;
+    version: VersionNumber;
+    content: BaselineContent;
+  };
+  baseline2: {
+    id: number;
+    baselineName: string;
+    version: VersionNumber;
+    content: BaselineContent;
+  };
+  diff: DiffBlock[];
+  healthDeltaSummary: {
+    summary: string;
+    summaryType: 'positive' | 'neutral' | 'negative';
+  };
+}
+
+/** Result of a promote action */
+export interface PromoteResult {
+  message: string;
+  newBaseline: Baseline;
+  previouslyActive: {
+    id: number;
+    version: VersionNumber;
+    status: BaselineStatus;
+  } | null;
+}
+
+/** Standard API error shape */
+export interface ApiError {
+  error: string;
+  code: string;
+  status: number;
+  details?: unknown;
+}
+
+/** Role-based access control levels */
+export type BaselineRole = 'owner' | 'admin' | 'editor' | 'viewer';
+
+/** Actions that can be performed on baselines */
+export type BaselineAction = 'create' | 'view' | 'compare' | 'promote' | 'archive' | 'delete' | 'list';
