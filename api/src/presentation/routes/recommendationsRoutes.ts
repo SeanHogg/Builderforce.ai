@@ -73,6 +73,28 @@ export function createRecommendationsRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ dismissed: recKey });
   });
 
+  // Feedback (👍 / 👎 + optional free text) on a recommendation by its stable
+  // rec_key (manager) — FR-6. Upserts one row per (tenant, user, rec_key) so a
+  // user can change their mind; the reason is optional and capped at 500 chars.
+  // Feedback does NOT hide the rec (that is dismiss); it is analytics signal only,
+  // so no cache version bump is needed.
+  router.post('/recommendations/feedback', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId } = scope(c);
+    const body = await c.req.json<{ recKey?: unknown; vote?: unknown; reason?: unknown }>()
+      .catch(() => ({} as { recKey?: unknown; vote?: unknown; reason?: unknown }));
+    const recKey = typeof body.recKey === 'string' ? body.recKey.trim() : '';
+    if (!recKey || recKey.length > 120) return c.json({ error: 'recKey is required' }, 400);
+    const vote = typeof body.vote === 'string' ? body.vote.trim().toLowerCase() : '';
+    if (vote !== 'up' && vote !== 'down') return c.json({ error: 'vote must be "up" or "down"' }, 400);
+    let reason: string | null = typeof body.reason === 'string' ? body.reason.trim() : null;
+    if (reason && reason.length > 500) reason = reason.slice(0, 500);
+    if (reason === '') reason = null;
+    const userId = (c.get('userId') as string | undefined) ?? '';
+    if (!userId) return c.json({ error: 'unauthenticated' }, 401);
+    await recordFeedback(db, tenantId, recKey, userId, vote === 'up', vote === 'down', reason);
+    return c.json({ recKey, vote, reason });
+  });
+
   // SPACE metrics (developer+; complements DORA). Short TTL over hot tables.
   router.get('/space', requireRole(TenantRole.DEVELOPER), async (c) => {
     const { tenantId } = scope(c);
