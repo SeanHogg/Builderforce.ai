@@ -174,6 +174,5 @@ export function formatExplanation(check: TaskMisalignmentCheck): string {
  * Get the hint for an explanation
  */
 export function getExplanationHint(check: TaskMisalignmentCheck): string | undefined {
-  const explanation = getExplanation(check.type, check.details);
-  return explanation?.hint;
+  return check.details?.actionableHint;
 }
