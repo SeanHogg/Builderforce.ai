@@ -212,10 +212,6 @@ function runDerivedFunction(
       const src = raw !== undefined ? raw : resolved["value"]?.value;
       return typeof src === "string" ? src.toLowerCase() : undefined;
     }
-    case "初期状態": {
-      // derived placeholder mapped to context identity: returns context unchanged
-      return context;
-    }
     default:
       return raw;
   }
