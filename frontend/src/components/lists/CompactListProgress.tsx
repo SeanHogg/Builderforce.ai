@@ -296,7 +296,9 @@ const skeletonRow: CSSProperties = {
 const skeletonLabel: CSSProperties = {
   fontSize: '0.84rem',
   fontWeight: 600,
-  color: 'var(--text-muted)',
+  color: 'transparent',
+  background: 'var(--surface-muted, rgba(148, 163, 184, 0.25))',
+  borderRadius: '4px',
   whiteSpace: 'nowrap',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
@@ -305,7 +307,18 @@ const skeletonLabel: CSSProperties = {
   flex: '0 0 auto',
 };
 
+const skeletonBar: CSSProperties = {
+  flex: '1 1 auto',
+  height: PROGRESS_BAR_HEIGHT,
+  minWidth: '80px',
+  borderRadius: PROGRESS_BAR_HEIGHT,
+  background: 'var(--surface-muted, rgba(148, 163, 184, 0.25))',
+};
+
 const skeletonPerc: CSSProperties = {
+  color: 'transparent',
+  background: 'var(--surface-muted, rgba(148, 163, 184, 0.25))',
+  borderRadius: '4px',
   fontSize: '0.72rem',
   fontWeight: 500,
   color: 'var(--text-muted)',
