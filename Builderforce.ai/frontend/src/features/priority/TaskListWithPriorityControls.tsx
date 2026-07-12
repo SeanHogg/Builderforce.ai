@@ -1,19 +1,20 @@
 /**
  * Task List with Low-Priority Controls Integration Example
- * 
+ *
  * Demonstrates integration of PriorityContextMenu and PriorityBadgeEnhanced
  * for managing low-priority task status in a task list view.
- * 
+ *
  * This component shows how to:
  * 1. Display tasks with visual priority indicators
  * 2. Provide quick-action menus for status changes
  * 3. Show toasts for user feedback on status changes
+ * 4. Use PriorityStatusService for status transitions
  */
 
 import React, { useState, useCallback } from 'react';
 import { PriorityContextMenu } from '@/components/tasks/PriorityContextMenu';
 import { PriorityBadge, PriorityBadgeDot } from '@/components/tasks/PriorityBadgeEnhanced';
-import { PriorityStatusService, priorityStatusService } from '@/services/priorityStatusService';
+import { PriorityStatusService, setTaskStatus } from '@/services/priorityStatusService';
 import { useToast } from '@/components/ui/use-toast';
 import type { LowPriorityStatus } from '@/types/priority-status';
 
@@ -94,13 +95,13 @@ interface TaskRowProps {
 export const TaskRow: React.FC<TaskRowProps> = ({ task }) => {
     const [hovered, setHovered] = useState(false);
     const { toast } = useToast();
-    
+
     const handleStatusChange = useCallback(
         async (taskId: string, newStatus: LowPriorityStatus) => {
             try {
                 // Call the PriorityStatusService
                 const response = await PriorityStatusService.setTaskStatus(taskId, newStatus);
-                
+
                 // Show success toast
                 toast({
                     title: 'Status Updated',
@@ -108,10 +109,9 @@ export const TaskRow: React.FC<TaskRowProps> = ({ task }) => {
                     variant: 'success',
                     duration: 4000,
                 });
-                
+
                 // Refresh task status (would come from API in production)
                 await refreshTaskStatus(taskId);
-                
             } catch (error) {
                 console.error('Failed to update status:', error);
                 toast({
@@ -130,13 +130,14 @@ export const TaskRow: React.FC<TaskRowProps> = ({ task }) => {
         // 1. Call PriorityStatusService.getTaskStatus(taskId)
         // 2. Update local state with returned status
         // 3. Trigger parent to refresh
+        console.log(`Refreshing status for task ${taskId}`);
     };
 
     return (
-        <div 
+        <div
             className={`flex items-center gap-4 p-3 rounded-lg border transition-all ${
-                hovered 
-                    ? 'bg-slate-50 border-slate-300 shadow-sm' 
+                hovered
+                    ? 'bg-slate-50 border-slate-300 shadow-sm'
                     : 'bg-white border-slate-200 hover:border-slate-300'
             }`}
             onMouseEnter={() => setHovered(true)}
@@ -144,12 +145,12 @@ export const TaskRow: React.FC<TaskRowProps> = ({ task }) => {
         >
             {/* Task Check */}
             <div className="w-5 h-5 border-2 border-slate-300 rounded-full" />
-            
+
             {/* Task ID */}
             <span className="text-sm font-mono text-slate-500">
                 {task.id}
             </span>
-            
+
             {/* Task Title */}
             <div className="flex-1">
                 <p className="text-sm font-medium text-slate-800">
@@ -157,12 +158,12 @@ export const TaskRow: React.FC<TaskRowProps> = ({ task }) => {
                 </p>
                 <div className="flex items-center gap-2 mt-1">
                     {/* Status Badge */}
-                    <PriorityBadge 
+                    <PriorityBadge
                         status={task.status}
                         size="sm"
                         showIcon={true}
                     />
-                    
+
                     {/* Priority Badge */}
                     <span className="text-xs text-slate-500">
                         Priority: {task.priority}
@@ -172,7 +173,7 @@ export const TaskRow: React.FC<TaskRowProps> = ({ task }) => {
 
             {/* Assignee Avatar */}
             {task.assignee && (
-                <div 
+                <div
                     className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-sm font-medium text-slate-600"
                 >
                     {task.assignee.avatar}
@@ -187,9 +188,9 @@ export const TaskRow: React.FC<TaskRowProps> = ({ task }) => {
             />
 
             {/* Dot indicator for low-priority status (muted styling) */}
-            {['on_hold', 'deferred'].includes(task.status) ? (
+            {['on_hold', 'deferred'].includes(task.status) && (
                 <PriorityBadgeDot status={task.status} size="sm" />
-            ) : null}
+            )}
         </div>
     );
 };
@@ -242,8 +243,8 @@ export const TaskListWithPriorityControls: React.FC<TaskListWithPriorityControls
             {/* Task List */}
             <div className="space-y-2">
                 {tasks.map((task) => (
-                    <TaskRow 
-                        key={task.id} 
+                    <TaskRow
+                        key={task.id}
                         task={task}
                         onSelect={() => handleTaskSelection(task.id)}
                     />
@@ -281,7 +282,7 @@ export const TaskListWithPriorityControls: React.FC<TaskListWithPriorityControls
                         </span>
                     </div>
                 </div>
-                
+
                 {/* Interaction Hint */}
                 <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                     <div className="flex items-start gap-2">
@@ -306,8 +307,8 @@ export const TaskListWithPriorityControls: React.FC<TaskListWithPriorityControls
 
 /**
  * Task Detail View Component with Priority Controls
- * 
- * Shows high-level example of how to integrate PriorityContextMenu 
+ *
+ * Shows high-level example of how to integrate PriorityContextMenu
  * into a task detail view.
  */
 
@@ -324,17 +325,16 @@ export const TaskDetailWithPriority: React.FC = () => {
         async (taskId: string, newStatus: LowPriorityStatus) => {
             try {
                 const response = await PriorityStatusService.setTaskStatus(taskId, newStatus);
-                
+
                 toast({
                     title: 'Task Status Updated',
                     description: `Status changed to ${response.newStatus.replace('_', ' ')}`,
                     variant: 'success',
                     duration: 4000,
                 });
-                
+
                 // Refresh task detail
                 // await refreshTaskDetail(taskId);
-                
             } catch (error) {
                 console.error('Failed to update status:', error);
                 toast({
@@ -360,7 +360,7 @@ export const TaskDetailWithPriority: React.FC = () => {
                         Example integration for task detail views
                     </p>
                 </div>
-                
+
                 {/* Priority Context Menu - Top Right Action Button */}
                 <PriorityContextMenu
                     taskId={selectedTaskId || 'task-1'}
@@ -381,25 +381,25 @@ export const TaskDetailWithPriority: React.FC = () => {
                             <h3 className="text-xl font-semibold text-slate-900 mb-4">
                                 {selectedTask.title}
                             </h3>
-                            
+
                             <div className="flex items-center gap-4">
                                 {/* Status Badge */}
-                                <PriorityBadge 
+                                <PriorityBadge
                                     status={selectedTask.status}
                                     size="lg"
                                     showIcon={true}
                                 />
-                                
+
                                 {/* Priority Badge */}
                                 <span className="px-3 py-1 rounded-full bg-slate-100 text-sm font-medium text-slate-700">
                                     Priority: {selectedTask.priority}
                                 </span>
                             </div>
-                            
+
                             {/* Assignee */}
                             {selectedTask.assignee && (
                                 <div className="mt-4 flex items-center gap-3">
-                                    <div 
+                                    <div
                                         className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-sm font-medium text-slate-600"
                                     >
                                         {selectedTask.assignee.avatar}
@@ -415,15 +415,15 @@ export const TaskDetailWithPriority: React.FC = () => {
                                 </div>
                             )}
                         </div>
-                        
+
                         {/* Visual Status Indicator */}
-                        <PriorityBadgeDot 
+                        <PriorityBadgeDot
                             status={selectedTask.status}
                             size="xl"
                             className="border-4 border-slate-200"
                         />
                     </div>
-                    
+
                     {/* Status History Section (example) */}
                     <div className="mt-6 pt-6 border-t border-slate-200">
                         <h4 className="text-sm font-semibold text-slate-700 mb-3">
@@ -464,7 +464,7 @@ export const TaskDetailWithPriority: React.FC = () => {
                 </h3>
                 <div className="text-sm text-slate-600 space-y-2">
                     <p>
-                        This example demonstrates the integration of PriorityControlMenu
+                        This example demonstrates the integration of PriorityContextMenu
                         into task list and detail views. For production use:
                     </p>
                     <ul className="list-disc list-inside space-y-1 ml-4">
@@ -481,4 +481,4 @@ export const TaskDetailWithPriority: React.FC = () => {
 };
 
 // Export priority status service for integration
-export const PriorityStatusService = priorityStatusService;
+export const PriorityStatusService = PriorityStatusService;
