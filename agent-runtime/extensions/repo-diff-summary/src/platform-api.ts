@@ -1,88 +1,65 @@
-// Types for platform integration — repository APIs for diff fetching and task resolution.
-// The real implementation will live in src/plugins/helpers or a separate platform provider.
-// This file exists so repo-diff-summary-tool.ts can depend on them at build time.
+// Platform resolver abstractions.
+//
+// The actual task/board API is not checked out on this sparse branch — only
+// agent-runtime/extensions/** is present. These stubs define the integration
+// surface so the tool compiles and tests run, and the host can inject real
+// resolvers via api.pluginConfig / api.config once the full repo is present.
 
-import { type DiffSummaryErrorClass } from "./errors.js";
-
-// ---------------------------------------------------------------------------
-// Module: data
-// ---------------------------------------------------------------------------
-
-interface RawFileChange {
+export interface RawFileChange {
   path: string;
   status: "added" | "modified" | "deleted" | "renamed";
   linesAdded: number;
   linesDeleted: number;
   previousPath?: string;
-  binary?: boolean; // true when the provider reports the blob as binary
+  binary?: boolean;
 }
 
-interface GitProviderDiffResponse {
-  files: readonly RawFileChange[];
+export interface GitProviderDiffResponse {
+  files: RawFileChange[];
   baseBranch: string;
-  changedFiles: number;
-  repoFullName: string; // "org/repo"
-  resolvedAt: string; // ISO-8601
+  repoFullName: string;
+  resolvedAt: string;
 }
 
-// ---------------------------------------------------------------------------
-// Module: platform
-// ---------------------------------------------------------------------------
-
-interface TaskRecord {
+export interface TaskRecord {
   id: string;
   projectId: string;
   prNumber?: number;
   branch?: string;
   repoFullName?: string;
-  // Future: state, assignee, etc.
 }
 
-interface PlatformContext {
-  // Resolve taskId → task record
-  resolveTask(taskId: string): TaskRecord | Promise<TaskRecord>;
-
-  // Resolve projectId → repo URL (for repo API calls)
-  resolveProjectId(projectId: string): string | Promise<string>;
+export interface PlatformResolver {
+  resolveTask: (taskId: string) => TaskRecord | Promise<TaskRecord | undefined> | undefined | Promise<undefined>;
+  resolveProjectRepo: (projectId: string) => string | Promise<string>;
 }
 
-// ---------------------------------------------------------------------------
-// Module: GitHub provider (stub)
-// ---------------------------------------------------------------------------
-
-interface PrDiffFetcher {
-  // In production: fetch PR diff from GitHub GraphQL or commits API.
-  // For MVP, we raise a configured unavailable error so the tool detects the stub stage.
-  fetchPrDiff(projectId: string, prNumber: number): GitProviderDiffResponse | Promise<GitProviderDiffResponse>;
+export interface DiffFetcher {
+  fetchDiff: (
+    repoFullName: string,
+    baseBranch: string,
+    headRef: string,
+  ) => GitProviderDiffResponse | Promise<GitProviderDiffResponse>;
 }
 
-// ---------------------------------------------------------------------------
-// Concrete stubs (for transport of platform APIs)
-// ---------------------------------------------------------------------------
-
-export class StubPrDiffFetcher implements PrDiffFetcher {
-  fetchPrDiff(projectId: string, prNumber: number): GitProviderDiffResponse {
-    // Not implemented in this stub; use GitProvider implementation in REFACTOR.
-    // Normalizing to the same error-brand as the real implementation.
-    throw new DiffSummaryErrorClass(
-      "DIFF_UNAVAILABLE",
-      "PR diff fetch is currently in stub stage.",
-    );
+export function asRawFileChange(item: unknown, index: number): RawFileChange {
+  if (!item || typeof item !== "object") {
+    throw new Error(`Invalid file entry at index ${index}: expected object.`);
   }
+  const o = item as Record<string, unknown>;
+  if (typeof o.path !== "string") {
+    throw new Error(`Invalid file entry at index ${index}: path is missing or not a string.`);
+  }
+  return {
+    path: o.path as string,
+    status: (o.status as RawFileChange["status"]) ?? "modified",
+    linesAdded: (o.linesAdded as number) ?? 0,
+    linesDeleted: (o.linesDeleted as number) ?? 0,
+    previousPath: o.previousPath as string | undefined,
+    binary: (o.binary as boolean) ?? false,
+  };
 }
 
-export class StubPlatformResolver implements PlatformContext {
-  async resolveTask(taskId: string): Promise<TaskRecord> {
-    throw new DiffSummaryErrorClass(
-      "TASK_NOT_FOUND",
-      `Task not found: ${taskId}`,
-    );
-  }
-
-  async resolveProjectId(projectId: string): Promise<string> {
-    return projectId;
-  }
+export function normalizeFileChangeArray(files: ReadonlyArray<RawFileChange> | undefined): RawFileChange[] {
+  return files?.slice() ?? [];
 }
-
-// Export for provisioning in tests and later integration.
-export { GitProviderDiffResponse, TaskRecord, PlatformContext, PrDiffFetcher, RawFileChange };
