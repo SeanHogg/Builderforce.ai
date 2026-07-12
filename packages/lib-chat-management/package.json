@@ -6,7 +6,9 @@
   "main": "./index.ts",
   "types": "./index.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "echo \"Linting not configured\" && exit 0",
+    "build": "echo \"No build step required\""
   },
   "keywords": [
     "builderforce",
@@ -17,5 +19,10 @@
   "license": "MIT",
   "peerDependencies": {
     "@seanhogg/builderforce-agents": "workspace:*"
-  }
+  },
+  "files": [
+    "*.ts",
+    "*.json",
+    "*.md"
+  ]
 }
