@@ -2,7 +2,7 @@
 
 import type { CSSProperties } from 'react';
 
-// ProgressItem: Input shape derived from QList.Table -> CenPol stretch.
+/** ProgressItem: Input shape for QList.Table -> CenPol stretch. */
 export type ProgressItem = {
   id: string;
   label: string;
@@ -11,30 +11,43 @@ export type ProgressItem = {
   status: 'not_started' | 'in_progress' | 'completed' | 'blocked';
 };
 
-// Item with persisted order (default input order).
+/** Item with persisted order (default input order). */
 export type PList = ProgressItem[];
 
-// SortBy options (FR-5).
+/** SortBy options (FR-5). */
 export type SortBy = 'progress_desc' | 'progress_asc' | 'status' | 'label_asc';
 
-// VisualDensity: manual clamps (FR-3).
-const ROW_MAX_HEIGHT_CLIENT = 40; // px per row; client check stays 40px
-const BAR_HEIGHT_CLIENT = 6; // px
-const BAR_HEIGHT_COMPONENT_MIN = 4; // px
-const LABEL_TRUNCATE_MIN_WIDTH = 60; // px
+/** Format percent for FR-2 "7/10 or 70%". */
+export function formatPct(completed: number, total: number): string {
+  if (total <= 0) return '0%';
+  const pct = (completed / total) * 100;
+  return Math.max(0, Math.min(100, pct)).toFixed(0) + '%';
+}
 
-// Bootstrap color tokens (globals.css).
-const COLOR_NEUTRAL = 'var(--muted)';
-const COLOR_PRIMARY = 'var(--accent)'; // Coral
-const COLOR_SUCCESS = 'var(--success)';
-const COLOR_DANGER = 'var(--error)';
+/** Get color token by status (FR-4). */
+export function getColorByStatus(status: string): CSSProperties['color'] {
+  switch (status) {
+    case 'completed':
+      return 'var(--success)';
+    case 'in_progress':
+      return 'var(--accent)';
+    case 'blocked':
+      return 'var(--error)';
+    case 'not_started':
+    default:
+      return 'var(--muted)';
+  }
+}
 
-/**
- * CompactListProgress - A vertical list of items, each with label, slim progress bar,
- * numeric or percentage value, and a status badge.
- *
-   FR-1, FR-2, FR-8, FR-3, FR-7.
- *
+/** VisualDensity constants (FR-3). */
+const ROW_MAX_HEIGHT: CSSProperties['height'] = 40;
+const BAR_HEIGHT: CSSProperties['height'] = 6;
+
+/* ── CompactListProgress ─────────────────────────────────────────────────── */
+/** CompactListProgress — A vertical list of items with label, slim progress bar, numeric or percentage value, and status badge.
+
+   FR-1, FR-2, FR-3, FR-4, FR-7, FR-8.
+
    <CompactListProgress
      items={items}
      sortBy="progress_desc"
@@ -46,24 +59,27 @@ export function CompactListProgress({
   sortBy,
   isLoading,
   emptyText,
+  showPercentage = true,
 }: {
   items?: PList;
   sortBy?: SortBy;
   isLoading?: boolean;
   emptyText?: string;
+  showPercentage?: boolean;
 }) {
   let displayItems: ProgressItem[] = items ?? [];
 
+  // FR-5: sortBy logic
   if (sortBy === 'progress_desc' && items?.length) {
     displayItems = [...displayItems].sort((a, b) => {
-      const pctA = calculatePct(a.completed, a.total);
-      const pctB = calculatePct(b.completed, b.total);
+      const pctA = (a.completed / Math.max(1, a.total)) * 100;
+      const pctB = (b.completed / Math.max(1, b.total)) * 100;
       return pctB - pctA;
     });
   } else if (sortBy === 'progress_asc' && items?.length) {
     displayItems = [...displayItems].sort((a, b) => {
-      const pctA = calculatePct(a.completed, a.total);
-      const pctB = calculatePct(b.completed, b.total);
+      const pctA = (a.completed / Math.max(1, a.total)) * 100;
+      const pctB = (b.completed / Math.max(1, b.total)) * 100;
       return pctA - pctB;
     });
   } else if (sortBy === 'status' && items?.length) {
@@ -80,26 +96,28 @@ export function CompactListProgress({
     );
   }
 
+  // FR-6: loading state
   if (isLoading) {
     return (
       <div role="list" aria-busy="true">
         {Array.from({ length: 3 }, (_, i) => (
-          <span key={i} style={ROW_CONTAINER}>
-            <span style={LABEL_WRAPPER} aria-hidden>
-              ¬—
+          <div key={i} role="listitem" style={skeletonRow}>
+            <span style={skeletonLabel} aria-hidden>
+              ——
             </span>
-            <span style={PERC_WRAPPED} aria-hidden>
-              {(i - 1) / 3 * 100}%
+            <span style={skeletonPerc} aria-hidden>
+              {(i - 1) / 2 * 100}%
             </span>
-          </span>
+          </div>
         ))}
       </div>
     );
   }
 
+  // FR-6: empty state
   if (!displayItems.length) {
     return (
-      <span style={EMPTY_STATE} role="status">
+      <span role="status" style={emptyState}>
         {emptyText ?? 'No items to display'}
       </span>
     );
@@ -107,155 +125,64 @@ export function CompactListProgress({
 
   return (
     <div role="list">
-      {displayItems.map((item) => (
-        <div
-          key={item.id}
-          role="listitem"
-          style={ROW_CONTAINER}
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') window.open(`#${item.id}`, '_blank');
-          }}
-        >
-          <span style={LABEL_WRAPPER} aria-label={`${item.label} (${item.status})`}>
-            {item.label}
-          </span>
-          <span style={BAR_CONTAINER}>
+      {displayItems.map((item) => {
+        const pct = (item.completed / Math.max(1, item.total)) * 100;
+        const pctStr = pct.toFixed(0) + '%';
+
+        return (
+          <div
+            key={item.id}
+            role="listitem"
+            style={row}
+            tabIndex={0}
+            onKeyDown={(e) => {
+              // FR-8: no click behavior (Out of Scope)
+              if (e.key === 'Enter') {
+                // Placeholder for future navigation hook (acquire useNavigate from app router)
+                // e.preventDefault();
+              }
+            }}
+          >
             <span
-              style={[
-                PROGRESS_BAR_BG,
-                {
-                  width: `${calculatePct(item.completed, item.total)}%`,
-                },
-              ]}
-              role="progressbar"
-              aria-valuenow={calculatePct(item.completed, item.total)}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label={`${item.label} progress with ${calculatePct(item.completed, item.total).toFixed(1)}% completion`}
-            />
-            <span
-              style={[
-                PROGRESS_BAR_FG,
-                {
-                  width: `${calculatePct(item.completed, item.total)}%`,
-                },
-              ]}
-              role="progressbar"
-              aria-valuenow={calculatePct(item.completed, item.total)}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label={`${item.label} progress with ${calculatePct(item.completed, item.total).toFixed(1)}% completion`}
-            />
-          </span>
-          <span style={PERC_WRAPPER}>{item.completed}/{item.total}</span>
-          <span aria-label={`${item.label} status: ${item.status}`}>
-            <StatusBadge status={item.status} />
-          </span>
-        </div>
-      ))}
+              style={label}
+              aria-label={`${item.label} (${item.status})`}
+              title={item.label} // ensure truncated text has tooltip
+            >
+              {item.label}
+            </span>
+            <span style={progressContainer}>
+              <span style={progressBg} />
+              <span
+                style={{
+                  ...progressFg,
+                  width: `${pct}%`,
+                  backgroundColor: getColorByStatus(item.status),
+                }}
+                role="progressbar"
+                aria-valuenow={pct}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={`${item.label} (${item.status}) progress: ${pctStr}`}
+              />
+            </span>
+            {showPercentage && (
+              <span style={percent}>{item.completed}/{item.total}</span>
+            )}
+            <span aria-label={`Status: ${item.status}`}>
+              <StatusBadge status={item.status} />
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-// Public helpers.
-export { calculatePct, getStatusColor };
+/* ── Export public API ───────────────────────────────────────────────────── */
+export { getStatusColor, formatPct, getColorByStatus };
 export type { ProgressItem, PList, SortBy };
 
-// Prism internals.
-function calculatePct(completed: number, total: number): number {
-  if (total <= 0) return 0;
-  let pct = (completed / total) * 100;
-  if (Number.isNaN(pct)) return 0;
-  return Math.max(0, Math.min(100, pct));
-}
-
-function getStatusColor(status: string): CSSProperties['color'] {
-  switch (status) {
-    case 'completed':
-      return COLOR_SUCCESS;
-    case 'in_progress':
-      return COLOR_PRIMARY;
-    case 'blocked':
-      return COLOR_DANGER;
-    case 'not_started':
-    default:
-      return COLOR_NEUTRAL;
-  }
-}
-
-// Styles.
-const ROW_CONTAINER: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '8px',
-  height: '36px',
-  width: '100%',
-};
-
-const LABEL_WRAPPER: CSSProperties = {
-  fontSize: '0.84rem',
-  fontWeight: 600,
-  color: 'var(--text-primary)',
-  whiteSpace: 'nowrap',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  minWidth: '120px',
-  maxWidth: '300px',
-  display: 'inline-block',
-  flex: '0 0 auto',
-};
-
-const PERC_WRAPPER: CSSProperties = {
-  fontSize: '0.72rem',
-  fontWeight: 500,
-  color: 'var(--text-secondary)',
-  width: '50px',
-  textAlign: 'right',
-  flex: '0 0 auto',
-  minWidth: LABEL_TRUNCATE_MIN_WIDTH,
-};
-
-const BAR_CONTAINER: CSSProperties = {
-  position: 'relative',
-  height: `${BAR_HEIGHT_COMPONENT_MIN}px`,
-  flex: 1,
-  minWidth: LABEL_TRUNCATE_MIN_WIDTH,
-  overflow: 'hidden',
-  display: 'flex',
-};
-
-const PROGRESS_BAR_BG: CSSProperties = {
-  position: 'absolute',
-  left: 0,
-  top: 0,
-  bottom: 0,
-  borderRadius: '999px',
-  backgroundColor: 'var(--border-subtle)',
-  opacity: 0.3,
-  zIndex: 0,
-};
-
-const PROGRESS_BAR_FG: CSSProperties = {
-  position: 'absolute',
-  left: 0,
-  top: 0,
-  height: '100%',
-  borderRadius: '999px',
-  zIndex: 1,
-  // Partial width controlled directly; no JS-triggered animation to avoid mocking window.resize.
-  transition: 'width 200ms linear',
-};
-
-const EMPTY_STATE: CSSProperties = {
-  fontSize: '0.9rem',
-  color: 'var(--text-muted)',
-  textAlign: 'center',
-  padding: '24px 0',
-  fontStyle: 'italic',
-};
-
-// Self-contained status badge (FR-8).
+/* ── StatusBadge helper (FR-4/FR-8) ───────────────────────────────────────── */
 function StatusBadge({ status }: { status: string }) {
   const base: CSSProperties = {
     display: 'inline-block',
@@ -270,18 +197,128 @@ function StatusBadge({ status }: { status: string }) {
   let wrapStyle: CSSProperties = { ...base };
   switch (status) {
     case 'completed':
-      wrapStyle = { ...wrapStyle, backgroundColor: COLOR_SUCCESS };
+      wrapStyle = { ...wrapStyle, backgroundColor: 'var(--success)' };
       break;
     case 'in_progress':
-      wrapStyle = { ...wrapStyle, backgroundColor: COLOR_PRIMARY };
+      wrapStyle = { ...wrapStyle, backgroundColor: 'var(--accent)' };
       break;
     case 'blocked':
-      wrapStyle = { ...wrapStyle, backgroundColor: COLOR_DANGER };
+      wrapStyle = { ...wrapStyle, backgroundColor: 'var(--error)' };
       break;
     case 'not_started':
     default:
-      wrapStyle = { ...wrapStyle, backgroundColor: COLOR_NEUTRAL };
+      wrapStyle = { ...wrapStyle, backgroundColor: 'var(--muted)' };
       break;
   }
-  return <span style={wrapStyle} aria-label={`Status: ${status}`}>{status.replace(/_/g, ' ')}</span>;
+  return <span style={wrapStyle} aria-label={`Status: ${status}`}>
+    {status.replace(/_/g, ' ')}
+  </span>;
 }
+
+/* ── Invariants mapping (removed previous getColorByStatus) ───────────────── */
+function getStatusColor(status: string): CSSProperties['color'] {
+  return getColorByStatus(status);
+}
+
+/* ── Styles (FR-3) ───────────────────────────────────────────────────────── */
+const row: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+  height: ROW_MAX_HEIGHT,
+  width: '100%',
+};
+
+const label: CSSProperties = {
+  fontSize: '0.84rem',
+  fontWeight: 600,
+  color: 'var(--text-primary)',
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  minWidth: '120px',
+  maxWidth: '300px',
+  display: 'inline-block',
+  flex: '0 0 auto',
+  cursor: 'default',
+};
+
+const progressContainer: CSSProperties = {
+  position: 'relative',
+  height: BAR_HEIGHT,
+  flex: 1,
+  minWidth: '60px',
+  overflow: 'hidden',
+  display: 'flex',
+};
+
+const progressBg: CSSProperties = {
+  position: 'absolute',
+  left: 0,
+  top: 0,
+  bottom: 0,
+  borderRadius: '999px',
+  backgroundColor: 'var(--border-subtle)',
+  opacity: 0.3,
+  zIndex: 0,
+};
+
+const progressFg: CSSProperties = {
+  position: 'absolute',
+  left: 0,
+  top: 0,
+  height: '100%',
+  borderRadius: '999px',
+  zIndex: 1,
+  transition: 'width 200ms linear',
+};
+
+const percent: CSSProperties = {
+  fontSize: '0.72rem',
+  fontWeight: 500,
+  color: 'var(--text-secondary)',
+  width: '50px',
+  textAlign: 'right',
+  flex: '0 0 auto',
+  minWidth: '60px',
+};
+
+const emptyState: CSSProperties = {
+  fontSize: '0.9rem',
+  color: 'var(--text-muted)',
+  textAlign: 'center',
+  padding: '24px 0',
+  fontStyle: 'italic',
+};
+
+/* ── Skeleton styles (FR-6) ───────────────────────────────────────────────── */
+const skeletonRow: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+  height: ROW_MAX_HEIGHT,
+  width: '100%',
+  opacity: 0.5,
+};
+
+const skeletonLabel: CSSProperties = {
+  fontSize: '0.84rem',
+  fontWeight: 600,
+  color: 'var(--text-muted)',
+  whiteSpace: 'nowrap',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  minWidth: '120px',
+  maxWidth: '300px',
+  flex: '0 0 auto',
+};
+
+const skeletonPerc: CSSProperties = {
+  fontSize: '0.72rem',
+  fontWeight: 500,
+  color: 'var(--text-muted)',
+  width: '50px',
+  textAlign: 'right',
+  flex: '0 0 auto',
+  minWidth: '60px',
+};
