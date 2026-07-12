@@ -7602,6 +7602,9 @@
       },
       "google": {
         "blurb": "Paste a Google AI (Gemini) API key to run Gemini models on your own Google account."
+      },
+      "meta": {
+        "blurb": "Paste a Meta AI API key to run MUSE models (muse-spark-1.1) on your own Meta AI account."
       }
     }
   },

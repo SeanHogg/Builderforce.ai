@@ -217,6 +217,9 @@ function providerFrontierFlagship(vendor: string, agentic: boolean): string | nu
     case 'anthropic': return agentic ? 'claude-opus-4-8' : 'claude-sonnet-4-6';
     case 'openai':    return 'direct/openai/gpt-4.1';
     case 'googleai':  return 'googleai/gemini-2.5-pro';
+    // Meta MUSE — tenant's own Meta AI account. `direct/meta/` prefix routes to
+    // the `meta` vendor module on the tenant's key (not the operator pool).
+    case 'meta':      return 'direct/meta/muse-spark-1.1';
     default:          return null;
   }
 }
@@ -1368,6 +1371,10 @@ export class LlmProxyService {
       // A tenant BYO OpenAI key overrides the operator OpenAI key (spread above)
       // for the `openai` vendor — marked tenant-funded → byo, $0 to us.
       ...(this.tenantVendorKeys.openai ? { OPENAI_API_KEY: this.tenantVendorKeys.openai } : {}),
+      // A tenant BYO Meta AI key powers the `meta` vendor (MUSE models). There is
+      // NO operator-level Meta key — this is the ONLY source. When absent the meta
+      // vendor no-key-skips at dispatch, same as any other unbound vendor.
+      ...(this.tenantVendorKeys.meta ? { META_API_KEY: this.tenantVendorKeys.meta } : {}),
     };
   }
 
