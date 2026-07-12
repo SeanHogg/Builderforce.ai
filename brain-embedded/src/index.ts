@@ -167,7 +167,7 @@ export {
 export type { MessageProvenance, ProvenanceAccount } from './provenance';
 
 // Shared data shapes
-export type { BrainChat, BrainMessage, BrainModality, ChatInputAttachment, EvermindLearnOutcome } from './types';
+export type { BrainChat, BrainMessage, BrainModality, ChatInputAttachment, EvermindLearnOutcome, EvermindLearnTarget } from './types';
 export { STEP_MESSAGE_ROLE, isStepMessage, attachEvermindLearn, formatEvermindLearnStep } from './types';
 
 // "Copy diagnostics" — pure serializer for the chat's identity + Evermind wiring state

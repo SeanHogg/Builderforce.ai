@@ -4,6 +4,16 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-12 — Coordinated Role Participation Phase 3/4 foundation (capability-resolver upgrade + reviewer attribution + diagnostic pass-gating)
+
+Three safe, fully-wired follow-ups to Phases 1–2 (no migration — all read-time/logic):
+
+- **Fuzzy role→agent resolution superseded by the first-class capability resolver** in the live lane gate: `resolveRoleAgent` (`laneRequirementGate.ts`) now resolves lane-staffed agents first, then `resolveRoleCapableAgents` (explicit pin → `role_keys` → `builtin_kind` → fuzzy) — closing the "fuzzy `agentMatchesRole` must be superseded / seed built-ins deterministically" risk item for reviewer dispatch. Removed the now-dead `ideAgents`/`agentMatchesRole` imports from the gate.
+- **Reviewer-dispatch → manifest attribution (§5.6 partial):** when the gate dispatches a reviewer role, it captures the returned `executionId` and calls new `TicketParticipantsService.markRoleInProgress` — advancing that role's manifest slot to `in_progress` with the execution as evidence (best-effort, non-destructive, no-op until the manifest is derived). The accountability record now shows a reviewer *engaged* before its sign-off lands.
+- **Diagnostic pass-threshold gating (FR-7 partial, no schema change):** `auditRules.ts` + `ticketAuditService.gatherSignals` now read each diagnostic `tool_run`'s existing `ToolResult.score` (0..5, already persisted by `ToolService`) — a run that scored **below the pass threshold (3)** no longer satisfies its `kind:'diagnostic'` requirement (`failedDiagnostics`), while a run with **no score stays satisfied-by-existence** (backward-compatible). Closes "diagnostic requirements are existence-only" without an inert column. New unit test in `auditRules.test.ts`.
+
+Verification: api `tsgo` clean, `vitest` 151 green across swimlane/audit/kanban (incl. new diagnostic-threshold + roleCapability cases). Remaining Phase 3/4 (producer hard-gating — needs the PR/diff/CI completion signal; Coordinator tick + assignee→executor removal; finalize `actAsRole` attribution; approvals↔sign-off bridge; ticket-type templates/quorum; structured PRD sections; incident RCA linkage) tracked in ROADMAP.
+
 ## ✅ RESOLVED 2026-07-12 — Coordinated Role Participation Phases 1–2 (role-aware assignment + participation manifest + accountability record) — mig 0334
 
 Implements Phases 1–2 of `PRD-coordinated-role-participation.md` end-to-end (the deepest #467 fix + the operator's headline accountability surface), plus the operator's two live refinements (dynamic **Resource Assessment** and **child-task %-complete rollup**).

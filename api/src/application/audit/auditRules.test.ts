@@ -5,6 +5,7 @@ const emptySignals = (): AuditSignals => ({
   approvedRoles: new Set(),
   changesRequestedRoles: new Set(),
   ranDiagnostics: new Set(),
+  failedDiagnostics: new Set(),
   performedRoles: new Set(),
 });
 
@@ -39,6 +40,17 @@ describe('requirementUnmetReason', () => {
     const diag = req({ kind: 'diagnostic', ref: 'security-posture' });
     expect(requirementUnmetReason(diag, s)).toBe('missing');
     s.ranDiagnostics.add('security-posture');
+    expect(requirementUnmetReason(diag, s)).toBeNull();
+  });
+
+  it('a diagnostic that RAN but scored below the pass threshold stays unmet', () => {
+    const s = emptySignals();
+    const diag = req({ kind: 'diagnostic', ref: 'security-posture' });
+    s.ranDiagnostics.add('security-posture');   // it ran
+    s.failedDiagnostics.add('security-posture'); // …but below threshold
+    expect(requirementUnmetReason(diag, s)).toBe('missing');
+    // A later passing run clears the fail signal → satisfied.
+    s.failedDiagnostics.delete('security-posture');
     expect(requirementUnmetReason(diag, s)).toBeNull();
   });
 });

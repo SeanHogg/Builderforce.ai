@@ -731,6 +731,8 @@ export function BrainPanel({
       'not-seeded': tTimeline('learnSkipReasonNotSeeded'),
       frozen: tTimeline('learnSkipReasonFrozen'),
     },
+    learnTargetContributed: tTimeline('learnTargetContributed'),
+    learnTargetSkipped: tTimeline('learnTargetSkipped'),
     reconcileTitle: tTimeline('reconcileTitle'),
     reconcileHint: tTimeline('reconcileHint'),
   }), [tTimeline]);

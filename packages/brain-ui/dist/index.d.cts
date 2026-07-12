@@ -1,6 +1,6 @@
 import * as React from 'react';
 import React__default from 'react';
-import { BrainMessage, BrainTraceEvent, DirectedRecipient, EvermindRecallItem, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
+import { BrainMessage, BrainTraceEvent, DirectedRecipient, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
 
 interface BrainTimelineLabels {
     /** Shown on the live thinking node while a turn streams. */
@@ -53,6 +53,12 @@ interface BrainTimelineLabels {
         'not-seeded': string;
         frozen: string;
     };
+    /** Per-Evermind CONTRIBUTED line for a multi-target fan-out. Must contain `{name}`,
+     *  `{projectId}`, `{version}`. */
+    learnTargetContributed: string;
+    /** Per-Evermind SKIPPED line for a multi-target fan-out. Must contain `{name}`,
+     *  `{projectId}`, `{reason}` (filled from {@link learnSkipReason}). */
+    learnTargetSkipped: string;
     /** Evermind reconcile step — the turn updated learned memories. Must contain
      *  `{count}` and `{version}`. */
     reconcileTitle: string;
@@ -441,8 +447,16 @@ interface ChatTicketsLabels {
     lockHint: string;
     mergeHint: string;
     mergeNoOthers: string;
+    /** Title on the collapsed ticket header — click to reveal the ring grid. */
+    showTickets: string;
+    /** Title on the expanded ticket header — click to collapse the ring grid. */
+    hideTickets: string;
     kind: Record<TicketKind, string>;
     ringAria: (label: string, pct: number) => string;
+    /** N-linked-tickets count shown in the collapsible header. */
+    ticketCount: (n: number) => string;
+    /** Aria label for the collapsed header's overall-progress ring. */
+    overallAria: (pct: number) => string;
     runStarted: (agent: string) => string;
     mergeAction: (n: number) => string;
     mergedN: (n: number) => string;
@@ -624,6 +638,7 @@ type TimelineNode = {
     order: number;
     version: number;
     skipped?: BrainLearnSkipReason;
+    targets?: EvermindLearnTarget[];
 } | {
     key: string;
     kind: 'reconcile';

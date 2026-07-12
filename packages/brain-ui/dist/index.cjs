@@ -371,7 +371,8 @@ function stepNode(step, ts, key) {
     case "learn": {
       const r = step.result ?? {};
       const skipped = r.skipped && isLearnSkipReason(r.reason) ? r.reason : void 0;
-      return { key, kind: "learn", ts, order: ORDER.learn, version: typeof r.version === "number" ? r.version : 0, ...skipped ? { skipped } : {} };
+      const targets = Array.isArray(r.targets) ? r.targets : void 0;
+      return { key, kind: "learn", ts, order: ORDER.learn, version: typeof r.version === "number" ? r.version : 0, ...skipped ? { skipped } : {}, ...targets ? { targets } : {} };
     }
     case "reconcile": {
       const r = step.result ?? {};
@@ -506,6 +507,8 @@ var DEFAULT_TIMELINE_LABELS = {
     "not-seeded": "this project has no Evermind model yet",
     frozen: "this project\u2019s Evermind is frozen (read-only)"
   },
+  learnTargetContributed: "Contributed to {name} (project #{projectId} v{version})",
+  learnTargetSkipped: "Skipped {name} (project #{projectId}) \u2014 {reason}",
   reconcileTitle: "Reconciled {count} learned memories in Evermind v{version}",
   reconcileHint: "The answer restated these recalled learnings, so it updates them (write-through cognition)."
 };
@@ -779,6 +782,20 @@ function BrainTimelineInner({
           ] }, node.key);
         }
         if (node.kind === "learn") {
+          if (node.targets && node.targets.length > 0) {
+            const lines = node.targets.map((tg) => {
+              if (tg.learned) {
+                return labels.learnTargetContributed.replace("{name}", tg.name).replace("{projectId}", String(tg.projectId)).replace("{version}", String(tg.version));
+              }
+              const reasonLabel = tg.reason && tg.reason !== "too-short" ? labels.learnSkipReason[tg.reason] : null;
+              return reasonLabel ? labels.learnTargetSkipped.replace("{name}", tg.name).replace("{projectId}", String(tg.projectId)).replace("{reason}", reasonLabel) : null;
+            }).filter((s) => !!s);
+            if (lines.length === 0) return null;
+            return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("li", { className: "bf-tl__item bf-tl__item--memory", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("learn") }) }),
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "bf-tl__body", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__memory-line", children: lines.join("; ") }) })
+            ] }, node.key);
+          }
           const title = node.skipped ? labels.learnSkippedTitle.replace("{reason}", labels.learnSkipReason[node.skipped]) : labels.learnTitle.replace("{version}", String(node.version));
           const hint = node.skipped ? labels.learnSkippedHint : labels.learnHint;
           return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("li", { className: "bf-tl__item bf-tl__item--memory", children: [
@@ -1004,8 +1021,12 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
   lockHint: "Shared chats are visible to the whole team; lock to keep this chat to its members only.",
   mergeHint: "Merge other chats into this one. Their messages, tickets and agents move here; the sources are archived.",
   mergeNoOthers: "No other chats to merge.",
+  showTickets: "Show linked tickets",
+  hideTickets: "Hide linked tickets",
   kind: { task: "Task", epic: "Epic", gap: "Gap", objective: "Objective", initiative: "Initiative", portfolio: "Portfolio", roadmap: "Roadmap", spec: "Spec" },
   ringAria: (label, pct) => `${label}: ${pct}% done`,
+  ticketCount: (n) => `${n} ticket${n === 1 ? "" : "s"}`,
+  overallAria: (pct) => `Overall progress: ${pct}% done`,
   runStarted: (agent) => `Started ${agent} on the ticket.`,
   mergeAction: (n) => `Merge ${n} here`,
   mergedN: (n) => `Merged ${n} chat(s).`
@@ -1014,6 +1035,7 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
 // src/chatTickets/ChatTicketsPanel.tsx
 var import_jsx_runtime7 = require("react/jsx-runtime");
 var RUNNABLE = new Set(RUNNABLE_KINDS);
+var COLLAPSE_THRESHOLD = 8;
 function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket }) {
   const [tickets, setTickets] = (0, import_react4.useState)([]);
   const [agents, setAgents] = (0, import_react4.useState)([]);
@@ -1025,6 +1047,8 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   const [runKey, setRunKey] = (0, import_react4.useState)(null);
   const [msg, setMsg] = (0, import_react4.useState)(null);
   const [busy, setBusy] = (0, import_react4.useState)(false);
+  const [collapsed, setCollapsed] = (0, import_react4.useState)(null);
+  const userCollapsed = (0, import_react4.useRef)(false);
   const load = (0, import_react4.useCallback)(async () => {
     const [tk, ag, mem] = await Promise.all([
       adapter.listTickets(chatId).catch(() => []),
@@ -1034,6 +1058,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     setTickets(tk);
     setAgents(ag);
     setMembers(mem);
+    if (!userCollapsed.current) setCollapsed(tk.length > COLLAPSE_THRESHOLD);
   }, [adapter, chatId]);
   (0, import_react4.useEffect)(() => {
     void load();
@@ -1077,8 +1102,43 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       setBusy(false);
     }
   };
+  const agg = (0, import_react4.useMemo)(() => {
+    let done = 0, total = 0, sumPct = 0;
+    for (const tk of tickets) {
+      done += tk.done;
+      total += tk.total;
+      sumPct += tk.progressPct;
+    }
+    const pct = total > 0 ? Math.round(done / total * 100) : tickets.length ? Math.round(sumPct / tickets.length) : 0;
+    return { pct, done, total };
+  }, [tickets]);
+  const isCollapsed = tickets.length > 0 && (collapsed ?? tickets.length > COLLAPSE_THRESHOLD);
+  const toggleCollapsed = () => {
+    userCollapsed.current = true;
+    setCollapsed(!isCollapsed);
+  };
   return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { style: S.root, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { style: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }, children: tickets.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { style: S.muted, children: labels.none }) : tickets.map((tk) => {
+    tickets.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(
+      "button",
+      {
+        type: "button",
+        onClick: toggleCollapsed,
+        "aria-expanded": !isCollapsed,
+        title: isCollapsed ? labels.showTickets : labels.hideTickets,
+        style: S.ticketsHeader,
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { "aria-hidden": true, style: { ...S.caret, transform: isCollapsed ? "rotate(0deg)" : "rotate(90deg)" }, children: "\u25B8" }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(HealthRing, { percent: agg.pct, size: 22, muted: false, ariaLabel: labels.overallAria(agg.pct) }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { style: S.ticketsCount, children: labels.ticketCount(tickets.length) }),
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("span", { style: S.ticketsAgg, children: [
+            agg.pct,
+            "%",
+            agg.total > 0 ? ` \xB7 ${agg.done}/${agg.total}` : ""
+          ] })
+        ]
+      }
+    ),
+    !isCollapsed && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { style: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }, children: tickets.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { style: S.muted, children: labels.none }) : tickets.map((tk) => {
       const key = `${tk.kind}:${tk.ref}`;
       return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { style: S.chip, children: [
         /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(HealthRing, { percent: tk.progressPct, size: 36, caption: tk.total > 0 ? `${tk.done}/${tk.total}` : void 0, muted: !tk.exists, ariaLabel: labels.ringAria(tk.label, tk.progressPct) }),
@@ -1403,6 +1463,12 @@ var V = {
 var S = {
   root: { margin: "4px 0 0", padding: "8px 10px", border: `1px solid ${V.border}`, borderRadius: 10, background: V.surface, display: "flex", flexDirection: "column", gap: 8 },
   muted: { fontSize: 12, color: V.muted },
+  // Collapsible ticket-summary header — full-width, button-reset, subtle hover-less
+  // affordance that carries a caret, an overall health ring and the linked count.
+  ticketsHeader: { display: "flex", alignItems: "center", gap: 8, padding: "2px 4px", width: "100%", background: "transparent", border: "none", cursor: "pointer", textAlign: "left", color: V.text },
+  caret: { display: "inline-block", fontSize: 11, color: V.muted, transition: "transform 120ms ease" },
+  ticketsCount: { fontSize: 12, fontWeight: 600, color: V.text },
+  ticketsAgg: { fontSize: 11, color: V.muted },
   chip: { display: "flex", alignItems: "center", gap: 6, padding: "2px 6px", border: `1px solid ${V.border}`, borderRadius: 8 },
   ticketLabel: { fontSize: 12, fontWeight: 600, color: V.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   // Clickable variant of the label — opens the artifact. Underlined-on-hover link
