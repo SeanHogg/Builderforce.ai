@@ -119,7 +119,7 @@ export interface StepGenerationResponse {
 export interface ExecutionResponse {
   success: boolean;
   stepId: string;
-  executionResult?: ExecutionResponse['executionResult'];
+  executionResult?: ExecutionResultPayload;
   executionError?: string;
   durationMs: number;
   timestamp: number;
