@@ -201,7 +201,11 @@ describe('Task.update() parentTaskId preservation (AC-1..AC-4)', () => {
 
       expect(detached.parentTaskId).toBeNull();
       expect(detached.assignedAgentRef).toBe('ide-agent-99');
-      expect((await repo.findById(epic.id as TaskId))?.parentTaskId).toBeNull();
+      // FR-3 + FR-5: the explicit null must round-trip through the persistence
+      // layer — re-read the CHILD from the repo and confirm its parent was cleared.
+      const persisted = await repo.findById(child.id as TaskId);
+      expect(persisted?.parentTaskId).toBeNull();
+      expect(persisted?.assignedAgentRef).toBe('ide-agent-99');
     });
   });
 
