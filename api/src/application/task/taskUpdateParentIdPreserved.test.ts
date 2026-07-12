@@ -5,12 +5,11 @@ import { IProjectRepository } from '../../domain/project/IProjectRepository';
 import { Task } from '../../domain/task/Task';
 import { Project } from '../../domain/project/Project';
 import {
+  TaskId,
   asTaskId,
   asProjectId,
   asTenantId,
-  asAgentHostId,
 } from '../../domain/shared/types';
-import { TaskStatus, TaskPriority, TaskType } from '../../domain/shared/types';
 
 // ---------------------------------------------------------------------------
 // In-memory repo that tracks which fields were written (to test no overwrites)
