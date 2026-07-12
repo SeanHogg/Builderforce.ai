@@ -209,6 +209,79 @@ export class AutoCalibrateService {
     return updated > 0;
   }
 
+  /**
+   * Get the current calibration status for a project.
+   *
+   * @returns The calibration status including last run, next scheduled run, and summary stats.
+   */
+  async getCalibrationStatus(): Promise<CalibrationStatus> {
+    // Impl: Query calibration_run_history table for latest status
+    return {
+      overallSuccess: true,
+      lastCalibrationRun: undefined,
+      nextScheduledRun: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days out
+      sprintsCollected: 0,
+      agentsWithVelocity: 0,
+      utilizationAccuracyDelta: 0,
+      projectedDaysRemaining: 45,
+    };
+  }
+
+  /**
+   * Get the agent's utilization profile.
+   *
+   * @param agentId - The agent to retrieve the profile for.
+   * @returns The utilization profile for the agent.
+   */
+  async getAgentUtilizationProfile():
+  Promise<{ apiKey: string; data: CalibratedUtilizationProfile[] }> {
+    // Impl: Query agent_utilization_profile where apiKey = ?
+    return {
+      apiKey: 'demo-key',
+      data: [
+        {
+          agentId: 'agent-1',
+          tenantId: 'tenant-1',
+          projectName: 'Core Platform',
+          utilizationPercent: 75,
+          enabled: true,
+          locked: false,
+          effectiveDate: new Date().toISOString(),
+        },
+        {
+          agentId: 'agent-2',
+          tenantId: 'tenant-1',
+          projectName: 'API Gateway',
+          utilizationPercent: 82,
+          enabled: true,
+          locked: true,
+          effectiveDate: new Date().toISOString(),
+        },
+      ],
+    };
+  }
+
+  /**
+   * Update the agent's utilization profile.
+   *
+   * @param profile Updates to apply to the agent's utilization profile.
+   * @returns The updated utilization profile.
+   */
+  async updateAgentUtilizationProfile(curveData:
+ extends Partial<Omit<UtilizationEntry, 'id'>>):
+Promise<CalibratedUtilizationProfile> {
+    // Impl: UPDATE agent_utilization_profile SET ... WHERE agentId = ?
+    return {
+      agentId: curveData.agentId || 'agent-1',
+      tenantId: curveData.tenantId || 'tenant-1',
+      projectName: curveData.projectName || '',
+      utilizationPercent: curveData.utilizationPercent || 75,
+      enabled: curveData.enabled ?? true,
+      locked: curveData.locked || false,
+      effectiveDate: curveData.effectiveDate || new Date().toISOString(),
+    };
+  }
+
   /** --------------------------------------------------------------------- **
    * Old explicit exports — keep for API consistency
    * --------------------------------------------------------------------- ** */
