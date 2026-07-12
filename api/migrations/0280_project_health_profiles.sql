@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS health_profile_versions (
   tenant_id    integer NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   project_id   integer NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   version_seq  integer NOT NULL, -- sequential version number (1, 2, 3...)
-  actor_id     integer NOT NULL, -- user_id of the actor who made this version
+  actor_ref    varchar(64) NOT NULL, -- users.id (UUID) of the actor who made this version
   content      jsonb NOT NULL,   -- full JSON snapshot
   created_at   timestamp NOT NULL DEFAULT now(),
   CONSTRAINT uq_health_profile_version UNIQUE (tenant_id, project_id, version_seq)
