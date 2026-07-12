@@ -160,6 +160,7 @@ import { createAgentAssignmentRoutes } from './presentation/routes/agentAssignme
 import { createSecurityReviewRoutes } from './presentation/routes/securityReviewRoutes';
 import { createKnowledgeRoutes } from './presentation/routes/knowledgeRoutes';
 import { createKnowledgeMarketRoutes } from './presentation/routes/knowledgeMarketRoutes';
+import { createMisalignmentRulesRoutes } from './presentation/routes/misalignmentRulesRoutes';
 
 import { API_VERSION } from './version';
 import {
