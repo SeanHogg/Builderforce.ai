@@ -74,7 +74,7 @@ export default function RfpDetailClient() {
 
   return (
     <div className="page-inner">
-      <button type="button" className="btn btn-secondary btn-sm" onClick={() => router.push('/rfp')} style={{ marginBottom: 14 }}>
+      <button type="button" className="btn btn-secondary btn-sm" onClick={() => router.push('/projects?tab=rfp')} style={{ marginBottom: 14 }}>
         ← {t('backToList')}
       </button>
 

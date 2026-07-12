@@ -365,7 +365,8 @@
       "escalation": "Escalade",
       "contacts": "Contacts",
       "boards": "Tableaux",
-      "reporting": "Rapports"
+      "reporting": "Rapports",
+      "rfp": "Appels d'offres"
     }
   },
   "alerts": {
@@ -2411,7 +2412,9 @@
       "security": "Sécurité",
       "product_manager": "Produit",
       "designer": "Designer",
-      "incident_manager": "Gestionnaire d'incidents"
+      "incident_manager": "Gestionnaire d'incidents",
+      "cto": "CTO",
+      "product_owner": "Product Owner"
     },
     "teams": {
       "heading": "Équipes",
@@ -5525,7 +5528,9 @@
       "learnSkipReasonFrozen": "l'Evermind de ce projet est gelé (lecture seule)",
       "reconcileTitle": "{count} souvenirs appris réconciliés dans Evermind v{version}",
       "reconcileHint": "La réponse a reformulé ces apprentissages rappelés, elle les met donc à jour (cognition en écriture directe).",
-      "stop": "Arrêter"
+      "stop": "Arrêter",
+      "learnTargetContributed": "Contribué à {name} (projet #{projectId} v{version})",
+      "learnTargetSkipped": "Ignoré {name} (projet #{projectId}) — {reason}"
     },
     "tickets": {
       "none": "Aucun ticket lié pour l’instant.",
@@ -5572,6 +5577,10 @@
       "lockHint": "Les chats partagés sont visibles par toute l’équipe ; verrouillez pour le réserver à ses membres.",
       "mergeHint": "Fusionnez d’autres chats dans celui-ci. Leurs messages, tickets et agents sont déplacés ici ; les sources sont archivées.",
       "mergeNoOthers": "Aucun autre chat à fusionner.",
+      "showTickets": "Afficher les tickets liés",
+      "hideTickets": "Masquer les tickets liés",
+      "ticketCount": "{n, plural, one {# ticket} other {# tickets}}",
+      "overallAria": "Progression globale : {pct}% terminé",
       "mergeAction": "Fusionner {n} ici",
       "mergedN": "{n} chat(s) fusionné(s).",
       "kind": {
@@ -9409,5 +9418,91 @@
       "materialize": "Créer des éléments de travail",
       "materializeHelp": "Crée une sous-tâche par ressource pour que la progression remonte à ce ticket."
     }
+  },
+  "rfpPage": {
+    "title": "Réponse à un appel d'offres",
+    "subtitle": "Répondez à un RFQ/RFP par une proposition co-brandée fondée sur votre portefeuille : inventaire des capacités, compte de résultat, plan de livraison et risques.",
+    "newRequest": "Nouvelle réponse",
+    "needDeveloper": "Nécessite le rôle Développeur",
+    "loading": "Chargement…",
+    "empty": "Aucune demande d'appel d'offres pour l'instant. Créez-en une pour rédiger une proposition co-brandée.",
+    "validation": "Un titre est requis.",
+    "creating": "Création…",
+    "create": "Créer et rédiger",
+    "cancel": "Annuler",
+    "noOrg": "Organisation sans nom",
+    "sourceNew": "Nouveau projet",
+    "sourceExisting": "Basée sur un projet",
+    "quoted": "Devis {price}",
+    "notGenerated": "Pas encore générée",
+    "scanFresh": "Scan récent",
+    "status": {
+      "draft": "Brouillon",
+      "analyzing": "Analyse",
+      "ready": "Prête",
+      "submitted": "Soumise"
+    },
+    "field": {
+      "title": "Titre",
+      "titlePlaceholder": "ex. Refonte du portail client",
+      "requesterOrg": "Organisation demandeuse",
+      "requesterOrgPlaceholder": "Qui a émis l'appel d'offres",
+      "requesterBrand": "Couleurs de marque du demandeur",
+      "requesterBrandHint": "La palette de l'entreprise demandeuse, fusionnée avec la vôtre dans la proposition.",
+      "primary": "Principale",
+      "secondary": "Secondaire",
+      "accent": "Accent",
+      "logoUrl": "URL du logo",
+      "requirements": "Exigences",
+      "requirementsPlaceholder": "Collez les exigences du RFP/RFQ…",
+      "sourceMode": "Fondement",
+      "project": "Projet",
+      "selectProject": "Sélectionnez un projet…",
+      "economics": "Économie",
+      "margin": "Marge",
+      "marketing": "Marketing",
+      "contingency": "Contingence"
+    },
+    "backToList": "Retour aux demandes",
+    "generating": "Génération…",
+    "regenerate": "Régénérer",
+    "generate": "Générer la réponse",
+    "generatingHint": "Exécution du scan avec contrôle de fraîcheur, mise en correspondance de votre portefeuille et rédaction de la proposition…",
+    "noResponseYet": "Aucune proposition générée pour l'instant. Cliquez sur Générer pour en rédiger une.",
+    "scanRefreshed": "Scan actualisé",
+    "scanCurrent": "Scan à jour",
+    "groundedOn": "Fondée sur {project}",
+    "greenfield": "Nouveau projet — proposé à partir des exigences",
+    "scanAge": "dernier scan il y a {days}j",
+    "sec": {
+      "summary": "Synthèse",
+      "capabilities": "Capacités et approche",
+      "economics": "Investissement et volet commercial",
+      "plan": "Plan de livraison",
+      "risks": "Risques clés",
+      "dependencies": "Dépendances",
+      "portfolio": "Projets similaires",
+      "document": "Proposition brandée"
+    },
+    "capabilitiesGreenfield": "Nouveau projet — les capacités sont proposées à partir des exigences.",
+    "col": {
+      "component": "Composant",
+      "responsibility": "Responsabilité"
+    },
+    "stack": "Stack",
+    "quotedPrice": "Prix proposé",
+    "marginNote": "{pct} % de marge · {weeks} semaines d'effort.",
+    "deliveryWindow": "Livraison : {start} → {end} ({weeks} semaines).",
+    "severity": {
+      "low": "Faible",
+      "medium": "Moyen",
+      "high": "Élevé"
+    },
+    "depType": {
+      "internal": "Interne",
+      "external": "Externe",
+      "third_party": "Tierce partie"
+    },
+    "downloadDoc": "Télécharger"
   }
 }

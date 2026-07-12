@@ -52,6 +52,12 @@ export interface BrainTimelineLabels {
   learnSkippedHint: string;
   /** Human phrase per skip reason, substituted into {@link learnSkippedTitle}. */
   learnSkipReason: { 'not-attached': string; 'not-seeded': string; frozen: string };
+  /** Per-Evermind CONTRIBUTED line for a multi-target fan-out. Must contain `{name}`,
+   *  `{projectId}`, `{version}`. */
+  learnTargetContributed: string;
+  /** Per-Evermind SKIPPED line for a multi-target fan-out. Must contain `{name}`,
+   *  `{projectId}`, `{reason}` (filled from {@link learnSkipReason}). */
+  learnTargetSkipped: string;
   /** Evermind reconcile step — the turn updated learned memories. Must contain
    *  `{count}` and `{version}`. */
   reconcileTitle: string;
@@ -91,6 +97,8 @@ export const DEFAULT_TIMELINE_LABELS: BrainTimelineLabels = {
     'not-seeded': 'this project has no Evermind model yet',
     frozen: 'this project’s Evermind is frozen (read-only)',
   },
+  learnTargetContributed: 'Contributed to {name} (project #{projectId} v{version})',
+  learnTargetSkipped: 'Skipped {name} (project #{projectId}) — {reason}',
   reconcileTitle: 'Reconciled {count} learned memories in Evermind v{version}',
   reconcileHint: 'The answer restated these recalled learnings, so it updates them (write-through cognition).',
 };
@@ -525,6 +533,37 @@ function BrainTimelineInner({
             );
           }
           if (node.kind === 'learn') {
+            // Multi-target: a project can fan out to MANY Everminds (its own head + its IDE
+            // builds). Name EACH by id + version so a fan-out is triageable — the same detail
+            // the native chat chip shows. Falls back to the single-line phrasing below when
+            // the server sent no per-target breakdown (older turns / summary only).
+            if (node.targets && node.targets.length > 0) {
+              const lines = node.targets
+                .map((tg) => {
+                  if (tg.learned) {
+                    return labels.learnTargetContributed
+                      .replace('{name}', tg.name).replace('{projectId}', String(tg.projectId)).replace('{version}', String(tg.version));
+                  }
+                  const reasonLabel = tg.reason && tg.reason !== 'too-short'
+                    ? labels.learnSkipReason[tg.reason as 'not-attached' | 'not-seeded' | 'frozen']
+                    : null;
+                  return reasonLabel
+                    ? labels.learnTargetSkipped.replace('{name}', tg.name).replace('{projectId}', String(tg.projectId)).replace('{reason}', reasonLabel)
+                    : null;
+                })
+                .filter((s): s is string => !!s);
+              if (lines.length === 0) return null;
+              return (
+                <li key={node.key} className="bf-tl__item bf-tl__item--memory">
+                  <span className="bf-tl__gutter">
+                    <span className="bf-tl__dot bf-tl__dot--muted">{dotIcon('learn')}</span>
+                  </span>
+                  <div className="bf-tl__body">
+                    <span className="bf-tl__memory-line">{lines.join('; ')}</span>
+                  </div>
+                </li>
+              );
+            }
             // Skipped: the turn did NOT feed the Evermind for a project-level reason —
             // render an explained muted line so the absence is never a silent mystery.
             const title = node.skipped
