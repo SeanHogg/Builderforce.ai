@@ -28,11 +28,10 @@ function RenderedItem({ item, isFirst, isLoading }: RenderedItemProps) {
     : item.title;
 
   return (
-    <div
+    <a
+      href={item.url}
       className={`attention-item ${isFirst ? 'attention-item-top' : 'attention-item-normal'}`}
-      role="button"
-      aria-label={`Attention item: ${item.title}`}
-      tabIndex={0}
+      aria-label={`Attention item: ${title}`}
     >
       <div className="attention-item-header">
         <span className={`attention-item-icon attention-icon-${item.type}`}>
@@ -46,7 +45,7 @@ function RenderedItem({ item, isFirst, isLoading }: RenderedItemProps) {
       <div className="attention-item-meta">
         <span className="attention-item-link">{t('viewDetails')}</span>
       </div>
-    </div>
+    </a>
   );
 }
 
