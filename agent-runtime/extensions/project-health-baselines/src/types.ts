@@ -54,19 +54,6 @@ export type BaselineAuditEntry = {
   details: Record<string, unknown>;
 };
 
-/** Full immutable baseline entity */
-export type Baseline = {
-  id: number;
-  version: BaselineVersion;
-  status: BaselineStatus;
-  metadata: BaselineMetadata;
-  content: BaselineContent;
-  author: BaselineAuthor;
-  createdAt: string; // ISO 8601
-  updatedAt: string;
-  auditTrail: BaselineAuditEntry[];
-};
-
 /** Filter options for listing baselines */
 export type BaselineListFilters = {
   projectId: number;
