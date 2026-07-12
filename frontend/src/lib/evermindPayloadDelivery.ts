@@ -10,7 +10,7 @@
  *   result.state === 'error' → a validation/network error occurred (FR-1.3).
  */
 
-import type { ProjectEvermindContributions } from './projectEvermindApi';
+import { getProjectEvermindContributions, type ProjectEvermindContributions } from './projectEvermindApi';
 
 /**
  * Errors that occur during payload delivery or validation.
