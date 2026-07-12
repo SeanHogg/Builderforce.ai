@@ -1,4 +1,4 @@
-// Deadline Targets - TypeScript Types and Interfaces
+// Deadline Targets - TypeScript Types and Interfaces (Framework-Agnostic)
 
 export type DeadlineType = 'Business' | 'Customer';
 
@@ -9,58 +9,60 @@ export type DeadlinePriority = 'Critical' | 'High' | 'Medium' | 'Low';
 export type OwnerKind = 'user' | 'team';
 
 export interface DeadlineWatchers {
-  userId: string; // external user id from identity provider
+  userId: string;
   projectId: number;
   tenantId: number;
-  addedAt: number; // ISO timestamp
+  addedAt: number;
   source: 'manual' | 'assignment';
 }
 
 export interface DeadlineTargetAssociation {
-  entityType: 'project' | 'work_item' | 'account' | 'contract';
-  entityId: string; // project id or unique identifier
-  linkedAt: number; // ISO timestamp
-  source: 'owner_initiated' | 'system';
+  entityType: string; // 'project' | 'work_item' | 'account' | 'contract'
+  entityId: string;
+  linkedAt: number;
+  source: string;
 }
 
-export interface DeadlineTargetAudit {
-  id: string; // uuid
+export interface DeadlineTargetAuditItem {
+  id: string;
   timestamp: number; // ISO timestamp
-  actorRef: string; // user agent ref or system
+  actorRef: string;
   action: 'create' | 'update' | 'status_change' | 'complete' | 'override' | 'delete';
-  field?: string; // specific field changed for update actions
+  field?: string;
   oldValue?: unknown;
   newValue?: unknown;
-  reason?: string; // for status override/changes
+  reason?: string;
   auditType: 'field_edit' | 'status_change' | 'override' | 'completion';
 }
 
+export type DeadlineTargetAudits = Array<DeadlineTargetAuditItem>;
+
 export interface DeadlineTarget {
-  id: string; // uuid
+  id: string;
   tenantId: number;
-  projectId: number; // null for orphans
+  projectId: number | null;
   name: string;
   type: DeadlineType;
-  targetDate: number; // ISO timestamp (millisecond epoch)
-  targetDateTz?: string; // optional timezone
-  ownerId: string; // user id
+  targetDate: number; // ISO timestamp (milliseconds since epoch)
+  targetDateTz?: string;
+  ownerId: string;
   ownerKind: OwnerKind;
   status: DeadlineStatus;
   statusReason?: string;
   isManualOverride: boolean;
   description?: string;
   priority: DeadlinePriority;
-  externalReference?: string; // e.g. contract ID, ticket number, URL
+  externalReference?: string; // contract ID, ticket number, URL
   confidential: boolean;
-  healthScore: number; // computed as % of linked tasks complete
+  healthScore: number; // 0..100
 
   watchers: DeadlineWatchers[];
   associations: DeadlineTargetAssociation[];
-  audit: DeadlineTargetAudit[];
+  audit: DeadlineTargetAudits;
 
-  createdAt: number; // ISO timestamp
-  updatedAt: number; // ISO timestamp
-  completedAt?: number; // ISO timestamp only if status=Completed
+  createdAt: number;
+  updatedAt: number;
+  completedAt?: number;
 }
 
 export interface CreateDeadlineTargetRequest {
@@ -73,7 +75,7 @@ export interface CreateDeadlineTargetRequest {
   priority: DeadlinePriority;
   projectId?: number;
   associations?: Array<{
-    entityType: CreateDeadlineTargetRequest['associations']['entityType'];
+    entityType: string;
     entityId: string;
   }>;
   externalReference?: string;
@@ -86,11 +88,7 @@ export interface UpdateDeadlineTargetRequest {
   description?: string;
   priority?: DeadlinePriority;
   externalReference?: string;
-}
-
-export interface UpdateDeadlineTargetStatusRequest {
-  status: DeadlineStatus;
-  reason?: string;
+  status?: { status: DeadlineStatus; reason?: string };
 }
 
 export interface DeadlineTargetFilters {
@@ -118,40 +116,26 @@ export interface DeadlineTargetSummary {
   top5Upcoming: Omit<DeadlineTarget, 'watchers' | 'associations' | 'audit'>[];
 }
 
-export interface DeadlineTargetDeliverable {
-  id: string;
-  name: string;
-  type: DeadlineType;
-  targetDate: number;
-  status: DeadlineStatus;
-  priority: DeadlinePriority;
-  healthScore: number;
-}
-
-export interface RegisterReminderRequest {
-  emailSubject: string;
-  emailBody: string;
-}
-
-export interface ListRemindersResponse {
-  userId: string;
-  reminders: Array<{
-    // Constants per PRD: 30, 14, 7, 1 day(s), and on target day
-    name: '30_days_before' | '14_days_before' | '7_days_before' | '1_day_before' | 'on_target_date';
-    minutesBefore: number;
-    active: boolean;
-    lastSentAt?: number;
-    lastSentEmailSubject?: string;
-  }>;
+export interface DeadlineTargetExportRow extends Omit<DeadlineTarget, 'watchers' | 'associations' | 'audit'> {
+  targetDate: string;
+  status: string;
+  healthScore: string;
+  reminderStatuses?: {
+    30_days_before: boolean;
+    14_days_before: boolean;
+    7_days_before: boolean;
+    1_day_before: boolean;
+    on_target_date: boolean;
+  };
 }
 
 export interface ReminderSchedule {
-  minutesBeforeTarget: number;
   active: boolean;
   lastSentAt?: number;
   lastSentEmailSubject?: string;
 }
 
+// Reminder constants (from PRD): 30 days before, 14 days before, 7 days before, 1 day before, and on the target date
 export const REMINDER_INTERVALS: Record<string, number> = {
   '30_days_before': 30 * 24 * 60 * 60 * 1000,
   '14_days_before': 14 * 24 * 60 * 60 * 1000,
@@ -159,3 +143,15 @@ export const REMINDER_INTERVALS: Record<string, number> = {
   '1_day_before': 1 * 24 * 60 * 60 * 1000,
   'on_target_date': 0,
 };
+
+export const DEFAULT_REMINDER_SCHEDULES: Record<string, ReminderSchedule> = {
+  '30_days_before': { active: true },
+  '14_days_before': { active: true },
+  '7_days_before': { active: true },
+  '1_day_before': { active: true },
+  'on_target_date': { active: true },
+};
+
+export const REMINDER_TYPES = Object.keys(DEFAULT_REMINDER_SCHEDULES) as Array<keyof typeof DEFAULT_REMINDER_SCHEDULES>;
+
+export const WARNING_THRESHOLD_MS = 14 * 24 * 60 * 60 * 1000; // 14 days in milliseconds
