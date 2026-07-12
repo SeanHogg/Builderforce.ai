@@ -260,10 +260,23 @@ describe('AC-6 — low confidence with < 3 periods', () => {
     expect(result.confidence).toBe('Low');
   });
 
-  it('labels confidence Medium with 1 period and no WIP issues', () => {
+  it('labels confidence Low with 1 period (AC-6: < 3 periods → Low)', () => {
     const result = estimateBacklogBurnRate(makeInput());
-    // Single value, 1 period, no blocked items
-    expect(result.confidence).toBe('Medium');
+    // Single value = 1 period → fewer than 3 → Low confidence
+    expect(result.confidence).toBe('Low');
+  });
+
+  it('labels confidence Low with a 2-period time-series', () => {
+    const result = estimateBacklogBurnRate(makeInput({
+      velocity: {
+        timeSeries: [
+          { units: 12, timeUnit: 'week', track: 'agent' },
+          { units: 14, timeUnit: 'week', track: 'agent' },
+        ],
+      },
+    }));
+    expect(result.confidence).toBe('Low');
+    expect(result.flaggedInsights.some((i) => i.label === 'Low Confidence')).toBe(true);
   });
 
   it('includes a warning insight about low data', () => {
