@@ -27,25 +27,6 @@ export const ProgressiveRevealContext = createContext<ProgressiveRevealContextVa
 });
 
 /**
- * Minimal ref to hold the last known state for event helpers; currentStage is computed in useMemo.
- */
-const lastStateRef = useRef<ProgressiveRevealState>({ currentStage: 0, lastTransitionAt: undefined });
-
-const STAGE_THRESHOLDS: Record<Stage, PriorityTier> = {
-  0: 'critical', // Stage 0 has no data, but streams that are critical are prioritized in order
-  1: 'critical',
-  2: 'secondary',
-  3: 'deferred',
-};
-
-/** Default timeout thresholds per stage (ms) per PRD. */
-const DEFAULT_TIMEOUTS = {
-  1: 5_000,
-  2: 10_000,
-  3: 15_000,
-} as const;
-
-/**
  * ProgressiveRevealOrchestrator — central state manager for staged data reveals.
  */
 export function ProgressiveRevealOrchestrator({
@@ -56,6 +37,45 @@ export function ProgressiveRevealOrchestrator({
   callbacks?: ProgressiveRevealCallbacks;
 }) {
   const streamsRef = useRef<Map<string, ProgressiveRevealStream>>(new Map());
+  const lastStateRef = useRef<ProgressiveRevealState>({ currentStage: 0, lastTransitionAt: undefined });
+  const activitiesRef = useRef<Activities>({
+    criticalResolved: 0,
+    secondaryResolved: 0,
+    deferredResolved: 0,
+    criticalStarted: 0,
+    secondaryStarted: 0,
+    deferredStarted: 0,
+  });
+
+  /**
+   * Helper to get effective timeout for a priority tier.
+   */
+  const getTimeout = useCallback(
+    (priority: PriorityTier): number => {
+      if (priority === 'critical') return 5_000;
+      if (priority === 'secondary') return 10_000;
+      return 15_000;
+    },
+    [],
+  );
+
+  /**
+   * Start timeout tracking for a newly registered stream.
+   */
+  const startStreamTimeout = useCallback((key: string) => {
+    const stream = streamsRef.current.get(key);
+    if (!stream) return;
+
+    const timeout = stream.timeoutMs ?? getTimeout(stream.priority);
+    stream.timeoutHandle = setTimeout(() => {
+      const current = streamsRef.current.get(key);
+      if (current && !current.resolved) {
+        const error = new Error(`Stream ${key} timed out after ${timeout}ms`);
+        if (stream.timeoutHandle) clearTimeout(stream.timeoutHandle);
+        fail(key, error);
+      }
+    }, timeout);
+  }, [getTimeout, fail]);
 
   /**
    * Register a new stream and track its timeout.
@@ -77,8 +97,11 @@ export function ProgressiveRevealOrchestrator({
 
       // Start timeout tracking
       startStreamTimeout(key);
+
+      // Track that a stream has started
+      activitiesRef.current[priority + 'Started']++;
     },
-    [],
+    [getTimeout, startStreamTimeout],
   );
 
   /**
@@ -99,6 +122,9 @@ export function ProgressiveRevealOrchestrator({
 
       // Notify callbacks
       callbacks.onStreamResolve?.(stream);
+
+      // Track resolution
+      activitiesRef.current[stream.priority + 'Resolved']++;
 
       // Recalculate current stage
       updateCurrentStage();
@@ -132,192 +158,118 @@ export function ProgressiveRevealOrchestrator({
   /**
    * Reset a specific stream or all streams.
    */
-  const reset = useCallback((key?: string) => {
-    if (key) {
-      const stream = streamsRef.current.get(key);
-      if (stream) {
-        if (stream.timeoutHandle) clearTimeout(stream.timeoutHandle);
-        streamsRef.current.delete(key);
+  const reset = useCallback(
+    (key?: string) => {
+      if (key) {
+        const stream = streamsRef.current.get(key);
+        if (stream) {
+          if (stream.timeoutHandle) clearTimeout(stream.timeoutHandle);
+          // Decrement started count if deregistering
+          if (stream.priority) {
+            activitiesRef.current[stream.priority + 'Started']--;
+          }
+          streamsRef.current.delete(key);
+        }
+      } else {
+        streamsRef.current.forEach((s) => {
+          if (s.timeoutHandle) clearTimeout(s.timeoutHandle);
+          if (s.priority) {
+            activitiesRef.current[s.priority + 'Started']--;
+          }
+        });
+        streamsRef.current.clear();
+        // Reset resolved counts
+        activitiesRef.current = {
+          criticalResolved: 0,
+          secondaryResolved: 0,
+          deferredResolved: 0,
+          criticalStarted: 0,
+          secondaryStarted: 0,
+          deferredStarted: 0,
+        };
       }
-    } else {
-      streamsRef.current.forEach((s) => {
-        if (s.timeoutHandle) clearTimeout(s.timeoutHandle);
-      });
-      streamsRef.current.clear();
-    }
-    updateCurrentStage();
-  }, []);
-
-  /**
-   * Helper to get effective timeout for a priority tier.
-   */
-  const getTimeout = useCallback(
-    (priority: PriorityTier): number => {
-      const stageToTimeout: Record<PriorityTier, number> = { critical: 5_000, secondary: 10_000, deferred: 15_000 };
-      return stageToTimeout[priority] ?? 10_000;
+      updateCurrentStage();
     },
     [],
   );
 
   /**
-   * Start timeout tracking for a newly registered stream.
-   */
-  const startStreamTimeout = useCallback((key: string) => {
-    const stream = streamsRef.current.get(key);
-    if (!stream) return;
-
-    const timeout = stream.timeoutMs ?? getTimeout(stream.priority);
-    stream.timeoutHandle = setTimeout(() => {
-      const current = streamsRef.current.get(key);
-      if (current && !current.resolved) {
-        const error = new Error(`Stream ${key} timed out after ${timeout}ms`);
-        if (stream.timeoutHandle) clearTimeout(stream.timeoutHandle);
-        fail(key, error);
-      }
-    }, timeout);
-  }, [getTimeout, fail]);
-
-  /**
-   * Traverse streams by stage and build data payloads.
+   * Build data payloads by stage.
    */
   const stage1Data = streamsRef.current.size > 0 ? streamsRef.current.get('critical')?.data ?? null : null;
   const stage2Data = streamsRef.current.size > 0 ? streamsRef.current.get('secondary')?.data ?? null : null;
   const stage3Data = streamsRef.current.size > 0 ? streamsRef.current.get('deferred')?.data ?? null : null;
 
   /**
-   * Aggregate counts of resolved streams per priority.
+   * Calculate current stage based on resolved streams.
    */
-  const criticalCount = streamsRef.current.size > 0 
-    ? activitiesRef.current.criticalResolved
-    : 0; 
-  const secondaryCount = streamsRef.current.size > 0
-    ? activitiesRef.current.secondaryResolved
-    : 0; 
-  const deferredCount = streamsRef.current.size > 0
-    ? activitiesRef.current.deferredResolved
-    : 0; 
-  // Note: The orchestrator only groups counts when resolved; to reflect started unresolveds, we could include countsRef.current.*Start. For simplicity, we expose only resolved counts.
-
   const updateCurrentStage = useCallback(() => {
-    // Rebuild stages from resolved streams only. If none are resolved, currentStage is 0.
-    const resolvedStages = Array<Stage>();
+    // Rebuild stages from resolved streams only
+    const resolvedStages: number[] = [];
     streamsRef.current.forEach((s) => {
-      if (!s.resolved) return; // Skip unresolved; unresolved but preregistered streams don’t surface until they resolve.
-      resolvedStages.push(s.priority === 'critical' ? 1 : s.priority === 'secondary' ? 2 : 3);
+      if (s.resolved) {
+        if (s.priority === 'critical') resolvedStages.push(1);
+        else if (s.priority === 'secondary') resolvedStages.push(2);
+        else if (s.priority === 'deferred') resolvedStages.push(3);
+      }
     });
 
-    // currentStage is max resolved stage, or 0 if none resolved.
+    // currentStage is max resolved stage, or 0 if none resolved
     const currentStage = resolvedStages.length > 0 ? Math.max(...resolvedStages) : 0;
     const lastTransitionAt = performance.now();
     lastStateRef.current = { currentStage, lastTransitionAt };
 
-    // Dispatch and inform
-    dispatchActivity(currentStage, lastTransitionAt);
-  }, []);
-
-  /**
-   * Track resolved counts per priority as tracks receives resolution events per PRD 10.
-   */
-  type Activities = {
-    criticalResolved: number;
-    secondaryResolved: number;
-    deferredResolved: number;
-    criticalStarted: number;
-    secondaryStarted: number;
-    deferredStarted: number;
-  };
-  const activitiesRef = useRef<Activities>({
-    criticalResolved: 0,
-    secondaryResolved: 0,
-    deferredResolved: 0,
-    criticalStarted: 0,
-    secondaryStarted: 0,
-    deferredStarted: 0,
-  });
-
-  const dispatchActivity = useCallback((currentStage: Stage, lastTransitionAt: number) => {
-    const prevStageValue = valueRef.current.currentStage;
-    valueRef.current = { currentStage, lastTransitionAt: lastTransitionAt / 1000 };
-    
+    // Dispatch timing events for observability
     if (window?.performanceMark) {
-      const eventName = currentStage > prevStageValue 
-        ? `progressive.reveal.stage:${currentStage}` 
-        : `progressive.reveal.reset:${currentStage}`;
+      const prevStageValue = valueRef.current.currentStage;
+      const eventName = currentStage > prevStageValue
+        ? `progressive.reveal.stage:${currentStage}`
+        : 'progressive.reveal.reset:0';
       window.performanceMark(eventName);
     }
   }, []);
 
-  // Activity tracking helpers for resolve/fail
-  const trackResolved = useCallback((priority: PriorityTier) => {
-    activitiesRef.current[priority + 'Resolved']++;
-    
-    const sideEffect = {
-      type: 'stream_resolved',
-      priority: priority,
-      timestamp: performance.now(),
-    };
-    if (window?.performanceMark) {
-      window.performanceMark('progressive.reveal.stream_resolved');
-    }
-  }, []);
-
-  const trackStarted = useCallback(() => {
-    // Track stream starts each time a stream is registered or fetched to enforce that 'started*
-    // counts only increment when the stream emits start evidence. We'll call this on registration
-    // to mirror resolve's payload; if there's no start event (bulk fetch without per-stream start)
-    // the started count stays nil. This matches the PRD requirement to emit stages once target
-    // data is supplied.
-  }, []); // Note: for now, no auto-increment on registration; awaiting backend start events
-    
-  // Track resolved events per resolve/fail
-  const trackStreamResolved = useCallback((priority: PriorityTier) => {
-    activitiesRef.current[priority + 'Resolved']++;
-    
-    const sideEffect = {
-      type: 'stream_resolved',
-      priority: priority,
-      timestamp: performance.now(),
-    };
-    if (window?.performanceMark) {
-      window.performanceMark('progressive.reveal.stream_resolved');
-    }
-  }, []);
-
-  // Memoize final state
-  // currentStage = max resolved stage (0 if none resolved); stage values come from resolved streams only.
+  /**
+   * Memoize final state.
+   */
   const value = useMemo(
-    (): ProgressiveRevealContextValue => ({
-      currentStage:
-        activitiesRef.current.criticalResolved + activitiesRef.current.secondaryResolved + activitiesRef.current.deferredResolved > 0
-          ? Math.max(...([activitiesRef.current.criticalResolved ? 1 : 0, activitiesRef.current.secondaryResolved ? 2 : 0, activitiesRef.current.deferredResolved ? 3 : 0]))
-          : 0,
-      lastTransitionAt: updateCurrentStage() > 0 ? lastStateRef.current.lastTransitionAt : undefined,
-      streams: streamsRef.current,
-      callbacks,
-      register,
-      resolve,
-      fail,
-      reset,
-      stage1Data,
-      stage2Data,
-      stage3Data,
-      criticalCount: activitiesRef.current.criticalResolved,
-      secondaryCount: activitiesRef.current.secondaryResolved,
-      deferredCount: activitiesRef.current.deferredResolved,
-    }),
-    [callbacks, register, resolve, fail, reset, stage1Data, stage2Data, stage3Data, updateCurrentStage],
+    (): ProgressiveRevealContextValue => {
+      const resolvedCount =
+        activitiesRef.current.criticalResolved +
+        activitiesRef.current.secondaryResolved +
+        activitiesRef.current.deferredResolved;
+
+      return {
+        currentStage: resolvedCount > 0 ? Math.max(activitiesRef.current.criticalResolved ? 1 : 0, activitiesRef.current.secondaryResolved ? 2 : 0, activitiesRef.current.deferredResolved ? 3 : 0) : 0,
+        lastTransitionAt: lastStateRef.current.lastTransitionAt,
+        streams: streamsRef.current,
+        callbacks,
+        register,
+        resolve,
+        fail,
+        reset,
+        stage1Data,
+        stage2Data,
+        stage3Data,
+        criticalCount: activitiesRef.current.criticalResolved,
+        secondaryCount: activitiesRef.current.secondaryResolved,
+        deferredCount: activitiesRef.current.deferredResolved,
+      };
+    },
+    [callbacks, register, resolve, fail, reset, stage1Data, stage2Data, stage3Data],
   );
 
   return <ProgressiveRevealContext.Provider value={value}>{children}</ProgressiveRevealContext.Provider>;
 }
 
-const valueRef = useRef<ProgressiveRevealState>({ currentStage: 0, lastTransitionAt: undefined });
+type Activities = {
+  criticalResolved: number;
+  secondaryResolved: number;
+  deferredResolved: number;
+  criticalStarted: number;
+  secondaryStarted: number;
+  deferredStarted: number;
+};
 
-/**
- * Hook to access progressive reveal state.
- */
-export function useProgressiveReveal() {
-  const ctx = useContext(ProgressiveRevealContext);
-  if (!ctx) throw new Error('ProgressiveRevealContext is not provided');
-  return ctx;
-}
+// Staging for valueRef so it's accessible in useMemo
+const valueRef = useRef<ProgressiveRevealState>({ currentStage: 0, lastTransitionAt: undefined });
