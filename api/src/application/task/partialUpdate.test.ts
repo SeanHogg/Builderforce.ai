@@ -5,7 +5,7 @@ import { IProjectRepository } from '../../domain/project/IProjectRepository';
 import { Task } from '../../domain/task/Task';
 import { Project } from '../../domain/project/Project';
 import {
-  ProjectId, TaskId, TenantId, TaskType, TaskPriority, ProjectStatus,
+  ProjectId, TaskId, TaskStatus, ProjectStatus,
   asTaskId, asProjectId, asTenantId,
 } from '../../domain/shared/types';
 
