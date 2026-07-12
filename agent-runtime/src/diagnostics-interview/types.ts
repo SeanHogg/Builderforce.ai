@@ -1,13 +1,9 @@
 /**
  * Canonical data model for the Diagnostic Interview system.
  *
- * The interview is a structured, conversational flow over three pillars:
- *   - status: phase, completion signal, last/next deliverable
- *   - risk: top risks, likelihood, impact, materialized risks
- *   - priority: top priority, changes, deprioritizations
- *
- * All downstream consumers (JSON report, Markdown report, audit trail,
- * saved sessions, recommendation engine) use this single canonical model.
+ * This module defines all shared types used throughout the interview
+ * engine. It serves as the “source of truth” for code generation and
+ * downstream consumers (agents/LLM, Frontend, and the eventual Marketing module).
  */
 
 export type EntityId = string;
@@ -167,7 +163,7 @@ export type PillarData = {
 };
 
 export type AuditContract = {
-  sessionType: 'initiated' | 'resumed' | 'saved';
+  sessionType: 'initiated' | 'resumed' | 'saved' | 'completed';
   requiredPillarsPresent: boolean;
   allRequiredAnswersPopulated: boolean;
   durations: {
