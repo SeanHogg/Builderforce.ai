@@ -1,0 +1,53 @@
+{
+  "id": "schedule-acceleration",
+  "name": "Schedule Acceleration Assistant",
+  "description": "Detects schedule slippage and recommends recovery actions: task parallelization, scope reduction, and agent/resource deployment",
+  "kind": "schedule",
+  "type": "extension",
+  "version": "1.0.0",
+  "apiVersion": "1.0.0",
+  "main": "index.ts",
+  "configSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "baselineSlippageThreshold": {
+        "type": "number",
+        "title": "Baseline Slippage Threshold",
+        "description": "Minimum percentage of schedule buffer consumed to trigger acceleration analysis",
+        "default": 10
+      },
+      "riskWarningThreshold": {
+        "type": "number",
+        "title": "Risk Warning Threshold",
+        "description": "Brooks' Law risk threshold: adding > N agents yields < M% net time savings to trigger a warning",
+        "default": 15
+      },
+      "criticalPathRefreshInterval": {
+        "type": "integer",
+        "title": "Critical Path Refresh Interval",
+        "description": "Hours between automatic critical path recomputations (0 = disabled)",
+        "default": 24
+      },
+      "enableParallelizationFlags": {
+        "type": "boolean",
+        "title": "Enable Parallelization Detection",
+        "description": "Enable parallelization opportunity detection",
+        "default": true
+      },
+      "enableScopeReductionFlags": {
+        "type": "boolean",
+        "title": "Enable Scope Reduction Detection",
+        "description": "Enable scope reduction recommendations",
+        "default": true
+      },
+      "enableResourceDeploymentFlags": {
+        "type": "boolean",
+        "title": "Enable Resource Deployment Detection",
+        "description": "Enable resource/agent deployment recommendations",
+        "default": true
+      }
+    },
+    "required": []
+  }
+}
