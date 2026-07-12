@@ -1,55 +1,87 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by John Coder ((V2) (Durable)) · task #679
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# PRD: Fix `tasks.update` Partial-Update Semantics & `parentTaskId` Preservation
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+### Problem
+`tasks.update` violates partial-update (PATCH) semantics on the assignment code path. When `assignedAgentRef` is set in an update call that omits `parentTaskId`, the handler silently nulls out `parentTaskId`, detaching the task from its parent Epic. This has caused real production incidents: tasks #643, #644, #646 were detached from Epic #617 mid-sprint, requiring manual re-parenting and re-dispatch that produced duplicate executions (runs #3949, #3951, #3953 had to be cancelled).
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+### Goal
+Enforce strict partial-update semantics across **all** `tasks.update` code paths: only fields explicitly present in the request payload may be mutated. Omitting a field is always a no-op. Additionally, verify the auto-run side effect fires exactly once per assignment.
 
-## Target users / ICP roles
+---
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## Target Users / ICP Roles
+
+| Role | Impact |
+|---|---|
+| **Orchestrator Agent** | Issues `tasks.update` calls to assign child tasks; must not inadvertently restructure the task graph |
+| **Coder / Executor Agents** | Receive assignment; duplicate dispatch wastes compute and produces race conditions |
+| **Human Engineering Lead** | Monitors Epic/task hierarchy in the UI; silent detachment breaks sprint visibility |
+| **Platform / Infra Engineers** | Own the `tasks.update` handler and persistence layer being patched |
+
+---
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This fix is scoped to the `tasks.update` API handler and its immediate side-effect pipeline. No schema changes, no new endpoints, no UI changes.
+
+---
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### FR-1 — Strict Partial-Update Semantics
+The `tasks.update` handler **MUST** apply a merge strategy: for every field in the stored task record, retain the existing value unless that field key is explicitly present in the incoming request payload.
+
+- "Not present in payload" → field is unchanged in the database row.
+- `null` explicitly present in payload → field is set to `null` (opt-in nullification).
+- This rule applies uniformly to: `parentTaskId`, `priority`, `dueDate`, `status`, `assignedAgentRef`, and all other mutable fields.
+
+### FR-2 — Assignment Code Path Audit
+The assignment/auto-run branch within `tasks.update` **MUST NOT** perform a full-row rewrite from the incoming payload. Specifically:
+
+- Identify any location where the persisted row is constructed by spreading or mapping only from the request body (losing fields absent from the payload).
+- Replace with a read-modify-write pattern: fetch current row → merge explicit payload fields → persist merged row.
+
+### FR-3 — `parentTaskId` Preservation Under Assignment
+Setting `assignedAgentRef` (with or without triggering auto-run) on a task that has a non-null `parentTaskId` **MUST** leave `parentTaskId` unchanged.
+
+### FR-4 — Explicit Detachment Still Works
+Calling `tasks.update({ id, parentTaskId: null })` **MUST** detach the task from its parent (set `parentTaskId` to `null`). Opt-in nullification must remain functional.
+
+### FR-5 — Auto-Run Side Effect Fires Exactly Once
+When `assignedAgentRef` is set and the auto-run condition is met, the execution dispatch side effect **MUST** fire exactly once per `tasks.update` call. Duplicate dispatches are a defect. The fix must audit for:
+
+- Double invocation within the same request lifecycle (e.g., called in both pre-persist and post-persist hooks).
+- Re-triggering caused by the re-dispatch that was previously required to recover from the detachment bug.
+
+### FR-6 — No Silent Failures
+If the read-modify-write merge encounters a missing or deleted task, the handler **MUST** return a structured error (e.g., `404 Task Not Found`) rather than creating a new row or swallowing the error.
+
+---
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+| # | Criterion | Verification Method |
+|---|---|---|
+| AC-1 | `tasks.update({ id, assignedAgentRef })` on a task with `parentTaskId` set → `parentTaskId` remains unchanged after the call | Automated integration test |
+| AC-2 | `tasks.update` with payload omitting `priority`, `dueDate`, or `status` → those fields are not mutated | Automated integration test (parameterized across each field) |
+| AC-3 | `tasks.update({ id, parentTaskId: null })` → task is detached (`parentTaskId` becomes `null`) | Automated integration test |
+| AC-4 | `tasks.update({ id, assignedAgentRef })` on a parented task → auto-run dispatch fires exactly once, confirmed via dispatch log/event count | Automated integration test with dispatch spy |
+| AC-5 | No duplicate execution runs are created when an agent is assigned to a child task of an Epic | Integration test asserting run count = 1 |
+| AC-6 | Unit test covers the merge logic directly: given stored row with `parentTaskId=X` and payload `{ assignedAgentRef: "coder" }`, output row has `parentTaskId=X` | Unit test |
+| AC-7 | Manual smoke test: reproduce original steps (Epic → child task → assign Coder) confirms hierarchy intact and single execution | QA sign-off |
 
-## Out of scope
+---
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## Out of Scope
+
+- Changes to `tasks.create` (separate endpoint, separate validation path).
+- UI rendering of the task hierarchy — this is a backend-only fix.
+- Bulk update endpoints (should be audited separately in a follow-on ticket).
+- Changes to Epic-level fields or Epic lifecycle logic.
+- Backfilling or recovering tasks detached by the existing bug in production (handled operationally, not in this fix).
+- Performance optimization of the read-modify-write pattern (acceptable latency trade-off; optimize later if needed).
+- Authentication or authorization changes to `tasks.update`.
