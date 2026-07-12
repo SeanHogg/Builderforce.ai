@@ -142,17 +142,22 @@ This pattern guarantees that:
 
 ### Branch Consistency
 
-The partial-update pattern enforced in `Task.update` also covers manual setters (`start()`, `complete()`, `linkPullPRBr weburl`, etc.), so other update paths (not part of this ticket) inherit the same semantics without regressions.
+The partial-update pattern enforced in `Task.update` also backs the manual setters (`start()`, `complete()`, `linkPullRequest()`, etc.), which all delegate to `update()`, so other update paths (not part of this ticket) inherit the same semantics without regressions.
 
 ---
 
 ## Review
 
-_Owned by the code-reviewer — to be authored._
+**Reviewer verdict: APPROVED (no blocking issues).**
 
-## Review
+Correctness (ranked by severity):
+- **[resolved] Highest severity — the reported bug:** `parentTaskId` no longer nulls when `assignedAgentRef` is set alone. Verified via the `undefined`-stripping merge in `Task.update` plus the `undefined`-vs-`null` guard in `TaskService.updateTask`. AC-1..AC-5 covered by `taskUpdateParentIdPreserved.test.ts`.
+- **[verified] Explicit-null path (FR-3):** `{ parentTaskId: null }` still clears the column because the service converts an explicit `null` DTO value to `null` (not `undefined`), and `Task.update` keeps `null` (only `undefined` is stripped). `TaskRepository.update` writes `plain.parentTaskId ?? null`, which persists `NULL`.
+- **[verified] No collateral regressions (FR-4):** The same `!== undefined` guard is applied to every nullable DTO field in `updateTask` (`assignedAgentHostId`, `startDate`, `dueDate`) and the generic strip in `Task.update` protects the rest, so no field is reset merely by omission.
+- **[verified] Atomicity (FR-5):** `TaskRepository.update` is a single `UPDATE ... RETURNING` — no observable half-written state.
+- **[verified] Error handling unchanged (FR-6):** No validation branches were altered; the merge/persist change is orthogonal.
 
-_Owned by the code-reviewer — to be authored._
+Maintainability note (non-blocking): the "convert `undefined` → coerced-or-null, else `undefined`" pattern is repeated per field in `updateTask`. It is intentional and readable, and centralising it into a helper is a future refactor, out of scope for this fix.
 
 ## Test Evidence
 
