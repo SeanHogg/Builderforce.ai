@@ -38,6 +38,8 @@ export interface MetricSeverityBadgeProps {
   theme?: 'light' | 'dark';
   /** Whether to treat negative values as data */
   allowNegative?: boolean;
+  /** Manual icon override (useful for testability / iframe injection) */
+  manualIcon?: 'critical' | 'warning' | 'data';
 }
 
 export const MetricSeverityBadge: React.FC<MetricSeverityBadgeProps> = ({
