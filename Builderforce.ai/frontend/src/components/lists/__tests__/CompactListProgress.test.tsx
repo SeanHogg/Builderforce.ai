@@ -269,7 +269,44 @@ describe('CompactListProgress (AC-1..AC-11, FR-1..FR-8, FR-3, FR-6, FR-7, FR-8)'
         { id: 'b', label: 'Beta', completed: 2, total: 5, status: 'in_progress' },
       ];
       render(<CompactListProgress items={sample} sortBy="label_asc" emptyText="No items" />);
-      expect(screen.getByText('Alpha')).toBeInTheDocument();
+      const rows = screen.getAllByRole('listitem');
+      expect(within(rows[0]!).getByText('Alpha')).toBeInTheDocument();
+      expect(within(rows[1]!).getByText('Beta')).toBeInTheDocument();
+      expect(within(rows[2]!).getByText('Charlie')).toBeInTheDocument();
+      expect(within(rows[3]!).getByText('Delta')).toBeInTheDocument();
+    });
+
+    it('status groups items in not_started -> in_progress -> completed -> blocked order', () => {
+      const sample: PList = [
+        { id: 'a', label: 'Done', completed: 4, total: 4, status: 'completed' },
+        { id: 'b', label: 'Stuck', completed: 1, total: 4, status: 'blocked' },
+        { id: 'c', label: 'Fresh', completed: 0, total: 4, status: 'not_started' },
+        { id: 'd', label: 'Working', completed: 2, total: 4, status: 'in_progress' },
+      ];
+      render(<CompactListProgress items={sample} sortBy="status" emptyText="No items" />);
+      const rows = screen.getAllByRole('listitem');
+      expect(within(rows[0]!).getByText('Fresh')).toBeInTheDocument();
+      expect(within(rows[1]!).getByText('Working')).toBeInTheDocument();
+      expect(within(rows[2]!).getByText('Done')).toBeInTheDocument();
+      expect(within(rows[3]!).getByText('Stuck')).toBeInTheDocument();
+    });
+  });
+
+  describe('exported helpers (formatPct / getColorByStatus)', () => {
+    it('formatPct clamps and rounds, returns 0% on total=0', async () => {
+      const { formatPct } = await import('../CompactListProgress');
+      expect(formatPct(0, 0)).toBe('0%');
+      expect(formatPct(5, 10)).toBe('50%');
+      expect(formatPct(7, 10)).toBe('70%');
+      expect(formatPct(20, 10)).toBe('100%'); // clamped
+    });
+
+    it('getColorByStatus maps blocked to the danger token', async () => {
+      const { getColorByStatus } = await import('../CompactListProgress');
+      expect(getColorByStatus('blocked')).toBe('var(--error)');
+      expect(getColorByStatus('completed')).toBe('var(--success)');
+      expect(getColorByStatus('in_progress')).toBe('var(--accent)');
+      expect(getColorByStatus('not_started')).toBe('var(--muted)');
     });
   });
 });
