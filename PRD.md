@@ -1,5 +1,8 @@
 > **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #307
 > _Each agent that updates this PRD signs its change below._
+>
+> - Trend calculation ticket authored: code (TrendArrow.tsx, trend.ts, trend.test.ts)
+> - Wire-up expected to compose TrendArrow into InsightStat and dashboard pages (filter-driven comparison window integration pending)
 
 # PRD: Trend Arrows (Improving / Stable / Declining)
 
