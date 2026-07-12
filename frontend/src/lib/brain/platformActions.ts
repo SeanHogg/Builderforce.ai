@@ -72,7 +72,7 @@ const STATIC_ROUTES: Record<string, string> = {
   tenants: '/tenants',
   settings: '/settings',
   settings_members: '/workforce',
-  settings_api_keys: '/settings/api-keys',
+  settings_api_keys: '/settings/integrations',
   compare: '/compare',
   pricing: '/pricing',
   product: '/product',

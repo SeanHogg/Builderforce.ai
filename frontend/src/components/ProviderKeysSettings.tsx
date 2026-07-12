@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { providerKeysApi, type ProviderAuthType, type LlmProvider } from '@/lib/builderforceApi';
 
 /**
@@ -109,6 +110,7 @@ function PrecedencePanel({
     <div style={{ ...cardStyle, marginBottom: 20 }}>
       <div style={sectionTitle}>{t('precedence.title')}</div>
       <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 12px' }}>{t('precedence.subtitle')}</p>
+      {order.length === 0 && <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{t('status.notConnected')}</div>}
       <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
         {order.map((p, i) => (
           <li
@@ -313,7 +315,15 @@ function ProviderConnectionCard({
   );
 }
 
-export function ProviderKeysSettings() {
+export function ProviderKeysSettings({
+  search = '', viewMode = 'card', priorityOpen = false, onPriorityClose, onPriorityChange,
+}: {
+  search?: string;
+  viewMode?: 'card' | 'table';
+  priorityOpen?: boolean;
+  onPriorityClose?: () => void;
+  onPriorityChange?: (order: LlmProvider[]) => void;
+}) {
   const t = useTranslations('providerKeys');
   const [authByProvider, setAuthByProvider] = useState<Partial<Record<LlmProvider, ProviderAuthType>>>({});
   // BYO precedence — connected providers, most-preferred first. Seeded from the backend
@@ -321,6 +331,8 @@ export function ProviderKeysSettings() {
   const [order, setOrder] = useState<LlmProvider[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeProvider, setActiveProvider] = useState<LlmProvider | null>(null);
+  const visibleProviders = PROVIDERS.filter((p) => !search.trim() || `${p.label} ${p.id}`.toLowerCase().includes(search.trim().toLowerCase()));
 
   const refresh = () =>
     providerKeysApi.list()
@@ -330,6 +342,7 @@ export function ProviderKeysSettings() {
         setAuthByProvider(map);
         // r.details already arrives ordered by tenant precedence — connected only.
         setOrder(r.details.map((d) => d.provider));
+        onPriorityChange?.(r.details.map((d) => d.provider));
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
@@ -347,6 +360,7 @@ export function ProviderKeysSettings() {
 
   const persistOrder = async (next: LlmProvider[]) => {
     setOrder(next); // optimistic
+    onPriorityChange?.(next);
     try {
       await providerKeysApi.setPriority(next);
     } catch (e) {
@@ -365,26 +379,43 @@ export function ProviderKeysSettings() {
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>
       ) : (
         <>
-          {order.length >= 2 && <PrecedencePanel order={order} onReorder={persistOrder} t={t} />}
-          <div style={wrapStyle}>
-            {PROVIDERS.map((p) => (
-              <ProviderConnectionCard
-                key={p.id}
-                config={p}
-                authType={authByProvider[p.id] ?? null}
-                t={t}
-                onChange={(authType) => {
-                  setAuthByProvider((prev) => {
-                    const next = { ...prev };
-                    if (authType === null) delete next[p.id];
-                    else next[p.id] = authType;
-                    return next;
-                  });
-                  syncOrder(p.id, authType);
-                }}
-              />
+          <div style={viewMode === 'card' ? wrapStyle : { display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {visibleProviders.map((p) => (
+              <button key={p.id} type="button" onClick={() => setActiveProvider(p.id)} style={{ ...cardStyle, cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: viewMode === 'table' ? 'row' : 'column', alignItems: viewMode === 'table' ? 'center' : 'stretch', gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={sectionTitle}>{p.label}</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{t(`provider.${p.id}.blurb`)}</div>
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 650, color: authByProvider[p.id] ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                  {authByProvider[p.id] === 'oauth'
+                    ? t('status.connected', { subscription: p.supportsOauth ? t(`provider.${p.id}.subscription`) : p.label })
+                    : authByProvider[p.id] === 'api_key' ? t('status.keyConfigured', { label: p.label }) : t('status.notConnected')}
+                </span>
+              </button>
             ))}
           </div>
+
+          {activeProvider && (() => {
+            const p = PROVIDERS.find((item) => item.id === activeProvider)!;
+            return (
+              <SlideOutPanel open onClose={() => setActiveProvider(null)} title={p.label}>
+                <div style={{ padding: 20 }}>
+                  <ProviderConnectionCard config={p} authType={authByProvider[p.id] ?? null} t={t} onChange={(authType) => {
+                    setAuthByProvider((prev) => { const next = { ...prev }; if (authType === null) delete next[p.id]; else next[p.id] = authType; return next; });
+                    syncOrder(p.id, authType);
+                    const nextOrder = authType === null ? order.filter((id) => id !== p.id) : order.includes(p.id) ? order : [...order, p.id];
+                    onPriorityChange?.(nextOrder);
+                  }} />
+                </div>
+              </SlideOutPanel>
+            );
+          })()}
+
+          <SlideOutPanel open={priorityOpen} onClose={() => onPriorityClose?.()} title={t('precedence.title')}>
+            <div style={{ padding: 20 }}>
+              <PrecedencePanel order={order} onReorder={persistOrder} t={t} />
+            </div>
+          </SlideOutPanel>
         </>
       )}
     </div>
