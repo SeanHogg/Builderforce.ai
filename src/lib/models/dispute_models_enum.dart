@@ -11,4 +11,15 @@ enum DisputeState {
   resolvedReleased,
   resolvedRefunded,
   canceled,
+
+  /// Parsed from prefer resolvedReleased/resolvedRefunded as resolved types
+  /// (used in transitionState validation)
+}
+
+/// Resolution types supported by the dispute system
+enum DisputeResolutionType {
+  fullPayment,
+  fullRefund,
+  partial,
+  noAction,
 }
