@@ -480,5 +480,11 @@ export const TaskDetailWithPriority: React.FC = () => {
     );
 };
 
-// Export priority status service for integration
-export const PriorityStatusService = PriorityStatusService;
+/**
+ * Utility functions for debug and testing
+ */
+export const debugShowTaskHistory = async (taskId: string) => {
+    const history = PriorityStatusService.getTaskHistory(taskId);
+    console.log(`Task ${taskId} History:`, history);
+    return history;
+};
