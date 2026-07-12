@@ -11,6 +11,7 @@ import {
   asTaskId,
   TaskPriority,
   TaskStatus,
+  ProjectStatus,
 } from '../../domain/shared/types';
 
 // ---------------------------------------------------------------------------
@@ -115,7 +116,7 @@ function makeProject(): Project {
     description: null,
     template: null,
     rootWorkingDirectory: null,
-    status: 1,
+    status: ProjectStatus.ACTIVE,
     sourceControlIntegrationId: null,
     sourceControlProvider: null,
     sourceControlRepoFullName: null,
@@ -148,18 +149,15 @@ describe('Task.update() parentTaskId preservation (AC-1..AC-4)', () => {
         {
           projectId: PROJECT_ID as number,
           title: 'Epic',
-          projectKey: 'ACME',
-          lastKeySeq: 4,
         },
         TENANT,
       );
+      // The service creation passes default values: no checklist, single-line description
       const child = await service.createTask(
         {
           projectId: PROJECT_ID as number,
           title: 'Child',
           parentTaskId: epic.id as number,
-          projectKey: 'ACME',
-          lastKeySeq: 5,
         },
         TENANT,
       );
@@ -183,8 +181,6 @@ describe('Task.update() parentTaskId preservation (AC-1..AC-4)', () => {
         {
           projectId: PROJECT_ID as number,
           title: 'Epic',
-          projectKey: 'ACME',
-          lastKeySeq: 6,
         },
         TENANT,
       );
@@ -193,8 +189,6 @@ describe('Task.update() parentTaskId preservation (AC-1..AC-4)', () => {
           projectId: PROJECT_ID as number,
           title: 'Child',
           parentTaskId: epic.id as number,
-          projectKey: 'ACME',
-          lastKeySeq: 7,
         },
         TENANT,
       );
@@ -218,8 +212,6 @@ describe('Task.update() parentTaskId preservation (AC-1..AC-4)', () => {
         {
           projectId: PROJECT_ID as number,
           title: 'Epic',
-          projectKey: 'ACME',
-          lastKeySeq: 8,
         },
         TENANT,
       );
@@ -229,8 +221,6 @@ describe('Task.update() parentTaskId preservation (AC-1..AC-4)', () => {
           title: 'Child',
           parentTaskId: epic.id as number,
           assignedAgentRef: 'ide-agent-55',
-          projectKey: 'ACME',
-          lastKeySeq: 9,
         },
         TENANT,
       );
@@ -253,8 +243,6 @@ describe('Task.update() parentTaskId preservation (AC-1..AC-4)', () => {
         {
           projectId: PROJECT_ID as number,
           title: 'Epic',
-          projectKey: 'ACME',
-          lastKeySeq: 10,
         },
         TENANT,
       );
@@ -264,8 +252,6 @@ describe('Task.update() parentTaskId preservation (AC-1..AC-4)', () => {
           title: 'Child',
           parentTaskId: epic.id as number,
           assignedAgentRef: 'ide-agent-77',
-          projectKey: 'ACME',
-          lastKeySeq: 11,
         },
         TENANT,
       );
@@ -287,8 +273,6 @@ describe('Task.update() partial-update semantic guards (AC-5)', () => {
       {
         projectId: PROJECT_ID as number,
         title: 'Epic',
-        projectKey: 'ACME',
-        lastKeySeq: 12,
       },
       TENANT,
     );
@@ -300,8 +284,6 @@ describe('Task.update() partial-update semantic guards (AC-5)', () => {
         assignedAgentRef: 'ide-agent-33',
         status: TaskStatus.BACKLOG,
         priority: TaskPriority.HIGH,
-        projectKey: 'ACME',
-        lastKeySeq: 13,
       },
       TENANT,
     );
