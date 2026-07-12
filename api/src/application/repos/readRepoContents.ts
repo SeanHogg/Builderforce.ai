@@ -9,6 +9,7 @@
  * `searchRepoCode`/`compare` remain GitHub-only (no cross-provider code-search /
  * compare equivalent yet). Never throws.
  */
+import { normalizeScopeDir, isUnderScopeDir } from '@builderforce/agent-tools';
 import { buildGitApiBaseUrl } from './gitProxy';
 import { createRepoSource, makeRepoFetch } from './sources/RepoSource';
 
@@ -101,7 +102,7 @@ export async function readRepoFile(ctx: RepoReadContext, path: string): Promise<
  */
 /** GitLab project blob search (`scope=blobs`). Each hit carries the matching
  *  `data` snippet; group by path. Additive — GitHub keeps its richer path. */
-async function gitlabSearchCode(ctx: RepoReadContext, query: string, opts?: { maxResults?: number }): Promise<SearchCodeResult> {
+async function gitlabSearchCode(ctx: RepoReadContext, query: string, opts?: { maxResults?: number; path?: string }): Promise<SearchCodeResult> {
   if (!query.trim()) return { ok: false, reason: 'query is required' };
   let apiBase: string;
   try { apiBase = buildGitApiBaseUrl('gitlab', ctx.host); } catch (e) { return { ok: false, reason: e instanceof Error ? e.message : `search not implemented for provider '${ctx.provider}'` }; }
@@ -121,14 +122,23 @@ async function gitlabSearchCode(ctx: RepoReadContext, query: string, opts?: { ma
     if (existing) { if (frag && existing.fragments.length < 3) existing.fragments.push(frag); }
     else byPath.set(path, { path, fragments: frag ? [frag] : [] });
   }
-  const matches = [...byPath.values()].slice(0, perPage);
-  return { ok: true, matches, total: matches.length, truncated: (items?.length ?? 0) >= perPage };
+  // GitLab basic blob search has no reliable `path:` qualifier (advanced-search is
+  // instance-dependent), so a subdirectory scope is applied as a prefix filter here —
+  // in the ONE search function, not the caller. When scoped, do NOT report `truncated`:
+  // a client-side filter over a relevance-ranked page can't prove more scoped matches
+  // exist, and a `truncated:true` here would loop the agent into "narrow further" when
+  // it already scoped (the same false signal the GitHub path fixes server-side).
+  const scopeDir = normalizeScopeDir(opts?.path);
+  let matches = [...byPath.values()];
+  if (scopeDir) matches = matches.filter((m) => isUnderScopeDir(m.path, scopeDir));
+  matches = matches.slice(0, perPage);
+  return { ok: true, matches, total: matches.length, truncated: scopeDir ? false : (items?.length ?? 0) >= perPage };
 }
 
 export async function searchRepoCode(
   ctx: RepoReadContext,
   query: string,
-  opts?: { maxResults?: number },
+  opts?: { maxResults?: number; path?: string },
 ): Promise<SearchCodeResult> {
   if (ctx.provider === 'gitlab') return gitlabSearchCode(ctx, query, opts);
   // Bitbucket code search is workspace-scoped (not repo-scoped) + must be enabled
@@ -137,6 +147,15 @@ export async function searchRepoCode(
   if (!query.trim()) return { ok: false, reason: 'query is required' };
   const apiBase = buildGitApiBaseUrl(ctx.provider, ctx.host);
   const perPage = Math.min(Math.max(opts?.maxResults ?? 30, 1), 50);
+  // Scope to a subdirectory SERVER-SIDE via GitHub's `path:` qualifier — NOT by
+  // post-filtering globally-ranked hits. A client-side post-filter over the capped
+  // top-N silently dropped a subdir's real matches for a common term (they ranked
+  // below the cap) AND carried the pre-filter `truncated` flag, producing the
+  // nonsensical `total:0, truncated:true` that looped agents into "re-run narrower"
+  // when they had already narrowed. Pushing `path:` into the query makes total_count,
+  // items, and truncated all reflect the subtree actually searched.
+  const scopeDir = normalizeScopeDir(opts?.path);
+  const scopeQualifier = scopeDir ? ` path:${scopeDir}` : '';
   // GitHub's REST /search/code has NO boolean `OR` operator: a quoted query is an
   // exact-phrase match. So a model's natural compound query ("a OR b OR c") would
   // be matched verbatim — including the literal " OR "s — and return 0 for every
@@ -145,8 +164,9 @@ export async function searchRepoCode(
   // a sprawling query can't burn GitHub's tight code-search rate limit.
   const terms = query.split(/\s+OR\s+/i).map((t) => t.trim()).filter(Boolean).slice(0, 5);
   const reqs = terms.map(async (term) => {
-    // Quote each term so GitHub matches the literal token sequence, scoped to the repo.
-    const q = `${JSON.stringify(term)} repo:${ctx.owner}/${ctx.repo}`;
+    // Quote each term so GitHub matches the literal token sequence, scoped to the repo
+    // (and to the subdirectory when a `path` scope was requested).
+    const q = `${JSON.stringify(term)} repo:${ctx.owner}/${ctx.repo}${scopeQualifier}`;
     const url = `${apiBase}/search/code?q=${encodeURIComponent(q)}&per_page=${perPage}`;
     const res = await fetch(url, {
       headers: { ...ghHeaders(ctx.token), Accept: 'application/vnd.github.text-match+json' },
@@ -286,11 +306,11 @@ export async function listRepoFiles(ctx: RepoReadContext, subPath?: string): Pro
     try {
       const src = createRepoSource(ctx.provider, { owner: ctx.owner, repo: ctx.repo, host: ctx.host, token: ctx.token }, makeRepoFetch());
       const { entries } = await src.getTree(ctx.ref);
-      const prefix = subPath?.replace(/^\/+|\/+$/g, '');
+      const prefix = normalizeScopeDir(subPath);
       let paths = entries
         .filter((e) => e.type === 'file')
         .map((e) => e.path)
-        .filter((p) => (prefix ? p === prefix || p.startsWith(`${prefix}/`) : true));
+        .filter((p) => isUnderScopeDir(p, prefix));
       const truncated = paths.length > MAX_TREE_ENTRIES;
       if (truncated) paths = paths.slice(0, MAX_TREE_ENTRIES);
       return { ok: true, paths, truncated };
@@ -307,11 +327,11 @@ export async function listRepoFiles(ctx: RepoReadContext, subPath?: string): Pro
   if (!res) return { ok: false, reason: 'list request failed (network)' };
   if (!res.ok) { const t = await res.text().catch(() => ''); return { ok: false, reason: `GitHub ${res.status}: ${t.slice(0, 160)}` }; }
   const json = (await res.json().catch(() => null)) as { tree?: Array<{ path?: string; type?: string }> } | null;
-  const prefix = subPath?.replace(/^\/+|\/+$/g, '');
+  const prefix = normalizeScopeDir(subPath);
   let paths = (json?.tree ?? [])
     .filter((n) => n.type === 'blob' && typeof n.path === 'string')
     .map((n) => n.path as string)
-    .filter((p) => (prefix ? p === prefix || p.startsWith(`${prefix}/`) : true));
+    .filter((p) => isUnderScopeDir(p, prefix));
   const truncated = paths.length > MAX_TREE_ENTRIES;
   if (truncated) paths = paths.slice(0, MAX_TREE_ENTRIES);
   return { ok: true, paths, truncated };

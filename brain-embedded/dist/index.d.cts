@@ -279,6 +279,14 @@ interface StreamChatResult {
      * is self-explaining instead of looking like "nothing connected".
      */
     byoUnresolved?: string;
+    /**
+     * BYO providers that hit a usage/capacity cap this turn (from
+     * `x-builderforce-provider-cap`, comma-separated) — e.g. the tenant's Anthropic
+     * key hit its monthly spend limit, or Meta MUSE quota was exhausted. Only set
+     * when the tenant's OWN key hit the cap (never the shared operator pool). The
+     * client should prompt the user to manage their provider keys in settings.
+     */
+    providerCap?: string;
     /** Token usage for this completion, when the gateway reported it. */
     usage?: CompletionUsage;
 }
@@ -440,13 +448,33 @@ interface EvermindRecallResult {
     items: EvermindRecallItem[];
 }
 /**
- * The single hook a host injects into the run loop. Bound to the active chat's
- * project; returns null when the chat isn't project-scoped or recall is
- * unavailable (so the loop simply skips the memory steps).
+ * A memory-first answer that lets the run loop SKIP the paid model entirely — either
+ * an exact-repeat Q&A cache hit or the project's Evermind SSM. Returned by the opt-in
+ * {@link EvermindRunHooks.answer} hook; null means "memory can't answer, run the LLM".
+ */
+interface MemoryFirstAnswer {
+    /** The answer text to adopt as the assistant turn. */
+    text: string;
+    /** Where it came from — drives the "no LLM" provenance/step. */
+    source: 'qa-cache' | 'evermind';
+    /** Evermind head version, when `source === 'evermind'`. */
+    evermindVersion?: number;
+}
+/**
+ * The hooks a host injects into the run loop. Bound to the active chat's project.
+ * `recall` grounds the answer (RAG); the OPTIONAL `answer`/`cacheAnswer` pair adds the
+ * memory-first short-circuit — answer from the project's own memory (Q&A cache or
+ * Evermind) BEFORE spending a model call, and remember a fresh (question→answer) pair
+ * so the next exact repeat is free. All return null / no-op when the chat isn't
+ * project-scoped or memory is unavailable, so the loop simply falls through to the LLM.
  */
 interface EvermindRunHooks {
     /** Recall the project's learned memories most relevant to `query`. */
     recall(query: string): Promise<EvermindRecallResult | null>;
+    /** Try to answer `query` from memory WITHOUT the LLM; null → run the model. */
+    answer?(query: string): Promise<MemoryFirstAnswer | null>;
+    /** Remember a (question → answer) pair so an exact repeat short-circuits next time. */
+    cacheAnswer?(query: string, answer: string): void | Promise<void>;
 }
 /**
  * Assistant text shorter than this isn't a teaching signal, so the server won't
@@ -1095,6 +1123,13 @@ interface UseBrainConversation {
      */
     byoUnresolved: string[];
     /**
+     * BYO providers that hit a usage/capacity cap this run (e.g. Anthropic monthly
+     * spend limit, Meta MUSE quota exhausted). A mounted view renders a "manage your
+     * API keys" banner so the user can top up or switch providers. Empty when no cap
+     * was hit this run.
+     */
+    providerCap: string[];
+    /**
      * Assemble a paste-able triage report of the active chat's execution — the LLM
      * steps, the full tool chain (args + results), intermediate assistant messages,
      * every error, and the visible transcript. `agentLabel` names the persona the
@@ -1225,6 +1260,14 @@ interface BrainRunSnapshot {
      * when everything resolved (or nothing is connected).
      */
     byoUnresolved: string[];
+    /**
+     * BYO providers whose key hit a usage/capacity cap on any turn of this run
+     * (from `x-builderforce-provider-cap`) — e.g. the tenant's Anthropic key hit its
+     * monthly spend limit, or Meta MUSE quota was exhausted. A mounted view shows a
+     * "manage your API keys" banner so the user knows to top up or switch providers.
+     * Accumulated across turns; reset fresh each run. Empty when no cap was hit.
+     */
+    providerCap: string[];
 }
 /**
  * A snapshot of which chats are live right now, split by whether they are actively
