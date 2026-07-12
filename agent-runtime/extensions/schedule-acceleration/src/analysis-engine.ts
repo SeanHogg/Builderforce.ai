@@ -576,8 +576,8 @@ class ScheduleAnalysisEngine {
   }
 }
 
-// Export utilities for repository usage without module pattern issues
-export { 
+// Export for internal use within the extension
+export {
   ScheduleRepository, 
   ScheduleAnalysisEngine,
   type Task,
