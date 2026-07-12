@@ -17,7 +17,7 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { filterByGlob, applyStringEdit } from "@builderforce/agent-tools";
+import { filterByGlob, applyStringEdit, normalizeScopeDir } from "@builderforce/agent-tools";
 import type {
   Capability,
   CapabilityProvider,
@@ -182,9 +182,10 @@ export function buildLocalCapabilityProvider(root: string): CapabilityProvider {
       // Optional subdirectory scope: on a big monorepo an unscoped walk can hit the
       // file cap before it reaches the relevant subtree, so the model can narrow here.
       let start = rootResolved;
-      if (scope && scope.trim()) {
+      const scopeDir = normalizeScopeDir(scope);
+      if (scopeDir) {
         try {
-          start = resolveInRoot(rootResolved, scope.trim());
+          start = resolveInRoot(rootResolved, scopeDir);
         } catch (e) {
           return { ok: false, query, error: e instanceof Error ? e.message : String(e) };
         }

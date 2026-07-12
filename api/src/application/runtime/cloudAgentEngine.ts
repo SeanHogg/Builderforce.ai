@@ -23,7 +23,7 @@ import { claimTaskPrOpen, releaseTaskPrClaim } from '../repos/openTaskPullReques
 import { readRepoFile, listRepoFiles, searchRepoCode, listBranchDiff } from '../repos/readRepoContents';
 import { verifyWrittenFiles } from '../repos/verifyWrittenFiles';
 import { scanWrittenForPlaceholders } from '../repos/scanForPlaceholders';
-import { CODING_BACKSTOP_MODELS, CODING_MODEL_POOL, codingModelsForPlan, estimateRequestTokens, llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../llm/LlmProxyService';
+import { CODING_BACKSTOP_MODELS, RECOGNIZED_CODER_MODELS, codingModelsForPlan, estimateRequestTokens, llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../llm/LlmProxyService';
 import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
 import { resolveTenantLlmCredentials, byoVendorIdSet, providersFromCredentials, type TenantVendorKeys } from '../llm/tenantProviderKeyService';
 import { cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool, callBuiltinTool } from '../llm/builtinMcpService';
@@ -463,8 +463,17 @@ export async function recordCloudToolEvent(
   } catch { /* telemetry is best-effort — never break the run */ }
 }
 
-/** Set form of CODING_MODEL_POOL for O(1) membership on the hot per-turn path. */
-const CODING_MODEL_POOL_SET: ReadonlySet<string> = new Set(CODING_MODEL_POOL);
+/** Real-coder recognition set (auto-route pool + BYO frontier flagships) for O(1)
+ *  membership on the hot per-turn path — so a connected-account coder (e.g. Meta MUSE
+ *  `direct/meta/muse-spark-1.1`) is recognised as a coder, not flagged as degraded. */
+const CODING_MODEL_POOL_SET: ReadonlySet<string> = RECOGNIZED_CODER_MODELS;
+
+/** The ONE agent commit-message convention (`<Verb> <path> — task #<id> (<agent>)`),
+ *  so every write/edit/delete commit reads identically instead of re-inlining the
+ *  template at each call site. `suffix` appends an optional reason (e.g. a delete note). */
+function agentCommitMessage(verb: string, path: string, taskId: number, agentLabel: string, suffix = ''): string {
+  return `${verb} ${path} — task #${taskId} (${agentLabel})${suffix}`;
+}
 
 /**
  * True when a CLOUD CODING turn was served by a model that is NOT a curated coding
@@ -1100,7 +1109,7 @@ export async function handleContainerOp(
     if (!path || !content) return { status: 200, body: { ok: false, error: 'path and content are both required' } };
     const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskId);
     if (!repo.ok) return { status: 200, body: { ok: false, error: `no repo bound to this task (${repo.reason}); include the file contents in your final summary instead` } };
-    const commit = await commitAgentFile(repo.ctx, path, content, `${isNew ? 'Add' : 'Update'} ${path} — task #${taskId} (${agentLabel})`);
+    const commit = await commitAgentFile(repo.ctx, path, content, agentCommitMessage(isNew ? 'Add' : 'Update', path, taskId, agentLabel));
     if (!commit.ok) return { status: 200, body: { ok: false, error: commit.reason } };
     // Label from whether the path actually existed in the repo (commit.existed),
     // not the caller's `isNew` hint — that defaults to true and mislabels edits as "created".
@@ -1299,23 +1308,20 @@ function buildCloudProvider(args: {
       },
       async searchCode(query, scope) {
         if (!repoCtx) return { ok: false, error: noRepo() };
-        const sr = await searchRepoCode({ ...repoCtx, ref: readRef() }, query, { maxResults: 30 });
+        // The `path` scope is applied INSIDE searchRepoCode (server-side via GitHub's
+        // `path:` qualifier), not post-filtered here — a post-filter over the capped
+        // top-N global hits dropped a subdir's real matches and carried a stale
+        // `truncated` flag, yielding `total:0, truncated:true` that looped the agent.
+        const sr = await searchRepoCode({ ...repoCtx, ref: readRef() }, query, { maxResults: 30, path: scope });
         if (!sr.ok) return { ok: false, error: sr.reason };
-        // Honor an optional subdirectory scope by prefix-filtering the index hits, so
-        // `search_code`'s `path` argument narrows results on the cloud surface too.
-        let matches = sr.matches;
-        if (scope && scope.trim() && matches) {
-          const prefix = scope.trim().replace(/^[./]+|\/+$/g, "");
-          matches = matches.filter((m) => typeof m.path === "string" && m.path.startsWith(`${prefix}/`));
-        }
-        return { ok: true, query, total: matches?.length ?? sr.total, truncated: sr.truncated, matches };
+        return { ok: true, query, total: sr.total, truncated: sr.truncated, matches: sr.matches };
       },
     },
     repoWrite: {
       async writeFile(path, content, _summary) {
         if (!repoCtx) return { ok: false, error: noRepo('; include the file contents in your final summary instead') };
         const firstWriteThisRun = !writtenPaths.has(path);
-        const commit = await commitAgentFile(repoCtx, path, content, `${firstWriteThisRun ? 'Add' : 'Update'} ${path} — task #${taskRow.id} (${agentLabel})`);
+        const commit = await commitAgentFile(repoCtx, path, content, agentCommitMessage(firstWriteThisRun ? 'Add' : 'Update', path, taskRow.id, agentLabel));
         if (!commit.ok) return { ok: false, error: commit.reason };
         writtenPaths.add(path);
         // created vs modified comes from whether the path pre-existed in the repo
@@ -1337,7 +1343,7 @@ function buildCloudProvider(args: {
         if (!edit.ok || edit.content == null) return { ok: false, error: `cannot edit '${path}': ${edit.error ?? 'old_string not found'}` };
         const updated = edit.content;
         const firstWriteThisRun = !writtenPaths.has(path);
-        const commit = await commitAgentFile(repoCtx, path, updated, `${firstWriteThisRun ? 'Edit' : 'Update'} ${path} — task #${taskRow.id} (${agentLabel})`);
+        const commit = await commitAgentFile(repoCtx, path, updated, agentCommitMessage(firstWriteThisRun ? 'Edit' : 'Update', path, taskRow.id, agentLabel));
         if (!commit.ok) return { ok: false, error: commit.reason };
         writtenPaths.add(path);
         await recordTaskFileChange(env, tenantId, taskRow.id, executionId, path, 'modified', agentLabel);
@@ -1347,7 +1353,7 @@ function buildCloudProvider(args: {
       async deleteFile(path, reason) {
         if (!repoCtx) return { ok: false, error: noRepo() };
         const suffix = reason && reason.trim() ? ` — ${reason.trim()}` : '';
-        const del = await deleteAgentFile(repoCtx, path, `Remove ${path} — task #${taskRow.id} (${agentLabel})${suffix}`);
+        const del = await deleteAgentFile(repoCtx, path, agentCommitMessage('Remove', path, taskRow.id, agentLabel, suffix));
         if (del.ok) {
           writtenPaths.delete(path);
           await recordTaskFileChange(env, tenantId, taskRow.id, executionId, path, 'deleted', agentLabel);

@@ -12,7 +12,7 @@
  * read-through cache, keyed by a per-(tenant,project) VERSION token bumped on every
  * write, so a recall never serves a stale fact set.
  */
-import { and, desc, eq, ilike, or, type SQL } from 'drizzle-orm';
+import { and, desc, eq, ilike, ne, or, type SQL } from 'drizzle-orm';
 import { projectFacts } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -20,6 +20,16 @@ import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrast
 
 const RECALL_DEFAULT = 6;
 const RECALL_MAX = 20;
+
+/**
+ * `source` marking a row as a memory-first Q&A CACHE entry (a question→answer pair
+ * the short-circuit replays to skip the LLM), not a durable belief. These rows live
+ * in the SAME table (one builderforce-memory store) but are EXCLUDED from the RAG
+ * facts block — a cached answer is retrieved by exact question key, never injected as
+ * ambient "knowledge". The single source of this constant is here so recall + the
+ * memory module agree. See projectMemory.ts.
+ */
+export const QA_CACHE_SOURCE = 'qa-cache';
 
 export interface ProjectFact {
   key: string;
@@ -84,7 +94,13 @@ export async function recallProjectFacts(
       env,
       `project_facts:recall:${tenantId}:${projectId}:v:${token}:${limit}:${query}`,
       async () => {
-        const base = and(eq(projectFacts.tenantId, tenantId), eq(projectFacts.projectId, projectId));
+        // Durable beliefs only — Q&A cache rows (source=qa-cache) are retrieved by
+        // exact question key (projectMemory), never surfaced as ambient RAG facts.
+        const base = and(
+          eq(projectFacts.tenantId, tenantId),
+          eq(projectFacts.projectId, projectId),
+          ne(projectFacts.source, QA_CACHE_SOURCE),
+        );
         const words = tokenize(query);
         const where: SQL | undefined = words.length > 0 ? and(base, or(...words.map((w) => ilike(projectFacts.content, `%${w}%`)))) : base;
         return db
@@ -98,6 +114,41 @@ export async function recallProjectFacts(
     );
   } catch {
     return [];
+  }
+}
+
+/**
+ * Fetch a single fact's content by EXACT key (read-through cached, version-token
+ * keyed like recall). Used by the Q&A cache short-circuit — an O(1) PK lookup that
+ * decides "have we answered this exact question before?" without an LLM call.
+ * Returns null when absent / pre-migration / invalid project.
+ */
+export async function getProjectFactByKey(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+  key: string,
+): Promise<string | null> {
+  const k = (key ?? '').trim().slice(0, 255);
+  if (!k || !Number.isInteger(projectId) || projectId <= 0) return null;
+  try {
+    const token = await getCacheVersion(env, versionKey(tenantId, projectId));
+    return await getOrSetCached(
+      env,
+      `project_facts:key:${tenantId}:${projectId}:v:${token}:${k}`,
+      async () => {
+        const [row] = await db
+          .select({ content: projectFacts.content })
+          .from(projectFacts)
+          .where(and(eq(projectFacts.tenantId, tenantId), eq(projectFacts.projectId, projectId), eq(projectFacts.key, k)))
+          .limit(1);
+        return row?.content ?? null;
+      },
+      { kvTtlSeconds: 60 },
+    );
+  } catch {
+    return null;
   }
 }
 

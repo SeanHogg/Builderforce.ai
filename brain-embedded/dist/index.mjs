@@ -188,6 +188,13 @@ async function streamChatCompletion(opts, handlers = {}) {
     headerByoUnresolved = null;
   }
   const byoUnresolved = () => headerByoUnresolved ?? void 0;
+  let headerProviderCap = null;
+  try {
+    headerProviderCap = res.headers?.get?.("x-builderforce-provider-cap") || null;
+  } catch {
+    headerProviderCap = null;
+  }
+  const providerCap = () => headerProviderCap ?? void 0;
   let usage;
   const readUsage = (u) => {
     if (!u || typeof u !== "object") return;
@@ -214,7 +221,7 @@ async function streamChatCompletion(opts, handlers = {}) {
     });
     finishReason = choice?.finish_reason ?? null;
     handlers.onDone?.(finishReason);
-    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), usage };
+    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
   }
   const decoder = new TextDecoder();
   let buffer = "";
@@ -232,7 +239,7 @@ async function streamChatCompletion(opts, handlers = {}) {
         const tail2 = xml.flush();
         if (tail2) handlers.onTextDelta?.(tail2);
         handlers.onDone?.(finishReason);
-        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), usage };
+        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
       }
       let parsed;
       try {
@@ -1389,6 +1396,13 @@ function accrueByoUnresolved(c, raw) {
   for (const p of raw.split(",").map((s) => s.trim()).filter(Boolean)) next.add(p);
   if (next.size !== before) c.byoUnresolved = [...next];
 }
+function accrueProviderCap(c, raw) {
+  if (!raw) return;
+  const before = c.providerCap.length;
+  const next = new Set(c.providerCap);
+  for (const p of raw.split(",").map((s) => s.trim()).filter(Boolean)) next.add(p);
+  if (next.size !== before) c.providerCap = [...next];
+}
 var HISTORY_TOKEN_BUDGET = 24e3;
 var MAX_TOOL_RESULT_CHARS = 6e3;
 function estimateTokens(chars) {
@@ -1423,7 +1437,8 @@ var EMPTY_SNAPSHOT = {
   appended: [],
   hasTrace: false,
   trace: [],
-  byoUnresolved: []
+  byoUnresolved: [],
+  providerCap: []
 };
 function makeCell() {
   return {
@@ -1439,6 +1454,7 @@ function makeCell() {
     listeners: /* @__PURE__ */ new Set(),
     abort: null,
     byoUnresolved: [],
+    providerCap: [],
     codeChanged: false,
     ticketRecorded: false,
     touchedFiles: [],
@@ -1476,7 +1492,8 @@ function emit(c) {
     appended: c.appended,
     hasTrace: c.trace.length > 0,
     trace: c.trace,
-    byoUnresolved: c.byoUnresolved
+    byoUnresolved: c.byoUnresolved,
+    providerCap: c.providerCap
   };
   for (const l of c.listeners) l();
   for (const l of storeListeners) l();
@@ -1715,6 +1732,7 @@ async function startRun(chatId, req) {
   c.error = "";
   c.streamingText = "";
   c.byoUnresolved = [];
+  c.providerCap = [];
   c.codeChanged = false;
   c.ticketRecorded = false;
   c.touchedFiles = [];
@@ -1858,6 +1876,38 @@ ${block}`;
       }
     }
   }
+  if (evermind?.answer && !c.abort?.signal.aborted) {
+    const query = latestUserText(convo);
+    if (query) {
+      let memAnswer = null;
+      try {
+        memAnswer = await evermind.answer(query);
+      } catch {
+        memAnswer = null;
+      }
+      const finalText = memAnswer?.text.trim();
+      if (finalText) {
+        convo.push({ role: "assistant", content: finalText });
+        const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: finalText }]);
+        c.streamingText = "";
+        recordAppended(c, assistantMsg);
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: "recall",
+          label: memAnswer.source === "evermind" ? "evermind.answer" : "memory.answer",
+          args: { query },
+          result: {
+            source: memAnswer.source,
+            skippedLlm: true,
+            ...memAnswer.evermindVersion != null ? { version: memAnswer.evermindVersion } : {}
+          }
+        });
+        emit(c);
+        onActivity?.(chatId);
+        return;
+      }
+    }
+  }
   if (req.augmentSystemPrompt) {
     try {
       const extra = await req.augmentSystemPrompt(latestUserText(convo));
@@ -1905,6 +1955,7 @@ ${chatWorkLinkingDirective(chatId)}`;
       throw e;
     }
     accrueByoUnresolved(c, result.byoUnresolved);
+    accrueProviderCap(c, result.providerCap);
     const resolved = result.resolvedModel ?? model ?? "default";
     const requested = model ?? "default";
     if (requested !== "default" && resolved !== "default" && resolved !== requested) {
@@ -2061,6 +2112,13 @@ ${chatWorkLinkingDirective(chatId)}`;
         result: { version: learn.version, skipped: true, reason: learn.reason }
       });
     }
+    if (evermind?.cacheAnswer) {
+      const q = latestUserText(convo);
+      if (q) {
+        void Promise.resolve(evermind.cacheAnswer(q, finalText)).catch(() => {
+        });
+      }
+    }
     onActivity?.(chatId);
     return;
   }
@@ -2087,6 +2145,7 @@ ${chatWorkLinkingDirective(chatId)}`;
         } }
       );
       accrueByoUnresolved(c, closing.byoUnresolved);
+      accrueProviderCap(c, closing.providerCap);
       pushTrace(c, {
         ts: nowIso(),
         category: "llm",
@@ -2404,6 +2463,7 @@ ${refs}`;
      *  subscription) — a mounted view renders a passive "reconnect your account"
      *  banner off this. Empty when everything resolved. */
     byoUnresolved: snapshot.byoUnresolved,
+    providerCap: snapshot.providerCap,
     buildTriageReport
   };
 }
