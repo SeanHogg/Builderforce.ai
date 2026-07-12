@@ -1,0 +1,21 @@
+{
+  "name": "@seanhogg/lib-chat-management",
+  "version": "0.1.0",
+  "description": "Chat management utilities for Builderforce",
+  "type": "module",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "builderforce",
+    "chat",
+    "management"
+  ],
+  "author": "Builderforce",
+  "license": "MIT",
+  "peerDependencies": {
+    "@seanhogg/builderforce-agents": "workspace:*"
+  }
+}
