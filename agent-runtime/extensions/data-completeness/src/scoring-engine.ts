@@ -11,6 +11,12 @@ import type {
   FieldWeightConfig,
   PlaceholderConfig,
 } from "./types.js";
+import {
+  DEFAULT_PLACEHOLDERS,
+  DEFAULT_THRESHOLD_CRITICAL,
+  DEFAULT_THRESHOLD_WARNING,
+  DEFAULT_THRESHOLD_PASSING,
+} from "./enums.js";
 
 /**
  * Checks if a value is considered present (not missing/empty/placeholder)
