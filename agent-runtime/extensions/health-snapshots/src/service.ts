@@ -32,7 +32,7 @@ const DEFAULT_CONFIG: Required<HealthSnapshotsConfig> = {
 };
 
 /**
- * Health snapshot capture
+ * Capture a snapshot from current state
  */
 function captureSnapshot(
   logger: Logger,
@@ -47,8 +47,9 @@ function captureSnapshot(
   commitSha?: string,
 ): HealthSnapshot {
   // Derive overall status
+  let overallStatus: HealthStatus;
   if (statusCounts.unhealthy > 0) {
-    var overallStatus: HealthStatus = 'unhealthy';
+    overallStatus = 'unhealthy';
   } else if (statusCounts.degraded > 0) {
     overallStatus = 'degraded';
   } else {
@@ -76,20 +77,7 @@ function captureSnapshot(
 }
 
 /**
- * Derive overall status from component health list
- */
-function deriveOverallStatus(components: ComponentHealth): HealthStatus {
-  const statusCounts = { healthy: 0, degraded: 0, unhealthy: 0 };
-  for (const c of components) {
-    statusCounts[c.status]++;
-  }
-  if (statusCounts.unhealthy > 0) return 'unhealthy';
-  if (statusCounts.degraded > 0) return 'degraded';
-  return 'healthy';
-}
-
-/**
- * Compute delta for a numeric field
+ * Compute numeric delta for a field that may be undefined (added or removed)
  */
 function computeNumericDelta(prev: number | undefined, cur: number | undefined): number {
   if (prev === undefined) return cur === undefined ? 0 : cur; // added
@@ -98,7 +86,7 @@ function computeNumericDelta(prev: number | undefined, cur: number | undefined):
 }
 
 /**
- * Compute absolute and percentage change for numeric values
+ * Compute absolute and percentage change for two numeric values
  */
 function computeDelta(prev: number, cur: number): { absolute: number; percent: number } {
   const absolute = cur - prev;
@@ -113,9 +101,13 @@ function compareSnapshots(
   base: HealthSnapshot,
   target: HealthSnapshot,
   thresholdPercent: number,
-  componentStates: Map<string, ComponentHealth>,
-  resourceUsage: ResourceUsage,
+  baseComponentStates: Map<string, ComponentHealth>,
+  targetResource: ResourceUsage & { cpuPercent: number; memoryPercent: number; diskPercent: number },
 ): SnapshotComparison {
+  const baseComponentById = new Map<string, ComponentHealth>(
+    base.components.map((c) => [c.component, c]),
+  );
+
   // Overall status change
   const healthStatusChange = {
     from: base.status,
@@ -123,56 +115,60 @@ function compareSnapshots(
   };
 
   // Component deltas
-  const componentDeltas = [];
+  const componentDeltas: Array<{
+    component: string;
+    from: ComponentHealth;
+    to: ComponentHealth;
+    errorRateDeltaPercent: number;
+    latencyDeltaMs: number;
+    statusChange: HealthStatus;
+    added: boolean;
+  }> = [];
 
-  for (const [component, targetComponent] of target.components) {
-    const baseComponent = base.components.find((c) => c.component === component);
+  // Added components or updated components
+  for (const targetComponent of target.components) {
+    const baseComponent = baseComponentById.get(targetComponent.component);
     if (!baseComponent) {
       // Component added between snapshots
       componentDeltas.push({
-        component,
-        from: baseComponent ?? { component, status: 'unknown', errorRatePercent: 0, latencyMs: 0 },
+        component: targetComponent.component,
+        from: { component: targetComponent.component, status: 'healthy', errorRatePercent: 0, latencyMs: 0 },
         to: targetComponent,
-        errorRateDeltaPercent: computeNumericDelta(baseComponent?.errorRatePercent, targetComponent.errorRatePercent),
-        latencyDeltaMs: computeNumericDelta(baseComponent?.latencyMs, targetComponent.latencyMs),
+        errorRateDeltaPercent: computeNumericDelta(0, targetComponent.errorRatePercent),
+        latencyDeltaMs: computeNumericDelta(0, targetComponent.latencyMs),
         statusChange: targetComponent.status,
         added: true,
       });
       continue;
     }
 
-    const { absolute: errorRateChange, percent: errorRatePercentChange } = computeDelta(
-      baseComponent.errorRatePercent || 0,
-      targetComponent.errorRatePercent || 0,
-    );
+    const deltaErrorRate = computeNumericDelta(baseComponent.errorRatePercent, targetComponent.errorRatePercent);
+    const { absolute: latencyChange } = computeDelta(baseComponent.latencyMs, targetComponent.latencyMs);
 
-    const { absolute: latencyChange, percent: latencyPercentChange } = computeDelta(
-      baseComponent.latencyMs || 0,
-      targetComponent.latencyMs || 0,
-    );
+    const isStatusChange = baseComponent.status !== targetComponent.status;
+    const statusChange = isStatusChange ? targetComponent.status : 'healthy';
 
     componentDeltas.push({
-      component,
+      component: targetComponent.component,
       from: baseComponent,
       to: targetComponent,
-      errorRateDeltaPercent: errorRatePercentChange,
+      errorRateDeltaPercent: deltaErrorRate,
       latencyDeltaMs: latencyChange,
-      statusChange: baseComponent.status !== targetComponent.status ? targetComponent.status : 'unknown',
+      statusChange,
       added: false,
     });
   }
 
-  // Removed components
+  // Removed components (present in base but not in target)
   for (const baseComponent of base.components) {
-    if (!target.components.find((c) => c.component === baseComponent.component)) {
-      // Component removed
+    if (!baseComponentById.has(baseComponent.component)) {
       componentDeltas.push({
         component: baseComponent.component,
         from: baseComponent,
-        to: { component: baseComponent.component, status: 'unknown', errorRatePercent: 0, latencyMs: 0 },
+        to: { component: baseComponent.component, status: 'healthy', errorRatePercent: 0, latencyMs: 0 },
         errorRateDeltaPercent: -baseComponent.errorRatePercent,
         latencyDeltaMs: -baseComponent.latencyMs,
-        statusChange: 'unknown',
+        statusChange: 'healthy',
         added: false,
       });
     }
@@ -184,15 +180,14 @@ function compareSnapshots(
   const versionDiff = oldVersion !== newVersion ? { old: oldVersion, new: newVersion } : undefined;
 
   // Significant changes summary
-  let significantChangesSummary = 'No significant changes detected.';
+  let significantChangesSummary: string = 'No significant changes detected.';
   const changes: string[] = [];
 
   for (const delta of componentDeltas) {
-    if (delta.added || delta.statusChange !== 'unknown') {
-      if (delta.statusChange !== 'unknown' && delta.statusChange !== delta.from.status) {
-        const label = delta.added ? 'Added' : 'Removed';
-        changes.push(`${label}: ${delta.component} changed health from ${delta.from.status} to ${delta.to.status}`);
-      }
+    if (delta.added || delta.statusChange !== 'healthy') {
+      if (!delta.added && delta.statusChange === 'healthy') continue;
+      const label = delta.added ? 'Added' : 'Removed';
+      changes.push(`${label}: ${delta.component} changed health from ${delta.from.status} to ${delta.to.status}`);
     } else {
       if (Math.abs(delta.errorRateDeltaPercent) >= thresholdPercent) {
         changes.push(`Error rate changed by ${Math.abs(delta.errorRateDeltaPercent)}% on ${delta.component}`);
@@ -223,12 +218,11 @@ function compareSnapshots(
 export function createHealthSnapshotsService(): BuilderForceAgentsPluginService {
   let metricMeter = metrics.getMeter('health-snapshots');
   let metricTracer = trace.getTracer('health-snapshots');
-
-  let config: Required<HealthSnapshotsConfig> = { ...DEFAULT_CONFIG };
+  let config: Required<HealthSnapshotsConfig>;
   let log: Logger | null = null;
 
   // Snapshot storage: Map<serviceId, Map<snapshotId, snapshot>>
-  // Note: Use a write-in, not delete-wise aggregated storage
+  // Note: Uses write-in, no eviction aggregation storage
   const snapshotStorage = new Map<string, Map<string, HealthSnapshot>>();
 
   // Current state: used to compute diffs
@@ -256,10 +250,9 @@ export function createHealthSnapshotsService(): BuilderForceAgentsPluginService 
 
   return {
     id: 'health-snapshots',
-    async start(ctx) {
-      const cfg = ctx.config.healthSnapshots || {};
-      config = { ...DEFAULT_CONFIG, ...cfg };
 
+    async start(ctx) {
+      config = { ...DEFAULT_CONFIG, ...((ctx.config as unknown) as HealthSnapshotsConfig) };
       log = ctx.logger;
 
       // Resolve version if enabled
@@ -290,8 +283,8 @@ export function createHealthSnapshotsService(): BuilderForceAgentsPluginService 
       log?.info('Health snapshots service stopped');
     },
 
-    // Callback for a new diagnostic event
-    async onDiagnosticEvent(evt: DiagnosticEventPayload): Promise<void> {
+    // Called by SDK from diagnostic events
+    async onDiagnosticEvent(evt: DiagnosticEventPayload) {
       const span = metricTracer.startSpan('health-snapshots.onDiagnosticEvent', {
         attributes: {
           'diagnostic.type': evt.type,
@@ -302,13 +295,14 @@ export function createHealthSnapshotsService(): BuilderForceAgentsPluginService 
       try {
         switch (evt.type) {
           case 'model.usage':
-            // Track token usage as a proxy for component health (= high usage = load)
+            // Track token usage as a proxy for component load
             if (config.trackComponents) {
               const component = evt.channel ?? 'unknown';
               const componentState = currentState.componentStates.get(component);
               if (componentState) {
-                componentState.latencyMs = (componentState.latencyMs * 3 + evt.durationMs!) / 4; // rolling average
-                componentState.errorRatePercent += componentState.errorRatePercent / 20; // gradual increase on every event
+                componentState.latencyMs = (componentState.latencyMs * 3 + (evt.durationMs ?? 0)) / 4; // rolling average
+                componentState.errorRatePercent =
+                  Math.min(100, componentState.errorRatePercent + componentState.errorRatePercent / 20);
               } else {
                 currentState.componentStates.set(component, {
                   component,
@@ -351,7 +345,7 @@ export function createHealthSnapshotsService(): BuilderForceAgentsPluginService 
             break;
 
           case 'diagnostic.heartbeat':
-            // Handled by caller to supply resource usage; no state here
+            // Handled by caller to supply resource usage
             break;
 
           default:
@@ -361,10 +355,12 @@ export function createHealthSnapshotsService(): BuilderForceAgentsPluginService 
 
         // Update metrics
         if (evt.channel) {
-          metricMeter.createCounter('health.snapshots.event_count', {
-            unit: '1',
-            description: 'Count of diagnostic events for health-sensing',
-          }).add(1, { channel: evt.channel, event_type: evt.type });
+          metricMeter
+            .createCounter('health.snapshots.event_count', {
+              unit: '1',
+              description: 'Count of diagnostic events for health-sensing',
+            })
+            .add(1, { channel: evt.channel, event_type: evt.type });
         }
       } finally {
         span.end();
@@ -406,14 +402,13 @@ export function createHealthSnapshotsService(): BuilderForceAgentsPluginService 
 
     // List snapshots with filters
     async listSnapshots(filters: SnapshotListFilters): Promise<SnapshotListResponse> {
-      const allSnapshots = new Array<HealthSnapshot>();
+      const allSnapshots: Array<HealthSnapshot> = [];
       // Flatten all storage buckets by timestamps ascending (newest last)
       for (const bucket of snapshotStorage.values()) {
         for (const s of bucket.values()) {
           allSnapshots.push(s);
         }
       }
-      // Filter by produced fields to match SnapshotListResponse contract
       allSnapshots.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
       // Apply criteria exactly as described
@@ -433,6 +428,22 @@ export function createHealthSnapshotsService(): BuilderForceAgentsPluginService 
       if (filters.component) {
         filtered = filtered.filter((s) =>
           s.components.some((c) => c.component === filters.component),
+        );
+      }
+
+      if (filtered.length !== allSnapshots.length) {
+        const { start, end, sources, status, component } = filters;
+        log?.debug(
+          {
+            start,
+            end,
+            sources,
+            status,
+            component,
+            originalCount: allSnapshots.length,
+            filteredCount: filtered.length,
+          },
+          'Snapshot list filtered',
         );
       }
 
@@ -467,23 +478,29 @@ export function createHealthSnapshotsService(): BuilderForceAgentsPluginService 
 
       if (!base || !target) return null;
 
-      // Populate component/markers by component identifier for comparing to/from lookups.
-      // Note: This is a local lookup (read-only; does not write) to support diff logic. Not marked purged.
-      const baseComponentForDiff = new Map<string, ComponentHealth>(
-        base.components.map((c) => [c.component, c]),
-      );
-      const targetComponentForDiff = new Map<string, ComponentHealth>(
-        target.components.map((c) => [c.component, c]),
-      );
-      const baseResourceForDiff = base.resourceUsage ? { ...base.resourceUsage } : undefined;
-      const targetResourceForDiff = target.resourceUsage ? { ...target.resourceUsage } : undefined;
+      // Populate component/markers by component identifier for comparing to/from lookups. The base/target component lists already have ComponentHealth[]. The following local maps avoid reconstructing them repeatedly during merge.
+      const baseComponentForDiff: Map<string, ComponentHealth> =
+        new Map(base.components.map((c) => [c.component, c]));
+      const targetComponentForDiff: Map<string, ComponentHealth> =
+        new Map(target.components.map((c) => [c.component, c]));
+      const baseResourceForDiff =
+        base.resourceUsage ? { ...base.resourceUsage } : undefined;
+      const targetResourceForDiff =
+        target.resourceUsage ? { ...target.resourceUsage } : undefined;
+
+      // Build synergetic resource options: prioritize non-undefined target over undefined base
+      const mergedResource: ResourceUsage & { cpuPercent: number; memoryPercent: number; diskPercent: number } = {
+        cpuPercent: targetResourceForDiff?.cpuPercent ?? baseResourceForDiff?.cpuPercent ?? 0,
+        memoryPercent: targetResourceForDiff?.memoryPercent ?? baseResourceForDiff?.memoryPercent ?? 0,
+        diskPercent: targetResourceForDiff?.diskPercent ?? baseResourceForDiff?.diskPercent ?? 0,
+      };
 
       return compareSnapshots(
         base,
         target,
         10, // 10% threshold
         baseComponentForDiff,
-        targetResourceForDiff ? { ...targetResourceForDiff } : { cpuPercent: 0, memoryPercent: 0, diskPercent: 0 },
+        mergedResource,
       );
     },
 
@@ -499,10 +516,7 @@ export function createHealthSnapshotsService(): BuilderForceAgentsPluginService 
           const snapshotTimestamp = new Date(snapshot.timestamp).getTime();
           if (now - snapshotTimestamp > cutoffMs) {
             bucket.delete(id);
-            log?.info(
-              { id, timestamp: snapshot.timestamp },
-              'Snapshot expired and purged',
-            );
+            log?.info({ id, timestamp: snapshot.timestamp }, 'Snapshot expired and purged');
           }
         }
       }
@@ -510,10 +524,14 @@ export function createHealthSnapshotsService(): BuilderForceAgentsPluginService 
 
     // Update resource usage snapshot from external caller (diagnostic.heartbeat)
     async updateResource(usage: ResourceUsage): Promise<void> {
-      currentState.resourceUsage = usage;
+      currentState.resourceUsage = {
+        cpuPercent: usage.cpuPercent ?? 0,
+        memoryPercent: usage.memoryPercent ?? 0,
+        diskPercent: usage.diskPercent ?? 0,
+      };
     },
 
-    // Explicit periodic clean-up call (for scheduled job or on-demand)
+    // Explicit periodic cleanup call (for scheduled job or on-demand)
     async clean(): Promise<void> {
       await this.purgeStaleSnapshots();
       // No delete-wise aggregated eviction (for memory-bound we leave to GC)
