@@ -2,7 +2,7 @@
 
 import { useState, forwardRef, type ReactNode } from 'react';
 import { CSSProperties } from 'react';
-import { TrendArrowProps, TrendClassification } from './trend';
+import { TrendArrowProps, TrendClassification, COLORS } from './trend';
 
 /**
  * Inline trend arrow component — renders an SVG arrow with tooltip, colors, and accessibility.
@@ -12,9 +12,10 @@ import { TrendArrowProps, TrendClassification } from './trend';
  * - Improving: green (#22863a)
  * - Declining: red (#d73a49)
  * - Stable: gray (#6a737d)
- * - No data: dash (—) embedded in the aria-label portion (title fallback).
+ * - No data: dash (—), rendered visibly (FR-6).
  */
 
+/** Size variant — scales the SVG stroke width and height. */
 export interface TrendArrowProps {
   /** Classification result. */
   classification: TrendClassification;
@@ -32,42 +33,34 @@ const SIZE_CONFIGS: Record<'small' | 'medium' | 'large', { width: number; height
   large: { width: 24, height: 24, strokeWidth: 2 },
 };
 
-/** Colors from the PRD (task #307 — Trend Arrows PRD). */
-export const COLORS = {
-  improving: '#22863a', // green (GitHub-style)
-  declining: '#d73a49', // red (danger)
-  stable: '#6a737d', // gray (muted text)
-} as const;
-
-/** SVG arrow paths. Size-agnostic; styles dominate via `viewBox` and `strokeWidth`. */
+/** Arrow SVG paths — size-agnostic; styles dominate via viewBox and strokeWidth. */
 const PATHS = {
   up: <path d="M12 6 L18 12 L12 18 M12 6V18" />,
   down: <path d="M12 18 L18 12 L12 6 M12 6V18" />,
   flat: <path d="M6 12h12" />,
 };
 
-/* We wrap the arrow in a div with padding so the tooltip can land to the right of the arrow. */
+/** Spacing around the arrow so the tooltip can land to the right of the arrow. */
 const SPACING_MAPPED: Record<'small' | 'medium' | 'large', { paddingX: number; paddingY: number }> = {
   small: { paddingX: 4, paddingY: 2 },
   medium: { paddingX: 5, paddingY: 3 },
   large: { paddingX: 6, paddingY: 3 },
 };
 
-/** Generate aria-label text from classification. */
+/** Build aria-label following the PRD format ("improving/declining/stable, up/down/→ N% vs. previous period"). */
 function buildAriaLabel(
+  roleId: TrendArrowProps['classification']['state'],
   direction: TrendArrowProps['classification']['direction'],
   tooltip: TrendArrowProps['classification']['tooltip'],
 ): string {
-  // We don't have the polarized state here; we generate a direction- and delta-facing label that does not
-  // misattribute the arrow guess to polarity. For informational tooltips (hover/focus) we show the phases.
   if (!tooltip) {
     return 'Not enough data to calculate trend';
   }
-  const glyph = direction === 'up' ? '▲' : direction === 'down' ? '▼' : '→';
-  return `Trend ${glyph}, ${tooltip.pct > 0 ? '+' : ''}${tooltip.pct.toFixed(1)}% change vs. ${tooltip.windowLabel}`;
+  const dirGlyph = direction === 'up' ? '▲' : direction === 'down' ? '▼' : '→';
+  return `Trend ${dirGlyph}, ${roleId}, ${tooltip.pct > 0 ? '+' : ''}${tooltip.pct.toFixed(1)}% change vs. ${tooltip.windowLabel}`;
 }
 
-/** Build tooltip content string for keyboard focus. */
+/** Build tooltip content string for keyboard focus (matches hover behavior). */
 function buildTooltipContent(
   tooltip: TrendArrowProps['classification']['tooltip'],
 ): string {
@@ -76,21 +69,24 @@ function buildTooltipContent(
   }
   return [
     `${tooltip.priorValue} → ${tooltip.currentValue}`,
-    `Absolute change: ${Math.abs(tooltip.delta).toLocaleString()}${Math.sign(tooltip.delta) === -1 ? '-' : '+'}`,
+    `Absolute change: ${Math.abs(tooltip.delta).toLocaleString()}${
+      tooltip.delta < 0 ? '-' : '+'
+    }`,
     `Percentage change: ${tooltip.pct > 0 ? '+' : ''}${tooltip.pct.toFixed(1)}%`,
     `Comparison: ${tooltip.windowLabel}`,
   ].join('\n');
 }
 
 /**
- * Tooltip element. uses sizing and styles for positioning via props.
+ * Tooltip element — positioned absolute above/below the arrow based on height and edge of the parent.
+ * Simplified from a fully adaptive position; the current offset-driven fixed placement fits the dashboard layout.
  */
-function Tooltip({ content, style }: { content: string; style?: CSSProperties; alignRight?: boolean }): ReactNode {
-  if (typeof document === 'undefined') return null; // guard SSR + some previewers
+function Tooltip({ content, style }: { content: string; style?: CSSProperties }): ReactNode {
+  // Avoid rendering any nodes during SSR/before the DOM is fully attached.
+  if (typeof document === 'undefined') return null;
   const container = document.body;
   if (!container) return null;
-  // We fallback to a fixed-right positioning within the parent container using calculation passed via style.
-  // This satisfies the PRD: "Hovering or focusing the arrow displays a tooltip".
+  // We fall back to a fixed placement relative to this wrapper via the style prop.
   return (
     <div
       style={{
@@ -123,13 +119,15 @@ export const TrendArrow = forwardRef<HTMLDivElement, TrendArrowProps>(
     const config = SIZE_CONFIGS[size];
     const padding = SPACING_MAPPED[size];
 
-    // Determine direction to render. For classification, 'state' is semantically polarized, but arrow glyph is direction.
+    // Determine glyph to render based on direction, independent of state.
     const glyph = classification.direction === 'up' ? PATHS.up : classification.direction === 'down' ? PATHS.down : PATHS.flat;
 
     // Show tooltip on hover or focus.
     const showTooltip = hovered || focused;
 
-    // ariaLabel is still generated by InsightStat for consistency.
+    // Explicit visibility for insufficient-data dash (FR-6).
+    const isNoData = !classification.hasData;
+
     return (
       <div
         ref={ref}
@@ -141,28 +139,33 @@ export const TrendArrow = forwardRef<HTMLDivElement, TrendArrowProps>(
           position: 'relative',
           margin: 0,
           padding: `${padding.paddingY}px ${padding.paddingX}px`,
-          minWidth: 0, // let the container shrink without causing overflow
+          minWidth: 0,
         }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        tabIndex={0} // Keyboard focusable (FR-7, AC-8)
+        tabIndex={0}
         role="img"
-        aria-label={buildAriaLabel(classification.direction, classification.tooltip)}
-        aria-hidden="true"
+        aria-label={buildAriaLabel(classification.state, classification.direction, classification.tooltip)}
+        aria-hidden={isNoData ? 'true' : 'false'}
       >
-        {/* CSS-positioned tooltip sibling — will be rendered absolutely positioned within this wrapper */}
+        {/* CSS-positioned tooltip sibling — rendered absolutely positioned here. */}
         {showTooltip && (
           <Tooltip
             content={buildTooltipContent(classification.tooltip ?? { priorValue: '', currentValue: '', delta: 0, pct: 0, windowLabel: '' })}
             style={{
-              left: `${config.width + padding.paddingX + SPACING_MAPPED['medium'].paddingX}px`, // right of the arrow with padding
+              left: `${config.width + padding.paddingX + padding.paddingX}px`,
             }}
           />
         )}
 
-        {classification.hasData ? (
+        {isNoData ? (
+          // Insufficient data — render visible dash (FR-6).
+          <span aria-hidden="true" style={{ fontSize: `${config.fontSize}px`, visibility: 'visible' }}>
+            —
+          </span>
+        ) : (
           <>
             <svg
               width={config.width}
@@ -176,20 +179,13 @@ export const TrendArrow = forwardRef<HTMLDivElement, TrendArrowProps>(
                 height: '100%',
                 color,
                 transition: 'transform 0.15s ease-out',
+                fontSize: `${config.fontSize}px`, // Fallback consistency
               }}
               role="presentation"
-              aria-hidden="true"
             >
               {glyph}
             </svg>
           </>
-        ) : (
-          // Insufficient data: render dash that is invisible except as aria-label (it's on a non-interactive span).
-          <span
-            aria-hidden="true"
-            style={{ visibility: 'hidden' }}
-            dangerouslySetInnerHTML={{ __html: '—' }}
-          />
         )}
       </div>
     );
@@ -197,5 +193,3 @@ export const TrendArrow = forwardRef<HTMLDivElement, TrendArrowProps>(
 );
 
 TrendArrow.displayName = 'TrendArrow';
-
-export default TrendArrow;
