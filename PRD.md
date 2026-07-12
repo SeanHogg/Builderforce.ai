@@ -5,20 +5,20 @@
 
 ## Problem & Goal
 
-When a Task's `parentTaskId` is set to `null` — whether through a direct update, a cascade from Epic deletion, or a data integrity issue — the system currently has no mechanism to detect, surface, or respond to this "orphaned task" state. This creates silent data loss of organizational hierarchy, breaks Epic progress tracking, and leaves downstream agents and users without actionable information.
+When a Task's `parentTaskId` is set to `null` — whether through an API call, a cascading delete of the parent Epic, or a data mutation — the system currently provides no signal that this detachment occurred. Orphaned tasks accumulate silently, breaking Epic-level progress tracking, reporting roll-ups, and team visibility.
 
-**Goal:** Detect when a Task becomes detached from its Epic (`parentTaskId` transitions to `null`), emit a reliable signal, and ensure the system and its users can observe and respond to that event consistently.
+**Goal:** Detect when a Task becomes detached from its Epic (`parentTaskId` transitions to `null`), communicate that event to relevant consumers, and ensure the system and its users can respond appropriately.
 
 ---
 
 ## Target Users / ICP Roles
 
-| Role | Interest |
+| Role | Need |
 |---|---|
-| **Project Manager** | Needs to re-assign orphaned tasks to the correct Epic before sprint planning is affected |
-| **Developer / Engineer** | Needs to understand why a task no longer appears under an Epic in their tooling |
-| **Platform / Backend Agent** | Must react programmatically to the detachment event to maintain data integrity |
-| **QA / Audit Agent** | Needs a traceable log of all detachment events for compliance and debugging |
+| **Project Manager** | Visibility into orphaned tasks so they can be reassigned or closed |
+| **Developer / Task Owner** | Notification that their task is no longer linked to an Epic |
+| **Backend / Integration Engineer** | Reliable event or hook to trigger downstream workflows |
+| **Data / Reporting Analyst** | Clean lineage data; no silent gaps in Epic completion metrics |
 
 ---
 
@@ -26,75 +26,87 @@ When a Task's `parentTaskId` is set to `null` — whether through a direct updat
 
 This PRD covers:
 
-- Detection of the `parentTaskId → null` transition on any Task entity
-- Event emission at the point of detachment
-- Observability artifacts (logs, audit trail entry, UI indicator)
-- A defined recovery path (re-attachment or explicit orphan acknowledgement)
+1. Detection of the `parentTaskId → null` state transition on a Task entity.
+2. System-level event emission when detachment is confirmed.
+3. User-facing notification of the detachment.
+4. UI and API surfacing of orphaned task status.
 
 ---
 
 ## Functional Requirements
 
-### FR-1 · Detachment Detection
+### FR-1 — Transition Detection
 
-- The system **MUST** detect when a Task's `parentTaskId` changes from a non-null Epic ID to `null`, regardless of the trigger (direct edit, Epic deletion cascade, bulk operation, API call, or migration script).
-- Detection **MUST** occur at the persistence layer (pre- or post-save hook / domain event) so no update path can bypass it.
+- The system **must** detect when `parentTaskId` changes from a non-null Epic ID to `null`, regardless of trigger (direct edit, Epic deletion, bulk operation, or external API call).
+- Detection **must** differentiate between:
+  - **Intentional detachment** — user explicitly removes the Epic link.
+  - **Cascading detachment** — parent Epic was deleted and the Task was orphaned as a side effect.
 
-### FR-2 · Orphaned Task Event
+### FR-2 — Event Emission
 
-- On detachment, the system **MUST** emit a `task.detached` domain event containing:
-  - `taskId` — ID of the affected Task
-  - `previousParentId` — Epic ID that was the former parent
-  - `detachedAt` — ISO-8601 timestamp
-  - `triggeredBy` — actor ID (user, agent, or system process)
-  - `reason` — enum: `EPIC_DELETED | MANUAL_UPDATE | BULK_OPERATION | UNKNOWN`
+- On confirmed detachment, the system **must** emit a `task.detached` domain event with the following payload:
 
-### FR-3 · Audit Trail
+  ```json
+  {
+    "eventType": "task.detached",
+    "taskId": "<uuid>",
+    "previousParentId": "<epic-uuid>",
+    "detachmentReason": "explicit_unlink | parent_deleted",
+    "detachedAt": "<ISO-8601 timestamp>",
+    "actorId": "<user-uuid | system>"
+  }
+  ```
 
-- Every `task.detached` event **MUST** produce an immutable audit log entry with all fields from FR-2.
-- Audit entries **MUST** be queryable by `taskId`, `previousParentId`, and date range.
+- The event **must** be published to the internal event bus within 500 ms of the write commit.
 
-### FR-4 · Observability & Notification
+### FR-3 — Orphaned Task Flagging
 
-- The orphaned Task **MUST** be visually flagged in the UI (e.g., "Unassigned Epic" badge) until re-attached or explicitly acknowledged.
-- Project Managers and the task's Assignee **MUST** receive an in-app notification and, if configured, an email/webhook alert when a task they own becomes detached.
-- A dedicated **Orphaned Tasks** view/filter **MUST** be available in the project dashboard.
+- The Task record **must** receive an `orphaned: true` flag and an `orphanedAt` timestamp upon detachment.
+- The Task **must** remain fully accessible and editable in its orphaned state.
+- A Task's `orphaned` flag **must** be cleared when `parentTaskId` is reassigned to a valid Epic.
 
-### FR-5 · Recovery Workflow
+### FR-4 — User Notification
 
-- A user with edit rights **MUST** be able to re-attach the orphaned Task to any existing Epic via the Task detail pane.
-- A user **MUST** be able to explicitly mark a Task as "standalone" (intentionally parentless), which clears the orphan flag without requiring re-attachment.
-- Re-attachment **MUST** emit a `task.reattached` event and clear the orphan badge.
+- The Task owner and any Task watchers **must** receive an in-app notification within 60 seconds of detachment.
+- Notification content **must** include: Task name, previous Epic name, detachment reason, and a direct link to the Task.
+- If a workspace notification integration (Slack, email) is configured, the notification **must** also be forwarded via that channel.
 
-### FR-6 · Epic Progress Recalculation
+### FR-5 — Orphaned Task Discovery
 
-- When a Task is detached, the former Epic's progress metrics (completion %, story point totals) **MUST** be recalculated immediately and synchronously before the response is returned to the caller.
+- The Task list view **must** support filtering by `orphaned: true`.
+- The API `GET /tasks` endpoint **must** accept `?orphaned=true` as a query parameter.
+- Project Managers **must** be able to bulk-reassign or bulk-close orphaned tasks from the filtered view.
+
+### FR-6 — Epic Progress Integrity
+
+- When a Task is detached, its progress contribution (story points, completion percentage) **must** be immediately removed from the parent Epic's roll-up calculations.
+- Historical Epic snapshots (for reporting) **must** retain the Task's contribution up to the moment of detachment.
 
 ---
 
 ## Acceptance Criteria
 
-| # | Scenario | Expected Result |
-|---|---|---|
-| AC-1 | A Task's `parentTaskId` is set to `null` via the REST API | `task.detached` event is emitted; audit log entry created; orphan badge appears on Task within one UI refresh cycle |
-| AC-2 | An Epic is deleted and its child Tasks are cascaded | All child Tasks emit individual `task.detached` events with `reason: EPIC_DELETED`; none are silently orphaned |
-| AC-3 | Project Manager views the project dashboard | An "Orphaned Tasks" section lists all tasks where `parentTaskId` is `null` and status is not `STANDALONE` |
-| AC-4 | PM re-attaches a Task to a new Epic | `task.reattached` event emitted; orphan badge removed; new Epic progress recalculated |
-| AC-5 | PM marks a Task as "standalone" | Orphan badge cleared; Task no longer appears in Orphaned Tasks view; audit log records the acknowledgement |
-| AC-6 | Former Epic's progress is queried immediately after Task detachment | Returned metrics exclude the detached Task's story points and status |
-| AC-7 | Audit log is queried by `previousParentId` | All `task.detached` events referencing that Epic ID are returned in chronological order |
-| AC-8 | A bulk operation nullifies `parentTaskId` on 50 Tasks simultaneously | All 50 Tasks individually appear in Orphaned Tasks view; no events are dropped |
+| # | Criterion |
+|---|---|
+| AC-1 | Given a Task with a valid `parentTaskId`, when `parentTaskId` is set to `null` via the UI or API, then a `task.detached` event is emitted within 500 ms and contains all required payload fields. |
+| AC-2 | Given an Epic is deleted, when child Tasks exist, then each child Task's `parentTaskId` is set to `null`, each emits a `task.detached` event with `detachmentReason: "parent_deleted"`, and each is flagged `orphaned: true`. |
+| AC-3 | Given a Task is flagged `orphaned: true`, when the Task owner opens the app, then an in-app notification is visible within 60 seconds. |
+| AC-4 | Given orphaned tasks exist, when a Project Manager filters the Task list by `orphaned: true`, then only orphaned tasks are returned in the correct order. |
+| AC-5 | Given a Task is orphaned, when it is reassigned to a new Epic, then `orphaned` is set to `false`, `orphanedAt` is cleared, and the Task's points are added to the new Epic's roll-up. |
+| AC-6 | Given a Task was detached, when Epic progress metrics are queried, then the detached Task's contribution is excluded from current totals but present in historical snapshots prior to `orphanedAt`. |
+| AC-7 | Given `GET /tasks?orphaned=true` is called with valid auth, then the response contains only tasks where `orphaned: true` and returns HTTP 200. |
+| AC-8 | Detachment of a Task produces no unhandled exceptions, no silent data loss, and is fully recorded in the audit log with actor, timestamp, and previous Epic ID. |
 
 ---
 
 ## Out of Scope
 
-- **Sub-task detachment** — Tasks detaching from a parent Task (non-Epic) are handled by a separate sub-task hierarchy PRD.
-- **Automatic re-assignment** — The system will not automatically assign orphaned Tasks to a default Epic; this remains a human or agent decision.
-- **Historical backfill** — Tasks that were already orphaned before this feature ships will be surfaced in the Orphaned Tasks view but will not have synthetic `task.detached` events generated retroactively.
-- **Cross-project Epic re-attachment** — Attaching a Task to an Epic in a different project is out of scope for this iteration.
-- **Slack / third-party notification integrations** — Only in-app and email notifications are in scope; webhook support for external tools is a follow-on.
-- **Soft-delete / archive flows** — Behavior when an Epic is archived (not deleted) is addressed in the Epic Lifecycle PRD.
+- Automatic re-parenting or AI-suggested Epic reassignment (future phase).
+- Archiving or auto-closing orphaned tasks on a schedule.
+- Changes to Epic deletion policy (soft vs. hard delete behavior is governed by a separate PRD).
+- Sub-task detachment (Tasks whose parent is another Task, not an Epic) — handled under a separate work item.
+- Retroactive backfill of `orphaned` flags for tasks that were silently orphaned prior to this feature's release.
+- Third-party project management integrations (Jira, Linear sync) — dependent on integration layer PRD.
 
 ## Requirements
 
