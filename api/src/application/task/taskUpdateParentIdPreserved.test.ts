@@ -541,8 +541,8 @@ describe('TaskService.updateTask (FR-4)', () => {
       projectId: PROJECT_ID,
       title: 'Parent Task',
       description: null,
-      status: TaskStatus.TODO as any,
-      priority: TaskPriority.MEDIUM,
+      status: undefined as never,
+      priority: undefined as never,
       assignedAgentType: AgentType.CLAUDE,
       assignedAgentHostId: null,
       assignedAgentRef: null,
@@ -554,13 +554,13 @@ describe('TaskService.updateTask (FR-4)', () => {
     });
     await repo.save(parent);
 
-    // Unassigned child
+    // Unassigned child linked to parent
     const child = Task.create({
       projectId: PROJECT_ID,
       title: 'Child Task',
       description: null,
-      status: TaskStatus.TODO as any,
-      priority: TaskPriority.MEDIUM,
+      status: undefined as never,
+      priority: undefined as never,
       assignedAgentType: AgentType.CLAUDE,
       assignedAgentHostId: null,
       assignedAgentRef: null,
@@ -569,15 +569,14 @@ describe('TaskService.updateTask (FR-4)', () => {
       persona: null,
       projectKey: 'CHILD',
       lastKeySeq: 0,
+      parentTaskId: parent.id,
     });
-    child.parentTaskId = parent.id;
-    child.taskType = TaskType.TASK;
     await repo.save(child);
 
     // Simultaneous updates; assign task and update other fields — assess should still fire exactly once
     const updated = await service.updateTask(child.id as number, {
       assignedAgentRef: 'ide-agent-multi',
-      status: TaskStatus.IN_PROGRESS as any,
+      status: TaskStatus.IN_PROGRESS,
       priority: TaskPriority.HIGH,
     });
 
