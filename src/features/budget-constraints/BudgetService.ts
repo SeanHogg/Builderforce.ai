@@ -151,11 +151,11 @@ class BudgetService {
   /**
    * FR-4.5: Log an alert
    */
-  async createAlert(alert: Omit<BudgetAlert, 'id'>): Promise<BudgetAlert> {
+  async createAlert(alert: Omit<BudgetAlert, 'id' | 'triggeredAt'>): Promise<BudgetAlert> {
     const newAlert: BudgetAlert = {
       ...alert,
       id: `alert_${Date.now()}`,
-      timestamp: new Date(),
+      triggeredAt: new Date(),
     };
 
     const alerts = this.alerts.get(alert.constraintId) || [];
