@@ -120,7 +120,7 @@
       "description": "Analyzed connection pool metrics to assess steady state timing.",
       "evidence_ids": ["e3a4b5c6-d7e8-4f9b-0c1d-2e3f4a5b6c8e"],
       "claim_ids": ["c3a4b5c6-d7e8-4f9b-0c1d-2e3f4a5b6c7d"],
-      "inference_type": "empirical"
+      "inference_type": "inductive"
     },
     {
       "step": 4,
