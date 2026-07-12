@@ -40,6 +40,13 @@ export interface TrendClassification {
 
 const DEFAULT_THRESHOLD_PCT = 2;
 
+/** PRD-specified color palette for trend arrow states. */
+export const COLORS: Record<'improving' | 'declining' | 'stable', string> = {
+  improving: '#22863a', // green
+  declining: '#d73a49', // red
+  stable: '#6a737d',    // gray
+};
+
 /**
  * Classify a metric trend using a configurable threshold band.
  *
