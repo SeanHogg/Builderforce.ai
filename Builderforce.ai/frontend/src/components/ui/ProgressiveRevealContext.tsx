@@ -158,15 +158,16 @@ export function ProgressiveRevealOrchestrator({
     const fresh = state.streams.get(key);
     if (!fresh || fresh.resolved) return;
 
-    if (fresh.timeoutHandle) clearTimeout(fresh.timeoutHandle);
+    cleanupStream(fresh);
 
+    const errBean: StreamBean = { ...fresh, error, timestamp: performance.now(), timeoutHandle: undefined } as StreamBean;
     setState(old => {
       const next = new Map([...old.streams]);
-      next.set(key, { ...fresh, error, timestamp: performance.now() } as StreamBean);
+      next.set(key, errBean);
       return { ...old, streams: next };
     });
 
-    callbacks?.onStreamTimeout?.(state.streams.get(key) as ProgressiveRevealStream);
+    callbacks?.onStreamTimeout?.(errBean as unknown as ProgressiveRevealStream);
     lastStateRef.current = {
       ...lastStateRef.current,
       currentStage: latestStage(state.streams),
