@@ -21,6 +21,12 @@ import { computePeopleInsights } from '../insights/peopleInsights';
 import { computeRdFinancials } from '../insights/rdFinancialsInsights';
 import { errorEvents, executions, llmUsageLog, deploymentEvents, alertEvents } from '../../infrastructure/database/schema';
 import { dailyCountSeries, dailySumSeries, seriesTotal, type MetricPoint } from './dailySeries';
+import {
+  deadlineRiskTier,
+  daysAtRisk,
+  velocityDirection,
+  computeScheduleHealth,
+} from '../schedule/scheduleHealth';
 
 /** Millicents → USD (llm_usage_log.cost_usd_millicents is 1e-5 USD units). */
 const MILLICENTS_PER_USD = 100_000;
