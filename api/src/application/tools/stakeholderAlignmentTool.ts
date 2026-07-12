@@ -1,13 +1,15 @@
+import { QuestionnaireTool, ToolResult, scoreQuestionnaire } from './toolTypes';
+
 export const TOOL_STAKEHOLDER_ALIGNMENT = 'stakeholder-alignment';
 
 /**
  * Score a stakeholder alignment questionnaire following the shared scorer conventions.
  */
 export function scoreStakeholderAlignment(
-  tool: import('./toolTypes').QuestionnaireTool,
+  tool: QuestionnaireTool,
   answers: Record<string, number>
-): import('./toolTypes').ToolResult {
-  return import('./toolTypes').scoreQuestionnaire(tool, answers);
+): ToolResult {
+  return scoreQuestionnaire(tool, answers);
 }
 
 export const stakeholderAlignmentToolDefinition: import('./toolTypes').QuestionnaireTool = {
