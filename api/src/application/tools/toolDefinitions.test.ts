@@ -127,7 +127,7 @@ describe('ai-dev-maturity (quiz)', () => {
 });
 
 describe('questionnaire tools', () => {
-  for (const id of ['cobit-governance', 'delivery-risk', 'agentic-maturity', 'incident-readiness', 'security-posture']) {
+  for (const id of ['cobit-governance', 'delivery-risk', 'agentic-maturity', 'incident-readiness', 'security-posture', 'stakeholder-alignment']) {
     const tool = getTool(id) as QuestionnaireTool;
 
     it(`${id}: all-5 answers score Optimizing with an empty plan`, () => {
