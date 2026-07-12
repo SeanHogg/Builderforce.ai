@@ -15,7 +15,7 @@ import type {
   DigestMetrics,
   WeeklyDigestConfig,
   DistributionMethod,
-} from '@builderforce/shared/types/dashboard';
+} from './definitions';
 
 /**
  * Storage interface for digest persistence and paging
