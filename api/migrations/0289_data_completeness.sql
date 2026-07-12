@@ -312,19 +312,23 @@ BEGIN;
 
 COMMIT;
 
--- Support function: clear stale alerts (should be called by cron)
+-- Support function: clear stale history, notifications, and scores (should be called by cron)
 CREATE OR REPLACE FUNCTION completeness_cron_cleanup(p_days_to_keep INTEGER DEFAULT 90)
-RETURNS void AS $$
+RETURNS void AS $
 BEGIN
   -- Keep history for min 13 months (AC-9): 13 * 30 = 390 days
   IF p_days_to_keep < 390 THEN
     p_days_to_keep := 390;
   END IF;
-  
+
   DELETE FROM completeness_history
   WHERE recorded_at < NOW() - (p_days_to_keep || ' days')::INTERVAL;
-  
+
   DELETE FROM completeness_notifications
   WHERE created_at < NOW() - (p_days_to_keep || ' days')::INTERVAL;
+
+  -- Clean records older than configured retention from scores (deeper cleanup than history)
+  DELETE FROM completeness_scores
+  WHERE ingestion_time < NOW() - (p_days_to_keep || ' days')::INTERVAL;
 END;
-$$ LANGUAGE plpgsql;
+$ LANGUAGE plpgsql;
