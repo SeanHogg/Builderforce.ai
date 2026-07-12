@@ -216,11 +216,16 @@ export class Task {
       >
     >,
   ): Task {
-    // Strip undefined keys to avoid overwriting existing props. Drizzle's SET omits `undefined`
-    // from updates, but without this guard, DTO-only fields would still fault via `Task.update`.
-    // Explicit values (including null) are preserved: a caller masking `parentTaskId: undefined`
-    // should null-out the column, so we keep non-undefined values even if they're `null`.
-    const { updatedAt, ...stripped } = Object.fromEntries(
+    // ROOT-CAUSE FIX (parentTaskId drop): a partial update must only touch the
+    // fields the caller actually sent. TaskService masks an OMITTED field as
+    // `undefined` (vs. an explicit `null`, which means "clear this column").
+    // Spreading `updates` straight onto props would write those `undefined`s over
+    // the stored values — so an update carrying `assignedAgentRef` (or any other
+    // field) but NOT `parentTaskId` used to blow away the existing parentTaskId,
+    // which the repository then persisted as NULL (`plain.parentTaskId ?? null`).
+    // Stripping `undefined` keys here preserves omitted fields while still honoring
+    // an explicit `null` (detach) — for parentTaskId, assignees, and every field.
+    const stripped = Object.fromEntries(
       Object.entries(updates).filter(([, v]) => v !== undefined),
     );
     return new Task({ ...this.props, ...stripped, updatedAt: new Date() });
