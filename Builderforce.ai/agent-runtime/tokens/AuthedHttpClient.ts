@@ -7,7 +7,7 @@
  * - Clear AuthError for double failures instead of silent null degradation
  */
 
-import type { TokenStore, AuthError } from "./TokenStore.js";
+import type { TokenStore, AuthError, toAuthError as toAuthErrorFromTokenStore } from "./TokenStore.js";
 
 export interface RequestOptions extends RequestInit {
   token?: string; // Optional manual token (overrides store)
