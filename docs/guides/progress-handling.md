@@ -31,87 +31,119 @@ See the PRD and API reference for full definition and rationale.
 
 ## Example: Terminal Listener Pattern
 
-Below is a minimal implementation using an in-progress progress-tracker pattern (based on canonical event format). Note that 99% or any other intermediate value is **not** equivalent to `progressPct: 100`.
+Below is a minimal implementation using an in-progress progress-tracker pattern (based on canonical event format). Note that 99% or any other intermediate value is **not** equivalent to `progressPct: 100`. The canonical pattern registers a progress listener that terminates and tears it down when the event delivers `progressPct: 100`.
 
 ```python
 import json
-from collections import defaultdict
 from typing import Callable
 
 StreamPayload = dict[str, object]
 
 class SimpleProgressTracker:
     def __init__(self):
-        # Map resource IDs to a (resourceType, status) tuple
-        self._state: dict[str, tuple[str, str]] = {}
-        # Map resource IDs to their latest progress percentage
-        self._progress_by_res: dict[str, float] = {}
+        self._listener_ended = False
+        self._callbacks: list[Callable[[dict[str, object]], None]] = []
+
+    def add_progress_listener(self, callback: Callable[[dict[str, object]], None]) -> None:
+        """
+        Register a progress callback. The callback receives the full event payload.
+        Precaution: write state-only handling code; do NOT assume idempotence.
+        """
+        self._callbacks.append(callback)
+
+    def _process(self, payload: StreamPayload) -> None:
+        # State-only handling: don't assume the emitter guarantees idempotence.
+        rid = payload["resourceId"]
+        pct = payload.get("progressPct")
+        st = payload.get("status")
+
+        if pct is None:
+            # Progress-value absent: only update status.
+            print(f"STATUS: {rid}={st}")
+        else:
+            # Optional: validate range; emission logic in the platform enforces [0, 100].
+            if pct < 0.0 or pct > 100.0:
+                print(f"WARN: Invalid progressPct={pct} for {rid}")
+            else:
+                print(f"PROGRESS: {rid}={pct}% (status={st})")
 
     def update(self, payload: StreamPayload) -> None:
-        rid = payload["resourceId"]
-        rtype = payload["resourceType"]
-        st = payload["status"]
+        """Main entry point: call _process for all listeners once per event."""
+        for cb in self._callbacks:
+            cb(payload)
+
+        # Canonical pattern on the event: if progressPct is exactly 100, stop polling.
         pct = payload.get("progressPct")
-        if percent is None:
-            # Update status only
-            self._state[rid] = (rtype, st)
-            self._progress_by_res.pop(rid, None)
-        else:
-            assert 0.0 <= percent <= 100.0, f"percent must be 0–100: {rid} {percent}"
-            self._state[rid] = (rtype, st)
-            self._progress_by_res[rid] = percent
-            self._on_progress(pct, rid, st)
+        st = payload.get("status")
+        if isinstance(pct, (int, float)) and pct == 100.0:
+            if st == "completed":
+                self._on_completion()
+            # If status != completed but progressPct is 100, treat it as suspicious.
+            elif st != "completed":
+                print(f"WARN: Received progressPct=100 with status={st} for {payload['resourceId']}")
 
-        # If progressPct is 100 and status is completed, we treat it as terminal.
-        if st == "completed" and isinstance(pct, (int, float)) and pct == 100.0:
-            self._on_completion(rid)
+    def _on_completion(self) -> None:
+        """
+        Terminal cleanup: poller/listener can stop. The platform emits at most one progressPct=100,
+        so this may be called once per resource.
+        """
+        self._listener_ended = True
+        print(f"COMPLETE: Terminal event received. Tear down listeners and stop polling.")
 
-    def _on_progress(self, pct: float, rid: str, status: str) -> None:
-        """
-        Called when a progress update is received.
-        - 99.9 or any intermediate value is NOT terminal; keep listeners active.
-        """
-        print(f"PROGRESS: {rid}={pct}% (status={status})")
-
-    def _on_completion(self, rid: str) -> None:
-        """
-        Called when progressPct is 100 and status is completed.
-        - This is the terminal point; remove listeners and tear down resources.
-        """
-        print(f"COMPLETE: {rid} (progressPct=100). Clean up listeners.")
+    def terminate(self) -> None:
+        self._callbacks.clear()
+        self._listener_ended = False
 
 # Example usage
 import socket
+
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.bind(('127.0.0.1', 9999))
+server.bind(("127.0.0.1", 9999))
 server.listen()
 
 tracker = SimpleProgressTracker()
 
+def progress_handler(payload: StreamPayload) -> None:
+    # Example stateless EventHandler: update tracker without mutating global state.
+    tracker.update(payload)
+
+tracker.add_progress_listener(progress_handler)
+
+print("Listening on :9999 for progress events...")
 while True:
-    (client_sock, addr) = server.accept()
+    client_sock, addr = server.accept()
+    print(f"Connection from {addr}")
     while True:
         data = client_sock.recv(4096)
         if not data:
             break
-        events = data.decode().splitlines()
-        for line in events:
-            if line.strip():
-                payload = json.loads(line)
-                tracker.update(payload)
+        lines = data.decode().splitlines()
+        for line in lines:
+            if not line.strip():
+                continue
+            try:
+                tracker.update(json.loads(line))
+            except Exception as exc:
+                print(f"WARN: Failed to parse event line: {exc}")
     client_sock.close()
+    if tracker._listener_ended:
+        print("Server: polling terminated; exiting.")
+        break
+
+tracker.terminate()
 ```
 
 ## Warning: Intermediate Values Near 100
 
 ```python
-if progress_pct == 100 and status == "completed":
-    # Terminal: clean up listeners, stop polling, etc.
+# Terminal condition requires exact 100:
+if progress_pct == 100.0 and status == "completed":
+    # Cancel polling, close listeners, and clean up state.
     pass
 
 # Do NOT treat 99 or 99.9 as completion:
 if progress_pct in (99, 99.9):
-    # Keep listeners active, continue, check again for 100.
+    # Keep polling active; check again for exact 100.
     pass
 ```
 
