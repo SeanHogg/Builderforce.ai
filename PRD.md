@@ -1,15 +1,17 @@
 > **PRD** — drafted by John Coder ((V2) (Durable)) · task #616
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: MCP Tool — PR/Branch Diff Summary with File-Change Categorization
+# PRD: MCP Tool — PR/Branch Diff Summary by Change Category
 
 ## Problem & Goal
 
 ### Problem
-Agents operating on the MCP tool surface cannot programmatically determine whether a task's associated PR contains real implementation work or only documentation/configuration changes. Without this signal, agents (and the board) cannot distinguish a delivered feature from a doc-only PR, causing tasks to be marked complete when no functional code was shipped. This is the root visibility gap beneath task #615.
+
+Agents operating on the MCP platform cannot programmatically distinguish a PR that delivers working implementation code from one that contains only documentation, configuration, or other non-code artifacts. When an agent evaluates task completion, it must manually enumerate and read individual files from the diff — a fragile, expensive, and unreliable heuristic. This gap caused task #615 to be marked 100% complete based on a doc-only PR.
 
 ### Goal
-Expose a new MCP tool — `repos.pull_request_diff_summary` — that, given a task ID (or PR number / branch name), returns a structured, categorized summary of every file changed in the associated PR or branch diff, with per-category line counts and derived boolean flags, so agents can gate completion logic without manual file inspection.
+
+Expose a first-class MCP tool — `repos.pull_request_diff_summary` — that accepts a task identifier (or PR/branch reference) and returns a structured, categorized summary of every changed file, with line-count metrics and derived boolean signals. Agents and the board UI can consume this signal to gate completion status, enforce review policies, and surface accurate delivery visibility without hand-inspection.
 
 ---
 
@@ -17,177 +19,163 @@ Expose a new MCP tool — `repos.pull_request_diff_summary` — that, given a ta
 
 | Consumer | Usage |
 |---|---|
-| Autonomous agents (e.g., the agent that filed gap #58) | Gate task completion; detect doc-only vs. code PRs |
-| Board / orchestration layer | Surface a "code changed" indicator on task cards |
-| Human reviewers using the MCP surface | Quick diff triage without opening GitHub/GitLab |
-| CI/automation pipelines calling MCP tools | Enforce policy (e.g., block "done" status if `codeChanged === false`) |
+| **Autonomous agents** (primary) | Gate task completion; detect doc-only vs. code PRs automatically |
+| **Orchestrator / board logic** | Flag tasks where `docsOnly === true` despite a "Done" status |
+| **Human reviewers / tech leads** | Quick diff triage during code review without opening GitHub |
+| **CI/policy enforcement hooks** | Assert that a feature task includes at least one `source-code` file change before merge |
 
 ---
 
 ## Scope
 
 ### In Scope
+
 - New MCP tool: `repos.pull_request_diff_summary`
-- Resolution chain: `taskId → PR/branch → diff → categorized file list`
-- File classification into six canonical categories
-- Per-file and per-category line-count aggregates
-- Derived boolean summary flags (`codeChanged`, `docsOnly`, `testsOnly`, `hasTests`)
-- Tool registration in the MCP tool manifest so agents can discover it via standard capability introspection
-- Support for repos hosted on GitHub (MVP); extensible interface for GitLab/Bitbucket
+- Resolution of a `taskId` → PR/branch automatically (agents need not know the PR number)
+- Per-file classification into a fixed category taxonomy
+- Per-category aggregated line-count metrics (additions, deletions, net)
+- Top-level derived boolean signals (`codeChanged`, `docsOnly`, `testsChanged`, `configOnly`)
+- Support for both open and merged PRs; fall back to branch-vs-default-base diff when no PR exists
+- MCP tool-surface documentation so agents discover the tool via capability introspection
 
 ### Out of Scope
-- Modifying existing `executions.task_file_changes` (evaluated and deferred; kept as separate surface)
-- Rendering a visual diff or patch content (line-level diffs)
-- Code quality analysis, coverage deltas, or linting signals
-- Automatic status transitions triggered by this tool (that is task #615's responsibility)
-- Support for GitLab/Bitbucket (post-MVP)
-- Monorepo sub-package attribution
+
+- Semantic analysis of file content (classification is path/extension-based only; see classification rules below)
+- Inline diff rendering or patch content
+- Comment or review thread summarization
+- Triggering any side-effects (read-only tool)
+- Changes to existing `executions.task_file_changes` schema (additive, not mutating)
+- UI surface changes beyond surfacing the signal that already exists in task cards (owned by #615)
 
 ---
 
 ## Functional Requirements
 
-### FR-1 — Tool Signature
+### FR-1 Tool Identity & Invocation
 
-```typescript
-repos.pull_request_diff_summary(input: {
-  taskId?:    string;   // preferred; resolve to PR/branch internally
-  prNumber?:  number;   // fallback if taskId unavailable
-  projectId?: string;   // required when using prNumber; scopes the repo lookup
-  branch?:    string;   // fallback: compare branch HEAD vs. default branch base
-}): DiffSummaryResult
-```
-
-Exactly one of `taskId`, `prNumber`, or `branch` must be provided. When `taskId` is provided, `projectId` is resolved from the task record; it need not be supplied separately.
-
----
-
-### FR-2 — Resolution Chain
-
-1. Accept `taskId` → look up task record → extract linked PR number and repo/project context.
-2. If no PR is linked, fall back to the task's feature branch vs. the repo's default branch.
-3. If `prNumber` is supplied directly, use `projectId` to identify the repo.
-4. If `branch` is supplied, diff that branch against the default branch HEAD.
-5. Return a structured error (`UNRESOLVABLE_REF`) if none of the above yields a valid diff target.
-
----
-
-### FR-3 — File Classification
-
-Every file in the diff must be assigned exactly one category from the following closed set:
-
-| Category | Classification Rules (applied in priority order) |
+| ID | Requirement |
 |---|---|
-| `test` | Path matches `**/test/**`, `**/__tests__/**`, `**/*.test.*`, `**/*.spec.*`, `**/fixtures/**` |
-| `docs` | Extension in `{.md, .mdx, .rst, .txt}` OR path matches `**/docs/**`, `**/documentation/**` |
-| `config` | Extension in `{.json, .yaml, .yml, .toml, .ini, .env*}` OR filename in `{Dockerfile, .dockerignore, Makefile, .gitignore, .eslintrc*, .prettierrc*}` |
-| `migration` | Path matches `**/migrations/**`, `**/migrate/**`; OR filename matches `\d+_*.sql` |
-| `asset` | Extension in `{.png, .jpg, .jpeg, .gif, .svg, .ico, .mp4, .woff, .woff2, .ttf, .eot, .pdf}` |
-| `source` | All remaining files not matched by the above |
+| FR-1.1 | The tool MUST be registered under the namespace `repos` with the name `pull_request_diff_summary`. |
+| FR-1.2 | The tool MUST accept the following mutually-exclusive primary inputs (resolved in priority order): `taskId` (string), `prNumber` + `projectId` (integers), `branchName` + `projectId` (strings). |
+| FR-1.3 | When `taskId` is supplied, the tool MUST resolve the associated PR or branch automatically using the existing task→VCS linkage; it MUST NOT require the caller to supply `prNumber` or `projectId`. |
+| FR-1.4 | The tool MUST be listed in the MCP capability manifest with a human-readable description and parameter schema so agents discover it via `mcp.list_tools()` or equivalent introspection. |
 
-Classification is case-insensitive. Rules are evaluated top-to-bottom; first match wins.
+### FR-2 File Classification
 
----
+| ID | Requirement |
+|---|---|
+| FR-2.1 | Every changed file MUST be assigned exactly one category from the following closed taxonomy: `source-code`, `test`, `docs`, `config`, `migration`, `asset`. |
+| FR-2.2 | Classification MUST be path/extension-based and follow the default rules in the table below. |
+| FR-2.3 | Classification rules MUST be overridable per-repository via an optional `.mcp-diff-categories.yml` config file at the repo root (same pattern as `.gitattributes`). |
+| FR-2.4 | When a file matches multiple rules, the most specific rule (longest path glob match) wins; ties resolve by taxonomy order as listed in FR-2.1 (test > source-code, etc.). |
 
-### FR-4 — Response Shape
+**Default Classification Rules**
 
-```typescript
-interface DiffSummaryResult {
-  meta: {
-    taskId?:      string;
-    prNumber?:    number;
-    branch?:      string;
-    baseBranch:   string;
-    repoFullName: string;       // e.g. "org/repo"
-    resolvedAt:   string;       // ISO-8601
-    totalFilesChanged: number;
-  };
+| Category | Path / Extension Patterns |
+|---|---|
+| `test` | `**/*.test.*`, `**/*.spec.*`, `**/test/**`, `**/tests/**`, `**/__tests__/**`, `**/_test.*` |
+| `docs` | `**/*.md`, `**/*.mdx`, `**/*.rst`, `**/*.txt`, `**/docs/**`, `**/documentation/**`, `LICENSE*`, `CHANGELOG*` |
+| `migration` | `**/migrations/**`, `**/migrate/**`, `**/*.migration.*`, `**/*.sql` |
+| `config` | `**/*.json`, `**/*.yaml`, `**/*.yml`, `**/*.toml`, `**/*.ini`, `**/*.env*`, `**/.*rc`, `**/Makefile`, `**/Dockerfile*`, `**/*.config.*` |
+| `asset` | `**/*.png`, `**/*.jpg`, `**/*.svg`, `**/*.gif`, `**/*.ico`, `**/*.woff*`, `**/*.ttf` |
+| `source-code` | Everything else not matched above |
 
-  summary: {
-    codeChanged:  boolean;      // true if any file in category "source"
-    hasTests:     boolean;      // true if any file in category "test"
-    docsOnly:     boolean;      // true if ALL files are in {"docs"} only
-    testsOnly:    boolean;      // true if ALL files are in {"test"} only
-    categories: {
-      [category in FileCategory]: {
-        fileCount:    number;
-        linesAdded:   number;
-        linesDeleted: number;
-      }
-    };
-  };
+### FR-3 Response Payload
 
-  files: Array<{
-    path:         string;
-    category:     FileCategory;  // "source"|"test"|"docs"|"config"|"migration"|"asset"
-    status:       "added" | "modified" | "deleted" | "renamed";
-    linesAdded:   number;
-    linesDeleted: number;
-    previousPath?: string;      // populated on rename
-  }>;
+The tool MUST return a JSON object conforming to the following structure:
+
+```jsonc
+{
+  // Resolution metadata
+  "taskId": "string | null",
+  "prNumber": "integer | null",
+  "projectId": "integer",
+  "branchName": "string",
+  "baseBranch": "string",
+  "prState": "open | merged | closed | branch-only",
+
+  // Derived boolean signals — top-level for fast agent consumption
+  "codeChanged": "boolean",       // true if any source-code file has additions > 0
+  "testsChanged": "boolean",      // true if any test file changed
+  "docsOnly": "boolean",          // true iff codeChanged === false && at least one docs file changed
+  "configOnly": "boolean",        // true iff only config/asset files changed, no source-code or tests
+
+  // Per-category rollup
+  "summary": {
+    "<category>": {
+      "fileCount": "integer",
+      "additions": "integer",
+      "deletions": "integer",
+      "net": "integer"            // additions - deletions
+    }
+    // one entry per category that has at least one file; absent categories omitted
+  },
+
+  // Totals across all categories
+  "totals": {
+    "fileCount": "integer",
+    "additions": "integer",
+    "deletions": "integer",
+    "net": "integer"
+  },
+
+  // Per-file detail
+  "files": [
+    {
+      "path": "string",
+      "category": "source-code | test | docs | config | migration | asset",
+      "status": "added | modified | deleted | renamed | copied",
+      "additions": "integer",
+      "deletions": "integer",
+      "previousPath": "string | null"   // populated for renamed/copied files only
+    }
+  ]
 }
-
-type FileCategory = "source" | "test" | "docs" | "config" | "migration" | "asset";
 ```
 
----
+### FR-4 Error Handling
 
-### FR-5 — Error Cases
-
-The tool must return structured errors (not unhandled exceptions) for the following conditions:
-
-| Error Code | Condition |
+| ID | Requirement |
 |---|---|
-| `UNRESOLVABLE_REF` | Cannot determine a PR or branch from the supplied inputs |
-| `PR_NOT_FOUND` | `prNumber` supplied but not found in the resolved repo |
-| `TASK_NOT_FOUND` | `taskId` supplied but no such task exists |
-| `NO_LINKED_PR_OR_BRANCH` | Task exists but has no linked PR and no associated branch |
-| `DIFF_UNAVAILABLE` | Repo API returned an error or diff is empty/inaccessible |
-| `REPO_PERMISSION_DENIED` | MCP service lacks read access to the repo |
+| FR-4.1 | If `taskId` cannot be resolved to a PR or branch, the tool MUST return a structured error with code `TASK_NOT_LINKED` and a human-readable message. |
+| FR-4.2 | If the PR/branch does not exist or the agent lacks read permission, return error code `NOT_FOUND` or `FORBIDDEN` respectively. |
+| FR-4.3 | Binary files (images, compiled artifacts) with indeterminate line counts MUST be included in `files[]` with `additions: 0, deletions: 0` and classified normally. |
+| FR-4.4 | The tool MUST NOT throw unhandled exceptions; all error states MUST return the MCP standard error envelope. |
 
-All errors include `code`, `message`, and `hint` fields.
+### FR-5 Performance
 
----
-
-### FR-6 — Tool Discovery
-
-- The tool must be registered in the MCP tool manifest under the `repos` namespace.
-- The tool's schema, parameter descriptions, and return shape must be included in the manifest so agents discover it via standard `tools/list` introspection without reading external documentation.
-- A one-line `description` field must convey the categorization behavior: _"Returns a categorized file-change summary (source/test/docs/config/migration/asset) for a task's PR or branch, with line counts and codeChanged/docsOnly flags."_
-
----
-
-### FR-7 — Performance
-
-- Response must be returned within **5 seconds** for PRs up to 500 files changed.
-- For PRs exceeding 500 files, the tool must still respond (no timeout/error) but may paginate the `files` array internally; the `summary` totals must always reflect the full diff.
+| ID | Requirement |
+|---|---|
+| FR-5.1 | Response MUST be returned within 5 seconds (p95) for PRs with fewer than 500 changed files. |
+| FR-5.2 | For PRs exceeding 500 files, the tool MAY truncate `files[]` at 500 entries (sorted by additions desc) and MUST set a top-level `"truncated": true` flag with `"totalFileCount"` reflecting the true count. |
+| FR-5.3 | Results MUST be cached per `(prNumber, headSha)` tuple with a TTL of 60 seconds to avoid redundant VCS API calls when multiple agents query the same PR. |
 
 ---
 
 ## Acceptance Criteria
 
-| # | Criterion | Verifiable By |
+| # | Criterion | Verified By |
 |---|---|---|
-| AC-1 | `repos.pull_request_diff_summary({ taskId })` returns a valid `DiffSummaryResult` without requiring the caller to know `prNumber` or repo name. | Integration test: supply only `taskId` for a task with a linked PR. |
-| AC-2 | Every file in the response is assigned exactly one category from the closed set; no file is uncategorized or multi-categorized. | Unit test: run classifier against a fixture set of 50 representative filenames covering all six categories and edge cases. |
-| AC-3 | `summary.docsOnly === true` if and only if every file in `files[]` has `category === "docs"`. | Unit test with a docs-only PR fixture and a mixed PR fixture. |
-| AC-4 | `summary.codeChanged === true` if and only if at least one file has `category === "source"`. | Unit test with a source-containing PR and a config-only PR. |
-| AC-5 | `summary.categories` line-count totals equal the sum of `linesAdded`/`linesDeleted` across all `files[]` entries in that category. | Property-based test: assert sum invariant across randomized fixture PRs. |
-| AC-6 | The tool appears in the response to `tools/list` with schema, parameter descriptions, and the required `description` string. | Integration test: call `tools/list`, assert `repos.pull_request_diff_summary` is present with non-empty `description` and input schema. |
-| AC-7 | Supplying an unknown `taskId` returns `TASK_NOT_FOUND` error with `code`, `message`, and `hint` fields; no unhandled exception. | Integration test: supply a fabricated UUID. |
-| AC-8 | A PR with 400 files returns a complete response (all files present, summary correct) within 5 seconds in the CI environment. | Load test fixture: use a real or mocked 400-file diff; assert response time p95 ≤ 5 s. |
-| AC-9 | Renamed files populate `previousPath` and are counted once (not twice) in category totals. | Unit test with a rename-only PR fixture. |
-| AC-10 | Downstream agent consuming the tool can derive `docsOnly` without reading `files[]` — the flag alone is sufficient for a boolean gate. | Code-review check: confirm no agent-side file-list iteration is required to obtain the flag. |
+| AC-1 | Calling `repos.pull_request_diff_summary({ taskId: "<id>" })` returns a valid response without requiring `prNumber` or `projectId` from the caller. | Integration test with a linked task |
+| AC-2 | Response includes `summary` keyed by category, with correct `fileCount`, `additions`, `deletions`, `net` for each category present in the diff. | Unit test against a fixture diff with known file types |
+| AC-3 | `docsOnly` is `true` when every changed file is classified as `docs` or `asset`, and `false` when any `source-code` file is present. | Unit test with doc-only and mixed fixture diffs |
+| AC-4 | `codeChanged` is `true` when at least one `source-code` file has `additions > 0`. Deletions alone do not set `codeChanged`. | Unit test with delete-only source-code diff |
+| AC-5 | The tool appears in `mcp.list_tools()` output with a description, parameter schema, and example call. | Snapshot test of capability manifest |
+| AC-6 | Supplying an unlinked `taskId` returns error code `TASK_NOT_LINKED` with HTTP-equivalent status 422. | Integration test with an unlinked task fixture |
+| AC-7 | A renamed file appears once in `files[]` with `status: "renamed"` and `previousPath` populated, classified by its new path. | Unit test with a rename fixture |
+| AC-8 | A PR with 600 changed files returns `truncated: true`, `totalFileCount: 600`, and exactly 500 entries in `files[]`. | Unit test with a generated 600-file fixture |
+| AC-9 | Response time is under 5 seconds (p95) for a 499-file PR against the staging VCS backend. | Load test in CI |
+| AC-10 | A repository with a `.mcp-diff-categories.yml` override correctly reclassifies files per the custom rules. | Integration test with an override fixture repo |
 
 ---
 
 ## Out of Scope
 
-- Modifying or deprecating `executions.task_file_changes`
-- Line-level patch content or hunk rendering
-- Code quality, complexity, or test-coverage delta signals
-- Automatically changing task status based on diff content (owned by task #615)
-- GitLab, Bitbucket, or self-hosted Git provider support (post-MVP)
-- Monorepo package-boundary attribution (e.g., mapping files to affected packages/services)
-- Binary diff analysis (binary files are classified by extension and counted with `linesAdded: 0, linesDeleted: 0`)
-- Caching or webhook-triggered pre-computation of diff summaries
+- **Patch / hunk content**: The tool returns metadata only; no raw diff text or inline code is returned.
+- **Semantic classification**: File purpose is not inferred from AST, imports, or content — only from path and extension.
+- **Mutations**: The tool is strictly read-only; it triggers no labels, comments, or status checks.
+- **`executions.task_file_changes` schema changes**: That endpoint is not modified; this is a net-new tool.
+- **UI rendering**: Board/card display of the signal is owned by task #615, not this PRD.
+- **Non-Git VCS**: Only Git-backed repositories are in scope for this iteration.
+- **Diff between arbitrary commits**: The tool only resolves via PR or branch-vs-base; freeform SHA-to-SHA diffing is a future extension.
+- **Notification or webhook delivery**: Signal is pull-only; no push/event integration in this iteration.
