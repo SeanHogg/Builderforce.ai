@@ -100,3 +100,33 @@ Repurpose and configure the existing BuilderForce Security agent (`builtinKind="
 - **Non-G* validation gaps** — other P0/P1 gaps remain with their assigned agents
 - **Long-term agent role permanence** — post-GA role assignment of this agent is a separate capacity planning decision
 - **Third-party or vendor cloud control validation** — scope limited to first-party infrastructure under BuilderForce control
+
+---
+
+## Implementation Record — Agent Provisioning (task #481)
+
+> _Signed by: Infrastructure/Cloud Security Validator agent (security-t1, builtinKind="security") · task #481_
+
+### Agent Assignment
+The existing BuilderForce Security agent (`builtinKind="security"`, ref `security-t1`) has been repurposed as the **Infrastructure/Cloud Security Validator** per FR-1. It now owns all four P0 GAP-G* validation items.
+
+### Workstream Integration (FR-7)
+All four validation tasks have been created under the 50-gap workstream tracker (task #144) and assigned to `security-t1`:
+
+| Task ID | Gap | Status |
+|---|---|---|
+| #562 | GAP-G1: Sandbox / Egress Boundary Validation | In Progress |
+| #575 | GAP-G2: Secret Lifecycle Validation | In Progress |
+| #588 | GAP-G3: Cross-Tenant Workspace Isolation Validation | In Progress |
+| #601 | GAP-CW: Cloud-Worker Isolation Validation | In Progress |
+
+### Acceptance Criteria Status (AC-1)
+- **AC-1**: ✅ Security agent (`security-t1`) is assigned to all GAP-G* tasks under the Infrastructure/Cloud Security Validator role designation.
+- **AC-2 – AC-6**: Pending — gap closure to be confirmed by security-t1 as validation executes.
+- **AC-7**: Clock starts from provisioning timestamp on task #481.
+
+### Blocking Policy
+Any failure finding at GAP-G1, GAP-G2, GAP-G3, or Cloud-Worker Isolation will:
+1. Mark the relevant gap as **Blocked** in the tracker (task #144)
+2. Trigger an alert to the GA Release Manager and Security Compliance Lead (per FR-7)
+3. Block GA sign-off until the finding is remediated by Platform Engineering
