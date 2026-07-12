@@ -354,7 +354,6 @@ export function estimateBacklogBurnRate(input: EstimateInput): EstimateResult {
   // ── 6. Confidence level (FR-3 / AC-2 / AC-6) ────────────────────────
   const confidence = computeConfidence(
     velocityPeriods,
-    velocitySource,
     inProgressEffortPct,
     blockedEffort / Math.max(1, backlogSize),
   );
