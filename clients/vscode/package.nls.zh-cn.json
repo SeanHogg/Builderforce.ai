@@ -10,6 +10,7 @@
   "welcome.insights": "登录以查看实时的开发者洞察（令牌消耗、预算、热门模型、每个合并 PR 的成本）。\n[登录](command:builderforce.signIn)",
   "command.openChat": "BuilderForce：打开对话",
   "command.refreshInsights": "BuilderForce：刷新洞察",
+  "command.refreshEvermind": "BuilderForce：刷新 Evermind",
   "command.signIn": "BuilderForce：登录",
   "command.signOut": "BuilderForce：退出登录",
   "command.newSession": "BuilderForce：新建对话",

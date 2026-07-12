@@ -4,6 +4,23 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-11 — "Copy chat transcript" → "Copy chat diagnostics": dump the chat's identity + Evermind wiring state so "Connected yet nothing learns" is never a guess again (brain-embedded 2026.7.30 · VSIX 2026.7.71)
+
+Operator (superadmin) kept hitting the same wall: the Evermind panel shows "Learning · Connected v11" but the chat's learn step said "Contributed … **v0**", LAST LEARNED stayed frozen ~23h, and dispatched agents weren't posting back — with no way to see the ground truth (is the CHAT actually attached to project 11? which tenant? what's the real head? what did the learn gate return?). They asked to turn the "Copy dialogue" button into a **Copy diagnostics** that dumps all of it.
+
+**What shipped.** The VSIX Brain's copy button now copies a **Chat diagnostics** block ahead of the transcript. New shared pure serializer `formatChatDiagnostics` (+ `ChatDiagnosticsData`/`ChatDiagnosticsEvermind`) in `brain-embedded/src/chatDiagnostics.ts` (exported from the package index), fed by data the webview gathers over its bearer fetch in `clients/vscode/webview/src/App.tsx` `copyTranscript` (now async, best-effort per source):
+- **Identity:** chat id/title/visibility, the CHAT's own `projectId` + name (what the learn gate keys on), the panel's SELECTED project (shown when it differs), tenantId + userId (decoded client-side from the tenant JWT `tid`/`sub` claims — `decodeTokenClaims`, display-only).
+- **Evermind (the chat's project):** version, mode, inference on/off, teacher, **Learned** (contributions), **Queued** (pending), **Last learned** — from `GET /api/projects/:id/evermind/contributions`.
+- **Last turn learn gate:** `learned` / reported version / `reason` (from the assistant message's attached `evermindLearn`).
+- **Agents in chat** (`listAgents`) and **linked tickets** (`listTickets`, via the existing `ChatTicketsAdapter`).
+- **Signals section** — computes and NAMES the likely cause: chat not attached to a project (the #1 real cause), chat's project ≠ panel's selected project, unseeded (v0) head, frozen mode, learn-version≠head-version mismatch, zero agents invited. This is what ends the "Contributed v0 / frozen 23h" mystery: it states outright whether the chat feeds the model and why not.
+
+Threaded through `clients/vscode/webview/src/transcript.ts` (new optional `diagnostics` input → renders the block after the Project line). Button/tooltip relabeled "Copy chat diagnostics (identity + Evermind state + transcript)" (host `brainWebview.ts` label + toast). Also fixed a **pre-existing packaging blocker**: the `builderforce.refreshEvermind` command (added earlier) had no `command.refreshEvermind` NLS key — added to all 6 `package.nls*.json` catalogs (en/de/es/fr/zh-cn). Rebuilt brain-embedded (tsup) + webview (vite, diagnostics strings verified in the bundle); packaged **`builderforce-ai-2026.7.71.vsix`**.
+
+Note on the "Contributed v0" itself: the CURRENT gate never returns `learned:true` with `version 0` (it returns `not-seeded`/`not-attached` with `learned:false`), and current brain-ui renders those as an explicit "Not learned — <reason>" skip step — so that screenshot was a pre-2026.7.68 build. On 2026.7.71 the step is truthful; the diagnostics block reveals the actual head/attach state behind a frozen panel.
+
+---
+
 ## ✅ RESOLVED 2026-07-11 — Brain assignment→work→chat handoff + runtime chat-awareness (api 2026.7.82 · brain-embedded 2026.7.29 · frontend 2026.7.57 · VSIX 2026.7.70)
 
 Operator reported (VSIX transcript): the Brain didn't know its project, couldn't see the workforce and invented agent refs, looped/duplicated, and — after assigning dev agents to tickets — the agents never joined the chat, never started, and never reported progress. Fixed across four+one areas:

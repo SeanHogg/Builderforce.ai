@@ -10,6 +10,7 @@
   "welcome.insights": "Inicia sesión para ver análisis en vivo (consumo de tokens, presupuesto, modelo principal, coste por PR fusionada).\n[Iniciar sesión](command:builderforce.signIn)",
   "command.openChat": "BuilderForce: Abrir chat",
   "command.refreshInsights": "BuilderForce: Actualizar análisis",
+  "command.refreshEvermind": "BuilderForce: Actualizar Evermind",
   "command.signIn": "BuilderForce: Iniciar sesión",
   "command.signOut": "BuilderForce: Cerrar sesión",
   "command.newSession": "BuilderForce: Nuevo chat",

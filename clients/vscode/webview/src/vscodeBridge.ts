@@ -204,6 +204,16 @@ export function onIntent(cb: (i: BrainIntent) => void): () => void {
   };
 }
 
+/** Subscribe to host-driven refresh requests (e.g. a sidebar view's title-bar
+ *  refresh action), so a screen can reload its data in place. Returns an unsubscribe. */
+export function onRefresh(cb: () => void): () => void {
+  refreshWaiters.push(cb);
+  return () => {
+    const i = refreshWaiters.indexOf(cb);
+    if (i >= 0) refreshWaiters.splice(i, 1);
+  };
+}
+
 /** Subscribe to token changes (re-issued on refresh / re-auth). */
 export function onTokenChange(cb: () => void): () => void {
   tokenWaiters.push(cb);
@@ -250,6 +260,10 @@ window.addEventListener('message', (e: MessageEvent) => {
   if (m.type === 'intent' && m.intent) {
     if (intentWaiters.length) for (const w of intentWaiters) w(m.intent);
     else pendingIntents.push(m.intent);
+    return;
+  }
+  if (m.type === 'refresh') {
+    for (const w of refreshWaiters.slice()) w();
     return;
   }
   if (m.type === 'response' && m.id) {

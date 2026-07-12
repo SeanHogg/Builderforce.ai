@@ -140,6 +140,11 @@
         "icon": "$(sync)"
       },
       {
+        "command": "builderforce.refreshEvermind",
+        "title": "%command.refreshEvermind%",
+        "icon": "$(sync)"
+      },
+      {
         "command": "builderforce.signIn",
         "title": "%command.signIn%",
         "icon": "$(sign-in)"
@@ -378,6 +383,11 @@
         {
           "command": "builderforce.refreshInsights",
           "when": "view == builderforce.insights",
+          "group": "navigation@1"
+        },
+        {
+          "command": "builderforce.refreshEvermind",
+          "when": "view == builderforce.evermind",
           "group": "navigation@1"
         },
         {

@@ -10,6 +10,7 @@
   "welcome.insights": "Melde dich an, um Live-Einblicke zu sehen (Token-Verbrauch, Budget, Top-Modell, Kosten pro gemergtem PR).\n[Anmelden](command:builderforce.signIn)",
   "command.openChat": "BuilderForce: Chat öffnen",
   "command.refreshInsights": "BuilderForce: Einblicke aktualisieren",
+  "command.refreshEvermind": "BuilderForce: Evermind aktualisieren",
   "command.signIn": "BuilderForce: Anmelden",
   "command.signOut": "BuilderForce: Abmelden",
   "command.newSession": "BuilderForce: Neuer Chat",

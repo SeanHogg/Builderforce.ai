@@ -87,7 +87,7 @@ export interface ActiveProject {
  * (review PRs / fix errors / open PR), a new chat, and the `@builderforce`
  * participant. Returns undefined (no directive) when no project is selected.
  */
-export function activeProjectDirective(project?: ActiveProject): string | undefined {
+export function activeProjectDirective(project?: ActiveProject | null): string | undefined {
   if (!project) return undefined;
   return (
     `The current project is "${project.name}" (projectId ${project.id}). ` +

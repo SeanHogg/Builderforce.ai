@@ -10,6 +10,7 @@
   "welcome.insights": "Connectez-vous pour voir des analyses en direct (consommation de jetons, budget, modèle principal, coût par PR fusionnée).\n[Se connecter](command:builderforce.signIn)",
   "command.openChat": "BuilderForce : Ouvrir la conversation",
   "command.refreshInsights": "BuilderForce : Actualiser les analyses",
+  "command.refreshEvermind": "BuilderForce : Actualiser Evermind",
   "command.signIn": "BuilderForce : Se connecter",
   "command.signOut": "BuilderForce : Se déconnecter",
   "command.newSession": "BuilderForce : Nouvelle conversation",

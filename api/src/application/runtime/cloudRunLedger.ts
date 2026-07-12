@@ -18,10 +18,12 @@
 import { and, eq, gte, isNotNull, sql } from 'drizzle-orm';
 import { llmUsageLog, tenants } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { resolveCloudRunsMonthly } from '../../domain/tenant/PlanLimits';
 import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { utcMonthStart } from '../llm/tokenUsage';
+import { tenantHasSuperadminMember } from '../llm/tenantTokenAvailability';
 
 /** Only cloud-surface usage rows that carry an execution id count as a run. */
 const cloudRunRow = and(eq(llmUsageLog.surface, 'cloud'), isNotNull(llmUsageLog.executionId));
@@ -63,10 +65,15 @@ export type CloudRunCapResult =
 /**
  * Gate a NEW cloud-agent run against the tenant's monthly allowance. Self-contained
  * (resolves plan + limit + month-to-date count from the tenantId). Unlimited plans
- * (and superadmin-unlimited tenants) always pass. Fails OPEN on a query error — a
- * metering hiccup must not block a legitimate run.
+ * always pass; so does a tenant OWNED/operated by a superadmin — that "superadmin ⇒
+ * unlimited" rule is NOT re-implemented here: it reuses the SAME primitive the token
+ * gate uses ({@link tenantHasSuperadminMember}), so the operator's bypass is defined
+ * in exactly one place and covers both the token cap and this cloud-run cap. The
+ * superadmin lookup runs ONLY for an already-capped tenant, so unlimited tenants pay
+ * nothing; pass `env` to serve it through the read-through cache. Fails OPEN on a
+ * query error — a metering hiccup must not block a legitimate run.
  */
-export async function enforceCloudRunCap(db: Db, tenantId: number): Promise<CloudRunCapResult> {
+export async function enforceCloudRunCap(db: Db, tenantId: number, env?: Env): Promise<CloudRunCapResult> {
   try {
     const [tenantRow] = await db
       .select({
@@ -88,7 +95,11 @@ export async function enforceCloudRunCap(db: Db, tenantId: number): Promise<Clou
       effectivePlan,
       tokenDailyLimitOverride: tenantRow?.tokenDailyLimitOverride ?? null,
     });
-    if (limit < 0) return { allowed: true }; // unlimited
+    if (limit < 0) return { allowed: true }; // plan-unlimited (Teams / -1 override)
+
+    // A superadmin OPERATOR is unlimited everywhere — same bypass, same source of
+    // truth as the token gate. Only consulted once the plan already caps the tenant.
+    if (await tenantHasSuperadminMember(db, tenantId, env)) return { allowed: true };
 
     const used = await sumTenantCloudRuns(db, tenantId, utcMonthStart());
     if (used >= limit) return { allowed: false, effectivePlan, used, limit };

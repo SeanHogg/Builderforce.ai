@@ -10,6 +10,7 @@
   "welcome.insights": "Sign in to see live builder-level insights (token spend, budget, top model, cost per merged PR).\n[Sign In](command:builderforce.signIn)",
   "command.openChat": "BuilderForce: Open Chat",
   "command.refreshInsights": "BuilderForce: Refresh Insights",
+  "command.refreshEvermind": "BuilderForce: Refresh Evermind",
   "command.signIn": "BuilderForce: Sign In",
   "command.signOut": "BuilderForce: Sign Out",
   "command.newSession": "BuilderForce: New Chat",

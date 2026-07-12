@@ -243,6 +243,10 @@ function QuestionCard({
 
 // src/timelineModel.ts
 import { isStepMessage } from "@seanhogg/builderforce-brain-embedded";
+var LEARN_SKIP_REASONS = ["not-attached", "not-seeded", "frozen"];
+function isLearnSkipReason(v) {
+  return typeof v === "string" && LEARN_SKIP_REASONS.includes(v);
+}
 var ORDER = {
   user: 0,
   recall: 1,
@@ -296,7 +300,8 @@ function stepNode(step, ts, key) {
     }
     case "learn": {
       const r = step.result ?? {};
-      return { key, kind: "learn", ts, order: ORDER.learn, version: typeof r.version === "number" ? r.version : 0 };
+      const skipped = r.skipped && isLearnSkipReason(r.reason) ? r.reason : void 0;
+      return { key, kind: "learn", ts, order: ORDER.learn, version: typeof r.version === "number" ? r.version : 0, ...skipped ? { skipped } : {} };
     }
     case "reconcile": {
       const r = step.result ?? {};
@@ -424,6 +429,13 @@ var DEFAULT_TIMELINE_LABELS = {
   recallHint: "This project's self-learning Evermind recalled these prior learnings and grounded the answer on them.",
   learnTitle: "Contributed this turn to Evermind v{version}",
   learnHint: "This turn was contributed back to the project Evermind \u2014 it will be merged into the learned model.",
+  learnSkippedTitle: "Not learned this turn \u2014 {reason}",
+  learnSkippedHint: "This turn wasn't contributed to the project Evermind. \u201CLearning \u2014 Connected\u201D reflects the selected project's model, not whether this chat feeds it.",
+  learnSkipReason: {
+    "not-attached": "this chat isn\u2019t attached to a project",
+    "not-seeded": "this project has no Evermind model yet",
+    frozen: "this project\u2019s Evermind is frozen (read-only)"
+  },
   reconcileTitle: "Reconciled {count} learned memories in Evermind v{version}",
   reconcileHint: "The answer restated these recalled learnings, so it updates them (write-through cognition)."
 };
@@ -697,10 +709,11 @@ function BrainTimelineInner({
           ] }, node.key);
         }
         if (node.kind === "learn") {
-          const title = labels.learnTitle.replace("{version}", String(node.version));
+          const title = node.skipped ? labels.learnSkippedTitle.replace("{reason}", labels.learnSkipReason[node.skipped]) : labels.learnTitle.replace("{version}", String(node.version));
+          const hint = node.skipped ? labels.learnSkippedHint : labels.learnHint;
           return /* @__PURE__ */ jsxs4("li", { className: "bf-tl__item bf-tl__item--memory", children: [
             /* @__PURE__ */ jsx4("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx4("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("learn") }) }),
-            /* @__PURE__ */ jsx4("div", { className: "bf-tl__body", children: /* @__PURE__ */ jsx4("span", { className: "bf-tl__memory-line", title: labels.learnHint, children: title }) })
+            /* @__PURE__ */ jsx4("div", { className: "bf-tl__body", children: /* @__PURE__ */ jsx4("span", { className: "bf-tl__memory-line", title: hint, children: title }) })
           ] }, node.key);
         }
         if (node.kind === "reconcile") {
@@ -1536,7 +1549,7 @@ var POP = {
 };
 
 // src/evermind/EvermindConsole.tsx
-import { useCallback as useCallback3, useEffect as useEffect5, useMemo as useMemo7, useState as useState7 } from "react";
+import { useCallback as useCallback3, useEffect as useEffect5, useMemo as useMemo7, useRef as useRef2, useState as useState7 } from "react";
 
 // src/evermind/types.ts
 function defaultFormatWhen(atMs) {
@@ -1633,7 +1646,7 @@ var C = {
   accent: "var(--bf-ev-accent, var(--coral-bright, var(--accent, var(--bf-accent, #ff6b5e))))",
   danger: "var(--bf-ev-danger, var(--danger-text, #d9534f))"
 };
-function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName, showRecent = true, onValidate }) {
+function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName, showRecent = true, showHeaderRefresh = true, refreshSignal, onValidate }) {
   const t = useMemo7(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
   const [data, setData] = useState7(null);
   const [seedModels, setSeedModels] = useState7([]);
@@ -1689,6 +1702,12 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     }, refreshMs);
     return () => clearInterval(id);
   }, [refreshMs, busy, reload]);
+  const lastRefreshSignal = useRef2(refreshSignal);
+  useEffect5(() => {
+    if (refreshSignal == null || refreshSignal === lastRefreshSignal.current) return;
+    lastRefreshSignal.current = refreshSignal;
+    void reload();
+  }, [refreshSignal, reload]);
   const runValidate = useCallback3(async (prompt) => {
     const task = prompt.trim();
     if (task.length < 3) return;
@@ -1736,7 +1755,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     ] }),
     !loadFailed && /* @__PURE__ */ jsx9("span", { style: pill(seeded), children: seeded ? t.statusSeeded(data?.version ?? 0) : t.statusUnseeded }),
     !loadFailed && seeded && /* @__PURE__ */ jsx9(RegressionChip, { t, evalPoint: data?.eval ?? null }),
-    /* @__PURE__ */ jsx9("button", { type: "button", onClick: () => void reload(), disabled: busy, style: ghostBtn, title: t.refresh, "aria-label": t.refresh, children: "\u21BB" })
+    showHeaderRefresh && /* @__PURE__ */ jsx9("button", { type: "button", onClick: () => void reload(), disabled: busy, style: ghostBtn, title: t.refresh, "aria-label": t.refresh, children: "\u21BB" })
   ] });
   if (loadFailed) {
     return /* @__PURE__ */ jsxs9(Section, { "aria-label": t.title, children: [

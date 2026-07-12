@@ -607,7 +607,7 @@ async function startDispatchedExecution(
     // autofix), so gating here covers them all. Over the cap → fail fast with an
     // upgrade hint rather than start a run we'd have to run for free. Superadmin /
     // unlimited plans pass; a metering error fails OPEN (never blocks a real run).
-    const cloudGate = await enforceCloudRunCap(db, tenantId);
+    const cloudGate = await enforceCloudRunCap(db, tenantId, env);
     if (!cloudGate.allowed) {
       const msg = `Monthly cloud-run allowance reached (${cloudGate.used}/${cloudGate.limit} on the ${cloudGate.effectivePlan} plan). Upgrade at builderforce.ai/pricing to run more cloud agents — on-prem and VS Code runs stay unlimited.`;
       await recordCloudToolEvent(db, {
