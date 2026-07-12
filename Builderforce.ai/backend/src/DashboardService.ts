@@ -15,10 +15,10 @@ import type {
   MetricsSummary,
   ProjectMetrics,
   DashboardFilters,
-  PriorityMetrics,
-  SignOffMetrics,
-  ConflictMetrics,
-  EscalationMetrics,
+  PriorityMetricsType,
+  SignOffMetricsType,
+  ConflictMetricsType,
+  EscalationMetricsType,
 } from './definitions';
 
 /**
