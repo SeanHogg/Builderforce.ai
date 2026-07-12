@@ -23,6 +23,11 @@ export interface ProjectEvermindHead {
   /** ISO timestamp of the last merged contribution, or null if never learned. */
   lastLearnedAt: string | null;
   seeded: boolean;
+  /** ISO timestamp the head was AUTO-QUARANTINED (inference force-disabled after a
+   *  streak of incoherent replies), or null when healthy. */
+  quarantinedAt?: string | null;
+  /** Human-readable reason for the quarantine, shown to the operator. */
+  quarantineReason?: string | null;
 }
 
 /** One inspectable contribution the coordinator merged into a version. */
@@ -266,17 +271,28 @@ export async function seedProjectEvermindFromModel(
   );
 }
 
-/** Toggle whether the project's agent runs EXECUTE on its Evermind. */
+/**
+ * Toggle whether the project's agent runs EXECUTE on its Evermind.
+ *
+ * ENABLING is benchmark-gated server-side: a head that fails the coherence probe is
+ * REFUSED with a 422 (it can't be promoted to serve while it produces gibberish).
+ * 422 is listed as an expected error so it surfaces as a normal thrown Error (the
+ * message is the server's plain-language reason) for the caller to render inline —
+ * NOT a global system-fault toast / support prompt. `force` bypasses the probe
+ * (deliberate operator override).
+ */
 export async function setProjectEvermindInference(
   projectId: number,
   enabled: boolean,
+  opts?: { force?: boolean },
 ): Promise<{ ok: boolean; inferenceEnabled: boolean }> {
   return apiRequest<{ ok: boolean; inferenceEnabled: boolean }>(
     `/api/projects/${projectId}/evermind/inference`,
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled }),
+      body: JSON.stringify({ enabled, ...(opts?.force ? { force: true } : {}) }),
+      expectedErrors: [422],
     },
   );
 }
