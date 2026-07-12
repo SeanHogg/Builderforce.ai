@@ -7596,7 +7596,7 @@
   },
   "providerKeys": {
     "title": "Bring your own models",
-    "subtitle": "Connect your own Anthropic, OpenAI, or Google account. Connected providers power your agents on your own account and drive the model choices in every picker — usage on your machine (on-prem & VS Code) is free; cloud-agent usage is still billed. Credentials are stored encrypted and never shown again.",
+    "subtitle": "Connect your own Anthropic, OpenAI, Google, Kimi, Qwen, MiniMax, or Meta account. Connected providers power your agents on your own account and drive the model choices in every picker — usage on your machine (on-prem & VS Code) is free; cloud-agent usage is still billed. Credentials are stored encrypted and never shown again.",
     "loading": "Loading…",
     "errorPrefix": "Error: {message}",
     "status": {
