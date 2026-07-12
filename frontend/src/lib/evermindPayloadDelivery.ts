@@ -224,7 +224,7 @@ export function boardModelFromPayload(payload: EvermindPayloadSnapshot): Evermin
   const nextEval = d.eval
     ? { version: d.eval.version, delta: d.eval.delta }
     : null;
-  return {
+  const boardModel: EvermindBoardPayloadModel = {
     version: d.version,
     seeded: d.seeded,
     mode: d.mode,
@@ -239,6 +239,16 @@ export function boardModelFromPayload(payload: EvermindPayloadSnapshot): Evermin
     limbic: d.affect?.state ?? {},
     armed: !!d.eval,
   };
+
+  // FR-3.3: Additional human-friendly labels are attached in PayloadLabels. logged for FR-6.2
+  console.debug('[EvermindPayloadPanel Model]', {
+    sdkVersion: 'builderforce/loading-facade',
+    payloadVersion: boardModel.version,
+    loadedAt: Date.now(),
+    availableLabels: Object.keys(PayloadLabels),
+  });
+
+  return boardModel;
 }
 
 /** Human-readable labels for payload fields (FR-3.3). */
