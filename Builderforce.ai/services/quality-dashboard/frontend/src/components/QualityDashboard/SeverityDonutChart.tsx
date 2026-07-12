@@ -4,8 +4,13 @@
  */
 
 import React from "react";
-import { TrendData, SeverityBreakdown } from "../../../types/quality";
-import * as Recharts from "recharts";
+import { SeverityBreakdown } from "../../../types/quality";
+import RechartsDonutChart from "recharts/esm/charts/DonutChart";
+import RechartsPie from "recharts/esm/charts/Pie";
+import RechartsCell from "recharts/esm/components/Cell";
+import RechartsLegend from "recharts/esm/components/Legend";
+import RechartsResponsiveContainer from "recharts/esm/components/ResponsiveContainer";
+import RechartsTooltip from "recharts/esm/components/Tooltip";
 import "./SeverityDonutChart.css";
 
 interface SeverityDonutChartProps {
