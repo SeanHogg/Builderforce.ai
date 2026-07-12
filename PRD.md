@@ -1,55 +1,98 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #266
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# PRD: AI-Assisted Form & Workflow Completion Agent
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+Users filling out complex forms, questionnaires, or multi-step workflows frequently encounter friction: ambiguous questions, missing context, decision fatigue when choosing between options, and incomplete submissions due to uncertainty. This results in high abandonment rates, low data quality, and increased support burden.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+**Goal:** Build an AI-assisted agent that operates inline within forms and workflows to answer user questions in context, fill data gaps intelligently, and surface relevant options — reducing abandonment, improving submission quality, and accelerating task completion.
 
-## Target users / ICP roles
+---
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## Target Users / ICP Roles
+
+| Role | Description |
+|---|---|
+| **End Users** | Individuals completing forms or workflows (applicants, customers, employees, patients) who lack domain expertise or context to answer every field confidently |
+| **Power Users** | Professionals (operations managers, analysts, coordinators) completing high-volume or complex workflows who benefit from AI-accelerated drafts |
+| **Form/Workflow Owners** | Product managers, ops leads, or admins who configure forms and want higher completion rates and cleaner data |
+| **Developers / Integrators** | Engineering teams embedding the assistant into existing products via SDK or API |
+
+---
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This document covers the **v1.0 MVP** of the AI-assisted workflow agent, delivered as an embeddable web component and REST/WebSocket API.
+
+---
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### FR-1: Contextual Question Answering
+- The agent must answer user questions about any field, term, or instruction within the active form/workflow.
+- Answers must be grounded in: field-level metadata, form owner–provided documentation, and general knowledge (in that priority order).
+- The agent must cite its source (e.g., "Based on the instructions provided by [Form Owner]…") when using owner-supplied content.
+
+### FR-2: Gap Detection & Smart Fill
+- The agent must detect fields that are empty, incomplete, or contain low-confidence values.
+- For detected gaps, the agent must generate suggested values with an explanation of its reasoning.
+- Suggested values must be presented as **editable drafts** — never auto-committed without explicit user confirmation.
+- The agent must respect field constraints (type, format, min/max, enumerated options) when generating suggestions.
+
+### FR-3: Option Suggestion & Comparison
+- When a field presents multiple options (dropdowns, radio buttons, multi-select), the agent must explain each option in plain language on request.
+- The agent must recommend the most relevant option(s) based on prior answers in the same form session and any user-provided context.
+- Comparisons must be presented in a scannable format (table or bulleted summary).
+
+### FR-4: Conversational Interface
+- Users must be able to ask free-text questions at any point in the workflow.
+- The agent must maintain session context across all fields within the same form session.
+- The agent must support follow-up clarification turns (multi-turn dialogue).
+- The interface must indicate when the agent is uncertain and suggest the user consult an authoritative source.
+
+### FR-5: Form Owner Configuration
+- Form owners must be able to upload reference documents (PDF, Markdown, plain text) that the agent uses to ground its answers.
+- Form owners must be able to define field-level hints and prohibited suggestions per field.
+- Form owners must be able to enable or disable the agent per field or per form.
+
+### FR-6: Transparency & Auditability
+- Every agent suggestion and answer must be logged with a timestamp, the triggering user action, and the model's confidence signal.
+- Logs must be accessible to form owners via dashboard and API export.
+- Users must be able to thumbs-up/thumbs-down any agent response, with feedback stored in logs.
+
+### FR-7: Embedding & Integration
+- The agent must be embeddable via a JavaScript web component (`<ai-form-assistant>`) with a configuration attribute accepting a form schema and API key.
+- A REST API must support server-side rendering contexts.
+- The agent must emit DOM events (`suggestion-accepted`, `suggestion-rejected`, `question-asked`) for host application integration.
+
+---
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+| # | Criterion | Verification Method |
+|---|---|---|
+| AC-1 | Agent answers a field-level question with a relevant, grounded response in ≤ 3 seconds (p95) under standard load | Load test + manual QA |
+| AC-2 | Gap-fill suggestions match field type and constraints in 100% of cases | Automated test suite against schema-validated forms |
+| AC-3 | No suggestion is committed to a field without explicit user confirmation action | Manual QA + automated E2E test |
+| AC-4 | Agent correctly prioritizes form owner documentation over general knowledge when owner docs are present | QA with seeded knowledge base containing deliberate overrides |
+| AC-5 | Multi-turn conversation maintains field context across minimum 20 prior turns within a session | Automated conversation harness |
+| AC-6 | Form owner can upload a reference document and see it reflected in agent answers within 5 minutes | Manual QA |
+| AC-7 | All agent interactions are logged and retrievable via API within 60 seconds of occurrence | Integration test |
+| AC-8 | Web component renders and functions correctly in Chrome, Firefox, Safari, and Edge (latest 2 versions) | Cross-browser automated test suite |
+| AC-9 | Agent surfaces an uncertainty disclaimer when confidence signal falls below defined threshold | Unit test on confidence threshold logic |
+| AC-10 | Form abandonment rate in A/B test with agent enabled decreases by ≥ 15% vs. control | A/B test with minimum 1,000 sessions per arm |
 
-## Out of scope
+---
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## Out of Scope
+
+- **Autonomous form submission:** The agent will not submit forms on behalf of users under any condition in v1.0.
+- **Voice / multimodal input:** Text-only interface in v1.0; voice and image input deferred to v2.0.
+- **Native mobile SDKs:** iOS and Android native SDKs are deferred; web component covers mobile web.
+- **Workflow orchestration:** The agent does not control navigation between workflow steps; it responds to the host application's step management.
+- **PII redaction / masking:** Handling of sensitive field data (SSN, payment info) in agent context is deferred pending security review; such fields must be excluded from agent scope by form owners in v1.0.
+- **Multilingual support beyond English:** Localization architecture will be designed but non-English language models and UI strings are deferred post-MVP.
+- **Analytics dashboard UI:** Log data is available via API; a first-party dashboard UI is deferred to v1.1.
+- **Fine-tuning on customer data:** Custom model fine-tuning per form owner is out of scope; retrieval-augmented generation (RAG) over owner documents is the supported personalization mechanism.
