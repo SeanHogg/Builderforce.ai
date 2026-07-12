@@ -160,13 +160,13 @@ describe('completeTaskOnMerge', () => {
     });
 
     it('FR-1.3 & FR-1.4: completeTaskOnMerge returns void (no deliveredArtifacts payload in this codebase)', async () => {
-      const { db } = makeFakeDb(rows);
+      const { db, updateSets } = makeFakeDb(rows);
       const result = await completeTaskOnMerge(env, db as never, { tenantId: 5, taskId: 100 });
       // This implementation writes changes to the DB; it does not return a result payload.
       expect(result).toBeUndefined();
       // The status update is still issued (the real work happens).
-      const statusUpdate = (db as any).updateSets?.find(
-        (u: any) => u.table === tasks && (u.setPayload as any)?.status === TaskStatus.DONE,
+      const statusUpdate = updateSets.find(
+        (u) => u.table === tasks && (u.setPayload as any)?.status === TaskStatus.DONE,
       );
       expect(statusUpdate).toBeDefined();
     });
