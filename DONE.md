@@ -4,6 +4,16 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-12 — Evermind served gibberish: coherence gate + benchmark-gated promotion + auto-quarantine (api · mig 0339)
+
+An inference-enabled but under-trained project Evermind head (project #30 "v100") was answering Brain chat ("status?") with fluent-looking garbage — broken UTF-8 (`�` from byte-level BPE), degenerate repetition (`commit … commit … commit`), and near-words — because the adopt-Evermind gate keyed on **length only** (≥20 chars). A separate BuilderForce agent had misdiagnosed it as a "substitution cipher"; it is under-training/mode-collapse of the tiny SSM, not an encoding bug (intact words like `commit`/`the`/`ticket` survive while neighbours scramble; surrounding UI is clean). Fixed as a vertical slice, operator direction = "keep Evermind as a responder, but only when it's actually good + self-disable when it degrades":
+
+- **Serve-time coherence gate.** New zero-dep, language-agnostic `looksLikeCoherentText` (`api/src/application/llm/textCoherence.ts`, re-exported from `projectMemory` for DRY) — rejects replacement chars, adjacent runaway repetition, and dominant-token collapse; passes normal English, Spanish (`y`/`o`), and CJK. Applied at BOTH adoption sites (`resolveMemoryAnswer` + `BrainService` agent-reply) and the Q&A cache writer, so a garbled reply is treated as a memory MISS and falls through to a real LLM (and is never cached).
+- **Benchmark-gated promotion.** `setProjectEvermindInference(enabled=true)` is now refused unless the head passes a coherence probe (`assessEvermindCoherence` in `evermindRuntime.ts` — generates from neutral prompts, majority must be coherent). The `/evermind/inference` route wires the R2-backed probe and returns a **422** with the probe samples on refusal (`force:true` overrides). Closes the hole at the source: a degraded head can never be marked inference-enabled.
+- **Auto-quarantine.** `recordEvermindServeOutcome` (mig 0339 adds `serve_failure_streak`/`quarantined_at`/`quarantine_reason` to `project_evermind`): a coherent serve resets the streak (write-free on the happy path); `QUARANTINE_FAILURE_STREAK` (3) consecutive incoherent serves force-disable `inference_enabled` with a reason. Wired into both serve paths; head payload + web client (`quarantinedAt`/`quarantineReason`) carry it.
+
+Tests: `projectMemory.test.ts` (garbage samples rejected, non-English preserved, never-cache-garbage) + `projectEvermind.test.ts` (probe refuses/passes, quarantine at threshold, streak reset). `tsgo` clean (api + frontend), `check:schema` + `check:migrations` green. Open follow-ups (in-console reason/badge in the shared `brain-ui` package; retrain #30; optional hard-pin gate) → ROADMAP.
+
 ## ✅ RESOLVED 2026-07-12 — Reliability: Incidents + Monitoring consolidated into ONE destination; incidents run custom workflows; workflows triggerable by monitor/incident events (api 2026.7.88 · frontend 2026.7.63 · mig 0337)
 
 Three operator asks delivered as one vertical slice:
