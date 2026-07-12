@@ -11,7 +11,7 @@ import {
 } from '../../domain/shared/types';
 import { NotFoundError, ForbiddenError } from '../../domain/shared/errors';
 import { cloudOrphanReason, cloudSilenceCeilingMs, HOST_ORPHAN_REASON } from './orphanReasons';
-import { parseExecutor } from './cloudDispatch';
+import { parseExecutor, parseActAsRole } from './cloudDispatch';
 import type { RunMilestonePhase } from '../brain/ChatTicketService';
 
 export interface SubmitTaskDto {
@@ -43,19 +43,6 @@ function parseLaneKey(payload: string | null): string | undefined {
   }
 }
 
-/** Recover the ROLE a dispatch ran AS from its payload — the reviewer round-trip
- *  stamps `reviewRole`; a role-attributed producer dispatch stamps `actAsRole`.
- *  Drives manifest attribution at finalize (which role participated). */
-function parseActAsRole(payload: string | null): string | undefined {
-  if (!payload) return undefined;
-  try {
-    const obj = JSON.parse(payload) as { actAsRole?: unknown; reviewRole?: unknown };
-    const role = typeof obj.actAsRole === 'string' ? obj.actAsRole : typeof obj.reviewRole === 'string' ? obj.reviewRole : undefined;
-    return role && role.trim() ? role.trim() : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 /**
  * RuntimeService — the execution engine.

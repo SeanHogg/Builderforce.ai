@@ -21,11 +21,13 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
 import {
   prodIncidents,
+  prodIncidentImplicatedTasks,
   tasks as tasksTable,
   incidentEvents,
   brainChats,
   projects,
 } from '../../infrastructure/database/schema';
+import { TicketParticipantsService, type AccountabilityReport } from '../kanban/ticketParticipants';
 import { TaskService } from '../task/TaskService';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
@@ -517,5 +519,44 @@ export class IncidentService {
       .orderBy(desc(incidentEvents.createdAt))
       .limit(200);
     return { incident, timeline };
+  }
+
+  /** Link a DELIVERY ticket implicated in this incident (PRD §5.10) — the change whose
+   *  ship caused the regression, so RCA can pull its Accountability Report. Idempotent. */
+  async linkImplicatedTask(tenantId: number, incidentId: string, args: { taskId: number; relation?: string; note?: string | null; createdBy?: string | null }): Promise<void> {
+    await this.db
+      .insert(prodIncidentImplicatedTasks)
+      .values({ tenantId, incidentId, taskId: args.taskId, relation: args.relation ?? 'implicated', note: args.note ?? null, createdBy: args.createdBy ?? null })
+      .onConflictDoUpdate({
+        target: [prodIncidentImplicatedTasks.incidentId, prodIncidentImplicatedTasks.taskId],
+        set: { relation: args.relation ?? 'implicated', note: args.note ?? null },
+      });
+  }
+
+  async unlinkImplicatedTask(tenantId: number, incidentId: string, taskId: number): Promise<void> {
+    await this.db.delete(prodIncidentImplicatedTasks).where(and(
+      eq(prodIncidentImplicatedTasks.tenantId, tenantId),
+      eq(prodIncidentImplicatedTasks.incidentId, incidentId),
+      eq(prodIncidentImplicatedTasks.taskId, taskId),
+    ));
+  }
+
+  /**
+   * The implicated delivery tickets for an incident, EACH with its Accountability
+   * Report — the RCA's concrete "was the process followed?" answer: which roles signed
+   * off, with what evidence, and where the process was skipped/waived. Feeds the
+   * postmortem view and process-improvement aggregation.
+   */
+  async listImplicatedTasks(env: Env, tenantId: number, incidentId: string): Promise<Array<{ taskId: number; title: string; status: string; relation: string; note: string | null; accountability: AccountabilityReport }>> {
+    const rows = await this.db
+      .select({ taskId: prodIncidentImplicatedTasks.taskId, relation: prodIncidentImplicatedTasks.relation, note: prodIncidentImplicatedTasks.note, title: tasksTable.title, status: tasksTable.status })
+      .from(prodIncidentImplicatedTasks)
+      .innerJoin(tasksTable, eq(tasksTable.id, prodIncidentImplicatedTasks.taskId))
+      .where(and(eq(prodIncidentImplicatedTasks.tenantId, tenantId), eq(prodIncidentImplicatedTasks.incidentId, incidentId)));
+    const participants = new TicketParticipantsService(this.db);
+    return Promise.all(rows.map(async (r) => ({
+      taskId: r.taskId, title: r.title, status: r.status, relation: r.relation, note: r.note,
+      accountability: await participants.getAccountability(env, tenantId, r.taskId),
+    })));
   }
 }

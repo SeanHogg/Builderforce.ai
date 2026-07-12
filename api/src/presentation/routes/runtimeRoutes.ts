@@ -10,7 +10,7 @@ import { and, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import {
   resolveCloudSurface, chooseCloudExecutor, probeContainerHealth, cloudAgentTypeLabel,
-  isTerminalExecutionStatus, parseCloudAgentRef, parseRepoId, buildFollowUpPayload, withDefaultModel, withExecutor,
+  isTerminalExecutionStatus, parseCloudAgentRef, parseActAsRole, parseRepoId, buildFollowUpPayload, withDefaultModel, withExecutor,
 } from '../../application/runtime/cloudDispatch';
 import { mintContainerRunToken, verifyContainerRunToken } from '../../application/runtime/containerRunToken';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
@@ -282,6 +282,9 @@ async function evaluateExecutionApprovalGate(
       // (as the same cloud agent + model + repo pin) — see parseApprovalReplay.
       payload: submitContext?.payload ?? null,
       agentHostId: task.assignedAgentHostId ?? requestedAgentHostId,
+      // When this run is role-attributed (a reviewer/producer dispatch), record the
+      // role so a human APPROVAL of the gate records that role's sign-off (§5.8 bridge).
+      roleKey: parseActAsRole(submitContext?.payload ?? null) ?? null,
     }),
     createdAt: now,
     updatedAt: now,

@@ -290,7 +290,8 @@
       "myWorkspace": "我的工作台",
       "marketplace": "市场",
       "incidents": "事件",
-      "monitoring": "监控"
+      "monitoring": "监控",
+      "reliability": "可靠性"
     },
     "tab": {
       "projects": "项目",
@@ -365,6 +366,7 @@
       "escalation": "升级",
       "contacts": "联系人",
       "boards": "看板",
+      "monitors": "监控器",
       "reporting": "报告",
       "rfp": "RFP 响应"
     }
@@ -3158,6 +3160,7 @@
       "integrations": "集成",
       "content": "内容",
       "ceremonies": "仪式",
+      "incidents": "事件",
       "wfPlan": "人力计划",
       "empAllocation": "工作分配",
       "empCollaboration": "协作",
@@ -3252,6 +3255,10 @@
       "obsContentByKind": "按类型分布的文档",
       "obsCeremonyCadence": "仪式节奏",
       "obsCeremonyBalance": "仪式发言分布",
+      "incStatus": "未解决事件",
+      "incSeverity": "按严重程度划分的事件",
+      "incSystems": "按系统划分的事件",
+      "incMttr": "平均解决时间",
       "wfpCostSplit": "招聘 vs 智能体成本",
       "wfpCapacity": "产能对比 WIP",
       "wfpGap": "可分配余量",
@@ -3384,6 +3391,19 @@
       "humanTalk": "人类",
       "agentTalk": "AI 代理",
       "completed": "已完成"
+    },
+    "inc": {
+      "noIncidents": "无事件",
+      "ofTotal": "共 {total} 个（时间范围内）",
+      "openNudge": "{count} 个需要关注",
+      "allClear": "一切正常",
+      "incidents": "事件",
+      "unclassified": "未分类",
+      "mttrSub": "平均解决时间",
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
     },
     "reorder": {
       "drag": "拖动以重新排序",
@@ -7604,6 +7624,14 @@
     "errStartConnect": "启动连接失败",
     "errConnectSubscription": "连接订阅失败",
     "errRemove": "移除凭据失败",
+    "precedence": {
+      "title": "提供商优先级",
+      "subtitle": "当连接了多个账户时，云代理会优先使用排在最前面的提供商，并沿列表向下依次故障转移。将 Meta 排在首位即可让云代理通过它路由。",
+      "leads": "首选",
+      "moveUp": "上移 {provider}",
+      "moveDown": "下移 {provider}",
+      "errSave": "保存优先级失败"
+    },
     "provider": {
       "anthropic": {
         "blurb": "连接您的 Claude Pro/Max 订阅（无需按令牌计费），或粘贴 Anthropic API 密钥。",
@@ -9095,6 +9123,16 @@
       "escalation": "升级",
       "contacts": "联系人"
     },
+    "workflows": {
+      "title": "运行手册与工作流",
+      "blurb": "针对此事件运行自定义工作流，或查看其事件触发的工作流。",
+      "pick": "工作流",
+      "pickPlaceholder": "选择工作流…",
+      "run": "运行工作流",
+      "create": "创建工作流",
+      "runs": "此事件的运行记录",
+      "noRuns": "尚无工作流运行记录。"
+    },
     "severity": {
       "sev1": "SEV1",
       "sev2": "SEV2",
@@ -9154,6 +9192,8 @@
       "publishedNote": "已为此事件发布根因分析。",
       "prompt": "此事件已解决。请将根因分析发布到知识库。",
       "formTitle": "发布根因分析",
+      "fishTitle": "为何会发生？",
+      "fishAria": "{title} 的鱼骨根因分析图",
       "summary": "摘要",
       "summaryPlaceholder": "用一段话概述该事件……",
       "rootCause": "根本原因",

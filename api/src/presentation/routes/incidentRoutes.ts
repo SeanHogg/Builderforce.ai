@@ -38,7 +38,7 @@ import { EscalationService } from '../../application/incident/EscalationService'
 import { dispatchIncidentTriage } from '../../application/incident/incidentDispatch';
 import { instantiateWorkflowRun, runTargetFromDefinition, type RunTarget } from '../../application/workflow/instantiateRun';
 import { parseDefinition } from '../../domain/workflowGraph';
-import type { HonoEnv } from '../../env';
+import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
@@ -192,6 +192,29 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
     const data = await new IncidentService(db).getIncident(tenantId, c.req.param('id'));
     if (!data) return c.json({ error: 'Incident not found' }, 404);
     return c.json(data);
+  });
+
+  // RCA linkage (PRD §5.10): the implicated delivery ticket(s) + each one's Accountability
+  // Report — the concrete "was the process followed?" answer (which roles signed off, with
+  // what evidence, where it was skipped/waived).
+  router.get('/:id/implicated', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const implicated = await new IncidentService(db).listImplicatedTasks(c.env as Env, tenantId, c.req.param('id'));
+    return c.json({ implicated });
+  });
+  router.post('/:id/implicated', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const b = (await c.req.json().catch(() => ({}))) as { taskId?: number; relation?: string; note?: string };
+    if (typeof b.taskId !== 'number') return c.json({ error: 'taskId is required' }, 400);
+    await new IncidentService(db).linkImplicatedTask(tenantId, c.req.param('id'), { taskId: b.taskId, relation: b.relation, note: b.note, createdBy: (c.get('userId') as string | undefined) ?? null });
+    await invalidate(c, tenantId);
+    return c.json({ ok: true });
+  });
+  router.delete('/:id/implicated/:taskId', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    await new IncidentService(db).unlinkImplicatedTask(tenantId, c.req.param('id'), Number(c.req.param('taskId')));
+    await invalidate(c, tenantId);
+    return c.json({ ok: true });
   });
   router.patch('/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;

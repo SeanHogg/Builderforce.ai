@@ -8,6 +8,7 @@ import { CORE_WIDGETS } from '@/components/widgets/registry-modules/coreWidgets'
 import { CATALOG_WIDGETS } from '@/components/widgets/registry-modules/catalogWidgets';
 import { OPERATIONAL_WIDGETS } from '@/components/widgets/registry-modules/operationalWidgets';
 import { OBSERVABILITY_WIDGETS } from '@/components/widgets/registry-modules/observabilityWidgets';
+import { INCIDENT_WIDGETS } from '@/components/widgets/registry-modules/incidentWidgets';
 import { WORKFORCE_WIDGETS } from '@/components/widgets/registry-modules/workforceWidgets';
 import { WORKFORCE_PLAN_WIDGETS } from '@/components/widgets/registry-modules/workforcePlanWidgets';
 import { EMP_METRICS_WIDGETS } from '@/components/widgets/registry-modules/empMetricsWidgets';
@@ -33,6 +34,7 @@ export const ALL_WIDGETS: WidgetDef[] = [
   ...CATALOG_WIDGETS,
   ...OPERATIONAL_WIDGETS,
   ...OBSERVABILITY_WIDGETS,
+  ...INCIDENT_WIDGETS,
   ...WORKFORCE_WIDGETS,
   ...WORKFORCE_PLAN_WIDGETS,
   ...EMP_METRICS_WIDGETS,

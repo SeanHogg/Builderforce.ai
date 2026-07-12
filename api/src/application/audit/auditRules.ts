@@ -17,6 +17,13 @@ export interface RequirementInput {
   responsibility?: Responsibility;
   isRequired: boolean;
   description?: string;
+  /** N-of-M quorum for the reviewer set at this lane; null = all required. */
+  quorum?: number | null;
+}
+
+/** A requirement satisfied by an approving sign-off (a review, or a role acting as reviewer). */
+function isReviewerReq(r: RequirementInput): boolean {
+  return r.kind === 'review' || r.responsibility === 'reviewer';
 }
 
 export interface AuditSignals {
@@ -77,30 +84,56 @@ export function requirementUnmetReason(
   return performed ? null : 'missing';
 }
 
-/** Compute overall coverage; only `isRequired` requirements can flag a ticket. */
+const asUnmet = (req: RequirementInput, reason: 'missing' | 'changes_requested'): UnmetRequirement => ({
+  laneKey: req.laneKey, laneName: req.laneName, kind: req.kind, ref: req.ref,
+  responsibility: req.responsibility, reason, description: req.description,
+});
+
+/** Compute overall coverage; only `isRequired` requirements can flag a ticket.
+ *  Reviewer requirements at a lane form a QUORUM set: with quorum N, N approvals
+ *  satisfy the set (default N = the set size ⇒ all must approve, the legacy rule). */
 export function computeCoverage(reqs: RequirementInput[], signals: AuditSignals): CoverageResult {
   const required = reqs.filter((r) => r.isRequired);
   const missing: UnmetRequirement[] = [];
   let satisfied = 0;
+  let requiredCount = 0;
 
-  for (const req of required) {
+  // Non-reviewer (producer / diagnostic) requirements — per-requirement.
+  for (const req of required.filter((r) => !isReviewerReq(r))) {
+    requiredCount += 1;
     const reason = requirementUnmetReason(req, signals);
-    if (reason == null) {
-      satisfied++;
-    } else {
-      missing.push({
-        laneKey: req.laneKey,
-        laneName: req.laneName,
-        kind: req.kind,
-        ref: req.ref,
-        responsibility: req.responsibility,
-        reason,
-        description: req.description,
-      });
+    if (reason == null) satisfied += 1; else missing.push(asUnmet(req, reason));
+  }
+
+  // Reviewer requirements — grouped by lane into quorum sets.
+  const reviewersByLane = new Map<string, RequirementInput[]>();
+  for (const req of required.filter(isReviewerReq)) {
+    const list = reviewersByLane.get(req.laneKey) ?? [];
+    list.push(req);
+    reviewersByLane.set(req.laneKey, list);
+  }
+  for (const group of reviewersByLane.values()) {
+    // Quorum = the smallest declared quorum in the set, capped at the set size;
+    // default (no quorum set) = the set size (every reviewer must approve).
+    const declared = group.map((r) => r.quorum).filter((q): q is number => typeof q === 'number' && q > 0);
+    const quorum = Math.min(group.length, declared.length ? Math.min(...declared) : group.length);
+    const approvedCount = group.filter((r) => !signals.changesRequestedRoles.has(r.ref) && signals.approvedRoles.has(r.ref)).length;
+    requiredCount += quorum;
+    const metInSet = Math.min(approvedCount, quorum);
+    satisfied += metInSet;
+    if (metInSet < quorum) {
+      // Report the shortfall: unapproved roles, changes_requested first.
+      const unapproved = group.filter((r) => !signals.approvedRoles.has(r.ref));
+      const ordered = [
+        ...unapproved.filter((r) => signals.changesRequestedRoles.has(r.ref)),
+        ...unapproved.filter((r) => !signals.changesRequestedRoles.has(r.ref)),
+      ];
+      for (const req of ordered.slice(0, quorum - metInSet)) {
+        missing.push(asUnmet(req, signals.changesRequestedRoles.has(req.ref) ? 'changes_requested' : 'missing'));
+      }
     }
   }
 
-  const requiredCount = required.length;
   const coverage = requiredCount === 0 ? 100 : Math.round((satisfied / requiredCount) * 100);
   return {
     status: missing.length === 0 ? 'pass' : 'flagged',

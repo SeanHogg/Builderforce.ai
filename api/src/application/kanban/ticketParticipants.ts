@@ -27,7 +27,7 @@ import {
 import { BUILTIN_ROLES } from './roleCatalog';
 import { resolveRoleCapableAgents } from './roleCapability';
 import { projectRoleAssignments } from '../../infrastructure/database/schema';
-import type { Responsibility } from './types';
+import { requirementApplies, type Responsibility } from './types';
 import type { SignoffContribution } from '../audit/ticketAuditService';
 import { TaskStatus } from '../../domain/shared/types';
 
@@ -127,13 +127,33 @@ export class TicketParticipantsService {
 
   private async bump(env: Env, taskId: number): Promise<void> {
     await bumpCacheVersion(env, versionKey(taskId));
-    const projectId = await this.taskProjectId(taskId);
-    if (projectId != null) await bumpCacheVersion(env, projectVersionKey(projectId));
+    const ctx = await this.taskContext(taskId);
+    if (ctx) await bumpCacheVersion(env, projectVersionKey(ctx.projectId));
   }
 
   /** Invalidate a ticket's cached manifest/accountability + its project summary. */
   async invalidate(env: Env, taskId: number): Promise<void> {
     await this.bump(env, taskId);
+  }
+
+  /**
+   * Done gate (PRD §5.5 / AC-2): on a LIFECYCLE-MANAGED board, a ticket cannot reach a
+   * terminal (Done) lane while any required participant is not completed-with-evidence.
+   * Returns the outstanding role names so the caller can show why. No-op (never blocks)
+   * on un-managed boards, so legacy behaviour is unchanged.
+   */
+  async doneGate(env: Env, tenantId: number, taskId: number, targetStatus: string): Promise<{ blocked: boolean; outstanding: string[] }> {
+    const ctx = await this.taskContext(taskId);
+    if (!ctx) return { blocked: false, outstanding: [] };
+    const [board] = await this.db.select({ id: boards.id, managed: boards.lifecycleManaged }).from(boards).where(eq(boards.projectId, ctx.projectId)).limit(1);
+    if (!board || !board.managed) return { blocked: false, outstanding: [] };
+    const [lane] = await this.db.select({ isTerminal: swimlanes.isTerminal }).from(swimlanes).where(and(eq(swimlanes.boardId, board.id), eq(swimlanes.key, targetStatus))).limit(1);
+    const terminal = lane?.isTerminal ?? targetStatus === TaskStatus.DONE;
+    if (!terminal) return { blocked: false, outstanding: [] };
+    const report = await this.getAccountability(env, tenantId, taskId);
+    const done = new Set(['completed', 'waived', 'skipped']);
+    const outstanding = report.participants.filter((p) => p.required && !done.has(p.state)).map((p) => p.roleName);
+    return { blocked: outstanding.length > 0, outstanding };
   }
 
   /**
@@ -202,13 +222,15 @@ export class TicketParticipantsService {
     });
   }
 
-  private async taskProjectId(taskId: number): Promise<number | null> {
-    const [row] = await this.db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
-    return row?.projectId ?? null;
+  private async taskContext(taskId: number): Promise<{ projectId: number; taskType: string | null; actionType: string | null } | null> {
+    const [row] = await this.db.select({ projectId: tasks.projectId, taskType: tasks.taskType, actionType: tasks.actionType }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+    return row ? { projectId: row.projectId, taskType: row.taskType, actionType: row.actionType } : null;
   }
 
-  /** The required role/review slots across the ticket's whole board lifecycle. */
-  private async templateSlots(projectId: number): Promise<SlotSeed[]> {
+  /** The required role/review slots across the ticket's whole board lifecycle, scoped
+   *  to the ticket's type/condition (a Security ticket includes the security role; a
+   *  docs ticket excludes QA). */
+  private async templateSlots(projectId: number, task: { taskType: string | null; actionType: string | null }): Promise<SlotSeed[]> {
     const [board] = await this.db.select({ id: boards.id }).from(boards).where(eq(boards.projectId, projectId)).limit(1);
     if (!board) return [];
     const laneRows = await this.db
@@ -225,6 +247,7 @@ export class TicketParticipantsService {
     const slots: SlotSeed[] = [];
     for (const r of reqRows) {
       if (r.kind !== 'role' && r.kind !== 'review') continue;
+      if (!requirementApplies({ ticketType: r.ticketType, condition: r.condition }, task)) continue;
       const lane = laneById.get(r.swimlaneId);
       const responsibility: Responsibility = (r.responsibility as Responsibility) ?? (r.kind === 'review' ? 'reviewer' : 'owner');
       slots.push({ stageKey: lane?.key ?? null, roleKey: r.ref, responsibility, required: r.isRequired });
@@ -250,9 +273,10 @@ export class TicketParticipantsService {
    * remove assessment-added rows. Returns the number of template slots present.
    */
   async deriveManifest(env: Env, tenantId: number, taskId: number): Promise<number> {
-    const projectId = await this.taskProjectId(taskId);
-    if (projectId == null) return 0;
-    const slots = await this.templateSlots(projectId);
+    const ctx = await this.taskContext(taskId);
+    if (!ctx) return 0;
+    const projectId = ctx.projectId;
+    const slots = await this.templateSlots(projectId, { taskType: ctx.taskType, actionType: ctx.actionType });
     const now = new Date();
     for (const s of slots) {
       const assignee = await this.resolveAssignee(env, tenantId, projectId, s.roleKey);
@@ -291,8 +315,9 @@ export class TicketParticipantsService {
    * row lands `unstaffed` — a first-class, audited RESOURCE GAP that blocks Done.
    */
   async addParticipant(env: Env, tenantId: number, taskId: number, input: AddParticipantInput): Promise<ManifestParticipant | null> {
-    const projectId = await this.taskProjectId(taskId);
-    if (projectId == null) return null;
+    const ctx = await this.taskContext(taskId);
+    if (!ctx) return null;
+    const projectId = ctx.projectId;
     const responsibility = input.responsibility ?? 'owner';
     const source = input.source ?? 'assessment';
     const assignee = await this.resolveAssignee(env, tenantId, projectId, input.roleKey);
