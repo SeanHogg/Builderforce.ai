@@ -50,6 +50,32 @@ await redAlertNotificationCenter.sendAlert(
 );
 ```
 
+### 4. Surface Red Alerts in the UI (React)
+
+```tsx
+import { useRedAlertNotifications } from '@/services/redAlert';
+
+function AdminAlertPanel() {
+  const { notifications, unreadCount, markAsRead, clearHistory } =
+    useRedAlertNotifications({ requiredChannels: ['in-app'] });
+
+  return (
+    <div>
+      <span>Unread: {unreadCount}</span>
+      <ul>
+        {notifications.map((n) => (
+          <li key={n.id}>
+            <button onClick={() => markAsRead(n.id)}>{n.metricName}</button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+**Hook landing site**: `services/redAlert/index.ts` exports `useRedAlertNotifications` alongside `redAlertNotificationCenter`.
+
 ## Directory Structure
 
 ```
