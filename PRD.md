@@ -1,55 +1,56 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #378
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+## Product Requirements Document (PRD): Contracts & IP Enforcement
 
-## Problem & Goal
+### 1. Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+**Problem:** The current system lacks a centralized, standardized method for managing contracts, specifically missing a contracts table, work-for-hire agreements, IP-assignment clauses, and engagement-level terms documentation. This exposes the organization to legal risks, creates ambiguity regarding IP ownership, and hinders efficient engagement setup.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+**Goal:** To establish a robust contracts model capable of generating, managing, and storing legally binding agreements for each engagement. This model will include fixed-price terms, clear work-for-hire and IP assignment clauses, and a streamlined bilateral acceptance process, ensuring legal clarity and operational efficiency.
 
-## Target users / ICP roles
+### 2. Target Users / ICP Roles
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+*   **Internal Operations / Project Managers:** To initiate, track, and reference engagement contracts.
+*   **Legal Team:** To define and ensure compliance of contract templates and clauses.
+*   **Clients / Contractors:** To review and digitally accept engagement-specific terms.
+*   **System Administrators:** To oversee contract settings and data.
 
-## Scope
+### 3. Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This project involves the development of a new `Contract` data model and associated workflows. Key areas include:
 
-## Functional Requirements
+*   Automated contract generation linked to engagement creation or contractor hiring.
+*   Incorporation of standard clauses: fixed-price terms, work-for-hire, and IP assignment.
+*   Mechanism for digital acceptance by all involved parties.
+*   Secure storage and immutable linkage of accepted contracts to their respective engagements.
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### 4. Functional Requirements
 
-## Acceptance Criteria
+*   **FR1: Contract Generation on Engagement:** The system SHALL automatically generate a draft contract when a new engagement is initiated or a contractor is hired for an engagement.
+*   **FR2: Standardized Clauses:** The generated contract SHALL include predefined sections for:
+    *   Fixed-price terms and payment schedules.
+    *   Work-for-hire provisions.
+    *   IP assignment clauses, clearly transferring ownership to the company.
+*   **FR3: Engagement-Specific Details:** The contract SHALL dynamically populate engagement-specific details (e.g., project name, parties involved, scope summary) from the engagement record.
+*   **FR4: Digital Acceptance Workflow:** The system SHALL provide a workflow for all designated parties (e.g., client, contractor, company representative) to digitally review and accept the contract terms.
+*   **FR5: Contract Status Tracking:** The system SHALL track the status of each contract (e.g., Draft, Pending Acceptance, Accepted, Rejected).
+*   **FR6: Immutable Storage & Referencing:** Once accepted by all parties, the contract SHALL be immutably stored and made easily referenceable directly from the associated engagement record.
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+### 5. Acceptance Criteria
 
-## Out of scope
+*   **AC1:** A newly created engagement successfully triggers the generation of a draft contract.
+*   **AC2:** The generated contract visibly contains fixed-price terms, a work-for-hire clause, and an IP assignment clause.
+*   **AC3:** Both parties designated on the contract can independently review and digitally accept the contract.
+*   **AC4:** Upon acceptance by all required parties, the contract's status is updated to "Accepted."
+*   **AC5:** The "Accepted" contract is accessible as a read-only document from the associated engagement's detail page.
+*   **AC6:** Any attempt to proceed with key engagement milestones (e.g., project start) without an "Accepted" contract results in a clear warning or block.
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+### 6. Out of Scope
+
+*   Advanced contract negotiation features (e.g., redlining, version control beyond initial draft).
+*   Integration with external e-signature providers (simple digital acceptance is sufficient for this iteration).
+*   Templating system for user-defined contract clauses (clauses will be system-defined/hardcoded initially).
+*   Automated legal compliance checks or alerts based on contract content.
+*   Contract amendment or re-negotiation workflows post-acceptance.
+*   Support for multiple complex contract types (e.g., retainers, equity-based agreements) beyond the specified fixed-price/work-for-hire model.
