@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   projectEvermindBase,
   projectEvermindRef,
@@ -6,9 +6,14 @@ import {
   getProjectEvermindHead,
   resolveProjectEvermindModelPin,
   resolveProjectInferenceModel,
+  setProjectEvermindInference,
+  recordEvermindServeOutcome,
   computeProjectAffect,
+  extractMemoriesToEvermind,
+  QUARANTINE_FAILURE_STREAK,
   PROJECT_EVERMIND_MODEL_PREFIX,
   type ProjectEvermindRecentEntry,
+  type EvermindServeReadiness,
 } from './projectEvermind';
 import type { Env } from '../../env';
 
@@ -25,6 +30,30 @@ function makeDb(row: Record<string, unknown> | null) {
   } as never;
 }
 
+/** db mock that also supports the update chain (`.set().where()[.returning()]`),
+ *  recording each `.set()` payload and returning queued `.returning()` result sets
+ *  in order. `where()` is awaitable AND exposes `.returning()`. */
+function updatableDb(row: Record<string, unknown> | null, returningQueue: Array<Array<Record<string, unknown>>> = []) {
+  const setCalls: Array<Record<string, unknown>> = [];
+  let ri = 0;
+  const db = {
+    select: () => ({ from: () => ({ where: () => ({ limit: async () => (row ? [row] : []) }) }) }),
+    update: () => {
+      const chain = {
+        set: (values: Record<string, unknown>) => { setCalls.push(values); return chain; },
+        where: () => {
+          const rows = returningQueue[ri++] ?? [];
+          const thenable = Promise.resolve(rows) as Promise<unknown> & { returning: () => Promise<unknown> };
+          thenable.returning = async () => rows;
+          return thenable;
+        },
+      };
+      return chain;
+    },
+  } as never;
+  return { db, setCalls };
+}
+
 // No AUTH_CACHE_KV → getCacheVersion/getOrSetCached fall through to the loader.
 const env = {} as Env;
 
@@ -35,6 +64,41 @@ describe('project Evermind R2 layout helpers', () => {
   });
   it('names the coordinator DO deterministically per project', () => {
     expect(coordinatorName(7, 42)).toBe('proj:7:42');
+  });
+});
+
+describe('extractMemoriesToEvermind', () => {
+  const entries = [
+    { key: 'a', text: 'too short' },
+    { key: 'b', text: 'This is a durable fact long enough to be learnable by the model.' },
+  ];
+
+  it('rejects an unseeded Evermind (nothing to learn into)', async () => {
+    const out = await extractMemoriesToEvermind(env, makeDb(null), 7, 42, entries);
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.status).toBe(400);
+  });
+
+  it('rejects a frozen Evermind', async () => {
+    const db = makeDb({ name: 'PM', version: 2, mode: 'offline-frozen', contributions: 1 });
+    const out = await extractMemoriesToEvermind(env, db, 7, 42, entries);
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.status).toBe(400);
+  });
+
+  it('skips too-short entries and reports per-key outcomes (no coordinator bound → no absorb)', async () => {
+    const db = makeDb({ name: 'PM', version: 1, mode: 'connected', contributions: 0 });
+    const out = await extractMemoriesToEvermind(env, db, 7, 42, entries);
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      // 'a' is below the 20-char floor; 'b' attempts dispatch but no DO binding exists in
+      // the test env, so it is reported skipped rather than silently absorbed.
+      expect(out.result.absorbed).toEqual([]);
+      expect(out.result.skipped.map((s) => s.key).sort()).toEqual(['a', 'b']);
+      expect(out.result.skipped.find((s) => s.key === 'a')?.reason).toMatch(/short/i);
+      expect(out.result.merged).toBe(0);
+      expect(out.result.version).toBe(1);
+    }
   });
 });
 
@@ -142,6 +206,75 @@ describe('resolveProjectInferenceModel (opt-in consumer emitter)', () => {
   it('stays undefined for a malformed project id', async () => {
     const out = await resolveProjectInferenceModel(env, makeDb(null), 7, 0);
     expect(out).toBeUndefined();
+  });
+});
+
+describe('setProjectEvermindInference (benchmark-gated promotion)', () => {
+  const ready: EvermindServeReadiness = { ready: true, passRate: 1, samples: [] };
+  const notReady: EvermindServeReadiness = {
+    ready: false, passRate: 0,
+    samples: [{ prompt: 'Summarize the status.', text: 'commit commit commit the the in the in the', coherent: false }],
+  };
+
+  it('REFUSES to enable a head that fails the coherence probe (no DB write)', async () => {
+    const { db, setCalls } = updatableDb({ name: 'PM', version: 100, mode: 'connected', contributions: 1, inferenceEnabled: false });
+    const assessReadiness = vi.fn(async () => notReady);
+    const res = await setProjectEvermindInference(env, db, 7, 30, true, { assessReadiness });
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.reason).toBe('not_ready');
+      expect(res.readiness.passRate).toBe(0);
+    }
+    expect(assessReadiness).toHaveBeenCalledWith('evermind/project/7/30/v100');
+    expect(setCalls).toHaveLength(0); // never promoted
+  });
+
+  it('enables a head that PASSES the probe and clears the quarantine slate', async () => {
+    const { db, setCalls } = updatableDb({ name: 'PM', version: 5, mode: 'connected', contributions: 1, inferenceEnabled: false });
+    const res = await setProjectEvermindInference(env, db, 7, 42, true, { assessReadiness: async () => ready });
+    expect(res.ok).toBe(true);
+    expect(setCalls[0]).toMatchObject({ inferenceEnabled: true, serveFailureStreak: 0, quarantinedAt: null, quarantineReason: null });
+  });
+
+  it('disabling is never gated and needs no probe', async () => {
+    const { db, setCalls } = updatableDb({ name: 'PM', version: 5, mode: 'connected', contributions: 1, inferenceEnabled: true });
+    const assessReadiness = vi.fn(async () => notReady);
+    const res = await setProjectEvermindInference(env, db, 7, 42, false, { assessReadiness });
+    expect(res.ok).toBe(true);
+    expect(assessReadiness).not.toHaveBeenCalled();
+    expect(setCalls[0]).toMatchObject({ inferenceEnabled: false });
+  });
+});
+
+describe('recordEvermindServeOutcome (auto-quarantine)', () => {
+  it('force-disables inference after the failure streak reaches the threshold', async () => {
+    // The incoherent increment returns the NEW streak = threshold → triggers quarantine.
+    const { db, setCalls } = updatableDb(null, [[{ streak: QUARANTINE_FAILURE_STREAK }]]);
+    await recordEvermindServeOutcome(env, db, 7, 30, false);
+    // 1st set = increment; 2nd set = the quarantine disable.
+    expect(setCalls).toHaveLength(2);
+    expect(setCalls[1]).toMatchObject({ inferenceEnabled: false });
+    expect(setCalls[1]?.quarantineReason).toMatch(/quarantine/i);
+    expect(setCalls[1]?.quarantinedAt).toBeInstanceOf(Date);
+  });
+
+  it('increments but does NOT quarantine below the threshold', async () => {
+    const { db, setCalls } = updatableDb(null, [[{ streak: QUARANTINE_FAILURE_STREAK - 1 }]]);
+    await recordEvermindServeOutcome(env, db, 7, 30, false);
+    expect(setCalls).toHaveLength(1); // only the increment, no disable
+  });
+
+  it('a coherent serve resets the streak (single conditional write)', async () => {
+    const { db, setCalls } = updatableDb(null, [[{ id: 'x' }]]); // where(streak<>0) matched a row
+    await recordEvermindServeOutcome(env, db, 7, 30, true);
+    expect(setCalls).toHaveLength(1);
+    expect(setCalls[0]).toMatchObject({ serveFailureStreak: 0 });
+  });
+
+  it('ignores a malformed project id', async () => {
+    const { db, setCalls } = updatableDb(null, []);
+    await recordEvermindServeOutcome(env, db, 7, 0, false);
+    expect(setCalls).toHaveLength(0);
   });
 });
 

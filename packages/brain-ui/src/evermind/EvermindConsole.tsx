@@ -281,6 +281,24 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
             </div>
           )}
 
+          {/* Import from builderforce-memory — only when the host implements the file
+              op (VS Code). The shared component decides its own visibility, so the web
+              app (no adapter.importMemory) simply never renders it. */}
+          {canManage && adapter.importMemory && (
+            <ImportBox
+              t={t} busy={busy} frozen={frozen}
+              onImport={() => run(async () => {
+                const report = await adapter.importMemory!();
+                if (!report) return; // user cancelled the picker — no notice
+                setNotice(
+                  report.absorbed > 0
+                    ? t.importDone(report.absorbed, report.version, report.compacted, (report.bytesSaved / 1024).toFixed(1))
+                    : t.importNothing,
+                );
+              })}
+            />
+          )}
+
           {showRecent && <RecentList t={t} entries={data?.recent ?? []} />}
         </>
       )}
@@ -477,6 +495,22 @@ function TeachBox({
           {validating ? t.validating : t.validateCta}
         </button>
       </div>
+    </div>
+  );
+}
+
+/** Import-from-builderforce-memory action — folds a local memory snapshot into the
+ *  model and compacts the absorbed facts to stubs. Frozen learning disables it (the
+ *  same guard the flush uses), since a frozen model can't absorb the import. */
+function ImportBox({ t, busy, frozen, onImport }: { t: EvermindConsoleLabels; busy: boolean; frozen: boolean; onImport: () => void }) {
+  const disabled = busy || frozen;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+      <div style={fieldTitle}>{t.importTitle}</div>
+      <div style={fieldHint}>{t.importHint}</div>
+      <button type="button" onClick={onImport} disabled={disabled} style={{ ...secondaryBtn(disabled), alignSelf: 'flex-start' }}>
+        {busy ? t.importing : t.importCta}
+      </button>
     </div>
   );
 }

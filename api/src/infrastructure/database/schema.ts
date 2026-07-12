@@ -5232,6 +5232,16 @@ export const projectEvermind = pgTable('project_evermind', {
    */
   teacherModel:  text('teacher_model'),
   lastLearnedAt: timestamp('last_learned_at'),
+  /**
+   * Auto-quarantine bookkeeping (migration 0339). `serveFailureStreak` counts
+   * CONSECUTIVE incoherent serves (reset to 0 by any coherent serve or a manual
+   * re-enable); when it reaches the threshold the head is force-disabled and
+   * `quarantinedAt`/`quarantineReason` are stamped so a broken head stops answering
+   * users in gibberish. See `recordEvermindServeOutcome`.
+   */
+  serveFailureStreak: integer('serve_failure_streak').notNull().default(0),
+  quarantinedAt:     timestamp('quarantined_at'),
+  quarantineReason:  text('quarantine_reason'),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ({
