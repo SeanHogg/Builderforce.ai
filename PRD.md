@@ -253,6 +253,12 @@ Notes on requirement decisions:
 > _Signed: developer (code-creator) — task #674, defined the v1.0.0 payload
 > structure, schema artifact, canonical example, documentation, and changelog._
 
+### Signed: developer (implementation confirmed, v1.0.0 ratified)
+
+- Defined the v1.0.0 payload structure per FR-1..FR-10, included identity block, claims, evidence (top-level, per AC-1 resolution), reasoning_chain, uncertainty, context, extensions, and schema artifact.
+- Documented requirement decisions in PRD Implementation Notes (AC-1 vs FR-4 tension, AC-6 unknown-field behavior, AC-8 tagging).
+- Delivered complete artifacts per ratified PRD Design: published JSON Schema (Draft 2020-12), reference documentation, canonical example, changelog, README, and zero-dependency validation harness.
+
 ## Review
 
 _Owned by the code-reviewer — to be authored._
