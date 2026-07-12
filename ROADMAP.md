@@ -82,6 +82,24 @@
 
 ## Consolidated Gap Register
 
+### 🧠 Evermind "Import from builderforce-memory" — shipped 2026-07-12, two follow-ups
+
+> The VS Code Evermind console now imports a local `builderforce-memory` JSON snapshot into the selected build's Evermind (batch `POST /api/projects/:id/evermind/extract-memories` → flush) and compacts absorbed facts to `[absorbed→Evermind vN]` stubs in place, shrinking the recall/digest context the memory MCP was eating. Residual gaps:
+> - **Live-store clobber.** Compaction rewrites the snapshot file, but if the `builderforce-memory` MCP stdio server is *running* it holds the full store in memory and re-snapshots (overwriting the stubs) on its next `remember`/`forget`. So stubs reliably take effect only after the MCP server respawns (next Claude Code session). Fix: have the MCP server watch its snapshot for external compaction and re-hydrate, or expose a first-class `memory_compact` tool the server itself runs so its in-memory store is stubbed too. Until then the importer should tell the user to restart Claude Code to apply compaction.
+> - **Markdown auto-memory not supported.** The importer targets the JSON snapshot only; the Claude Code markdown auto-memory (`MEMORY.md` + per-fact `*.md` with frontmatter) can't be imported/compacted through this path. Fix: teach `parseSnapshotArray` (or a sibling) to read a directory of frontmatter markdown facts and compact each `.md` body to a stub while keeping the `MEMORY.md` index pointer intact.
+
+### 🗂️ VSIX Sessions multi-tab — PRD written 2026-07-12, implementation pending
+
+> [PRD-vsix-session-tabs.md](./specs/builderforce/PRD-vsix-session-tabs.md) specifies a `builderforce.sessionTabs` setting (reuse one chat tab vs. one tab per session), live per-tab status (⏳ running / ❓ awaiting via title glyph + `iconPath` swap, since a webview tab can't host a `ThemeIcon` spinner), and a shared brain-ui `PendingQuestionBanner` surfacing the blocking `ask_user` at the composer. Two follow-on gaps the PRD itself flags: (1) **proposed chat-sessions API convergence** — `clients/vscode/src/chatSessions.ts` offers a native per-tab surface under `--enable-proposed-api`; if VS Code promotes `chatSessionsProvider` to stable, the two per-tab paths should merge onto one. (2) **Web chat parity** for `PendingQuestionBanner` — brain-ui is shared, so the web `BrainTimeline` host should pass the same next-intl labels rather than fork the component.
+
+### 🧠 Evermind coherence gate — code fixed 2026-07-12, data + hard-pin residuals
+
+> An inference-enabled but under-trained Evermind head served fluent-looking gibberish (broken UTF-8 `�`, `commit … commit … commit` spam, near-words) as chat replies because the adopt-Evermind gate keyed on length only (≥20 chars). Fixed by `looksLikeCoherentText` in `api/src/application/llm/projectMemory.ts`, now applied at both adoption sites (memory-first `resolveMemoryAnswer` + Brain agent-reply `BrainService.ts`) and the Q&A cache writer, so a garbled reply is treated as a miss and falls through to a real LLM. Residuals:
+>
+- **Data/ops: project #30's Evermind "v100" is unfit to serve chat.** The coherence gate stops it reaching users, but the head still burns an inference call per turn only to be discarded. It should have `inferenceEnabled` turned OFF (or be retrained past a benchmark bar — see `benchmarkEvermind`) until its output clears the gate. Needs an operator DB/console action; cannot be done from source.
+- **No auto-quarantine of a persistently-incoherent head.** A head that fails `looksLikeCoherentText` on N consecutive turns should auto-flip `inferenceEnabled=false` (with a surfaced notice) rather than silently wasting a call every turn. Enhancement — needs a per-head failure counter/state.
+- **Explicit `evermind/<ref>` hard-pin still serves raw** — the gateway vendor (`api/src/application/llm/vendors/evermind.ts`, reached via a deliberate `evermind/<ref>` pin with `modelStrict`) returns model output unfiltered by design (an explicit "I want Evermind" choice can't silently fall through). If a hard-pin should also refuse incoherent output, add the gate there with an explicit error rather than a silent swap.
+
 ### 📄 RFP / RFQ Response (PRD 15) — SHIPPED core, deferred sub-items
 
 > Full design in `Builderforce.ai/specs/builderforce/15-prd-rfp-response.md`. Pre-sales proposal generation SHIPPED 2026-07-12 (api 2026.7.87 · frontend 2026.7.60 · mig 0335): `rfp_requests`/`rfp_responses` tables, CTO + Product Owner built-in agents, `application/rfp/*` (cost/P&L, brand blend + branded doc, portfolio match, freshness-gated grounding), `/api/rfp` routes, and a Projects **RFP tab** (list/create) + `/projects/rfp/[id]` detail (capability roster, P&L, phase Gantt, risks, deps, branded doc download). Remaining sub-gaps:

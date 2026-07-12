@@ -27,6 +27,7 @@ import { projects } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 import { seedProjectEvermindFromPublished } from '../../application/llm/evermindRecipes';
+import { assessEvermindCoherence, type ArtifactStore } from '../../application/llm/evermindRuntime';
 import {
   getProjectEvermindHead,
   resolveEvermindTargets,
@@ -41,8 +42,11 @@ import {
   validateProjectEvermindRecall,
   recallProjectEvermindMemory,
   flushProjectEvermind,
+  extractMemoriesToEvermind,
+  MEMORY_EXTRACT_MAX_ENTRIES,
   projectEvermindRef,
   type ProjectEvermindMode,
+  type MemoryExtractEntry,
 } from '../../application/llm/projectEvermind';
 
 /** Verify the project exists AND belongs to this tenant (IDOR guard). */
@@ -64,7 +68,7 @@ const json = (body: unknown, status = 200): Response =>
 async function headCore(env: Env, db: Db, tenantId: number, projectId: number): Promise<Response> {
   if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   const head = await getProjectEvermindHead(env, db, tenantId, projectId);
-  return json({ version: head.version, ref: head.ref, mode: head.mode, name: head.name, contributions: head.contributions, inferenceEnabled: head.inferenceEnabled, teacherModel: head.teacherModel, lastLearnedAt: head.lastLearnedAt, seeded: head.version > 0 });
+  return json({ version: head.version, ref: head.ref, mode: head.mode, name: head.name, contributions: head.contributions, inferenceEnabled: head.inferenceEnabled, teacherModel: head.teacherModel, lastLearnedAt: head.lastLearnedAt, seeded: head.version > 0, quarantinedAt: head.quarantinedAt, quarantineReason: head.quarantineReason });
 }
 
 /**
@@ -182,6 +186,37 @@ async function learnTextCore(env: Env, db: Db, tenantId: number, projectId: numb
   return json(result.body, result.status);
 }
 
+/**
+ * Batch "Import from builderforce-memory" — the VS Code Evermind console reads the
+ * local memory snapshot and POSTs its entries `{ entries: [{ key, text, prompt? }] }`.
+ * Each is folded into THIS Evermind and a single flush merges them, so the editor can
+ * then compact the absorbed entries to stubs. Manager-gated (a training write).
+ */
+async function extractMemoriesCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
+  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  const body = (await c.req.json<{ entries?: unknown }>().catch(() => ({}))) as { entries?: unknown };
+  if (!Array.isArray(body.entries)) return json({ error: 'entries[] is required' }, 400);
+  const entries: MemoryExtractEntry[] = [];
+  for (const raw of body.entries) {
+    if (!raw || typeof raw !== 'object') continue;
+    const r = raw as Record<string, unknown>;
+    const key = typeof r.key === 'string' ? r.key : '';
+    const text = typeof r.text === 'string' ? r.text : '';
+    if (!key || !text.trim()) continue;
+    entries.push({
+      key,
+      text,
+      ...(typeof r.prompt === 'string' ? { prompt: r.prompt } : {}),
+      ...(typeof r.weight === 'number' ? { weight: r.weight } : {}),
+    });
+  }
+  if (entries.length === 0) return json({ error: 'no valid entries (each needs a key + non-empty text)' }, 400);
+  if (entries.length > MEMORY_EXTRACT_MAX_ENTRIES) return json({ error: `too many entries (max ${MEMORY_EXTRACT_MAX_ENTRIES})` }, 400);
+  const out = await extractMemoriesToEvermind(env, db, tenantId, projectId, entries);
+  if (!out.ok) return json({ error: out.error }, out.status);
+  return json(out.result);
+}
+
 const pid = (c: Context): number => Number(c.req.param('projectId'));
 
 // ── JWT front door (web UI + internal JWT callers) ───────────────────────────
@@ -200,6 +235,8 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
   router.get('/:projectId/evermind/tokenizer', (c) => artifactCore(c.env as Env, db, t(c), pid(c), c.req.query('version'), 'tokenizer.json'));
   router.post('/:projectId/evermind/learn', (c) => learnCore(c.env as Env, db, t(c), pid(c), c));
   router.post('/:projectId/evermind/learn-text', (c) => learnTextCore(c.env as Env, db, t(c), pid(c), c));
+  /** Import a batch of raw memories (VS Code "Import from builderforce-memory") + flush. */
+  router.post('/:projectId/evermind/extract-memories', requireRole(TenantRole.MANAGER), (c) => extractMemoriesCore(c.env as Env, db, t(c), pid(c), c));
 
   /** Seed the base model (version 1) from a published `.evermind` blob (manager). */
   router.post('/:projectId/evermind/seed', requireRole(TenantRole.MANAGER), async (c) => {
@@ -285,19 +322,37 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
   });
 
   /** Toggle whether this project's agent runs execute ON its Evermind (manager).
-   *  Body: { enabled: boolean }. The emitter of the `project_evermind:<id>` pin. */
+   *  Body: { enabled: boolean }. The emitter of the `project_evermind:<id>` pin.
+   *  ENABLING is BENCHMARK-GATED: the head must pass a coherence probe (it can't be
+   *  promoted to serve while it produces gibberish) — a 422 with the probe samples
+   *  explains a refusal. `force:true` bypasses the probe (deliberate operator override). */
   router.patch('/:projectId/evermind/inference', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = t(c);
     const projectId = pid(c);
+    const env = c.env as Env;
     if (!(await ownsProject(db, tenantId, projectId))) return c.json({ error: 'project not found' }, 404);
-    const body = (await c.req.json<{ enabled?: unknown }>().catch(() => ({}))) as { enabled?: unknown };
+    const body = (await c.req.json<{ enabled?: unknown; force?: unknown }>().catch(() => ({}))) as { enabled?: unknown; force?: unknown };
     if (typeof body.enabled !== 'boolean') return c.json({ error: 'enabled (boolean) is required' }, 400);
-    const head = await getProjectEvermindHead(c.env as Env, db, tenantId, projectId);
+    const head = await getProjectEvermindHead(env, db, tenantId, projectId);
     if (body.enabled && head.version <= 0) {
       return c.json({ error: 'seed a base model before enabling inference' }, 409);
     }
-    await setProjectEvermindInference(c.env as Env, db, tenantId, projectId, body.enabled);
-    return c.json({ ok: true, inferenceEnabled: body.enabled });
+    // Gate the enable on the coherence probe unless the operator forces it. The probe
+    // needs the R2 store; if it isn't bound we allow the toggle (serve-time gate + the
+    // auto-quarantine still protect users).
+    const store = env.UPLOADS as ArtifactStore | undefined;
+    const assessReadiness = body.enabled && body.force !== true && store
+      ? (ref: string) => assessEvermindCoherence(store, ref)
+      : undefined;
+    const result = await setProjectEvermindInference(env, db, tenantId, projectId, body.enabled, { ...(assessReadiness ? { assessReadiness } : {}) });
+    if (!result.ok) {
+      return c.json({
+        error: 'This Evermind is not coherent enough to serve yet — it produced gibberish on the readiness probe. Retrain or set a frontier teacher, then try again (or force to override).',
+        reason: result.reason,
+        readiness: result.readiness,
+      }, 422);
+    }
+    return c.json({ ok: true, inferenceEnabled: result.inferenceEnabled });
   });
 
   /** Pin/clear the frontier-LLM TEACHER (manager). Body: { model: string | null }.

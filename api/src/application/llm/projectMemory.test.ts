@@ -3,6 +3,7 @@ import {
   qaCacheKey,
   resolveMemoryAnswer,
   cacheProjectAnswer,
+  looksLikeCoherentText,
   EVERMIND_ANSWER_MIN_CHARS,
 } from './projectMemory';
 import type { Env } from '../../env';
@@ -94,6 +95,17 @@ describe('resolveMemoryAnswer', () => {
     expect(await resolveMemoryAnswer(env, db, 7, 42, 'q?', { runEvermind })).toBeNull();
   });
 
+  it('returns null when an under-trained head returns long-but-incoherent garbage', async () => {
+    const { db } = memoryDb([[], [], [headRow()]]);
+    // The real serving failure: fluent-looking gibberish that clears 20 chars but is
+    // not language — must be treated as a miss, not served to the user.
+    const garbage =
+      '� `` **ARserting yoularmy dir this your sintens byy b I - A met toades misin the ge simpelying e the the isb wonvert bled a suchrech u me toan I mend in the you reper seArrading';
+    const runEvermind = vi.fn(async () => garbage);
+    expect(garbage.length).toBeGreaterThanOrEqual(EVERMIND_ANSWER_MIN_CHARS);
+    expect(await resolveMemoryAnswer(env, db, 7, 42, 'status?', { runEvermind })).toBeNull();
+  });
+
   it('returns null without runEvermind and no cache hit (caller proceeds to the LLM)', async () => {
     const { db } = memoryDb([[]]);
     expect(await resolveMemoryAnswer(env, db, 7, 42, 'q?', {})).toBeNull();
@@ -112,5 +124,47 @@ describe('cacheProjectAnswer', () => {
     const { db, insert } = memoryDb([]);
     await cacheProjectAnswer(env, db, 7, 42, 'q?', 'short');
     expect(insert).not.toHaveBeenCalled();
+  });
+
+  it('never caches long-but-incoherent garbage (would pin gibberish under the key)', async () => {
+    const { db, insert } = memoryDb([]);
+    await cacheProjectAnswer(env, db, 7, 42, 'status?', 'commit commit commit ticket ticketO commit PRge the the inten prousan syour');
+    expect(insert).not.toHaveBeenCalled();
+  });
+});
+
+describe('looksLikeCoherentText', () => {
+  it('rejects the observed under-trained-Evermind garbage samples', () => {
+    // Sample 1 — includes the Unicode replacement char from broken byte-level decode.
+    expect(
+      looksLikeCoherentText(
+        '� `` **ARserting yoularmy dir this your sintens byy b I - A met toades misin the ge simpelying e the the isb wonvert',
+      ),
+    ).toBe(false);
+    // Sample 2 — no replacement char, but degenerate "commit" repetition + stray letters.
+    expect(
+      looksLikeCoherentText(
+        'S cane syour commitemend commiting ete the inten you commits : The commete eg in the commit commit commit ticket ticketO commit PRge in the in the k y i o y',
+      ),
+    ).toBe(false);
+  });
+
+  it('accepts normal English answers (no false rejects)', () => {
+    expect(looksLikeCoherentText('The project status is green: all 12 tickets are on track and the last deploy passed CI.')).toBe(true);
+    expect(looksLikeCoherentText('Auth uses PKCE OAuth via the gateway; the tenant key is stored in SecretStorage.')).toBe(true);
+    // Short clean answers clear it (too few tokens to score structurally).
+    expect(looksLikeCoherentText('Yes, the build is green.')).toBe(true);
+  });
+
+  it('does not mis-reject legitimate non-English replies', () => {
+    // Spanish uses real one-letter words (y / o); the single-letter test must not fire.
+    expect(looksLikeCoherentText('El estado del proyecto es verde y todas las tareas están al día o casi.')).toBe(true);
+    // CJK has no ASCII letters to score — accepted.
+    expect(looksLikeCoherentText('项目状态为绿色，所有工单都按计划进行，最近一次部署已通过持续集成。')).toBe(true);
+  });
+
+  it('rejects empty / whitespace', () => {
+    expect(looksLikeCoherentText('')).toBe(false);
+    expect(looksLikeCoherentText('   ')).toBe(false);
   });
 });

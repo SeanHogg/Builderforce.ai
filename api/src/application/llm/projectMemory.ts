@@ -22,12 +22,14 @@
 
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { resolveEvermindTargets } from './projectEvermind';
+import { resolveEvermindTargets, recordEvermindServeOutcome } from './projectEvermind';
 import { getProjectFactByKey, upsertProjectFact, QA_CACHE_SOURCE } from './projectFacts';
+import { EVERMIND_ANSWER_MIN_CHARS, looksLikeCoherentText } from './textCoherence';
 
-/** An Evermind reply shorter than this isn't a real answer — fall through to the LLM.
- *  Mirrors the cloud/BrainService threshold so every surface adopts Evermind identically. */
-export const EVERMIND_ANSWER_MIN_CHARS = 20;
+// Re-exported from the shared, zero-dep coherence module so existing importers
+// (BrainService, the memory tests) keep resolving these from projectMemory — one
+// home for "is this a real, coherent answer" across every surface (DRY).
+export { EVERMIND_ANSWER_MIN_CHARS, looksLikeCoherentText };
 
 /** Where a memory-first answer came from — drives the provenance chip the surfaces render. */
 export type MemoryAnswerSource = 'qa-cache' | 'evermind';
@@ -110,8 +112,20 @@ export async function resolveMemoryAnswer(
       .filter((h) => h.inferenceEnabled && h.version >= 1 && h.ref);
     for (const head of targets) {
       const text = await deps.runEvermind(head.ref as string, q).catch(() => null);
-      if (text && text.trim().length >= EVERMIND_ANSWER_MIN_CHARS) {
-        return { text: text.trim(), source: 'evermind', evermindVersion: head.version, evermindProjectId: head.projectId };
+      // Adopt only a SUBSTANTIVE and COHERENT reply. An under-trained head emits
+      // fluent-looking gibberish that clears the length bar; `looksLikeCoherentText`
+      // rejects it so we fall through to the next head / the LLM (a garbled reply
+      // IS a miss) rather than answering the user in garbage.
+      const coherent = !!text && text.trim().length >= EVERMIND_ANSWER_MIN_CHARS && looksLikeCoherentText(text);
+      // Feed the outcome to the head's quarantine counter: a run that produced text
+      // but failed the coherence bar counts as a failure; N in a row auto-disables
+      // inference on that head so it stops serving (and wasting a call). A null text
+      // is a transport miss (not the model's fault) → don't penalise it.
+      if (text != null) {
+        await recordEvermindServeOutcome(env, db, tenantId, head.projectId, coherent).catch(() => { /* best-effort */ });
+      }
+      if (coherent) {
+        return { text: (text as string).trim(), source: 'evermind', evermindVersion: head.version, evermindProjectId: head.projectId };
       }
     }
   }
@@ -135,7 +149,9 @@ export async function cacheProjectAnswer(
 ): Promise<void> {
   const q = (question ?? '').trim();
   const a = (answer ?? '').trim();
-  if (!q || a.length < EVERMIND_ANSWER_MIN_CHARS || !Number.isInteger(projectId) || projectId <= 0) return;
+  // Never cache garbage: an incoherent answer must not be replayed O(1) on the next
+  // repeat (it would pin the gibberish permanently under the Q&A key).
+  if (!q || a.length < EVERMIND_ANSWER_MIN_CHARS || !looksLikeCoherentText(a) || !Number.isInteger(projectId) || projectId <= 0) return;
   await upsertProjectFact(env, db, tenantId, projectId, qaCacheKey(q), a, QA_CACHE_SOURCE).catch(() => {
     /* best-effort — caching never breaks a reply */
   });

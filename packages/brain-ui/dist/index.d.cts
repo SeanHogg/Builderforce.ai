@@ -757,6 +757,29 @@ interface EvermindConsoleData {
     /** Latest automatic regression check (▲/▼ vs the previous version), or null. */
     eval?: EvermindEvalPoint | null;
 }
+/**
+ * The outcome of importing a local builderforce-memory snapshot into this Evermind:
+ * how many raw facts were absorbed + merged (and the resulting version), plus how many
+ * source entries were then compacted to terse stubs and the bytes that recovered. A
+ * host returns `null` from {@link EvermindConsoleAdapter.importMemory} when the user
+ * cancels the file picker (a no-op, not an error).
+ */
+interface MemoryImportReport {
+    /** The file the user imported (basename), for the confirmation notice. */
+    fileName: string;
+    /** Raw facts accepted into the learn queue. */
+    absorbed: number;
+    /** Facts skipped (too short / rejected), with the reason count rolled up. */
+    skipped: number;
+    /** Contributions merged into the model by the closing flush. */
+    merged: number;
+    /** Model version after the merge — stamped into each compacted stub. */
+    version: number;
+    /** Source entries rewritten to `[absorbed→Evermind vN]` stubs. */
+    compacted: number;
+    /** Bytes removed from the snapshot by compaction (the context-bloat recovered). */
+    bytesSaved: number;
+}
 /** A published Studio Evermind model that can seed a project's learnable base. */
 interface EvermindSeedModel {
     slug: string;
@@ -792,6 +815,14 @@ interface EvermindConsoleAdapter {
     }>;
     /** Validate a candidate task: which learned memories would answer it (ranked). */
     validate(prompt: string): Promise<EvermindValidateResult>;
+    /**
+     * OPTIONAL — import a local builderforce-memory snapshot into this Evermind and
+     * compact the absorbed facts to stubs. Only hosts with local filesystem access (the
+     * VS Code editor) implement it; the web app leaves it undefined, so the console hides
+     * the Import control there. Resolves to a {@link MemoryImportReport}, or `null` when
+     * the user cancels the file picker.
+     */
+    importMemory?(): Promise<MemoryImportReport | null>;
 }
 /** Every visible string. Parametric ones are functions the host localizes. */
 interface EvermindConsoleLabels {
@@ -844,6 +875,14 @@ interface EvermindConsoleLabels {
     flushing: string;
     flushedNone: string;
     flushedN: (merged: number, version: number) => string;
+    importTitle: string;
+    importHint: string;
+    importCta: string;
+    importing: string;
+    /** Success: N facts absorbed into vX, M entries compacted to stubs, K bytes recovered. */
+    importDone: (absorbed: number, version: number, compacted: number, savedKb: string) => string;
+    /** The picked file had nothing learnable (all too short / already stubbed). */
+    importNothing: string;
     validateCta: string;
     validating: string;
     validateHint: string;
