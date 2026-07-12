@@ -141,13 +141,7 @@ _Owned by the business-analyst — to be authored._
 
 - All scripts run: grep -i progressPct docs/**/*.md docs/**/*.json (`grep -i progressPct` across docs) to surface contradictions. K-V glossaries in schema docs and integration guide agree on emittance semantics.
 
-### Sign-offs & Peer Review Requirements (AC-7)
 
-- PRD.md (this spec document) — designer/PM review.
-- docs/api/event-payload.schema.json — technical writer + backend lead sign-off.
-- docs/guides/progress-handling.md — technical writer + frontend lead sign-off.
-- docs/CHANGELOG.md — technical writer + product manager sign-off.
-- README.md contributions (progress-tracker + vs 99) — integration lead sign-off.
 
 ### Impact Assessment
 
