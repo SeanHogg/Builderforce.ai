@@ -23,6 +23,8 @@ import { loadAssignableWorkforce } from '../../application/kanban/assignableWork
 import { loadAssigneeProfiles, assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { recordActivity, cloudAgentActor, resolveHumanActor } from '../../application/activity/activityLog';
+import { coordinateTicket } from '../../application/manager/coordinateTicket';
+import { buildRuntimeService } from '../../buildRuntimeService';
 
 /** Create a child work-item task under a parent ticket — injected from the composition
  *  root (needs TaskService's key allocation). Absent ⇒ materialize endpoint 503s. */
@@ -294,6 +296,15 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
   // Per-project participation progress for the board's %-complete chips (cached).
   router.get('/projects/:projectId/participants-summary', async (c) =>
     c.json({ summary: await participantsService.projectSummary(env(c), c.get('tenantId') as number, Number(c.req.param('projectId'))) }));
+
+  // Force a Coordinator tick — derive the manifest + dispatch the next required role.
+  router.post('/tasks/:taskId/coordinate', async (c) => {
+    if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
+    const result = await coordinateTicket(env(c), db, buildRuntimeService(env(c), db), {
+      tenantId: c.get('tenantId') as number, taskId: Number(c.req.param('taskId')),
+    });
+    return c.json({ result });
+  });
 
   // Resource Assessment — add a role the ticket needs beyond the template (designer,
   // security engineer, …). Manager-gated. An unstaffed add surfaces as a resource gap.

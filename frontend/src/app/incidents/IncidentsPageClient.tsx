@@ -17,8 +17,10 @@ import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { Select } from '@/components/Select';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useRole, hasMinRole } from '@/lib/rbac';
+import { MonitorsSection, MonitoringReporting } from '@/components/reliability/MonitoringSections';
 import {
   incidentsApi,
+  workflowDefinitions,
   type Incident,
   type IncidentEvent,
   type IncidentSeverity,
@@ -29,6 +31,8 @@ import {
   type EscalationPolicy,
   type EscalationTargetKind,
   type BusinessContact,
+  type IncidentWorkflowRun,
+  type WorkflowDefinitionSummary,
 } from '@/lib/builderforceApi';
 
 const card: React.CSSProperties = {
@@ -62,18 +66,23 @@ function fmt(dt: string | null | undefined): string {
 
 export default function IncidentsPageClient() {
   const t = useTranslations('incidents');
+  const tm = useTranslations('monitoring');
   const tc = useTranslations('common');
   const tab = useSearchParams().get('tab') ?? '';
   const role = useRole();
   const canManage = hasMinRole(role, 'manager');
 
-  const heading = tab === 'oncall'
-    ? { title: t('tab.oncall'), subtitle: t('oncallSubtitle') }
-    : tab === 'escalation'
-      ? { title: t('tab.escalation'), subtitle: t('escalationSubtitle') }
-      : tab === 'contacts'
-        ? { title: t('tab.contacts'), subtitle: t('contactsSubtitle') }
-        : { title: t('title'), subtitle: t('subtitle') };
+  const heading = tab === 'monitors'
+    ? { title: tm('boardsTitle'), subtitle: tm('boardsSubtitle') }
+    : tab === 'reporting'
+      ? { title: tm('reportingTitle'), subtitle: tm('reportingSubtitle') }
+      : tab === 'oncall'
+        ? { title: t('tab.oncall'), subtitle: t('oncallSubtitle') }
+        : tab === 'escalation'
+          ? { title: t('tab.escalation'), subtitle: t('escalationSubtitle') }
+          : tab === 'contacts'
+            ? { title: t('tab.contacts'), subtitle: t('contactsSubtitle') }
+            : { title: t('title'), subtitle: t('subtitle') };
 
   return (
     <PageContainer>
@@ -82,7 +91,11 @@ export default function IncidentsPageClient() {
         <p style={{ color: 'var(--text-secondary)', fontSize: 14, margin: 0, maxWidth: 640 }}>{heading.subtitle}</p>
       </div>
 
-      {tab === 'oncall' ? (
+      {tab === 'monitors' ? (
+        <MonitorsSection />
+      ) : tab === 'reporting' ? (
+        <MonitoringReporting />
+      ) : tab === 'oncall' ? (
         <OnCallSection t={t} tc={tc} canManage={canManage} />
       ) : tab === 'escalation' ? (
         <EscalationSection t={t} tc={tc} canManage={canManage} />
@@ -349,6 +362,9 @@ function IncidentDetailPanel({ t, tc, canManage, incidentId, onClose, onChanged 
             {/* RCA / post-mortem */}
             <RcaSection t={t} tc={tc} canManage={canManage} incident={incident} onPublished={() => { load(); onChanged(); }} />
 
+            {/* Runbooks — run a custom workflow against this incident + linked runs */}
+            <WorkflowRunsSection t={t} tc={tc} canManage={canManage} incidentId={incident.id} />
+
             {/* Classify */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 180 }}>
@@ -547,6 +563,80 @@ function RcaSection({ t, tc, canManage, incident, onPublished }: SectionProps & 
           {saving ? tc('saving') : t('rca.submit')}
         </button>
         <button type="button" className="btn btn-secondary btn-sm" onClick={() => setOpen(false)} disabled={saving}>{tc('cancel')}</button>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────── Runbooks — custom workflows on an incident ─────────────────── */
+
+function WorkflowRunsSection({ t, tc, canManage, incidentId }: SectionProps & { incidentId: string }) {
+  const [defs, setDefs] = useState<WorkflowDefinitionSummary[]>([]);
+  const [runs, setRuns] = useState<IncidentWorkflowRun[]>([]);
+  const [selectedDef, setSelectedDef] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadRuns = useCallback(() => {
+    incidentsApi.listWorkflowRuns(incidentId).then(setRuns).catch(() => {});
+  }, [incidentId]);
+
+  useEffect(() => {
+    workflowDefinitions.list().then(setDefs).catch(() => {});
+    loadRuns();
+  }, [loadRuns]);
+
+  const runWorkflow = async () => {
+    if (!selectedDef) return;
+    setBusy(true); setError(null);
+    try {
+      await incidentsApi.runWorkflow(incidentId, { definitionId: selectedDef });
+      setSelectedDef('');
+      loadRuns();
+    } catch (e) { setError(e instanceof Error ? e.message : 'Run failed'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>{t('workflows.title')}</div>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>{t('workflows.blurb')}</p>
+      {error && <ErrorCard msg={error} />}
+
+      {canManage && defs.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <Field label={t('workflows.pick')}>
+              <Select className="input" value={selectedDef} onChange={(e) => setSelectedDef(e.target.value)}>
+                <option value="">{t('workflows.pickPlaceholder')}</option>
+                {defs.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </Select>
+            </Field>
+          </div>
+          <button type="button" className="btn btn-primary btn-sm" onClick={runWorkflow} disabled={busy || !selectedDef}>
+            {busy ? tc('saving') : t('workflows.run')}
+          </button>
+        </div>
+      )}
+      {defs.length === 0 && (
+        <a href="/workflows" className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }}>{t('workflows.create')}</a>
+      )}
+
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 6 }}>{t('workflows.runs')}</div>
+        {runs.length === 0
+          ? <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('workflows.noRuns')}</div>
+          : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {runs.map((r) => (
+                <a key={r.id} href="/workflows" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', textDecoration: 'none', fontSize: 12 }}>
+                  <span className="badge-muted">{r.status}</span>
+                  <span style={{ fontWeight: 600, color: 'var(--text-primary)', flex: 1, minWidth: 0 }}>{r.definitionName || r.description || r.id}</span>
+                  <span style={{ color: 'var(--text-muted)' }}>{fmt(r.createdAt)}</span>
+                </a>
+              ))}
+            </div>
+          )}
       </div>
     </div>
   );
