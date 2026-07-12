@@ -3,6 +3,17 @@
   "title": "Event Payload Schema",
   "description": "Canonical event payload for progress tracking (Draft 2020-12)",
   "type": "object",
+  "examples": [
+    {
+      "id": "evt-1234567890",
+      "type": "job_status",
+      "resourceId": "job-999",
+      "resourceType": "job",
+      "status": "completed",
+      "progressPct": 100,
+      "created": "2025-06-17T10:30:00Z"
+    }
+  ],
   "properties": {
     "id": {
       "type": "string",
