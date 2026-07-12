@@ -138,9 +138,10 @@ describe('completeTaskOnMerge', () => {
       expect(statusUpdate).toBeDefined();
       expect((statusUpdate!.setPayload as any).status).toBe(TaskStatus.DONE);
 
-      // 2. A transition row is inserted (from in_progress → done)
-      const transitionInsert = inserts.find((i) => i.table as any === tasks); // using the real table ref
-      expect(inserts.length).toBeGreaterThanOrEqual(1);
+      // 2. A transition row is inserted (from in_progress → done) via recordStatusTransition
+      const transitionInsert = inserts.find((i) => (i.values as any)?.toStatus === TaskStatus.DONE);
+      expect(transitionInsert).toBeDefined();
+      expect((transitionInsert!.values as any).fromStatus).toBe(TaskStatus.IN_PROGRESS);
     });
 
     it('FR-1.2: completion timestamp is recorded on the task update', async () => {
