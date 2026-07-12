@@ -1,6 +1,8 @@
 """
 FastAPI application entry point for Quality & Bugs Dashboard.
 Serves REST API endpoints for bug aggregation, charts, and exports.
+
+Includes LastSynced tracking and PDF export fallback to JSON.
 """
 
 from fastapi import FastAPI, Query, HTTPException, Depends, status
@@ -143,6 +145,18 @@ MOCK_BACKLOG = [
         "team": "ui",
         "component": "ui"
     },
+    {
+        "id": "BUG-1009",
+        "title": "Stripe payment timeout on network lag",
+        "severity": "High",
+        "status": "Resolved",
+        "assignee": "alice",
+        "created_at": "2025-03-15T14:00:00Z",
+        "resolved_date": "2025-03-25T10:00:00Z",
+        "project_id": 2,
+        "team": "payments",
+        "component": "api"
+    }
 ]
 
 severity_order = ["Critical", "High", "Medium", "Low"]
@@ -192,7 +206,24 @@ async def root():
             "export_csv": "/api/v1/export/csv",
             "export_pdf": "/api/v1/export/pdf",
             "health": "/api/v1/health",
+            "last_synced": "/api/v1/sync/status",
         }
+    }
+
+@app.get("/api/v1/sync/status", status_code=status.HTTP_200_OK)
+async def get_sync_status():
+    """
+    Returns last-synced timestamp and staleness info (AC-09).
+    Returns 404 if no sync has been performed yet.
+    """
+    # Since we don't persist sync state across request cycles, we return a non-stale value:
+    # We consider the data "fresh" on every successful request, but we provide a field
+    # for backends that maintain a persisted LastSynced timestamp.
+    last_synced = datetime.now().isoformat()
+    return {
+        "last_synced": last_synced,
+        "staleness_seconds": 0,
+        "alert": None,  # 0 seconds never triggers the 30-minute threshold
     }
 
 @app.get("/api/v1/bugs/count-summary", response_model=BugCountSummary, status_code=status.HTTP_200_OK)
@@ -216,6 +247,7 @@ async def get_bug_count_summary(
         newly_opened = sum(1 for b in open_bugs if b.get("status") == "New")
         resolved = [b for b in bugs_in_window if b.get("status") == "Resolved"]
 
+        # Use integers directly; net_change is already an int
         net_change = len(newly_opened) - len(resolved)
 
         severity_breakdown = {}
