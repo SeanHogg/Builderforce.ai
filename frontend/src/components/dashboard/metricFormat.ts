@@ -6,6 +6,12 @@
  * call site (the library ships no hardcoded English).
  */
 
+import {
+  classifyTrend,
+  type TrendClassification,
+  type MetricPolarity,
+} from './trend';
+
 /** Format a numeric metric value with its unit suffix (the dashboard convention). */
 export function formatMetricValue(value: number | null | undefined, unit = ''): string {
   if (value == null || Number.isNaN(value)) return '—';
