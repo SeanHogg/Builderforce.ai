@@ -88,7 +88,7 @@ class TrackingTaskRepo implements ITaskRepository {
     });
     return t;
   }
-  async delete(id: TaskId): Promise<void> {
+  async delete(): Promise<void> {
     return;
   }
   async dequeueNextReady(): Promise<Task | null> {
