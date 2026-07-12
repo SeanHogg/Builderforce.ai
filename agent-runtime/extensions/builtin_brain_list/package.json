@@ -1,0 +1,35 @@
+{
+  "name": "@seanhogg/builtin_brain_list",
+  "version": "0.1.0",
+  "description": "Built-in Brain List plugin for Builderforce - lists all chats for a given project",
+  "type": "module",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "echo \"Linting not configured\" && exit 0",
+    "build": "echo \"No build step required\""
+  },
+  "keywords": [
+    "builderforce",
+    "plugin",
+    "brain",
+    "chat",
+    "listing"
+  ],
+  "author": "Builderforce",
+  "license": "MIT",
+  "peerDependencies": {
+    "@seanhogg/builderforce-agents": "workspace:*"
+  },
+  "builderforce": {
+    "plugin": {
+      "id": "builtin_brain_list",
+      "name": "Brain List (Project Chats)",
+      "description": "List all chat sessions for a given project ID",
+      "kind": "builtin",
+      "tools": ["builtin_brain_list"],
+      "commands": []
+    }
+  }
+}
