@@ -1,55 +1,37 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #395
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# Consolidate
 
 ## Problem & Goal
+The goal is to provide a feature to consolidate individual chats and merge their contents into a specific chat (target chat). This helps to keep all relevant communications in one place, simplifying navigation and reducing clutter.
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
-
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
-
-## Target users / ICP roles
-
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## Target Users / ICP Roles
+This feature is intended for Product Owners, Scrum Masters, and Development Team leads who need to manage and track discussions related to their product. They should be able to identify the most relevant discussions to be merged and ensure that the target chat is the appropriate and accessible one.
 
 ## Scope
+This feature allows for the consolidation of the following types of chats:
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+- **User chats**
+- **Feature requests chats**
+- **Epic chats**
+
+All chats will be considered for consolidation, based on their relevance to the product. The target chat should be a 'product chat' (chat with a title that directly relates to the product's topic) to ensure structured and organized discussions.
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+1. **Request access to consolidate chats:** A user can request access to the consolidate chats feature by providing a target chat ID and a list of source chat IDs.
+2. **Implement consolidated chats:** The system should merge the contents of the source chat into the target chat. The merge process should preserve the original structure of each source chat, such as the order of messages, users, and pinned messages.
+3. **Verify the merge results:** A review workflow should be implemented to verify the accuracy of the merge results. Users should be able to reopen any original messages or chats if necessary. The system should notify the user of any successful merges.
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+1. **User can request access to consolidate chats:** A user can request access to the consolidate chats feature by filling out a form, selecting the target chat and source chat IDs, and submitting the request.
+2. **Implement consolidated chats:** The system should merge all source chats into a single target chat, preserving the original structure of each source chat.
+3. **Verify the merge results:** A review workflow should be in place to verify the accuracy of the merge results. If the system cannot accurately merge two chats, it should confirm with the user that the merge is successful and reopen the chats for review.
 
-## Out of scope
+## Out of Scope
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+1. **Content migration:** Consoliding chats involves merging the contents of separate chat discussions, not moving users or permanent traces of their discussions.
+2. **Default chats:** The feature should be designed to automatically consolidate chats, not to overrule default chat settings or overrides.
+3. **Endless chats:** The system should not attempt to consolidate endless (never ending) chats.
