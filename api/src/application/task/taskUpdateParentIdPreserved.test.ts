@@ -20,9 +20,9 @@ import {
   asAgentHostId,
 } from '../../domain/shared/types';
 
-// -------------------------------------------------------------------------
+// -------------------------------------------------------------------
 // In-memory fakes (no DB) — isolate the update side-effect and parentTaskId behavior.
-// -------------------------------------------------------------------------
+// -------------------------------------------------------------------
 
 class InMemoryTaskRepo implements ITaskRepository {
   private seq = 1;
@@ -46,7 +46,9 @@ class InMemoryTaskRepo implements ITaskRepository {
     return this.store.get(id as number) ?? null;
   }
   async findChildren(parentId: TaskId): Promise<Task[]> {
-    return [...this.store.values()].filter((t) => (t.parentTaskId as number | null) === (parentId as number));
+    return [...this.store.values()].filter(
+      (t) => (t.parentTaskId as number | null) === (parentId as number),
+    );
   }
   async maxKeySeqByProject(projectId: ProjectId): Promise<number> {
     const seqs = [...this.store.values()]
@@ -62,7 +64,10 @@ class InMemoryTaskRepo implements ITaskRepository {
       const plain = t.toPlain();
       const suffix = plain.key.split('-').pop() ?? '';
       if (!/^\d+$/.test(suffix)) continue;
-      this.store.set(id, Task.reconstitute({ ...plain, key: `${newProjectKey}-${suffix}` }));
+      this.store.set(
+        id,
+        Task.reconstitute({ ...plain, key: `${newProjectKey}-${suffix}` }),
+      );
       n++;
     }
     return n;
@@ -137,20 +142,23 @@ function makeProject(): Project {
 
 function makeService(
   decomposer?: EpicDecomposer,
-  recommendChildAssignee?: (projectId: number, roleKey?: string) => Promise<{ memberKind: 'human' | 'cloud_agent' | 'host_agent'; memberRef: string } | null>,
-): {
-  repo: InMemoryTaskRepo;
-  service: TaskService;
-} {
+  recommendChildAssignee?: (
+    projectId: number,
+    roleKey?: string,
+  ) => Promise<{
+    memberKind: 'human' | 'cloud_agent' | 'host_agent';
+    memberRef: string;
+  } | null>,
+) {
   const repo = new InMemoryTaskRepo();
   const projects = new InMemoryProjectRepo(makeProject());
   const service = new TaskService(repo, projects, decomposer, recommendChildAssignee);
   return { repo, service };
 }
 
-// -------------------------------------------------------------------------
-// Test: FR-1 — parentTaskId preserved on assignedAgentRef update
-// -------------------------------------------------------------------------
+// -------------------------------------------------------------------
+// FR-1 — parentTaskId is preserved on assignedAgentRef update
+// -------------------------------------------------------------------
 describe('TaskService.updateTask parentTaskId preservation (FR-1)', () => {
   let repo: InMemoryTaskRepo;
   let service: TaskService;
@@ -159,42 +167,42 @@ describe('TaskService.updateTask parentTaskId preservation (FR-1)', () => {
   };
 
   beforeEach(() => {
-    spyDecomposer = {
-      assess: vi.fn(),
-    };
+    spyDecomposer = { assess: vi.fn() };
     spyDecomposer.assess.mockResolvedValue(heuristicEpicDecomposer.assess);
     const { repo: r, service: s } = makeService(spyDecomposer as EpicDecomposer);
     repo = r;
     service = s;
   });
 
-  it('preserves parentTaskId when only assignedAgentRef changes (Discovery)', async () => {
-    parentTaskId.snapshot = !(await repo.findById((parentTaskId.snapshot = asTaskId(100), asTaskId(100)))) ? asTaskId(1) as TaskId : parentTaskId.snapshot;
+  it('preserves parentTaskId when only assignedAgentRef changes (transition into agent ownership)', async () => {
+    // Create parent
     const parent = Task.create({
       projectId: PROJECT_ID,
       title: 'Parent Task',
       description: null,
+      status: TaskStatus.TODO as any, // workaround for Task.create
       priority: TaskPriority.MEDIUM,
       assignedAgentType: AgentType.CLAUDE,
-      assignedAgentHostId: asAgentHostId(5),
-      assignedAgentRef: 'ide-agent-5',
+      assignedAgentHostId: null,
+      assignedAgentRef: null,
       startDate: null,
       dueDate: null,
       persona: null,
       projectKey: 'PARENT',
       lastKeySeq: 0,
     });
-    parent.parentTaskId = parentTaskId.snapshot;
     await repo.save(parent);
 
+    // Create unassigned child linked to parent
     const child = Task.create({
       projectId: PROJECT_ID,
       title: 'Child Task',
       description: null,
+      status: TaskStatus.TODO as any,
       priority: TaskPriority.MEDIUM,
       assignedAgentType: AgentType.CLAUDE,
-      assignedAgentHostId: asAgentHostId(5),
-      assignedAgentRef: 'ide-agent-5',
+      assignedAgentHostId: null,
+      assignedAgentRef: null,
       startDate: null,
       dueDate: null,
       persona: null,
@@ -202,42 +210,46 @@ describe('TaskService.updateTask parentTaskId preservation (FR-1)', () => {
       lastKeySeq: 0,
     });
     child.parentTaskId = parent.id;
-    child.status = TaskStatus.TODO;
     await repo.save(child);
 
-    const updated = await service.updateTask(child.id as number, { assignedAgentRef: 'ide-agent-123' });
+    // Transition into agent ownership via updateTask — this should NOT strip parentTaskId
+    const updated = await service.updateTask(child.id as number, {
+      assignedAgentRef: 'ide-agent-123',
+    });
 
     expect(updated.parentTaskId).toBe(parent.id);
     const refreshed = await repo.findById(updated.id);
     expect(refreshed?.parentTaskId).toBe(parent.id);
   });
 
-  it('preserves parentTaskId for no-op assignedAgentRef update', async () => {
-    parentTaskId.snapshot = !(await repo.findById((parentTaskId.snapshot = asTaskId(101), asTaskId(101)))) ? asTaskId(1) as TaskId : parentTaskId.snapshot;
+  it('preserves parentTaskId when assignedAgentRef is changed to a different agent', async () => {
+    // Create parent
     const parent = Task.create({
       projectId: PROJECT_ID,
       title: 'Parent Task',
       description: null,
+      status: TaskStatus.TODO as any,
       priority: TaskPriority.MEDIUM,
       assignedAgentType: AgentType.CLAUDE,
-      assignedAgentHostId: asAgentHostId(5),
-      assignedAgentRef: 'ide-agent-5',
+      assignedAgentHostId: null,
+      assignedAgentRef: null,
       startDate: null,
       dueDate: null,
       persona: null,
       projectKey: 'PARENT',
       lastKeySeq: 0,
     });
-    parent.parentTaskId = parentTaskId.snapshot;
     await repo.save(parent);
 
+    // Create child already assigned to agent A, but link? No, we'll test reassign
     const child = Task.create({
       projectId: PROJECT_ID,
       title: 'Child Task',
       description: null,
+      status: TaskStatus.TODO as any,
       priority: TaskPriority.MEDIUM,
       assignedAgentType: AgentType.CLAUDE,
-      assignedAgentHostId: asAgentHostId(5),
+      assignedAgentHostId: null,
       assignedAgentRef: 'ide-agent-5',
       startDate: null,
       dueDate: null,
@@ -246,68 +258,22 @@ describe('TaskService.updateTask parentTaskId preservation (FR-1)', () => {
       lastKeySeq: 0,
     });
     child.parentTaskId = parent.id;
-    child.status = TaskStatus.TODO;
-    const sameAgent = 'ide-agent-5';
     await repo.save(child);
 
-    expect(spyDecomposer.assess).not.toHaveBeenCalled();
-
-    const refreshed = await repo.findById(child.id);
-    expect(refreshed?.parentTaskId).toBe(parent.id);
-  });
-
-  it('preserves parentTaskId when updating assignedAgentRef along with another field', async () => {
-    parentTaskId.snapshot = !(await repo.findById((parentTaskId.snapshot = asTaskId(102), asTaskId(102)))) ? asTaskId(1) as TaskId : parentTaskId.snapshot;
-    const parent = Task.create({
-      projectId: PROJECT_ID,
-      title: 'Parent Task',
-      description: null,
-      priority: TaskPriority.MEDIUM,
-      assignedAgentType: AgentType.CLAUDE,
-      assignedAgentHostId: asAgentHostId(5),
-      assignedAgentRef: 'ide-agent-5',
-      startDate: null,
-      dueDate: null,
-      persona: null,
-      projectKey: 'PARENT',
-      lastKeySeq: 0,
-    });
-    parent.parentTaskId = parentTaskId.snapshot;
-    await repo.save(parent);
-
-    const child = Task.create({
-      projectId: PROJECT_ID,
-      title: 'Child Task',
-      description: null,
-      priority: TaskPriority.MEDIUM,
-      assignedAgentType: AgentType.CLAUDE,
-      assignedAgentHostId: asAgentHostId(5),
-      assignedAgentRef: 'ide-agent-5',
-      startDate: null,
-      dueDate: null,
-      persona: null,
-      projectKey: 'CHILD',
-      lastKeySeq: 0,
-    });
-    child.parentTaskId = parent.id;
-    child.status = TaskStatus.TODO;
-    await repo.save(child);
-
-    // Update assignedAgentRef and also another field
-    await service.updateTask(child.id as number, {
+    // Reassign to different agent — parentTaskId should stay
+    const updated = await service.updateTask(child.id as number, {
       assignedAgentRef: 'ide-agent-456',
-      status: TaskStatus.IN_PROGRESS,
-      // Note: 'description' is NOT in UpdateTaskDto field list; omit
     });
 
-    const refreshed = await repo.findById(child.id);
+    expect(updated.parentTaskId).toBe(parent.id);
+    const refreshed = await repo.findById(updated.id);
     expect(refreshed?.parentTaskId).toBe(parent.id);
   });
 });
 
-// -------------------------------------------------------------------------
-// Test: FR-2 — Auto-run side effect fires exactly once (at on-assign decomposition).
-// -------------------------------------------------------------------------
+// -------------------------------------------------------------------
+// FR-2 — Auto-run side effect fires exactly once
+// -------------------------------------------------------------------
 describe('TaskService.updateTask side-effect behavior (FR-2)', () => {
   let repo: InMemoryTaskRepo;
   let service: TaskService;
@@ -315,43 +281,48 @@ describe('TaskService.updateTask side-effect behavior (FR-2)', () => {
     assess: ReturnType<typeof vi.fn>;
   };
 
+  const simplePlan = {
+    isEpic: false,
+    children: [],
+  };
+
   beforeEach(() => {
-    spyDecomposer = {
-      assess: vi.fn(),
-    };
-    spyDecomposer.assess.mockResolvedValue(heuristicEpicDecomposer.assess);
+    spyDecomposer = { assess: vi.fn() };
+    spyDecomposer.assess.mockResolvedValue(simplePlan);
     const { repo: r, service: s } = makeService(spyDecomposer as EpicDecomposer);
     repo = r;
     service = s;
   });
 
-  it('auto-run side effect (onAssign decomposition) fires exactly once per qualifying update', async () => {
-    childTaskId.snapshot = !(await repo.findById((childTaskId.snapshot = asTaskId(104), asTaskId(104)))) ? asTaskId(1) as TaskId : childTaskId.snapshot;
+  it('fire auto-run onAssignedToAgent hook exactly once per true assignment transition', async () => {
+    // Parent
     const parent = Task.create({
       projectId: PROJECT_ID,
       title: 'Parent Task',
-      description: '- [ ] Child A\n- [ ] Child B',
+      description: null,
+      status: TaskStatus.TODO as any,
       priority: TaskPriority.MEDIUM,
       assignedAgentType: AgentType.CLAUDE,
-      assignedAgentHostId: asAgentHostId(5),
-      assignedAgentRef: 'ide-agent-5',
+      assignedAgentHostId: null,
+      assignedAgentRef: null,
       startDate: null,
       dueDate: null,
       persona: null,
       projectKey: 'PARENT',
       lastKeySeq: 0,
     });
-    parent.parentTaskId = childTaskId.snapshot;
     await repo.save(parent);
 
+    // Unassigned child
     const child = Task.create({
       projectId: PROJECT_ID,
       title: 'Child Task',
       description: null,
+      status: TaskStatus.TODO as any,
       priority: TaskPriority.MEDIUM,
       assignedAgentType: AgentType.CLAUDE,
-      assignedAgentHostId: asAgentHostId(5),
-      assignedAgentRef: 'ide-agent-5',
+      assignedAgentHostId: null,
+      assignedAgentRef: null,
       startDate: null,
       dueDate: null,
       persona: null,
@@ -360,43 +331,51 @@ describe('TaskService.updateTask side-effect behavior (FR-2)', () => {
     });
     child.parentTaskId = parent.id;
     child.taskType = TaskType.TASK;
-    child.status = TaskStatus.TODO;
     await repo.save(child);
 
-    // On-assign hook (decomposition) should fire exactly once
-    await service.updateTask(child.id as number, { assignedAgentRef: 'ide-agent-789' });
+    // Transition from unassigned → assigned — assess should fire exactly once
+    await expect(
+      service.updateTask(child.id as number, { assignedAgentRef: 'ide-agent-789' }),
+    ).resolves.not.toThrow();
+
     expect(spyDecomposer.assess).toHaveBeenCalledTimes(1);
 
-    // Additional non-agent re-assignments should NOT fire
-    await service.updateTask(child.id as number, { assignedAgentRef: 'ide-agent-789' });
+    // Additional no-op agent reassignments should NOT trigger the hook again for the same transition
+    await expect(
+      service.updateTask(child.id as number, { assignedAgentRef: 'ide-agent-789' }),
+    ).resolves.not.toThrow();
+
     expect(spyDecomposer.assess).toHaveBeenCalledTimes(1);
   });
 
-  it('auto-run side effect is skipped for no-op assignedAgentRef update', async () => {
-    childTaskId.snapshot = !(await repo.findById((childTaskId.snapshot = asTaskId(105), asTaskId(105)))) ? asTaskId(1) as TaskId : childTaskId.snapshot;
+  it('skip auto-run hook when task is already assigned and only state fields update', async () => {
     const parent = Task.create({
       projectId: PROJECT_ID,
-      description: '- [ ] Child1\n- [ ] Child2',
+      title: 'Parent Task',
+      description: null,
+      status: TaskStatus.TODO as any,
       priority: TaskPriority.MEDIUM,
       assignedAgentType: AgentType.CLAUDE,
-      assignedAgentHostId: asAgentHostId(5),
-      assignedAgentRef: 'ide-agent-5',
+      assignedAgentHostId: null,
+      assignedAgentRef: null,
       startDate: null,
       dueDate: null,
       persona: null,
       projectKey: 'PARENT',
       lastKeySeq: 0,
     });
-    parent.parentTaskId = childTaskId.snapshot;
     await repo.save(parent);
 
+    // Already assigned (wired parentTaskId already OK)
     const child = Task.create({
       projectId: PROJECT_ID,
+      title: 'Child Task',
       description: null,
+      status: TaskStatus.TODO as any,
       priority: TaskPriority.MEDIUM,
       assignedAgentType: AgentType.CLAUDE,
-      assignedAgentHostId: asAgentHostId(5),
-      assignedAgentRef: 'ide-agent-5',
+      assignedAgentHostId: null,
+      assignedAgentRef: 'agentA',
       startDate: null,
       dueDate: null,
       persona: null,
@@ -404,19 +383,28 @@ describe('TaskService.updateTask side-effect behavior (FR-2)', () => {
       lastKeySeq: 0,
     });
     child.parentTaskId = parent.id;
-    child.assignedAgentHostId = asAgentHostId(7);
-    child.status = TaskStatus.TODO;
+    child.taskType = TaskType.TASK;
     await repo.save(child);
 
-    // No change detection, assess should not be called
-    await service.updateTask(child.id as number, { assignedAgentHostId: asAgentHostId(7), assignedAgentRef: 'agentA' });
+    // Reassign to same agent — assess should NOT fire (no transition)
+    await expect(
+      service.updateTask(child.id as number, { assignedAgentRef: 'agentA' }),
+    ).resolves.not.toThrow();
+
+    expect(spyDecomposer.assess).not.toHaveBeenCalled();
+
+    // Update another field (title) should also not fire the hook
+    await expect(
+      service.updateTask(child.id as number, { title: 'Updated Title' }),
+    ).resolves.not.toThrow();
+
     expect(spyDecomposer.assess).not.toHaveBeenCalled();
   });
 });
 
-// -------------------------------------------------------------------------
-// Test: FR-3 — No side effect on a no-op assignedAgentRef update
-// -------------------------------------------------------------------------
+// -------------------------------------------------------------------
+// FR-3 — Test: No side effect on a no-op assignedAgentRef update
+// -------------------------------------------------------------------
 describe('TaskService.updateTask (FR-3)', () => {
   let repo: InMemoryTaskRepo;
   let service: TaskService;
@@ -425,42 +413,42 @@ describe('TaskService.updateTask (FR-3)', () => {
   };
 
   beforeEach(() => {
-    spyDecomposer = {
-      assess: vi.fn(),
-    };
-    spyDecomposer.assess.mockResolvedValue(heuristicEpicDecomposer.assess);
+    spyDecomposer = { assess: vi.fn() };
+    spyDecomposer.assess.mockResolvedValue({ isEpic: false, children: [] });
     const { repo: r, service: s } = makeService(spyDecomposer as EpicDecomposer);
     repo = r;
     service = s;
   });
 
   it('does NOT fire auto-run side effect when assignedAgentRef value is unchanged', async () => {
-    childTaskId.snapshot = !(await repo.findById((childTaskId.snapshot = asTaskId(106), asTaskId(106)))) ? asTaskId(1) as TaskId : childTaskId.snapshot;
+    // Parent
     const parent = Task.create({
       projectId: PROJECT_ID,
       title: 'Parent Task',
-      description: 'Some desc',
+      description: null,
+      status: TaskStatus.TODO as any,
       priority: TaskPriority.MEDIUM,
       assignedAgentType: AgentType.CLAUDE,
-      assignedAgentHostId: asAgentHostId(5),
-      assignedAgentRef: 'ide-agent-5',
+      assignedAgentHostId: null,
+      assignedAgentRef: null,
       startDate: null,
       dueDate: null,
       persona: null,
       projectKey: 'PARENT',
       lastKeySeq: 0,
     });
-    parent.parentTaskId = childTaskId.snapshot;
     await repo.save(parent);
 
+    // Unassigned child
     const child = Task.create({
       projectId: PROJECT_ID,
       title: 'Child Task',
       description: null,
+      status: TaskStatus.TODO as any,
       priority: TaskPriority.MEDIUM,
       assignedAgentType: AgentType.CLAUDE,
-      assignedAgentHostId: asAgentHostId(5),
-      assignedAgentRef: 'ide-agent-5',
+      assignedAgentHostId: null,
+      assignedAgentRef: null,
       startDate: null,
       dueDate: null,
       persona: null,
@@ -468,11 +456,14 @@ describe('TaskService.updateTask (FR-3)', () => {
       lastKeySeq: 0,
     });
     child.parentTaskId = parent.id;
-    child.status = TaskStatus.TODO;
+    child.taskType = TaskType.TASK;
     await repo.save(child);
 
-    // same-value update should not detect change
-    await service.updateTask(child.id as number, { assignedAgentRef: 'ide-agent-5' });
+    // Unassigned → same empty string (still unassigned) should not transition
+    await expect(
+      service.updateTask(child.id as number, { assignedAgentRef: '' }),
+    ).resolves.not.toThrow();
+
     expect(spyDecomposer.assess).not.toHaveBeenCalled();
 
     const refreshed = await repo.findById(child.id);
@@ -480,32 +471,34 @@ describe('TaskService.updateTask (FR-3)', () => {
   });
 
   it('preserves parentTaskId when updating another field but not touching assignedAgentRef', async () => {
-    childTaskId.snapshot = !(await repo.findById((childTaskId.snapshot = asTaskId(107), asTaskId(107)))) ? asTaskId(1) as TaskId : childTaskId.snapshot;
+    // Parent
     const parent = Task.create({
       projectId: PROJECT_ID,
       title: 'Parent Task',
       description: null,
+      status: TaskStatus.TODO as any,
       priority: TaskPriority.MEDIUM,
       assignedAgentType: AgentType.CLAUDE,
-      assignedAgentHostId: asAgentHostId(5),
-      assignedAgentRef: 'ide-agent-5',
+      assignedAgentHostId: null,
+      assignedAgentRef: null,
       startDate: null,
       dueDate: null,
       persona: null,
       projectKey: 'PARENT',
       lastKeySeq: 0,
     });
-    parent.parentTaskId = childTaskId.snapshot;
     await repo.save(parent);
 
+    // Unassigned child
     const child = Task.create({
       projectId: PROJECT_ID,
       title: 'Child Task',
       description: null,
+      status: TaskStatus.TODO as any,
       priority: TaskPriority.MEDIUM,
       assignedAgentType: AgentType.CLAUDE,
-      assignedAgentHostId: asAgentHostId(5),
-      assignedAgentRef: 'ide-agent-5',
+      assignedAgentHostId: null,
+      assignedAgentRef: null,
       startDate: null,
       dueDate: null,
       persona: null,
@@ -513,11 +506,14 @@ describe('TaskService.updateTask (FR-3)', () => {
       lastKeySeq: 0,
     });
     child.parentTaskId = parent.id;
-    child.status = TaskStatus.TODO;
+    child.taskType = TaskType.TASK;
     await repo.save(child);
 
     // Update metadata only; no agent reassign/deassign, no decomposition
-    await service.updateTask(child.id as number, { title: 'Updated Title' });
+    await expect(
+      service.updateTask(child.id as number, { title: 'Updated Title' }),
+    ).resolves.not.toThrow();
+
     expect(spyDecomposer.assess).not.toHaveBeenCalled();
 
     const refreshed = await repo.findById(child.id);
@@ -525,9 +521,9 @@ describe('TaskService.updateTask (FR-3)', () => {
   });
 });
 
-// -------------------------------------------------------------------------
-// Test: FR-4 — parentTaskId preserved when updating multiple fields concurrently
-// -------------------------------------------------------------------------
+// -------------------------------------------------------------------
+// FR-4 — parentTaskId is preserved when updating multiple fields concurrently
+// -------------------------------------------------------------------
 describe('TaskService.updateTask (FR-4)', () => {
   let repo: InMemoryTaskRepo;
   let service: TaskService;
@@ -536,42 +532,42 @@ describe('TaskService.updateTask (FR-4)', () => {
   };
 
   beforeEach(() => {
-    spyDecomposer = {
-      assess: vi.fn(),
-    };
-    spyDecomposer.assess.mockResolvedValue(heuristicEpicDecomposer.assess);
+    spyDecomposer = { assess: vi.fn() };
+    spyDecomposer.assess.mockResolvedValue({ isEpic: false, children: [] });
     const { repo: r, service: s } = makeService(spyDecomposer as EpicDecomposer);
     repo = r;
     service = s;
   });
 
-  it('preserves parentTaskId across multiple-changes update that also triggers decomposition', async () => {
-    childTaskId.snapshot = !(await repo.findById((childTaskId.snapshot = asTaskId(108), asTaskId(108)))) ? asTaskId(1) as TaskId : childTaskId.snapshot;
+  it('preserves parentTaskId across multiple changes update that includes assignment transition', async () => {
+    // Parent
     const parent = Task.create({
       projectId: PROJECT_ID,
       title: 'Parent Task',
-      description: '- [ ] Multi-update child A\n- [ ] Multi-update child B',
+      description: null,
+      status: TaskStatus.TODO as any,
       priority: TaskPriority.MEDIUM,
       assignedAgentType: AgentType.CLAUDE,
-      assignedAgentHostId: asAgentHostId(5),
-      assignedAgentRef: 'ide-agent-5',
+      assignedAgentHostId: null,
+      assignedAgentRef: null,
       startDate: null,
       dueDate: null,
       persona: null,
       projectKey: 'PARENT',
       lastKeySeq: 0,
     });
-    parent.parentTaskId = childTaskId.snapshot;
     await repo.save(parent);
 
+    // Unassigned child
     const child = Task.create({
       projectId: PROJECT_ID,
       title: 'Child Task',
       description: null,
+      status: TaskStatus.TODO as any,
       priority: TaskPriority.MEDIUM,
       assignedAgentType: AgentType.CLAUDE,
-      assignedAgentHostId: asAgentHostId(5),
-      assignedAgentRef: 'ide-agent-5',
+      assignedAgentHostId: null,
+      assignedAgentRef: null,
       startDate: null,
       dueDate: null,
       persona: null,
@@ -579,42 +575,21 @@ describe('TaskService.updateTask (FR-4)', () => {
       lastKeySeq: 0,
     });
     child.parentTaskId = parent.id;
-    child.status = TaskStatus.TODO;
+    child.taskType = TaskType.TASK;
     await repo.save(child);
 
-    // Simultaneous updates; assess should still fire exactly once
-    await service.updateTask(child.id as number, {
+    // Simultaneous updates; assign task and update other fields — assess should still fire exactly once
+    const updated = await service.updateTask(child.id as number, {
       assignedAgentRef: 'ide-agent-multi',
-      status: TaskStatus.IN_PROGRESS,
-      businessValue: 50,
-      businessValueSource: 'manual',
+      status: TaskStatus.IN_PROGRESS as any,
+      priority: TaskPriority.HIGH,
     });
-    expect(spyDecomposer.assess).toHaveBeenCalledTimes(1);
 
-    const refreshed = await repo.findById(child.id);
+    expect(updated.parentTaskId).toBe(parent.id);
+
+    const refreshed = await repo.findById(updated.id);
     expect(refreshed?.parentTaskId).toBe(parent.id);
+
+    expect(spyDecomposer.assess).toHaveBeenCalledTimes(1);
   });
 });
-
-// -------------------------------------------------------------------------
-// Spy: Simple function to freeze/restore a snapshot across beforeEach calls.
-// -------------------------------------------------------------------------
-const childTaskId = {
-  get snapshot(): TaskId | undefined {
-    const stored = (globalThis as any).__childTaskSnapshot;
-    return stored ?? undefined;
-  },
-  set snapshot(value: TaskId | undefined) {
-    (globalThis as any).__childTaskSnapshot = value;
-  },
-};
-
-const parentTaskId = {
-  get snapshot(): TaskId | undefined {
-    const stored = (globalThis as any).__parentTaskSnapshot;
-    return stored ?? undefined;
-  },
-  set snapshot(value: TaskId | undefined) {
-    (globalThis as any).__parentTaskSnapshot = value;
-  },
-};
