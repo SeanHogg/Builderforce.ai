@@ -34,6 +34,84 @@ This PRD covers the **Team Health** module within the broader project management
 
 ---
 
+## Implementation Design Notes
+
+### Existing surfaces to reuse
+
+- **Dashboard layout pattern:** The platform’s `/dashboard` page (`frontend/src/app/dashboard/page.tsx`) provides a ready-made Shell/AppShell background + lazy-loadable routes pattern (see `SectionTabs` and `PillTabs`). The new `/team-health` route should follow this pattern:
+  - Route: `/team-health`
+  - Shell: reuse `AppShell.tsx` + top-nav links.
+  - Structured sections: `Workload`, `Blockers`, `Aging WIP`, `Agent Utilization`
+- **Components to reuse/adapt:**
+  - `HealthRing.tsx` (packages/brain-ui/src/HealthRing.tsx) — render progress/command arcs; suitable for capacity bars and the Team Health Score (0–100).
+  - `SectionTabs.tsx` (frontend/src/components/SectionTabs.tsx) — collapsible sections and scrolling.
+  - `PillTabs.tsx` (frontend/src/components/PillTabs.tsx) — filter tabs (team, sprint, label).
+  - `SidePanel`-style swimlanes or presentation modals for focused blocker details (Channel/Session + presentation affine layout). Use `SlideOutPanel` or opening a modal for escalation.
+- **Telemetry/observability surfaces:**
+  - Kanbans/Autonomous execution emit Observability/tool-audit events (see self-diagnostic last run). However, `agent-worker` API exports include `canAutoRun`, `agentStatus`, `lastRun`, `queueDepth`.
+- **Projects/tasks:**
+  - Projects: identifier `id` (INTEGER, NOT uuid) and `id INTEGER refs tenants(id)`.
+  - Tasks: first fetched by `projects.get(id) -> tasks.list(projectId)` resulting in a compact projection of tasks (id, title, status, priority, type, assignee/userId/agentRef/hostId points). Domain constants: TaskStatus states exist in domain/shared/types.ts (backlog, todo, ready, in_progress, in_review, done, blocked).
+- **Agent data from API:**
+  - Use `/projects/{id}/agents` endpoint on the agent-worker project (optional; default minimal) with query parameters `?remoteAgents=all`. The response contains expected fields:
+    - `agentHostId` (self-hosted runner ID, INTEGER)
+    - `agentRef` (Enterprise Agent id, string)
+    - `name` (display name)
+    - `agentStatus`: idle|running|waiting_on_human|blocked|error (use as-is)
+    - `queueDepth`, `lastAction`, `lastError`, `lastRunStart/End`, `completedSinceRestart`, `avgTaskDurationSeconds`
+    - `lastAcknowledgement`, `lastKeepAlive`
+  - Warn on missing/no-agent hosts (auto-create `agent-worker` project if needed).
+
+### Architectural considerations
+
+- **Frontend backend integration:**
+  - New `/api/projects/{id}/team-health` route under the agent-worker project to collect:
+    - Contributor task lists by userId/agentRef.
+    - Blocked tasks with `blockedSince` and blocking notes.
+    - Tasks with last-status-change/last-activity-at (lastActivityAt from task model and/or run events).
+    - Agent utilization metrics (returned by `/projects/{id}/agents`).
+  - Metrics reference platform configs where present (e.g., capacity configured via project/team settings).
+  - For AC-3 on task aging priority, tasks are now tied to runs: we can compute staleness from the latest `lastRunFinishedAt` and also fall back to `updatedAt`/`lastStatusChangeAt` per domain types. Default thresholds: 3 days (tasks), 7 days (epics).
+- **Team Health Score (formula):**
+  - Compute from the current dashboard evaluation cycle:
+    - `blockerCount`: number of blocked tasks (FR-2.1)
+    - `overloadPct`: % of contributors with tasks assigned > their configured capacity
+    - `agingWipCount`: number of in-progress tasks beyond threshold (FR-3)
+    - `agentErrorRate`: % of agents with an `error` state (non-healthy) for the current cycle
+  - Weights (per-source): blockers (0.4), overload (0.3), aging (0.2), agent errors (0.1). Teams can adjust weights at project level via settings.
+  - Score uses a bounded mapping to 0–100 (negative inputs map to close-to-zero; near-zero inputs to close-to-100).
+- **Alerting:**
+  - Reminder for peaks and parents (popover > priority) is just UI; focus on spike spikes and stale overloads (FR-6).
+- **Alert delivery:**
+  - Platform already has alerts support (`/api/projects/{id}/alerts` on the agent-worker project) for Slack-compatible payloads and digesting; reuse that surface and don’t duplicate.
+- **Agency oversight:**
+  - Admin can change the per-scoring source weighting (blockers, overload, agingWip, agentErrors) and per-contributor thresholds (warnings: >100% burden; critical: >150% burden, with constraints derived from configured capacity).
+  - Export: CSV via GET with query params (`?view=aging-wip?export=true`), paginating at 500 per page (acquiring `x-total` header).
+  - Cache/batching: for tasks/agents, use finite window to avoid loading every state; use server-side orchestration sequences in the repo (no AI-generated complexity).
+- **UI/UX:**
+  - Section tabs (Workload, Blockers, Aging WIP, Agent Utilization) with at-a-glance summary at the top (Workload, blockers, agingWip, agentErrors) plus toggles.
+  - Visual capacity bars per contributor: left side label, a sector for assigned burden relative to configured capacity (color-coded: green/blue <100%, yellow >100%, red >150%).
+  - Sticky per-contributor sections when scrolled (use React `sticky` CSS).
+  - WIP aging: yellow/orange/red based on thresholds; on-hover to show blocking dependency and assignee.
+  - Agent status: status pills and error messages inline; hover to show queue depth and duration.
+  - Color palette must meet contrast AA for the region (e.g., 4.5:1 ratio for small text, 3:1 for large text), and be consistent with the global theme (light/dark).
+- **Security:**
+  - Use existing RBAC on the agent-worker project; add an explicit “team health view” permission scope or derive from existing `project:view` and `project:edit` (access less than edit).
+- **Performance/observability:**
+  - Cache result of `/api/projects/{id}/team-health` for 60 seconds (FR-5.3). The URL is stable per project.
+  - Client-side polling: fetch with `useEffect` hook + `setInterval` (managed via a ref to avoid cross-tabs race).
+  - Track metrics (Full per-turn tool calls and execution trace) for debugging load, dashboard responsiveness.
+
+### Dependencies / integrations
+
+- **Platform:**
+  - Existing tasks runtime (swimlane + agent-worker) exposes fields used for telemetry (observability events, agent statuses, queue depth, avg duration).
+  - Existing frontend shell and components reuse.
+- **Future:**
+  - More granular task filtering by sprint/label via existing query APIs (scoping is single-team/individual project).
+
+---
+
 ## Functional Requirements
 
 ### FR-1 · Workload Distribution
