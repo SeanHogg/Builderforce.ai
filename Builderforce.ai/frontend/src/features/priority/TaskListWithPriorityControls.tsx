@@ -14,7 +14,7 @@
 import React, { useState, useCallback } from 'react';
 import { PriorityContextMenu } from '@/components/tasks/PriorityContextMenu';
 import { PriorityBadge, PriorityBadgeDot } from '@/components/tasks/PriorityBadgeEnhanced';
-import { PriorityStatusService, setTaskStatus } from '@/services/priorityStatusService';
+import { PriorityStatusService } from '@/services/priorityStatusService';
 import { useToast } from '@/components/ui/use-toast';
 import type { LowPriorityStatus } from '@/types/priority-status';
 
