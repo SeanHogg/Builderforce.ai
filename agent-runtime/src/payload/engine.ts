@@ -30,8 +30,6 @@ export type CustomFunction = (args: {
  */
 type PathSegment = string | number;
 
-const DEFAULT_SEPARATOR = ".";
-
 /**
  * Tokenize a path string into segments supporting:
  *   dot notation:   "user.address.city"
