@@ -362,4 +362,4 @@ When consuming a payload:
 - **Semantic Versioning:** [https://semver.org/](https://semver.org/)
 - **Schema Artifact:** [`basis-payload.schema.json`](./basis-payload.schema.json)
 - **Example Payload:** [`example.canonical.json`](./example.canonical.json)
-- **PRD:** See [PRD.md](../../../PRD.md) (task #674).
+- **PRD:** See [PRD.md](../../PRD.md) (task #674).
