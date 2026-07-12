@@ -1,55 +1,123 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #283
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# PRD: Stakeholder Alignment & Priority Clarity System
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+Engineering, product, and business teams frequently operate with misaligned assumptions about what matters most. Priorities shift in Slack threads, get buried in meeting notes, or live only in one person's head — creating rework, missed deadlines, and trust erosion between teams.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+**Goal:** Provide a lightweight, structured process and tooling layer that surfaces priority conflicts early, creates a shared source of truth for agreed priorities, and produces a durable audit trail of alignment decisions — so every team member can answer "what are we working on and why?" at any moment.
 
-## Target users / ICP roles
+---
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## Target Users / ICP Roles
+
+| Role | Pain Point | Primary Need |
+|---|---|---|
+| **Product Manager** | Priorities exist in their head or in scattered docs | A single place to publish, version, and get sign-off on priorities |
+| **Engineering Lead / Tech Lead** | Receives conflicting signals from multiple stakeholders | Clarity on ranked work before sprint commitments are made |
+| **Executive / Business Sponsor** | Unsure whether their strategic bets are reflected in what teams ship | Lightweight visibility without attending every planning meeting |
+| **Project / Program Manager** | Owns cross-team coordination but lacks authority to enforce alignment | A structured escalation path when stakeholders disagree |
+| **Individual Contributor (IC)** | Interrupted mid-sprint by "new priority" requests | Protected context backed by documented, agreed priorities |
+
+---
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+### In Scope
+
+- Defining the **priority alignment workflow**: who proposes, who reviews, who approves, and by when
+- A **Priority Register** — a living, versioned list of ranked initiatives and their rationale
+- A **conflict detection mechanism** — flagging when two stakeholders have submitted contradictory priorities
+- A **sign-off protocol** — explicit, time-boxed async approval from required stakeholders
+- An **audit trail** — immutable log of what was agreed, who agreed, and when it changed
+- **Escalation rules** — defined path and SLA when consensus cannot be reached within the standard window
+- **Integration touchpoints** with existing tools (Jira, Linear, Notion, Confluence, Slack) via lightweight hooks or manual templates
+
+### Out of Scope (see section below)
+
+---
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### FR-1: Priority Register
+
+- The system must maintain a **ranked, numbered list** of active initiatives (P0–P3 or stack-ranked).
+- Each item must include: title, owner, business rationale, dependencies, current status, and last-reviewed date.
+- The register must be **versioned** — any change creates a new version with a diff summary.
+- All stakeholders with access must be able to **comment inline** without editing the authoritative record directly.
+
+### FR-2: Stakeholder Mapping
+
+- Each priority item must have a defined set of **Required Approvers** and **Informed Parties**.
+- The system must prevent a priority from being marked "agreed" if any Required Approver has not responded within the sign-off window.
+- Stakeholder maps must be **editable by PMs** and **visible to all team members**.
+
+### FR-3: Conflict Detection
+
+- When two or more stakeholders submit priority inputs that place incompatible items in the same top slot (e.g., two different P0s competing for the same team), the system must **automatically surface a conflict alert**.
+- Conflicts must be labeled with: conflicting items, stakeholders in disagreement, and date detected.
+- No conflict may remain unresolved for more than **5 business days** before triggering escalation.
+
+### FR-4: Sign-Off Protocol
+
+- Each priority version must go through a **structured review window** (default: 48 hours async).
+- Stakeholders can respond: **Approve**, **Approve with Comment**, or **Block with Reason**.
+- A single Block response halts approval and opens an escalation thread automatically.
+- Once all Required Approvers approve, the register is **locked at that version** until a change request is submitted.
+
+### FR-5: Escalation Path
+
+- A defined escalation chain must be configured per team/program (e.g., PM → Director → VP → C-suite).
+- Escalations must carry: context summary, stakeholders involved, the blocker reason, and recommended resolution options.
+- Escalations must be resolved within a **defined SLA** (default: 3 business days per level).
+- Resolution outcome must be logged and attached to the relevant priority version.
+
+### FR-6: Audit Trail
+
+- Every state change (creation, edit, approval, block, escalation, resolution) must be recorded with: actor, timestamp, and change description.
+- Audit logs must be **read-only** to all users including admins.
+- Logs must be exportable as CSV or PDF for compliance or retrospective use.
+
+### FR-7: Notification & Reminders
+
+- Stakeholders must receive notifications for: review requests, approaching deadlines, conflict alerts, and escalation triggers.
+- Reminders must be sent at **24 hours** and **4 hours** before a sign-off window closes.
+- Notification channels must be configurable (email, Slack, in-app).
+
+### FR-8: Reporting Dashboard
+
+- A summary view must show: total open priorities, % aligned, pending approvals, active conflicts, and overdue escalations.
+- Dashboard must be filterable by team, time period, and stakeholder.
+- Weekly digest report must be auto-generated and distributed to all Required Approvers and Informed Parties.
+
+---
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+| # | Criterion | Verification Method |
+|---|---|---|
+| AC-1 | A Priority Register can be created, versioned, and retrieved with full diff history | Manual test + automated regression |
+| AC-2 | A conflict between two stakeholder submissions is detected and surfaced within 1 hour of submission | Automated test with synthetic conflicting inputs |
+| AC-3 | A priority version cannot reach "Agreed" status with any Required Approver response missing | State machine unit test; UI blocks action |
+| AC-4 | A Block response automatically opens an escalation thread with correct context populated | End-to-end test |
+| AC-5 | Escalation SLA timer begins within 15 minutes of escalation trigger and fires reminder at correct intervals | Automated timer test |
+| AC-6 | Audit log records all state changes; no log entry can be modified or deleted | Read/write permission test; tamper attempt test |
+| AC-7 | Notifications fire within 5 minutes of triggering event across all configured channels | Integration test against Slack + email sandbox |
+| AC-8 | Dashboard renders accurate metrics within 60 seconds of any state change in the register | Load test + accuracy validation |
+| AC-9 | A new stakeholder added as Required Approver blocks the "Agreed" state retroactively until they respond | Regression test |
+| AC-10 | Full priority cycle (create → review → conflict → escalate → resolve → agree) can be completed end-to-end in a single session | UAT walkthrough with PM and EL personas |
 
-## Out of scope
+---
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## Out of Scope
+
+- **Roadmap visualization or Gantt charting** — this system is about alignment, not scheduling
+- **Resource capacity planning** — headcount and velocity are managed in separate tooling
+- **OKR or KPI tracking** — outcomes measurement is distinct from priority agreement
+- **Direct integration build-out** with third-party tools in v1 (Jira, Linear, etc.) — v1 ships with documented manual templates and webhook specs; native integrations are v2
+- **AI-generated priority recommendations** — the system records and enforces human decisions; it does not make them
+- **External stakeholder / customer access** — the system is internal-team only; no external portal in scope
+- **Budget or cost tracking** tied to priority items
+- **Legal or contractual approval workflows** — this covers operational priorities only
