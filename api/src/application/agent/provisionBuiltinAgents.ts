@@ -23,8 +23,10 @@ interface BuiltinAgentSeed {
 }
 
 /** The seeded built-in workforce — kept in sync with migrations 0271 (Validator),
- *  0291 (Security), 0293 (Product Manager + Designer) and 0326 (Incident Manager) so
- *  an existing-tenant backfill and a new-tenant provision agree. */
+ *  0291 (Security), 0293 (Product Manager + Designer), 0326 (Incident Manager),
+ *  0393 (Cloud Security), and 0394 (Generalist Coder) so an existing-tenant
+ *  backfill and a new-tenant provision agree.
+ */
 const BUILTIN_AGENTS: BuiltinAgentSeed[] = [
   {
     kind: 'validator',
@@ -65,6 +67,22 @@ const BUILTIN_AGENTS: BuiltinAgentSeed[] = [
     title: 'Incident Manager — help-desk triage, on-call paging & escalation',
     bio: 'Runs the help desk and the first minutes of incident response. Reads inbound support tickets (Freshdesk / Freshservice), works out which system the issue pertains to, and for anything that reads as an incident opens a first-class incident — a tracked board ticket bridged to the incident record with a severity. It then pages the right on-call list, opens an on-call war-room chat, posts status updates (in-app + MS Teams), and escalates to the next on-call tier and business contacts on a timer until someone acknowledges.',
     skills: ['incident-response', 'triage', 'on-call', 'itsm', 'escalation', 'help-desk'],
+  },
+  {
+    kind: 'cloud_security',
+    idPrefix: 'cloud-security-t',
+    name: 'Cloud Security',
+    title: 'Cloud Security — GAP-G1/G2/G3 P0 security/isolation + cloud-Worker validation',
+    bio: 'Specialist for critical cloud security gaps (GAP-G1/G2/G3) and cloud-Worker isolation validation. Proactively identifies and resolves P0 security/isolation issues that block General Availability. Validates isolation boundaries for all cloud Worker workstreams, preventing cross-tenant and unauthorized access risks.',
+    skills: ['cloud-security', 'isolation-validation', 'ga-blockers', 'worker-isolation', 'security-isolation'],
+  },
+  {
+    kind: 'generalist_coder',
+    idPrefix: 'generalist-coder-t',
+    name: 'Generalist Coder',
+    title: 'Generalist Coder — Parallel gap coding executor',
+    bio: 'High-capacity coder agent specialized for parallel execution of the 50-gap coding workstreams (GAP-D*/W*/E*). Accelerates gap resolution by processing multiple tasks concurrently, significantly reducing the estimated 64–78 day timeline to 38–48 days. Offloads coding workload to relieve Bob Developer (85% utilization risk) and unblock the cloud-agent GA security gate.',
+    skills: ['gap-coding', 'parallel-execution', 'generalist', 'task-concurrency', 'code-generation'],
   },
 ];
 
