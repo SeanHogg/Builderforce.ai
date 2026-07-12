@@ -1,34 +1,39 @@
 # CODEOWNERS
-# Codeowners makes GitHub block PRs until all listed maintainers approve.
-# This matches the repo's AuditRunner regex: /(^|\/)(.github\/|docs\/)?codeowners$/
+#
+# GitHub uses this file to auto-request reviews and (with branch protection)
+# to REQUIRE an approving review from a code owner before a PR can merge into
+# `main`. This operationalizes FR-3.1 ("at least one approved review from a
+# qualified reviewer, not the author") and AC-7 for the Code Review & Merge
+# Pipeline PRD.
+#
+# Syntax: <path-pattern> <@owner> [<@owner> ...]
+# Later, more-specific rules win. Every merged PR that touches a matched path
+# requires an approval from a listed owner.
+#
+# NOTE: the repo's own audit engine (api/src/application/tools/AuditRunner.ts)
+# credits this file toward the CC1/CC3–CC5 change-management controls; its
+# matcher accepts .github/CODEOWNERS, docs/CODEOWNERS, or a root CODEOWNERS.
 
-# Default owners for all files — adjust based on privilege level in your org policy.
-* Owner: @SeanHogg
+# Default owner for everything not matched by a more specific rule below.
+*                       @SeanHogg
 
-# Core application code (requires higher privileges)
-# Priority reviewers: agent-runtime ops and backend maintainers. At least two approvals for non-trivial changes.
-/api/ Owner: @SeanHogg
-/api/* Owner: @SeanHogg
+# Backend / API and agent-runtime (highest scrutiny — core application code).
+/api/                   @SeanHogg
+/agent-runtime/         @SeanHogg
 
-# Frontend (SSR, Cloudflare Workers)
-# Strategy: author must include a "peers" review section with a reviewer名单. Minimum one approval from frontend-maintain crew.
-/frontend/ Owner: @SeanHogg
+# Frontend (SSR on Cloudflare Workers).
+/Builderforce.ai/       @SeanHogg
+/frontend/              @SeanHogg
 
-# Infrastructure — should require extra scrutiny and ideally an architectural review
-/Dockerfile* Owner: @SeanHogg
-/.github/ Owner: @SeanHogg
+# Infrastructure & container builds.
+/Dockerfile.api         @SeanHogg
+/Dockerfile.frontend    @SeanHogg
+/.dockerignore          @SeanHogg
 
-# Documentation — "doc-owners" needed for safety/audit compliance
-/*.md Owner: @SeanHogg
-/docs/ Owner: @SeanHogg
+# CI/CD pipelines and repo governance — DevOps approval required.
+/.github/               @SeanHogg
+/.claude/               @SeanHogg
 
-# CI pipelines — approval required for any substantial change; at least one approval from DevOps.
-/.github/workflows/ Owner: @SeanHogg
-/.claude/ Owner: @SeanHogg
-
-# Security & release scripts — require two approvals; one operations, one security.
-/scripts/ Owner: @SeanHogg
-
-# Dependencies / lockfiles — no approvals needed for dependency updates when semver bump; noise mitigation in PR template.
-/pnpm-lock.yaml Owner:
-/package.json Owner:
+# Documentation and process docs.
+*.md                    @SeanHogg
+/docs/                  @SeanHogg
