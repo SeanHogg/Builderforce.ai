@@ -1,55 +1,97 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #506
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# Product Requirements Document: Sign-Off Protocol and State Machine
 
-## Problem & Goal
+## 1. Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+### 1.1 Problem
+Current content/version review and approval processes are unstructured, often leading to delays, inconsistent decisions, difficulty tracking status, and lack of accountability. There is no automated mechanism to enforce required approvals or escalate blocked items effectively. This results in manual overhead, potential compliance risks, and lack of transparency.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+### 1.2 Goal
+To implement a robust, automated Sign-Off Protocol and State Machine that standardizes the review and approval process for content/versions. This system will ensure all required approvals are obtained, automate state transitions based on stakeholder responses, provide clear traceability of decisions, and facilitate efficient escalation of blocked items.
 
-## Target users / ICP roles
+## 2. Target Users / ICP Roles
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+*   **Content/Version Creators/Submitters:** Individuals initiating the sign-off process.
+*   **Approvers/Reviewers:** Designated stakeholders responsible for reviewing and responding to sign-off requests.
+*   **Admins:** Users responsible for configuring sign-off rules and managing required approver lists.
+*   **Project/Product Managers:** Users needing to monitor the status and history of sign-offs.
 
-## Scope
+## 3. Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This PRD covers the definition and implementation of a structured sign-off protocol, including response types, a state machine for tracking review progress, mechanisms for enforcing required approvals, automated escalation of blocked items, and the necessary APIs and configuration for system integration.
 
-## Functional Requirements
+## 4. Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+1.  **Review Window Management:**
+    *   The system shall define a default asynchronous review window of 48 hours for sign-off requests.
+    *   The review window duration shall be configurable via a sign-off rules configuration file.
+    *   The system shall notify approvers when a sign-off request is initiated. (Trigger for notification)
 
-## Acceptance Criteria
+2.  **Stakeholder Response Mechanisms:**
+    *   Approvers shall be able to respond to a sign-off request with one of three types:
+        *   `Approve`
+        *   `Approve with Comment` (requires a comment)
+        *   `Block with Reason` (requires a detailed reason)
+    *   The system shall capture the `responseType`, associated `comment`/`reason`, and a `timestamp` for each response.
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+3.  **State Machine Implementation:**
+    *   The system shall implement a state machine for each version undergoing sign-off with the following states:
+        *   `Draft`: Initial state, content not yet submitted for review.
+        *   `Submitted`: Content submitted, awaiting review initiation.
+        *   `InReview`: Review window is active, awaiting approver responses.
+        *   `Approved`: All required approvers have `Approved` or `Approved with Comment`.
+        *   `Blocked`: At least one required approver has responded with `Block with Reason`.
+        *   `Escalated`: The system has automatically opened an escalation thread due to a `Blocked` status.
+        *   `Agreed`: Final resolution after escalation, indicating a path forward has been determined (can follow `Approved` or `Escalated`).
 
-## Out of scope
+4.  **Approval Enforcement:**
+    *   A version cannot transition to the `Approved` state unless *all* `Required Approvers` have explicitly responded with either `Approve` or `Approve with Comment`.
+    *   The system shall track which approvers have responded (`approversWithResponse`) and their response details.
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+5.  **Blocking and Escalation:**
+    *   A single `Block with Reason` response from any `Required Approver` shall immediately halt the approval process.
+    *   Upon a `Block with Reason` response, the version's state shall transition to `Blocked`.
+    *   Concurrently with the `Blocked` state transition, the system shall automatically open an escalation thread (triggering the relevant integration/system).
+
+6.  **Data Tracking & History:**
+    *   The system shall meticulously track and store all individual responses, including `responseType`, `comment`/`reason`, and `timestamp`.
+    *   A complete `response log` for each sign-off request shall be maintained and retrievable.
+
+7.  **Configuration Management:**
+    *   The system shall expose a sign-off rules configuration file, allowing administrators to define:
+        *   Default review window duration.
+        *   Lists of `Required Approvers` per content type or category.
+        *   Any other configurable parameters related to the sign-off workflow.
+
+8.  **API and UI Logic:**
+    *   The system shall provide an API for programmatic interaction with the sign-off process:
+        *   `requestSignOff(versionId, approverList)`: Initiates a sign-off request.
+        *   `respondToSignOff(signOffId, approverId, responseType, comment/reason)`: Allows an approver to submit a response.
+        *   `getSignOffStatus(signOffId)`: Retrieves the current state and response details for a sign-off.
+    *   Application-level rules and UI logic shall be provided to guide users through state transitions and enforce blocking mechanisms.
+
+9.  **Performance Optimization:**
+    *   The system shall implement logic for "early exit" from the `InReview` state, specifically by immediately transitioning to `Blocked` (and triggering escalation) upon the first `Block with Reason` response, without waiting for the full review window to expire or all other responses.
+
+## 5. Acceptance Criteria
+
+*   **Review Initiation:** A sign-off request can be successfully initiated, setting the state to `InReview` and starting the review window.
+*   **Response Handling:** All three response types (`Approve`, `Approve with Comment`, `Block with Reason`) are accurately captured, including associated comments/reasons and timestamps.
+*   **Blocking Logic:** A single `Block with Reason` response from a `Required Approver` correctly transitions the sign-off to `Blocked` state and triggers the escalation mechanism.
+*   **Approval Enforcement:** A sign-off only transitions to `Approved` if *all* `Required Approvers` have responded with `Approve` or `Approve with Comment`. Any outstanding required response prevents `Approved` status.
+*   **State Machine Transitions:** All defined state transitions between `Draft`, `Submitted`, `InReview`, `Approved`, `Blocked`, `Escalated`, and `Agreed` operate correctly and predictably based on events and responses.
+*   **Data Persistence:** All response data, including `responseType`, `comment`/`reason`, and `timestamp`, is persisted and retrievable via the API.
+*   **Configuration:** Changes made in the sign-off rules configuration file (e.g., review window, required approvers) are reflected correctly in the sign-off process.
+*   **API Functionality:** The `requestSignOff`, `respondToSignOff`, and `getSignOffStatus` API endpoints function as expected, returning correct data structures (`response DTO`, `review DTO`).
+*   **Early Exit Performance:** The system demonstrates immediate transition to `Blocked` upon the first `Block with Reason` response, without unnecessary delays.
+
+## 6. Out of Scope
+
+*   The implementation of the actual "escalation thread" system beyond triggering the creation of such a thread.
+*   Detailed UI/UX design beyond the basic elements required for state visualization and response input.
+*   Complex reporting dashboards or analytics beyond basic status retrieval.
+*   The system or process for defining or managing `Required Approvers` (e.g., user groups, roles); this PRD assumes `Required Approvers` lists are provided inputs.
+*   Advanced notification mechanisms (e.g., email templates, in-app notification styles) beyond the core trigger events.
+*   Version control system for the content itself.
