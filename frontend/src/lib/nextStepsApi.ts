@@ -73,6 +73,41 @@ export const ExecutionTypeMap: Record<ExecutionType, { label: string; icon: stri
 
 export const PriorityMap: Record<Priority, string> = { urgent: 'Urgent', high: 'High', normal: 'Normal' };
 
+/**
+ * Event payload used in analytics logging (FR-7)
+ * Events: generated, viewed, accepted, dismissed, edited, executed, feedback
+ */
+export interface StepEvent {
+  eventId?: string; // Return of log endpoint or in-memory reference
+  eventType: StepEventType;
+  timestamp: number;
+  projectId: number;
+  userId: string;
+}
+
+/**
+ * Core Next Step entity (FR-1)
+ * - Ranked by the backend or personalization algorithm
+ * - Contains metadata needed to display and execute
+ */
+export interface NextStep {
+  id: string;
+  title: string;
+  description: string;
+  priority: Priority;
+  executionType: ExecutionType;
+  effort: Effort;
+  pinned?: boolean;
+  /** When provided, a deep link anchor for the panel to perform SubRoute to /step, if InAppNav exists */
+  deepLinkCode?: string; // string identifier that site(s) can map to the anchor, typically equal to id
+  /** Backend-provided event param for FR-7 */
+  viewedAt?: number;
+  /** When triggered, on success the UI lands result/confirmation via SubRoute or artifact panel */
+  executedAt?: number;
+  /** Optional external metadata for personalization */
+  metadata?: Record<string, unknown>;
+}
+
 /** API response shape for generateSteps (FR-1) */
 export interface StepGenerationResponse {
   steps: NextStep[];
