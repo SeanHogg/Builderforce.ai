@@ -1,55 +1,54 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #341
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# Product Requirements Document: Priority Alignment Initiative
 
-## Problem & Goal
+## 1. Problem
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+Current task management exhibits significant priority misalignment, leading to:
+*   High-priority items stalling due to lack of ownership, impacting critical path delivery.
+*   Low-priority items consuming disproportionate team resources, diverting effort from strategic objectives.
+*   Overall project efficiency and predictability are compromised, resulting in missed deadlines and wasted effort.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+## 2. Goal
 
-## Target users / ICP roles
+To ensure critical work is promptly assigned and actioned, and resource allocation effectively supports strategic priorities by minimizing effort on low-priority items when high-priority tasks are pending.
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## 3. Target Users / ICP Roles
 
-## Scope
+*   **Project Managers / Team Leads:** Responsible for task prioritization, assignment, and team resource allocation.
+*   **Individual Contributors:** Require clear direction on task priority and impact.
+*   **Stakeholders / Product Owners:** Need visibility into critical path progress and resource utilization.
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+## 4. Scope
 
-## Functional Requirements
+This initiative focuses on enhancing our existing task management system to provide better visibility, control, and alerts related to task priority and assignment status. It will specifically address unassigned high-priority tasks and the allocation of resources to low-priority work.
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+## 5. Functional Requirements
 
-## Acceptance Criteria
+*   **FR1: Unassigned High-Priority Task Identification:** The system shall automatically identify and flag tasks marked "High Priority" or "Critical" that currently have no assigned owner.
+*   **FR2: Proactive Notification System:** The system shall send daily summary notifications (email/in-app) to designated Project Managers/Team Leads detailing all unassigned high-priority tasks within their purview.
+*   **FR3: Priority Alignment Dashboard:** The system shall provide a dedicated dashboard view accessible to Project Managers, prominently displaying:
+    *   All unassigned high-priority tasks.
+    *   Current resource allocation breakdown by task priority (e.g., % of team capacity on High/Medium/Low priority tasks).
+*   **FR4: Streamlined Assignment:** From the Priority Alignment Dashboard, Project Managers shall be able to assign unassigned high-priority tasks to team members with minimal clicks.
+*   **FR5: Visual Priority Indicators:** All task views (e.g., Kanban boards, list views) shall clearly and consistently display the priority level (High, Medium, Low) of each task.
+*   **FR6: Low-Priority Task Management:** Project Managers shall have the ability to easily mark low-priority tasks as "On Hold" or "Deferred" to explicitly de-emphasize them.
+*   **FR7: Resource Prioritization Report:** The system shall generate weekly reports showing resource effort distributed across priority levels, highlighting any misalignments.
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+## 6. Acceptance Criteria
 
-## Out of scope
+*   **AC1:** Within 30 minutes of a new "High Priority" task being created without an assignee, or an existing high-priority task becoming unassigned, it appears on the Priority Alignment Dashboard.
+*   **AC2:** Daily notifications for unassigned high-priority tasks are received by relevant Project Managers/Team Leads before 9 AM local time.
+*   **AC3:** A Project Manager can assign an unassigned high-priority task from the dashboard in no more than 3 clicks.
+*   **AC4:** In any task view, 100% of tasks clearly display their priority level using consistent visual cues.
+*   **AC5:** After a 4-week pilot, the percentage of Project Manager-reported stalled high-priority tasks due to lack of assignment is reduced by 50%.
+*   **AC6:** The Resource Prioritization Report accurately reflects resource effort distribution by priority, with discrepancies of no more than 5% compared to manual audits.
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## 7. Out of Scope
+
+*   Automatic task assignment based on resource availability, skill sets, or workload.
+*   Real-time granular resource capacity planning beyond aggregate priority-based allocation.
+*   Automated re-prioritization of existing tasks (decision-making remains human-driven).
+*   New task creation workflows or enhancements to existing task creation forms.
+*   Integration with external HR or scheduling systems for resource management.
