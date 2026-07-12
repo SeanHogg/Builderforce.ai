@@ -1,0 +1,113 @@
+{
+  "title": "Payload Generation Business Rulesets",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "required": ["name", "version", "description"],
+    "properties": {
+      "name": {
+        "type": "string",
+        "pattern": "^[\\w.-]+$",
+        "description": "Ruleset identifier."
+      },
+      "version": {
+        "type": "string",
+        "pattern": "^[\\d]+(\\.[\\d]+)+$",
+        "description": "SemVer minor version."
+      },
+      "description": {
+        "type": "string"
+      },
+      "appliesTo": {
+        "type": "array",
+        "items": {"type": "string", "pattern": "^[\\w.-]+$"},
+        "description": "Payload type IDs that can use this ruleset."
+      },
+      "rules": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["name"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^[\\w.-]+$",
+              "description": "Rule identifier."
+            },
+            "description": {
+              "type": "string"
+            },
+            "appliesTo": {
+              "type": "array",
+              "items": {"type": "string", "pattern": "^[\\w.-]+$"}
+            },
+            "typeOrDerived": {
+              "type": "string",
+              "enum": ["string", "number", "integer", "boolean", "date", "epoch", "derivedFunction"],
+              "description": "Base type or derived function key."
+            },
+            "nullable": {
+              "type": "boolean",
+              "default": true
+            },
+            "coerce": {
+              "type": "boolean",
+              "default": true,
+              "description": "Whether to coerce source to type. Omitted = reuse nullable."
+            },
+            "enumMappings": {
+              "type": "object",
+              "patternProperties": {
+                "^[\\w.:]+$": {
+                  "type": "string"
+                }
+              },
+              "description": "Map internal codes to external labels for enumeration use."
+            },
+            "transformations": {
+              "type": "object",
+              "description": "Template for caller-supplied run-time transforms (e.g., Padding/Decimal). Keys are template IDs; values use strings/templates and are synthesized at ruleset activation."
+            },
+            "condition": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "pattern": "^[\\w.*().-]+$"
+                },
+                "operator": {
+                  "type": "string",
+                  "enum": [
+                    "equals", "notEquals", "contains", "startsWith", "endsWith",
+                    "greaterThan", "lessThan", "exists"
+                  ]
+                },
+                "value": {
+                  "description": "Expected value (type-checked downstream)."
+                }
+              },
+              "required": ["field", "operator"]
+            },
+            "fn": {
+              "type": "string",
+              "description": "Used only when typeOrDerived is \"derivedFunction\" (name in generated ruleset map)."
+            },
+            "functionAliases": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "Explicit fn aliases (e.g., derivedFunction:cond)."
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "DeclaredType": {"enum": ["string", "number", "integer", "boolean", "date", "epoch"]},
+    "Operator": {"enum": ["equals", "notEquals", "contains", "startsWith", "endsWith", "greaterThan", "lessThan", "exists"]},
+    "TransformKind": {"enum": ["map", "fn"]},
+    "TransformMode": {"enum": ["prop", "fnName"]}
+  }
+}
