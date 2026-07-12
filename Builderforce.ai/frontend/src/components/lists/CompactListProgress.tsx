@@ -77,13 +77,26 @@ export function CompactListProgress({
   sortBy,
   isLoading,
   emptyText,
-  showPercentage = true,
+  showValue = true,
+  valueFormat = 'fraction',
+  skeletonRowCount = 3,
+  className,
+  'aria-label': ariaLabel,
 }: {
   items?: PList;
   sortBy?: SortBy;
   isLoading?: boolean;
   emptyText?: string;
-  showPercentage?: boolean;
+  /** Show the numeric value column (fraction or percent). Defaults to true. */
+  showValue?: boolean;
+  /** Whether the value column renders as `7/10` (fraction) or `70%` (percent). */
+  valueFormat?: ValueFormat;
+  /** Number of skeleton rows to render while loading (FR-6). */
+  skeletonRowCount?: number;
+  /** Optional class applied to the list container so parents can scope layout. */
+  className?: string;
+  /** Accessible name for the whole list (FR-7). */
+  'aria-label'?: string;
 }) {
   let displayItems: ProgressItem[] = items ?? [];
 
