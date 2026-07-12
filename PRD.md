@@ -1,55 +1,61 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #515
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+## Product Requirements Document (PRD)
 
-## Problem & Goal
+### Visual Priority Indicators Integration
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+---
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+### 1. Problem & Goal
 
-## Target users / ICP roles
+**Problem:** While the `PriorityAlignmentDashboard` now displays task priority visually, other critical task views (list, Kanban, detail) lack this consistent and immediate visual feedback. This inconsistency hinders quick comprehension of task importance and slows down prioritization workflows for users navigating different parts of the application.
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+**Goal:** To integrate the established visual priority indicators (using the `PriorityBadge` component) into all primary task views, ensuring a consistent and clear visual representation of task priority across the entire platform. This will improve user efficiency in identifying, organizing, and prioritizing tasks.
 
-## Scope
+---
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+### 2. Target Users / ICP Roles
 
-## Functional Requirements
+*   **Project Managers:** For quick oversight and prioritization of tasks within their projects.
+*   **Team Leads:** To identify high-priority items requiring immediate attention and guide team focus.
+*   **Individual Contributors:** To easily understand the priority of their assigned tasks and manage their workload effectively.
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+---
 
-## Acceptance Criteria
+### 3. Scope
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+Integrate the `PriorityBadge` component into the following existing task views:
+*   Task List View
+*   Task Kanban View
+*   Task Detail View
 
-## Out of scope
+---
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+### 4. Functional Requirements
+
+*   **FR1:** The system MUST display visual priority indicators for each task in the Task List View.
+*   **FR2:** The system MUST display visual priority indicators for each task card in the Task Kanban View.
+*   **FR3:** The system MUST display a visual priority indicator within the Task Detail View.
+*   **FR4:** All integrated priority indicators MUST utilize the existing `PriorityBadge` component, adhering to its defined variants (Badge, Dot, Icon, Header where appropriate) and consistent color coding (High/red, Medium/amber, Low/gray).
+*   **FR5:** The visual representation of priority across these views MUST be consistent with the implementation on the `PriorityAlignmentDashboard`.
+
+---
+
+### 5. Acceptance Criteria
+
+*   **AC1:** Visual priority indicators are present and correctly rendered for all tasks in the Task List View.
+*   **AC2:** Visual priority indicators are present and correctly rendered for all task cards in the Task Kanban View.
+*   **AC3:** A visual priority indicator is present and correctly rendered within the Task Detail View.
+*   **AC4:** The design (color, shape, text) of all priority indicators in these views is identical to the `PriorityBadge` component variants used on the `PriorityAlignmentDashboard` for corresponding priority levels.
+*   **AC5:** Changing a task's priority updates its visual indicator immediately and consistently across all views (List, Kanban, Detail, and Dashboard).
+*   **AC6:** No regressions are introduced to the `PriorityAlignmentDashboard`'s display of priority indicators.
+
+---
+
+### 6. Out of Scope
+
+*   Introduction of new priority levels or custom priority types.
+*   Changes to the existing functionality for setting or editing task priority.
+*   Development of new `PriorityBadge` component variants or design modifications.
+*   Integration of priority indicators into other parts of the application (e.g., reports, dashboards beyond `PriorityAlignmentDashboard`, notifications, user profiles).
