@@ -1,117 +1,124 @@
 'use client';
 
 import React from 'react';
+import { GreenStatusIndicator } from '@/components/ui/GreenStatusIndicator';
 import { STATUS } from '@/types/status';
+import { type ScoreDisplay } from '@/types/status';
 
-/**
- * GreenStatusIndicator — reusable status indicator for on-track scores (75-100).
- *
- * Semantics (matches Green-tier PRD, FR-1 and AC-1..AC-3):
- * - score = 75 (inclusive) and score = 100 (inclusive) -> Green indicator
- * - score = 74.9 and score = 100.1 -> Not Green indicator (does not render Green)
- * - null/undefined -> Not Green indicator (does not render Green)
- * - If a green status is rendered, aria-label is "Status: Green, On Track" (FR-6 and AC-8)
- *
- * Visuals (FR-2 and AC-10):
- * - Inline `color.status.green` token resolves to green (default symbolic currentColor)
- * - When used with className achieving that token, the indicator inherits green
- * - Optional supporting icon filled circle or checkmark also rendered with currentColor
- *
- * Accessibility (FR-6 and AC-8):
- * - Text label "On Track" visible in all non-icon-only contexts
- * - aria-label includes both "Green" and "On Track" when green
- * - WCAG 2.1 AA contrast against background enforced via design token or currentColor
- *
- * Usage:
- * - <GreenStatusIndicator score={75} /> renders a Green/On Track indicator
- * - <GreenStatusIndicator score={null} /> renders no Green indicator (fallback/NG)
- * - <GreenStatusIndicator score={80} className="text-green-600" /> renders currentColor/green with icon + label
- * - <GreenStatusIndicator score={95} variant="icon-only" /> renders icon-only green without explicit label (for component hosting)
- *
- * Note: This component does not enforce 75 ≤ score ≤ 100 itself; it only renders Green when
- * the consume-component has classified the status using isGreenStatus/greenLogic. The indicator
- * complies with FR-5: <100, >100, null, undefined never manifest as Green here.
- */
-
+/** GreenStatusIndicatorProps */
 export interface GreenStatusIndicatorProps {
   /** The raw score that determines status */
   score: number | null | undefined;
-
-  /** Optional variant: "default" (icon + label) or "icon-only" (icon only) */
+  /** Optional variant: 'default' (icon + full label) or 'icon-only' (icon only) */
   variant?: 'default' | 'icon-only';
-
-  /** Optional custom className for additional styling (preserves currentColor/green token use) */
+  /** Optional custom className for additional styling */
   className?: string;
-
-  /**
-   * Optional custom aria-label override. If provided, BRFRS-6 aria-label must include "Green" and "On Track"
-   * and should match the pattern "Status: Green, On Track". Otherwise the component infers the canonical label.
-   */
+  /** Optional custom aria-label override. If provided, it must include "Green" and "On Track". */
   ariaLabel?: string;
 }
 
+/** Score to GreenStatusIndicator bridge helper. */
+export function scoreToGreenStatus(score: number | null | undefined): GreenStatusIndicatorProps {
+  const isGreen = score !== null && score !== undefined && score >= 75 && score <= 100;
+  if (!isGreen) {
+    return { score, variant: 'default' };
+  }
+  return {
+    score,
+    variant: 'default',
+    ariaLabel: `Status: Green, On Track`,
+  };
+}
+
+/** GreenStatusIndicator — canonical on-track status indicator (75 ≤ score ≤ 100). */
 export function GreenStatusIndicator({
   score,
   variant = 'default',
   className = '',
   ariaLabel: customAriaLabel,
 }: GreenStatusIndicatorProps): React.ReactNode {
-  // Access derived green decision consistent with g/s helpers:
-  // - FR-1: Green iff 75 ≤ score ≤ 100
-  // - FR-5: null/undefined or >100 never yields Green indicator
   const isGreen = score !== null && score !== undefined && score >= 75 && score <= 100;
 
   if (!isGreen) {
     return null;
   }
 
-  // Canonical accessible label (FR-6 and AC-8)
+  // Canonical accessible label (FR‑6 / AC‑8)
+  // Must include both "Green" and "On Track". When overridden by ariaLabel, consumers are responsible to keep both.
   const ariaLabelText = customAriaLabel ?? 'Status: Green, On Track';
 
-  // Icon-only uses only the icon; supports component nesting
+  // Icon-only variant
   if (variant === 'icon-only') {
     return (
       <span
-        className={`green-status-icon-only ${className}`}
+        className={`inline-flex items-center justify-center rounded-full ${className}`}
         aria-label="Green indicator"
         role="img"
+        aria-hidden={!customAriaLabel}
       >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 16 16"
-          fill="currentColor"
-          style={{ display: 'block', width: 'inherit', height: 'inherit' }}
-          aria-hidden={!customAriaLabel}
-        >
-          {/* Filled circle icon */}
-          <circle cx="8" cy="8" r="7" />
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style={{ display: 'block', width: 'inherit', height: 'inherit' }}>
+          {/* Friendly text */}
+          {customAriaLabel.length < 50 && <text x="8" y="11" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="600">✓</text>}
+          {/* Filled circle fallback */}
+          <circle cx="8" cy="8" r="7.5" />
         </svg>
       </span>
     );
   }
 
-  // Default renders icon + label (FR-2 and AC-7)
+  // Default variant: icon + visible friendly label + full aria label (FR‑2 / AC‑7 / AC‑10)
+  // Friendly label is always visible in the DOM; aria-label is for screen readers.
   return (
     <span
-      className={`green-status-default ${className}`}
+      className={`inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 border border-green-200 ${className}`}
       aria-label={ariaLabelText}
+      role="status"
     >
-      {/* Optional supporting icon in green */}
-      <span
-        className="green-status-icon"
-        aria-hidden="true"
-      >
-        <svg
-          width="10"
-          height="10"
-          viewBox="0 0 10 10"
-          fill="currentColor"
-        >
-          <circle cx="5" cy="5" r="4.5" />
+      {/* Optional icon */}
+      <span className="relative inline-flex -ml-0.5 -mt-0.5" aria-hidden="true">
+        <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
+          <circle cx="4" cy="4" r="3.5" />
         </svg>
       </span>
-      <span className="green-status-label">{ariaLabelText}</span>
+      {/* Visible friendly label per FR‑2 / AC‑7 (always present) */}
+      <span className="text-on-track">On Track</span>
     </span>
   );
+}
+
+/** GreenStatusIndicatorStyle helpers (computed when designed top-down). */
+export namespace GreenStatusIndicatorStyle {
+  /** Canonical status label for display and aria-labeling. */
+  const CANONICAL_LABEL = 'On Track';
+  /** Canonical aria-label (FR‑6). */
+  const CANONICAL_ARIA_LABEL = 'Status: Green, On Track';
+  /** Friendly /-visible text (FR‑2 / AC‑7). */
+  const FRIENDLY_TEXT = CANONICAL_LABEL;
+  /** Icon-only aria. */
+  const ICON_ONLY_ARIA = 'Green indicator';
+
+  /** Build up the full props to pass to the component without React runtime reflection. */
+  export function buildProps(score: number | null | undefined) {
+    const isGreen = score !== null && score !== undefined && score >= 75 && score <= 100;
+    if (!isGreen) {
+      return null;
+    }
+    return {
+      score,
+      variant: 'default',
+      ariaLabel: CANONICAL_ARIA_LABEL,
+    };
+  }
+
+  namespace Render {
+    /** Default element role */
+    export const DEFAULT_ROLE: React.AriaRole = 'status';
+  }
+
+  namespace Format {
+    /** Friendly text for visibility (always present). */
+    export const FRIENDLY = FRIENDLY_TEXT;
+    /** Canonical aria label (screen reader). */
+    export const ARIA_LABEL = CANONICAL_ARIA_LABEL;
+  }
 }
