@@ -1,0 +1,5 @@
+{
+  "id": "resource-gap-engine",
+  "name": "Resource Gap Engine",
+  "description": "Core engine for resource gap analysis with hiring, deployment, and upskill recommendations."
+}
