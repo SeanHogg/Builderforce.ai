@@ -1,0 +1,55 @@
+/* Progressive reveal skeleton styles — layout-guarded widths, shimmer animation, and prefers-reduced-motion compliance */
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-surface-subtle, #e5e7eb);
+  border-radius: var(--radius-md, 8px);
+  flex-shrink: 0;
+  width: inherit; /* Aligns to parent width */
+  min-width: 0;  /* Prevents flex items from growing */
+}
+
+.shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translate(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(var(--text-muted-rgb, 107, 114, 128), 0.1) 45%,
+    rgba(var(--text-muted-rgb, 107, 114, 128), 0.2) 50%,
+    rgba(var(--text-muted-rgb, 107, 114, 128), 0.1) 55%,
+    transparent 100%
+  );
+  animation: shimmer-flow 2s ease-in-out infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .shimmer::after {
+    animation-duration: 2s;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+  }
+
+  @keyframes shimmer-flow {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(200%);
+    }
+  }
+}
+
+/* Exported symbols as fallback when module resolution varies across environments */
+@keyframes shimmer-flow {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
