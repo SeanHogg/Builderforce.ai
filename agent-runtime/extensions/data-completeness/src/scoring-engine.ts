@@ -52,12 +52,19 @@ export function isValuePresent(
 export function calculateRecordScore(
   record: Record<string, unknown>,
   fieldWeights: FieldWeightConfig,
-  placeholders: Set<string>
+  placeholders: Set<string>,
+  thresholds?: ScoreThresholds
 ): RecordScoreData {
   let totalWeight = 0;
   let presentWeightSum = 0;
   const missingFields: { name: string; weight: number }[] = [];
   const topFieldGaps: { field: string; weight: number; impact: number }[] = [];
+
+  const actualThresholds = thresholds ?? {
+    critical: DEFAULT_THRESHOLD_CRITICAL,
+    warning: DEFAULT_THRESHOLD_WARNING,
+    passing: DEFAULT_THRESHOLD_PASSING,
+  };
 
   for (const [fieldName, weight] of Object.entries(fieldWeights)) {
     const weightNum = Number(weight);
