@@ -68,6 +68,7 @@ export interface RecDataTrace {
   field: string;
   value: string;
   source: string;                 // e.g. 'budget.forecast_overspend'
+}
 
 /**
  * Persisted dismissals only (recommendations themselves are computed live).
