@@ -5,9 +5,9 @@
 
 ## Problem & Goal
 
-Ticket detail responses currently lack a unified, structured representation of task progress. Consumers of the API (UI, agents, automations) must stitch together disparate signals—subtask counts, PR states, CI results, manual status—into their own ad-hoc logic, producing inconsistency across surfaces.
+Ticket detail responses currently provide no structured, machine-readable summary of how far along a ticket is. Consumers (UI widgets, automation scripts, downstream agents) are forced to infer progress by independently querying subtasks, pull requests, and status fields — leading to duplicated logic, inconsistent interpretations, and brittle integrations.
 
-**Goal:** Expose a single, normalized `progress` object on every ticket detail payload (both `tasks.get` and the compact list endpoint) that gives callers a clear, unambiguous picture of how far along a ticket is and what that assessment is based on.
+**Goal:** Expose a single canonical `progress` object on every ticket detail response (both the full `tasks.get` payload and the compact list item shape) that communicates progress basis and key signal fields in one place.
 
 ---
 
@@ -15,30 +15,21 @@ Ticket detail responses currently lack a unified, structured representation of t
 
 | Role | Need |
 |---|---|
-| **Frontend engineers** | Render progress bars, status badges, and completion indicators without custom derivation logic |
-| **AI agents / automation scripts** | Make routing and gating decisions (e.g. "is this ticket ready for QA?") from a single field |
-| **Engineering managers / PMs** | Trust that progress shown in list views and detail views is computed identically |
-| **Backend / integration developers** | Consume a stable, versioned contract when building webhooks or external dashboards |
+| Frontend engineers | Render progress bars, status chips, and PR badges without extra round-trips |
+| Automation / agent scripts | Gate actions (e.g., deploy, close) on objective progress signals |
+| Project managers / dashboard builders | Aggregate ticket health across a project without custom join logic |
+| QA engineers | Quickly determine whether tests are passing before approving a review |
 
 ---
 
 ## Scope
 
-### In Scope
+This PRD covers the **shape, population logic, and contract** of the `progress` object returned on:
 
-- Adding a `progress` object to:
-  - `tasks.get` (single ticket detail)
-  - The compact ticket list endpoint (all list items)
-- Defining the shape, valid values, and derivation rules for the `progress` object
-- Server-side derivation logic that selects the correct `basis` and populates all sub-fields
-- Serialization and OpenAPI/schema documentation updates
+1. `tasks.get` (single ticket, full detail)
+2. Compact list items (e.g., results from `tasks.list`, board queries, search results)
 
-### Out of Scope
-
-- UI rendering of the progress object (separate ticket)
-- Webhooks payload changes (separate ticket)
-- Historical progress tracking / time-series data
-- Allowing callers to *set* the `basis` field directly (it is computed, not user-configurable, except where `manual` is the explicit ticket setting)
+It does **not** cover storage schema changes, new write endpoints, or UI rendering.
 
 ---
 
@@ -46,56 +37,86 @@ Ticket detail responses currently lack a unified, structured representation of t
 
 ### FR-1 — Progress Object Shape
 
-Every ticket payload (detail and compact list) **MUST** include a top-level `progress` field with the following structure:
+Every ticket response MUST include a top-level `progress` field conforming to the following TypeScript-style interface:
 
-```jsonc
-{
-  "progress": {
-    "basis":          "subtasks" | "pr" | "status" | "manual",
-    "subtasksDone":   number | null,   // null when basis != "subtasks" and no subtasks exist
-    "subtasksTotal":  number | null,   // null under same condition
-    "codeDelivered":  boolean,
-    "testsPassing":   boolean | null,  // null = no CI data available
-    "prState":        "none" | "open" | "review" | "merged" | "closed"
-  }
+```ts
+interface TicketProgress {
+  /**
+   * The primary signal used to calculate overall progress percentage.
+   * Determines which fields are authoritative for progress computation.
+   */
+  basis: "subtasks" | "pr" | "status" | "manual";
+
+  /** Subtask counts — always populated when subtasks exist, otherwise null. */
+  subtasksDone:  number | null;
+  subtasksTotal: number | null;
+
+  /** True once at least one PR linked to this ticket has been merged. */
+  codeDelivered: boolean;
+
+  /**
+   * Reflects CI/test state of the most-recent linked PR.
+   * null  → no linked PR or CI not configured.
+   * false → CI running or at least one check failing.
+   * true  → all required checks passing.
+   */
+  testsPassing: boolean | null;
+
+  /**
+   * Aggregated state of all linked pull requests.
+   * null if no PRs are linked.
+   */
+  prState: "none" | "open" | "review" | "approved" | "merged" | "closed" | null;
 }
 ```
 
-### FR-2 — Basis Selection Rules (Priority Order)
+### FR-2 — Basis Selection Logic
 
-The server **MUST** select `basis` using the following waterfall; the first matching rule wins:
+The `basis` field MUST be determined by the following priority order (first match wins):
 
-1. **`"manual"`** — The ticket has an explicit manual progress override set by a user.
-2. **`"subtasks"`** — The ticket has one or more subtasks (regardless of PR or CI state).
-3. **`"pr"`** — No subtasks exist but one or more linked PRs exist.
-4. **`"status"`** — None of the above; progress is inferred from the ticket's workflow status alone.
+1. **`"manual"`** — a human or automation has explicitly set a numeric progress value on the ticket.
+2. **`"subtasks"`** — the ticket has one or more subtasks (regardless of their completion state).
+3. **`"pr"`** — no subtasks exist but one or more pull requests are linked.
+4. **`"status"`** — neither subtasks nor PRs are present; progress is inferred from workflow status position.
 
-### FR-3 — Field Derivation Rules
+### FR-3 — Subtask Fields
 
-| Field | Derivation |
-|---|---|
-| `subtasksDone` | Count of subtasks whose status is in a "done" category; `null` if `subtasksTotal` is `null` |
-| `subtasksTotal` | Total count of direct child subtasks; `null` if the ticket has no subtasks |
-| `codeDelivered` | `true` if any linked PR has state `merged`; otherwise `false` |
-| `testsPassing` | `true` if all linked PRs with CI data have passing checks; `false` if any check is failing; `null` if no CI data exists for any linked PR |
-| `prState` | Highest-precedence state across all linked PRs using order: `merged > review > open > closed > none` |
+- `subtasksDone` and `subtasksTotal` MUST be populated (non-null integers) whenever `subtasksTotal > 0`.
+- When no subtasks exist both fields MUST be `null`.
+- Subtask counts MUST reflect **direct children only** (not recursively nested sub-subtasks) unless the implementation already traverses all descendants consistently — in which case the behavior MUST be documented and consistent across both endpoints.
 
-### FR-4 — Consistency Guarantee
+### FR-4 — `codeDelivered` Flag
 
-The `progress` object returned for a given ticket **MUST** be computed by the same function/module for both `tasks.get` and the compact list endpoint. Duplicate derivation logic is not permitted.
+- `codeDelivered` is `true` if and only if **at least one** PR linked to the ticket has state `merged`.
+- It remains `false` if all linked PRs are open, in review, approved, or closed without merging.
+- It MUST be `false` (not `null`) when no PRs are linked.
 
-### FR-5 — Performance
+### FR-5 — `testsPassing` Field
 
-- For compact list responses, progress derivation **MUST NOT** issue per-ticket N+1 queries. Subtask counts, PR states, and CI statuses **MUST** be batch-loaded.
-- p99 latency increase for the compact list endpoint **MUST NOT** exceed **50 ms** over the pre-change baseline.
+- Evaluated against the **most recently updated** linked PR that has CI results.
+- `true` — all required status checks on that PR are in a passing/success state.
+- `false` — one or more required checks are pending, running, or failing.
+- `null` — no linked PRs exist, or no CI integration is configured for the repository.
 
-### FR-6 — Null Safety
+### FR-6 — `prState` Aggregation
 
-All nullable fields **MUST** be explicitly `null` (not omitted, not `undefined`, not `0`) when data is unavailable, so consumers can distinguish "no data" from "zero / false."
+When multiple PRs are linked, `prState` MUST reflect the **highest-priority state** using the following hierarchy (highest → lowest):
 
-### FR-7 — Schema Documentation
+```
+merged > approved > review > open > closed > none
+```
 
-The `progress` object **MUST** be documented in the OpenAPI spec with descriptions, enum values, and nullable annotations for every field.
+- `null` is returned only when no PRs are linked at all.
+- `"none"` is a valid explicit value when PRs are linked but all have been explicitly dismissed/unlinked at the provider level (edge case).
+
+### FR-7 — Compact List Parity
+
+The `progress` object on compact list items MUST be **identical in shape** to the full `tasks.get` response. No fields may be omitted or substituted with placeholder values in list contexts. Implementations MAY batch-compute progress fields to optimize list query performance.
+
+### FR-8 — Consistency
+
+- The `progress` object MUST be recomputed (or invalidated and re-fetched from source) whenever subtasks, PR links, CI status, or the manual progress value change.
+- Stale cache TTL for `testsPassing` and `prState` MUST NOT exceed **60 seconds** in production environments.
 
 ---
 
@@ -103,27 +124,26 @@ The `progress` object **MUST** be documented in the OpenAPI spec with descriptio
 
 | # | Criterion |
 |---|---|
-| AC-1 | `tasks.get` response includes a `progress` object matching the specified shape on every ticket, including tickets with no subtasks, no PRs, and no CI. |
-| AC-2 | Compact list response includes `progress` on every item in the list; shape is identical to `tasks.get`. |
-| AC-3 | `basis` is always one of the four defined enum values and is never `null` or omitted. |
-| AC-4 | A ticket with subtasks always has `basis: "subtasks"` regardless of PR or CI state. |
-| AC-5 | A ticket with no subtasks but with a merged PR has `codeDelivered: true` and `prState: "merged"`. |
-| AC-6 | `testsPassing` is `null` for tickets where no linked PR has CI check data. |
-| AC-7 | `subtasksDone` and `subtasksTotal` are `null` (not `0`) for tickets with no subtasks. |
-| AC-8 | A manual-override ticket has `basis: "manual"` regardless of subtask or PR state. |
-| AC-9 | Compact list endpoint p99 latency regression is ≤ 50 ms measured against the pre-change baseline in the staging load test. |
-| AC-10 | OpenAPI spec is updated; schema validation passes in CI with no new warnings. |
-| AC-11 | Unit tests cover all four `basis` branches and every nullable field's null/non-null cases. |
-| AC-12 | A single shared derivation function is used by both endpoints (verified by code review / import graph). |
+| AC-1 | `tasks.get` response includes a `progress` object with all five fields present and correctly typed. |
+| AC-2 | Compact list items include an identical `progress` object with no missing fields. |
+| AC-3 | `basis` correctly reflects the priority logic in FR-2 across all four basis types, verified by unit tests covering each branch. |
+| AC-4 | A ticket with 3 subtasks (2 done) returns `subtasksDone: 2`, `subtasksTotal: 3`, `basis: "subtasks"`. |
+| AC-5 | A ticket with no subtasks and one merged PR returns `codeDelivered: true`, `prState: "merged"`, `basis: "pr"`. |
+| AC-6 | A ticket with no subtasks and no PRs returns `codeDelivered: false`, `testsPassing: null`, `prState: null`, `basis: "status"`. |
+| AC-7 | A ticket with a manually set progress value returns `basis: "manual"` regardless of subtask or PR presence. |
+| AC-8 | When multiple PRs are linked, `prState` returns the highest-priority state per FR-6. |
+| AC-9 | `testsPassing` returns `null` when no CI integration is configured, `false` when any required check is pending/failing, and `true` when all pass. |
+| AC-10 | Integration tests confirm compact list and single-get return identical `progress` values for the same ticket. |
+| AC-11 | Response time for `tasks.list` with progress fields does not regress beyond **200 ms p95** on a 500-ticket result set (benchmarked in CI). |
 
 ---
 
 ## Out of Scope
 
-- Changes to how `basis` is *stored* on a ticket — `manual` mode is toggled via an existing separate mechanism; this PRD only concerns reading and exposing the derived value.
-- Aggregated progress across epics or projects.
-- Real-time / streaming updates to the progress object.
-- UI components, design specs, or frontend implementation.
-- Webhook payload changes or event emission triggered by progress changes.
-- Admin tooling for bulk backfilling historical tickets.
-- Any change to how CI/CD systems report check statuses to the platform.
+- **Write API for progress** — no new endpoint or field for manually setting `basis` or overriding computed values (manual progress is set through the existing ticket update mechanism).
+- **Recursive subtask aggregation changes** — depth-of-traversal policy is out of scope; current behavior is preserved and documented only.
+- **UI rendering** — how clients display the `progress` object is not specified here.
+- **Webhook / event emission** — pushing progress change events to subscribers is a separate workstream.
+- **Third-party CI provider onboarding** — expanding CI integration coverage beyond currently supported providers is out of scope.
+- **Historical progress tracking / time series** — only current state is returned; no audit log or trend data.
+- **Access control changes** — progress fields inherit the same visibility rules as the parent ticket.
