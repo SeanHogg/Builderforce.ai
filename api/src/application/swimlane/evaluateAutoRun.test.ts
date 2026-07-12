@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { classifyResolvedAutoRun, parseRequiredCapabilities } from './evaluateAutoRun';
+import {
+  classifyResolvedAutoRun,
+  parseRequiredCapabilities,
+  trailingFailureStreak,
+  MAX_CONSECUTIVE_AUTORUN_FAILURES,
+} from './evaluateAutoRun';
 
 describe('classifyResolvedAutoRun', () => {
   const base = {
@@ -37,6 +42,37 @@ describe('classifyResolvedAutoRun', () => {
 
   it('gate precedence: a human gate wins even when an agent would otherwise run', () => {
     expect(classifyResolvedAutoRun({ ...base, gate: 'human', hasLiveExecution: true }).reason).toBe('human_gate');
+  });
+
+  it('halts autonomy once the consecutive-failure streak hits the cap', () => {
+    expect(classifyResolvedAutoRun({ ...base, consecutiveFailures: MAX_CONSECUTIVE_AUTORUN_FAILURES }))
+      .toEqual({ reason: 'run_cap_exhausted', canRunNow: false });
+  });
+
+  it('still runs while the failure streak is below the cap', () => {
+    expect(classifyResolvedAutoRun({ ...base, consecutiveFailures: MAX_CONSECUTIVE_AUTORUN_FAILURES - 1 }))
+      .toEqual({ reason: 'will_run', canRunNow: true });
+  });
+
+  it('a live run still takes precedence over the failure breaker (avoids stacking)', () => {
+    expect(classifyResolvedAutoRun({ ...base, hasLiveExecution: true, consecutiveFailures: 99 }).reason)
+      .toBe('already_running');
+  });
+});
+
+describe('trailingFailureStreak', () => {
+  it('counts leading (newest-first) failed runs', () => {
+    expect(trailingFailureStreak([{ status: 'failed' }, { status: 'failed' }, { status: 'failed' }])).toBe(3);
+  });
+
+  it('stops at the first non-failed run (a completed/cancelled/live resets it)', () => {
+    expect(trailingFailureStreak([{ status: 'failed' }, { status: 'completed' }, { status: 'failed' }])).toBe(1);
+    expect(trailingFailureStreak([{ status: 'running' }, { status: 'failed' }])).toBe(0);
+    expect(trailingFailureStreak([{ status: 'cancelled' }, { status: 'failed' }])).toBe(0);
+  });
+
+  it('is 0 for no runs', () => {
+    expect(trailingFailureStreak([])).toBe(0);
   });
 });
 
