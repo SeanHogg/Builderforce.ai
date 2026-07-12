@@ -172,19 +172,22 @@ describe('completeTaskOnMerge', () => {
       expect(statusUpdate).toBeDefined();
     });
 
-    it('FR-1.5: idempotent — second call does not re-issue the DONE update', async () => {
-      const { db, updateSets } = makeFakeDb(rows);
+    it('FR-1.5: idempotent — a second completion on a stateful db does NOT re-issue the DONE update', async () => {
+      // Use a write-back fake so the second select() reflects the first call's DONE
+      // write. This is a TRUE idempotency assertion (not the mock-limited variant):
+      // the second completeTaskOnMerge hits the isDoneClass early-return and writes nothing.
+      const { db, updateSets } = makeStatefulFakeDb({
+        task: inflightTask({ id: 100, projectId: 10 }),
+        swimlane: doneSwimlane,
+      });
       await completeTaskOnMerge(env, db as never, { tenantId: 5, taskId: 100 });
       await completeTaskOnMerge(env, db as never, { tenantId: 5, taskId: 100 });
 
       const doneUpdates = updateSets.filter(
         (u) => u.table === tasks && (u.setPayload as any)?.status === TaskStatus.DONE,
       );
-      // The second call finds status already DONE (via isDoneClass on the returned row) → no-op.
-      // But the mock always returns the original row with status 'in_progress', so the mock
-      // sees two updates — this is an acknowledged mock limitation. In reality only one hits.
-      // The real idempotency guard is tested in the "already DONE" scenario below.
-      expect(doneUpdates.length).toBeGreaterThanOrEqual(1);
+      // Exactly ONE DONE status update across both calls — the second is a no-op.
+      expect(doneUpdates).toHaveLength(1);
     });
   });
 
