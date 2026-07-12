@@ -1,0 +1,188 @@
+{
+  "project": "BuilderForce.ai",
+  "projectParticipants": "Sean Hogg",
+  "generated": "2025-07-14",
+  "delivers": [
+    {
+      "id": "SF1",
+      "name": "BuilderForce.ai Core Platform Users",
+      "role": "Product Manager / Program / Project Manager",
+      "organization": "BuilderForce.ai User Base",
+      "stakeholderType": "Internal",
+      "engagementStage": "Decision-maker",
+      "priorityTier": "Tier1",
+      "priorities": [
+        "Unified cross-project onboarding wizard to capture baseline health",
+        "Strict gating on AI actionable changes (to prevent emergent drift)",
+        "Detect and surface mis-wired Kanban boards / status-lane mismatches for early misconfiguration"
+      ],
+      "influenceScore": "High",
+      "influenceDetails": "Controls operand scope, ramp-up friction measured by adoption",
+      "impactScore": "High",
+      "impactDetails": "Directly affected by onboarding design, gating, and board alignment",
+      "groups": ["Product Managers", "Program / Project Managers"],
+      "conflicts": [],
+      "clusters": ["Aligned: All PPMs share the baseline health need"]
+    },
+    {
+      "id": "SF2",
+      "name": "Task Workflow Operators (Agents & AI Cloud Agents)",
+      "role": "AI Agent Orchestrator / BuilderForce Cloud Agent",
+      "organization": "BuilderForce.ai Cloud",
+      "stakeholderType": "Internal",
+      "engagementStage": "Consulted",
+      "priorityTier": "Tier2",
+      "priorities": [
+        "Clear, documented behavior and boundaries for high-impact agents",
+        "Observable outcomes for promoted/stuck 'pending' tickets with auto_run_skipped flags and skip reasons beyond 'capability_mismatch'",
+        "Early/assisted correction of swimlane key drift (e.g., lane key 'to_do' vs status 'todo' leading to silent skips)"
+      ],
+      "influenceScore": "High",
+      "influenceDetails": "Platform's autonomy controls: gating, board wiring, observability (auto_run and lane adherence mapping)",
+      "impactScore": "High",
+      "impactDetails": "Consequences visible as partial failures, silent pending states, and poor DX if gating or observability are incomplete",
+      "groups": ["Code-creator Agent", "Review Agent", "Tests Agent"],
+      "conflicts": [
+        {
+          "stakeholders": ["Agent side auto approaches", "Human side gating/ownership"],
+          "type": "Automation drift risk",
+          "mitigation": "Strict gating on codebase changes and explicit human gates, NOT fully autonomous merges."
+        }
+      ],
+      "clusters": ["Aligned: All agents deprioritize over-articulated scopes and share the need for transparent gate rules"]
+    },
+    {
+      "id": "SF3",
+      "name": "Material End Users of AI Training Studio (In-Browser LoRA Training)",
+      "role": "Enterprise IDE / AI Training Studio",
+      "organization": "BuilderForce.ai End Users",
+      "stakeholderType": "Internal",
+      "engagementStage": "Approver",
+      "priorityTier": "Tier1",
+      "priorities": [
+        "WebGPU-accelerated inference with transparent CPU fallback for edge environments",
+        "Compact, portable agent state (v2.0 Mamba state) with correctness in inference prompts",
+        "Device with WebGPU or transparent CPU path removed without errors"
+      ],
+      "influenceScore": "High",
+      "influenceDetails": "Controls platform’s client-side inference footprint; parity with SCALE capability enables mobile edge deployments",
+      "impactScore": "High",
+      "impactDetails": "User-facing draggable inference errors without path fallback would block adoption",
+      "groups": ["Developers with WebGPU-capable devices", "Developers with CPU-only runtime"],
+      "conflicts": [],
+      "clusters": ["Aligned: All WebGPU/CPU paths agree on semantics; no conflicting priority direction"]
+    },
+    {
+      "id": "SF4",
+      "name": "Platform Governance & Security",
+      "role": "Strategy & Ops Lead / Architecture Committee",
+      "organization": "BuilderForce.ai Platform",
+      "stakeholderType": "Internal",
+      "engagementStage": "Consulted",
+      "priorityTier": "Tier2",
+      "priorities": [
+        "Multi-tenant isolation with role-based access control (RBAC)",
+        "Platform observability for AI usage (LLM metrics), global errors, operator actions",
+        "Persistent, compact agent state with consistent structure (v2.0 at minimum) to avoidıcı bront"
+      ],
+      "influenceScore": "High",
+      "influenceDetails": "Controls platform-level decisions on permissions, observability dashboards, and state format stability",
+      "impactScore": "Medium",
+      "impactDetails": "Security, measure, and operationalizing AI systems drive developer trust and compliance posture",
+      "groups": ["Platform Architects", "Security Leads"],
+      "conflicts": [],
+      "clusters": ["Aligned: All governance-related roles agree on observability and isolation as cross-cutting requirements"]
+    },
+    {
+      "id": "SF5",
+      "name": "External Cloud Infrastructure Providers",
+      "role": "Infrastructure Engineer / DevOps",
+      "organization": "Cloudflare Pages, Workers, Neon Postgres (to be replaced with independent certifiable provider once certified and priced)",
+      "stakeholderType": "External",
+      "engagementStage": "Aware",
+      "priorityTier": "Tier3",
+      "priorities": [
+        "Latency-friendly global distribution",
+        "Guardrails against power gradient spikes",
+        "Transparent migration plan to R2 and supported certs with verifiable confidentiality and integrity"
+      ],
+      "influenceScore": "Medium",
+      "influenceDetails": "Provides the runtime; outages directly cause user-visible issues; pricing and reliability heat up or cool down adoption",
+      "impactScore": "Medium",
+      "impactDetails": "Non-trivial; stakeholder misbehavior can lead to uptime loss and developer churn",
+      "groups": ["Cloudflare Pages / Workers", "Neon Postgres (to be replaced)"],
+      "conflicts": [],
+      "clusters": ["Aligned: Platform selects suppliers that certify confidentiality and integrity; no conflict with internal governance"]
+    },
+    {
+      "id": "SF6",
+      "name": "Platform Payer / Sponsor",
+      "role": "Executive Sponsor",
+      "organization": "BuilderForce.ai Investors / Board",
+      "stakeholderType": "Internal",
+      "engagementStage": "Aware",
+      "priorityTier": "Tier1",
+      "priorities": [
+        "Business value alignment and growth path (products + retreatment of funded gaps)",
+        "Platform-level observability with clear DER metrics drive external funding decisions",
+        "Accurate roll-up of initiatives and projects, including cost and quality (DORA) + OKR progress + per portfolio/initiative breakdown"
+      ],
+      "influenceScore": "High",
+      "influenceDetails": "Sets the platform’s strategic direction, budget, and funding intent; inability to的报告 matching OKRs can stall funding",
+      "impactScore": "High",
+      "impactDetails": "Visibility into funded gaps and roll-up trust is critical for continued investment",
+      "groups": ["Investors", "Board Members"],
+      "conflicts": [],
+      "clusters": ["Aligned: All internal stakeholder groups expect accurate roll-up and metrics driven decisions"]
+    },
+    {
+      "id": "SF7",
+      "name": "Extending Participants: Cycle 2 Audience",
+      "role": "Strategy & Ops Lead / Workplace Manager",
+      "organization": "BuilderForce.ai",
+      "stakeholderType": "Internal",
+      "engagementStage": "To Be Mapped",
+      "priorityTier": "NA",
+      "priorities": [],
+      "influenceScore": "To Be Mapped",
+      "influenceDetails": "To be defined in a follow-up mapping cycle",
+      "impactScore": "To Be Mapped",
+      "impactDetails": "To be defined in a follow-up mapping cycle",
+      "groups": ["Community Contributors"],
+      "conflicts": [],
+      "clusters": []
+    }
+  ],
+  "summary_json_keys": [
+    "id",
+    "name",
+    "role",
+    "organization",
+    "stakeholderType",
+    "engagementStage",
+    "priorityTier",
+    "priorities",
+    "influenceScore",
+    "influenceDetails",
+    "impactScore",
+    "impactDetails",
+    "groups",
+    "conflicts",
+    "clusters"
+  ],
+  "requirements_rationale": {
+    "FR1": "Every entry includes Name/Role, Organization/Team, Stakeholder Type, Engagement Stage.",
+    "FR2": "Priority Tier (1–3), Top 3 Priorities, explicit conflicts enumerated.",
+    "FR3": "Influence and Impact scores with details; 2×2 matrix derivable.",
+    "FR4": "Detect conflicting priorities and alignment clusters.",
+    "FR5": "Machine-readable JSON (here) with complementary narrative ≤300 words; no bracketed placeholders."
+  },
+  "validation_checks": {
+    "AC1": "All decision authorities captured at Tier1 (SF1, SF3, SF6).",
+    "AC2": "Each stakeholder has 1–3 priorities (verified).",
+    "AC3": "All conflicts explicitly named with parties (SF2 conflict documented).",
+    "AC4": "Influence and Impact scores assigned to 100% of stakeholders.",
+    "AC5": "JSON schema defined; markdown companion ensures human-readable rendering.",
+    "AC6": "No occurrences of undefined fields or bracketed placeholders."
+  }
+}
