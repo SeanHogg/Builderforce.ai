@@ -42,7 +42,7 @@ const COLOR_DANGER = 'var(--error)';
    />
 */
 export function CompactListProgress({
-  items: inputItems,
+  items,
   sortBy,
   isLoading,
   emptyText,
@@ -52,33 +52,39 @@ export function CompactListProgress({
   isLoading?: boolean;
   emptyText?: string;
 }) {
-  let displayItems = (inputItems ?? []).map(item => ({ ...item, __order: Math.random() }));
-  if (!isLoading && inputItems?.length && sortBy === 'progress_desc') {
+  let displayItems: ProgressItem[] = (items ?? []).map((item): ProgressItem => ({
+    ...item,
+    __order: Math.random(),
+  }));
+
+  if (sortBy === 'progress_desc' && items?.length) {
     displayItems.sort((a, b) => {
       const pctA = calculatePct(a.completed, a.total);
       const pctB = calculatePct(b.completed, b.total);
       return pctB - pctA;
     });
-  }
-  if (!isLoading && inputItems?.length && sortBy === 'progress_asc') {
+  } else if (sortBy === 'progress_asc' && items?.length) {
     displayItems.sort((a, b) => {
       const pctA = calculatePct(a.completed, a.total);
       const pctB = calculatePct(b.completed, b.total);
       return pctA - pctB;
     });
-  }
-  if (!isLoading && inputItems?.length && sortBy === 'status') {
-    const order: Record<string, number> = { not_started: 0, in_progress: 1, completed: 2, blocked: 3 };
+  } else if (sortBy === 'status' && items?.length) {
+    const order: Record<string, number> = {
+      not_started: 0,
+      in_progress: 1,
+      completed: 2,
+      blocked: 3,
+    };
     displayItems.sort((a, b) => order[a.status] - order[b.status]);
-  }
-  if (!isLoading && inputItems?.length && sortBy === 'label_asc') {
+  } else if (sortBy === 'label_asc' && items?.length) {
     displayItems.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
   }
 
   if (isLoading) {
     return (
       <div role="list" aria-busy="true">
-        {[1, 2, 3].map(i => (
+        {Array.from({ length: 3 }, (_, i) => (
           <span key={i} style={ROW_CONTAINER}>
             <span style={[LABEL, { width: '100px', overflow: 'hidden' }]} aria-hidden>
               ¬—
@@ -91,7 +97,7 @@ export function CompactListProgress({
     );
   }
 
-  if (!displayItems?.length) {
+  if (!displayItems.length) {
     return (
       <span style={EMPTY_STATE} role="status">
         {emptyText ?? 'No items to display'}
@@ -107,7 +113,6 @@ export function CompactListProgress({
           role="listitem"
           style={ROW_CONTAINER}
           tabIndex={0}
-          // Minimal keyboard support (ARIA-hidden parts are ignored by screen readers).
           onKeyDown={(e) => {
             if (e.key === 'Enter') window.open(`#${item.id}`, '_blank');
           }}
@@ -119,7 +124,9 @@ export function CompactListProgress({
             <span
               style={[
                 PROGRESS_BAR_BG,
-                { width: `${calculatePct(item.completed, item.total)}%` },
+                {
+                  width: `${calculatePct(item.completed, item.total)}%`,
+                },
               ]}
               role="progressbar"
               aria-valuenow={calculatePct(item.completed, item.total)}
@@ -128,9 +135,7 @@ export function CompactListProgress({
               aria-label={`${item.label} progress`}
             />
           </span>
-          <span style={PERC}>
-            {item.completed}/{item.total}
-          </span>
+          <span style={PERC}>{item.completed}/{item.total}</span>
           <span aria-label={`${item.label} status: ${item.status}`}>
             <StatusBadge status={item.status} />
           </span>
@@ -140,25 +145,29 @@ export function CompactListProgress({
   );
 }
 
-// ProgressListProgress exports.
+// ProgressListProgress public helpers.
 export { calculatePct, getStatusColor };
 export type { ProgressItem, PList, SortBy };
 
-// CenPol: private helpers (no public API).
+// CompactListProgress internals.
 function calculatePct(completed: number, total: number): number {
   if (total <= 0) return 0;
   let pct = (completed / total) * 100;
-  if (Number.isNaN(pct)) return 0; // FR-2 (total=0).
+  if (Number.isNaN(pct)) return 0;
   return Math.max(0, Math.min(100, pct));
 }
 
 function getStatusColor(status: string): CSSProperties['color'] {
   switch (status) {
-    case 'completed': return COLOR_SUCCESS;
-    case 'in_progress': return COLOR_PRIMARY;
-    case 'blocked': return COLOR_DANGER;
+    case 'completed':
+      return COLOR_SUCCESS;
+    case 'in_progress':
+      return COLOR_PRIMARY;
+    case 'blocked':
+      return COLOR_DANGER;
     case 'not_started':
-    default: return COLOR_NEUTRAL;
+    default:
+      return COLOR_NEUTRAL;
   }
 }
 
@@ -167,10 +176,11 @@ const ROW_CONTAINER: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: '8px',
-  height: '36px',
+  height: '36px', // design target (scaled visual density)
   width: '100%',
 };
 
+// Inline style object mapping for AB/FLAT manual lifting.
 const LABEL: CSSProperties = {
   fontSize: '0.84rem',
   fontWeight: 600,
@@ -180,8 +190,6 @@ const LABEL: CSSProperties = {
   textOverflow: 'ellipsis',
   minWidth: '120px',
   maxWidth: '300px',
-  // Force truncation if width is constrained; not dependent on layout, inlined per FR-3.
-  // FR-3: No horizontal scroll within list container; paddingBottom keeps row height consistent.
   display: 'inline-block',
   flex: '0 0 auto',
 };
@@ -215,6 +223,7 @@ const PROGRESS_BAR_BG: CSSProperties = {
   opacity: 0.3,
   zIndex: 0,
 };
+
 const PROGRESS_BAR_FG: CSSProperties = {
   position: 'absolute',
   left: 0,
@@ -224,6 +233,14 @@ const PROGRESS_BAR_FG: CSSProperties = {
   zIndex: 1,
   // Partial width controlled directly; no JS-triggered animation to avoid mocking window.resize.
   transition: 'width 200ms linear',
+};
+
+const EMPTY_STATE: CSSProperties = {
+  fontSize: '0.9rem',
+  color: 'var(--text-muted)',
+  textAlign: 'center',
+  padding: '24px 0',
+  fontStyle: 'italic',
 };
 
 // StatusBadge for CompactListProgress (not an import to avoid dependency on StatusBadge; FR-8 requires self-contained).
@@ -256,11 +273,3 @@ function StatusBadge({ status }: { status: string }) {
   }
   return <span style={wrapStyle} aria-label={`Status: ${status}`}>{status.replace(/_/g, ' ')}</span>;
 }
-
-const EMPTY_STATE: CSSProperties = {
-  fontSize: '0.9rem',
-  color: 'var(--text-muted)',
-  textAlign: 'center',
-  padding: '24px 0',
-  fontStyle: 'italic',
-};
