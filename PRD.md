@@ -1,55 +1,64 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #377
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+## Product Requirements Document: Dispute Resolution
 
-## Problem & Goal
+### 1. Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+#### 1.1 Problem
+A critical gap (P1-7) exists in the platform's engagement lifecycle: there is no formal dispute, arbitration, or mediation flow. This absence leaves clients and freelancers without a clear path to resolve disagreements on engagements or milestones, leading to potential financial stalemates, project abandonment, and an inability to mediate conflicts effectively.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+#### 1.2 Goal
+To implement a robust dispute resolution system that allows either party (client or freelancer) to formally initiate a dispute on an engagement or milestone. This system will securely hold associated funds in escrow, facilitate communication, and enable resolution through a defined mediation state machine, ensuring fair outcomes and appropriate fund disbursement.
 
-## Target users / ICP roles
+### 2. Target Users / ICP Roles
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+*   **Client/Employer:** Initiates disputes, responds to disputes, provides evidence, agrees to resolutions.
+*   **Freelancer/Contractor:** Initiates disputes, responds to disputes, provides evidence, agrees to resolutions.
+*   **Platform Administrator/Mediator:** Oversees dispute processes, reviews evidence, facilitates communication, and enforces resolutions.
 
-## Scope
+### 3. Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This feature will encompass the ability for users to initiate and manage disputes related to monetary engagements or milestones. It includes escrowing disputed funds, providing a communication channel for all parties, and a state-based system to guide disputes through to a final resolution by platform administrators.
 
-## Functional Requirements
+### 4. Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+1.  **Dispute Initiation:**
+    *   Either the client or freelancer can initiate a dispute on an active engagement or specific milestone.
+    *   Users must provide a clear reason and description for the dispute.
+    *   System validates eligibility (e.g., active engagement, funds present for milestones).
+2.  **Escrow Management:**
+    *   Upon dispute initiation, all funds associated with the disputed engagement or milestone are immediately moved to a secure escrow state.
+    *   These funds remain held until the dispute is formally resolved.
+    *   No further payments or refunds related to the disputed item can be processed outside the dispute flow.
+3.  **Dispute State Machine:**
+    *   Implement a clear lifecycle with states: `Open`, `Under Review`, `Mediation Phase`, `Awaiting Party Agreement`, `Platform Decision`, `Resolved - Released`, `Resolved - Refunded`, `Canceled`.
+    *   Define permissible transitions between states based on actions by users or platform administrators.
+4.  **Communication & Evidence:**
+    *   Provide a dedicated, private communication thread within the dispute interface for all involved parties (client, freelancer, platform mediator).
+    *   Allow parties to upload supporting documents, screenshots, and other evidence.
+5.  **Resolution Mechanisms:**
+    *   Enable parties to propose and mutually agree upon a resolution (e.g., full payment, partial refund, full refund).
+    *   Platform Administrators/Mediators can review all evidence and communication to make an impartial decision.
+    *   Resolution actions include: releasing full payment to the freelancer, issuing a full refund to the client, or distributing funds partially based on the agreed/decided outcome.
+6.  **Notifications:**
+    *   Automated notifications to all involved parties for dispute initiation, status changes, new messages, and resolution.
+7.  **Dispute Visibility & Access:**
+    *   Disputes are only visible to the directly involved client, freelancer, and platform administrators.
 
-## Acceptance Criteria
+### 5. Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+*   A user (client or freelancer) can successfully initiate a dispute on an active engagement or milestone.
+*   Upon dispute initiation, all funds directly associated with the disputed engagement/milestone are automatically and securely moved to an escrow state, preventing any unauthorized disbursement.
+*   The dispute progresses through its defined state machine from initiation to resolution (e.g., `Open` -> `Mediation Phase` -> `Resolved`).
+*   A platform administrator can intervene, review all submitted evidence, and enforce a final resolution.
+*   Based on the final resolution outcome (mutual agreement or platform decision), funds are accurately released to the freelancer, fully refunded to the client, or partially distributed as specified.
 
-## Out of scope
+### 6. Out of Scope
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+*   Automated arbitration via AI or algorithms.
+*   Integration with external legal systems or third-party arbitration services.
+*   Dispute resolution for non-monetary or non-engagement related issues (e.g., pure reputational disputes without an associated financial transaction).
+*   Advanced reporting and analytics features on dispute trends (for V1).
+*   Handling of multiple simultaneous disputes on the exact same discrete milestone.
+*   Dispute escalation paths beyond platform administrators to external authorities (for V1).
