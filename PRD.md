@@ -1,55 +1,46 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Bob Developer (V2 (Container)) · task #384
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# PRD: Employment Classification Framework
 
-## Problem & Goal
+## 1. Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+### 1.1. Problem
+The current platform lacks a robust employment classification framework beyond a basic `engagement_type` enum. This absence prevents explicit distinction between contractor and FTE statuses and the provision of compliance disclosures for freelancer status. This exposes the platform and its users to significant misclassification risks.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+### 1.2. Goal
+Implement a comprehensive employment classification framework to explicitly define and assign an employment classification to each engagement. This framework will include surfacing all required compliance disclosures to both parties involved in an engagement, thereby mitigating misclassification risks.
 
-## Target users / ICP roles
+## 2. Target Users / ICP Roles
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+*   **Clients:** To understand the classification of their engagements and view associated disclosures.
+*   **Freelancers / Contractors:** To understand their classification status and view relevant disclosures pertaining to their engagement.
+*   **Internal Legal & Compliance Teams:** To define, configure, and audit employment classifications and associated disclosure requirements.
+*   **Platform Administrators:** To manage the framework settings and configurations.
 
-## Scope
+## 3. Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This project will introduce a new employment classification framework that complements or extends the existing `engagement_type` enum. It will focus on defining, assigning, and disclosing classifications for all *new and active* engagements.
 
-## Functional Requirements
+## 4. Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+*   **FR1: Classification Definition:** The system shall allow internal Legal & Compliance teams to define and manage a set of distinct employment classifications (e.g., "Full-Time Employee," "Independent Contractor," "Freelancer," "Part-Time Contractor").
+*   **FR2: Disclosure Configuration:** For each defined classification, the system shall allow internal teams to configure and associate specific compliance-mandated disclosures. These disclosures may include text, links to legal documents, or specific data points.
+*   **FR3: Engagement Classification Assignment:** Each new engagement created shall be explicitly assigned an employment classification from the defined set.
+*   **FR4: Classification & Disclosure Display (Client):** Clients shall be able to clearly view the employment classification and all associated compliance disclosures for each of their engagements.
+*   **FR5: Classification & Disclosure Display (Freelancer/Contractor):** Freelancers/contractors shall be able to clearly view the employment classification and all associated compliance disclosures for each of their engagements.
+*   **FR6: Data Storage:** The assigned classification for each engagement and the status of its associated disclosures (e.g., acknowledgement) shall be persistently stored.
 
-## Acceptance Criteria
+## 5. Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+*   Every new engagement created within the platform carries an explicit, defined employment classification.
+*   For every new and active engagement, all required compliance disclosures pertinent to its assigned classification are prominently surfaced to both the client and the freelancer/contractor.
+*   Internal Legal & Compliance teams have the tools to define new classifications and configure/update their associated disclosures.
 
-## Out of scope
+## 6. Out of Scope
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+*   Automatic inference or AI-driven assignment of employment classifications. Initial assignment will be manual or rule-based, defined by internal teams.
+*   Generation of legal advice; the system will display pre-defined disclosures, not provide real-time legal counsel.
+*   Retroactive application of the classification framework to *all* historical, completed engagements. Focus will be on new and active engagements.
+*   Detailed UI/UX design specifications.
+*   Changes to core platform billing or payment processing logic unless directly necessitated by a disclosure requirement.
