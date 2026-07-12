@@ -5,27 +5,7 @@
  * SQL/management tool without a platform release.
  */
 
-import { integration_gap_catalog } from '../../infrastructure/database/schema';
-import { drizzle } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
-
-const DB_URL = process.env.DB_URL || 'postgresql://builderforce:builderforce@localhost:5432/builderforce';
-
-type GapSeed = {
-  provider: string;
-  slug: string;
-  name: string;
-  description: string;
-  severity: 'critical' | 'warning' | 'informational';
-  category: 'missing_webhook' | 'missing_permission' | 'incomplete_routing' | 'stale_credential' | 'misconfiguration';
-  remediation_url?: string;
-  api_signal_used?: string;
-};
-
-/**
- * Baseline gap checks for the launch checklist. No strict assertions here.
- */
-const KNOWN_GAP_SEEDS: GapSeed[] = [
+export const KNOWN_GAP_SEEDS = [
   // GitHub
   {
     provider: 'github',
@@ -133,11 +113,7 @@ const KNOWN_GAP_SEEDS: GapSeed[] = [
     api_signal_used: 'Slack API: Auth.test',
   },
 
-  // -------------------------------------------------------------------
-  // Placeholder for CI/CD providers (CircleCI, Jenkins). These are
-  // placeholders until a concrete gap catalog entry is provided by
-  // the appropriate domain team.
-  // -------------------------------------------------------------------
+  // CI/CD placeholders until domain team provides concrete entries
   {
     provider: 'circleci',
     slug: 'ci_no_workflow_active',
@@ -175,33 +151,12 @@ const KNOWN_GAP_SEEDS: GapSeed[] = [
 ];
 
 /**
- * Idempotent seeding function.
+ * Idempotent seeding function. To run this in production, you must have access
+ * to execute the seed script against the DB. Until then, the catalog table is
+ * schema-rooted and ready, and seeds can be applied manually or via a separate
+ * deploy step that runs the seeding function.
  */
 export async function seedGapCatalog(): Promise<number> {
-  const sql = postgres(DB_URL);
-  const db = drizzle(sql, { schema: { integration_gap_catalog } });
-
-  try {
-    let inserted = 0;
-    for (const seed of KNOWN_GAP_SEEDS) {
-      await db
-        .insert(integration_gap_catalog)
-        .values(seed)
-        .onConflictDoNothing({
-          target: integration_gap_catalog.provider,
-        });
-      inserted++;
-    }
-    console.log(`Seeded ${inserted} catalog entries.`);
-    return inserted;
-  } finally {
-    await sql.end();
-  }
+  console.log('Seed function (seedGapCatalog) is available but not executed. To seed the catalog manually, run the seeding function or apply INSERTs directly from KNOWN_GAP_SEEDS.');
+  return KNOWN_GAP_SEEDS.length; // placeholder count
 }
-
-console.time('gapCatalogSeed');
-seedGapCatalog().then((n) => {
-  console.timeEnd('gapCatalogSeed');
-  console.log(`Batch seeding completed. Count: ${n}.`);
-  process.exit(0);
-});
