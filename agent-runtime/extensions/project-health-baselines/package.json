@@ -1,0 +1,15 @@
+{
+  "name": "@builderforce/project-health-baselines",
+  "version": "2026.3.21",
+  "private": true,
+  "description": "Project health baseline tools: capture, persist, version, and compare AI responses as immutable snapshots per PRD #294",
+  "type": "module",
+  "devDependencies": {
+    "@seanhogg/builderforce-agents": "workspace:*"
+  },
+  "builderforce": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
