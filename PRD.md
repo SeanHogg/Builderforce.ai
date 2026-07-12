@@ -1,55 +1,114 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #269
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# PRD: Integration Validation at Each Step
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+### Problem
+Multi-step pipelines — whether data transformations, API chains, CI/CD workflows, or agent tool-call sequences — frequently fail silently or propagate corrupt state because validation only occurs at the terminal output. Debugging regressions requires tracing backwards through every step, increasing mean time to resolution (MTTR) and eroding confidence in pipeline outputs.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+### Goal
+Implement a lightweight, consistent integration-validation layer that automatically asserts correctness of inputs and outputs **at every discrete step** in a pipeline. Failures surface immediately at the step where they originate, halting execution and emitting actionable diagnostics before bad data propagates further.
 
-## Target users / ICP roles
+---
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## Target Users / ICP Roles
+
+| Role | Need |
+|---|---|
+| **Backend / Platform Engineer** | Instrument existing pipelines without rewriting business logic |
+| **Data Engineer** | Guarantee schema and referential integrity between ETL stages |
+| **DevOps / SRE** | Catch integration regressions in CI before they reach production |
+| **QA / Automation Engineer** | Write declarative step-level contracts as part of test suites |
+| **AI/Agent System Developer** | Validate tool inputs/outputs in multi-agent orchestration chains |
+
+---
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This PRD covers the design and delivery of a **step-level integration validation framework** that can be embedded in or alongside an existing pipeline runtime. It addresses:
+
+- Defining and attaching validation contracts (schemas, rules, assertions) to individual pipeline steps
+- Executing those contracts synchronously at step boundaries (pre- and post-execution)
+- Halting or branching execution on validation failure
+- Reporting structured diagnostics at the failing step
+- Developer tooling for authoring and testing contracts locally
+
+---
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### FR-1 — Step Contract Definition
+- Each pipeline step **must** support attachment of an optional `InputContract` and `OutputContract`.
+- Contracts are declarative and expressible as: JSON Schema, Pydantic/dataclass models, custom assertion functions, or rule sets (non-null, range, regex, referential checks).
+- Contracts are version-controlled alongside step definitions.
+
+### FR-2 — Pre-Step Input Validation
+- Before a step executes, the framework validates the incoming payload against the step's `InputContract`.
+- Validation executes synchronously by default; async mode available for I/O-bound contract checks.
+- Invalid input **immediately halts** execution of that step.
+
+### FR-3 — Post-Step Output Validation
+- After a step executes, the framework validates the outgoing payload against the step's `OutputContract`.
+- Invalid output halts propagation to the next step.
+- Original step output is quarantined and not forwarded downstream.
+
+### FR-4 — Failure Handling & Diagnostics
+- On failure, the framework emits a structured `ValidationError` event containing:
+  - `step_id`, `step_name`
+  - `contract_type` (`input` | `output`)
+  - `failed_rules[]` with field path, expected constraint, actual value
+  - `pipeline_run_id`, `timestamp`
+- Execution halts by default; configurable `on_failure` modes: `halt` (default), `warn-and-continue`, `retry(n)`, `branch-to-fallback`.
+
+### FR-5 — Observability Integration
+- Validation events (pass and fail) emit to a configurable sink: stdout/stderr, structured log (JSON), OpenTelemetry span attributes, or a webhook.
+- Each step boundary produces a validation trace entry linkable to the parent pipeline run.
+
+### FR-6 — Pipeline Orchestrator Compatibility
+- The validation layer integrates as middleware or decorator with at least the following runtimes:
+  - Python function chains (decorator `@validate_step`)
+  - Apache Airflow (custom operator wrapper)
+  - Prefect / Dagster (hook-based integration)
+  - REST API chains (request/response interceptor)
+  - LLM agent tool-call pipelines (pre/post tool invocation hooks)
+
+### FR-7 — Contract Testing CLI
+- A CLI command (`validate-contracts`) allows engineers to:
+  - Lint contract definitions for syntax errors
+  - Run contracts against fixture payloads offline
+  - Diff contract changes between versions to flag breaking changes
+
+### FR-8 — Bypass & Override Controls
+- Contracts can be toggled: `enforced` (default), `audit-only`, `disabled`.
+- Environment-scoped overrides (e.g., disable in local dev, enforce in staging/prod).
+- All overrides are logged with actor identity.
+
+---
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+| # | Criterion |
+|---|---|
+| AC-1 | Given a step with an `InputContract`, when the incoming payload violates a defined rule, then execution of that step does not proceed and a `ValidationError` event is emitted within 50 ms of receipt. |
+| AC-2 | Given a step with an `OutputContract`, when the step produces an invalid output, then the payload is not forwarded to the next step and a `ValidationError` event is emitted. |
+| AC-3 | Given a valid payload at every step, then the pipeline executes end-to-end with zero additional latency overhead exceeding 10 ms per step under a 1 KB payload. |
+| AC-4 | Given a `ValidationError`, the error event contains `step_id`, `contract_type`, at least one `failed_rule` with field path and constraint details, and `pipeline_run_id`. |
+| AC-5 | Given `on_failure: warn-and-continue`, the pipeline completes and all validation failures are recorded but do not halt execution. |
+| AC-6 | Given the CLI `validate-contracts --fixture <file>`, the command exits non-zero and prints rule-level failures when the fixture violates the contract. |
+| AC-7 | Given a contract set to `audit-only`, validation results are logged but execution is never halted. |
+| AC-8 | Integration tests covering Airflow, Prefect, and Python decorator runtimes pass in CI with zero false positives on known-valid fixtures. |
+| AC-9 | A breaking contract change (e.g., adding a required field) is detected and flagged by `validate-contracts --diff` before deployment. |
 
-## Out of scope
+---
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## Out of Scope
+
+- **Business-logic validation** within a step (e.g., domain rules unrelated to data contracts between steps) — this is the step owner's responsibility.
+- **Data quality profiling** (statistical drift detection, anomaly scoring) — handled by separate data observability tooling.
+- **UI dashboard** for browsing validation results — integrations with existing log/trace UIs (Grafana, Datadog) are sufficient for v1.
+- **Automatic contract inference** from historical payloads — may be considered in a future iteration.
+- **Cross-pipeline validation** (asserting relationships between separate pipeline runs).
+- **Security / PII scanning** of payload contents — outside the validation layer's mandate.
+- **Retroactive reprocessing** of already-forwarded payloads after a contract is added.

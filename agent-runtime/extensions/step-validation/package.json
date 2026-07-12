@@ -1,0 +1,44 @@
+{
+  "name": "@builderforce/step-validation",
+  "description": "Step-level integration validation for Builderforce pipelines",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "bin": {
+    "validate-contracts": "./src/cli.js"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "src"
+  ],
+  "scripts": {
+    "test": "echo no tests yet"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "commander": "^12.1.0",
+    "ajv-formats": "^3.0.1"
+  },
+  "devDependencies": {
+    "@builderforce/core": "workspace:*",
+    "@builderforce/agent-runtime": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public",
+    "main": "index.js",
+    "module": "index.js"
+  },
+  "keywords": [
+    "validation",
+    "contracts",
+    "step-validation",
+    "pipeline"
+  ],
+  "author": "Builderforce",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  }
+}

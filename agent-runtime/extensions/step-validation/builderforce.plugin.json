@@ -1,0 +1,25 @@
+{
+  "id": "step-validation",
+  "name": "Step Validation",
+  "description": "Step-level integration validation: pre/post input/output contracts, structured diagnostics, failure modes, CLI tooling, LLM tool-call instrumentation",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "defaultEnforcementMode": {
+        "type": "string",
+        "enum": ["enforced", "audit-only", "disabled"],
+        "default": "enforced"
+      },
+      "defaultFailureMode": {
+        "type": "string",
+        "enum": ["halt", "warn-and-continue", "retry(3)", "branch-to-fallback"],
+        "default": "halt"
+      },
+      "source": {
+        "description": "Hyphenated actor identity for override logging (e.g. 'api-gateway', 'script-runner'). Required when overriding contracts.",
+        "type": "string"
+      }
+    }
+  }
+}
