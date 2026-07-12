@@ -160,6 +160,7 @@ import { createAgentAssignmentRoutes } from './presentation/routes/agentAssignme
 import { createSecurityReviewRoutes } from './presentation/routes/securityReviewRoutes';
 import { createKnowledgeRoutes } from './presentation/routes/knowledgeRoutes';
 import { createKnowledgeMarketRoutes } from './presentation/routes/knowledgeMarketRoutes';
+import { createMisalignmentRulesRoutes } from './presentation/routes/misalignmentRulesRoutes';
 
 import { API_VERSION } from './version';
 import {
@@ -573,6 +574,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/monitoring',        createMonitoringRoutes(db));
   app.route('/api/knowledge',         createKnowledgeRoutes(db));
   app.route('/api/knowledge-market',  createKnowledgeMarketRoutes(db)); // PUBLIC browse (logged-out)
+
+  // Priority misalignment detection & rules management
+  app.route('/api/misalignment-rules', createMisalignmentRulesRoutes(db));
 
   app.onError(errorHandler);
   app.notFound((c) => addCorsToResponse(c, c.json({ error: 'Not found' }, 404)));
