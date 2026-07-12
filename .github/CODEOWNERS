@@ -1,0 +1,34 @@
+# CODEOWNERS
+# Codeowners makes GitHub block PRs until all listed maintainers approve.
+# This matches the repo's AuditRunner regex: /(^|\/)(.github\/|docs\/)?codeowners$/
+
+# Default owners for all files — adjust based on privilege level in your org policy.
+* Owner: @SeanHogg
+
+# Core application code (requires higher privileges)
+# Priority reviewers: agent-runtime ops and backend maintainers. At least two approvals for non-trivial changes.
+/api/ Owner: @SeanHogg
+/api/* Owner: @SeanHogg
+
+# Frontend (SSR, Cloudflare Workers)
+# Strategy: author must include a "peers" review section with a reviewer名单. Minimum one approval from frontend-maintain crew.
+/frontend/ Owner: @SeanHogg
+
+# Infrastructure — should require extra scrutiny and ideally an architectural review
+/Dockerfile* Owner: @SeanHogg
+/.github/ Owner: @SeanHogg
+
+# Documentation — "doc-owners" needed for safety/audit compliance
+/*.md Owner: @SeanHogg
+/docs/ Owner: @SeanHogg
+
+# CI pipelines — approval required for any substantial change; at least one approval from DevOps.
+/.github/workflows/ Owner: @SeanHogg
+/.claude/ Owner: @SeanHogg
+
+# Security & release scripts — require two approvals; one operations, one security.
+/scripts/ Owner: @SeanHogg
+
+# Dependencies / lockfiles — no approvals needed for dependency updates when semver bump; noise mitigation in PR template.
+/pnpm-lock.yaml Owner:
+/package.json Owner:
