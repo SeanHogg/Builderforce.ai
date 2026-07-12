@@ -1,55 +1,110 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #485
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# Product Requirements Document (PRD): Telemetry Reconstruction Tests
+
+## Overview
+This PRD outlines the requirements for developing and integrating telemetry reconstruction and billing ledger consistency tests into the QA pipeline. The goal is to validate cloud agent runs for GAP-O1 and GAP-O2.
+
+---
 
 ## Problem & Goal
+### Problem
+- **No automated validation** for telemetry reconstruction (GAP-O1) and billing ledger consistency (GAP-O2) in cloud agent runs.
+- **Manual testing is error-prone**, time-consuming, and does not scale with increasing agent deployments.
+- **Lack of integration** into the QA pipeline hampers visibility into regressions or failures.
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+### Goal
+- Develop automated tests to validate telemetry reconstruction and billing ledger consistency.
+- Integrate tests into the QA pipeline to ensure continuous validation of cloud agent runs.
+- Reduce manual testing efforts and improve confidence in telemetry and billing data accuracy.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+---
 
-## Target users / ICP roles
+## Target Users / ICP Roles
+| Role                     | Responsibilities                                  | Value Gained                     |
+|--------------------------|--------------------------------------------------|----------------------------------|
+| QA Engineers             | Execute and maintain tests, monitor results      | Reduced manual effort, faster feedback |
+| Cloud Operations Team    | Monitor agent health and billing accuracy        | Early detection of inconsistencies |
+| Product Managers         | Validate business logic and billing integrity    | Trust in data accuracy           |
+| DevOps / SREs            | Ensure CI/CD pipeline reliability                | Seamless test integration        |
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+---
 
 ## Scope
+### In Scope
+1. **Test Development**
+   - Telemetry reconstruction tests for GAP-O1.
+   - Billing ledger consistency tests for GAP-O2.
+   - Test coverage for edge cases (e.g., partial data, out-of-order events).
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+2. **Test Infrastructure**
+   - Test harness for cloud agent runs.
+   - Mock data generation for reproducible testing.
+   - Integration with existing QA tools (e.g., pytest, CI/CD).
+
+3. **QA Pipeline Integration**
+   - Automated test execution in CI/CD (e.g., GitHub Actions, Jenkins).
+   - Reporting and alerting for test failures.
+   - Dashboard for test results visibility.
+
+4. **Documentation**
+   - Test case documentation.
+   - Runbook for debugging failures.
+
+### Out of Scope
+- **Production data testing**: Tests will use synthetic or anonymized data.
+- **Performance benchmarking**: Focus is on correctness, not performance (e.g., latency, throughput).
+- **End-to-end billing reconciliation**: Tests validate ledger consistency, not external billing systems.
+- **Non-cloud agents**: Tests are specific to cloud agent environments.
+
+---
 
 ## Functional Requirements
+| ID   | Requirement                                                                 | Priority |
+|------|-----------------------------------------------------------------------------|----------|
+| FR-1 | Tests shall validate telemetry reconstruction (GAP-O1) for cloud agent runs. | P0       |
+| FR-2 | Tests shall validate billing ledger consistency (GAP-O2) for cloud agent runs. | P0       |
+| FR-3 | Tests shall support configurable mock data for agent inputs.               | P1       |
+| FR-4 | Tests shall fail visibly with actionable error messages.                   | P0       |
+| FR-5 | Tests shall integrate with the QA pipeline (e.g., GitHub Actions).         | P0       |
+| FR-6 | Test results shall be logged and accessible via a dashboard.               | P1       |
+| FR-7 | Tests shall handle edge cases (e.g., missing data, out-of-order events).   | P1       |
+| FR-8 | Tests shall support parallel execution for efficiency.                     | P2       |
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+---
 
 ## Acceptance Criteria
+### Test Development
+1. **Telemetry Reconstruction (GAP-O1)**
+   - Tests pass when reconstructed telemetry matches expected output for given mock inputs.
+   - Tests fail with clear error messages for mismatches (e.g., missing events, incorrect timestamps).
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+2. **Billing Ledger Consistency (GAP-O2)**
+   - Tests pass when the ledger accurately reflects agent activity (e.g., usage, timestamps).
+   - Tests fail with clear error messages for inconsistencies (e.g., missing entries, incorrect calculations).
 
-## Out of scope
+### QA Pipeline Integration
+1. Tests execute automatically on:
+   - Pull requests targeting `main`/`master`.
+   - Scheduled nightly runs.
+   - Manual triggers via CI/CD.
+2. Test failures block merges for `P0` requirements.
+3. Test results are visible in a dashboard (e.g., GitHub Actions, Grafana) with:
+   - Pass/fail status.
+   - Error logs.
+   - Historical trends.
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+### Documentation
+1. README includes:
+   - Setup instructions for local test execution.
+   - Explanation of test cases.
+   - Debugging guidelines for failures.
+
+---
+
+## Out of Scope
+- Testing of on-premise or hybrid agent deployments.
+- Validation against external billing systems (e.g., Stripe, AWS Billing).
+- Load or stress testing of telemetry/billing pipelines.
+- Integration with non-QA tools (e.g., tracking tickets for failures).
