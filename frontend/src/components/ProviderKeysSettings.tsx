@@ -26,13 +26,13 @@ interface ProviderConfig {
   label: string;
   /** Placeholder / format hint for the API-key input — literal. */
   keyPlaceholder: string;
-  /** Anthropic also supports connecting a Pro/Max subscription via OAuth. */
+  /** Provider supports connecting a consumer subscription via OAuth. */
   supportsOauth: boolean;
 }
 
 const PROVIDERS: ProviderConfig[] = [
   { id: 'anthropic', label: 'Anthropic (Claude)', keyPlaceholder: 'sk-ant-…', supportsOauth: true },
-  { id: 'openai',    label: 'OpenAI',             keyPlaceholder: 'sk-…',     supportsOauth: false },
+  { id: 'openai',    label: 'OpenAI',             keyPlaceholder: 'sk-…',     supportsOauth: true },
   { id: 'google',    label: 'Google (Gemini)',    keyPlaceholder: 'AIza…',   supportsOauth: false },
   { id: 'meta',      label: 'Meta AI (MUSE)',     keyPlaceholder: 'meta-…',  supportsOauth: false },
 ];
@@ -187,7 +187,7 @@ function ProviderConnectionCard({
   const startConnect = async () => {
     setBusy(true); setError(null);
     try {
-      const { authorizeUrl } = await providerKeysApi.oauthStart();
+      const { authorizeUrl } = await providerKeysApi.oauthStart(config.id);
       window.open(authorizeUrl, '_blank', 'noopener,noreferrer');
       setConnecting(true);
     } catch (e) {
@@ -202,7 +202,7 @@ function ProviderConnectionCard({
     if (!code) return;
     setBusy(true); setError(null);
     try {
-      await providerKeysApi.oauthComplete(code);
+      await providerKeysApi.oauthComplete(config.id, code);
       onChange('oauth');
       setConnecting(false);
       setPastedCode('');
@@ -260,14 +260,14 @@ function ProviderConnectionCard({
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
-                {t.rich('pastePrompt', { code: (chunks) => <code>{chunks}</code> })}
+                {t.rich(`provider.${config.id}.pastePrompt`, { code: (chunks) => <code>{chunks}</code> })}
               </p>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <input
                   type="text"
                   value={pastedCode}
                   onChange={(e) => setPastedCode(e.target.value)}
-                  placeholder={t('pastePlaceholder')}
+                  placeholder={t(`provider.${config.id}.pastePlaceholder`)}
                   disabled={busy}
                   style={{ ...inputStyle, flex: '1 1 180px' }}
                 />

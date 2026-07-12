@@ -7635,10 +7635,15 @@
     "provider": {
       "anthropic": {
         "blurb": "连接您的 Claude Pro/Max 订阅（无需按令牌计费），或粘贴 Anthropic API 密钥。",
-        "subscription": "Claude 订阅"
+        "subscription": "Claude 订阅",
+        "pastePrompt": "在 Claude 标签页批准后，粘贴完整的 <code>code#state</code> 值。",
+        "pastePlaceholder": "粘贴 Claude 代码…"
       },
       "openai": {
-        "blurb": "粘贴 OpenAI API 密钥，在您自己的 OpenAI 账户上运行 GPT 模型。"
+        "blurb": "连接您的 ChatGPT/Codex 订阅，或粘贴 OpenAI API 密钥。",
+        "subscription": "ChatGPT/Codex 订阅",
+        "pastePrompt": "登录后，从地址栏复制完整的 <code>http://localhost:1455/auth/callback?code=…&state=…</code> URL 并粘贴到这里。",
+        "pastePlaceholder": "粘贴 OpenAI 重定向 URL…"
       },
       "google": {
         "blurb": "粘贴 Google AI (Gemini) API 密钥，在您自己的 Google 账户上运行 Gemini 模型。"
