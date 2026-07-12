@@ -179,35 +179,30 @@ export function ProgressiveRevealOrchestrator({
     if (key) {
       const stream = state.streams.get(key);
       if (stream && stream.timeoutHandle) clearTimeout(stream.timeoutHandle);
-      const next = new Map(state.streams);
-      next.delete(key);
-      setState(old => ({
-        ...old,
-        streams: next,
-      }));
       activitiesRef.current = {
         ...activitiesRef.current,
-        [stream?.priority ?? 'critical' + 'Started']: Math.max(0, activitiesRef.current[stream?.priority ?? 'critical' + 'Started'] - 1),
+        [stream?.priority ?? 'critical']: Math.max(0, (activitiesRef.current[stream?.priority ?? 'critical'] ?? 0) - 1),
       };
+      const next = new Map(state.streams);
+      next.delete(key);
+      setState(old => ({ ...old, streams: next }));
     } else {
       let timers = 0;
-      state.streams.forEach(s => { if(s.timeoutHandle) clearTimeout(s.timeoutHandle); timers++; });
+      state.streams.forEach(s => { if(s.timeoutHandle) { clearTimeout(s.timeoutHandle); timers++; }});
       const zeroActivities = {
-        criticalResolved: 0,
-        secondaryResolved: 0,
-        deferredResolved: 0,
-        criticalStarted: 0,
-        secondaryStarted: 0,
-        deferredStarted: 0,
+        critical: 0,
+        secondary: 0,
+        deferred: 0,
       };
       setState(old => ({ ...old, streams: new Map(), activities: zeroActivities }));
       activitiesRef.current = zeroActivities;
     }
 
     const freshPrevious = lastStateRef.current;
+    const recomputed = latestStage(state.streams);
     lastStateRef.current = {
-      currentStage: latestStage(state.streams),
-      lastTransitionAt: freshPrevious.currentStage === lastStateRef.current.currentStage ? freshPrevious.lastTransitionAt : performance.now(),
+      currentStage: recomputed,
+      lastTransitionAt: recomputed === freshPrevious.currentStage ? freshPrevious.lastTransitionAt : performance.now(),
     };
   };
 
