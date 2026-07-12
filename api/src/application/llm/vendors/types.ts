@@ -30,7 +30,10 @@ export type VendorId =
   | 'deepinfra' | 'xai' | 'perplexity' | 'moonshot' | 'hyperbolic' | 'novita'
   | 'sambanova' | 'lepton' | 'anyscale' | 'octoai' | 'featherless' | 'inferencenet'
   | 'targon' | 'avian' | 'nebius' | 'baseten' | 'lambda' | 'klusterai'
-  | 'parasail' | 'nscale' | 'chutes' | 'ai21' | 'siliconflow' | 'minimax';
+  | 'parasail' | 'nscale' | 'chutes' | 'ai21' | 'siliconflow' | 'minimax'
+  // ── BYO-only vendor: no operator pool key; only reachable when a tenant
+  //    connects their own Meta AI account from the provider-keys settings page.
+  | 'meta';
 
 /**
  * Tier classification per model — drives pricing, plan gating, and the
@@ -143,6 +146,11 @@ export interface VendorEnv {
   SILICONFLOW_API_KEY?: string | null;
   /** MiniMax — api.minimax.io/v1. */
   MINIMAX_API_KEY?: string | null;
+  /** Meta AI (MUSE) — api.meta.ai/v1. BYO-only: populated exclusively from a
+   *  tenant's connected Meta AI provider key (settings → Bring your own models).
+   *  No operator-level key exists; when unset the `meta` vendor is skipped by the
+   *  cascade exactly like any other unbound vendor. */
+  META_API_KEY?: string | null;
 }
 
 export interface VendorCallParams {

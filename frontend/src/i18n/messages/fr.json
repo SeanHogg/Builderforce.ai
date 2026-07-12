@@ -7602,6 +7602,9 @@
       },
       "google": {
         "blurb": "Collez une clé d'API Google AI (Gemini) pour exécuter des modèles Gemini sur votre propre compte Google."
+      },
+      "meta": {
+        "blurb": "Collez une clé d'API Meta AI pour exécuter des modèles MUSE (muse-spark-1.1) sur votre propre compte Meta AI."
       }
     }
   },
