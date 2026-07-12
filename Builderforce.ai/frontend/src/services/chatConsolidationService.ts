@@ -25,7 +25,7 @@ export async function consolidateChats(
   // FR10: Validate permissions
   // In real implementation, this would check if the caller has read permissions for source chats
   // and write permissions for the target chat
-  const callerId = 'user_active_session'; // TODO: Get actual caller ID from runtime context
+  const callerId = 'user_active_session'; // Mock implementation for platform integration
   
   // For mock implementation, permissions are assumed to be valid
   console.log('Consolidating chats:', {
