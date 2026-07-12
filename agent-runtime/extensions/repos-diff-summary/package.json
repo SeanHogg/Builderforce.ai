@@ -1,0 +1,15 @@
+{
+  "name": "@builderforce/repos-diff-summary",
+  "version": "2026.3.21",
+  "private": true,
+  "description": "BuilderForceAgents PR/branch diff summary MCP tool (files changed by category)",
+  "type": "module",
+  "devDependencies": {
+    "@seanhogg/builderforce-agents": "workspace:*"
+  },
+  "builderforce": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
