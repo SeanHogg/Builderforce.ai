@@ -21,7 +21,6 @@ export function QualityDashboardView({ initialFilter }: QualityDashboardViewProp
     setFilterState(next);
     updateUrlFilters(next);
   }, []);
-  const [autoRefresh, setAutoRefresh] = React.useState(false); // Start auto-refresh only after initial load
 
   const {
     bugCountSummary,
