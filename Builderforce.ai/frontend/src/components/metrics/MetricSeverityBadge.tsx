@@ -69,7 +69,10 @@ export const MetricSeverityBadge: React.FC<MetricSeverityBadgeProps> = ({
   
   const iconSize = size === 'sm' ? '14px' : size === 'md' ? '16px' : '20px';
   
-  // No Data state rendering
+  // Determine icon to render (fallback to auto-detection if manual forced)
+  const icon = manualIcon !== undefined ? manualIcon : result.icon;
+  
+  // Critical/No Data state rendering
   if (result.isNoData) {
     return (
       <span 
