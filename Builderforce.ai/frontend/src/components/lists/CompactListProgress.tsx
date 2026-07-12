@@ -255,7 +255,10 @@ const row: CSSProperties = {
   alignItems: 'center',
   gap: '8px',
   height: ROW_MAX_HEIGHT,
+  maxHeight: ROW_MAX_HEIGHT, // FR-3: rows never exceed 40px
   width: '100%',
+  boxSizing: 'border-box',
+  overflow: 'hidden', // FR-3: no horizontal scroll leaks out of a row
 };
 
 const label: CSSProperties = {
@@ -265,18 +268,18 @@ const label: CSSProperties = {
   whiteSpace: 'nowrap',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
-  minWidth: '120px',
-  maxWidth: '300px',
-  display: 'inline-block',
-  flex: '0 0 auto',
+  // Flexible + shrinkable so the label truncates (never overflows) even at 320px (FR-3/AC-5/AC-10).
+  flex: '1 1 40%',
+  minWidth: 0,
   cursor: 'default',
 };
 
 const progressContainer: CSSProperties = {
   position: 'relative',
   height: BAR_HEIGHT,
-  flex: 1,
-  minWidth: '60px',
+  maxHeight: BAR_HEIGHT, // FR-3: bar height never exceeds 6px
+  flex: '1 1 auto',
+  minWidth: '48px',
   overflow: 'hidden',
   display: 'flex',
 };
