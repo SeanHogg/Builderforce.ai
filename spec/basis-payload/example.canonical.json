@@ -1,0 +1,171 @@
+{
+  "schema_version": "1.0.0",
+  "basis_id": "b1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5c",
+  "created_at": "2025-01-15T14:30:00Z",
+  "agent_id": "agent-code-analyzer-v1",
+  "session_id": "sess-9ed8c7b6-a5f4-3e2d-1c0b-89a7f6e5d4c3",
+  "parent_basis_id": null,
+  "claims": [
+    {
+      "claim_id": "c1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5d",
+      "text": "The component under test follows the documented contract.",
+      "confidence": 0.94,
+      "confidence_method": "empirical",
+      "tags": [
+        "behavioral",
+        "high-confidence"
+      ],
+      "status": "asserted"
+    },
+    {
+      "claim_id": "c2a3b4c5-d6e7-4f8a-9b0c-1d2e3f4a5b6c",
+      "text": "Error handling paths correctly return 4xx responses for invalid input.",
+      "confidence": 0.76,
+      "confidence_method": "llm-self-report",
+      "tags": [
+        "error-handling"
+      ],
+      "status": "asserted"
+    },
+    {
+      "claim_id": "c3a4b5c6-d7e8-4f9b-0c1d-2e3f4a5b6c7d",
+      "text": "Database connection pool reaches steady state within 30s.",
+      "confidence": 0.84,
+      "confidence_method": "heuristic",
+      "tags": [
+        "performance"
+      ],
+      "status": "asserted"
+    },
+    {
+      "claim_id": "c4a5b6c7-d8e9-4fa0-1d2e-3f4a5b6c7d8e",
+      "text": "The provided test coverage report indicates lines with low usage.",
+      "confidence": 1.0,
+      "confidence_method": "empirical",
+      "tags": [
+        "coverage"
+      ],
+      "status": "superseded"
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "e1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5e",
+      "claim_ids": [
+        "c1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5d",
+        "c2a3b4c5-d6e7-4f8a-9b0c-1d2e3f4a5b6c"
+      ],
+      "type": "api_response",
+      "uri": "http://localhost:8080/v1/api/status",
+      "title": "Health check endpoint response",
+      "excerpt": "Status: operational, version: v1.3.2, latency: 12ms, connections: 47",
+      "retrieved_at": "2025-01-15T14:29:55Z",
+      "weight": 0.85,
+      "provenance": {
+        "source_system": "local-api",
+        "source_version": "1.3.2-10-gf1b6c4d",
+        "checksum": "4f2b7e3a5c1d6e8f9a0b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3"
+      }
+    },
+    {
+      "evidence_id": "e2a3b4c5-d6e7-4f8a-9b0c-1d2e3f4a5b6d",
+      "claim_ids": [
+        "c2a3b4c5-d6e7-4f8a-9b0c-1d2e3f4a5b6c",
+        "c3a4b5c6-d7e8-4f9b-0c1d-2e3f4a5b6c7d"
+      ],
+      "type": "document",
+      "uri": "https://docs.operator.com/guidelines/error-handling",
+      "title": "Error handling guidelines v1.1",
+      "excerpt": "All invalid input must produce 4xx responses with appropriate error codes.",
+      "retrieved_at": "2025-01-15T14:28:00Z",
+      "weight": 1.0,
+      "provenance": {
+        "source_system": "documentation-service",
+        "checksum": "5f2c7e3a5c2d6e8f9a0b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d3e4f5"
+      }
+    },
+    {
+      "evidence_id": "e3a4b5c6-d7e8-4f9b-0c1d-2e3f4a5b6c8e",
+      "claim_ids": [
+        "c3a4b5c6-d7e8-4f9b-0c1d-2e3f4a5b6c7d"
+      ],
+      "type": "computed",
+      "title": "Database connection pool metrics (13s window)",
+      "excerpt": "Pool size stable at 15 of 20, avg wait time 4ms, reconnects 0",
+      "retrieved_at": "2025-01-15T14:31:00Z",
+      "weight": 0.97,
+      "provenance": {
+        "source_system": "observability-collector",
+        "checksum": "6f3d7e3a5d3e6f8a9b0b2c3d4e5f6a7b8c9d0e1f3a4b5c6d7e8f9a0b1c2d3e4f5g"
+      }
+    }
+  ],
+  "reasoning_chain": [
+    {
+      "step": 1,
+      "description": "Ran health check endpoint to verify operational status.",
+      "evidence_ids": ["e1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5e"],
+      "claim_ids": ["c1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5d"],
+      "inference_type": "inductive"
+    },
+    {
+      "step": 2,
+      "description": "Verified error response codes against documentation guidelines.",
+      "evidence_ids": ["e2a3b4c5-d6e7-4f8a-9b0c-1d2e3f4a5b6d"],
+      "claim_ids": ["c2a3b4c5-d6e7-4f8a-9b0c-1d2e3f4a5b6c"],
+      "inference_type": "deductive"
+    },
+    {
+      "step": 3,
+      "description": "Analyzed connection pool metrics to assess steady state timing.",
+      "evidence_ids": ["e3a4b5c6-d7e8-4f9b-0c1d-2e3f4a5b6c8e"],
+      "claim_ids": ["c3a4b5c6-d7e8-4f9b-0c1d-2e3f4a5b6c7d"],
+      "inference_type": "empirical"
+    },
+    {
+      "step": 4,
+      "description": "Archived prior claim on test coverage to avoid duplication.",
+      "evidence_ids": [],
+      "claim_ids": ["c4a5b6c7-d8e9-4fa0-1d2e-3f4a5b6c7d8e"],
+      "inference_type": "deductive"
+    }
+  ],
+  "uncertainty": {
+    "overall_confidence": 0.85,
+    "known_unknowns": [
+      "Impact of recent SDK upgrade (v2.8.4) on error response codes."
+    ],
+    "assumptions": [
+      "The health check endpoint reflects full system health.",
+      "Observed connection pool metrics extrapolate to future operations."
+    ],
+    "contradictions": []
+  },
+  "context": {
+    "task_id": "TASK-0123",
+    "task_description": "Verify automated test suite correctness and identify performance regressions",
+    "model_id": "gpt-4.1-turbo",
+    "model_version": "2024-07-06",
+    "tool_calls": [
+      {
+        "tool_name": "api_status_tool",
+        "input_summary": "Fetch status endpoint under /v1/api",
+        "output_summary": "Status: operational, latency: 12ms, connections: 47",
+        "called_at": "2025-01-15T14:28:30Z"
+      },
+      {
+        "tool_name": "search_documentation_tool",
+        "input_summary": "Search for error-handling guidelines with relation to 4xx codes",
+        "output_summary": "Found guidelines doc v1.1 with exact requirements",
+        "called_at": "2025-01-15T14:29:00Z"
+      },
+      {
+        "tool_name": "fetch_metrics_tool",
+        "input_summary": "Collect connection pool metrics (15s window)",
+        "output_summary": "Pool size stable at 15 of 20, avg wait 4ms, 0 reconnects",
+        "called_at": "2025-01-15T14:30:05Z"
+      }
+    ],
+    "environment": "production"
+  }
+}
