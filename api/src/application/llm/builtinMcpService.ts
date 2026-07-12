@@ -2464,6 +2464,12 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   // the swimlane can advance (the round-trip that used to need a hand HTTP call). Read
   // the coverage audit to see what it still needs to satisfy.
   'kanban.signoff', 'kanban.audit',
+  // Coordinated role participation (PRD "Coordinated Role Participation") — a Coordinator/
+  // Manager agent reads the ticket's Participation Manifest + Accountability Report to know
+  // which required roles still must execute + sign off, and performs a Resource Assessment
+  // (add a role the ticket needs beyond the template). Without these on the allowlist an
+  // unattended Coordinator can SEE the tools in the catalog but not invoke them.
+  'kanban.participants', 'kanban.accountability', 'kanban.assess_resource',
   // Security agent: file SOC 2 findings mid-run. NOT security.configure_access —
   // deciding who can see security tickets is an admin action, never an unattended
   // agent reconfiguring its own findings' visibility.
