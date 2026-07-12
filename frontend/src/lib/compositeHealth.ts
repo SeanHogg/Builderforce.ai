@@ -130,6 +130,16 @@ export const DEFAULT_WEIGHTS: Readonly<Record<string, number>> = {
  */
 export type CriticalMetricName = 'open_incidents' | 'sla_breaches' | 'outages' | 'p1_incidents';
 
+/**
+ * Permissive merge that also includes 'p2_incidents' in addition to 'open_incidents'.
+ * This is included for compatibility with existing callers that use the full string set,
+ * and to match PRD FR-3's mention of "open P1/P2 incident count".
+ */
+export const CRITICAL_METRIC_NAMES_ROBUST: readonly CriticalMetricName[] = [
+  'open_incidents',
+  'p2_incidents',
+] as const;
+
 /* -------------------------------------------------------------------------- */
 /* Helper Functions */
 /* -------------------------------------------------------------------------- */
