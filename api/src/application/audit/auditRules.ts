@@ -26,6 +26,10 @@ export interface AuditSignals {
   changesRequestedRoles: Set<string>;
   /** Diagnostic tool ids that were run against this ticket. */
   ranDiagnostics: Set<string>;
+  /** Diagnostic tool ids that RAN but scored BELOW the pass threshold — a ran-but-failed
+   *  diagnostic must NOT satisfy its requirement (evidence-based gating, PRD §5.6). Runs
+   *  with no score stay satisfied-by-existence, so this is backward-compatible. */
+  failedDiagnostics: Set<string>;
   /** Role keys that actually did work on the ticket (dispatched as that role / owned it). */
   performedRoles: Set<string>;
 }
@@ -57,6 +61,9 @@ export function requirementUnmetReason(
   signals: AuditSignals,
 ): 'missing' | 'changes_requested' | null {
   if (req.kind === 'diagnostic') {
+    // A diagnostic that ran but scored below the pass threshold does NOT satisfy —
+    // the flag stays up until it passes (or a run with no score exists = legacy).
+    if (signals.failedDiagnostics.has(req.ref)) return 'missing';
     return signals.ranDiagnostics.has(req.ref) ? null : 'missing';
   }
   // review, or a role acting as a reviewer → needs an approved sign-off.

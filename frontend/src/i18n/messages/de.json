@@ -365,7 +365,8 @@
       "escalation": "Eskalation",
       "contacts": "Kontakte",
       "boards": "Boards",
-      "reporting": "Berichte"
+      "reporting": "Berichte",
+      "rfp": "RFP"
     }
   },
   "alerts": {
@@ -2411,7 +2412,9 @@
       "security": "Sicherheit",
       "product_manager": "Produkt",
       "designer": "Designer",
-      "incident_manager": "Incident-Manager"
+      "incident_manager": "Incident-Manager",
+      "cto": "CTO",
+      "product_owner": "Product Owner"
     },
     "teams": {
       "heading": "Teams",
@@ -5525,7 +5528,9 @@
       "learnSkipReasonFrozen": "das Evermind dieses Projekts ist eingefroren (schreibgeschützt)",
       "reconcileTitle": "{count} gelernte Erinnerungen in Evermind v{version} abgeglichen",
       "reconcileHint": "Die Antwort hat diese abgerufenen Erkenntnisse neu formuliert und aktualisiert sie damit (Write-Through-Kognition).",
-      "stop": "Stoppen"
+      "stop": "Stoppen",
+      "learnTargetContributed": "Zu {name} beigetragen (Projekt #{projectId} v{version})",
+      "learnTargetSkipped": "{name} übersprungen (Projekt #{projectId}) — {reason}"
     },
     "tickets": {
       "none": "Noch keine Tickets verknüpft.",
@@ -5572,6 +5577,10 @@
       "lockHint": "Geteilte Chats sind für das ganze Team sichtbar; sperren, um ihn nur den Mitgliedern vorzubehalten.",
       "mergeHint": "Andere Chats in diesen zusammenführen. Ihre Nachrichten, Tickets und Agenten wandern hierher; die Quellen werden archiviert.",
       "mergeNoOthers": "Keine anderen Chats zum Zusammenführen.",
+      "showTickets": "Verknüpfte Tickets anzeigen",
+      "hideTickets": "Verknüpfte Tickets ausblenden",
+      "ticketCount": "{n, plural, one {# Ticket} other {# Tickets}}",
+      "overallAria": "Gesamtfortschritt: {pct}% erledigt",
       "mergeAction": "{n} hier zusammenführen",
       "mergedN": "{n} Chat(s) zusammengeführt.",
       "kind": {
@@ -9409,5 +9418,91 @@
       "materialize": "Arbeitspakete erstellen",
       "materializeHelp": "Erstellt pro Ressource eine Unteraufgabe, sodass der Fortschritt zu diesem Ticket zusammenläuft."
     }
+  },
+  "rfpPage": {
+    "title": "RFP-Antwort",
+    "subtitle": "Beantworten Sie ein RFQ/RFP mit einem co-gebrandeten Angebot auf Basis Ihres Portfolios – Fähigkeitenkatalog, GuV, Lieferplan und Risiken.",
+    "newRequest": "Neue Antwort",
+    "needDeveloper": "Erfordert Entwicklerrolle",
+    "loading": "Laden…",
+    "empty": "Noch keine RFP-Anfragen. Erstellen Sie eine, um ein co-gebrandetes Angebot zu entwerfen.",
+    "validation": "Ein Titel ist erforderlich.",
+    "creating": "Wird erstellt…",
+    "create": "Erstellen & entwerfen",
+    "cancel": "Abbrechen",
+    "noOrg": "Unbenannte Organisation",
+    "sourceNew": "Neuentwicklung",
+    "sourceExisting": "Basierend auf einem Projekt",
+    "quoted": "Angebot {price}",
+    "notGenerated": "Noch nicht generiert",
+    "scanFresh": "Aktueller Scan",
+    "status": {
+      "draft": "Entwurf",
+      "analyzing": "Analyse",
+      "ready": "Bereit",
+      "submitted": "Eingereicht"
+    },
+    "field": {
+      "title": "Titel",
+      "titlePlaceholder": "z. B. Kundenportal-Neuaufbau",
+      "requesterOrg": "Anfragende Organisation",
+      "requesterOrgPlaceholder": "Wer das RFP ausgestellt hat",
+      "requesterBrand": "Markenfarben des Anfragenden",
+      "requesterBrandHint": "Die Palette des anfragenden Unternehmens – im Angebot mit Ihrer eigenen kombiniert.",
+      "primary": "Primär",
+      "secondary": "Sekundär",
+      "accent": "Akzent",
+      "logoUrl": "Logo-URL",
+      "requirements": "Anforderungen",
+      "requirementsPlaceholder": "Fügen Sie die RFP/RFQ-Anforderungen ein…",
+      "sourceMode": "Grundlage",
+      "project": "Projekt",
+      "selectProject": "Projekt auswählen…",
+      "economics": "Wirtschaftlichkeit",
+      "margin": "Marge",
+      "marketing": "Marketing",
+      "contingency": "Puffer"
+    },
+    "backToList": "Zurück zu Anfragen",
+    "generating": "Wird generiert…",
+    "regenerate": "Neu generieren",
+    "generate": "Antwort generieren",
+    "generatingHint": "Aktualitätsgeprüfter Scan läuft, Portfolio wird abgeglichen und das Angebot entworfen…",
+    "noResponseYet": "Noch kein Angebot generiert. Klicken Sie auf Generieren, um eines zu entwerfen.",
+    "scanRefreshed": "Scan aktualisiert",
+    "scanCurrent": "Scan aktuell",
+    "groundedOn": "Basierend auf {project}",
+    "greenfield": "Neuentwicklung – aus den Anforderungen abgeleitet",
+    "scanAge": "letzter Scan vor {days} T",
+    "sec": {
+      "summary": "Zusammenfassung",
+      "capabilities": "Fähigkeiten & Ansatz",
+      "economics": "Investition & Kommerzielles",
+      "plan": "Lieferplan",
+      "risks": "Wesentliche Risiken",
+      "dependencies": "Abhängigkeiten",
+      "portfolio": "Ähnliche Projekte",
+      "document": "Gebrandetes Angebot"
+    },
+    "capabilitiesGreenfield": "Neuentwicklung – Fähigkeiten werden aus den Anforderungen abgeleitet.",
+    "col": {
+      "component": "Komponente",
+      "responsibility": "Verantwortung"
+    },
+    "stack": "Stack",
+    "quotedPrice": "Angebotspreis",
+    "marginNote": "{pct}% Gewinnmarge · {weeks} Wochen Aufwand.",
+    "deliveryWindow": "Lieferung: {start} → {end} ({weeks} Wochen).",
+    "severity": {
+      "low": "Niedrig",
+      "medium": "Mittel",
+      "high": "Hoch"
+    },
+    "depType": {
+      "internal": "Intern",
+      "external": "Extern",
+      "third_party": "Drittanbieter"
+    },
+    "downloadDoc": "Herunterladen"
   }
 }

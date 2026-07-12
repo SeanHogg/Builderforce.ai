@@ -365,7 +365,8 @@
       "escalation": "Escalación",
       "contacts": "Contactos",
       "boards": "Tableros",
-      "reporting": "Informes"
+      "reporting": "Informes",
+      "rfp": "RFP"
     }
   },
   "alerts": {
@@ -2411,7 +2412,9 @@
       "security": "Seguridad",
       "product_manager": "Producto",
       "designer": "Diseñador",
-      "incident_manager": "Gestor de incidentes"
+      "incident_manager": "Gestor de incidentes",
+      "cto": "CTO",
+      "product_owner": "Product Owner"
     },
     "teams": {
       "heading": "Equipos",
@@ -5525,7 +5528,9 @@
       "learnSkipReasonFrozen": "el Evermind de este proyecto está congelado (solo lectura)",
       "reconcileTitle": "Se reconciliaron {count} memorias aprendidas en Evermind v{version}",
       "reconcileHint": "La respuesta reformuló estos aprendizajes recuperados, por lo que los actualiza (cognición de escritura directa).",
-      "stop": "Detener"
+      "stop": "Detener",
+      "learnTargetContributed": "Contribuido a {name} (proyecto #{projectId} v{version})",
+      "learnTargetSkipped": "Omitido {name} (proyecto #{projectId}) — {reason}"
     },
     "tickets": {
       "none": "Aún no hay tickets vinculados.",
@@ -5572,6 +5577,10 @@
       "lockHint": "Los chats compartidos son visibles para todo el equipo; bloquéalo para que solo lo vean sus miembros.",
       "mergeHint": "Fusiona otros chats en este. Sus mensajes, tickets y agentes se trasladan aquí; los orígenes se archivan.",
       "mergeNoOthers": "No hay otros chats para fusionar.",
+      "showTickets": "Mostrar tickets vinculados",
+      "hideTickets": "Ocultar tickets vinculados",
+      "ticketCount": "{n, plural, one {# ticket} other {# tickets}}",
+      "overallAria": "Progreso general: {pct}% completado",
       "mergeAction": "Fusionar {n} aquí",
       "mergedN": "Se fusionaron {n} chat(s).",
       "kind": {
@@ -9409,5 +9418,91 @@
       "materialize": "Crear elementos de trabajo",
       "materializeHelp": "Genera una subtarea por recurso para que el progreso se agregue a este ticket."
     }
+  },
+  "rfpPage": {
+    "title": "Respuesta a RFP",
+    "subtitle": "Responde a un RFQ/RFP con una propuesta de marca compartida basada en tu portafolio: inventario de capacidades, P&L, plan de entrega y riesgos.",
+    "newRequest": "Nueva respuesta",
+    "needDeveloper": "Requiere rol de Desarrollador",
+    "loading": "Cargando…",
+    "empty": "Aún no hay solicitudes de RFP. Crea una para redactar una propuesta de marca compartida.",
+    "validation": "Se requiere un título.",
+    "creating": "Creando…",
+    "create": "Crear y redactar",
+    "cancel": "Cancelar",
+    "noOrg": "Organización sin nombre",
+    "sourceNew": "Nuevo desarrollo",
+    "sourceExisting": "Basada en un proyecto",
+    "quoted": "Cotizado {price}",
+    "notGenerated": "Aún no generada",
+    "scanFresh": "Escaneo reciente",
+    "status": {
+      "draft": "Borrador",
+      "analyzing": "Analizando",
+      "ready": "Lista",
+      "submitted": "Enviada"
+    },
+    "field": {
+      "title": "Título",
+      "titlePlaceholder": "p. ej. Rediseño del portal de clientes",
+      "requesterOrg": "Organización solicitante",
+      "requesterOrgPlaceholder": "Quién emitió el RFP",
+      "requesterBrand": "Colores de marca del solicitante",
+      "requesterBrandHint": "La paleta de la empresa solicitante, combinada con la tuya en la propuesta.",
+      "primary": "Primario",
+      "secondary": "Secundario",
+      "accent": "Acento",
+      "logoUrl": "URL del logo",
+      "requirements": "Requisitos",
+      "requirementsPlaceholder": "Pega los requisitos del RFP/RFQ…",
+      "sourceMode": "Base",
+      "project": "Proyecto",
+      "selectProject": "Selecciona un proyecto…",
+      "economics": "Economía",
+      "margin": "Margen",
+      "marketing": "Marketing",
+      "contingency": "Contingencia"
+    },
+    "backToList": "Volver a solicitudes",
+    "generating": "Generando…",
+    "regenerate": "Regenerar",
+    "generate": "Generar respuesta",
+    "generatingHint": "Ejecutando el escaneo con control de frescura, cotejando tu portafolio y redactando la propuesta…",
+    "noResponseYet": "Aún no se ha generado una propuesta. Haz clic en Generar para redactar una.",
+    "scanRefreshed": "Escaneo actualizado",
+    "scanCurrent": "Escaneo actual",
+    "groundedOn": "Basada en {project}",
+    "greenfield": "Nuevo proyecto: propuesto a partir de los requisitos",
+    "scanAge": "último escaneo hace {days}d",
+    "sec": {
+      "summary": "Resumen ejecutivo",
+      "capabilities": "Capacidades y enfoque",
+      "economics": "Inversión y aspectos comerciales",
+      "plan": "Plan de entrega",
+      "risks": "Riesgos clave",
+      "dependencies": "Dependencias",
+      "portfolio": "Proyectos similares",
+      "document": "Propuesta con marca"
+    },
+    "capabilitiesGreenfield": "Proyecto nuevo: las capacidades se proponen a partir de los requisitos.",
+    "col": {
+      "component": "Componente",
+      "responsibility": "Responsabilidad"
+    },
+    "stack": "Stack",
+    "quotedPrice": "Precio cotizado",
+    "marginNote": "{pct}% de margen de beneficio · {weeks} semanas de esfuerzo.",
+    "deliveryWindow": "Entrega: {start} → {end} ({weeks} semanas).",
+    "severity": {
+      "low": "Bajo",
+      "medium": "Medio",
+      "high": "Alto"
+    },
+    "depType": {
+      "internal": "Interna",
+      "external": "Externa",
+      "third_party": "Terceros"
+    },
+    "downloadDoc": "Descargar"
   }
 }

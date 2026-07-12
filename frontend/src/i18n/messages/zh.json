@@ -365,7 +365,8 @@
       "escalation": "升级",
       "contacts": "联系人",
       "boards": "看板",
-      "reporting": "报告"
+      "reporting": "报告",
+      "rfp": "RFP 响应"
     }
   },
   "alerts": {
@@ -2411,7 +2412,9 @@
       "security": "安全",
       "product_manager": "产品",
       "designer": "设计师",
-      "incident_manager": "事件经理"
+      "incident_manager": "事件经理",
+      "cto": "技术总监",
+      "product_owner": "产品负责人"
     },
     "teams": {
       "heading": "团队",
@@ -5525,7 +5528,9 @@
       "learnSkipReasonFrozen": "该项目的 Evermind 已冻结（只读）",
       "reconcileTitle": "已在 Evermind v{version} 中协调 {count} 条已学习记忆",
       "reconcileHint": "回答重述了这些召回的学习内容，因此会对其进行更新（写通式认知）。",
-      "stop": "停止"
+      "stop": "停止",
+      "learnTargetContributed": "已贡献到 {name}（项目 #{projectId} v{version}）",
+      "learnTargetSkipped": "已跳过 {name}（项目 #{projectId}）— {reason}"
     },
     "tickets": {
       "none": "尚未关联任何工单。",
@@ -5572,6 +5577,10 @@
       "lockHint": "共享聊天对整个团队可见；锁定后仅其成员可见。",
       "mergeHint": "将其他聊天合并到此聊天。其消息、工单和代理都会转移到这里；来源聊天将被归档。",
       "mergeNoOthers": "没有可合并的其他聊天。",
+      "showTickets": "显示关联工单",
+      "hideTickets": "隐藏关联工单",
+      "ticketCount": "{n, plural, other {# 个工单}}",
+      "overallAria": "总体进度：完成 {pct}%",
       "mergeAction": "将 {n} 个合并到此处",
       "mergedN": "已合并 {n} 个聊天。",
       "kind": {
@@ -9409,5 +9418,91 @@
       "materialize": "创建工作项",
       "materializeHelp": "为每个资源生成一个子任务，使进度汇总到此工单。"
     }
+  },
+  "rfpPage": {
+    "title": "RFP 响应",
+    "subtitle": "以联合品牌方案回应 RFQ/RFP，基于您的项目组合——能力清单、损益、交付计划与风险。",
+    "newRequest": "新建响应",
+    "needDeveloper": "需要开发者角色",
+    "loading": "加载中…",
+    "empty": "暂无 RFP 请求。创建一个以起草联合品牌方案。",
+    "validation": "标题为必填项。",
+    "creating": "创建中…",
+    "create": "创建并起草",
+    "cancel": "取消",
+    "noOrg": "未命名组织",
+    "sourceNew": "全新构建",
+    "sourceExisting": "基于某个项目",
+    "quoted": "报价 {price}",
+    "notGenerated": "尚未生成",
+    "scanFresh": "最新扫描",
+    "status": {
+      "draft": "草稿",
+      "analyzing": "分析中",
+      "ready": "就绪",
+      "submitted": "已提交"
+    },
+    "field": {
+      "title": "标题",
+      "titlePlaceholder": "例如：客户门户重建",
+      "requesterOrg": "请求方组织",
+      "requesterOrgPlaceholder": "谁发起了 RFP",
+      "requesterBrand": "请求方品牌色",
+      "requesterBrandHint": "发起方的配色——将与您的配色在方案中融合。",
+      "primary": "主色",
+      "secondary": "辅色",
+      "accent": "强调色",
+      "logoUrl": "徽标 URL",
+      "requirements": "需求",
+      "requirementsPlaceholder": "粘贴 RFP/RFQ 需求…",
+      "sourceMode": "依据",
+      "project": "项目",
+      "selectProject": "选择一个项目…",
+      "economics": "经济测算",
+      "margin": "利润率",
+      "marketing": "营销",
+      "contingency": "应急"
+    },
+    "backToList": "返回请求列表",
+    "generating": "生成中…",
+    "regenerate": "重新生成",
+    "generate": "生成响应",
+    "generatingHint": "正在运行时效性扫描、匹配您的项目组合并起草方案…",
+    "noResponseYet": "尚未生成方案。点击\"生成\"以起草。",
+    "scanRefreshed": "已刷新扫描",
+    "scanCurrent": "扫描为最新",
+    "groundedOn": "基于 {project}",
+    "greenfield": "全新项目——根据需求提出",
+    "scanAge": "上次扫描于 {days} 天前",
+    "sec": {
+      "summary": "执行摘要",
+      "capabilities": "能力与方案",
+      "economics": "投资与商务",
+      "plan": "交付计划",
+      "risks": "主要风险",
+      "dependencies": "依赖项",
+      "portfolio": "相似项目",
+      "document": "品牌方案"
+    },
+    "capabilitiesGreenfield": "全新项目——能力根据需求提出。",
+    "col": {
+      "component": "组件",
+      "responsibility": "职责"
+    },
+    "stack": "技术栈",
+    "quotedPrice": "报价",
+    "marginNote": "{pct}% 利润率 · {weeks} 周工作量。",
+    "deliveryWindow": "交付：{start} → {end}（{weeks} 周）。",
+    "severity": {
+      "low": "低",
+      "medium": "中",
+      "high": "高"
+    },
+    "depType": {
+      "internal": "内部",
+      "external": "外部",
+      "third_party": "第三方"
+    },
+    "downloadDoc": "下载"
   }
 }
