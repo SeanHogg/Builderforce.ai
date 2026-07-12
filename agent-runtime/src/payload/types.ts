@@ -105,6 +105,15 @@ export type PayloadDefinition = {
 };
 
 /**
+ * Custom function registry signature.
+ */
+export type CustomFunction = (args: {
+  context: InputContext;
+  resolved: Record<string, FieldResolution>;
+  sourcePath: string;
+}) => unknown;
+
+/**
  * Log entry structure.
  */
 export type LogEntry = {
