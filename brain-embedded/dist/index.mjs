@@ -859,6 +859,20 @@ function attachEvermindLearn(messages, outcome) {
   if (!outcome) return messages;
   return messages.map((m) => m.role === "assistant" ? { ...m, evermindLearn: outcome } : m);
 }
+function formatEvermindLearnStep(outcome) {
+  if (!outcome) return null;
+  if (outcome.learned) return `\u{1F9E0} Contributed this turn to the project Evermind (v${outcome.version}).`;
+  switch (outcome.reason) {
+    case "not-attached":
+      return "\u{1F9E0} Not learned this turn \u2014 this chat isn't attached to a project, so it can't train a project Evermind.";
+    case "not-seeded":
+      return "\u{1F9E0} Not learned this turn \u2014 this project's Evermind isn't set up yet.";
+    case "frozen":
+      return "\u{1F9E0} Not learned this turn \u2014 this project's Evermind is frozen (read-only).";
+    default:
+      return null;
+  }
+}
 
 // src/consolidation.ts
 var CONSOLIDATION_META = { consolidation: true };
@@ -2527,6 +2541,7 @@ export {
   formatBrainDiagnostics,
   formatBrainProvenance,
   formatChatDiagnostics,
+  formatEvermindLearnStep,
   formatEvermindMemoryBlock,
   getGlobalRunState,
   getRunSnapshot,

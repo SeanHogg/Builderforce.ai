@@ -91,6 +91,30 @@ export function attachEvermindLearn<M extends { role: string }>(
   return messages.map((m) => (m.role === 'assistant' ? { ...m, evermindLearn: outcome } : m));
 }
 
+/**
+ * Render a one-line, plain-text status for a learn-gate {@link EvermindLearnOutcome} —
+ * the non-React equivalent of the timeline's learn/skip step, for a host that streams
+ * Markdown (the native VS Code `@builderforce` chat participant) rather than mounting
+ * the `<BrainTimeline>`. Returns null when there's nothing worth surfacing (no outcome,
+ * or a mundane `too-short` turn), so learning is VISIBLE on every surface, not just the
+ * ones that render the timeline. Keep the skip phrasing in sync with brain-ui's
+ * `learnSkipReason` labels.
+ */
+export function formatEvermindLearnStep(outcome: EvermindLearnOutcome | null | undefined): string | null {
+  if (!outcome) return null;
+  if (outcome.learned) return `🧠 Contributed this turn to the project Evermind (v${outcome.version}).`;
+  switch (outcome.reason) {
+    case 'not-attached':
+      return "🧠 Not learned this turn — this chat isn't attached to a project, so it can't train a project Evermind.";
+    case 'not-seeded':
+      return "🧠 Not learned this turn — this project's Evermind isn't set up yet.";
+    case 'frozen':
+      return "🧠 Not learned this turn — this project's Evermind is frozen (read-only).";
+    default:
+      return null; // `too-short` (or unknown): a one-line turn isn't a teaching signal.
+  }
+}
+
 /** An uploaded attachment reference attached to an outgoing message. */
 export interface ChatInputAttachment {
   key: string;
