@@ -21,7 +21,19 @@ the product requirements.
 ## Validating a payload
 
 The schema is a standard JSON Schema Draft 2020-12 document, so any conformant
-validator can check a payload against it. For example:
+validator can check a payload against it.
+
+The fastest way to verify the spec end-to-end is the bundled, zero-dependency
+script — it validates the canonical example and runs the full acceptance-criteria
+test plan (required-field rejection, `[0,1]` bounds, enum checks, extensions
+namespacing, reasoning-chain rules):
+
+```bash
+# Node.js 18+, no npm install required
+node spec/basis-payload/validate.js
+```
+
+You can also point any conformant validator at the artifacts directly, e.g.:
 
 ```bash
 # Node.js, using ajv-cli (with the 2020-12 dialect + format assertions enabled)
