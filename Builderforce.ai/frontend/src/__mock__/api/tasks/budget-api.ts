@@ -35,8 +35,4 @@ app.post('/api/budget-constraints/enrollment/register', (req, res) => {
 
 export { app };
 
-// In production, this would connect to the main Express application:
-// import { app } from './app';
-// app.listen(process.env.PORT || 3000, () => {
-//   console.log('Budget Constraints API running on port 3000');
-// });
+// Integration note: In production, this router would be mounted in the main application (see comment).
