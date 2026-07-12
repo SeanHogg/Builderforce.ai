@@ -190,17 +190,63 @@ export class TaskService {
   async updateTask(id: number, dto: UpdateTaskDto): Promise<Task> {
     const task = await this.getTask(id);
     const wasAssignedToAgent = task.isAssignedToAgent;
-    const updated = task.update({
-      ...dto,
-      assignedAgentHostId: dto.assignedAgentHostId !== undefined
-        ? (dto.assignedAgentHostId != null ? asAgentHostId(dto.assignedAgentHostId) : null)
-        : undefined,
-      parentTaskId: dto.parentTaskId !== undefined
-        ? (dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null)
-        : undefined,
-      startDate: dto.startDate !== undefined ? (dto.startDate ? new Date(dto.startDate) : null) : undefined,
-      dueDate: dto.dueDate !== undefined ? (dto.dueDate ? new Date(dto.dueDate) : null) : undefined,
-    });
+    // Task.update now respects omitted DTO fields and never overwrites them.
+    const updates: Partial<
+      Pick<
+        TaskProps,
+        | 'title'
+        | 'description'
+        | 'status'
+        | 'priority'
+        | 'taskType'
+        | 'parentTaskId'
+        | 'assignedAgentType'
+        | 'githubPrUrl'
+        | 'githubPrNumber'
+        | 'assignedAgentHostId'
+        | 'assignedAgentRef'
+        | 'assignedUserId'
+        | 'gitBranch'
+        | 'explicitRepoId'
+        | 'sprintId'
+        | 'releaseId'
+        | 'storyPoints'
+        | 'startDate'
+        | 'dueDate'
+        | 'businessValue'
+        | 'businessValueRationale'
+        | 'businessValueSource'
+        | 'managerRank'
+        | 'persona'
+        | 'archived'
+      >
+    > = {};
+
+    if (dto.title !== undefined) updates.title = dto.title;
+    if (dto.description !== undefined) updates.description = dto.description;
+    if (dto.status !== undefined) updates.status = dto.status;
+    if (dto.priority !== undefined) updates.priority = dto.priority;
+    if (dto.taskType !== undefined) updates.taskType = dto.taskType;
+    if (dto.parentTaskId !== undefined) updates.parentTaskId = dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null;
+    if (dto.sprintId !== undefined) updates.sprintId = dto.sprintId;
+    if (dto.releaseId !== undefined) updates.releaseId = dto.releaseId;
+    if (dto.storyPoints !== undefined) updates.storyPoints = dto.storyPoints;
+    if (dto.businessValue !== undefined) updates.businessValue = dto.businessValue;
+    if (dto.businessValueRationale !== undefined) updates.businessValueRationale = dto.businessValueRationale;
+    if (dto.businessValueSource !== undefined) updates.businessValueSource = dto.businessValueSource;
+    if (dto.assignedAgentType !== undefined) updates.assignedAgentType = dto.assignedAgentType;
+    if (dto.assignedAgentHostId !== undefined)
+      updates.assignedAgentHostId = dto.assignedAgentHostId != null ? asAgentHostId(dto.assignedAgentHostId) : null;
+    if (dto.assignedAgentRef !== undefined) updates.assignedAgentRef = dto.assignedAgentRef;
+    if (dto.assignedUserId !== undefined) updates.assignedUserId = dto.assignedUserId;
+    if (dto.githubPrUrl !== undefined) updates.githubPrUrl = dto.githubPrUrl;
+    if (dto.githubPrNumber !== undefined) updates.githubPrNumber = dto.githubPrNumber;
+    if (dto.startDate !== undefined) updates.startDate = dto.startDate ? new Date(dto.startDate) : null;
+    if (dto.dueDate !== undefined) updates.dueDate = dto.dueDate ? new Date(dto.dueDate) : null;
+    if (dto.persona !== undefined) updates.persona = dto.persona;
+    if (dto.archived !== undefined) updates.archived = dto.archived;
+
+    const updated = task.update(updates);
     const saved = await this.tasks.update(updated);
     // On-assign hook: only when this update is what newly handed the task to an
     // agent (a transition into agent-ownership), and only for a plain `task`
