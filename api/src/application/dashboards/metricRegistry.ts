@@ -19,6 +19,7 @@ import { computeDora } from '../metrics/workforceMetrics';
 import { computeQualityInsights } from '../insights/qualityInsights';
 import { computePeopleInsights } from '../insights/peopleInsights';
 import { computeRdFinancials } from '../insights/rdFinancialsInsights';
+import { computeBacklogMetric, captureBacklogSnapshot, getBacklogMetricSnapshotHistory } from '../metrics/backlogMetricService';
 import { errorEvents, executions, llmUsageLog, deploymentEvents, alertEvents } from '../../infrastructure/database/schema';
 import { dailyCountSeries, dailySumSeries, seriesTotal, type MetricPoint } from './dailySeries';
 
