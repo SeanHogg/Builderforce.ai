@@ -7602,6 +7602,9 @@
       },
       "google": {
         "blurb": "粘贴 Google AI (Gemini) API 密钥，在您自己的 Google 账户上运行 Gemini 模型。"
+      },
+      "meta": {
+        "blurb": "粘贴 Meta AI API 密钥，在您自己的 Meta AI 账户上运行 MUSE 模型（muse-spark-1.1）。"
       }
     }
   },

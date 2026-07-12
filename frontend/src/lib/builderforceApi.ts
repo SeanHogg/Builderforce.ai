@@ -2473,7 +2473,7 @@ export const empMetricsApi = {
  * and meters them. The key is write-only: we only ever read which providers are
  * configured, never the secret.
  */
-export type LlmProvider = 'anthropic' | 'openai' | 'google';
+export type LlmProvider = 'anthropic' | 'openai' | 'google' | 'meta';
 
 /** How a configured provider authenticates: a pasted API key, or a connected
  *  Claude Pro/Max subscription via OAuth. */
