@@ -35,3 +35,37 @@ This ticket covers the DECISION/provisioning of the agents and does not include 
 ## Out of scope
 
 The hiring/procurement workflow is out of scope of this analysis.
+
+## Agent Provisions
+
+### 1. Cloud Security Agent (cloud_security)
+
+**Role ID:** `cloud_security-t<tenantId>`
+**Built-in Kind:** `cloud_security`
+
+Specialized for:
+- GAP-G1/G2/G3 (P0 security/isolation gaps)
+- Cloud-Worker isolation validation
+- GA security gate resolution
+
+Capabilities:
+- proactive identification of critical security gaps
+- cloud-Worker boundary and isolation validation
+- SOC 2 out-of-scope specialization (distinct from the existing SOC 2 auditor)
+- parallel scanning of multiple projects to unblock GA
+
+### 2. Generalist Coder Agent (generalist_coder)
+
+**Role ID:** `generalist-coder-t<tenantId>`
+**Built-in Kind:** `generalist_coder`
+
+Specialized for:
+- Parallel execution of the 50-gap coding workstreams (GAP-D*/W*/E*)
+- Noticeable reduction from 64-78 days to 38-48 days
+- Bob Developer load relief (85% utilization risk)
+
+Capabilities:
+- concurrent task execution across gap workstreams
+- high-volume code generation and gap resolution
+- systematic parallelization of coding bottlenecks
+- delegated from manual workflow to BUILTIN_AGENTS registry for new-tenant roles
