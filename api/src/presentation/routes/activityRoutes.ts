@@ -362,7 +362,9 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
   });
 
   // POST /:id/submit — worker submits a draft timecard for approval (notifies the
-  // employer who owns the engagement).
+  // employer who owns the engagement). Writes a state transition event to timecard_events.
+  router.post('/:id/submit', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as string;
   router.post('/:id/submit', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
