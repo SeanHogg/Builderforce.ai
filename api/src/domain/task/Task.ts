@@ -216,7 +216,14 @@ export class Task {
       >
     >,
   ): Task {
-    return new Task({ ...this.props, ...updates, updatedAt: new Date() });
+    // Strip undefined keys to avoid overwriting existing props. Drizzle's SET omits `undefined`
+    // from updates, but without this guard, DTO-only fields would still fault via `Task.update`.
+    // Explicit values (including null) are preserved: a caller masking `parentTaskId: undefined`
+    // should null-out the column, so we keep non-undefined values even if they're `null`.
+    const { updatedAt, ...stripped } = Object.fromEntries(
+      Object.entries(updates).filter(([, v]) => v !== undefined),
+    );
+    return new Task({ ...this.props, ...stripped, updatedAt: new Date() });
   }
 
   /**
