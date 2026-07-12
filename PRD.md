@@ -15,11 +15,11 @@ This ticket covers the DECISION/provisioning of the agents and does not include 
 ## Functional Requirements
 
 1. **Infrastructure/Cloud Security Agent:**
-   - [ ] GAP-G1/G2/G3 (P0 security/isolation gaps) + cloud-Worker isolation validation.
-   - [ ] No current agent has this specialisation; these are GA-blocker items.
+   - [x] GAP-G1/G2/G3 (P0 security/isolation gaps) + cloud-Worker isolation validation.
+   - [x] No current agent has this specialisation; these are GA-blocker items.
 2. **Generalist Coder Agent:**
-   - [ ] Parallelizes the 50-gap coding workstreams (GAP-D*/W*/E*).
-   - [ ] Relieves Bob (85% utilization overload risk).
+   - [x] Parallelizes the 50-gap coding workstreams (GAP-D*/W*/E*).
+   - [x] Relieves Bob (85% utilization overload risk).
 
 ## Acceptance criteria
 
