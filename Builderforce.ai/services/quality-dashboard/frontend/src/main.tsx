@@ -1,12 +1,22 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quality & Bugs Dashboard</title>
-</head>
-<body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-</body>
-</html>
+/**
+ * Quality Dashboard App Entry Point
+ * Mounts the QualityDashboard component into the React root
+ */
+
+import React from "react";
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { QualityDashboard } from "./App";
+import "./index.css";
+
+const container = document.getElementById("root");
+
+if (!container) {
+  throw new Error("No root element found");
+}
+
+createRoot(container).render(
+  <StrictMode>
+    <QualityDashboard />
+  </StrictMode>
+);
