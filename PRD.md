@@ -1,55 +1,74 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #499
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# Product Requirements Document: Budget Constraints – Persistence, Burn-Rate & Nested Budgets
+
+**Status**: Work in Progress
+**Author**: [Product Architect]
+**Date**: [YYYY-MM-DD]
 
 ## Problem & Goal
+### Problem
+1. **Data Loss**: Budget definitions and spend data are stored in-memory, causing loss on service restart or failover.
+2. **Stale Reporting**: Dashboards reflect charges only on periodic syncs, leading to >12-hour lag in visibility.
+3. **No Historical Context**: Lack of 24-month history prevents trend analysis and compliance reporting.
+4. **Flat Budgeting**: Teams cannot model nested/rolled-up budgets (e.g., department → team → project), leading to manual spreadsheets.
+5. **Double-Counting Risk**: Shared resources (e.g., shared Kubernetes cluster) may be counted in multiple budget envelopes, distorting projections.
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+### Goal
+Provide durable, real-time budget tracking with nested aggregation, accurate burn-rate projections, and full historical retention while eliminating double-counting.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
-
-## Target users / ICP roles
-
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## Target Users / ICP Roles
+- **Finance Teams**: FP&A, Cost Controllers – need 24-month spend history for accruals and audit.
+- **Engineering Mgmt**: VP, Directors, Team Leads – require nested budgets aligned with org hierarchy.
+- **FinOps Analysts**: Need <15-min cost updates and end-of-period projections to prevent overspend.
 
 ## Scope
+### In Scope
+1. **Persistence Layer**: Replace in-memory Maps with durable storage (PostgreSQL or cloud-native alternative).
+2. **Real-Time Cost Ingestion**: Integrate with cloud billing APIs to update spend within 15 minutes of accrual.
+3. **Write-Through Updates**: Ensure dashboard reflects new charges via CDC or push-based ingestion.
+4. **Burn-Rate Calculation**: Compute current burn rate (rate per period) and project end-of-period spend based on current trend.
+5. **Historical Retention**: Store 24 months of raw spend data and daily snapshots.
+6. **Nested Budget Aggregation**: Support unlimited tree depth (parent → child) without double-counting shared resources.
+7. **Required Field Validation**: Enforce non-null values on budget creation (`name`, `owner`, `period`, `amount`).
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+### Out of Scope
+- Forecasting based on ML or seasonality (future phase).
+- Currency conversion or multi-currency budgeting.
+- Granular resource-level tagging or charge-back mechanism.
+- UI/UX for budget editor beyond functional requirements.
 
 ## Functional Requirements
-
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+| ID          | Requirement                                                                                             | Priority |
+|-------------|--------------------------------------------------------------------------------------------------------|----------|
+| FR-1.2      | Support nested budgets with aggregation without double-counting.                                      | High     |
+| FR-3.1      | Persist all budget definitions and spend history in durable storage.                                 | High     |
+| FR-3.2      | Ingest cloud spend within <15 minutes and update dashboard via write-through.                         | High     |
+| FR-3.3      | Compute burn rate (actual spend / elapsed period) and project end-of-period total.                    | High     |
+| FR-3.4      | Retain 24 months of raw spend history and daily snapshots; allow query by date range.                 | High     |
+| FR-4.1      | Validate `name`, `owner`, `period`, `amount` as required on budget create/update.                     | Medium   |
 
 ## Acceptance Criteria
+### AC-2: Required Field Validation
+- [ ] Submission fails if `name`, `owner`, `period`, or `amount` is null or invalid format.
+- [ ] Error message specifies which field is missing/invalid.
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+### AC-3: Nested Budgets without Double-Counting
+- [ ] Shared resource charges allocated proportionally to intersecting budgets.
+- [ ] Parent budget aggregates child budgets without double-counting shared items.
+- [ ] Graph traversal respects DAG (no cycles); error if cycle detected.
 
-## Out of scope
+### AC-4: Cost Ingestion & Write-Through
+- [ ] Dashboard reflects new cloud charges within 15 minutes of ingestion.
+- [ ] Write-through updates atomic (no stale reads).
+- [ ] Backfill mechanism handles missed ingestion windows.
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+### AC-5: Burn Rate & Projection
+- [ ] Current burn rate calculated as `actual_spend / elapsed_period`.
+- [ ] Projection formula: `projected_total = actual_spend + (burn_rate * remaining_period)`.
+- [ ] Alert triggered if projection exceeds budget by defined threshold (e.g., 90 %).
+
+### AC-6: Historical Retention
+- [ ] API/query returns spend data for any range within 24 months.
+- [ ] Daily snapshots stored and deletable after retention policy expires (24 months).
