@@ -575,6 +575,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/knowledge',         createKnowledgeRoutes(db));
   app.route('/api/knowledge-market',  createKnowledgeMarketRoutes(db)); // PUBLIC browse (logged-out)
 
+  // Priority misalignment detection & rules management
+  app.route('/api/misalignment-rules', createMisalignmentRulesRoutes(db));
+
   app.onError(errorHandler);
   app.notFound((c) => addCorsToResponse(c, c.json({ error: 'Not found' }, 404)));
 
