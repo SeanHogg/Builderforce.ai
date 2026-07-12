@@ -11,6 +11,7 @@ the product requirements.
 | [`basis-payload.schema.json`](./basis-payload.schema.json) | JSON Schema (Draft 2020-12) artifact — the machine-readable, validating contract. |
 | [`basis-payload.md`](./basis-payload.md) | Human-readable reference documentation, integration guidelines, and rendering guidance. |
 | [`example.canonical.json`](./example.canonical.json) | Full canonical example payload that validates against the schema (FR-10 / AC-7). |
+| [`validate.js`](./validate.js) | Self-contained Node.js (18+) validation script — validates the canonical example and runs the AC test plan (no npm dependencies). |
 | [`CHANGELOG.md`](./CHANGELOG.md) | Versioned changelog; the current schema version is **1.0.0** (AC-8). |
 
 ## Current Version
