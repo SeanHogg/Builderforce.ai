@@ -1,5 +1,7 @@
-> **PRD** — drafted by Ada (Sr. Product Mgr) · task #672
-> _Each agent that updates this PRD signs its change below._
+---
+
+**PRD** — drafted by Ada (Sr. Product Mgr) · task #672
+_Each agent that updates this PRD signs its change below._
 
 # PRD: Update Documentation for `progressPct=100` Emission Rule
 
@@ -27,7 +29,7 @@ All documentation assets that describe progress event emission, task/job lifecyc
 
 - API reference pages covering the progress event or job status payload
 - Developer guides / integration tutorials that walk through progress handling
-- Changelog / migration guide entries
+- Changelog / migration guide entries (e.g., CHANGELOG.md)
 - Inline code comments or JSDoc/TSDoc annotations directly describing `progressPct` behavior
 - Any README sections covering progress tracking
 
@@ -36,31 +38,40 @@ All documentation assets that describe progress event emission, task/job lifecyc
 ## Functional Requirements
 
 ### FR-1 — Canonical Rule Statement
+
 The documentation MUST include a dedicated, clearly labeled explanation of the `progressPct=100` emission rule, stating:
+
 - The exact conditions under which `progressPct=100` is emitted
-- Whether `progressPct=100` is emitted once or can be emitted multiple times
-- The ordering guarantee: `progressPct=100` MUST only be emitted after all processing steps are confirmed complete and no further progress updates will follow
+- Whether `progressPct=100` may be emitted once or multiple times (note: our design favors at most once per resource)
+- The ordering guarantee: `progressPct=100` SHALL only be emitted after all processing steps are confirmed complete and no further progress updates will follow
 - That `progressPct=100` is the authoritative signal of task/job completion for progress-stream consumers
 
 ### FR-2 — API Reference Update
-The API reference for the progress event payload MUST:
+
+The API reference for the progress event payload (or job status payload) MUST:
+
 - Update the `progressPct` field description to document the `=100` boundary condition explicitly
 - Note any distinction between `progressPct=100` and other terminal status fields (e.g., `status: "completed"`) if applicable
 - Include a concrete example payload showing `progressPct=100`
 
 ### FR-3 — Developer Guide Update
+
 Any integration guide or tutorial covering progress handling MUST:
+
 - Revise code examples or pseudocode to correctly handle the `progressPct=100` event as a completion signal
-- Warn against treating intermediate values near 100 (e.g., 99) as equivalent to 100
-- Describe the correct pattern for tearing down progress listeners upon receiving `progressPct=100`
+- Warn against treating intermediate values near 100 (e.g., 99.9) as equivalent to 100
+- Describe the correct pattern for tearing down progress listeners upon receiving `progressPct=100` (e.g., listener removal and resource cleanup)
 
 ### FR-4 — Changelog / Migration Entry
+
 A changelog entry MUST be added that:
+
 - Identifies this as a behavioral rule clarification or change (whichever is accurate)
 - States the previous behavior or ambiguity that existed before
 - Describes what developers must verify or update in their integrations
 
 ### FR-5 — Consistency Across All Assets
+
 All documentation assets in scope MUST use consistent terminology and MUST NOT contain contradictory statements about `progressPct=100` semantics.
 
 ---
@@ -105,4 +116,4 @@ _Owned by the code-reviewer — to be authored._
 
 ## Test Evidence
 
-_Owned by the qa-tester — to be authored._
+_Owned by the qa-tester — to be authored.
