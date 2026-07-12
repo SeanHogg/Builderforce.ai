@@ -1,55 +1,85 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #277
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# PRD: Re-runnable Diagnostic Tool
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+Users currently cannot re-run the diagnostic after it has been executed once within a session. If system conditions change — such as new errors appearing, configuration updates being applied, or intermittent issues resolving — users must restart or navigate away to get fresh diagnostic results. This creates friction, delays troubleshooting, and produces stale data that does not reflect the current system state.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+**Goal:** Allow users to manually trigger the diagnostic at any time, as many times as needed, so that diagnostic results always reflect the most current system state.
 
-## Target users / ICP roles
+---
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## Target Users / ICP Roles
+
+| Role | Need |
+|---|---|
+| **End Users / Customers** | Quickly re-check system health after attempting a self-fix without reloading the page or restarting a flow |
+| **Support Agents** | Capture a fresh diagnostic snapshot during a live support session to confirm whether a reported issue persists |
+| **System Administrators** | Validate that a configuration change or remediation has resolved the flagged condition |
+| **QA / DevOps Engineers** | Trigger repeated diagnostic runs during testing and deployment verification |
+
+---
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This work covers the UI control, triggering mechanism, and result-refresh behavior for re-running an existing diagnostic. It does not cover creating new diagnostic checks or altering the underlying diagnostic logic.
+
+---
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### FR-1 — Re-Run Trigger Control
+- A clearly labeled **"Re-run Diagnostic"** button (or equivalent accessible control) must be persistently visible on the diagnostic results view after the first run completes.
+- The control must be available regardless of whether the previous run returned a passing, failing, or partial result.
+
+### FR-2 — Execution Behavior
+- Activating the control must execute the full diagnostic suite from scratch, identical to the initial run.
+- Each re-run must be treated as an independent execution; no results from prior runs must be cached or pre-populated.
+- Re-runs must be executable an unlimited number of times within a session.
+
+### FR-3 — Loading / In-Progress State
+- While the diagnostic is running, the UI must display a clear in-progress indicator (spinner, progress bar, or equivalent).
+- The Re-run button must be disabled during execution to prevent concurrent runs.
+- Any previously displayed results must be replaced by the in-progress state immediately upon trigger activation.
+
+### FR-4 — Result Refresh
+- Upon completion, the results view must be fully replaced with the latest diagnostic output.
+- The timestamp of the most recent run must be displayed (e.g., "Last run: Today at 14:32").
+- If results differ from the previous run, no diff or change highlight is required (see Out of Scope), but the new results must stand alone as the current state.
+
+### FR-5 — Error Handling
+- If the re-run fails to execute (network error, timeout, service unavailability), the UI must display a descriptive error message and restore the Re-run button so the user can retry.
+- The last successfully retrieved results, if any, must remain visible beneath the error message with a clear label indicating they are from a prior run.
+
+### FR-6 — Accessibility
+- The Re-run control must be keyboard-navigable and screen-reader accessible with an appropriate ARIA label.
+- In-progress and completion states must be announced to assistive technologies.
+
+---
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+| # | Criterion |
+|---|---|
+| AC-1 | After the initial diagnostic run completes, a Re-run Diagnostic button is visible and interactive on the results screen. |
+| AC-2 | Clicking Re-run Diagnostic immediately shows an in-progress state and clears the previous results from view. |
+| AC-3 | The Re-run button is disabled and non-interactive while a diagnostic run is in progress. |
+| AC-4 | On successful completion, the results view displays only the output of the latest run, with an updated timestamp. |
+| AC-5 | Re-running the diagnostic produces the same type of output as the initial run with no stale cached data. |
+| AC-6 | A user can successfully trigger at least 5 consecutive re-runs within a single session without error (under normal conditions). |
+| AC-7 | If a re-run fails, an error message is shown, the Re-run button is re-enabled, and previously successful results (if any) remain visible and labeled as stale. |
+| AC-8 | The Re-run button is reachable and operable via keyboard alone, and its state changes are announced by a screen reader. |
 
-## Out of scope
+---
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## Out of Scope
+
+- **Scheduled / automatic re-runs** — periodic polling or time-based triggers are not included in this release.
+- **Result diffing or change highlighting** — comparing the current run to previous runs is not included.
+- **Run history / audit log** — storing, displaying, or exporting multiple past diagnostic results is not included.
+- **Partial or selective re-runs** — running a subset of diagnostic checks is not included.
+- **New diagnostic checks** — no additions or modifications to the underlying diagnostic logic are included.
+- **Cross-session persistence** — results from a previous session are not retained or surfaced.
+- **Concurrent multi-user diagnostics** — this scope covers single-user, single-session interaction only.
