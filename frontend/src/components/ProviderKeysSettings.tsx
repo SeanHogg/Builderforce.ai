@@ -38,6 +38,7 @@ const PROVIDERS: ProviderConfig[] = [
   { id: 'kimi',      label: 'Kimi',                keyPlaceholder: 'sk-…',    supportsOauth: false },
   { id: 'qwen',      label: 'Qwen',                keyPlaceholder: 'sk-…',    supportsOauth: false },
   { id: 'minimax',   label: 'MiniMax',             keyPlaceholder: 'sk-…',    supportsOauth: false },
+  { id: 'xai',       label: 'xAI (Grok)',           keyPlaceholder: 'xai-…',   supportsOauth: true },
 ];
 
 const cardStyle: React.CSSProperties = {
@@ -78,6 +79,7 @@ const PROVIDER_LABEL: Record<LlmProvider, string> = {
   kimi: 'Kimi',
   qwen: 'Qwen',
   minimax: 'MiniMax',
+  xai: 'xAI (Grok)',
 };
 
 /**

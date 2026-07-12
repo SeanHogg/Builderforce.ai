@@ -7654,6 +7654,7 @@
       "kimi": { "blurb": "Pega una clave de suscripción de Kimi Code o una clave API de Moonshot." },
       "qwen": { "blurb": "Pega una clave API de Alibaba DashScope para ejecutar modelos Qwen." },
       "minimax": { "blurb": "Pega una clave API de MiniMax para ejecutar modelos MiniMax." }
+      ,"xai": { "blurb": "Conecta una suscripción SuperGrok compatible o una clave API de xAI.", "subscription": "suscripción SuperGrok", "pastePrompt": "Copia la URL completa <code>http://127.0.0.1:56121/callback?code=…&state=…</code> y pégala aquí.", "pastePlaceholder": "Pega la URL de redirección de xAI…" }
     }
   },
   "modelSelect": {
