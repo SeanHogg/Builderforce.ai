@@ -204,8 +204,3 @@ export interface GapAnalysisResult {
     sourceChangeTimestamp?: string;
   };
 }
-
-/**
- * Priority guidance for PRD PR148 “check-resource-gaps/load-dashboard-attachments”
- */
-export type GapPriority = 'medium_high_impact_and_immediate_release_fixed';
