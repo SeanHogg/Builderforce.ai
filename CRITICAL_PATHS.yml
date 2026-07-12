@@ -1,0 +1,154 @@
+# Critical Paths Manifest
+# THIS FILE DEFINES ALL CODEPATHS THAT REQUIRE 100% TEST COVERAGE
+# CRITICAL PATH: Code that directly affects payment processing, auth, data persistence,
+# or public API contracts. Any reduction in coverage for critical paths triggers
+# Engineering Lead review and documentation.
+#
+# Validation: CI job checks for < 100% coverage on any path listed here.
+# Reported: Weekly quality digest flags Tier-1 services with missing critical path coverage.
+
+criticalPaths:
+  # -------------------------------------------------------------------------
+  # AUTHENTICATION SERVICE (Tier-1)
+  # -------------------------------------------------------------------------
+  - service: "auth-service"
+    tier: "Tier-1"
+    owner: "Security Team"
+    files:
+      - "src/auth/token-manager.ts"
+      - "src/auth/middleware.ts"
+      - "src/auth/sessions.ts"
+      - "src/auth/oauth.ts"
+    paths:
+      - "/v1/auth/login"
+      - "/v1/auth/logout"
+      - "/v1/auth/refresh"
+      - "/v1/auth/verify"
+      - "/internal/auth/health"
+
+  # -------------------------------------------------------------------------
+  # PAYMENT PROCESSING SERVICE (Tier-1)
+  # -------------------------------------------------------------------------
+  - service: "payment-service"
+    tier: "Tier-1"
+    owner: "Finance Team"
+    files:
+      - "src/payment/checkout.ts"
+      - "src/payment/subscription.ts"
+      - "src/payment/refund.ts"
+      - "src/payment/webhook-handler.ts"
+    paths:
+      - "/v1/payment/checkout"
+      - "/v1/payment/callback"
+      - "/v1/payment/refund"
+      - "/v1/payment/notices"
+      - "/internal/payment/notification"
+
+  # -------------------------------------------------------------------------
+  # TENANT MANAGEMENT SERVICE (Tier-1)
+  # -------------------------------------------------------------------------
+  - service: "tenant-service"
+    tier: "Tier-1"
+    owner: "Platform Team"
+    files:
+      - "src/tenant/create.ts"
+      - "src/tenant/update.ts"
+      - "src/tenant/subscription.ts"
+      - "src/tenant/rbac.ts"
+    paths:
+      - "/v1/tenants"
+      - "/v1/tenants/:id"
+      - "/v1/tenants/config"
+      - "/internal/tenant/health"
+
+  # -------------------------------------------------------------------------
+  # BUILDERFORCE API LAYER (Tier-1)
+  # -------------------------------------------------------------------------
+  - service: "builderforce-api"
+    tier: "Tier-1"
+    owner: "Core Platform"
+    files:
+      - "src/api/endpoints/tenant.ts"
+      - "src/api/endpoints/project.ts"
+      - "src/api/endpoints/task.ts"
+      - "src/api/endpoints/agent.ts"
+    paths:
+      - "/v1/tenants"
+      - "/v1/tenants/:id"
+      - "/v1/projects"
+      - "/v1/projects/:id"
+      - "/v1/tasks"
+      - "/v1/tasks/:id"
+      - "/v1/agents"
+      - "/v1/agents/:id"
+
+  # -------------------------------------------------------------------------
+  # TASK WORKFLOW ENGINE (Tier-1)
+  # -------------------------------------------------------------------------
+  - service: "workflow-engine"
+    tier: "Tier-1"
+    owner: "Orchestration Team"
+    files:
+      - "src/workflow/runner.ts"
+      - "src/workflow/state-machine.ts"
+      - "src/workflow/validation.ts"
+    paths:
+      - "/v1/workflow/execute"
+      - "/v1/workflow/suspend"
+      - "/v1/workflow/resume"
+      - "/internal/workflow/poll"
+
+  # -------------------------------------------------------------------------
+  # MULTI-AGENT SANDBOX (Tier-2)
+  # -------------------------------------------------------------------------
+  - service: "agent-sandbox"
+    tier: "Tier-2"
+    owner: "AI Platform"
+    files:
+      - "src/sandbox/runtime.ts"
+      - "src/sandbox/integration.ts"
+    paths:
+      - "/internal/sandbox/execute"
+      - "/internal/sandbox/health"
+
+  # -------------------------------------------------------------------------
+  # MESSAGING & EVENTING (Tier-2)
+  # -------------------------------------------------------------------------
+  - service: "eventing-service"
+    tier: "Tier-2"
+    owner: "Infrastructure"
+    files:
+      - "src/eventing/publisher.ts"
+      - "src/eventing/consumer.ts"
+    paths:
+      - "/internal/event/publish"
+      - "/internal/event/consume"
+
+# -------------------------------------------------------------------------
+# VALIDATION RULES
+# -------------------------------------------------------------------------
+#
+# 1. CRITICAL SERVICES (Tier-1):
+#    - Must maintain 100% line + branch coverage on all paths listed above
+#    - CI detected via CRITICAL_PATHS.yml validation job
+#    - Weekly quality digest flags missing coverage
+#
+# 2. CRITICAL PATH UPDATE PROCESS:
+#    - To add/remove a critical path:
+#      - Update this file
+#      - Update related CITATION reference (service harbor)
+#      - Push PR with documentation of why critical path added
+#      - QA sign-off required (Engineering Lead)
+#
+# 3. NOTIFICATION TRIGGERS:
+#    - Service Tier-1 critical path < 100% coverage = Engineering Lead email + alert
+#    - Weekly digest flags services with critical path coverage gap
+#    - Critical path breach at release time = automated construction/Mr. Work
+#
+# 4. SECURITY CRITICAL:
+#    - All auth, payment, tenant, API layer paths marked as Tier-1
+#    - If they have < 100% coverage, pr restricts to "emergency-only" branch
+#
+# 5. CHANGE LOGGING:
+#    - Critical path changes logged in `docs/quality/critical-path-changes.md`
+#    - History of path additions/removals for audit trail
