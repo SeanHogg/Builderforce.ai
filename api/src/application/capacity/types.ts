@@ -72,3 +72,49 @@ export interface CalibrationSummary {
   projectionRefined: boolean;
   gapTotalImproved: number; // SP reduction from legacy estimate
 }
+
+export interface CalibrationStatus {
+  overallSuccess: boolean;
+  lastCalibrationRun?: CalibrationRun;
+  nextScheduledRun?: string;
+  sprintsCollected: number;
+  agentsWithVelocity: number;
+  utilizationAccuracyDelta: number;
+  projectedDaysRemaining: number;
+}
+
+export interface ProjectFilter {
+  tenantId: string;
+  projectId?: string;
+  projectNames?: string[];
+}
+
+export interface ProjectViewModel {
+  projectId: string;
+  projectName: string;
+  agentId: string;
+  hoursAllocated: number;
+  hoursBilled: number;
+  utilizationPercent: number;
+  enabled: boolean;
+  locked: boolean;
+  effectiveDate: string;
+}
+
+export interface MapUtilizationFromRosterMutation {
+  sourceProjectId: string;
+  targetProjectId: string;
+  projectMappings: {
+    sourceProject: string;
+    targetProject: string;
+    mappedToTargetProject: boolean;
+    affectedRows: number;
+    errors: string[];
+  }[];
+  summary: {
+    totalMappings: number;
+    successfulMappings: number;
+    failedMappings: number;
+    accuracyImprovement: number;
+  };
+}
