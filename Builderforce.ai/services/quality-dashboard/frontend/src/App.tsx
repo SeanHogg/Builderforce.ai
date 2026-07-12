@@ -1,22 +1,22 @@
 /**
- * Quality Dashboard App Entry Point
- * Mounts the QualityDashboard component into the React root
+ * Quality Dashboard root component.
+ *
+ * Reads the initial filter state from the URL query string so that a shared
+ * link (AC-05) restores the dashboard in the same filtered state for any user
+ * with access, then renders the dashboard view.
  */
 
 import React from "react";
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import { QualityDashboard } from "./components/QualityDashboard";
+import { QualityDashboardView } from "./components/QualityDashboard";
+import { extractFiltersFromUrl } from "./utils/filters";
+import type { BugFilter } from "./types/quality";
 import "./index.css";
 
-const container = document.getElementById("root");
+export function QualityDashboard() {
+  // Derive the initial filter from the URL exactly once, on first render.
+  const initialFilter = React.useMemo<BugFilter>(() => extractFiltersFromUrl(), []);
 
-if (!container) {
-  throw new Error("No root element found");
+  return <QualityDashboardView initialFilter={initialFilter} />;
 }
 
-createRoot(container).render(
-  <StrictMode>
-    <QualityDashboard />
-  </StrictMode>
-);
+export default QualityDashboard;
