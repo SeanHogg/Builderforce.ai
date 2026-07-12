@@ -157,9 +157,7 @@ describe('TaskService update preserves parentTaskId (AC-1..AC-4)', () => {
 
   it('AC-1: parentTaskId in update payload is persisted to database after tasks.update', async () => {
     const service = new TaskService(repo, new SingleProjectRepo(makeProject()));
-    const taskId = asTaskId(42);
-    // Set up initial state with parentTaskId=1, then update to new parentTaskId=2
-    // Update carries parentTaskId, should be persisted
+    // Update carries an explicit parentTaskId, which should be persisted.
     const updated = await service.updateTask(42, {
       parentTaskId: 2,
       title: 'Updated Title',
