@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Event Payload Schema",
+  "description": "Canonical event payload for progress tracking (Draft 2020-12)",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Event identifier"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["job_status", "progress_update"]
+    },
+    "resourceId": {
+      "type": "string",
+      "description": "Job or task identifier"
+    },
+    "resourceType": {
+      "type": "string",
+      "enum": ["job", "task"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["queued", "running", "completed", "failed", "canceled", "unknown"]
+    },
+    "progressPct": {
+      "type": "number",
+      "description": "Optional progress percentage: 0 to 100. 100 indicates the final state (terminal event). At most once per job/task, emitted only after all processing steps complete.",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "created": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": true,
+  "required": ["id", "type", "resourceId", "resourceType", "created"]
+}
