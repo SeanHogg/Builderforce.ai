@@ -2,17 +2,14 @@
  * Health Engine: rule-based deadline health computation.
  *
  * Pure, testable function using local-invariant logic.
- * Wildcard: metrics/telemetry placeholders are reserved for future backend hooks.
  */
 
-/**
+/** 
  * The interval in minutes to consider a deadline on track/untracked. Defaults to 15.
  */
 const HEALTH_METRIC_INTERVAL = 15;
 
-/**
- * Utility: calculate minimum gap days to make relative differences opinionated.
- */
+/** Utility: calculate minimum gap days to make relative differences opinionated. */
 export const MINIMUM_ASPECT_WINDOW_DAYS = 7; // Arbitrary higher bound to avoid 0-division noise.
 
 /**
@@ -29,13 +26,9 @@ export const getDefaultWarningBuffer = (
   return Math.max(bufferDays, 5);
 };
 
-/**
- * Helper: business-day truncation (NYSE/CME inclusivity simplified to total days for initial scope).
- */
+/** Helper: business-day truncation (NYSE/CME inclusivity simplified to total days for initial scope). */
 const efficiencyTruncate = (n: number): number => Math.min(MINIMUM_ASPECT_WINDOW_DAYS, n);
-/**
- * Helper: duration in business days (simplified).
- */
+/** Helper: duration in business days (simplified). */
 const durationBusinessDays = (start: Date, end: Date): number => {
   // Simplified; future improvement can adjust for weekends/holidays.
   const diffMs = end.getTime() - start.getTime();
@@ -53,12 +46,10 @@ const durationBusinessDays = (start: Date, end: Date): number => {
 export const computeHealthStatus = (
   deadlineSnapshot: {
     targetDate: Date;
-    // Optional: forecast capability (当前为空位，用于扩容预测进度)
+    // Optional: forecast capability (currently not used for status; reserved for future forecasting)
     forecastStart?: Date | null;
-    // externalMetrics.signal A,B,C placeholders.
-    externalMetrics:
-      | { elapsed: number; buffer: number; overallPerformanceScore: number; limit(date: Date): number }
-      | undefined;
+    // External metrics are reserved for future telemetry hooks; not used in status computation today.
+    externalMetrics?: undefined;
     override: null | 'on_track' | 'at_risk' | 'off_track' | 'missed';
   },
   options?: {
@@ -67,11 +58,13 @@ export const computeHealthStatus = (
   }
 ): 'on_track' | 'at_risk' | 'off_track' | 'missed' | 'manual_override' => {
   const now = new Date();
-  const targetDateStartOfDay = new Date(targetDateStartOfDay(deadlineSnapshot.targetDate));
+  const targetDateStartOfDay = new Date(deadlineSnapshot.targetDate.toDateString());
+
   const effectiveDurationMs = durationBusinessDays(
     new Date(Math.min(deadlineSnapshot.targetDate.getTime(), now.getTime())),
     targetDateStartOfDay
   );
+
   const warningBufferHome =
     options?.warningBuffer ?? Math.max(5, Math.round(effectiveDurationMs * 0.1));
 
@@ -80,15 +73,16 @@ export const computeHealthStatus = (
   }
 
   const forecast = deadlineSnapshot.forecastStart;
+
   // Missed: target date has passed without a forecast that lands on-or-before the deadline.
-  if (now.getTime() > targetDateStartOfDay.getTime()) {
-    if (!forecast || forecast.getTime() > targetDateStartOfDay.getTime()) {
+  if (now > targetDateStartOfDay) {
+    if (!forecast || forecast > targetDateStartOfDay) {
       return 'missed';
     }
   }
 
   // Off track: forecast is after target (and on/after now).
-  if (forecast && forecast.getTime() > targetDateStartOfDay.getTime() && now.getTime() <= targetDateStartOfDay.getTime()) {
+  if (forecast && forecast > targetDateStartOfDay && now <= targetDateStartOfDay) {
     return 'off_track';
   }
 
@@ -97,11 +91,11 @@ export const computeHealthStatus = (
   const bufferEndMs = targetDateStartOfDay.getTime();
   if (
     forecast &&
-    forecast.getTime() >= bufferStartMs &&
-    forecast.getTime() <= bufferEndMs &&
-    now.getTime() <= targetDateStartOfDay.getTime()
+    forecast >= bufferStartMs &&
+    forecast <= bufferEndMs &&
+    now <= targetDateStartOfDay
   ) {
-    // Optionally enrich with metrics feedback (placeholders).
+    // Optionally enrich with metrics feedback (reserved for future telemetry).
     return 'at_risk';
   }
 
@@ -119,5 +113,5 @@ export const metricTriggers: Record<'health_milestone' | 'status_change', number
 
 // Reserved for prometheus-like key placeholders (unimplemented for now).
 export const metricsKeyMetricsPairs = [
-  { key: 'deadline_computed_status', value: JSON.stringify('on_track | at_risk | off_track | missed | manual_override') },
+  { key: 'deadline_computed_status', value: JSON.stringify('on_track | at_risk | off_track | missed | manual_override') }
 ] as const;
