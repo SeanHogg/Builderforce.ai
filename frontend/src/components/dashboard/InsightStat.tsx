@@ -5,6 +5,8 @@ import type { CSSProperties, ReactNode } from 'react';
 import { Sparkline } from '@/components/charts/Sparkline';
 import { colorAt } from '@/components/charts/chartColors';
 import type { DeltaDirection } from './metricFormat';
+import { TrendArrow, COLORS } from './TrendArrow';
+import type { TrendClassification } from './trend';
 
 /**
  * InsightStat — THE canonical metric card for the Dashboard library.
