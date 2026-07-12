@@ -9,6 +9,8 @@ import { NotFoundError, ForbiddenError } from '../../domain/shared/errors';
 import {
   EpicDecomposer, ChildTaskPlan, heuristicEpicDecomposer,
 } from './EpicDecomposer';
+import { getTaskEligibility } from './readyTaskEligibility';
+import type { Db } from '../../infrastructure/database/connection';
 
 /** Postgres unique-constraint violation (e.g. a task-key insert race). */
 function isUniqueViolation(e: unknown): boolean {
