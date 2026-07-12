@@ -1,0 +1,33 @@
+{
+  "name": "@builderforce/step-validation",
+  "version": "1.0.0",
+  "description": "Step-level integration validation framework for pipelines, including pre/post contracts, structured diagnostics, configurable failure modes, and CLI tooling",
+  "type": "module",
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "ajv": "^8.17.1",
+    "@sinclair/typebox": "^0.33.12"
+  },
+  "devDependencies": {
+    "@seanhogg/builderforce-agents": "workspace:*",
+    "typescript": "^5.7.2"
+  },
+  "bin": {
+    "validate-contracts": "./dist/cli.js"
+  },
+  "files": [
+    "dist/",
+    "package.json",
+    "README.md"
+  ],
+  "builderforce": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "lint": "oxlint src/ tests/",
+    "typecheck": "tsc --noEmit"
+  }
+}
