@@ -216,7 +216,16 @@ export class Task {
       >
     >,
   ): Task {
-    return new Task({ ...this.props, ...updates, updatedAt: new Date() });
+    // Partial-update semantics: only fields present in incoming updates (missing values are omitted)
+    const { updatedAt, ...effectiveUpdates } = updates;
+    // Strip any undefined own-prop values that would silently overwrite existing props during spread
+    const filtered: Partial<TaskProps> = {};
+    for (const key in effectiveUpdates) {
+      if (Object.prototype.hasOwnProperty.call(effectiveUpdates, key) && effectiveUpdates[key] !== undefined) {
+        filtered[key] = effectiveUpdates[key];
+      }
+    }
+    return new Task({ ...this.props, ...filtered, updatedAt: new Date() });
   }
 
   /**
