@@ -32,7 +32,7 @@ export interface NotificationPayload {
   siteUrl?: string;
 }
 
-interface AlertNotification {
+export interface AlertNotification {
   id: string;
   metricName: string;
   timestamp: string;
