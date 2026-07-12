@@ -6,23 +6,31 @@
  * Supports loose matching by initiativeId or projectId.
  */
 
-import { eq, and, or, sql, inArray } from 'drizzle-orm';
-import { db } from '@/db/client.js';
-import { stakeholderMaps, type NewStakeholderMapInput } from '@/db/schema/index.js';
-import { ValidationError, BadRequestError, NotFoundError } from '@/errors/index.js';
+import { eq, and, or } from 'drizzle-orm';
+import { db } from '@builderforce.ai/mysql-client';
+import { stakeholderMaps } from '@builderforce.ai/database';
+import { PineconeError } from '@builderforce.ai/errors';
 
 /**
  * Generate a unique UUID for a new stakeholder map
  */
 export function generateStakeholderMapId(): string {
-  return uuid();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
 }
 
 /**
  * Generate a timestamp string for created_by/updated_by fields
  */
 export function generateAuthorId(): string {
-  return uuid();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
 }
 
 /**
@@ -30,22 +38,21 @@ export function generateAuthorId(): string {
  * 
  * @param input - The stakeholder map data to create
  * @returns The created stakeholder map
- * @throws ValidationError if approverIds or informedPartyIds are empty
  */
 export async function createStakeholderMap(
-  input: NewStakeholderMapInput & { createdBy: string },
-): Promise<NewStakeholderMapInput> {
+  input: any & { createdBy: string },
+): Promise<any> {
   // Validate that approverIds and informedPartyIds are not empty
   if (!input.approverIds || input.approverIds.length === 0) {
-    throw new ValidationError('approverIds must contain at least one user ID');
+    throw new PineconeError('approverIds must contain at least one user ID', 400);
   }
 
   if (!input.informedPartyIds || input.informedPartyIds.length === 0) {
-    throw new ValidationError('informedPartyIds must contain at least one user ID');
+    throw new PineconeError('informedPartyIds must contain at least one user ID', 400);
   }
 
   // Initialize version to 1
-  const newMap: NewStakeholderMapInput = {
+  const newMap = {
     ...input,
     version: 1,
     approverIds: input.approverIds,
@@ -65,11 +72,13 @@ export async function createStakeholderMap(
 export async function getStakeholderMapByInitiativeId(
   initiativeId: string,
   tenantId: string,
-): Promise<NewStakeholderMapInput | null> {
+): Promise<any> {
   const [map] = await db
     .select()
     .from(stakeholderMaps)
-    .where(and(eq(stakeholderMaps.initiativeId, initiativeId), eq(stakeholderMaps.tenantId, tenantId)));
+    .where(
+      and(eq(stakeholderMaps.initiativeId, initiativeId), eq(stakeholderMaps.tenantId, tenantId)),
+    );
 
   return map ?? null;
 }
@@ -79,13 +88,12 @@ export async function getStakeholderMapByInitiativeId(
  * 
  * @param query - The query parameters
  * @returns List of matching stakeholder maps
- * @throws BadRequestError if neither initiativeId nor projectId is provided
  */
 export async function listStakeholderMaps(
   query: { initiativeId?: string; projectId?: string; tenantId: string },
-): Promise<NewStakeholderMapInput[]> {
+): Promise<any[]> {
   if (!query.initiativeId && !query.projectId) {
-    throw new BadRequestError('Either initiativeId or projectId must be provided for filtering');
+    throw new PineconeError('Either initiativeId or projectId must be provided for filtering', 400);
   }
 
   // Build dynamic query conditions
@@ -98,7 +106,7 @@ export async function listStakeholderMaps(
   if (query.projectId) {
     conditions.push(
       // Optional projectId: sets or filters by project scope without strict require
-      and(eq(stakeholderMaps.tenantId, query.tenantId), eq(stakeholderMaps.projectId, query.projectId))
+      and(eq(stakeholderMaps.tenantId, query.tenantId), eq(stakeholderMaps.projectId, query.projectId)),
     );
   }
 
@@ -112,28 +120,26 @@ export async function listStakeholderMaps(
  * @param input - The updated stakeholder map data
  * @param updatedBy - The user ID performing the update
  * @returns The updated stakeholder map
- * @throws NotFoundError if the stakeholder map doesn't exist
- * @throws ValidationError if approverIds or informedPartyIds are empty
  */
 export async function updateStakeholderMap(
   initiativeId: string,
   input: { approverIds: string[]; informedPartyIds: string[] },
   updatedBy: string,
   tenantId: string,
-): Promise<NewStakeholderMapInput> {
+): Promise<any> {
   // Validate that approverIds and informedPartyIds are not empty
   if (!input.approverIds || input.approverIds.length === 0) {
-    throw new ValidationError('approverIds must contain at least one user ID');
+    throw new PineconeError('approverIds must contain at least one user ID', 400);
   }
 
   if (!input.informedPartyIds || input.informedPartyIds.length === 0) {
-    throw new ValidationError('informedPartyIds must contain at least one user ID');
+    throw new PineconeError('informedPartyIds must contain at least one user ID', 400);
   }
 
   // Check if the stakeholder map exists
   const existingMap = await getStakeholderMapByInitiativeId(initiativeId, tenantId);
   if (!existingMap) {
-    throw new NotFoundError('Stakeholder map not found');
+    throw new PineconeError('Stakeholder map not found', 404);
   }
 
   // Increment version
@@ -146,10 +152,7 @@ export async function updateStakeholderMap(
     updatedBy,
   };
 
-  await db
-    .update(stakeholderMaps)
-    .set(updatedMap)
-    .where(eq(stakeholderMaps.initiativeId, initiativeId));
+  await db.update(stakeholderMaps).set(updatedMap).where(eq(stakeholderMaps.initiativeId, initiativeId));
 
   return updatedMap;
 }
@@ -159,7 +162,6 @@ export async function updateStakeholderMap(
  * 
  * @param initiativeId - The initiative ID of the map to delete
  * @param deletedBy - The user ID performing the deletion
- * @throws NotFoundError if the stakeholder map doesn't exist
  */
 export async function deleteStakeholderMap(
   initiativeId: string,
@@ -169,21 +171,14 @@ export async function deleteStakeholderMap(
   // Check if the stakeholder map exists
   const existingMap = await getStakeholderMapByInitiativeId(initiativeId, tenantId);
   if (!existingMap) {
-    throw new NotFoundError('Stakeholder map not found');
+    throw new PineconeError('Stakeholder map not found', 404);
   }
 
   await db
     .delete(stakeholderMaps)
-    .where(and(eq(stakeholderMaps.initiativeId, initiativeId), eq(stakeholderMaps.tenantId, tenantId)));
-}
-
-// Simple UUID generator (similar to crypto.randomUUID in production)
-function uuid(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+    .where(
+      and(eq(stakeholderMaps.initiativeId, initiativeId), eq(stakeholderMaps.tenantId, tenantId)),
+    );
 }
 
 // Export all methods for API router access
