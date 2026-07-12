@@ -19,11 +19,17 @@ import { Hono } from 'hono';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { integrationCredentials, integrationSyncLogs, projects } from '../../infrastructure/database/schema';
-import { TenantRole } from '../../domain/shared/types';
+import {
+  TenantRole,
+  integrationGapsTenant,
+} from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { githubStatusMessage } from '../../application/integrations/githubTestError';
-import { encryptCredentials, decryptCredentials } from '../../application/integrations/credentialCrypto';
+import {
+  githubStatusMessage,
+  encryptCredentials,
+  decryptCredentials,
+} from '../../application/integrations/credentialCrypto';
 
 /**
  * Credential providers accepted by this endpoint. Mirrors integrationProviderEnum
