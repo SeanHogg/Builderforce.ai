@@ -346,7 +346,13 @@ The following test cases exercise the schema and example. Validation is performe
 - Rejecting payloads with missing `schema_version`, `basis_id`, `agent_id`, `claims`, `evidence` succeeded — confirms AC-1.
 - Reasoning chain enforcement (sequential steps, gaps) is enforced primarily by producer/consumer documentation; the schema itself enforces `step >= 1` and items exist — test behavior aligns with PRD guidance.
 - Extensions validation: reverse-DNS pattern enforced, unknown namespaces ignored; unknown top-level fields cause warning only per consumer doc — AC-6 satisfied.
-- This task does not include automated runnable tests in repo; the test plan above is for reference if separate test suites are added.
+- A runnable, zero-dependency validation harness ships in the repo at
+  [`spec/basis-payload/validate.js`](spec/basis-payload/validate.js). It loads the
+  schema + canonical example and executes the positive/negative/extension/reasoning-chain
+  cases above (`node spec/basis-payload/validate.js`, Node 18+). It exercises AC-1
+  (required-field rejection), AC-4 ([0,1] bounds on confidence/weight), AC-6
+  (unknown top-level field allowed), AC-7 (canonical example passes), and AC-8
+  (version consistency with the schema `$id`).
 
 ### Test Outcome
 
