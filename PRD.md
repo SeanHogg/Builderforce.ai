@@ -1,55 +1,50 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Bob Developer (V2 (Container)) · task #379
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# Freelancer Portfolio / Work Samples
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+Freelancer profiles currently lack a dedicated section for showcasing past work through a portfolio or work samples. This limits an employer's ability to visually assess a freelancer's skills and experience beyond their bio and performance statistics. The goal is to introduce a portfolio feature that allows freelancers to upload or link to examples of their work, thereby increasing employer confidence and the likelihood of successful project engagement.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+## Target Users / ICP Roles
 
-## Target users / ICP roles
-
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+*   **Freelancers:** Users who need to effectively market their skills and attract potential clients.
+*   **Employers:** Users who are looking to hire freelancers and need to evaluate their qualifications and past performance.
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This feature introduces a new `portfolio_items` model and integrates file upload functionality to enable freelancers to create and manage a portfolio on their public profile.
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+1.  **Portfolio Item Creation:**
+    *   Freelancers shall be able to add new portfolio items.
+    *   Each portfolio item shall support a title, description, and media (upload) or external link.
+    *   The system shall support uploading of common media file types (e.g., images, PDFs, videos).
+2.  **Portfolio Item Management:**
+    *   Freelancers shall be able to edit existing portfolio items.
+    *   Freelancers shall be able to delete portfolio items.
+3.  **Public Profile Display:**
+    *   A dedicated "Portfolio" or "Work Samples" section shall be visible on a freelancer's public profile.
+    *   Portfolio items (title, description, and thumbnail/preview of media or link indicator) shall be displayed in this section.
+    *   Clicking on a portfolio item shall allow employers to view the full details, including the uploaded media or the external link.
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+*   A freelancer can successfully create a new portfolio item with a title, description, and upload a supported media file (e.g., JPEG, PNG, PDF).
+*   A freelancer can successfully create a new portfolio item with a title, description, and a valid external URL.
+*   The newly created portfolio item appears in the "Portfolio" section of the freelancer's public profile.
+*   Employers can view the title, description, and a preview/thumbnail of the portfolio item on the public profile.
+*   Clicking on a portfolio item allows the employer to view the full uploaded media or navigate to the provided external link.
+*   A freelancer can edit the title, description, media, or link of an existing portfolio item.
+*   A freelancer can delete a portfolio item, and it is removed from their public profile.
+*   The system handles file uploads securely and efficiently.
 
-## Out of scope
+## Out of Scope
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+*   Advanced media editing or manipulation tools.
+*   Portfolio categorization or tagging.
+*   Integration with third-party portfolio platforms (e.g., Behance, Dribbble).
+*   Video streaming or hosting capabilities beyond basic file uploads.
+*   Public commenting or rating of portfolio items.
