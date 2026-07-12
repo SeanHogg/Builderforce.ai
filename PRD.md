@@ -106,13 +106,13 @@ This audit covers:
 
 ## Root Cause Documentation
 
-- **File(s) examined**: `api/src/presentation/routes/taskRoutes.ts` (PATCH handler), `api/src/application/task/TaskService.ts` (TaskService.updateTask), `api/src/infrastructure/repositories/TaskRepository.ts` (update: SET clause).
+- **Files examined**: `api/src/presentation/routes/taskRoutes.ts` (PATCH handler), `api/src/application/task/TaskService.ts` (TaskService.updateTask), `api/src/infrastructure/repositories/TaskRepository.ts` (update: SET clause).
 - **Mechanism**: No `assignedAgentRef` branching occurs within `TaskService.updateTask` or `TaskRepository.update` — the full body (including `parentTaskId`) is passed through unchanged via `Task.update({...dto})`. The repository writes an authoritative `parentTaskId` (`plain.parentTaskId ?? null`). The prior-layer fix (task-689) ensures `undefined` keys are stripped from `dto` and that `TaskRepository.update` cannot receive malformed input. The current codebase does NOT exhibit the alleged drop site; existing tests (`taskUpdateParentIdPreserved.test.ts`) pass with `parentTaskId` in the payload and demonstrate preservation against side effects.
 - **Assurance**: Changes from the builderforce/task-689 fix are present:
   - Task.update strips undefined keys (`Object.fromEntries(filter((_, k) => dto[k] !== undefined))`).
   - TaskService.updateTask conditionally coerces/omits `parentTaskId` if `dto.parentTaskId` is passed in.
   - TaskRepository.update writes an explicit `parentTaskId: plain.parentTaskId ?? null`.
-  - Regression tests (`taskUpdateParentIdPreserved.test.ts`) cover AC-1, AC-2, AC-3, and AC-4 using an in-memory repo that tracks writes.
+  - Regression tests (`taskUpdateParentIdPreserved.test.ts`) cover AC-1..AC-4 with repo round-trip re-reads on CHILD. PRD.md Design/Impl/Review/Test+sign-offs filled. NOTE: the running PLATFORM board's own tasks.update STILL has this bug — a status-only builtin_tasks_update on #689 nulled its parentTaskId(679)+assignedAgentRef; had to re-set them. So when updating board task status via builtin_tasks_update, re-pass parentTaskId/assignedAgentRef or they get wiped.
 
 ## Fix Implementation
 
@@ -128,7 +128,7 @@ This audit covers:
 |------|--------|---------|--------|
 | Diagnostic checks (FR-1..FR-5) | Inspected routes, service, repo; confirmed explicit inclusion | Zod-like body passed verbatim; no pick/omit/root-cause | PASS |
 | FR-3 & FR-4 audit (assignedAgentRef code path + auto-run side effects) | Confirmed no proprietary branching; side-effect path uses repo.save/create for children | OnAssignedToAgent only performs key allocation; auto-run in taskRoutes.ts does not write tasks.update | PASS |
-| Root cause (FR-6) | Documented actual code path and that the bug is fixed by prior layer-3 patch, not a re-occurrence | Provided diagnostic checks and documented existing fix | PASS |
+| Root cause (FR-6) | Documented actual code path and that each layer includes parentTaskId, no drop site present | Provided diagnostic checks and documented existing fix | PASS |
 | Fix implementation (FR-7) | Confirmed three-layer fix is present and no additional drop site exists | Accredited for builderforce/task-689 PR#327; existing implementation passes the audit | PASS |
 | Regression test coverage (FR-8) | Verified `taskUpdateParentIdPreserved.test.ts` via read_file; AC-1, AC-2, AC-3, AC-4 covered | Inspected test assertions and tracking repo writes; full coverage exists | PASS |
 | Simplified coverage summary (AC-6) | Side-effect order atomic under repo.save/create; no second unsafe write | Documented in Root Cause & Fix sections | PASS |
@@ -143,8 +143,8 @@ This audit covers:
   - AC-3: auto-run side effects do not clear/overwrite parentTaskId (check: onAssignedToAgent only keys children; repo captures only one write).
   - AC-4: update without parentTaskId retains existing stored parentTaskId (check: implicit ?? null preserves 1).
 - **In-memory tracking repo**: Records `parentTaskId` and `assignedAgentRef` on each `update`; tests assert payload and write consistency.
-- **CI**: Full test suite must pass; no CI gateway in this executor — rely on CI on the PR. This PR’s test file is executable and passes with the Layers 3 fix.
+- **CI**: Full test suite must pass; no CI gateway in this executor — rely on CI on the PR. This PR’s test file is executable.
 
 ---
 
-> **PRD changed** — updated on 2025-06-20 by agent-688 (code-creator). Changes: replaced/added Root Cause, Fix Implementation, Review sections with accurate diagnostics and sign-offs; removed outdated placeholders for Requirements/Design/Implementation Notes/Test Evidence.
+> **PRD updated** — revised on 2025-06-20: replaced/added Root Cause, Fix Implementation, and Review sections with accurate diagnostic checks and sign-offs. Removed placeholders for Requirements/Design/Implementation Notes/Test Evidence, documented that the bug is fixed as of provider-run build ./a while documenting that the current PLATFORM board task status updates via builtin_tasks_update still strip parentTaskId/assignedAgentRef; you must re-pass those fields.
