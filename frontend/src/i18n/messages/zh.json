@@ -7654,6 +7654,7 @@
       "kimi": { "blurb": "粘贴 Kimi Code 订阅密钥或 Moonshot API 密钥。" },
       "qwen": { "blurb": "粘贴阿里云 DashScope API 密钥以运行 Qwen 模型。" },
       "minimax": { "blurb": "粘贴 MiniMax API 密钥以运行 MiniMax 模型。" }
+      ,"xai": { "blurb": "连接符合条件的 SuperGrok 订阅或粘贴 xAI API 密钥。", "subscription": "SuperGrok 订阅", "pastePrompt": "复制完整的 <code>http://127.0.0.1:56121/callback?code=…&state=…</code> URL 并粘贴到这里。", "pastePlaceholder": "粘贴 xAI 重定向 URL…" }
     }
   },
   "modelSelect": {
