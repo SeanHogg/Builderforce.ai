@@ -174,7 +174,7 @@ export function agentContextFromPayload(
     projectId,
     driverAffect: d.affect?.state ?? {},
     targetMode: d.mode,
-    lastLearnedAt: d.lastLearnedAt instanceof Date ? d.lastLearnedAt.getTime() : null,
+    lastLearnedAt: d.lastLearnedAt ? Date.parse(d.lastLearnedAt) : null,
     inferenceEnabled: d.inferenceEnabled,
   };
 }
