@@ -47,8 +47,10 @@ export interface InsightStatProps {
   sub?: string;
   /** Daily series → inline sparkline. Omit/empty for a scalar-only card. */
   series?: number[] | null;
-  /** Trend delta chip. */
+  /** Trend delta chip (text-based fallback). */
   delta?: InsightDelta | null;
+  /** TrendClassification from trend.ts (SVG arrow). Takes precedence over delta. */
+  trendClassification?: TrendClassification | null;
   /** Localized "updated Xh ago" recency badge. */
   recencyLabel?: string | null;
   /** Actionable hint / CTA shown at the foot of the card. */
@@ -59,6 +61,8 @@ export interface InsightStatProps {
   color?: string;
   /** Escape hatch for a bespoke chart (back-compat with the old StatCard). */
   chart?: ReactNode;
+  /** Optional polarity hint for backwards-compatibility text chips. */
+  polarity?: boolean | null;
   style?: CSSProperties;
 }
 
