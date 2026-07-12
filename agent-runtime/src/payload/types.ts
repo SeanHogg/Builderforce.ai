@@ -35,8 +35,8 @@ export type TransformationRule = {
   conditions?: {
     /** Field name to evaluate */
     field: string;
-    /** Operator: 'exists', 'equals', 'notEquals', 'contains', 'startsWith', 'endsWith', 'greaterThan', 'lessThan', 'in' */
-    operator: 'exists' | 'equals' | 'notEquals' | 'contains' | 'startsWith' | 'endsWith' | 'greaterThan' | 'lessThan' | 'in';
+    /** Operator: 'exists', 'equals', 'notEquals', 'contains', 'startsWith', 'endsWith', 'greaterThan', 'lessThan' */
+    operator: 'exists' | 'equals' | 'notEquals' | 'contains' | 'startsWith' | 'endsWith' | 'greaterThan' | 'lessThan';
     /** Value(s) to compare against */
     value: unknown;
   };
@@ -74,14 +74,14 @@ export type OutputField = {
     arrayTransform?: {
       /** Field to apply transform to each element */
       field: string;
-      /** Transform to apply */}
+      /** Transform to apply (fn:fnName) */}
       transform: string;
     };
   };
   /** Whether to include in output (conditional) */
   includeIf?: {
     field: string;
-    operator: Parameters<TransformationRule['conditions']>[0]['operator'];
+    operator: 'exists' | 'equals' | 'notEquals' | 'contains' | 'startsWith' | 'endsWith' | 'greaterThan' | 'lessThan';
     value: unknown;
   };
 };
