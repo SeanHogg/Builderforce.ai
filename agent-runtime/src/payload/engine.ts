@@ -289,7 +289,7 @@ function validateProperty(
       }
     })();
     if (!isValidType) {
-      const entry = {
+      emit({
         level: "error",
         contextId: options.contextId,
         field: propName,
@@ -316,7 +316,7 @@ function validateProperty(
   }
   if (def.enum && Array.isArray(def.enum)) {
     if (!def.enum.some((entry) => entry === value)) {
-      const entry = {
+      emit({
         level: "error",
         contextId: options.contextId,
         field: propName,
@@ -443,7 +443,7 @@ export function createPayloadGenerator(
 
     for (const r of required) {
       if (!(r in payload) || payload[r] === undefined || payload[r] === null) {
-        const entry = {
+        emit({
           level: "error",
           contextId,
           field: r,
@@ -487,7 +487,7 @@ export function createPayloadGenerator(
       const srcRes = resolved[field.source.path];
       if (!srcRes) {
         if (field.source.required) {
-          const entry = {
+          emit({
             level: "error",
             contextId,
             field: outName,
@@ -504,7 +504,7 @@ export function createPayloadGenerator(
 
       if (!srcRes.exists) {
         if (field.source.required) {
-          const entry = {
+          emit({
             level: "error",
             contextId,
             field: outName,
