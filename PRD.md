@@ -1,55 +1,128 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #149
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# Product Requirements Document (PRD): Integration & Data Ingestion Audit
 
-## Problem & Goal
+## **1. Problem & Goal**
+**Problem:**
+Teams lack visibility into which integrations are connected, whether data is flowing as expected, or where gaps exist. Without this audit, diagnostics and analytics rely on assumptions rather than real data, leading to incomplete insights and inefficiencies.
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+**Goal:**
+Provide a real-time audit of integrations and data ingestion to:
+- Confirm which tools are connected (e.g., GitHub, Jira, Slack, CI/CD, monitoring).
+- Assess data completeness (e.g., repos linked, issues imported, deploy data flowing).
+- Surface gaps (e.g., connected but inactive, partial data, or missing integrations).
+- Enable data-driven diagnostics by ensuring all relevant data is ingested.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+---
 
-## Target users / ICP roles
+## **2. Target Users / ICP Roles**
+- **Engineering Leaders (CTOs, VPEs, Engineering Managers):** Need visibility into toolchain health to identify blind spots in workflows.
+- **Product Managers:** Require accurate data ingestion for roadmap and planning tools (e.g., Jira, Linear).
+- **DevOps/SRE Teams:** Monitor CI/CD and incident data flow (e.g., Jenkins, Datadog).
+- **Project/Program Managers:** Ensure deadline data (e.g., calendars) and communication tools (e.g., Slack) are synced.
+- **Data Teams:** Validate data completeness for analytics and reporting.
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+---
 
-## Scope
+## **3. Scope**
+### **In Scope:**
+- **Integration Status Checks:** Verify connectivity and data flow for:
+  - **Source Control:** GitHub, GitLab, Bitbucket (repos, commits, PRs).
+  - **Issue Trackers:** Jira, Linear (issues, status sync).
+  - **Communication:** Slack, Microsoft Teams (channels linked).
+  - **CI/CD:** GitHub Actions, Jenkins, CircleCI (deploy data).
+  - **Monitoring:** Datadog, PagerDuty (incident data).
+  - **Calendar/Project Tools:** Google Calendar, Outlook, Asana (deadlines).
+- **Data Completeness Scoring:** Percentage-based score (0–100%) per integration.
+- **Health Dashboard:** Per-project view of integration status, last sync, and gaps.
+- **Recommendations:** Actionable suggestions for missing or partial integrations.
+- **Auto-Detection:** Identify common gaps (e.g., webhooks missing despite connection).
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+### **Out of Scope:**
+- **Deep Data Validation:** E.g., semantic analysis of issues/commits (beyond presence).
+- **Automated Fixes:** No auto-reconnection or repair of broken integrations.
+- **Custom Integrations:** Only predefined integrations (no support for non-standard tools).
+- **Historical Data Analysis:** Limited to current/last sync status (no trend analysis).
+- **User Permissions/Access Control:** Integration visibility tied to existing role-based access.
 
-## Functional Requirements
+---
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+## **4. Functional Requirements**
+### **4.1 Integration Audit**
+| **Integration**       | **Checks**                                                                 |
+|-----------------------|---------------------------------------------------------------------------|
+| GitHub/GitLab/Bitbucket | Connected? Repos linked? Commits/PRs ingested?                            |
+| Jira/Linear           | Connected? Issues imported? Active status sync?                           |
+| Slack/Teams           | Connected? Channels linked?                                               |
+| CI/CD (e.g., Jenkins) | Connected? Deploy data flowing?                                           |
+| Monitoring (e.g., Datadog) | Connected? Incident data available?                              |
+| Calendar/Asana        | Connected? Deadline/project data ingested?                                |
 
-## Acceptance Criteria
+### **4.2 Status Classification**
+- **Connected:** Fully linked with active data flow.
+- **Partial:** Connected but missing expected data (e.g., no webhooks for deploys).
+- **Missing:** Not connected.
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+### **4.3 Data Completeness Score**
+- Calculate a score (0–100%) per integration based on:
+  - Presence of expected data objects (e.g., repos, issues).
+  - Recency of data (last sync timestamp).
+- Weighted by criticality (e.g., CI/CD deploy data > Slack channel links).
 
-## Out of scope
+### **4.4 Health Dashboard**
+- **Views:**
+  - Summary: Roll-up of all integrations (connected/partial/missing count).
+  - Per-Integration: Details on status, last sync, completeness score, and gaps.
+- **Visuals:**
+  - Traffic-light indicators (green/yellow/red).
+  - Table/list format with sortable columns.
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+### **4.5 Recommendations**
+- **Auto-Detected Gaps:** Examples:
+  - GitHub connected but no repo webhooks → "Set up repo webhooks for PR/commit data."
+  - Slack connected but no channels linked → "Link channels for thread data."
+- **Missing Integrations:** Prioritized list based on user role (e.g., "Engineers: Connect CI/CD tool").
+
+---
+
+## **5. Acceptance Criteria**
+### **5.1 Integration Health Dashboard**
+- [ ] Displays all tracked integrations for a project.
+- [ ] Classifies each integration as **Connected**, **Partial**, or **Missing**.
+- [ ] Shows **last sync timestamp** for each integration.
+- [ ] Includes a **data completeness score (0–100%)** per integration.
+- [ ] Supports filtering/sorting by status, integration type, or score.
+- [ ] Provides drill-down to details (e.g., which repos are missing webhooks).
+
+### **5.2 Data Completeness Scoring**
+- [ ] Score is calculated for each integration automatically.
+- [ ] Score reflects:
+  - **Presence of expected data** (e.g., 10/10 repos = 100% for repos).
+  - **Recency of data** (last sync within 24h = full score; older = penalized).
+- [ ] Scores are updated on sync or manual refresh.
+
+### **5.3 Recommendations**
+- [ ] Generates actionable suggestions for **partial/missing integrations**.
+- [ ] Auto-detects gaps (e.g., "GitHub connected but no deploy webhooks").
+- [ ] Prioritizes recommendations based on user role (e.g., PMs see Jira/Linear first).
+
+### **5.4 Auto-Detection of Gaps**
+- [ ] Identifies lack of webhooks/event triggers despite connection.
+- [ ] Flags stale data (e.g., no new commits in 7+ days for a "connected" repo).
+- [ ] Detects misconfigured integrations (e.g., Jira issues not syncing due to field mapping).
+
+### **5.5 Performance & Reliability**
+- [ ] Dashboard loads in <2s for projects with ≤50 integrations.
+- [ ] Audit runs asynchronously with no impact on sync performance.
+- [ ] Handles API rate limits gracefully (retries, backoff).
+
+---
+
+## **6. Out of Scope**
+- **Automated remediation** of broken integrations.
+- **Deep data validation** (e.g., ensuring Jira issues have valid assignees).
+- **Support for custom/non-standard integrations**.
+- **Historical trend analysis** (e.g., completeness score over time).
+- **User access controls** for integration visibility.
+- **Manual override** of status/classification.
