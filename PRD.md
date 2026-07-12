@@ -98,6 +98,88 @@ This PRD covers the design and implementation of the server-side payload generat
 - **Rate Limiting / Throttling** — Controlling the frequency of payload generation at the infrastructure level.
 - **Data Sourcing / ETL** — Populating the input context from raw data sources; this module assumes a well-formed context is provided by the caller.
 
+---
+
+## Design
+
+### High-Level Architecture
+
+The payload generation module is a deterministic, declarative pipeline:
+
+1. **Input Context** — `InputContext = Record<string, unknown>`. May contain nested objects, arrays, primitives. Caller owns all data.
+2. **Payload Definition** — `PayloadDefinition` declares:
+   - **Fields**: output name → `SourceDefinition` (path, required, defaultValue, async) + `transform` (type, enumMap, derivedFunction, arrayTransform, includeIf) + alias.
+   - **Schema**: JSON Schema (required[], properties[]) used for structured validation.
+3. **Generator Factory** — `createPayloadGenerator(def, options?)`: configures the engine plus an optional `logSink` callback (per FR-6).
+4. **Pipeline** — (synchronous, per task) for each output field:
+   - Resolve the source path (dot + bracket notation) → `FieldResolution` (value, exists).
+   - Apply `defaultValue` when not required and not provided.
+   - Apply transformation chain: array transform → derived function → custom function → enum mapping → type coercion.
+   - Skip the field when `includeIf(condition)` is false.
+5. **Schema Validation** — Uses the `payloadDefinition.schema` (properties + required[]) to collect `ValidationError[]` before returning success.
+6. **Error Handling** — Returns `{ success: false, errors: ValidationError[] }`. Errors include required-field, type, enum, configured-default-missing.
+7. **Observability** — All failures (mapping, rule, validation) produce `LogEntry` objects (timestamp, level, contextId, field, ruleId, reason, inputState). When a logSink is provided, each failure calls `logSink(LogEntry)`. `getLog()/resetLog()` inspect/flush the internal buffer.
+8. **Async Resolution (FR-1)** — If any `SourceDefinition.async` is true, the engine must plumb an async first-pass resolver (`asyncExplore`). The recommend pipeline splits: `syncExplore` resolves immediately reachable fields; then an async fetcher resolves async fields; then the engine matches missing resolver results back to the fields that requested them; only after all pending async calls return does `generate` proceed to build the payload. This keeps the synchronous path (idiomatic for most use cases) unchanged while supporting async lookups.
+
+### Technical Specifications
+
+- **Path Resolution**: Dot syntax (`a.b.c`) and bracket syntax (`a[0].b`) are tokenized and traversed. Intermediate null/undefined returns `exists: false` and `value: undefined`.
+- **Type Coercion**: `type` in `transform.type` supports:
+  - `string` (always `String(value)`)
+  - `number` (parses as float; NaN becomes undefined)
+  - `integer` (truncates float)
+  - `boolean` (truthy“ vs falsy“ using extended falsy set: “0”, “”)
+  - `date` (ISO 8601 `toISOString()` from Date number/date string or Date object)
+  - `epoch` (ms Timestamp from Number/date string or Date object)
+  - `nullable` flag (for date/epoch) – when null/undefined and nullable, value is kept as undefined; otherwise undefined.
+- **Derived Functions (transform.derivedFunction)**:
+  - Built-in: `fullName`, `upper`, `lower`.
+  - Custom: resolved via `transform.derivedFunction` as an alias to a function registered in `functions`.
+  - Behavior: returns the resolved value if present, or runs against `resolved` dictionary combining path conventions (`key`, `parent.key`, `root.key`).
+- **Array Transform** (`transform.arrayTransform`):
+  - Syntax: `transform: "map(prop)"` extracts a property from each element; or `transform: "fn:fnName"` applies a custom function to each element (both call `applyArrayTransform`).
+  - If the source is not an array, value becomes empty array.
+- **Conditional Inclusion** (`transform.includeIf`):
+  - Syntax: `{ field, operator, value }`. Operators: `equals`, `notEquals`, `contains`, `startsWith`, `endsWith`, `greaterThan`, `lessThan`, `exists`.
+  - When false, the field is omitted from output entirely.
+- **Validation**:
+  - `payloadDefinition.schema`: collected under `required` and `properties`.
+  - Errors per property include schemaPath (JSON Pointer style), type, enum, required, configured_default_missing.
+  - Schema-level defaults are applied after field generation but before validation (schema-level `default` → fills properties still missing after field defaults). No other schema features are used; `transform.expression` and `transform.rules` are not supported.
+- **Multiple Schema Versions (FR-5)**:
+  - `PayloadDefinition.schemaVersion` is stored as metadata for migrations.
+  - Validation is performed against the single defined schema referenced by the generator. Managing multiple incoming/outgoing schemas is out-of-scope for this iteration; this commit sets the foundation for future migrations (no-op for v1).
+
+---
+
+## Implementation Notes
+
+### Architecture Notes
+
+- The engine is pure (no external I/O in synchronous mode) and opts into async when needed via `SourceDefinition.async` flags. It avoids side effect pollution by collecting all fetch calls during an `asyncExplore` phase and waiting on them before payload construction.
+- `asyncExplore` tracks field-to-resolver mappings; on each async resolver, the engine registers the field identifier and the resolver function. When the resolver resolves with `{ value, exists }`, it looks up the field's mapping and sets `resolved[path] = result`. Requiredness and defaults are still enforced when evaluating.
+- Error types distinguish configured_default_missing (field missing + no defaultValue) from required (missing and required=true). This helps downstream callers distinguish configuration error vs data availability.
+- Logs are accumulated until reset and, when `logSink` is provided, emitted per failure (to trace pipelines in real-time and keep small in-memory buffers).
+- Schema validation uses a lightweight validator that checks required presence, type, and enum constraints as described above. Structure requirements beyond these are assumed to be upheld by the caller (no runtime enforcement of `anyOf`, `allOf`, `additionalProperties`, etc.). This matches the goal of well-formed production payloads without imposing a full JSON Schema engine.
+
+### Disclaimers
+
+- The async resolution placeholder respects async flags but does not implement actual HTTP/DB lookups; it confirms the plumbing is sufficient for future use. Actual async resolvers will need to depend on an async runtime (e.g., Deno/Node `Promise` returning fetchers) and call the engine.
+- `transform.expression`, `transform.rules` are not implemented. The engine follows the mapping and transform chain without any DSL/JavaScript expression evaluator for derived properties beyond `derivedFunction`.
+- No transport, persistence, rate limiting, or authentication concerns are part of this deliverable.
+
+---
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+---
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored.
+
 ## Requirements
 
 _Owned by the business-analyst — to be authored._
