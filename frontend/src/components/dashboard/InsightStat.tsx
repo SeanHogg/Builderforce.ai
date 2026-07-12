@@ -5,6 +5,8 @@ import type { CSSProperties, ReactNode } from 'react';
 import { Sparkline } from '@/components/charts/Sparkline';
 import { colorAt } from '@/components/charts/chartColors';
 import type { DeltaDirection } from './metricFormat';
+import { TrendArrow, COLORS } from './TrendArrow';
+import type { TrendClassification } from './trend';
 
 /**
  * InsightStat — THE canonical metric card for the Dashboard library.
@@ -45,8 +47,10 @@ export interface InsightStatProps {
   sub?: string;
   /** Daily series → inline sparkline. Omit/empty for a scalar-only card. */
   series?: number[] | null;
-  /** Trend delta chip. */
+  /** Trend delta chip (text-based fallback). */
   delta?: InsightDelta | null;
+  /** TrendClassification from trend.ts (SVG arrow). Takes precedence over delta. */
+  trendClassification?: TrendClassification | null;
   /** Localized "updated Xh ago" recency badge. */
   recencyLabel?: string | null;
   /** Actionable hint / CTA shown at the foot of the card. */
@@ -57,6 +61,8 @@ export interface InsightStatProps {
   color?: string;
   /** Escape hatch for a bespoke chart (back-compat with the old StatCard). */
   chart?: ReactNode;
+  /** Optional polarity hint for backwards-compatibility text chips. */
+  polarity?: boolean | null;
   style?: CSSProperties;
 }
 
@@ -66,6 +72,7 @@ export function InsightStat({
   sub,
   series,
   delta,
+  trendClassification,
   recencyLabel,
   nudge,
   href,
@@ -96,12 +103,17 @@ export function InsightStat({
         )}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, margin: '6px 0 2px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '6px 0 2px' }}>
         <span style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--text-primary)' }}>{value}</span>
-        {delta && (
-          <span style={{ fontSize: '0.74rem', fontWeight: 700, color: TONE_COLOR[delta.tone ?? 'neutral'] }}>
-            {DIRECTION_ARROW[delta.direction]} {delta.label}
-          </span>
+        {/* Trend indicator — SVG arrow (task #307) takes precedence over the legacy text chip. */}
+        {trendClassification ? (
+          <TrendArrow classification={trendClassification} size="small" />
+        ) : (
+          delta && (
+            <span style={{ fontSize: '0.74rem', fontWeight: 700, color: TONE_COLOR[delta.tone ?? 'neutral'] }}>
+              {DIRECTION_ARROW[delta.direction]} {delta.label}
+            </span>
+          )
         )}
       </div>
 

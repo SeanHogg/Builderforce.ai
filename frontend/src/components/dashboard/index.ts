@@ -10,6 +10,15 @@
 // Widgets
 export { InsightStat, type InsightStatProps, type InsightDelta } from './InsightStat';
 export { DashboardWidget } from './DashboardWidget';
+export { TrendArrow, type TrendArrowProps } from './TrendArrow';
+export {
+  classifyTrend,
+  type TrendClassification,
+  type TrendDirection,
+  type TrendState,
+  type MetricPolarity,
+  type TrendTooltip,
+} from './trend';
 
 // Shared metric helpers
 export {
