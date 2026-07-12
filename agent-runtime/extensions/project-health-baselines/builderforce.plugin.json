@@ -1,0 +1,26 @@
+{
+  "id": "project-health-baselines",
+  "name": "Project Health Baselines",
+  "description": "Capture AI responses as immutable, versioned project health baselines with diff, promotion, and audit trail (PRD #294). Tools: baseline.create, baseline.list, baseline.get, baseline.promote, baseline.archive, baseline.diff, baseline.active.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "maxBaselinesPerProject": {
+        "type": "number",
+        "default": 100,
+        "description": "Hard cap on baselines stored per project"
+      },
+      "auditLogPath": {
+        "type": "string",
+        "default": "/tmp/builderforce-baselines-audit.jsonl",
+        "description": "File path for tamper-evident audit logs (empty string = in-memory only)"
+      },
+      "diffTokenBudget": {
+        "type": "number",
+        "default": 10000,
+        "description": "Maximum tokens buffed for diff computation (per PRD AC-8)"
+      }
+    }
+  }
+}
