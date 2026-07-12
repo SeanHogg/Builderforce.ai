@@ -43,7 +43,7 @@ function ApiKeysSettingsLink({ label }: { label: string }) {
   return (
     <RoleGate capability="apiKeys.manage">
       <Link
-        href="/settings/api-keys"
+        href="/settings/integrations"
         style={{
           padding: '6px 12px', fontSize: 12, fontWeight: 600,
           background: 'var(--bg-elevated)', color: 'var(--text-secondary)',

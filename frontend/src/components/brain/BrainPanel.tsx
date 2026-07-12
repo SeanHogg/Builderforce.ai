@@ -1067,7 +1067,7 @@ export function BrainPanel({
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, margin: '8px 12px 0', padding: '8px 12px', fontSize: 13, background: 'var(--warning-bg, rgba(234,179,8,0.12))', color: 'var(--warning-text, #d97706)', border: '1px solid var(--warning-border, rgba(234,179,8,0.3))', borderRadius: 8 }} role="status">
           <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
             {tBrain('providerCapBanner', { providers: conv.providerCap.join(', ') })}{' '}
-            <a href="/settings/api-keys" style={{ color: 'inherit', fontWeight: 600, textDecoration: 'underline' }}>
+            <a href="/settings/integrations" style={{ color: 'inherit', fontWeight: 600, textDecoration: 'underline' }}>
               {tBrain('manageApiKeys')}
             </a>
           </span>
