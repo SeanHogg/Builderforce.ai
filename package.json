@@ -1,0 +1,25 @@
+{
+  "name": "builderforce.ai",
+  "version": "1.0.0",
+  "description": "Builderforce AI platform",
+  "main": "index.js",
+  "scripts": {
+    "test": "npm run test:qa",
+    "test:qa": "npm run --prefix qa-tests test",
+    "test:qa-watch": "npm run --prefix qa-tests test:watch",
+    "test:qa:coverage": "npm run --prefix qa-tests test:coverage",
+    "test:qa:telemetry": "npm run --prefix qa-tests test:telemetry",
+    "test:qa:billing": "npm run --prefix qa-tests test:billing",
+    "test:qa:all": "npm run --prefix qa-tests test:all",
+    "build": "echo 'Build script - configure based on your project'",
+    "dev": "echo 'Dev script - configure based on your project'",
+    "start": "echo 'Start script - configure based on your project'"
+  },
+  "keywords": [
+    "builderforce",
+    "ai",
+    "platform"
+  ],
+  "author": "Builderforce Platform Team",
+  "license": "MIT"
+}

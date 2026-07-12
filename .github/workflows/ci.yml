@@ -12,6 +12,8 @@ name: CI
 # (which DOES need a provisioned throwaway Postgres) remains a separate follow-up.
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
 
@@ -35,3 +37,23 @@ jobs:
       - name: Track manifest valid + generated table in sync
         working-directory: api
         run: node scripts/check-track-manifest.mjs --check
+
+  qa-tests:
+    name: QA Tests (GAP-O1, GAP-O2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm ci
+      - name: Run QA Tests
+        run: npm test -- --passWithNoTests --coverage qa-tests/
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/coverage-final.json
+          flags: qa-tests
+          name: codecov-qatools
+          fail_ci_if_error: false
