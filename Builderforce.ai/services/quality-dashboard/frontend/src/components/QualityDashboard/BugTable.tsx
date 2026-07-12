@@ -4,8 +4,8 @@
  */
 
 import React from "react";
-import { Bug } from "../../../types/quality";
-import { exportBugsToCSV } from "../../../utils/exports";
+import { Bug } from "../../types/quality";
+import { exportBugsToCSV } from "../../utils/exports";
 import "./BugTable.css";
 
 interface BugTableProps {
