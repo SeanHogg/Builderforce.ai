@@ -72,9 +72,11 @@ export const MetricSeverityBadge: React.FC<MetricSeverityBadgeProps> = ({
   
   // Determine icon to render (fallback to auto-detection if manual forced)
   const icon = manualIcon !== undefined ? manualIcon : result.icon;
-  
-  // Critical/No Data state rendering
-  if (result.isNoData) {
+
+  // Critical/No Data state rendering — a manual icon override of 'data' forces
+  // the No Data presentation regardless of the classified value (used for
+  // testability / iframe injection scenarios).
+  if (result.isNoData || icon === 'data') {
     return (
       <span 
         className={`bg-gray-100 text-gray-500 rounded ${sizeClasses[size]}`}
