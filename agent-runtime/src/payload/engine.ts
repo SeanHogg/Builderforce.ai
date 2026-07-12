@@ -218,6 +218,20 @@ function runDerivedFunction(
 /**
  * Extract the requirements from a schema (used to validate top-level fields).
  */
+function emit(log: LogEntry[], options: { logSink?: (entry: LogEntry) => void }) {
+  return (entry: Omit<LogEntry, "timestamp">): void => {
+    const full: LogEntry = { ...entry, timestamp: new Date().toISOString() };
+    log.push(full);
+    if (options.logSink) {
+      try {
+        options.logSink(full);
+      } catch {
+        // A failing sink must never break payload generation.
+      }
+    }
+  };
+}
+
 function getSchemaRequiredFields(schema: Record<string, unknown>): Set<string> {
   const out = new Set<string>();
   const required = schema.required;
