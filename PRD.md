@@ -1,55 +1,58 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #507
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# Product Requirements Document: Escalation Path and Reminder System
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+**Problem:** The absence of a standardized, automated escalation process leads to delayed resolution of critical issues, lack of accountability, and insufficient tracking of escalation lifecycles. This results in prolonged issue resolution times and potential negative impact on business operations.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+**Goal:** To implement a robust, configurable, and automated escalation path and reminder system that ensures timely attention and resolution of critical issues, enhances accountability, and provides a comprehensive audit trail of all escalation activities.
 
-## Target users / ICP roles
+## Target Users / ICP Roles
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+*   **Escalation Initiators:** Project Managers, Team Leads, Engineers, Customer Support Agents.
+*   **Escalation Recipients:** Project Managers, Directors, VPs, C-suite executives (specific to defined escalation chains).
+*   **System Administrators:** Individuals responsible for configuring escalation chains, SLAs, and system settings.
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This project encompasses the development and implementation of a comprehensive escalation management system. Key deliverables include:
+
+*   **Escalation Chain Data Model:** Define the structure for storing escalation paths, including `initiativeId`, `effectiveLevel`, and `sequence`.
+*   **Escalation Log DB Schema and Table Creation:** Database schema for logging all escalation events, outcomes, and resolutions.
+*   **Escalation Manager Service:** A backend service handling the lifecycle of an escalation (start, resolve, notify, deadline computation).
+*   **Escalation Rule Configuration File:** Mechanism for defining and storing team-specific escalation rules and chains.
+*   **Escalation Workflow Icons:** Visual assets to represent different stages or types of escalations.
+*   **Escalation SLA Clock:** A visual and functional component to track the remaining time for an SLA.
+*   **Escalation Reminder Worker:** A scheduled process responsible for sending timely reminders.
+*   **Escalation API:** A programmatic interface for interacting with the escalation system.
+*   **Escalation Status DTO:** Data transfer object for representing the current state of an escalation.
+*   **Escalation Timeline (by Level):** A view or component displaying the progression of an escalation through its defined levels.
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+*   **FR.1 Escalation Chain Configuration:** The system shall allow administrators to define configurable escalation chains per team scope (e.g., PM → Director → VP → C-suite), specifying the order and responsible parties at each level.
+*   **FR.2 Service Level Agreement (SLA):** The system shall enforce a default 3 business days SLA for resolution at each escalation level. This SLA should be configurable per level if needed.
+*   **FR.3 SLA Timer Initiation:** The SLA timer for an escalation level must begin within 15 minutes of the escalation being triggered or escalated to that level.
+*   **FR.4 Automated Reminders:** The system shall automatically send reminders to the current escalation level owner at 24 hours and 4 hours prior to the escalation deadline for their level.
+*   **FR.5 Comprehensive Logging:** For every escalation, the system shall log the resolution outcome, SLA breach status, steps taken during resolution, and any recommended resolution options. This log must be immutable and timestamped.
+*   **FR.6 Escalation API:** Provide a set of APIs to programmatically trigger, update, query the status of, and resolve escalations.
+*   **FR.7 Escalation Status & Timeline Display:** The system shall provide a clear view of an escalation's current status, remaining SLA time, and its progression through the defined timeline by level.
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+*   **AC.1:** A system administrator can successfully define and activate a new team-specific escalation chain with at least three distinct levels and assign specific roles or users to each level.
+*   **AC.2:** When an escalation is initiated, the designated recipient at the first level receives a notification, and the SLA timer for their level starts within 15 minutes.
+*   **AC.3:** If an escalation is not marked as resolved by the current level owner within 3 business days, it automatically escalates to the next defined level in the chain.
+*   **AC.4:** Reminders are automatically sent to the current escalation level recipient at precisely 24 hours and 4 hours before their SLA deadline.
+*   **AC.5:** Upon resolution or closure of an escalation, all mandatory fields (outcome, SLA breach status, steps taken, resolution options) are captured and stored in the immutable escalation log.
+*   **AC.6:** The Escalation API successfully allows an external system to trigger a new escalation and retrieve its current status, including the active level and remaining SLA.
 
-## Out of scope
+## Out of Scope
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+*   Detailed UI/UX design beyond the specified visual deliverables (icons, clock, timeline).
+*   Integration with specific external notification channels (e.g., direct Slack/Email integration) beyond the internal notification mechanism and configurable hooks.
+*   Complex reporting or analytics dashboards based on escalation data (beyond basic logging and timeline views).
+*   Automated escalation *resolution* (the system facilitates, not resolves).
+*   Advanced role-based access control (RBAC) implementation details for the escalation system itself, beyond basic user assignment to escalation levels.
