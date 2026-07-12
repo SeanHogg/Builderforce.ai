@@ -1,0 +1,82 @@
+# Diagnostic Category Mapping Registry
+# Versioned so that changes are auditable.
+version: "1.0.0"
+categories:
+  quality_bugs:
+    name: "Quality & Bugs"
+    diagnosticQuestion: "How many defects exist, and what is their severity distribution?"
+  velocity:
+    name: "Delivery Velocity"
+    diagnosticQuestion: "How fast is the team delivering work?"
+  tech_debt:
+    name: "Technical Debt"
+    diagnosticQuestion: "How much accumulated debt is slowing progress?"
+  test_coverage:
+    name: "Test Coverage"
+    diagnosticQuestion: "How well is the codebase covered by automated tests?"
+  reliability:
+    name: "Reliability & Stability"
+    diagnosticQuestion: "How stable and available is the system in production?"
+  security:
+    name: "Security & Compliance"
+    diagnosticQuestion: "Are there known vulnerabilities or compliance gaps?"
+  dev_experience:
+    name: "Developer Experience"
+    diagnosticQuestion: "How efficient and unblocked is the engineering workflow?"
+  customer_impact:
+    name: "Customer Impact"
+    diagnosticQuestion: "How are defects or incidents affecting end users?"
+  process_health:
+    name: "Process Health"
+    diagnosticQuestion: "Are team processes (reviews, retros, planning) functioning well?"
+  dependencies:
+    name: "Dependency Health"
+    diagnosticQuestion: "Are third-party and internal dependencies up to date and low risk?"
+
+# Mapping rules: each source field matches exactly one category.
+# Fields are case-sensitive by default; pattern rules use exact key as written.
+mappingRules:
+  - sourceFieldKey: "bug_count"
+    sourceSystem: "Jira"
+    category: "quality_bugs"
+  - sourceFieldKey: "open_bugs_critical"
+    sourceSystem: "Jira"
+    category: "quality_bugs"
+  - sourceFieldKey: "story_points_completed"
+    sourceSystem: "Jira"
+    category: "velocity"
+  - sourceFieldKey: "cycle_time_days"
+    sourceSystem: "LinearB"
+    category: "velocity"
+  - sourceFieldKey: "tech_debt_hours"
+    sourceSystem: "SonarQube"
+    category: "tech_debt"
+  - sourceFieldKey: "code_coverage_pct"
+    sourceSystem: "SonarQube"
+    category: "test_coverage"
+  - sourceFieldKey: "p1_incident_count"
+    sourceSystem: "PagerDuty"
+    category: "reliability"
+  - sourceFieldKey: "mttr_minutes"
+    sourceSystem: "PagerDuty"
+    category: "reliability"
+  - sourceFieldKey: "critical_vuln_count"
+    sourceSystem: "Snyk"
+    category: "security"
+  - sourceFieldKey: "pr_review_cycle_hours"
+    sourceSystem: "GitHub"
+    category: "dev_experience"
+  - sourceFieldKey: "customers_affected"
+    sourceSystem: "Zendesk"
+    category: "customer_impact"
+  - sourceFieldKey: "retrospective_action_completion_rate"
+    sourceSystem: "Notion"
+    category: "process_health"
+  - sourceFieldKey: "outdated_dependency_count"
+    sourceSystem: "Dependabot"
+    category: "dependencies"
+
+# Example pattern-based rule family (commented out as template; uncomment to enable).
+# - sourceFieldKey: "bug_*"
+#   sourceSystem: "Jira"
+#   category: "quality_bugs"
