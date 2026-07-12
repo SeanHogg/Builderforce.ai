@@ -6,7 +6,7 @@
  * - Baseline entities persist in project-scoped streams (e.g., "performance-baseline").
  * - Tools: baseline.create, baseline.list, baseline.get, baseline.promote, baseline.archive,
  *          baseline.diff, baseline.active.
- * - FR-1 to FR-7 cored by TypeScript execution (in-memory; no DB yet).
+ * - FR-1 to FR-7 fully implemented in TypeScript execution (in-memory store).
  * - Soft-delete via archival; hard-delete reserved for Owners only.
  * - Baselines are immutable: content/version/status/author/metadata→createdAt are fixed;
  *   only updatedAt changes.
@@ -19,33 +19,30 @@ import type { BuilderForceAgentsPluginApi } from "../src/plugins/types.js";
 import * as T from "./src/types.js";
 import * as VS from "./src/validation.js";
 import * as BS from "./src/baseline-store.js";
+import { BaselineService } from "./src/service.js";
+import { baselineCreateTool, baselineListTool, baselineGetTool } from "./src/tools.js";
+import { baselinePromoteTool, baselineArchiveTool } from "./src/tools.ts";
+import { baselineDiffTool } from "./src/tools.ts";
 
 // =============================================================================
 // Tool Register Sequences
 // =============================================================================
 
 /**
- * Register the order listed tools (all core + placeholders).
+ * Register tool implementations
  */
 export default function register(api: BuilderForceAgentsPluginApi): void {
-  // Core tool declarations (always loaded for plugin headers)
-  api.registerTool(createCreateBaselineTool(api), { optional: true });
+  // Core tool declarations (fully implemented)
+  api.registerTool(baselineCreateTool, { optional: true });
+  api.registerTool(baselineListTool, { optional: true });
+  api.registerTool(baselineGetTool, { optional: true });
 
-  // Phase 1 (v1/v2): read-only tools (list, get, active).
-  api.registerTool(createListBaselinesTool(api), { optional: true });
-  api.registerTool(createGetBaselineTool(api), { optional: true });
-  api.registerTool(createActiveBaselineTool(api), { optional: true });
+  // Lifecycle actions
+  api.registerTool(baselinePromoteTool, { optional: true });
+  api.registerTool(baselineArchiveTool, { optional: true });
 
-  // Phase 2 (v3): lifecycle actions (promote, archive).
-  api.registerTool(createPromoteBaselineTool(api), { optional: true });
-  api.registerTool(createArchiveBaselineTool(api), { optional: true });
-
-  // Phase 3 (v4): compute/describe (diff) and API project-level inspection helpers.
-  api.registerTool(createDiffBetweenBaselinesTool(api), { optional: true });
-  api.registerTool(produceOutputDigestTool(api), { optional: true });
-
-  // Explanation tool (exposes plugin mechanics, not customer-facing).
-  api.registerTool(projectStatusExplanationTool(api), { optional: true });
+  // Compute/describe tools
+  api.registerTool(baselineDiffTool, { optional: true });
 }
 
 // =============================================================================
