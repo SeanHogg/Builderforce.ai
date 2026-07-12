@@ -47,18 +47,111 @@ app.add_middleware(
 
 # Mock data cache
 MOCK_BACKLOG = [
-    {"id": "BUG-1001", "title": "Memory leak in auth service", "severity": "Critical", "status": "Open", "assignee": "alice", "created_at": "2025-04-01T10:00:00Z", "duration_days": 14, "project_id": 1, "team": "auth", "component": "auth-service"},
-    {"id": "BUG-1002", "title": "Login form validation issue", "severity": "High", "status": "Open", "assignee": "bob", "created_at": "2025-04-03T11:30:00Z", "duration_days": 12, "project_id": 1, "team": "auth", "component": "ui"},
-    {"id": "BUG-1003", "title": "Missing error messages on API", "severity": "High", "status": "Open", "assignee": "carol", "created_at": "2025-04-02T09:00:00Z", "duration_days": 13, "project_id": 2, "team": "payments", "component": "api"},
-    {"id": "BUG-1004", "title": "Currency formatting broken in EU", "severity": "Medium", "status": "New", "assignee": "bob", "created_at": "2025-04-05T13:00:00Z", "duration_days": 10, "project_id": 2, "team": "payments", "component": "ui"},
-    {"id": "BUG-1005", "title": "API documentation outdated", "severity": "Low", "status": "New", "assignee": "alice", "created_at": "2025-04-06T14:00:00Z", "duration_days": 9, "project_id": 1, "team": "docs", "component": "docs"},
-    {"id": "BUG-1006", "title": "Null pointer crash on reload", "severity": "Critical", "status": "Open", "assignee": "dave", "created_at": "2025-03-20T08:00:00Z", "duration_days": 17, "project_id": 3, "team": "core", "component": "core"},
-    {"id": "BUG-1007", "title": "Slow page load on mobile", "severity": "Medium", "status": "Open", "assignee": "carol", "created_at": "2025-03-25T10:00:00Z", "duration_days": 12, "project_id": 3, "team": "performance", "component": "frontend"},
-    {"id": "BUG-1008", "title": "Export button unresponsive", "severity": "Low", "status": "New", "assignee": "bob", "created_at": "2025-04-06T15:00:00Z", "duration_days": 8, "project_id": 2, "team": "ui", "component": "ui"},
+    {
+        "id": "BUG-1001",
+        "title": "Memory leak in auth service",
+        "severity": "Critical",
+        "status": "Open",
+        "assignee": "alice",
+        "created_at": "2025-04-01T10:00:00Z",
+        "duration_days": 14,
+        "project_id": 1,
+        "team": "auth",
+        "component": "auth-service"
+    },
+    {
+        "id": "BUG-1002",
+        "title": "Login form validation issue",
+        "severity": "High",
+        "status": "Open",
+        "assignee": "bob",
+        "created_at": "2025-04-03T11:30:00Z",
+        "duration_days": 12,
+        "project_id": 1,
+        "team": "auth",
+        "component": "ui"
+    },
+    {
+        "id": "BUG-1003",
+        "title": "Missing error messages on API",
+        "severity": "High",
+        "status": "Open",
+        "assignee": "carol",
+        "created_at": "2025-04-02T09:00:00Z",
+        "duration_days": 13,
+        "project_id": 2,
+        "team": "payments",
+        "component": "api"
+    },
+    {
+        "id": "BUG-1004",
+        "title": "Currency formatting broken in EU",
+        "severity": "Medium",
+        "status": "New",
+        "assignee": "bob",
+        "created_at": "2025-04-05T13:00:00Z",
+        "duration_days": 10,
+        "project_id": 2,
+        "team": "payments",
+        "component": "ui"
+    },
+    {
+        "id": "BUG-1005",
+        "title": "API documentation outdated",
+        "severity": "Low",
+        "status": "New",
+        "assignee": "alice",
+        "created_at": "2025-04-06T14:00:00Z",
+        "duration_days": 9,
+        "project_id": 1,
+        "team": "docs",
+        "component": "docs"
+    },
+    {
+        "id": "BUG-1006",
+        "title": "Null pointer crash on reload",
+        "severity": "Critical",
+        "status": "Open",
+        "assignee": "dave",
+        "created_at": "2025-03-20T08:00:00Z",
+        "duration_days": 17,
+        "project_id": 3,
+        "team": "core",
+        "component": "core"
+    },
+    {
+        "id": "BUG-1007",
+        "title": "Slow page load on mobile",
+        "severity": "Medium",
+        "status": "Open",
+        "assignee": "carol",
+        "created_at": "2025-03-25T10:00:00Z",
+        "duration_days": 12,
+        "project_id": 3,
+        "team": "performance",
+        "component": "frontend"
+    },
+    {
+        "id": "BUG-1008",
+        "title": "Export button unresponsive",
+        "severity": "Low",
+        "status": "New",
+        "assignee": "bob",
+        "created_at": "2025-04-06T15:00:00Z",
+        "duration_days": 8,
+        "project_id": 2,
+        "team": "ui",
+        "component": "ui"
+    },
 ]
 
 severity_order = ["Critical", "High", "Medium", "Low"]
-severity_colors = {"Critical": "#EF4444", "High": "#F59E0B", "Medium": "#10B981", "Low": "#6B7280"}
+severity_colors = {
+    "Critical": "#EF4444",
+    "High": "#F59E0B",
+    "Medium": "#10B981",
+    "Low": "#6B7280"
+}
 
 def apply_filters(bugs: List[Dict[str, Any]], project_id: Optional[int] = None,
                   team: Optional[str] = None, component: Optional[str] = None,
@@ -96,6 +189,9 @@ async def root():
             "all_bugs": "/api/v1/bugs/list",
             "sync_jira": "/api/v1/sync/jira",
             "sync_github": "/api/v1/sync/github",
+            "export_csv": "/api/v1/export/csv",
+            "export_pdf": "/api/v1/export/pdf",
+            "health": "/api/v1/health",
         }
     }
 
@@ -193,9 +289,9 @@ async def get_severity_breakdown(
     Returns severity breakdown for current open bugs.
     """
     try:
-        all_open = [b for b in [`BUG-1001`, `BUG-1002`, `BUG-1003`, `BUG-1004`, `BUG-1005`, `BUG-1006`, `BUG-1007`, `BUG-1008`] if True]  # placeholder if needed
-
-        filtered_bugs = apply_filters(MOCK_BACKLOG, project_id, team, component, assignee)
+        # Filter to open status only
+        all_open = [b for b in MOCK_BACKLOG if b.get("status") in ["Open", "New"]]
+        filtered_bugs = apply_filters(all_open, project_id, team, component, assignee)
         breakdown = {severity: 0 for severity in severity_order}
         for severity in severity_order:
             count = sum(1 for b in filtered_bugs if b.get("severity") == severity)
@@ -230,10 +326,7 @@ async def get_bugs_list(
         if status:
             filtered_bugs = [b for b in filtered_bugs if b.get("status") == status]
 
-        if "status" in locals() and status:
-            filtered_bugs = [b for b in filtered_bugs if b.get("status") == status]  # Redundant but opportunistic placeholder
-
-        # Placeholder if needing time window filter by status; not enforced here
+        # Time window filter on list results
         bugs_in_window = filter_by_time_window(filtered_bugs, time_window_days)
         total = len(bugs_in_window)
 
@@ -364,6 +457,7 @@ async def export_pdf(
     """
     Export filtered bugs summary to PDF.
     Includes summary counts, severity chart, and trend chart.
+    Note: PDF generation requires full chart rendering and reportlab support; currently returns JSON export.
     """
     try:
         summary_response = await get_bug_count_summary(
@@ -424,7 +518,7 @@ async def export_pdf(
         json_report = json.dumps(report_data, indent=2)
         output = io.BytesIO(json_report.encode("utf-8"))
 
-        filename = "quality-bugs-report.json"  # JSON placeholder for PDF generation
+        filename = "quality-bugs-report.json"
         output.seek(0)
 
         return StreamingResponse(
