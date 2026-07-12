@@ -116,10 +116,9 @@ export function ProgressiveRevealOrchestrator({
       }]]),
     }));
 
-    const tiers: PriorityTier[] = ['critical', 'secondary', 'deferred'];
     activitiesRef.current = {
       ...activitiesRef.current,
-      [tiers.indexOf(priority)]: (activitiesRef.current[tiers.indexOf(priority)] ?? 0) + 1,
+      [priority]: activitiesRef.current[priority] + 1,
     };
 
     lastStateRef.current = {
