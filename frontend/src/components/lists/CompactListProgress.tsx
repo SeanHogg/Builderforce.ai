@@ -103,10 +103,11 @@ export function CompactListProgress({
         {Array.from({ length: 3 }, (_, i) => (
           <div key={i} role="listitem" style={skeletonRow}>
             <span style={skeletonLabel} aria-hidden>
-              ——
+              ————————
             </span>
+            <span style={skeletonBar} aria-hidden />
             <span style={skeletonPerc} aria-hidden>
-              {(i - 1) / 2 * 100}%
+              —
             </span>
           </div>
         ))}
