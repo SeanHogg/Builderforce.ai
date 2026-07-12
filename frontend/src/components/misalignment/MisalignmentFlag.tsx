@@ -38,19 +38,24 @@ export const MisalignmentFlag = ({
 
   const hasMultipleChecks = checks.length > 1;
   const Explainer = (() => {
-    const first = checks[0];
-    if (!first) return null;
+    if (checks.length === 0) return null;
+
+    // Show the first check's explanation
+    const firstCheck = checks[0];
+    const explanation = formatExplanation(firstCheck);
+    const hint = getExplanationHint(firstCheck);
+
     return (
       <div className="flex max-w-sm flex-col items-start gap-0.5 text-xs">
-        {first.i18n?.mechanism || 'Priority misalignment detected'}
-        {first.detachedReason && first.detachedReason !== 'N/A' && (
-          <span className="text-muted-foreground">
-            ({first.detachedReason})
+        <span>{explanation}</span>
+        {hint && (
+          <span className="text-muted-foreground mt-1">
+            {hint}
           </span>
         )}
         {hasMultipleChecks && (
-          <span className="text-muted-foreground">
-            +{checks.length - 1} more
+          <span className="ml-1">
+            (+{checks.length - 1} {t('moreChecks')})
           </span>
         )}
       </div>
