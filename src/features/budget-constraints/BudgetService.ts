@@ -178,7 +178,7 @@ class BudgetService {
       (a) =>
         a.threshold === threshold &&
         a.status !== 'failed' &&
-        a.timestamp > twentyFourHoursAgo
+        a.triggeredAt > twentyFourHoursAgo
     );
 
     return !recentAlert;
