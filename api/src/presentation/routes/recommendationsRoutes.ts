@@ -3,9 +3,10 @@
  *
  * Two prescriptive surfaces that sit ON TOP of the existing read-only lenses:
  *
- *   GET  /recommendations         ranked prescriptive actions + anomalies [manager]
- *   POST /recommendations/dismiss { recKey } — hide an acknowledged rec      [manager]
- *   GET  /space                   SPACE five-dimension productivity scores  [developer]
+ *   GET  /recommendations          ranked prescriptive actions + anomalies [manager]
+ *   POST /recommendations/dismiss  { recKey } — hide an acknowledged rec     [manager]
+ *   POST /recommendations/feedback { recKey, vote, reason? } — 👍/👎 + text  [manager]
+ *   GET  /space                    SPACE five-dimension productivity scores [developer]
  *
  * Mounted at '/api/insights' alongside createInsightsRoutes (Hono merges the two
  * routers under the same base). Recommendations/SPACE are recomputed live from the
@@ -19,7 +20,7 @@ import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { scope } from './segmentTrackerRoutes';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
-import { computeRecommendations, dismissRecommendation } from '../../application/insights/recommendationsEngine';
+import { computeRecommendations, dismissRecommendation, recordFeedback } from '../../application/insights/recommendationsEngine';
 import { computeSpaceMetrics } from '../../application/insights/spaceMetrics';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
@@ -70,6 +71,28 @@ export function createRecommendationsRoutes(db: Db): Hono<HonoEnv> {
     await dismissRecommendation(db, tenantId, recKey, userId);
     await bumpCacheVersion(c.env as Env, recsVersionKey(tenantId));
     return c.json({ dismissed: recKey });
+  });
+
+  // Feedback (👍 / 👎 + optional free text) on a recommendation by its stable
+  // rec_key (manager) — FR-6. Upserts one row per (tenant, user, rec_key) so a
+  // user can change their mind; the reason is optional and capped at 500 chars.
+  // Feedback does NOT hide the rec (that is dismiss); it is analytics signal only,
+  // so no cache version bump is needed.
+  router.post('/recommendations/feedback', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId } = scope(c);
+    const body = await c.req.json<{ recKey?: unknown; vote?: unknown; reason?: unknown }>()
+      .catch(() => ({} as { recKey?: unknown; vote?: unknown; reason?: unknown }));
+    const recKey = typeof body.recKey === 'string' ? body.recKey.trim() : '';
+    if (!recKey || recKey.length > 120) return c.json({ error: 'recKey is required' }, 400);
+    const vote = typeof body.vote === 'string' ? body.vote.trim().toLowerCase() : '';
+    if (vote !== 'up' && vote !== 'down') return c.json({ error: 'vote must be "up" or "down"' }, 400);
+    let reason: string | null = typeof body.reason === 'string' ? body.reason.trim() : null;
+    if (reason && reason.length > 500) reason = reason.slice(0, 500);
+    if (reason === '') reason = null;
+    const userId = (c.get('userId') as string | undefined) ?? '';
+    if (!userId) return c.json({ error: 'unauthenticated' }, 401);
+    await recordFeedback(db, tenantId, recKey, userId, vote === 'up', vote === 'down', reason);
+    return c.json({ recKey, vote, reason });
   });
 
   // SPACE metrics (developer+; complements DORA). Short TTL over hot tables.
