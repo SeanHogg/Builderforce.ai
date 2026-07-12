@@ -1,55 +1,55 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #368
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# Epic: Engagement Workflow — Messaging, Milestones, Timecards, Disputes & Contracts (P1)
+
+P1 functional gaps identified from the Upwork gap analysis. Resolves direct employer-freelancer messaging, milestone/payment-release gates for fixed-bid work, timecard submit/approve workflow for hourly work, dispute resolution, and contract/terms + IP enforcement. Blocked by Financial Plumbing (payment-release gates need money movement first).
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+The goal of this project is to fill P1 functional gaps in Upwork's engagement workflow, addressing direct employer-freelancer messaging, milestone/payment-release gates for fixed-bid work, timecard submit/approve workflow for hourly work, dispute resolution, and contract/terms + IP enforcement.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+## Target Users / ICP Roles
 
-## Target users / ICP roles
-
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+This project will primarily benefit freelancers and direct employers on Upwork. Freelancers will benefit from direct messaging and milestone/payment-release gates, while direct employers will benefit from timecard submit/approve workflows and dispute resolution features.
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This PRD outlines the functional requirements for the Epic P1 engagement workflow, focusing on direct messaging, milestone/payment-release gates, timecard submit/approve workflows, dispute resolution, and contract/terms + IP enforcement.
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### Direct Messaging
+
+* Allow direct employer and freelancer messaging channels.
+* Implement a conversation history and messaging sharing feature.
+
+### Milestones & Payment Release Gates
+
+* Introduce milestone/payment-release gates for fixed-bid work.
+* Establish a tiered payment structure with milestones.
+* Implement a system to track and control milestone progress.
+
+### Timecard Submit & Approve Workflow
+
+* Create a timecard submit/approve workflow for hourly work.
+* Allow freelancers to attach time tracking documentation.
+* Automate timecard approval with clear absentee and time-off request processes.
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+| Feature | Acceptance Criteria |
+| --- | --- |
+| Direct Messaging | Freelancer can initiate direct messaging with direct employer. |
+| Milestones & Payment Release Gates | Freelancer completes a fixed-bid milestone to unlock payment. |
+| Timecard Submit & Approve Workflow | Freelancer submits a timecard with time tracking documentation. **(Automated approval required)** |
+| Dispute Resolution | Freelancer and direct employer can initiate a dispute via their respective messaging channels. Dispute is assessed automatically. |
+| Contract & Terms | Additional terms and conditions added to platform for freelancer + direct employer agreements. |
 
-## Out of scope
+## Out of Scope
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+* Extensive overtime features or step-rate pay settings.
+* Importing of recurring work by direct employers.
+* Full export or import of Upwork data for data analysis or reconciliation purposes.
+
+[P1 PRD - Product Requirements Document]
