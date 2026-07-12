@@ -65,6 +65,39 @@ export interface VerdictResult {
 }
 
 /** Band a 0..1-ish component into a 0..100 sub-score against four thresholds. */
+
+/**
+ * Define and export tier boundaries for use by Yellow risk-indicator components.
+ * All thresholds are inclusive at the lower bound.
+ * - Yellow: 50–74 (additive risk tier introduced for Yellow risk indicator PRD).
+ */
+export const TIER_BOUNDARIES = {
+  yellow: [50, 74],
+  watch: [60, Infinity],
+  at_risk: [40, 59],
+  healthy: [80, Infinity],
+  critical: [0, 39],
+} as const;
+
+/**
+ * Schema for tier specraries used by UI components and backend calls.
+ * Tier definitions support frontend Badge rendering, audit schema, and the backend hooking.
+ */
+export type TierSpec = typeof TIER_BOUNDARIES[keyof typeof TIER_BOUNDARIES];
+
+export type TierRange = readonly [number, number];
+
+/** Whether a score falls within the Yellow tier boundaries (50–74). */
+export function isYellow(score: number | null): boolean {
+  return (score ?? 0) >= 50 && (score ?? 0) <= 74;
+}
+
+/** Whether the score transitions across the Yellow boundary. */
+export function isYellowTransition(oldScore: number | null, newScore: number | null): boolean {
+  const nowYellow = isYellow(newScore);
+  const prevYellow = isYellow(oldScore);
+  return nowYellow !== prevYellow;
+}
 function band(value: number, t: [number, number, number], higherIsBetter: boolean): number {
   const [a, b, c] = t;
   if (higherIsBetter) {
