@@ -110,3 +110,34 @@ export function formatRecency(at: string | number | null | undefined, t: Transla
   const days = Math.floor(hrs / 24);
   return t('recency.daysAgo', { n: days });
 }
+
+/**
+ * Derive a prior-period value and current-period value to feed classifyTrend.
+ * Uses the last two points in a daily series, treating the most recent as current
+ * and the previous day as prior. Returns null if fewer than two points exist.
+ *
+ * @param series - Daily numeric series
+ * @returns Pairs of current/prior values or null.
+ */
+export function trendAnchorPoints(series: number[]): [current: number | null, prior: number | null] {
+  if (!series || series.length < 2) return [null, null];
+  const prior = series[series.length - 2];
+  const current = series[series.length - 1];
+  return [current, prior];
+}
+
+/**
+ * Build a TrendClassification from a raw daily series and metric polarity.
+ * This replaces the legacy buildInsightDelta with a proper SVG arrow.
+ * Returns null if insufficient series data.
+ */
+export function buildTrendClassification(
+  series: number[],
+  polarity: MetricPolarity,
+  thresholdPct?: number,
+): TrendClassification | null {
+  const [current, prior] = trendAnchorPoints(series);
+  if (current === null || prior === null) return null;
+  // Anchor is zero or both zero: classifyTrend handles those and sets hasData=false.
+  return classifyTrend(current, prior, polarity, thresholdPct ?? 2);
+}
