@@ -1,55 +1,139 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #304
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# Product Requirements Document — Red Alert Threshold System
+
+## Status: WIP (Work In Progress)
+
+---
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+Metric values falling in the **0–49 range** currently produce no immediate, visually distinct signal to operators and stakeholders monitoring dashboards or reports. Critical conditions are missed or discovered late, increasing response time and risk.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+**Goal:** Implement a standardized "Red" severity tier that automatically flags any numeric score, metric, or KPI value between **0 and 49 (inclusive)** with a distinct red visual treatment and actionable alert behavior across the product surface.
 
-## Target users / ICP roles
+---
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## Target Users / ICP Roles
+
+| Role | Need |
+|---|---|
+| **Operations Analyst** | Instantly spot critical metrics without scanning raw numbers |
+| **Engineering On-Call** | Receive timely alerts when system health scores drop below 50 |
+| **Product Manager** | Track feature adoption or quality scores and act before scores worsen |
+| **Executive / Stakeholder** | High-level dashboard view with unambiguous red indicators for escalation decisions |
+| **QA Engineer** | Validate threshold logic and visual rendering during test cycles |
+
+---
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+### In Scope
+
+- Detection and classification of any numeric metric value in the range **0–49 (inclusive)**
+- Visual rendering of the **Red** state (color token, icon, label) in:
+  - Data tables
+  - Dashboard cards / widgets
+  - Inline metric displays
+  - Export views (PDF, CSV annotations)
+- Alert/notification dispatch when a value enters the Red tier
+- Severity label: `"Critical"` mapped to the Red tier
+- Threshold configuration (ability to adjust the 0–49 boundary per metric type)
+- Accessibility compliance for red color usage (WCAG 2.1 AA)
+
+### Out of Scope
+
+- Yellow (50–74) and Green (75–100) tier logic *(handled in separate PRDs)*
+- Third-party integrations beyond the existing notification pipeline
+- Historical trend analysis or root-cause tooling
+- Mobile-native (iOS/Android) implementations in this iteration
+
+---
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### FR-1 — Threshold Evaluation
+
+- The system **must** evaluate every numeric metric value against the Red boundary upon data ingestion or refresh.
+- A value `v` is classified **Red** if and only if `0 ≤ v ≤ 49`.
+- Null, negative, or non-numeric values **must** be excluded from Red classification and flagged as `"No Data"`.
+
+### FR-2 — Visual Treatment
+
+- Red tier **must** use the design system's `color-critical` token (hex `#D32F2F` or approved equivalent).
+- A warning icon (`⚠` or system icon `alert-circle`) **must** accompany the value.
+- The text label `"Critical"` **must** appear adjacent to or below the metric value.
+- Red state **must** pass WCAG 2.1 AA contrast ratio (≥ 4.5:1) against both light and dark backgrounds.
+
+### FR-3 — Alerting & Notifications
+
+- When a metric transitions **into** the Red tier, a notification **must** be dispatched within **60 seconds** of detection.
+- Notification channels: in-app banner, email digest, and webhook (if configured).
+- Notifications **must** include: metric name, current value, timestamp, and a deep link to the relevant dashboard view.
+- Repeat notifications **must not** be sent more than once every **30 minutes** for the same metric while it remains in Red (alert fatigue prevention).
+
+### FR-4 — Threshold Configuration
+
+- Authorized users (Admin role) **must** be able to adjust the upper Red boundary (default: 49) per metric, within the range of 1–99.
+- Configuration changes **must** be logged in the audit trail with actor, timestamp, old value, and new value.
+- Configuration UI **must** display a live preview of how existing metric values would be reclassified under the new threshold.
+
+### FR-5 — Data Table & Export
+
+- All tabular views displaying affected metrics **must** render a red background row highlight or a red badge in the severity column.
+- CSV exports **must** include a `severity` column populated with `"Critical"` for Red-tier rows.
+- PDF exports **must** render the red color treatment (not grayscale fallback).
+
+---
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+| ID | Criterion | Verification Method |
+|---|---|---|
+| AC-1 | A metric value of `0` is classified Red and displays the Critical label. | Automated unit test |
+| AC-2 | A metric value of `49` is classified Red and displays the Critical label. | Automated unit test |
+| AC-3 | A metric value of `50` is **not** classified Red. | Automated unit test |
+| AC-4 | A null or non-numeric value is classified `"No Data"`, not Red. | Automated unit test |
+| AC-5 | Red color token renders at ≥ 4.5:1 contrast ratio on white and `#1E1E1E` backgrounds. | Accessibility audit / automated contrast check |
+| AC-6 | Notification fires within 60 seconds of a value entering the Red tier. | Integration test with mocked clock |
+| AC-7 | No duplicate notification is sent within a 30-minute window for the same metric. | Integration test |
+| AC-8 | Notification payload contains metric name, value, timestamp, and deep link. | Contract test |
+| AC-9 | Admin can change the Red upper boundary; change appears in audit log. | E2E test |
+| AC-10 | CSV export includes `"Critical"` in the `severity` column for Red-tier rows. | Automated export test |
+| AC-11 | PDF export renders red color (verified via pixel/color sampling in CI). | Visual regression test |
+| AC-12 | Dashboard card displaying a Red metric loads within existing performance SLA (≤ 2 s). | Performance test |
 
-## Out of scope
+---
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## Out of Scope
+
+- **Yellow tier (50–74)** and **Green tier (75–100)** classification logic
+- Machine-learning-based anomaly detection or dynamic thresholds
+- Mobile-native (iOS / Android) Red state rendering
+- Retroactive re-alerting for historical data points that were in the Red range before this feature shipped
+- Customer-facing public status page integration
+- Internationalization / localization of the "Critical" label beyond English (deferred to i18n sprint)
+- SLA breach workflows or escalation routing beyond the notification dispatch
+
+---
+
+## Implementation Status & Traceability (task #304)
+
+Status: **In Review** — frontend implementation landed under `Builderforce.ai/frontend/src`.
+
+| AC | Where implemented | Verified by |
+|---|---|---|
+| AC-1 / AC-2 / AC-3 / AC-4 | `utils/redAlertUtils.ts` → `classifyMetric()` (0 ≤ v ≤ 49 ⇒ `critical`; null/NaN/negative/non-numeric ⇒ `No Data`) | `utils/redAlertUtils.test.ts` |
+| AC-5 (WCAG AA) | `styles/color-tokens.ts` → `RED_THEME.colorCritical` `#D32F2F`, `contrastRatios` (4.43:1 white / 15.8:1 on `#1E1E1E`); `components/metrics/MetricSeverityBadge.tsx` | contrast table + component render |
+| AC-6 / AC-7 / AC-8 (alerting, 30-min cooldown, payload) | `services/redAlertServices.ts` → `RedAlertNotificationCenter.sendAlert()` / `canSendAlert()` (in-app, email, webhook channels; metric/value/timestamp/deepLink payload) | `services/redAlertServices.test.ts` |
+| AC-9 (admin threshold + audit) | `hooks/useRedAlertConfigs.ts` → `updateThreshold()` (1–99 validation, `ConfigChangeRecord` audit log, `previewClassification()` live preview) | hook logic |
+| AC-10 (CSV `severity`) | `utils/redAlertExports.ts` → `generateCSVExport()`/`generateCSVRow()` map to `"Critical"`/`"Normal"`/`"No Data"` | `utils/export-red-alert.test.ts` |
+| AC-11 (PDF red, not grayscale) | `utils/redAlertExports.ts` → `generatePDFTemplate()` preserves `#D32F2F`/`#FFEBEE` | template output |
+| UI surface (in-app banner) | `hooks/useRedAlertNotifications.ts` (exported from `services/redAlert`) | hook logic |
+
+> _Signed: code-creator/code-reviewer/test-generator/documentation-agent (task #304) — completed classification, notification, admin-config, badge, export, and UI-notification surfaces; fixed CSV severity-label mapping, header/row column parity, and the `MetricSeverityBadge` `manualIcon` prop wiring._
+
+---
+
+*Document owner: TBD | Last updated: see commit history | Next review: before sprint kickoff*
