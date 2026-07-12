@@ -5,7 +5,8 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
-import { generateCSVExport, generateCSVRow, generatePDFTemplate, MetricExportRow, MetricSeverity } from './redAlertExports';
+import type { MetricSeverity } from '../utils/redAlertUtils';
+import { generateCSVExport, generateCSVRow, generatePDFTemplate, MetricExportRow } from './redAlertExports';
 
 describe('CSV Export for Red Alert Threshold System', () => {
   describe('AC-10: CSV export includes Critical severity column', () => {
