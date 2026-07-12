@@ -103,12 +103,17 @@ export function InsightStat({
         )}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, margin: '6px 0 2px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '6px 0 2px' }}>
         <span style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--text-primary)' }}>{value}</span>
-        {delta && (
-          <span style={{ fontSize: '0.74rem', fontWeight: 700, color: TONE_COLOR[delta.tone ?? 'neutral'] }}>
-            {DIRECTION_ARROW[delta.direction]} {delta.label}
-          </span>
+        {/* Trend indicator — SVG arrow (task #307) takes precedence over the legacy text chip. */}
+        {trendClassification ? (
+          <TrendArrow classification={trendClassification} size="small" />
+        ) : (
+          delta && (
+            <span style={{ fontSize: '0.74rem', fontWeight: 700, color: TONE_COLOR[delta.tone ?? 'neutral'] }}>
+              {DIRECTION_ARROW[delta.direction]} {delta.label}
+            </span>
+          )
         )}
       </div>
 
