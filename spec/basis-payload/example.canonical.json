@@ -167,5 +167,16 @@
       }
     ],
     "environment": "production"
+  },
+  "extensions": {
+    "com.builderforce.review": {
+      "reviewer_agent_id": "agent-code-reviewer-v1",
+      "verdict": "approved",
+      "severity_max": "low"
+    },
+    "com.acme.risk": {
+      "risk_score": 0.12,
+      "risk_band": "low"
+    }
   }
 }
