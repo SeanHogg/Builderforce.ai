@@ -1,311 +1,344 @@
 /**
  * Alert Delivery Service
- * Handles sending alerts via multiple channels with SLA tracking
+ * Manages alert sending, status tracking, and SLA compliance monitoring
  */
 
-import { Alert, DeliveryChannel, DeliveryStatus, AlertDeliveryEvent, AlertDeliveryMetrics, SLA_CONFIG } from './types';
-
-interface ChannelConfig {
-  enabled: boolean;
-  apiKey?: string;
-  config?: Record<string, any>;
-}
-
-interface AlertDeliveryServiceOptions {
-  email?: ChannelConfig;
-  slack?: ChannelConfig;
-  sms?: ChannelConfig;
-  alertStorage?: any;
-  eventStorage?: any;
-  metricsStorage?: any;
-}
+import { Alert, DeliveryChannel, DeliveryStatus, SLAConfig, DeliveryResult } from './types';
+import { NotificationService } from './notification-service';
 
 export class AlertDeliveryService {
-  public readonly email: ChannelConfig;
-  public readonly slack: ChannelConfig;
-  public readonly sms: ChannelConfig;
+  private alerts: Map<string, Alert> = new Map();
+  private deliveryAttempts: Map<string, number> = new Map();
+  private readonly slaConfig: SLAConfig;
+  private readonly notificationService: NotificationService;
 
-  constructor(private options: AlertDeliveryServiceOptions = {}) {
-    this.email = options.email || { enabled: false };
-    this.slack = options.slack || { enabled: false };
-    this.sms = options.sms || { enabled: false };
+  constructor(
+    slaConfig: SLAConfig = {
+      requiredDeliveryRate: 0.99,
+      slatimeMinutes: 5,
+      maxRetries: 2,
+    }
+  ) {
+    this.slaConfig = slaConfig;
+    this.notificationService = new NotificationService();
+
+    this.enableSLAMonitoring();
   }
 
   /**
    * Send alert across configured channels
    */
   async sendAlert(alert: Partial<Alert>): Promise<string> {
-    const alertId = alert.id || this.generateAlertId();
-
-    const alertRecord: Alert = {
-      id: alertId,
+    const id = this.generateAlertId();
+    
+    const fullAlert: Alert = {
+      id,
       severity: alert.severity || 'medium',
-      title: alert.title,
-      message: alert.message,
-      recipient: alert.recipient,
+      title: alert.title!,
+      message: alert.message!,
+      recipient: alert.recipient!,
       channel: alert.channel || ['email'],
       status: 'pending',
       createdAt: new Date(),
-      retryCount: 0,
-      maxRetries: SLA_CONFIG.retryAttempts,
-      slaBreached: false,
+      sentAt: null,
+      deliveredAt: null,
+      failedAt: null,
+      failureReason: null,
       metadata: alert.metadata || {},
     };
 
-    await this.saveAlert(alertRecord);
+    this.alerts.set(id, fullAlert);
+    this.deliveryAttempts.set(id, 0);
 
-    // Send across all configured channels
-    for (const chan of alertRecord.channel) {
-      await this.sendToChannel(alertRecord, chan);
+    console.log(`[AlertDelivery] Sending alert ${id}: ${fullAlert.title}`);
+
+    // Send across all channels
+    const results = await Promise.allSettled(
+      fullAlert.channel.map((channel) => this.sendChannelAlert(id, fullAlert, channel))
+    );
+
+    // Update status based on results
+    const failedChannels = results
+      .filter((r) => r.status === 'rejected' || r.value?.status === 'failed')
+      .map((r) => r.value);
+
+    if (failedChannels.length === fullAlert.channel.length) {
+      this.handleDeliveryFailure(id, fullAlert, 'All channels failed');
+      fullAlert.status = 'failed';
+      return id;
+    } else if (failedChannels.length > 0) {
+      this.handlePartialDelivery(id, fullAlert, failedChannels);
+      fullAlert.status = 'partial';
+    } else {
+      fullAlert.status = 'delivered';
+      this.notificationService.notifySuccess(id, fullAlert);
     }
 
-    return alertId;
+    this.alerts.set(id, fullAlert);
+    return id;
   }
 
   /**
-   * Send alert to a specific channel
+   * Send alert on a specific channel
    */
-  private async sendToChannel(alert: Alert, channel: DeliveryChannel): Promise<void> {
-    await this.updateAlertStatus(alert.id, 'sent', channel);
+  private async sendChannelAlert(
+    alertId: string,
+    alert: Alert,
+    channel: DeliveryChannel
+  ): Promise<DeliveryResult> {
+    const attempts = this.deliveryAttempts.get(alertId) || 0;
+
+    if (attempts >= this.slaConfig.maxRetries) {
+      return {
+        alertId,
+        channel,
+        status: 'failed',
+        sentAt: alert.sentAt!,
+        timestamp: new Date(),
+        error: 'Max retries exceeded',
+      };
+    }
+
+    this.deliveryAttempts.set(alertId, attempts + 1);
+    const attemptNumber = attempts + 1;
+
+    console.log(`[AlertDelivery] Attempting ${attemptNumber}/${this.slaConfig.maxRetries} on ${channel}`);
 
     try {
-      switch (channel) {
-        case 'email':
-          await this.sendEmail(alert);
-          break;
-        case 'slack':
-          await this.sendSlack(alert);
-          break;
-        case 'sms':
-          await this.sendSMS(alert);
-          break;
+      // Simulate channel delivery
+      const result = await this.simulateChannelDelivery(alert, channel);
+
+      if (result.status === 'failed') {
+        return result;
       }
 
-      // Mark as delivered
-      await this.updateAlertStatus(alert.id, 'delivered', channel);
-      this.recordEvent({
-        id: this.generateEventId(),
-        alertId: alert.id,
-        channel,
-        action: 'delivered',
-        timestamp: new Date(),
-        recipient: alert.recipient,
-      });
-    } catch (error: any) {
-      // Mark as failed
-      await this.updateAlertStatus(alert.id, 'failed', channel);
-      this.recordEvent({
-        id: this.generateEventId(),
-        alertId: alert.id,
-        channel,
-        action: 'failed',
-        timestamp: new Date(),
-        recipient: alert.recipient,
-        error: error.message,
-      });
-    }
-  }
+      this.deliveryAttempts.set(alertId, 0); // Reset on success
 
-  /**
-   * Email delivery handler
-   */
-  private async sendEmail(alert: Alert): Promise<void> {
-    if (!this.email.enabled || !this.email.apiKey) {
-      throw new Error('Email channel not configured');
-    }
-
-    // Implement email sending - uses configured SMTP or Email API
-    // This would integrate with SendGrid, AWS SES, or similar
-    console.log(`[AlertDelivery] Sending email to ${alert.recipient}: ${alert.title}`);
-    
-    // Simulate delivery
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    if (Math.random() > 0.9) {
-      throw new Error('Email delivery simulation failure');
-    }
-  }
-
-  /**
-   * Slack delivery handler
-   */
-  private async sendSlack(alert: Alert): Promise<void> {
-    if (!this.slack.enabled || !this.slack.apiKey) {
-      throw new Error('Slack channel not configured');
-    }
-
-    // Implement Slack webhook or API call
-    const webhookUrl = this.slack.config?.webhookUrl;
-    if (!webhookUrl) {
-      throw new Error('Slack webhook URL not configured');
-    }
-
-    console.log(`[AlertDelivery] Sending Slack message to ${alert.recipient}: ${alert.title}`);
-    
-    // Simulate delivery
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-
-  /**
-   * SMS delivery handler
-   */
-  private async sendSMS(alert: Alert): Promise<void> {
-    if (!this.sms.enabled || !this.sms.apiKey) {
-      throw new Error('SMS channel not configured');
-    }
-
-    // Implement SMS gateway integration (Twilio, etc.)
-    console.log(`[AlertDelivery] Sending SMS to ${alert.recipient}: ${alert.title}`);
-    
-    // Simulate delivery
-    await new Promise((resolve) => setTimeout(resolve, 150));
-
-    if (alert.recipient.length < 10) {
-      throw new Error('Invalid phone number format');
-    }
-  }
-
-  /**
-   * Update alert status
-   */
-  private async updateAlertStatus(
-    alertId: string,
-    status: DeliveryStatus,
-    channel: DeliveryChannel
-  ): Promise<void> {
-    const alert = await this.loadAlert(alertId);
-    if (!alert) return;
-
-    alert.status = status;
-    alert.sentAt = alert.sentAt || new Date();
-
-    switch (status) {
-      case 'delivered':
-        alert.deliveredAt = new Date();
-        alert.retryCount = 0;
-        break;
-      case 'failed':
-        alert.failedAt = new Date();
-        alert.retryCount += 1;
-
-        // Retry if possible
-        if (alert.retryCount < SLA_CONFIG.retryAttempts) {
-          console.log(`[AlertDelivery] Retrying ${alertId} (attempt ${alert.retryCount + 1})`);
-          await this.sendToChannel(alert, channel);
-          return;
+      // Update alert
+      const updatedAlert = alert;
+      if (alert.sentAt) {
+        updatedAlert.sentAt = new Date();
+        if (channel === 'email') {
+          updatedAlert.deliveredAt = new Date();
         }
-        
-        // Check SLA breach
-        await this.checkSlaBreach(alert);
-        break;
-    }
+        updatedAlert.status = 'delivered';
+      }
 
-    await this.saveAlert(alert);
+      return {
+        alertId,
+        channel,
+        status: result.status,
+        sentAt: new Date(),
+        timestamp: new Date(),
+        error: result.error,
+      };
+    } catch (error: any) {
+      console.error(`[AlertDelivery] Failed to send on ${channel}:`, error);
+
+      return {
+        alertId,
+        channel,
+        status: 'failed',
+        sentAt: new Date(),
+        timestamp: new Date(),
+        error: error.message,
+      };
+    }
   }
 
   /**
-   * Check SLA breach for alert
+   * Simulate channel delivery (integration point)
    */
-  private async checkSlaBreach(alert: Alert): Promise<void> {
-    const deliveryTime = alert.deliveredAt?.getTime() || alert.sentAt?.getTime() || Date.now();
-    const slaExpiry = alert.sentAt?.getTime() + SLA_CONFIG.deliveryTimeoutMs;
+  private async simulateChannelDelivery(alert: Alert, channel: DeliveryChannel): Promise<DeliveryResult> {
+    // In production, integrate with actual channel providers:
+    // - Email: sendgrid, aws ses
+    // - Slack: slack api
+    // - SMS: twilio, nexmo
+
+    const seeds = {
+      email: 0.9,
+      slack: 0.95,
+      sms: 0.85,
+    };
+
+    const successProbability = seeds[channel] || 0.8;
+    const shouldFail = Math.random() > successProbability;
+
+    if (shouldFail) {
+      return {
+        alertId: alert.id,
+        channel,
+        status: 'failed',
+        sentAt: new Date(),
+        timestamp: new Date(),
+        error: `Simulated ${channel} delivery failure`,
+      };
+    }
+
+    return {
+      alertId: alert.id,
+      channel,
+      status: 'delivered',
+      sentAt: new Date(),
+      timestamp: new Date(),
+    };
+  }
+
+  /**
+   * Handle delivery failure
+   */
+  private handleDeliveryFailure(alertId: string, alert: Alert, reason: string): void {
+    console.error(`[AlertDelivery] Delivery failed for ${alertId}:`, reason);
     
-    if (slaExpiry && deliveryTime > slaExpiry) {
-      alert.slaBreached = true;
-      alert.slaBreachedAt = new Date();
-      console.warn(`[SLA] Alert ${alertId} breached SLA - delivery took ${(deliveryTime - (alert.sentAt?.getTime() || 0)) / 1000}s`);
-    }
+    const updated = alert;
+    updated.status = 'failed';
+    updated.failedAt = new Date();
+    updated.failureReason = reason;
 
-    await this.saveAlert(alert);
-  }
+    this.alerts.set(alertId, updated);
 
-  /**
-   * Record delivery event
-   */
-  private recordEvent(event: AlertDeliveryEvent): void {
-    // Persist event to storage
-    console.log(`[AlertDeliveryEvent] ${event.action.toUpperCase()} - ${event.alertId}:${event.channel}`);
-  }
-
-  /**
-   * Load alert from storage
-   */
-  private async loadAlert(alertId: string): Promise<Alert | null> {
-    try {
-      return await this.options.alertStorage?.get(alertId);
-    } catch {
-      // Fallback to in-memory storage
-      return this.memoryAlerts.get(alertId);
+    // Trigger SLA breach notification if applicable
+    if (alert.sentAt) {
+      const ageInMinutes = (Date.now() - alert.sentAt.getTime()) / (1000 * 60);
+      
+      if (ageInMinutes > this.slaConfig.slatimeMinutes) {
+        this.notificationService.notifySLABreach(alert);
+      }
     }
   }
 
   /**
-   * Save alert to storage
+   * Handle partial delivery
    */
-  private async saveAlert(alert: Alert): Promise<void> {
-    await this.options.alertStorage?.set(alert.id, alert);
-    this.memoryAlerts.set(alert.id, alert);
+  private handlePartialDelivery(
+    alertId: string,
+    alert: Alert,
+    failedChannels: DeliveryResult[]
+  ): void {
+    const updated = alert;
+    updated.status = 'partial';
+    updated.metadata = {
+      ...alert.metadata,
+      failedChannels: failedChannels.map((c) => c.channel),
+    };
 
-    // Update metrics
-    const metrics = await this.getMetrics();
-    metrics.totalSent++;
+    this.alerts.set(alertId, updated);
     
-    if (alert.status === 'delivered') {
-      metrics.totalDelivered++;
-      const avgDeliveryTime = this.calculateAverageDeliveryTime(alert);
-      metrics.averageDeliveryTimeMs = this.ewma(
-        metrics.averageDeliveryTimeMs,
-        avgDeliveryTime,
-        0.1
-      );
-    } else if (alert.status === 'failed') {
-      metrics.totalFailed++;
-    }
+    const failedNames = failedChannels.map((c) => c.channel).join(', ');
+    this.notificationService.notifyPartialDelivery(alertId, alert, failedNames);
+  }
 
-    await this.options.metricsStorage?.set('alertDelivery', metrics);
+  /**
+   * Get alert by ID
+   */
+  getAlert(id: string): Alert | undefined {
+    return this.alerts.get(id);
+  }
+
+  /**
+   * List alerts with filters
+   */
+  listAlerts(filters?: {
+    status?: DeliveryStatus;
+    channel?: DeliveryChannel[];
+    severity?: string;
+    startDate?: Date;
+    endDate?: Date;
+  }): Alert[] {
+    return Array.from(this.alerts.values()).filter((alert) => {
+      if (filters?.status && alert.status !== filters.status) return false;
+      if (filters?.channel && !filters.channel.includes(alert.channel[0] || 'email')) return false;
+      if (filters?.severity && alert.severity !== filters.severity) return false;
+      if (filters?.startDate && alert.createdAt < filters.startDate) return false;
+      if (filters?.endDate && alert.createdAt > filters.endDate) return false;
+      return true;
+    });
   }
 
   /**
    * Get delivery metrics
    */
-  async getMetrics(): Promise<AlertDeliveryMetrics> {
-    const metrics = await this.options.metricsStorage?.get('alertDelivery');
+  getMetrics(): {
+    totalSent: number;
+    totalDelivered: number;
+    totalFailed: number;
+    slaBreached: number;
+    complianceRate: number;
+    averageDeliveryTimeMs: number;
+    channelStats: {
+      email: { sent: number; delivered: number; failed: number };
+      slack: { sent: number; delivered: number; failed: number };
+      sms: { sent: number; delivered: number; failed: number };
+    };
+  } {
+    const allAlerts = Array.from(this.alerts.values());
     
-    if (metrics) {
-      metrics.slaComplianceRate = metrics.slaBreached === 0
-        ? 100
-        : ((metrics.totalSent - metrics.slaBreached) / metrics.totalSent) * 100;
-      return metrics;
-    }
+    const totalSent = allAlerts.length;
+    const totalDelivered = allAlerts.filter(a => a.status === 'delivered').length;
+    const totalFailed = allAlerts.filter(a => a.status === 'failed').length;
+    
+    const slaBreached = allAlerts.filter(a => 
+      a.status !== 'failed' && 
+      a.sentAt && 
+      (Date.now() - a.sentAt.getTime()) > this.slaConfig.slatimeMinutes * 60 * 1000
+    ).length;
+
+    const complianceRate = totalSent > 0 ? (totalDelivered / totalSent) * 100 : 100;
+    
+    const emailStats = this.calculateChannelStats(allAlerts, 'email');
+    const slackStats = this.calculateChannelStats(allAlerts, 'slack');
+    const smsStats = this.calculateChannelStats(allAlerts, 'sms');
+    
+    const totalDeliveredTime = allAlerts
+      .filter(a => a.deliveredAt && a.sentAt)
+      .reduce((acc, a) => acc + (a.deliveredAt!.getTime() - a.sentAt!.getTime()), 0);
+    const avgDeliveryTimeMs = totalDeliveredTime / allAlerts.filter(a => a.deliveredAt && a.sentAt).length || 0;
 
     return {
-      totalSent: 0,
-      totalDelivered: 0,
-      totalFailed: 0,
-      slaBreached: 0,
-      slaComplianceRate: 100,
-      averageDeliveryTimeMs: 0,
-      channelStats: {
-        email: { sent: 0, delivered: 0, failed: 0 },
-        slack: { sent: 0, delivered: 0, failed: 0 },
-        sms: { sent: 0, delivered: 0, failed: 0 },
-      },
+      totalSent,
+      totalDelivered,
+      totalFailed,
+      slaBreached,
+      complianceRate,
+      averageDeliveryTimeMs,
+      channelStats: { email: emailStats, slack: slackStats, sms: smsStats },
     };
   }
 
   /**
-   * Calculate average delivery time for an alert
+   * Calculate channel-specific statistics
    */
-  private calculateAverageDeliveryTime(alert: Alert): number {
-    if (!alert.sentAt || !alert.deliveredAt) return 0;
-    return alert.deliveredAt.getTime() - alert.sentAt.getTime();
+  private calculateChannelStats(
+    alerts: Alert[],
+    channel: DeliveryChannel
+  ): { sent: number; delivered: number; failed: number } {
+    return {
+      sent: alerts.filter(a => a.channel.includes(channel)).length,
+      delivered: alerts.filter(a => a.channel.includes(channel) && a.status === 'delivered').length,
+      failed: alerts.filter(a => a.channel.includes(channel) && a.status === 'failed').length,
+    };
   }
 
   /**
-   * Exponential Weighted Moving Average for metrics
+   * Enable SLA monitoring
    */
-  private ewma(prev: number, curr: number, alpha: number): number {
-    return alpha * curr + (1 - alpha) * prev;
+  private enableSLAMonitoring(): void {
+    const checkInterval = setInterval(async () => {
+      const alerts = Array.from(this.alerts.values()).filter(a => 
+        a.sentAt && !a.deliveredAt && !a.failedAt
+      );
+
+      for (const alert of alerts) {
+        const ageInMinutes = (Date.now() - alert.sentAt!.getTime()) / (1000 * 60);
+        
+        if (ageInMinutes > this.slaConfig.slatimeMinutes) {
+          this.notificationService.notifySLABreach(alert);
+          alert.status = 'sla-breach';
+        }
+      }
+    }, 60 * 1000); // Check every minute
+
+    // Cleanup interval on service destruction (not implemented)
   }
 
   /**
@@ -316,14 +349,11 @@ export class AlertDeliveryService {
   }
 
   /**
-   * Generate unique event ID
+   * Get SLA configuration
    */
-  private generateEventId(): string {
-    return `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  getSLAConfig(): SLAConfig {
+    return { ...this.slaConfig };
   }
-
-  // In-memory storage for demo/simulation
-  private memoryAlerts = new Map<string, Alert>();
 }
 
 // Export singleton instance
