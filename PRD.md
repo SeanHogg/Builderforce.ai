@@ -1,55 +1,50 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #374
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# Direct Messaging (employer ↔ freelancer)
 
-## Problem & Goal
+**Problem & Goal**
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+Upwork users, particularly freelancers and employers, require a messaging system within direct communication to better collaborate on job-specific activities and tasks.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+**Target Users / ICP Roles**
 
-## Target users / ICP roles
+* Freelancers
+	+ Incorporate direct messaging into the Upwork workflow.
+	+ Facilitate job-specific discussions and interactions.
+	+ Improve communication and collaboration.
+* Employers
+	+ Streamline communication with freelancers during job execution.
+	+ Enhance collaboration with freelancers.
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+**Scope**
 
-## Scope
+This functionality is limited to direct employer-freelancer communication within specific engagements. It does not include group or one-on-one messaging.
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+**Functional Requirements**
 
-## Functional Requirements
+| ID | Description |
+|---|---|
+| **1.** | Users can send and receive direct messages within their Upwork account. |
+| **2.** | Employers and freelancers can exchange messages tied to an engagement. |
+| **3.** | Maintain unread counts for all messages. |
+| **4.** | Trigger notification events for unread messages and when messages are read. |
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+**Acceptance Criteria**
 
-## Acceptance Criteria
+| ID | Description |
+|---|---|
+| **Requirement #1.** | Users can create an Upwork account and establish direct messages with their preferred connection style (email, phone, or direct messaging handle). |
+| **Requirement #2.** | When multiple parties are in a conversation, the oldest message appears at the top, and new messages are displayed below the oldest. |
+| **Requirement #3.** | Users can send messages, and the recipient has the option to read or ignore the message. When a user reads a message, it should be removed from the conversation thread. |
+| **Requirement #4.** | Users receive a notification indicating they have a new unread message, boss, or unread notifications overall. Notifications should be guided by system rules providing appropriate frequency and urgency. |
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+**Out of Scope**
 
-## Out of scope
+This functionality does not cover the following:
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+* Group messages (e.g., for freelancer teams).
+* Simultaneous multi-party conversations (e.g., covered by Upwork's core UX).
+* Voice and video communication.
+* Personal digital assistants (PDAs).
+* System-initiated transactional messages (e.g., password reset and Slack-like notification).
