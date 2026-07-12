@@ -79,14 +79,15 @@ export function ProgressiveRevealOrchestrator({
         error: null,
         timestamp: 0,
         timeoutMs: effectiveTimeout,
+        timeoutHandle: undefined,
       });
 
       const timeoutHandle = setTimeout(() => {
         const current = streamsRef.current.get(key);
         if (current && !current.resolved) {
           const err = new Error(`${key} timed out after ${effectiveTimeout}ms`);
-          if (streamsRef.current.get(key)?.timeoutHandle) {
-            clearTimeout(streamsRef.current.get(key)!.timeoutHandle!);
+          if (current.timeoutHandle) {
+            clearTimeout(current.timeoutHandle);
           }
           fail(key, err);
         }
@@ -121,9 +122,28 @@ export function ProgressiveRevealOrchestrator({
 
       callbacks?.onStreamResolve?.(streamsRef.current.get(key)!);
       activitiesRef.current[stream.priority + 'Resolved']++;
-      updateCurrentStage();
+
+      // Recalculate current stage
+      const resolvedStages: Stage[] = [];
+      streamsRef.current.forEach((s) => {
+        if (!s.resolved) return;
+        switch (s.priority) {
+          case 'critical':
+            resolvedStages.push(1);
+            break;
+          case 'secondary':
+            resolvedStages.push(2);
+            break;
+          case 'deferred':
+            resolvedStages.push(3);
+            break;
+        }
+      });
+
+      const currentStage = resolvedStages.length > 0 ? Math.max(...resolvedStages) : 0;
+      lastStateRef.current = { currentStage, lastTransitionAt: performance.now() };
     },
-    [callbacks, updateCurrentStage],
+    [callbacks],
   );
 
   /** Mark a stream as failed and advance orchestration */
@@ -146,9 +166,28 @@ export function ProgressiveRevealOrchestrator({
       }
 
       callbacks?.onStreamTimeout?.(streamsRef.current.get(key)!);
-      updateCurrentStage();
+
+      // Recalculate current stage
+      const resolvedStages: Stage[] = [];
+      streamsRef.current.forEach((s) => {
+        if (!s.resolved) return;
+        switch (s.priority) {
+          case 'critical':
+            resolvedStages.push(1);
+            break;
+          case 'secondary':
+            resolvedStages.push(2);
+            break;
+          case 'deferred':
+            resolvedStages.push(3);
+            break;
+        }
+      });
+
+      const currentStage = resolvedStages.length > 0 ? Math.max(...resolvedStages) : 0;
+      lastStateRef.current = { currentStage, lastTransitionAt: performance.now() };
     },
-    [callbacks, updateCurrentStage],
+    [callbacks],
   );
 
   /** Reset a specific or all streams */
@@ -159,7 +198,6 @@ export function ProgressiveRevealOrchestrator({
         if (s) {
           if (s.timeoutHandle) {
             clearTimeout(s.timeoutHandle);
-            streamsRef.current.get(key)!.timeoutHandle = undefined;
           }
           streamsRef.current.delete(key);
           activitiesRef.current[s.priority + 'Started']--;
@@ -180,19 +218,39 @@ export function ProgressiveRevealOrchestrator({
           deferredStarted: 0,
         };
         Object.assign(activitiesRef.current, zero);
-        updateCurrentStage();
+        const resolvedStages: Stage[] = [];
+        streamsRef.current.forEach((s) => {
+          if (!s.resolved) return;
+          switch (s.priority) {
+            case 'critical':
+              resolvedStages.push(1);
+              break;
+            case 'secondary':
+              resolvedStages.push(2);
+              break;
+            case 'deferred':
+              resolvedStages.push(3);
+              break;
+          }
+        });
+
+        const currentStage = resolvedStages.length > 0 ? Math.max(...resolvedStages) : 0;
+        lastStateRef.current = { currentStage, lastTransitionAt: performance.now() };
       }
     },
-    [updateCurrentStage],
+    [],
   );
 
-  /** Stage-data slices; null when no streams are tracked */
-  const stage1Data = streamsRef.current.size > 0 ? streamsRef.current.get('critical')?.data ?? null : null;
-  const stage2Data = streamsRef.current.size > 0 ? streamsRef.current.get('secondary')?.data ?? null : null;
-  const stage3Data = streamsRef.current.size > 0 ? streamsRef.current.get('deferred')?.data ?? null : null;
+  /** Get active streams count for stage thresholds */
+  const activeStreamCount = streamsRef.current.size;
 
-  /** Determine current stage based on resolved streams */
-  const updateCurrentStage = useCallback(() => {
+  /** Memoized context value exported to consumers */
+  const value = useMemo((): ProgressiveRevealContextValue => {
+    const resolvedCount =
+      activitiesRef.current.criticalResolved +
+      activitiesRef.current.secondaryResolved +
+      activitiesRef.current.deferredResolved;
+
     const resolvedStages: Stage[] = [];
     streamsRef.current.forEach((s) => {
       if (!s.resolved) return;
@@ -209,25 +267,8 @@ export function ProgressiveRevealOrchestrator({
       }
     });
 
-    const currentStage = resolvedStages.length > 0 ? Math.max(...resolvedStages) : 0;
-    lastStateRef.current = { currentStage, lastTransitionAt: performance.now() };
-  }, []);
-
-  /** Memoized context value exported to consumers */
-  const value = useMemo((): ProgressiveRevealContextValue => {
-    const resolvedCount =
-      activitiesRef.current.criticalResolved +
-      activitiesRef.current.secondaryResolved +
-      activitiesRef.current.deferredResolved;
-
     return {
-      currentStage: resolvedCount > 0
-        ? Math.max(
-            activitiesRef.current.criticalResolved ? 1 : 0,
-            activitiesRef.current.secondaryResolved ? 2 : 0,
-            activitiesRef.current.deferredResolved ? 3 : 0,
-          )
-        : 0,
+      currentStage: resolvedCount > 0 ? Math.max(...resolvedStages) : 0,
       lastTransitionAt: lastStateRef.current.lastTransitionAt
         ? Number(lastStateRef.current.lastTransitionAt.toFixed(3))
         : undefined,
@@ -237,16 +278,16 @@ export function ProgressiveRevealOrchestrator({
       resolve,
       fail,
       reset,
-      stage1Data,
-      stage2Data,
-      stage3Data,
+      stage1Data: streamsRef.current.size > 0 ? streamsRef.current.get('critical')?.data ?? null : null,
+      stage2Data: streamsRef.current.size > 0 ? streamsRef.current.get('secondary')?.data ?? null : null,
+      stage3Data: streamsRef.current.size > 0 ? streamsRef.current.get('deferred')?.data ?? null : null,
       criticalCount: activitiesRef.current.criticalResolved,
       secondaryCount: activitiesRef.current.secondaryResolved,
       deferredCount: activitiesRef.current.deferredResolved,
     };
-  }, [callbacks, register, resolve, fail, reset, stage1Data, stage2Data, stage3Data]);
+  }, [callbacks, register, resolve, fail, reset]);
 
-  /** Housekeeping: clean up timers on mount */
+  /** Housekeeping: clean up timers on unmount */
   React.useEffect(() => {
     return () => {
       streamsRef.current.forEach((s) => {
