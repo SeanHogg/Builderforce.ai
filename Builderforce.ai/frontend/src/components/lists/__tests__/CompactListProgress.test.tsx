@@ -74,13 +74,41 @@ describe('CompactListProgress (AC-1..AC-11, FR-1..FR-8, FR-3, FR-6, FR-7, FR-8)'
     });
 
     it('AC-8: sortBy=progress_desc puts highest first', () => {
-      render(<CompactListProgress items={itemsDef} sortBy="progress_desc" emptyText="No items" />);
-      // We find a row with label 'Deferred Delta' (8/8 = 100%).
-      const row = screen.queryByText('Deferred Delta');
-      expect(row).toBeInTheDocument();
-      // Defensive: if multiple items share the value, we still have at least one row with expected status.
+      const sample: PList = [
+        { id: 's1', label: 'Low', completed: 1, total: 10, status: 'in_progress' }, // 10%
+        { id: 's2', label: 'High', completed: 9, total: 10, status: 'in_progress' }, // 90%
+        { id: 's3', label: 'Mid', completed: 5, total: 10, status: 'in_progress' }, // 50%
+      ];
+      render(<CompactListProgress items={sample} sortBy="progress_desc" emptyText="No items" />);
       const rows = screen.getAllByRole('listitem');
-      expect(rows.length).toBeGreaterThan(0);
+      expect(rows.length).toBe(3);
+      // Rows must be ordered High (90%) -> Mid (50%) -> Low (10%).
+      expect(within(rows[0]!).getByText('High')).toBeInTheDocument();
+      expect(within(rows[1]!).getByText('Mid')).toBeInTheDocument();
+      expect(within(rows[2]!).getByText('Low')).toBeInTheDocument();
+    });
+
+    it('AC-8b: sortBy=progress_asc puts lowest first', () => {
+      const sample: PList = [
+        { id: 's1', label: 'Low', completed: 1, total: 10, status: 'in_progress' }, // 10%
+        { id: 's2', label: 'High', completed: 9, total: 10, status: 'in_progress' }, // 90%
+        { id: 's3', label: 'Mid', completed: 5, total: 10, status: 'in_progress' }, // 50%
+      ];
+      render(<CompactListProgress items={sample} sortBy="progress_asc" emptyText="No items" />);
+      const rows = screen.getAllByRole('listitem');
+      expect(within(rows[0]!).getByText('Low')).toBeInTheDocument();
+      expect(within(rows[2]!).getByText('High')).toBeInTheDocument();
+    });
+
+    it('default (no sortBy) preserves the input order', () => {
+      const sample: PList = [
+        { id: 's1', label: 'Zeta', completed: 1, total: 10, status: 'in_progress' },
+        { id: 's2', label: 'Alpha', completed: 9, total: 10, status: 'in_progress' },
+      ];
+      render(<CompactListProgress items={sample} emptyText="No items" />);
+      const rows = screen.getAllByRole('listitem');
+      expect(within(rows[0]!).getByText('Zeta')).toBeInTheDocument();
+      expect(within(rows[1]!).getByText('Alpha')).toBeInTheDocument();
     });
   });
 
