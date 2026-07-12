@@ -9,3 +9,4 @@ export * from './Issue';
 export * from './ChangeSet';
 export * from './PipelineRun';
 export * from './ObservabilityAlert';
+export * from './Message';
