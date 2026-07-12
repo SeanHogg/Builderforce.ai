@@ -139,7 +139,8 @@ class BudgetService {
       constraintId,
       spentAmount,
       remainingAmount,
-      burnRate: 0, // Would be calculated based on historical data
+      // Store raw historical spend for burn-rate computation; compute/attach separately as needed.
+      burnRate: 0,
       timestamp: new Date(),
     };
 
