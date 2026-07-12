@@ -242,6 +242,11 @@ describe('Task.update() parentTaskId preservation (AC-1..AC-4)', () => {
 
       expect(reparented.assignedAgentRef).toBe(oldAgent);
       expect(reparented.parentTaskId).toBe((epic.id + 1) as TaskId);
+      // FR-1/FR-2 (re-parent only): verify the persisted child has the new parent
+      // and retains the original assignee.
+      const persisted = await repo.findById(child.id as TaskId);
+      expect(persisted?.assignedAgentRef).toBe(oldAgent);
+      expect(persisted?.parentTaskId).toBe((epic.id + 1) as TaskId);
     });
   });
 
