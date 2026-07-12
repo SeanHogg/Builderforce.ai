@@ -212,11 +212,6 @@ function StatusBadge({ status }: { status: string }) {
   </span>;
 }
 
-/* ── Invariants mapping (removed previous getColorByStatus) ───────────────── */
-function getStatusColor(status: string): CSSProperties['color'] {
-  return getColorByStatus(status);
-}
-
 /* ── Styles (FR-3) ───────────────────────────────────────────────────────── */
 const row: CSSProperties = {
   display: 'flex',
