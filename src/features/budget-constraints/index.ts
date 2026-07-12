@@ -5,7 +5,13 @@
  * and reporting as defined in the Budget Constraints PRD.
  */
 
-export { BudgetConstraint } from './BudgetConstraint';
+export type {
+  BudgetConstraint,
+  BudgetSnapshot,
+  BudgetAlert,
+  BudgetOverride,
+  BudgetReport,
+} from './BudgetConstraint';
 export * from './BudgetService';
 export * from './BudgetEnforcement';
 export * from './AlertService';
