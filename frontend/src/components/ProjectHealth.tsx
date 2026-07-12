@@ -75,6 +75,8 @@ export interface ProjectHealthBadgeProps {
  * Compact health readout for dense rows: a tier-coloured "Health NN" chip and a
  * slim progress bar with "% done". Reuses {@link computeProjectHealth} so it can
  * never drift from the gauges. Renders a muted dash when there's no task data.
+ *
+ * Yellow tier (50–74) is rendered with the warning icon and "At Risk" label.
  */
 export function ProjectHealthBadge({ project }: ProjectHealthBadgeProps) {
   const t = useTranslations('projectCard');
@@ -84,9 +86,15 @@ export function ProjectHealthBadge({ project }: ProjectHealthBadgeProps) {
   }
 
   const tierLabel = health.tier ? t(`tier.${health.tier}`) : t('tier.noData');
+  
+  // Use "At Risk" explicitly for Yellow tier; fall back to the tier label for others.
+  const displayLabel = health.tier === 'yellow' ? 'At Risk' : tierLabel;
   const healthAria = health.healthScore != null
     ? t('healthAria', { score: health.healthScore, tier: tierLabel })
     : t('healthNoDataAria');
+
+  // Include the warning icon for Yellow tier as required by FR-2.
+  const icon = health.tier === 'yellow' ? '⚠' : null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 120 }}>
@@ -100,11 +108,13 @@ export function ProjectHealthBadge({ project }: ProjectHealthBadgeProps) {
             borderRadius: 999, padding: '2px 8px', whiteSpace: 'nowrap',
           }}
         >
+          {/* warning icon for Yellow tier */}
+          {icon && <span aria-hidden>⚠</span>}
           <span style={{ width: 8, height: 8, borderRadius: '50%', background: health.color, flexShrink: 0 }} aria-hidden />
           {health.healthScore ?? '—'}
         </span>
         <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-          {tierLabel}
+          {displayLabel}
         </span>
       </div>
       <div

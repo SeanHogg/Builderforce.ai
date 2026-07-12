@@ -17,7 +17,7 @@ import { computeDeliveryVerdict, type Verdict } from '@/lib/deliveryVerdict';
  *    tab. Null when there's no delivery data yet (no deploys / throughput).
  */
 
-export type HealthTier = 'healthy' | 'watch' | 'at_risk' | 'critical';
+export type HealthTier = 'healthy' | 'watch' | 'yellow' | 'at_risk' | 'critical';
 
 export interface ProjectHealth {
   /** False when the project has no (non-archived) tasks → render a neutral "no data" state. */
@@ -31,6 +31,10 @@ export interface ProjectHealth {
   verdict: Verdict;
   /** Tier for the score, or null when healthScore is null. */
   tier: HealthTier | null;
+  /** Previous tier and score when computing health for the next update; used to
+   *  detect Yellow transitions for notifications and audit logging. */
+  previousTier: HealthTier | null;
+  previousScore: number | null;
   /** Tier colour (hex, stable across themes — same convention as chartColors);
    *  neutral border colour when there's no health score. */
   color: string;
@@ -44,16 +48,32 @@ export interface ProjectHealth {
 const TIER_COLOR: Record<HealthTier, string> = {
   healthy: '#22c55e',
   watch: '#eab308',
+  yellow: '#F5A623',
   at_risk: '#f59e0b',
   critical: '#ef4444',
 };
 
 const NO_SCORE_COLOR = 'var(--border-subtle)';
 
-/** Map a 0–100 score to a tier (shared so the badge + gauge agree). */
+/** Whether a score transition crosses the Yellow boundary (50–74).
+ *  Returns true if score goes from NOT yellow (score < 50 or score > 74) TO yellow (score >= 50 and score <= 74),
+ *  or FROM yellow TO not yellow. Detects entry or exit events. */
+export function isYellowTransition(oldScore: number | null, newScore: number | null): boolean {
+  const nowYellow = newScore != null && newScore >= 50 && newScore <= 74;
+  const prevYellow = oldScore != null && oldScore >= 50 && oldScore <= 74;
+  return nowYellow !== prevYellow;
+}
+
+/** Map a 0–100 score to a tier (shared so the badge + gauge agree).
+ *
+ *  Yellow tier (50–74): for the Yellow risk indicator feature (Yellow: 50–74).
+ *  Watch (60+): kept for compatibility; label controlled by i18n.
+ *  At-risk (40–49): kept for compatibility; label controlled by i18n (may be aliased to Yellow in future).
+ */
 export function healthTier(score: number): HealthTier {
   if (score >= 80) return 'healthy';
   if (score >= 60) return 'watch';
+  if (score >= 50) return 'yellow';
   if (score >= 40) return 'at_risk';
   return 'critical';
 }

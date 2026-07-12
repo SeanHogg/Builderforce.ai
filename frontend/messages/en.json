@@ -1,0 +1,20 @@
+{
+  "currency": {
+    "usd": "USD",
+    "en-us": "English",
+    "selectedCurrency": "Selected Currency"
+  },
+  "tier": {
+    "healthy": "Healthy",
+    "watch": "Watch",
+    "at_risk": "At Risk",
+    "critical": "Critical",
+    "at risk": "At Risk"
+  },
+  "health": {
+    "score": "Health Score"
+  },
+  "warnings": {
+    "score": "Score"
+  }
+}
