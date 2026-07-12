@@ -82,6 +82,10 @@
 
 ## Consolidated Gap Register
 
+### 🧱 Frontend build broken: `BrainPanel` reads `providerCap` off `UseBrainConversation`
+
+- **`frontend/src/components/brain/BrainPanel.tsx` (lines ~967, ~968, ~1067) reference `providerCap`, which no longer exists on the `UseBrainConversation` type** — `tsgo --noEmit` fails with TS2339. Pre-existing (unrelated to the auto-run circuit-breaker pass); surfaced during that typecheck. Fixing it unblocks a clean frontend typecheck/build. Either restore `providerCap` on the hook's return type or drop the three reads.
+
 ### 🤖 Cloud-agent run milestones → Brain chat — residual phases (post 2026-07-11 runtime chat-awareness ship)
 
 > Shipped (api 2026.7.82): the runtime is chat-aware — `RuntimeService.update()` fires a best-effort `onRunMilestone` hook → `ChatTicketService.postRunMilestone`, posting started ▸ completed ▸ failed lines into every chat the ticket is linked to, per-execution+phase idempotent. Extended (api 2026.7.84): `paused` (ask_human) + `cancelled` phases now post too, via `RuntimeService.postLifecycleMilestone` from the ask_human pause site (`cloudAgentEngine`) and `cancel()` — full-lifecycle chat narration.

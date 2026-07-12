@@ -5697,6 +5697,7 @@
         "already_running": "Ya en ejecución",
         "human_gate": "Esperando aprobación",
         "capability_mismatch": "Al agente le faltan capacidades requeridas",
+        "run_cap_exhausted": "Demasiadas ejecuciones fallidas: en pausa para revisión",
         "no_agent": "Sin agente asignado",
         "no_board": "Sin tablero configurado",
         "no_lane": "Carril no configurado",
