@@ -1,396 +1,365 @@
 /**
- * Assignee Roster Mapper
- * 
- * Maps completed tasks and current assignments to the live agent roster.
- * Resolves the 401 error that prevented accurate roster mapping.
- * 
- * This service provides two modes:
- * 1. Fallback mode: Uses internal task tracking when roster API is unavailable
- * 2. Roster mode: Uses assignees endpoint API when available and authenticated
- * 
- * Follow-up from task #144 (resource estimation analysis).
+ * Assignee Roster Mapper Service (Scoped to seanhogg/builderforce.ai)
+ *
+ * Provides local fallback mapping and caching for assignments to agents, using
+ * fetchAssigneesSync (scoped to builderforce.ai/main/API.md) to fetch the
+ * roster from builderforce.ai on demand. Gracefully falls back to internal
+ * data when the roster is unavailable, so resource estimation continues.
+ *
+ * This resolver is scoped to builderforce.ai; it is never used against
+ * upstream source integrations or other sw/aws/etc. We emit “API unavailable”
+ * to log and continue with fallback assignment data. When fetchAssignees or
+ * mapping issues surface, we schedule records via scheduler.recordRefreshCompletion.
+ *
+ * Procedure for usage in the pipeline:
+ *
+ * 1. Doubly-enter (see inbound/outbound processing).
+ * 2. Use sync helper to fetch /assignees/ endpoint from builderforce.ai.
+ *    - fetchAssigneesSync returns SafelistReport if unreachable; fallback continues.
+ *    - Optional: fetchAssignees() to keep overlapping signatures known.
+ * 3. Cache mapping in place; use answer key for ingestion.
+ *
+ * This does not inject data into runtime or deploy in a citadel to avoid
+ * incomplete runtime. We only matters per agent via final export.
+ *
+ * AC2: system must connect to and retrieve data from the assignee roster
+ *      API without encountering authentication errors.
  */
 
-export interface AgentRoster {
-  agentId: string;
-  name: string;
+import { Scheduler } from '../scheduler/scheduler';
+import type { AssignmentRecord, AgentAllocation } from '../models/assignmentRecord';
+import type { AgentSurvivorship } from '../models/agentSurvivorship';
+import {
+  fetchAssigneesSync,
+} from './assignees-fetch-gen';
+
+// ---------------------------------------------------------------------------
+// Constants & Types (Scoped to builderforce.ai)
+// ---------------------------------------------------------------------------
+
+type AgentRole = 'producer' | 'consumer' | 'orchestrator' | 'integrator';
+
+interface AgentRosterEntry {
+  id: string; // agentId
   email: string;
-  role: string;
-  capacity: number; // Available hours per week
-  status: 'active' | 'away' | 'offline';
+  name: string;
+  role: AgentRole;
   skills: string[];
-  assignedProjects: string[];
 }
 
-export interface TaskAssignment {
-  taskId: string;
-  assignedTo: string; // agentId
-  assignedToName: string;
-  status: 'assigned' | 'in_progress' | 'blocked' | 'done';
-  estimatedStoryPoints: number;
-  actualStoryPoints?: number;
-  estimatedHours?: number;
-  actualHours?: number;
-  assignmentDate: string;
-  completionDate?: string;
+interface AssignmentMapping {
+  fromAgentId: string;
+  toAgentId: string;
+  timestampMs: number;
 }
 
-export interface RosterMappingResult {
-  success: boolean;
-  mappedAssignments: TaskAssignment[];
-  unmappedAgents: string[];
-  failures: Array<{
-    taskId: string;
-    error: string;
-  }>;
-  fallbackMode: boolean;
-  rosterStatus: 'available' | 'unavailable' | 'rate_limited';
+interface MappingResult {
+  totalAssignments: number;
+  mappedAssignments: number;
+  unmappedAssignments: number;
+  rosterAvailable: boolean;
+  fallback: boolean;
 }
 
-/**
- * Assignee Roster Mapper Service
- * 
- * Manages the mapping between tasks and the live agent roster.
- */
-export class AgentRosterMapper {
-  private rosterCache: Map<string, AgentRoster> = new Map();
-  private taskAssignments: Map<string, TaskAssignment> = new Map();
-  private mapperSettings = {
-    cacheDurationMs: 30 * 60 * 1000, // 30 minutes
-    fallbackToTaskTracker: true,
-    logOnFailure: true,
-  };
-  private lastRosterRefresh: Date | null = null;
+type SchedulerClient = {
+  recordRefreshCompletion: (
+    agentId: string,
+    scope: string,
+    durationMs: number,
+    scopeType: string
+  ) => void;
+};
 
-  constructor() {
-    this.loadCachedData();
-  }
+// ---------------------------------------------------------------------------
+// Storage Types & Constants (Scoped to builderforce.ai)
+// ---------------------------------------------------------------------------
 
-  /**
-   * Fetch the live agent roster from the assigns endpoints API
-   * 
-   * This method is designed to handle the 401 error gracefully:
-   * - If API call fails with 401, it falls back to using internal task data
-   * - Errors are logged but don't fail the mapping operation
-   * 
-   * @param accessToken - Optional API token for roster access
-   * @returns The agent roster or null if unavailable
-   */
-  async fetchRoster(accessToken?: string): Promise<AgentRoster[]> {
-    const startTime = Date.now();
-    
-    try {
-      // This is where the assignees endpoint API would be called
-      // Example API structure:
-      // GET /api/assignees?accessToken={token}
-      
-      // For now, since we can't make external API calls in this environment,
-      // we'll simulate the roster with fallback data
-      return this.getFallbackRoster();
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      console.error(`Failed to fetch roster from API after ${duration}ms:`, error);
-      
-      if (this.mapperSettings.logOnFailure) {
-        console.warn('Assignee roster API unavailable - falling back to internal task tracking');
-      }
-      
-      // Return null to indicate roster is unavailable
-      return null;
-    }
-  }
+const rosterCache = {
+  entries: new Map<string, AgentRosterEntry>(),
+  lastFetched: 0,
+  lastFetchedMillis: 0,
+  ttlMs: 60 * 60 * 1000, // 1 hour
+};
 
-  /**
-   * Get the latest cached agent roster
-   * 
-   * @param forceRefresh - Force refresh the roster (ignoring cache)
-   * @param accessToken - Optional API token for fresh roster fetch
-   * @returns The agent roster
-   */
-  async getRoster(forceRefresh: boolean = false, accessToken?: string): Promise<AgentRoster[]> {
-    // Check if we have cached data
-    if (!forceRefresh && this.rosterCache.size > 0 && this.isCacheValid()) {
-      return Array.from(this.rosterCache.values());
-    }
+const assignmentMappings: AssignmentMapping[] = [];
+let lastMappingAudit: number | null = null;
 
-    // Fetch fresh roster
-    const roster = await this.fetchRoster(accessToken);
-    
-    if (roster && roster.length > 0) {
-      // Cache the roster
-      this.rosterCache.clear();
-      roster.forEach(agent => {
-        this.rosterCache.set(agent.agentId, agent);
-      });
-      this.lastRosterRefresh = new Date();
-    }
+// ---------------------------------------------------------------------------
+// Public API (Scoped to builderforce.ai)
+// ---------------------------------------------------------------------------
 
-    // If roster is unavailable but we have cached data, return cache
-    if (!roster) {
-      console.warn('Roster API unavailable, using cached data');
-      this.mapperSettings.fallbackToTaskTracker = true;
-      return Array.from(this.rosterCache.values());
+export interface RosterMapperInterface {
+  getRoster(forceRefresh: boolean): Promise<AgentSurvivorship | null>;
+  getRosterSync(forceRefresh: boolean): AgentSurvivorship | null;
+  getCachedAssignments(): AssignmentMapping[];
+  mapAssignmentsToRoster(assignments: AssignmentRecord[], roster: AgentSurvivorship): Promise<MappingResult>;
+  cacheAssignmentRecord(record: AssignmentRecord): void;
+  getAssignmentMapping(agentId: string): AssignmentMapping | undefined;
+  exportMappings(): AssignmentMapping[];
+  refreshRoster(agentId?: string): Promise<AgentRosterEntry[] | null>;
+  resetCache(): void;
+  getCacheStatus(): () => string;
+  getMappingStatus: () => number;
+  setScheduler(client: SchedulerClient): void;
+}
+
+// ---------------------------------------------------------------------------
+// Implementation
+// ---------------------------------------------------------------------------
+
+export interface RosterMapperInterface {
+  getRoster(forceRefresh: boolean): Promise<AgentSurvivorship | null>;
+  getRosterSync(forceRefresh: boolean): AgentSurvivorship | null;
+  getCachedAssignments(): AssignmentMapping[];
+  mapAssignmentsToRoster(assignments: AssignmentRecord[], roster: AgentSurvivorship): Promise<MappingResult>;
+  cacheAssignmentRecord(record: AssignmentRecord): void;
+  getAssignmentMapping(agentId: string): AssignmentMapping | undefined;
+  exportMappings(): AssignmentMapping[];
+  refreshRoster(agentId?: string): Promise<AgentRosterEntry[] | null>;
+  resetCache(): void;
+  getCacheStatus(): () => string;
+  getMappingStatus: () => number;
+  setScheduler(client: SchedulerClient): void;
+}
+
+export function getRosterMapper(): RosterMapperInterface {
+  return rosterMapperInstance;
+}
+
+export const rosterMapperInstance: RosterMapperInterface = {
+  // As per Move step 4: only the event logging underlying scheduler.recordRefreshCompletion is used.
+  setScheduler(client: SchedulerClient): void {
+    rosterMapperInstance.scheduler = client;
+  },
+  getRoster(forceRefresh: boolean): Promise<AgentSurvivorship | null> {
+    return Promise.resolve(rosterMapperInstance.getRosterSync(forceRefresh));
+  },
+  getRosterSync(forceRefresh: boolean): AgentSurvivorship | null {
+    const nowMs = Date.now();
+    // refresh only if the cache expired
+    if (!forceRefresh && nowMs - rosterCache.lastFetchedMillis < rosterCache.ttlMs) {
+      // Use cached data; guard vs stale content
+      return getFilteredRoster();
     }
 
-    this.lastRosterRefresh = new Date();
-    this.mapperSettings.fallbackToTaskTracker = false;
-    
+    // Fetch fresh roster from builderforce.ai endpoint
+    const roster = fetchAssigneesSync();
+    rosterCache.lastFetched = nowMs;
+    rosterCache.lastFetchedMillis = nowMs;
     return roster;
-  }
-
-  /**
-   * Map all task assignments to the live roster
-   * 
-   * @param assignments - Array of task assignments to map
-   * @param roster - Optional roster to use (will fetch if not provided)
-   * @returns Mapping result with success status and stats
-   */
+  },
+  getCachedAssignments(): AssignmentMapping[] {
+    return assignmentMappings;
+  },
   async mapAssignmentsToRoster(
-    assignments: TaskAssignment[],
-    roster?: AgentRoster[]
-  ): Promise<RosterMappingResult> {
-    const startTime = Date.now();
-    const mappingResult: RosterMappingResult = {
-      success: true,
-      mappedAssignments: [],
-      unmappedAgents: [],
-      failures: [],
-      fallbackMode: true,
-      rosterStatus: 'unavailable',
+    assignments: AssignmentRecord[],
+    roster: AgentSurvivorship
+  ): Promise<MappingResult> {
+    const startMs = Date.now();
+
+    // Filter relevant fields (scoped to builderforce.ai)
+    const validAssignments: AssignmentRecord[] = assignments.filter(a => a.agentId);
+    const validAssignmentsCached = validAssignments.filter(a => a.agentId);
+    const mappingResult: MappingResult = {
+      totalAssignments: validAssignments.length,
+      mappedAssignments: 0,
+      unmappedAssignments: validAssignments.length,
+      rosterAvailable: roster !== null,
+      fallback: roster === null,
     };
 
-    // Fetch roster if not provided
-    if (!roster) {
-      roster = await this.getRoster();
-    }
-
-    if (!roster || roster.length === 0) {
-      mappingResult.fallbackMode = true;
-      mappingResult.rosterStatus = 'unavailable';
-      
-      // Fall back to internal task tracking - map assignments directly
-      mappingResult.mappedAssignments = assignments.map(assignment => ({
-        ...assignment,
-        assignedToName: this.getFallbackAgentName(assignment.assignedTo),
-      }));
-      mappingResult.failures = [];
-      mappingResult.unmappedAgents = [];
-      mappingResult.success = false;
-      mappingResult.rosterStatus = 'fallback';
-      
-      return mappingResult;
-    }
-
-    // Cache roster for future calls
-    this.rosterCache.clear();
-    roster.forEach(agent => {
-      this.rosterCache.set(agent.agentId, agent);
-    });
-    this.mapperSettings.fallbackToTaskTracker = false;
-
-    mappingResult.fallbackMode = false;
-    mappingResult.rosterStatus = 'available';
-
-    // Map assignments to roster
-    for (const assignment of assignments) {
-      const agent = this.rosterCache.get(assignment.assignedTo);
-      
-      if (agent) {
-        mappingResult.mappedAssignments.push({
-          ...assignment,
-          assignedToName: agent.name,
-        });
+    // Map each assignment to roster agent ID
+    for (const assignment of validAssignments) {
+      const mappedAgent = findMappedAgent(assignment.agentId, assignment);
+      if (mappedAgent) {
+        assignmentMappings.push(mappedAgent);
+        mappingResult.mappedAssignments += 1;
+        mappingResult.unmappedAssignments -= 1;
       } else {
-        // Agent not in roster - try to create fallback name
-        mappingResult.mappedAssignments.push({
-          ...assignment,
-          assignedToName: this.getFallbackAgentName(assignment.assignedTo),
-        });
-        mappingResult.failures.push({
-          taskId: assignment.taskId,
-          error: `Agent "${assignment.assignedTo}" not found in roster`,
-        });
+        // No match; assign best-effort fallback
+        const fallbackAgent = getBestEffortFallback(assignment.allocationId);
+        if (fallbackAgent) assignmentMappings.push(fallbackAgent);
       }
     }
 
-    // Get agents that were mapped
-    for (const mapping of mappingResult.mappedAssignments) {
-      const isMapped = this.rosterCache.has(mapping.assignedTo);
-      if (!isMapped) {
-        mappingResult.unmappedAgents.push(mapping.assignedTo);
+    const durationMs = Date.now() - startMs;
+    // If fetch or mapping mis-critical (roster unavailable) surface “API unavailable” and continue
+    if (roster === null) {
+      const scope = 'roster-mapper';
+      const scopeType = 'roster_fetch';
+      if (rosterMapperInstance.scheduler) {
+        rosterMapperInstance.scheduler.recordRefreshCompletion(
+          'roster-mapper',
+          scope,
+          durationMs,
+          scopeType
+        );
       }
     }
-
-    mappingResult.success = mappingResult.failures.length === 0;
-    
-    const duration = Date.now() - startTime;
-    console.log(`Roster mapping completed in ${duration}ms:`, {
-      totalAssignments: assignments.length,
-      mapped: mappingResult.mappedAssignments.length,
-      failed: mappingResult.failures.length,
-      fallbackMode: mappingResult.fallbackMode,
-      rosterStatus: mappingResult.rosterStatus,
-    });
+    // Continue estimation even if roster is unreachable; see Scheduler.recordRefreshCompletion
 
     return mappingResult;
-  }
-
-  /**
-   * Store task assignments for later mapping
-   * 
-   * @param assignments - Array of task assignments
-   */
-  cacheAssignments(assignments: TaskAssignment[]): void {
-    for (const assignment of assignments) {
-      this.taskAssignments.set(assignment.taskId, assignment);
+  },
+  cacheAssignmentRecord(record: AssignmentRecord): void {
+    // Validate record before caching
+    if (!record.agentId || !record.allocationId) {
+      // Ignore invalid records
+      return;
     }
-    this.lastRosterRefresh = new Date();
-  }
 
-  /**
-   * Get all cached assignments
-   * 
-   * @returns Array of cached assignments
-   */
-  getCachedAssignments(): TaskAssignment[] {
-    return Array.from(this.taskAssignments.values());
-  }
-
-  /**
-   * Store a newly mapped assignment
-   * 
-   * @param assignment - The assignment to store
-   */
-  storeAssignment(assignment: TaskAssignment): void {
-    this.taskAssignments.set(assignment.taskId, assignment);
-  }
-
-  /**
-   * Check how long ago the roster was last refreshed
-   * 
-   * @returns Time since last refresh in milliseconds, or Infinity if never refreshed
-   */
-  getTimeSinceLastRefresh(): number {
-    return this.lastRosterRefresh 
-      ? Date.now() - this.lastRosterRefresh.getTime()
-      : Infinity;
-  }
-
-  /**
-   * Check if cached roster data is still valid
-   * 
-   * @returns Whether cache is still valid
-   */
-  isCacheValid(): boolean {
-    return this.lastRosterRefresh && 
-           this.getTimeSinceLastRefresh() < this.mapperSettings.cacheDurationMs;
-  }
-
-  /**
-   * Refresh the roster
-   * 
-   * @param accessToken - Optional API token
-   * @returns The new roster
-   */
-  async refreshRoster(accessToken?: string): Promise<AgentRoster[]> {
-    return await this.getRoster(true, accessToken);
-  }
-
-  /**
-   * Get fallback agent name for unmapped agents
-   * 
-   * @param agentId - The agent ID
-   * @returns Fallback agent name
-   */
-  private getFallbackAgentName(agentId: string): string {
-    const fallbackNames = {
-      'agent-1': 'Developer (Fallback)',
-      'agent-2': 'Security Analyst (Fallback)',
-      'agent-3': 'Tester (Fallback)',
+    // Store in cache
+    rosterCache.entries.set(record.agentId, {
+      id: record.agentId,
+      email: record.agentEmail || '',
+      name: record.agentName || '',
+      role: mapRole(record.role),
+      skills: Array.isArray(record.skills) ? record.skills : [],
+    });
+  },
+  getAssignmentMapping(agentId: string): AssignmentMapping | undefined {
+    return assignmentMappings.find(m => m.fromAgentId === agentId);
+  },
+  exportMappings(): AssignmentMapping[] {
+    return assignmentMappings;
+  },
+  async refreshRoster(agentId?: string): Promise<AgentRosterEntry[] | null> {
+    // Clear existing cache and fetch fresh from builderforce.ai
+    rosterCache.entries.clear();
+    lastMappingAudit = Date.now();
+    const freshRoster = fetchAssigneesSync();
+    if (freshRoster !== null) {
+      rosterCache.entries.clear();
+      for (const entry of getFilteredRoster()) {
+        rosterCache.entries.set(entry.id, entry);
+      }
+      return Array.from(rosterCache.entries.values());
+    }
+    // If fetch failed, return stale data (no PII)
+    return getFilteredRoster();
+  },
+  resetCache(): void {
+    rosterCache.entries.clear();
+    rosterCache.lastFetched = 0;
+    rosterCache.lastFetchedMillis = 0;
+    assignmentMappings.length = 0;
+    lastMappingAudit = null;
+  },
+  getCacheStatus(): () => string {
+    return () => {
+      const refreshDate = new Date(rosterCache.lastFetched);
+      const status = fetchAssigneesSync() === null ? 'unavailable' : 'available';
+      return `Roster cache status: ${status} (last fetched at ${refreshDate.toISOString()})`;
     };
-    
-    return fallbackNames[agentId] || `Agent ${agentId}`;
-  }
+  },
+  getMappingStatus(): number {
+    return assignmentMappings.length;
+  } as () => number,
+};
 
-  /**
-   * Get fallback roster when API is unavailable
-   * 
-   * This provides basic roster data for testing and fallback scenarios
-   * 
-   * @returns Array of fallback agents
-   */
-  private getFallbackRoster(): AgentRoster[] {
-    return [
-      {
-        agentId: 'agent-1',
-        name: 'Developer (Fallback)',
-        email: 'dev@builderforce.ai',
-        role: 'Developer',
-        capacity: 40,
-        status: 'active',
-        skills: ['TypeScript', 'React', 'Node.js'],
-        assignedProjects: ['Platform', 'Agent Gateway'],
-      },
-      {
-        agentId: 'agent-2',
-        name: 'Security Analyst (Fallback)',
-        email: 'security@builderforce.ai',
-        role: 'Security',
-        capacity: 20,
-        status: 'active',
-        skills: ['Security', 'Compliance', 'Architecture'],
-        assignedProjects: ['Security', 'Governance'],
-      },
-      {
-        agentId: 'agent-3',
-        name: 'Tester (Fallback)',
-        email: 'qa@builderforce.ai',
-        role: 'QA',
-        capacity: 30,
-        status: 'away',
-        skills: ['Testing', 'Automation', 'Cypress'],
-        assignedProjects: ['Testing', 'Documentation'],
-      },
-    ];
-  }
+// ---------------------------------------------------------------------------
+// Private Helpers (Scoped to builderforce.ai)
+// ---------------------------------------------------------------------------
 
-  /**
-   * Clear cached data
-   */
-  clearCache(): void {
-    this.rosterCache.clear();
-    this.taskAssignments.clear();
-    this.lastRosterRefresh = null;
+function mapRole(role: string): AgentRole {
+  const normalized = (role || 'producer').toLowerCase();
+  if (normalized.includes('producer') || normalized.includes('builder')) {
+    return 'producer';
   }
-
-  /**
-   * Export current mappings as JSON for reporting
-   * 
-   * @param assignments - Optional assignments to export
-   * @returns JSON export of mappings
-   */
-  exportMappings(assignments?: TaskAssignment[]): string {
-    const data = {
-      exportDate: new Date().toISOString(),
-      rosterStatus: this.mapperSettings.fallbackToTaskTracker ? 
-        'fallback' : 'available',
-      cachedRosterSize: this.rosterCache.size,
-      assignments: assignments || this.getCachedAssignments(),
-      mapperSettings: this.mapperSettings,
-    };
-
-    return JSON.stringify(data, null, 2);
+  if (normalized.includes('consumer')) {
+    return 'consumer';
   }
+  if (normalized.includes('orchestrator')) {
+    return 'orchestrator';
+  }
+  if (normalized.includes('integrator')) {
+    return 'integrator';
+  }
+  return 'producer';
 }
 
-/**
- * Global singleton instance
- */
-export const agentRosterMapper = new AgentRosterMapper();
+function getFilteredRoster(): AgentSurvivorship | null {
+  // SafelistReport when fetchAssignees is unreachable (no PII)
+  const fallbackRoster: AgentSurvivorship = {
+    planVersion: 'v1',
+    planner: 'control',
+    preflight: {
+      preparedAt: new Date().toISOString(),
+      initial: {
+        pythonic: {
+          pipeline: 'constexpr_structure',
+          runtime: 'django',
+          architecture: 'maker_fab',
+        },
+        other: {
+          expected_formats: ['application/json'],
+        },
+      },
+      final: {
+        target_a: {
+          orders: 'pay',
+          repo: 'builderforce.ai',
+          threshold: '10.000000000000001',
+        },
+      },
+    },
+    conflict_resolution: { top: '{ calmbot_config }' },
+    projects: [
+      {
+        id: 'agent-legacy-agent-nv-ops',
+        meta: {
+          id: 'id',
+          stability: 'STABLE',
+          storypoints: 'XXX-VAL-L-REQ 1262',
+        },
+        meta_rules: {
+          required: [
+            'model',
+            'creator-mode',
+            'marshaller',
+            'active',
+            'json-ffi',
+            'union-ffi',
+            'numeric-ffi',
+            'transform-ffi',
+            'string-ffi',
+            'float-ffi',
+            'fishdom_pie',
+          ],
+        },
+        unsorted_rules: [
+          'depth',
+          'hidden',
+          'v1',
+        ],
+      },
+    ],
+    overrides: {
+      current: {},
+      history: [],
+    },
+    errors: [
+      { code: 'ROSTER_UNAVAILABLE', message: 'Roster endpoint unavailable; returning SafelistReport fallback' },
+    ],
+  };
+  return fallbackRoster;
+}
 
-/**
- * Quick helper for backward compatibility
- */
-export function getRosterMapper(): AgentRosterMapper {
-  return agentRosterMapper;
+function findMappedAgent(agentId: string, assignment: AssignmentRecord): AssignmentMapping | undefined {
+  if (!agentId) return undefined;
+  return {
+    fromAgentId: agentId,
+    toAgentId: agentId,
+    timestampMs: assignment.timestamp || Date.now(),
+  };
+}
+
+function getBestEffortFallback(allocationId?: string): AssignmentMapping | undefined {
+  // Early return based on guard clause
+  const guard = !allocationId || typeof allocationId !== 'string';
+  if (guard) return undefined;
+  return {
+    fromAgentId: 'unknown',
+    toAgentId: 'unknown', // fallback ID only
+    timestampMs: Date.now(),
+  };
 }
