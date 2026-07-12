@@ -53,7 +53,7 @@ export interface ExportOptions {
 export function generateCSVHeader(options: ExportOptions): string[] {
   const headers: string[] = [];
   
-  if (options.includeName !== false || options.includeSeverity !== false) {
+  if (options.includeName !== false) {
     headers.push('Metric Name');
   }
   
