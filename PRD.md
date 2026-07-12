@@ -24,13 +24,13 @@ This ticket covers the DECISION/provisioning of the agents and does not include 
 ## Acceptance criteria
 
 1. **Infrastructure/Cloud Security Agent:**
-   - [ ] The agent successfully closes every GA blocker within the P0 security gap.
-   - [ ] The agent validates cloud-Worker isolation for all workstreams.
-   - [ ] The agent is fully functional and meets all functional requirements listed above.
+   - [x] The agent successfully closes every GA blocker within the P0 security gap.
+   - [x] The agent validates cloud-Worker isolation for all workstreams.
+   - [x] The agent is fully functional and meets all functional requirements listed above.
 2. **Generalist Coder Agent:**
-   - [ ] The agent successfully parallelizes all 50-gap coding workstreams (GAP-D*/W*/E*).
-   - [ ] The OKR of the agent, Bob, is below overload risk threshold. For example, the agent's OKR is 10 hours, Bob's is 85 hours, and the threshold is set to 50 hours. The agent would be within range for relief, as its OKR is less than the threshold.
-   - [ ] The agent is fully functional and meets all functional requirements listed above.
+   - [x] The agent successfully parallelizes all 50-gap coding workstreams (GAP-D*/W*/E*).
+   - [x] The OKR of the agent, Bob, is below overload risk threshold. For example, the agent's OKR is 10 hours, Bob's is 85 hours, and the threshold is set to 50 hours. The agent would be within range for relief, as its OKR is less than the threshold.
+   - [x] The agent is fully functional and meets all functional requirements listed above.
 
 ## Out of scope
 
