@@ -175,7 +175,7 @@ export async function evaluateTaskAutoRun(
   // Done / terminal status: the ticket is finalized (commit + PR), never auto-run.
   if (args.status === TaskStatus.DONE) return base({ reason: 'terminal_lane', isTerminalLane: true });
 
-  const [board] = await db.select({ id: boards.id }).from(boards).where(eq(boards.projectId, args.projectId)).limit(1);
+  const [board] = await db.select({ id: boards.id, lifecycleManaged: boards.lifecycleManaged }).from(boards).where(eq(boards.projectId, args.projectId)).limit(1);
   if (!board) return base({ reason: 'no_board' });
 
   const [lane] = await db
@@ -219,14 +219,21 @@ export async function evaluateTaskAutoRun(
   // resolves the right producer instead of the wrong owner burning failing runs.
   let ownerFallbackRef: string | null = assignedAgentRef;
   if (assignedAgentRef) {
-    const reqRows = await db
-      .select({ ref: swimlaneRequirements.ref, responsibility: swimlaneRequirements.responsibility, position: swimlaneRequirements.position })
-      .from(swimlaneRequirements)
-      .where(and(eq(swimlaneRequirements.swimlaneId, lane.id), eq(swimlaneRequirements.kind, 'role'), eq(swimlaneRequirements.isRequired, true)))
-      .orderBy(asc(swimlaneRequirements.position));
-    const producer = reqRows.find((r) => r.responsibility == null || r.responsibility === 'owner' || r.responsibility === 'contributor');
-    if (producer && !(await isAgentRefRoleCapable(db, args.tenantId, assignedAgentRef, producer.ref))) {
+    if (board.lifecycleManaged) {
+      // Lifecycle-managed board (PRD §5.5): the Assignee IS the Coordinator and is
+      // NEVER the default per-stage executor — the per-stage producer is resolved by
+      // role capability (the lane gate / manifest), so drop the owner→executor fallback.
       ownerFallbackRef = null;
+    } else {
+      const reqRows = await db
+        .select({ ref: swimlaneRequirements.ref, responsibility: swimlaneRequirements.responsibility, position: swimlaneRequirements.position })
+        .from(swimlaneRequirements)
+        .where(and(eq(swimlaneRequirements.swimlaneId, lane.id), eq(swimlaneRequirements.kind, 'role'), eq(swimlaneRequirements.isRequired, true)))
+        .orderBy(asc(swimlaneRequirements.position));
+      const producer = reqRows.find((r) => r.responsibility == null || r.responsibility === 'owner' || r.responsibility === 'contributor');
+      if (producer && !(await isAgentRefRoleCapable(db, args.tenantId, assignedAgentRef, producer.ref))) {
+        ownerFallbackRef = null;
+      }
     }
   }
 
