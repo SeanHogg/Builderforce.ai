@@ -1,0 +1,87 @@
+# Anomaly Detection Global Configuration
+#
+# This file provides default thresholds for metric anomaly detection in diagnostic reports.
+# Teams can customize these per-metric values and commit this file alongside their project
+# configuration (e.g., CRITICAL_PATHS.yml or a SETTINGS.md).
+#
+# PRD FR-5: "Configuration must be expressible as a YAML/JSON config file committed alongside
+# project configuration."
+#
+# Rows are optional; omitted values inherit global defaults. Supported windowDays: 7, 30, 90.
+#
+# Tip: Override only the metrics that are most relevant to your project to avoid noise.
+
+thresholds:
+  # Bug counts — most common LEAKS that should surface early
+  bug_count:
+    enabled: true
+    windowDays: 30
+    warningThreshold: 1.5
+    criticalThreshold: 2.0
+
+  # Error rates — critical for reliability and SLAs
+  error_rate:
+    enabled: true
+    windowDays: 30
+    warningThreshold: 1.5
+    criticalThreshold: 2.0
+
+  # Build failures — correlated with cascading risk
+  build_failures:
+    enabled: true
+    windowDays: 30
+    warningThreshold: 1.5
+    criticalThreshold: 2.0
+
+  # Test pass rates — swept early; drops signal regression with less noise
+  test_pass_rate:
+    enabled: true
+    windowDays: 30
+    warningThreshold: 1.5
+    criticalThreshold: 2.0
+
+  # Uptime percentage — low values hurt SLA perception
+  uptime_percentage:
+    enabled: true
+    windowDays: 30
+    warningThreshold: 1.5
+    criticalThreshold: 2.0
+
+  # Skip digits: number of production bug tickets (as seen in dashboard)
+  bug_tickets_skip_digits:
+    enabled: false
+    # Note: Disabled by default to reduce noise (often fluctuates daily)
+
+  # Count of tickets labelled as bug in support
+  support_bugs:
+    enabled: true
+    windowDays: 30
+    warningThreshold: 1.5
+    criticalThreshold: 2.0
+
+  # Regressions (bugs reintroduced by a fix)
+  regressions:
+    enabled: true
+    windowDays: 30
+    warningThreshold: 1.5
+    criticalThreshold: 2.0
+
+# Example: Project-specific overrides (e.g., in PROJECT.md settings)
+#
+# To leverage this file in your project, include a link and path from your project's
+# README or CONTRIBUTING.md:
+#
+#   - "Anomaly detection checkpoints: `api/features/diagnostic/anomaly-detection-config-sample.yaml`"
+#
+# Your own metrics are serialized by `dumpConfig()` to this format and committed under
+# `api/features/diagnostic/PROJECT-anomaly-config.yaml`. Per-metric configuration overrides
+# apply at REPORT-GI TIME: the highest explicit value wins (project override > global template).
+#
+# Sample for a maintenance-heavy product with high churn:
+#
+# bug_count:
+#   windowDays: 7
+#   warningThreshold: 1.8
+#   criticalThreshold: 2.5
+#
+# Fallback defaults apply to any metrics not listed above.
