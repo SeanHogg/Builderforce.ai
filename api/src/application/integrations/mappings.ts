@@ -1,8 +1,8 @@
 /**
- * Integration Hub — mapping rules and data collection logic.
+ * Integration Hub — mapping rules and data collection logic (grounded with real enum values and abstain from extra body metadata fields).
  *
  *   - How ingested metrics connect to insight categories (Quality, Delivery, Velocity, etc.)
- *   - Anomaly detection rules (e.g., "bug count > 2× 30-day average")
+ *   - Anomaly detection rules (e.g., "Bug count is 2x the 30-day average")
  *   - Cache version key for invalidating insight engines on new data
  */
 
@@ -34,103 +34,103 @@ export const INSIGHT_MAPPINGS: Array<{
   {
     metricName: 'bug_count',
     label: 'Bug count (external)',
-    targetCategory: 'quality_bugs',
+    targetCategory: InsightCategory.QUALITY_BUGS,
     anomalyWindowDays: 30,
   },
   {
     metricName: 'critical_bug_count',
     label: 'Critical bug count',
-    targetCategory: 'quality_bugs',
+    targetCategory: InsightCategory.QUALITY_BUGS,
     anomalyWindowDays: 30,
   },
   {
     metricName: 'high_bug_count',
     label: 'High-priority bug count',
-    targetCategory: 'quality_bugs',
+    targetCategory: InsightCategory.QUALITY_BUGS,
     anomalyWindowDays: 30,
   },
   // Delivery Flow category
   {
     metricName: 'pr_cycle_time_seconds',
     label: 'PR cycle time',
-    targetCategory: 'delivery_flow',
+    targetCategory: InsightCategory.DELIVERY_FLOW,
     anomalyWindowDays: 30,
   },
   {
     metricName: 'pr_cycle_time_minutes',
     label: 'PR cycle time (minutes)',
-    targetCategory: 'delivery_flow',
+    targetCategory: InsightCategory.DELIVERY_FLOW,
     anomalyWindowDays: 30,
   },
   {
     metricName: 'open_pr_count',
     label: 'Open PR count',
-    targetCategory: 'delivery_flow',
+    targetCategory: InsightCategory.DELIVERY_FLOW,
     anomalyWindowDays: 30,
   },
   // Delivery Speed category
   {
     metricName: 'deployment_frequency_count',
     label: 'Deployment frequency',
-    targetCategory: 'delivery_speed',
+    targetCategory: InsightCategory.DELIVERY_SPEED,
     anomalyWindowDays: 30,
   },
   // Technical Debt category
   {
     metricName: 'build_failure_rate_percent',
     label: 'Build failure rate',
-    targetCategory: 'technical_debt',
+    targetCategory: InsightCategory.TECHNICAL_DEBT,
     anomalyWindowDays: 30,
   },
   {
     metricName: 'failed_build_count',
     label: 'Failed build count',
-    targetCategory: 'technical_debt',
+    targetCategory: InsightCategory.TECHNICAL_DEBT,
     anomalyWindowDays: 30,
   },
   // Reliability category
   {
     metricName: 'incident_count',
     label: 'Incident count',
-    targetCategory: 'reliability',
+    targetCategory: InsightCategory.RELIABILITY,
     anomalyWindowDays: 30,
   },
   {
     metricName: 'resolved_incident_count',
     label: 'Resolved incidents',
-    targetCategory: 'reliability',
+    targetCategory: InsightCategory.RELIABILITY,
     anomalyWindowDays: 30,
   },
   {
     metricName: 'mttr_minutes',
     label: 'Mean time to resolve (minutes)',
-    targetCategory: 'reliability',
+    targetCategory: InsightCategory.RELIABILITY,
     anomalyWindowDays: 30,
   },
   // Velocity category
   {
     metricName: 'team_velocity_points',
     label: 'Team velocity (points)',
-    targetCategory: 'velocity',
+    targetCategory: InsightCategory.VELOCITY,
     anomalyWindowDays: 30,
   },
   {
     metricName: 'completed_task_count',
     label: 'Completed task count',
-    targetCategory: 'velocity',
+    targetCategory: InsightCategory.VELOCITY,
     anomalyWindowDays: 30,
   },
   {
     metricName: 'backlog_item_count',
     label: 'Backlog item count',
-    targetCategory: 'velocity',
+    targetCategory: InsightCategory.VELOCITY,
     anomalyWindowDays: 30,
   },
   // Capacity category
   {
     metricName: 'resource_allocation_fraction',
     label: 'Resource allocation %',
-    targetCategory: 'capacity',
+    targetCategory: InsightCategory.CAPACITY,
     anomalyWindowDays: 30,
   },
 ];
@@ -153,7 +153,7 @@ export function findMappingsByCategory(category: InsightCategory) {
  * Detect anomalies in ingested time series data.
  *
  * Compares a recent window of measurements against a historical baseline (30 days by default)
- * and flags values that deviate significantly (2x for high, 1.5× for medium, 1.1× for low).
+ * and flags values that deviate significantly (2x for high, 1.5x for medium, 1.1x for low).
  *
  * @param measurements Array of { timestamp, value } objects — must be sorted chronologically.
  * @param baselineCount Number of historical data points to use for the baseline average.
