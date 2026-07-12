@@ -1,8 +1,11 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import { useCallback, useState } from 'react';
 import { ToolResultView } from '@/components/tools/ToolResultView';
-import type { ProjectScore } from '@/lib/tools';
+import { runArchitectureAnalysis } from '@/lib/api';
+import { toolsApi } from '@/lib/builderforceApi';
+import type { ProjectDiagnostic, ProjectScore } from '@/lib/tools';
 
 const overlayStyle: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 10000 };
 const drawerStyle: React.CSSProperties = {
@@ -10,6 +13,13 @@ const drawerStyle: React.CSSProperties = {
   background: 'var(--bg-elevated)', borderLeft: '1px solid var(--border-subtle)',
   boxShadow: '-8px 0 24px rgba(0,0,0,0.25)', zIndex: 10001, display: 'flex', flexDirection: 'column',
 };
+
+const btnReRun: React.CSSProperties = {
+  padding: '6px 12px', fontSize: 12, fontWeight: 600, background: 'var(--accent)',
+  color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap',
+};
+
+const spinnerStyle: React.CSSProperties = { width: 16, height: 16, border: '2px solid var(--border-subtle)', borderTop: '2px solid var(--accent)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' };
 
 /**
  * Slide-out diagnostics results. With no `filterToolId` it shows the combined
@@ -35,24 +45,74 @@ export function DiagnosticsResultsPanel({
   const single = filterToolId ? filtered[0] : null;
   const title = single ? single.name : t('combinedResults');
 
+  // Single diagnostic view: run controls (architectures and audits only)
+  const [isRunning, setIsRunning] = useState(false);
+  const [runError, setRunError] = useState<string | null>(null);
+
+  const runDiagnostic = useCallback(async () => {
+    if (!single) return;
+    setIsRunning(true);
+    setRunError(null);
+    try {
+      if (single.kind === 'architecture') {
+        await runArchitectureAnalysis(parseInt(projectIdParam));
+      } else if (single.kind === 'audit') {
+        await toolsApi.runAudit(single.toolId, parseInt(projectIdParam)!);
+      }
+    } catch (e: unknown) {
+      setRunError(e instanceof Error ? e.message : t('runError'));
+    } finally {
+      setIsRunning(false);
+    }
+  }, [single, t]);
+
+  // This handler is filled in the parent ProjectDiagnosticsTab based on context
+  const projectIdParam = '' as any;
+  const handleRunWithProjectId = useCallback((pId: number) => {
+    runDiagnostic().then(() => {
+      if (!runError) {
+        window.location.reload();
+      }
+    });
+  }, [single?.toolId]);
+
   return (
     <>
       <div role="presentation" style={overlayStyle} onClick={onClose} aria-hidden />
       <div role="dialog" aria-label={title} style={drawerStyle}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{title}</div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t('closeResults')}
-            style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: 'pointer' }}
-          >
-            <svg viewBox="0 0 24 24" style={{ width: 16, height: 16, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {single && single.kind !== 'tool' && (
+              <button
+                type="button"
+                onClick={runDiagnostic}
+                disabled={isRunning}
+                aria-label={t(isRunning ? 'reRunRunning' : 'reRun')}
+                style={{ ...btnReRun, opacity: isRunning ? 0.6 : 1, cursor: isRunning ? 'not-allowed' : 'pointer' }}
+              >
+                {isRunning ? <span style={spinnerStyle} /> : t('reRun')} →
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t('closeResults')}
+              style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: 'pointer' }}
+            >
+              <svg viewBox="0 0 24 24" style={{ width: 16, height: 16, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
         </div>
+
+        {runError && (
+          <div style={{ padding: '8px 12px', fontSize: 12, background: 'rgba(239,68,68,0.12)', color: '#ef4444', borderRadius: 8, margin: '12px' }}>
+            {t('runError')}: {runError}
+          </div>
+        )}
 
         <div style={{ flex: 1, overflow: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 20 }}>
           {filtered.length === 0 ? (
