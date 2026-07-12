@@ -198,8 +198,8 @@ describe('TaskService.updateTask parentTaskId preservation (FR-1)', () => {
       projectId: PROJECT_ID,
       title: 'Child Task',
       description: null,
-      status: TaskStatus.TODO as any,
-      priority: TaskPriority.MEDIUM,
+      status: undefined as never,
+      priority: undefined as never,
       assignedAgentType: AgentType.CLAUDE,
       assignedAgentHostId: null,
       assignedAgentRef: null,
@@ -208,8 +208,8 @@ describe('TaskService.updateTask parentTaskId preservation (FR-1)', () => {
       persona: null,
       projectKey: 'CHILD',
       lastKeySeq: 0,
+      parentTaskId: parent.id,
     });
-    child.parentTaskId = parent.id;
     await repo.save(child);
 
     // Transition into agent ownership via updateTask — this should NOT strip parentTaskId
