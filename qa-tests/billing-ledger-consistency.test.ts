@@ -227,18 +227,21 @@ describe('GAP-O2: Billing Ledger Consistency', () => {
 
   describe('Billable Activity Entry Types', () => {
     it('should correctly handle execution activities', () => {
-      const activities = activities.filter(a => a.activityType === 'execution');
-      expect(activities.length).toBeGreaterThan(0);
+      const execActivities = generateMockBillableActivities('agent-exec', 'ExecAgent', 5);
+      const executionItems = execActivities.filter(a => a.activityType === 'execution');
+      expect(executionItems.length).toBeGreaterThan(0);
     });
 
     it('should correctly handle tool usage activities', () => {
-      const activities = activities.filter(a => a.activityType === 'tool_usage');
-      expect(activities.length).toBeGreaterThan(0);
+      const toolActivities = generateMockBillableActivities('agent-tool', 'ToolAgent', 5);
+      const toolItems = toolActivities.filter(a => a.activityType === 'tool_usage');
+      expect(toolItems.length).toBeGreaterThan(0);
     });
 
     it('should correctly handle LLM inference activities', () => {
-      const activities = activities.filter(a => a.activityType === 'llm_inference');
-      expect(activities.length).toBeGreaterThan(0);
+      const llmActivities = generateMockBillableActivities('agent-llm', 'LLMAgent', 5);
+      const llmItems = llmActivities.filter(a => a.activityType === 'llm_inference');
+      expect(llmItems.length).toBeGreaterThan(0);
     });
   });
 });
