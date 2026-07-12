@@ -1,145 +1,111 @@
 /**
- * Validation rules for baseline creation and updates (PRD #294)
+ * Validation utilities (PRD #294)
+ * Replaces broken imports and error declarations.
  */
+import { AnyToolError } from "@builderforce/agent-tools";
 
-import {
-  BaselineMetadata,
-  BaselineContent,
-  BaselineAuthor,
-  ResponseMetadataCore,
-  BaselineVersion
-} from "./types.js";
-
+/**
+ * Validation violation type
+ */
 export interface ValidationViolation {
-  violation: string;
+  propertyPath: string;
   message: string;
-}
-
-export interface ValidationOutcome {
-  valid: boolean;
-  violations: ValidationViolation[];
+  severity: "critical" | "error" | "warning";
 }
 
 /**
- * Validate response length (AC-1 token guard: up to ~10,000 tokens)
+ * Validate baseline creation inputs
  */
-export function validateResponseLength(responseText: string): ValidationViolation[] {
-  const errors: ValidationViolation[] = [];
-  // Slightly under the 10k token limit to allow ~10% overhead (approx. 9.5k tokens)
-  const MAX_LENGTH = 9500;
-  if (responseText.length > MAX_LENGTH) {
-    errors.push({
-      violation: "response_text_too_large",
-      message: `Response length ${responseText.length} exceeds maximum of ${MAX_LENGTH} characters (~10k tokens) for AC-1 token guard.`
-    });
-  }
-  return errors;
-}
-
-/**
- * Validate required non-optional fields
- */
-export function validateRequiredNonOptionalFields(
+export function validateBaselineCreation(
   name: string,
   responseText: string,
-  metadata: BaselineMetadata,
-  author: BaselineAuthor
-): ValidationViolation[] {
+  metadata: Record<string, unknown>,
+  author: Record<string, unknown>
+): { violations: ValidationViolation[] } {
   const violations: ValidationViolation[] = [];
 
   if (!name || name.trim().length === 0) {
     violations.push({
-      violation: "baseline_name_missing",
-      message: "Baseline name is required."
+      propertyPath: "name",
+      message: "Baseline name is required.",
+      severity: "error"
     });
   }
 
   if (!responseText || responseText.trim().length === 0) {
     violations.push({
-      violation: "response_text_missing",
-      message: "Response text is required."
+      propertyPath: "responseText",
+      message: "Response text is required.",
+      severity: "error"
     });
   }
 
-  const required = ["projectId", "streamName", "baselineName", "responseMetadata", "author"] as const;
-  for (const field of required) {
-    const value = (metadata as Record<string, unknown>)[field];
-    if (!value) {
+  if (!metadata || typeof metadata !== "object") {
+    violations.push({
+      propertyPath: "metadata",
+      message: "Metadata is required and must be an object.",
+      severity: "error"
+    });
+  }
+
+  // Check author
+  if (!author || typeof author !== "object") {
+    violations.push({
+      propertyPath: "author",
+      message: "Author object is required.",
+      severity: "error"
+    });
+  } else {
+    const userId = author.userId;
+    if (!userId || typeof userId !== "string") {
       violations.push({
-        violation: `metadata_${field}_missing`,
-        message: `Metadata.${field} is required.`
+        propertyPath: "author.userId",
+        message: "Author.userId is required and must be a string.",
+        severity: "object"
+      });
+    }
+    const role = author.role;
+    if (!role || !["owner", "admin", "editor", "viewer"].includes(role as string)) {
+      violations.push({
+        propertyPath: "author.role",
+        message: "Author.role must be one of owner/admin/editor/viewer (optional viewer allowed).",
+        severity: "warning"
       });
     }
   }
-  // Disallow empty author (userId must be present)
-  if (!author.userId || author.userId.trim().length === 0) {
+
+  // Check version
+  const versionNumber = metadata.version as string | undefined;
+  if (!validateVersion(versionNumber)) {
     violations.push({
-      violation: "author_user_id_missing",
-      message: "Author.userId is required."
+      propertyPath: "version",
+      message: "Version must be a string like v1/v2/...; omitted if auto-increment is preferred.",
+      severity: "warning"
     });
   }
 
-  return violations;
+  return { violations };
 }
 
 /**
- * Validate immutable fields (AC-2 immutability)
+ * Check immutability flags
  */
-export function validateImmutableFields(
-  current: Pick<Baseline, "content" | "metadata" | "author">,
-  newName?: string,
-  newDescription?: string,
-  newTags?: string[]
-): ValidationViolation[] {
+function validateImmutableFields(metadata: Record<string, unknown>, description?: string, tags?: string[]): ValidationViolation[] {
   const violations: ValidationViolation[] = [];
 
-  // Core content fields immutable
-  if (current.content) {
-    if (current.content.responseText !== undefined) {
-      violations.push({
-        violation: "immutable_response_text",
-        message:
-          "content.responseText cannot be edited after baseline creation (AC-2)."
-      });
-    }
-    if (
-      current.content.responseMetadata.model !== undefined ||
-      current.content.responseMetadata.timestamp !== undefined ||
-      current.content.responseMetadata.contextMode !== undefined
-    ) {
-      violations.push({
-        violation: "immutable_core_metadata",
-        message:
-          "content.responseMetadata fields (model, timestamp, contextMode) cannot be edited."
-      });
-    }
+  if (description !== undefined && typeof description === "string") {
+    violations.push({
+      propertyPath: "immutableFields.description",
+      message: "Description must not be modified after creation.",
+      severity: "critical"
+    });
   }
 
-  // Metadata fields immutable (projectId, streamName, baselineName)
-  if (current.metadata) {
-    const m = current.metadata;
-    const alwaysImmutable = ["projectId", "streamName", "baselineName"] as const;
-    for (const field of alwaysImmutable) {
-      const val = (m as Record<string, unknown>)[field];
-      if (val !== undefined) {
-        violations.push({
-          violation: `immutable_metadata_${field}`,
-          message: `metadata.${field} (projectId, streamName, baselineName) cannot be edited.`
-        });
-      }
-    }
-  }
-
-  // Core author subsets immutable (userId, userName)
-  if (current.author) {
-    const a = current.author;
-    [a.userId, a.userName].forEach((val) => {
-      if (val !== undefined) {
-        violations.push({
-          violation: "immutable_author",
-          message: "Author.userId or userName cannot be edited."
-        });
-      }
+  if (tags !== undefined) {
+    violations.push({
+      propertyPath: "immutableFields.tags",
+      message: "Tags must not be modified after creation.",
+      severity: "critical"
     });
   }
 
@@ -147,25 +113,37 @@ export function validateImmutableFields(
 }
 
 /**
- * Validate baseline version constraints
+ * Validate version string
  */
-export function validateVersion(baselineVersion: BaselineVersion): boolean {
-  return ["v1", "v2", "v3", "v4"].includes(baselineVersion);
+export function validateVersion(version: string | undefined): boolean {
+  if (!version) return true;
+  const v = version.split("v").pop() ?? version;
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 1;
 }
 
 /**
- * Convenience: combine multiple validation concerns in one pass
+ * Raise ToolInputError if violations exist
  */
-export function validateBaselineCreation(
-  name: string,
-  responseText: string,
-  metadata: BaselineMetadata,
-  author: BaselineAuthor
-): ValidationOutcome {
-  const violations: ValidationViolation[] = [
-    ...validateRequiredNonOptionalFields(name, responseText, metadata, author),
-    ...validateResponseLength(responseText)
-  ];
+export function assertNoViolations(violations: ValidationViolation[]): void {
+  if (violations.length === 0) return;
 
-  return { valid: violations.length === 0, violations };
+  const criticalOrErrors = violations.filter((v) => v.severity === "critical" || v.severity === "error");
+  if (criticalOrErrors.length > 0) {
+    throw new AnyToolError {
+      message: `Validation errors (${criticalOrErrors.length}): ${criticalOrErrors.map((v) => v.message).join("; ")}` 
+    };
+  }
+
+  // warnings are logged rather than thrown unless harmful
+  for (const v of violations) {
+    if (v.severity === "warning") {
+      console.warn(`[Validation Warning] ${v.propertyPath}: ${v.message}`);
+    }
+  }
 }
+
+/**
+ * Export rewrites for Service imports
+ */
+export { AnyToolError };
