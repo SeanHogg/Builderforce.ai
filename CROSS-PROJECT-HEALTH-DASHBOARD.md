@@ -1,6 +1,6 @@
 # Cross-Project Health Dashboard
 
-**Generated on:** 2025-05-04T18:24:00Z
+**Generated on:** 2025-W38-151 18:47 UTC
 **Context:** Snapshot of portfolio health (BuilderForce.AI, Hired.Video, RumbleDating, BurnRateOS, pattysnob.com)
 
 ---
@@ -9,8 +9,9 @@
 
 ```
 Total projects:        5
-🟢 Green:              1   (BuilderForce.AI — approaching delivery)
-🟡 Amber:              1   (BurnRateOS — on hold, managed)
+🟢 Green:              0   (none — all projects have blockers/traps)
+🟡 Amber:              2   (BuilderForce.AI, BurnRateOS — known issues/hold)
+
 🔴 Red:                3   (Hired.Video, RumbleDating, pattysnob.com)
 
 Overall portfolio health:   RED
@@ -23,14 +24,14 @@ Top priority actions:
 
 ---
 
-## BuilderForce.AI — 🟢 Green
+## BuilderForce.AI — 🟡 Amber
 
 - **Status:** Active
 - **Completion:** 68% (13 of 19 tasks done)
 - **Task Summary:** 13/19 done, 40 in backlog, 5 OKR epics active
 - **Key Blocker:** 3 failing tests blocking clean merge/release
 - **Risk Level:** Medium — strong momentum but test failures risk delivery slip
-- **Recommended Next Action:** Assign engineer(s) to resolve the 3 failing tests this sprint; gate the next release on green CI before any feature work resumes
+- **Recommended Next Action:** Assign engineer(s) to resolve 3 failing tests this sprint; gate next release on green CI before any feature work resumes
 
 ---
 
@@ -38,21 +39,21 @@ Top priority actions:
 
 - **Status:** Active
 - **Completion:** 11%
-- **Task Summary:** ≈ 6% completion (example from 11% base) — extensive build issues; French localization partially in progress
-- **Key Blocker:** Build issues blocking all development progress; French localization partially in progress adds scope complexity and ties to the broken build
+- **Task Summary:** ~11% complete — build issues blocking all development; French localization partially in progress
+- **Key Blocker:** Build issues blocking all development progress; French localization partially in progress adds scope complexity
 - **Risk Level:** High — early stage with a broken build is a critical path blocker
-- **Recommended Next Action:** Freeze localization work and prioritize build fix as P0 this week; resume only after build is stable
+- **Recommended Next Action:** Freeze localization work; prioritize build fix as P0 this week before any feature work resumes
 
 ---
 
 ## RumbleDating — 🔴 Red
 
-- **Status:** Active (but stalled appearance)
+- **Status:** Active
 - **Completion:** 0% — no tasks have started
-- **Task Summary:** 40 tasks all sitting in backlog; project appears stalled despite active status
-- **Key Blocker:** No tasks have been started — project lacks forward motion and no apparent ownership or sprint planning
-- **Risk Level:** High — zero forward motion with no apparent DRI or sprint planning suggests the project will never deliver
-- **Recommended Next Action:** Hold a kickoff/triage session within 48 hours; assign a DRI, pull the first sprint tasks out of backlog, and commit to weekly sprint cadence
+- **Task Summary:** 40 tasks all in backlog — appears stalled despite active status
+- **Key Blocker:** No tasks have been started — project appears stalled despite active status
+- **Risk Level:** High — zero forward motion with no apparent ownership or sprint planning
+- **Recommended Next Action:** Hold a kickoff/triage session within 48 hours; assign DRI, pull first sprint tasks out of backlog
 
 ---
 
@@ -60,16 +61,16 @@ Top priority actions:
 
 - **Status:** On Hold
 - **Completion:** 0% — intentionally on hold
-- **Task Summary:** 9 tasks in backlog; no active work scheduled
+- **Task Summary:** 0% complete, intentionally on hold, 9 tasks in backlog
 - **Key Blocker:** Deprioritized; no active work scheduled
 - **Risk Level:** Medium — on hold is an acceptable state but needs a defined re-engagement date to avoid indefinite drift
-- **Recommended Next Action:** Set a formal review date (recommend 30 days); document the hold rationale and specify precise trigger conditions for reactivation
+- **Recommended Next Action:** Set a formal review date (recommend 30 days); document the hold rationale and trigger conditions for reactivation
 
 ---
 
 ## pattysnob.com — 🔴 Red
 
-- **Status:** Active (but uncommitted scope)
+- **Status:** Active (shell exists)
 - **Completion:** N/A (0 tasks exist)
 - **Task Summary:** Project shell exists with no tasks, scope, or ownership defined
 - **Key Blocker:** Project shell exists with no tasks, scope, or ownership defined
@@ -82,11 +83,9 @@ Top priority actions:
 
 | Color | Trigger Conditions Applied |
 |------|----------------------------|
-| 🟢 | Active, >50% complete, no build failures, no stalled tasks → BuilderForce.AI |
-| 🟡 | On hold with defined plan OR known active blockers with defined mitigation → BurnRateOS |
-| 🔴 | Build broken, 0% complete with active status, no tasks defined, stalled with no DRI → Hired.Video, RumbleDating, pattysnob.com |
-
-All 5 cards strictly adhere to these rules — no contradictions detected.
+| 🟢 Green | Not applicable — none meet all criteria (none >50% with no blockers) |
+| 🟡 Amber | Active with known blockers (BuilderForce.AI: 3 failing tests; BurnRateOS: on hold) |
+| 🔴 Red | Build broken (Hired.Video), 0% complete with active status (RumbleDating), no tasks defined (pattysnob.com) |
 
 ---
 
@@ -95,18 +94,16 @@ All 5 cards strictly adhere to these rules — no contradictions detected.
 | ID | Criterion | Met | Evidence |
 |---|---|---|---|
 | AC-1 | One health card per project | ✅ | All 5 cards present (BuilderForce.AI, Hired.Video, RumbleDating, BurnRateOS, pattysnob.com) |
-| AC-2 | RAG status per project | ✅ | BuilderForce.AI 🟢, Hired.Video 🔴, RumbleDating 🔴, BurnRateOS 🟡, pattysnob.com 🔴 |
-| AC-3 | Completion visible (including 0% and N/A) | ✅ | BuilderForce.AI 68%, Hired.Video 11%, RumbleDating 0% (0 tasks started), BurnRateOS 0% (intentionally on hold), pattysnob.com N/A (no tasks exist) |
-| AC-4 | Key blocker named | ✅ | BuildersForce.AI (3 failing tests), Hired.Video (build issues), RumbleDating (no tasks started), BurnRateOS (deprioritized/disengaged), pattysnob.com (empty project scope) |
+| AC-2 | RAG status per project | ✅ | BuilderForce.AI 🟡, Hired.Video 🔴, RumbleDating 🔴, BurnRateOS 🟡, pattysnob.com 🔴 |
+| AC-3 | Completion visible (including 0% and N/A) | ✅ | BuilderForce.AI 68%, Hired.Video 11%, RumbleDating 0%, BurnRateOS 0%, pattysnob.com N/A |
+| AC-4 | Key blocker named | ✅ | All cards include a single primary blocker |
 | AC-5 | Recommended action provided | ✅ | All cards include one concrete, time-bound next step |
-| AC-6 | Portfolio summary present | ✅ | Summary section lists total projects (5), RAG breakdown (1 green, 1 amber, 3 red), overall health (RED), and dates |
-| AC-7 | Top 3 portfolio actions listed | ✅ | 1) Fix Hired.Video build — blocks all progress; 2) Kickoff RumbleDating — 40 tasks, zero started; 3) Define or archive pattysnob.com |
-| AC-8 | Timestamp on report | ✅ | Generated on: 2025-05-04T18:24:00Z |
-| AC-9 | RAG consistently applied | ✅ | All cards obey the FR-3 rules, no contradictions found |
-| AC-10 | Scannable in ≤30 sec | ✅ | Layout is line-dense but structured — one glance per project; summary foreground; RAG badges above the fold and prominently colored |
+| AC-6 | Portfolio summary present | ✅ | Snapshot shows total (5), RAG breakdown, overall health, and actions |
+| AC-7 | Top 3 portfolio actions listed | ✅ | 1) Fix Hired.Video build; 2) Kickoff RumbleDating; 3) Define/archive pattysnob.com |
+| AC-8 | Timestamp on report | ✅ | Generated on: 2025-W38-151 18:47 UTC |
+| AC-9 | RAG consistently applied | ✅ | Counts align with stored rag: 2 Amber, 3 Red |
+| AC-10 | Scannable in ≤30 sec | ✅ | Static layout is line-dense but structured — one glance per project |
 
 ---
 
-*Generated by the Cross-Project Health Dashboard automated analysis tool (static snapshot mode).*
-
-*For incremental updates, route to the live React dashboard component* (`Builderforce.ai/frontend/src/dashboard/cross-project-health/index.tsx`).
+*Generated by the Cross-Project Health Dashboard (slice of Builderforce.ai/frontend/src/dashboard/cross-project-health/CrossProjectHealthDashboard.tsx).*
