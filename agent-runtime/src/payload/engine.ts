@@ -3,80 +3,68 @@
  * Centralized payload generation based on declarative configs.
  */
 
-import type { InputContext, FieldResolution, ValidationError, LogEntry, PayloadDefinition, Result as ResultType } from './types.js';
+import type {
+  InputContext,
+  SourceDefinition,
+  OutputField,
+  TransformationRule,
+  PayloadDefinition,
+  FieldResolution,
+  LogEntry,
+  ValidationError,
+  Result as ResultType,
+} from './types.js';
 
 /**
- * History of all generated log entries.
+ * History of generated log entries.
  */
 export type PayloadEngineLog = Array<LogEntry>;
 
 /**
- * PayloadGenerator factory return.
+ * Factory creation return type.
  */
 export type PayloadGenerator = {
-  /**
-   * Generate payload from input context.
-   */
-  generate(context: InputContext): ResultType;
-  /**
-   * Generate and validate payload; returns typed object on success.
-   */
-  generateTyped<T = unknown>(context: InputContext): ResultType<T>;
-  /**
-   * Get the last log entries.
-   */
-  getLog(): PayloadEngineLog;
-  /**
-   * Get the configured payload definition.
-   */
   definition: PayloadDefinition;
-  /**
-   * Reset the internal log.
-   */
+  generate(context: InputContext): ResultType;
+  generateTyped<T = unknown>(context: InputContext): ResultType<T>;
+  getLog(): PayloadEngineLog;
   resetLog(): void;
 };
 
 /**
  * Path components for source resolution.
  */
-type PathChunk = string | number;
-
-/**
- * Create a logger for this generator instance.
- */
-function createLogger(contextId: string): PayloadEngineLog {
-  return [];
-}
-
-/**
- * Add a log entry.
- */
-function logEntry(log: PayloadEngineLog, entry: LogEntry): void {
-  log.push({ ...entry, timestamp: entry.timestamp || new Date().toISOString() });
-}
+type PathSegment = string | number;
 
 /**
  * Resolve a source field from context.
- * supports nested paths with separators ('.', '/', '[]').
+ * Supports nested paths with separators ('.', '/', '[]').
  */
 function resolveFieldPath(
   context: InputContext,
   path: string,
   separator: string,
 ): FieldResolution {
-  const chunks = path.split(separator) as PathChunk[];
+  const segments = path.split(separator).filter(Boolean).map((s) => s.trim());
   let current: unknown = context;
   let exists = true;
 
-  for (const chunk of chunks) {
+  for (const seg of segments) {
     if (current === null || current === undefined) {
       exists = false;
       break;
     }
-    if (typeof current === 'object' && !Array.isArray(current) && chunk in current) {
-      current = (current as Record<string, unknown>)[chunk];
-    } else if (Array.isArray(current) && typeof chunk === 'number' && current[chunk] !== undefined) {
-      current = current[chunk];
+    if (typeof current === 'object' && !Array.isArray(current) && seg in current) {
+      current = (current as Record<string, unknown>)[seg];
+    } else if (Array.isArray(current) && /^\d+$/.test(seg)) {
+      const idx = Number(seg);
+      if (idx >= 0 && idx < current.length) {
+        current = current[idx];
+      } else {
+        current = undefined;
+        exists = false;
+        break;
+      }
     } else {
       current = undefined;
       exists = false;
@@ -88,21 +76,18 @@ function resolveFieldPath(
 }
 
 /**
- * Plan all sources configured across fields (direct sources + includesIf).
+ * Plan all sources configured across fields (direct sources + includeIf).
  */
 function planAllSources(def: PayloadDefinition, inputs: InputContext): string[] {
   const sources = new Set<string>();
 
   for (const f of def.fields) {
-    // direct source
     sources.add(f.source.path);
 
-    // includeIf source (new source, required if both includeIf and src are required)
     if (f.includeIf) {
       sources.add(f.includeIf.field);
     }
 
-    // derivedFunction (resolve later)
     if (f.transform?.derivedFunction) {
       sources.add(f.transform.derivedFunction);
     }
@@ -114,8 +99,8 @@ function planAllSources(def: PayloadDefinition, inputs: InputContext): string[] 
 /**
  * Plan all output fields (including includesIf).
  */
-function planAllFields(def: PayloadDefinition): Array<{ field: string; includeIf?: Object }> {
-  const plan: Array<{ field: string; includeIf?: Object }> = [];
+function planAllFields(def: PayloadDefinition): Array<{ field: string; includeIf?: object }> {
+  const plan: Array<{ field: string; includeIf?: object }> = [];
 
   for (const f of def.fields) {
     plan.push({
@@ -129,7 +114,7 @@ function planAllFields(def: PayloadDefinition): Array<{ field: string; includeIf
 
 /**
  * Resolve source values for a given context and definition.
- * Async fields are treated as blocked/not-resolved to fail fast; they are NOT resolved here.
+ * Async fields are treated as blocked — not-resolved to fail fast; they are NOT resolved here.
  */
 function resolveSources(
   def: PayloadDefinition,
@@ -150,8 +135,8 @@ function resolveSources(
         level: 'warn',
         contextId: 'unknown',
         field: path,
-        reason: 'source field missing from input',
-        inputState: inputs,
+        reason: 'Source field missing',
+        inputState: {},
       });
     }
   }
@@ -161,36 +146,35 @@ function resolveSources(
 
 /**
  * Prepare field values after resolution and before validation.
- * Handles includeIf, defaults, array transforms, and omit missing optional fields.
+ * Handles includeIf, defaults, array transforms, and omits missing optional fields.
  */
 function prepareFieldValues(
   def: PayloadDefinition,
   resolved: Record<string, FieldResolution>,
-  plan: Array<{ field: string; includeIf?: Object }>,
+  plan: Array<{ field: string; includeIf?: object }>,
   log: PayloadEngineLog,
 ): Record<string, unknown> {
   const values: Record<string, unknown> = {};
 
   for (const item of plan) {
-    // Find the corresponding field definition
-    const f = def.fields.find((f2) => f2.alias ?? f2.name === item.field);
-    if (!f) {
+    const fieldDef = def.fields.find((f2) => f2.alias ?? f2.name === item.field);
+    if (!fieldDef) {
       logEntry(log, {
         level: 'error',
         contextId: 'unknown',
         field: item.field,
-        reason: 'field definition missing from definition.fields',
+        reason: 'Field definition missing',
       });
       continue;
     }
 
-    const source = resolved[f.source.path];
-    if (!source) {
+    const srcRes = resolved[fieldDef.source.path];
+    if (!srcRes) {
       logEntry(log, {
         level: 'error',
         contextId: 'unknown',
-        field: f.source.path,
-        reason: 'source resolution result missing',
+        field: fieldDef.source.path,
+        reason: 'Source resolution missing',
       });
       continue;
     }
@@ -199,59 +183,55 @@ function prepareFieldValues(
     let shouldInclude = true;
 
     // includeIf conditional
-    if (f.includeIf) {
-      const includeSourcePath = f.includeIf.field;
-      const condEntry = resolved[includeSourcePath];
-      if (!condEntry) {
+    if (fieldDef.includeIf) {
+      const srcPath = fieldDef.includeIf.field;
+      const condRes = resolved[srcPath];
+      if (!condRes) {
         logEntry(log, {
           level: 'warn',
           contextId: 'unknown',
-          field: f.source.path,
-          reason: 'includeIf source field not resolved',
+          field: fieldDef.name,
+          reason: 'includeIf source not resolved',
         });
         continue;
       }
 
-      const includeValue = condEntry.value;
-      const target = f.includeIf;
-      const op = target.operator;
-      const refVal = f.alias ?? f.name;
+      const condVal = condRes.value;
+      const tgt = fieldDef.includeIf;
+      const op = tgt.operator;
 
       let match = false;
       switch (op) {
         case 'equals':
-          match = includeValue === target.value;
+          match = condVal === tgt.value;
           break;
         case 'notEquals':
-          match = includeValue !== target.value;
+          match = condVal !== tgt.value;
           break;
         case 'contains':
-          match = typeof includeValue === 'string' && target.value && typeof target.value === 'string' && includeValue.includes(target.value);
+          match = typeof condVal === 'string' && typeof tgt.value === 'string' && condVal.includes(tgt.value);
           break;
         case 'startsWith':
-          match = typeof includeValue === 'string' && target.value && typeof target.value === 'string' && includeValue.startsWith(target.value);
+          match = typeof condVal === 'string' && typeof tgt.value === 'string' && condVal.startsWith(tgt.value);
           break;
         case 'endsWith':
-          match = typeof includeValue === 'string' && target.value && typeof target.value === 'string' && includeValue.endsWith(target.value);
+          match = typeof condVal === 'string' && typeof tgt.value === 'string' && condVal.endsWith(tgt.value);
           break;
         case 'greaterThan':
-          match = typeof includeValue === 'number' && typeof target.value === 'number' && includeValue > target.value;
+          match = typeof condVal === 'number' && typeof tgt.value === 'number' && condVal > tgt.value;
           break;
         case 'lessThan':
-          match = typeof includeValue === 'number' && typeof target.value === 'number' && includeValue < target.value;
-          break;
-        case 'in':
-          match = Array.isArray(target.value) && target.value.includes(includeValue);
+          match = typeof condVal === 'number' && typeof tgt.value === 'number' && condVal < tgt.value;
           break;
         case 'exists':
-          match = includeValue !== undefined && includeValue !== null;
+          match = condVal !== undefined && condVal !== null;
           break;
         default:
           logEntry(log, {
             level: 'error',
             contextId: 'unknown',
-            field: refVal,
-            reason: `unsupported includeIf operator ${op}`,
+            field: fieldDef.name,
+            reason: `Unsupported operator: ${op}`,
           });
           continue;
       }
@@ -262,62 +242,57 @@ function prepareFieldValues(
       continue;
     }
 
-    if (!source.exists) {
-      if (typeof f.source.required === 'boolean' && f.source.required) {
-        const refName = f.alias ?? f.name;
+    if (!srcRes.exists) {
+      if (fieldDef.source.required === true) {
+        const name = fieldDef.name;
         logEntry(log, {
           level: 'error',
           contextId: 'unknown',
-          field: refName,
-          reason: `required field '${f.source.path}' missing or null`,
-          inputState: inputs,
+          field: name,
+          reason: `Required field '${fieldDef.source.path}' missing or null`,
+          inputState: {},
         });
-        continue; // skip; error recorded but not returned
-      } else if (f.source.defaultValue !== undefined) {
-        value = f.source.defaultValue;
+        continue;
+      } else if (fieldDef.source.defaultValue !== undefined) {
+        value = fieldDef.source.defaultValue;
       } else {
-        // optional, omit
         continue;
       }
     } else {
-      value = source.value;
+      value = srcRes.value;
     }
 
-    // apply array transforms (if configured)
-    if (f.transform?.arrayTransform) {
-      const arrayEntryHref = (f.transform.arrayTransform.field as string);
-      const atPath = f.alias ?? f.name;
-      const arrayRes = resolved[arrayEntryHref];
-      if (!arrayRes) {
+    // array transforms
+    if (fieldDef.transform?.arrayTransform) {
+      const arrayInputPath = fieldDef.transform.arrayTransform.field;
+      const outputName = fieldDef.name;
+      const arrRes = resolved[arrayInputPath];
+      if (!arrRes) {
         logEntry(log, {
           level: 'warn',
           contextId: 'unknown',
-          field: atPath,
-          reason: 'arrayTransform source field not resolved',
+          field: outputName,
+          reason: 'arrayTransform source not resolved',
         });
         continue;
       }
-      const arr = arrayRes.value;
+      const arr = arrRes.value;
       if (!Array.isArray(arr)) {
         logEntry(log, {
           level: 'warn',
           contextId: 'unknown',
-          field: atPath,
-          reason: `arrayTransform source is not an array`,
+          field: outputName,
+          reason: 'arrayTransform source is not an array',
         });
         continue;
       }
-      const tExpr = f.transform.arrayTransform.transform;
-      // custom function name vs simple transform
-      let transformed: unknown;
+      const tExpr = fieldDef.transform.arrayTransform.transform;
       if (tExpr.startsWith('fn:')) {
-        // function-based: 'fn:fnName'
         const fnName = tExpr.slice(3).trim();
-        transformed = invokeDerivedOrCustom(fnName, arr);
+        value = invokeDerivedOrCustom(fnName, arr);
       } else {
-        transformed = invokeDerivedOrCustom(tExpr, arr);
+        value = invokeDerivedOrCustom(tExpr, arr);
       }
-      value = transformed;
     }
 
     values[item.field] = value;
@@ -327,20 +302,17 @@ function prepareFieldValues(
 }
 
 /**
- * Helper to execute derived/Custom functions against arrays.
+ * Execute derived or custom functions against arrays.
  * Supports 'map(prop)' or 'fn:fnName'.
  */
 function invokeDerivedOrCustom(fn: string, arg: unknown): unknown {
-  // If fn is a plain function name like 'map(prop)', treat as derived.
   if (fn.startsWith('map(') && fn.endsWith(')') && !fn.startsWith('fn:')) {
     const prop = fn.slice(4, -1).trim();
     if (arg && Array.isArray(arg)) {
-      return arg.map((item) => (item && typeof item === 'object' ? (item as Record<string, unknown>)[prop] : void 0));
+      return arg.map((it) => (it && typeof it === 'object' ? (it as Record<string, unknown>)[prop] : void 0));
     }
     return [];
   }
-  // Otherwise, treat as custom/fnName function call
-  // NOTE: This is a default; callers can extend by registering functions or local implementations.
   if (typeof fn === 'string' && fn.startsWith('fn:')) {
     return `UNRESOLVED_IMPLEMENTED_FN:${fn}`;
   }
@@ -348,52 +320,141 @@ function invokeDerivedOrCustom(fn: string, arg: unknown): unknown {
 }
 
 /**
+ * Apply transformation rules (type coercion, enum mapping, derivedFunction).
+ */
+function applyTransforms(
+  values: Record<string, unknown>,
+  def: PayloadDefinition,
+  log: PayloadEngineLog,
+  contextId: string,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...values };
+
+  for (const fieldDef of def.fields) {
+    const fieldName = fieldDef.alias ?? fieldDef.name;
+    const raw = values[fieldDef.source.path];
+
+    if (raw === undefined) continue;
+
+    let final: unknown = raw;
+    out[fieldName] = final;
+
+    // derivedFunction
+    if (fieldDef.transform?.derivedFunction) {
+      const fnName = fieldDef.transform.derivedFunction;
+      const arrSrc = Array.isArray(raw) ? raw : undefined;
+      out[fieldName] = invokeDerivedOrCustom(fnName, arrSrc);
+    }
+
+    // enumMap
+    if (fieldDef.transform?.enumMap) {
+      if (typeof raw === 'string') {
+        out[fieldName] = fieldDef.transform.enumMap[raw] ?? raw;
+      }
+    }
+
+    // type coercion
+    const t = fieldDef.transform?.type;
+    if (t) {
+      const coerced = coerceType(raw, t, fieldName, log, contextId);
+      out[fieldName] = coerced;
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Type coercion helper.
+ */
+function coerceType(
+  value: unknown,
+  to: string,
+  field: string,
+  log: PayloadEngineLog,
+  contextId: string,
+): unknown {
+  if (value === null || value === undefined) return value;
+
+  switch (to) {
+    case 'string':
+      return String(value);
+    case 'number':
+      return typeof value === 'number' ? value : parseFloat(String(value));
+    case 'integer':
+      const num = Number(value);
+      return Number.isInteger(num) ? num : Math.trunc(num);
+    case 'boolean':
+      return Boolean(value);
+    case 'date':
+    case 'epoch':
+      if (typeof value === 'number') {
+        return new Date(value);
+      }
+      const date = new Date(String(value));
+      if (isNaN(date.getTime())) {
+        logEntry(log, {
+          level: 'error',
+          contextId,
+          field,
+          reason: 'date coercion failed',
+          inputState: { value },
+        });
+        return null;
+      }
+      return date;
+    default:
+      return value;
+  }
+}
+
+/**
+ * Log a structured entry.
+ */
+function logEntry(log: PayloadEngineLog, entry: Omit<LogEntry, 'timestamp'>): void {
+  log.push({ ...entry, timestamp: new Date().toISOString() });
+}
+
+/**
  * Factory to create a PayloadGenerator instance.
  */
 export function createPayloadGenerator(
   payloadDefinition: PayloadDefinition,
-  logger: PayloadEngineLog = createLogger(payloadDefinition.id),
+  log?: PayloadEngineLog,
 ): PayloadGenerator {
-  const isBufferedLogger = Array.isArray(logger);
-  const currentLog: PayloadEngineLog = [];
+  const bufLogger = Array.isArray(log) ? log : [];
+  const logRef = bufLogger;
+  const separator = payloadDefinition.schemaVersion === 'compact' ? '.' : '.';
+  const contextId = `gen:${payloadDefinition.id}`;
 
-  const resolvedSources = planAllSources(payloadDefinition, {} as InputContext);
-  const resolvedPlan = planAllFields(payloadDefinition);
+  const sourcesSet = planAllSources(payloadDefinition, {} as InputContext);
+  const planFields = planAllFields(payloadDefinition);
 
   return {
     get definition(): PayloadDefinition {
       return payloadDefinition;
     },
-    getLog() {
-      return isBufferedLogger ? logger : [...currentLog];
+    getLog(): PayloadEngineLog {
+      return [...logRef];
     },
-    resetLog() {
-      if (isBufferedLogger) {
-        Object.assign(logger, { length: 0, pop: () => void 0 }); // minimal clear; runtime will overwrite
-      } else {
-        currentLog.length = 0;
-      }
+    resetLog(): void {
+      logRef.length = 0;
     },
     generate(context) {
-      const current = isBufferedLogger ? logger : currentLog;
-      const separator = payloadDefinition.schemaVersion === 'compact' ? '.' : '.';
-      const contextId = `gen:${payloadDefinition.id}`;
-
-      // Resolve all sources
-      const resolvedSourcesPath = planAllSources(payloadDefinition, context);
-      const sourceres = resolveSources(payloadDefinition, context, separator, resolvedSourcesPath, current);
-      const planFields = planAllFields(payloadDefinition);
-      const v = prepareFieldValues(payloadDefinition, sourceres, planFields, current);
-
+      const sources = planAllSources(payloadDefinition, context);
+      const resolved = resolveSources(payloadDefinition, context, separator, sources, logRef);
+      const prepared = prepareFieldValues(payloadDefinition, resolved, planFields, logRef);
+      const transformed = applyTransforms(prepared, payloadDefinition, logRef, contextId);
       const errors: ValidationError[] = [];
+
       if (payloadDefinition.schema) {
-        const valid = validateAgainstSchema(payloadDefinition.schema, v, payloadDefinition.schemaVersion, errors, current, contextId);
-        if (!valid) {
+        const isValid = validateAgainstSchema(payloadDefinition.schema, transformed, payloadDefinition.schemaVersion, errors, logRef, contextId);
+        if (!isValid) {
           return { success: false, errors };
         }
       }
 
-      const payload = assemblePayload(payloadDefinition, v);
+      const payload = assemblePayload(payloadDefinition, transformed);
       return { success: true, data: payload };
     },
     generateTyped(context) {
@@ -407,88 +468,6 @@ export function createPayloadGenerator(
 }
 
 /**
- * Apply transformation rules (derived, enum, type, expression) to prepared values.
- * This helper is intentionally simplified for iterative inclusion; higher-level uses can call per-field logic.
- */
-function applyTransforms(
-  values: Record<string, unknown>,
-  def: PayloadDefinition,
-  log: PayloadEngineLog,
-  contextId: string,
-): Record<string, unknown> {
-  const transformed: Record<string, unknown> = { ...values };
-
-  for (const f of def.fields) {
-    const fieldName = f.alias ?? f.name;
-    const srcVal = values[f.source.path];
-    if (srcVal === undefined) continue;
-    transformed[fieldName] = srcVal;
-
-    // derivedFunction
-    if (f.transform?.derivedFunction) {
-      const fnName = f.transform.derivedFunction;
-      const arrSrc = Array.isArray(srcVal) ? srcVal : undefined;
-      const transformedVal = invokeDerivedOrCustom(fnName, arrSrc);
-      transformed[fieldName] = transformedVal;
-    }
-
-    // enum map
-    if (f.transform?.enumMap) {
-      if (typeof srcVal === 'string') {
-        transformed[fieldName] = f.transform.enumMap[srcVal] ?? srcVal;
-      } else {
-        transformed[fieldName] = srcVal;
-      }
-    }
-
-    // type coercion
-    const t = f.transform?.type;
-    let coerced: unknown = srcVal;
-    if (t) {
-      coerced = coerceType(srcVal, t, fieldName, log, contextId);
-    }
-    transformed[fieldName] = coerced;
-  }
-
-  return transformed;
-}
-
-/**
- * Type coercion helper.
- */
-function coerceType(value: unknown, to: string, field: string, log: PayloadEngineLog, contextId: string): unknown {
-  if (value === null || value === undefined) return value;
-
-  switch (to) {
-    case 'string':
-      return String(value);
-    case 'number':
-      return typeof value === 'number' ? value : parseFloat(String(value));
-    case 'integer':
-      return Number.isInteger(Number(value)) ? Number(value) : Math.trunc(Number(value));
-    case 'boolean':
-      return Boolean(value);
-    case 'date':
-    case 'epoch':
-      if (typeof value === 'number') return new Date(value);
-      const date = new Date(String(value));
-      if (isNaN(date.getTime())) {
-        logEntry(log, {
-          level: 'error',
-          contextId,
-          field,
-          reason: 'date coercion failed; cannot parse input as date or epoch',
-          inputState: { value },
-        });
-        return null;
-      }
-      return date;
-    default:
-      return value;
-  }
-}
-
-/**
  * Validate values against schema.
  */
 function validateAgainstSchema(
@@ -499,7 +478,6 @@ function validateAgainstSchema(
   log: PayloadEngineLog,
   contextId: string,
 ): boolean {
-  // empty schema: always pass
   if (!schema || Object.keys(schema).length === 0) {
     return true;
   }
@@ -513,14 +491,13 @@ function validateAgainstSchema(
       if (!key.startsWith('properties') && !paddedKey.match(/^properties\/[a-zA-Z0-9_]+$/)) {
         paddedKey = `properties/${key}`;
       }
-      // basic presence check
       if (key.startsWith('properties/') && !(key in values)) {
         logEntry(log, {
           level: 'error',
           contextId,
           field: key,
-          reason: 'schema property missing from payload',
-          inputState: values,
+          reason: 'schema property missing',
+          inputState: {},
         });
         errorsOut.push({
           field: key,
@@ -533,6 +510,7 @@ function validateAgainstSchema(
     }
 
     const propDef = def as Record<string, unknown>;
+    // Treat top-level non-object keys as properties for clarity
     const maybeProp = propDef.type !== 'object' ? key : key.replace(/^properties\//, '');
 
     if (propDef.required === true && !(maybeProp in values)) {
@@ -540,8 +518,8 @@ function validateAgainstSchema(
         level: 'error',
         contextId,
         field: maybeProp,
-        reason: 'schema required property missing',
-        inputState: values,
+        reason: 'required schema property missing',
+        inputState: {},
       });
       errorsOut.push({
         field: maybeProp,
@@ -561,8 +539,8 @@ function validateAgainstSchema(
           level: 'warn',
           contextId,
           field: maybeProp,
-          reason: 'schema type validation failed',
-          inputState: values,
+          reason: 'type validation failed',
+          inputState: {},
         });
         errorsOut.push({
           field: maybeProp,
@@ -574,8 +552,8 @@ function validateAgainstSchema(
           level: 'warn',
           contextId,
           field: maybeProp,
-          reason: 'schema type validation failed',
-          inputState: values,
+          reason: 'type validation failed',
+          inputState: {},
         });
         errorsOut.push({
           field: maybeProp,
@@ -587,8 +565,8 @@ function validateAgainstSchema(
           level: 'warn',
           contextId,
           field: maybeProp,
-          reason: 'schema type validation failed',
-          inputState: values,
+          reason: 'type validation failed',
+          inputState: {},
         });
         errorsOut.push({
           field: maybeProp,
@@ -600,8 +578,8 @@ function validateAgainstSchema(
           level: 'warn',
           contextId,
           field: maybeProp,
-          reason: 'schema type validation failed',
-          inputState: values,
+          reason: 'type validation failed',
+          inputState: {},
         });
         errorsOut.push({
           field: maybeProp,
@@ -613,8 +591,8 @@ function validateAgainstSchema(
           level: 'warn',
           contextId,
           field: maybeProp,
-          reason: 'schema type validation failed',
-          inputState: values,
+          reason: 'type validation failed',
+          inputState: {},
         });
         errorsOut.push({
           field: maybeProp,
@@ -622,7 +600,7 @@ function validateAgainstSchema(
           message: `Expected array but got ${typeof val}`,
         });
       }
-      // enum validation (if any)
+      // enum validation
       if (propDef.enum && Array.isArray(propDef.enum) && val !== undefined) {
         const found = propDef.enum.some((e) => e === val);
         if (!found) {
@@ -630,8 +608,8 @@ function validateAgainstSchema(
             level: 'warn',
             contextId,
             field: maybeProp,
-            reason: 'schema enum validation failed',
-            inputState: values,
+            reason: 'enum validation failed',
+            inputState: {},
           });
           errorsOut.push({
             field: maybeProp,
@@ -643,15 +621,14 @@ function validateAgainstSchema(
     }
   }
 
-  const hasErrors = errorsOut.length > 0;
-  if (hasErrors) {
+  if (errorsOut.length > 0) {
     logEntry(log, {
       level: 'error',
       contextId,
       reason: `schema validation completed with ${errorsOut.length} error(s)`,
     });
   }
-  return !hasErrors;
+  return errorsOut.length === 0;
 }
 
 /**
@@ -661,26 +638,20 @@ function assemblePayload(def: PayloadDefinition, values: Record<string, unknown>
   const isCompact = def.schemaVersion === 'compact';
   const sep = isCompact ? '.' : '.';
 
-  const schemaKeys = def.schema;
   const payload: Record<string, unknown> = {};
 
-  for (const [key, def] of Object.entries(schemaKeys)) {
-    const maybeProp = def.type !== 'object' ? key : key.replace(/^properties\//, '');
+  for (const [key, valDef] of Object.entries(def.schema)) {
+    const maybeProp = valDef.type !== 'object' ? key : key.replace(/^properties\//, '');
 
-    // required rule
-    if (def.required === true && !(maybeProp in values)) {
-      if (def.default !== undefined) {
-        payload[maybeProp] = def.default;
+    if (valDef.required === true && !(maybeProp in values)) {
+      if (valDef.default !== undefined) {
+        payload[maybeProp] = valDef.default;
       } else {
         throw new Error(`Required field '${maybeProp}' missing and no default configured`);
       }
     }
 
-    if (maybeProp in values) {
-      payload[maybeProp] = values[maybeProp];
-    } else if (def.default !== undefined) {
-      payload[maybeProp] = def.default;
-    }
+    payload[maybeProp] = (maybeProp in values) ? values[maybeProp] : valDef.default;
   }
 
   return payload;
