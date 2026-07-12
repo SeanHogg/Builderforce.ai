@@ -24,7 +24,6 @@ export function QualityDashboardView({ initialFilter }: QualityDashboardViewProp
   }, []);
 
   const { bugCountSummary, trendData, severityBreakdown, loading, lastSynced, syncing, syncError, sync: handleSync, clearSyncError } = useQualityData(filter);
-  const { allBugs } = useAllBugs(filter);
 
   const handleSyncClick = () => {
     clearSyncError();
