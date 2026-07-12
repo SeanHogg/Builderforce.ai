@@ -4,7 +4,7 @@
  */
 
 import React from "react";
-import { SevereSeverityBreakdown } from "../../../types/quality";
+import { TrendData, SeverityBreakdown } from "../../../types/quality";
 import * as Recharts from "recharts";
 import "./SeverityDonutChart.css";
 
@@ -12,6 +12,8 @@ interface SeverityDonutChartProps {
   breakdown: Record<"Critical" | "High" | "Medium" | "Low", number>;
   colors: Record<"Critical" | "High" | "Medium" | "Low", string>;
 }
+
+type Severity = "Critical" | "High" | "Medium" | "Low";
 
 export function SeverityDonutChart({ breakdown, colors }: SeverityDonutChartProps) {
   const severityOrder: (keyof typeof breakdown)[] = ["Critical", "High", "Medium", "Low"];
