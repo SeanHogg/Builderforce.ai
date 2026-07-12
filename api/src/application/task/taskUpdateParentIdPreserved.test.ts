@@ -171,6 +171,11 @@ describe('Task.update() parentTaskId preservation (AC-1..AC-4)', () => {
       // After update, child should still be a child of the Epic (parentTaskId unchanged)
       expect(updated.parentTaskId).toBe(epic.id);
       expect(updated.assignedAgentRef).toBe('ide-agent-42');
+      // FR-1/FR-2: the preserved parentTaskId must also be what is PERSISTED —
+      // re-read from the repo to prove the DTO→Task→persist path did not null it.
+      const persisted = await repo.findById(child.id as TaskId);
+      expect(persisted?.parentTaskId).toBe(epic.id);
+      expect(persisted?.assignedAgentRef).toBe('ide-agent-42');
     });
   });
 
