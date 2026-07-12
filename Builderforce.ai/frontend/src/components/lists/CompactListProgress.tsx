@@ -305,22 +305,34 @@ const progressFg: CSSProperties = {
   transition: 'width 200ms linear',
 };
 
-const percent: CSSProperties = {
+const value: CSSProperties = {
   fontSize: '0.72rem',
   fontWeight: 500,
   color: 'var(--text-secondary)',
-  width: '50px',
+  minWidth: '44px',
   textAlign: 'right',
   flex: '0 0 auto',
-  minWidth: '60px',
+  whiteSpace: 'nowrap',
+  fontVariantNumeric: 'tabular-nums',
 };
 
-const emptyState: CSSProperties = {
-  fontSize: '0.9rem',
-  color: 'var(--text-muted)',
-  textAlign: 'center',
-  padding: '24px 0',
-  fontStyle: 'italic',
+const badgeBase: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '4px',
+  padding: '2px 10px',
+  borderRadius: '999px',
+  fontSize: '0.68rem',
+  fontWeight: 700,
+  lineHeight: 1.2,
+  color: '#fff',
+  whiteSpace: 'nowrap',
+  flex: '0 0 auto',
+};
+
+const badgeIcon: CSSProperties = {
+  fontSize: '0.72rem',
+  lineHeight: 1,
 };
 
 /* ── Skeleton styles (FR-6) ───────────────────────────────────────────────── */
