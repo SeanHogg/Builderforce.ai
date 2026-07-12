@@ -1,55 +1,108 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #289
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# PRD: Data Ingestion Inventory & Visibility
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+Engineering teams using the platform lack a clear, real-time view of what data has been successfully ingested across the four core event types — commits, pull requests, incidents, and deploys. This creates debugging friction, reduces trust in downstream metrics, and makes it difficult to validate that integrations (GitHub, GitLab, PagerDuty, etc.) are working correctly.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+**Goal:** Provide a queryable, auditable inventory of all ingested data so that users can instantly confirm what data exists in the system, when it arrived, and from which source.
 
-## Target users / ICP roles
+---
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## Target Users / ICP Roles
+
+| Role | Need |
+|---|---|
+| **Engineering Manager** | Confirm team activity is being captured before reviewing DORA metrics |
+| **DevOps / Platform Engineer** | Debug missing deploys or incidents from a specific pipeline/tool |
+| **Developer** | Verify their commits and PRs are attributed correctly |
+| **Admin / Integration Owner** | Audit source integrations and detect ingestion gaps or failures |
+
+---
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This PRD covers the **read-side inventory** of the following ingested event types:
+
+- `commits`
+- `pull_requests`
+- `incidents`
+- `deploys`
+
+It covers surfacing what has been ingested — counts, time ranges, source attribution, and record-level inspection — but does **not** cover re-ingestion workflows or integration configuration.
+
+---
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### FR-1 — Ingestion Summary Dashboard
+- Display a summary count of ingested records per event type (`commits`, `pull_requests`, `incidents`, `deploys`).
+- Summary must be filterable by:
+  - **Time range** (last 7d / 30d / 90d / custom)
+  - **Repository** (for commits and PRs)
+  - **Service / environment** (for deploys and incidents)
+  - **Integration source** (e.g., GitHub, GitLab, PagerDuty, CircleCI)
+
+### FR-2 — Per-Event-Type Record List
+- Each event type exposes a paginated list of ingested records.
+- Each record displays:
+
+  | Event Type | Key Fields |
+  |---|---|
+  | **Commit** | SHA, author, repo, branch, timestamp, integration source |
+  | **Pull Request** | PR ID, title, author, repo, state, opened_at, merged_at, integration source |
+  | **Incident** | Incident ID, title, severity, service, started_at, resolved_at, integration source |
+  | **Deploy** | Deploy ID, service, environment, status, deployed_at, triggered_by, integration source |
+
+### FR-3 — Search & Filter
+- Full-text search within each event type (e.g., by PR title, commit SHA, incident title).
+- Filter by author / deployer / assignee.
+- Filter by date range on the primary timestamp field.
+
+### FR-4 — Ingestion Timeline / Volume Chart
+- Time-series chart showing ingestion volume per event type over the selected date range.
+- Ability to overlay all four event types on one chart or view individually.
+- Visible gaps in the timeline must be visually distinct (zero-count buckets rendered, not omitted).
+
+### FR-5 — Record-Level Detail View
+- Clicking any record opens a detail panel or page showing the full raw payload as received, plus normalized fields and the ingestion timestamp (`ingested_at`).
+- Display the originating webhook or API call metadata (source IP redacted, event type header, delivery ID where available).
+
+### FR-6 — Ingestion Health Indicators
+- Each integration source displays a status badge:
+  - `Healthy` — events received within the expected window
+  - `Stale` — no events received in > 24 hours (configurable threshold)
+  - `Error` — last delivery attempt returned a non-2xx or parsing failure
+- Last-event timestamp shown per source.
+
+### FR-7 — Export
+- Allow CSV export of the filtered record list for each event type (up to 10,000 rows).
+- Export must include all fields shown in FR-2.
+
+---
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+| # | Criterion |
+|---|---|
+| AC-1 | Summary counts match the actual record counts returned by the paginated list for the same filter set. |
+| AC-2 | A commit ingested via webhook appears in the commits list within 60 seconds of delivery. |
+| AC-3 | Filtering by repository correctly excludes events from other repositories with zero false positives. |
+| AC-4 | A source with no events in > 24 hours displays the `Stale` badge without manual refresh. |
+| AC-5 | The timeline chart renders zero-count buckets as flat segments, not gaps in the line. |
+| AC-6 | Clicking a record displays the original raw payload and the `ingested_at` timestamp. |
+| AC-7 | CSV export for 10,000 rows completes in < 30 seconds and column headers match FR-2 field names. |
+| AC-8 | All four event types are accessible to any authenticated user with at least `viewer` role; raw payload is restricted to `admin` role. |
 
-## Out of scope
+---
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## Out of Scope
+
+- **Re-ingestion / backfill workflows** — triggering a re-sync from an integration is a separate feature.
+- **Integration setup or credential management** — covered by the Integrations Configuration PRD.
+- **Alerting / notifications on ingestion failures** — covered by the Observability & Alerting PRD.
+- **Data deletion or retention policy enforcement** — governed by the Data Retention PRD.
+- **Real-time streaming view** (live tail of incoming events) — deferred to a future iteration.
+- **Cross-team or org-level aggregation** — this PRD covers single-team scope only.
