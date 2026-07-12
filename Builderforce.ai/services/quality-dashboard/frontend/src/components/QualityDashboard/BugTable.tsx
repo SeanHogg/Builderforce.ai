@@ -1,17 +1,13 @@
 /**
  * Bug Table
- * Paginated bug list with CSV/PDF export options
+ * Paginated bug list; uses useAllBugs to support the CSV/PDF export button.
  */
 
 import React from "react";
 import { Bug } from "../../types/quality";
 import { exportBugsToCSV } from "../../utils/exports";
+import { useAllBugs } from "../../hooks/useAllBugs";
 import "./BugTable.css";
-
-interface BugTableProps {
-  bugs: Bug[];
-  loading?: boolean;
-}
 
 const severityBadgeClass: Record<string, string> = {
   Critical: "badge-critical",
@@ -20,9 +16,18 @@ const severityBadgeClass: Record<string, string> = {
   Low: "badge-low",
 };
 
-export function BugTable({ bugs, loading = false }: BugTableProps) {
+export function BugTable() {
+  const { allBugs, total, loading, error } = useAllBugs({
+    project_id: undefined,
+    team: undefined,
+    component: undefined,
+    assignee: undefined,
+    severity_threshold: undefined,
+    time_window_days: 365,
+  });
+
   const handleExportCSV = () => {
-    exportBugsToCSV(bugs, "quality-bugs-export.csv");
+    exportBugsToCSV(allBugs.slice(0, 10000), "quality-bugs-export.csv");
   };
 
   if (loading) {
@@ -33,16 +38,24 @@ export function BugTable({ bugs, loading = false }: BugTableProps) {
     );
   }
 
+  if (error) {
+    return (
+      <div className="bug-table error">
+        <div>Error loading bugs: {error}</div>
+      </div>
+    );
+  }
+
   return (
     <div className="bug-table">
       <div className="table-header">
-        <span className="table-count">{bugs.length} bug(s)</span>
+        <span className="table-count">{allBugs.length} bug(s) (max exportable)</span>
         <button className="export-csv-button" onClick={handleExportCSV}>
           Export CSV
         </button>
       </div>
 
-      {bugs.length === 0 ? (
+      {allBugs.length === 0 ? (
         <div className="empty-state">No bugs match the current filters.</div>
       ) : (
         <div className="table-wrapper">
@@ -59,7 +72,7 @@ export function BugTable({ bugs, loading = false }: BugTableProps) {
               </tr>
             </thead>
             <tbody>
-              {bugs.map((bug) => (
+              {allBugs.slice(0, 10000).map((bug) => (
                 <tr key={bug.id}>
                   <td className="bug-id">{bug.id}</td>
                   <td className="bug-title">{bug.title}</td>
