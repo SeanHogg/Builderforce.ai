@@ -22,7 +22,6 @@ export type CustomFunction = (args: {
   context: InputContext;
   resolved: Record<string, FieldResolution>;
   sourcePath: string;
-  outputName: string;
 }) => unknown;
 
 /**
@@ -170,16 +169,16 @@ function applyArrayTransform(
   _resolved: Record<string, FieldResolution>,
   functions: Record<string, CustomFunction>,
 ): unknown[] {
-  if (transformExpr.startsWith("map(") && transformExpr.endsWith(")")) {
+  if (transformExpr.startsWith(`map(`) && transformExpr.endsWith(`)`)) {
     const prop = transformExpr.slice(4, -1).trim().replace(/^["']|["']$/g, "");
     return arr.map((el) =>
       el && typeof el === "object" && !Array.isArray(el) ? (el as Record<string, unknown>)[prop] : undefined,
     );
   }
-  if (transformExpr.startsWith("fn:")) {
+  if (transformExpr.startsWith(`fn:`)) {
     const fnName = transformExpr.slice(3).trim();
     if (functions[fnName]) {
-      return functions[fnName]({ context: _context, resolved: _resolved, sourcePath: "", outputName: "" }) as unknown[];
+      return functions[fnName]({ context: _context, resolved: _resolved, sourcePath: "" }) as unknown[];
     }
   }
   return arr;
@@ -216,22 +215,33 @@ function runDerivedFunction(
 }
 
 /**
- * Extract the requirements from a schema (used to validate top-level fields).
+ * Internal emitter for recording log entries (ontime, buffered).
  */
-function emit(log: LogEntry[], options: { logSink?: (entry: LogEntry) => void }) {
-  return (entry: Omit<LogEntry, "timestamp">): void => {
-    const full: LogEntry = { ...entry, timestamp: new Date().toISOString() };
-    log.push(full);
-    if (options.logSink) {
-      try {
-        options.logSink(full);
-      } catch {
-        // A failing sink must never break payload generation.
-      }
-    }
-  };
+function emitLog(log: LogEntry[], entry: Omit<LogEntry, "timestamp">): void {
+  log.push({ ...entry, timestamp: new Date().toISOString() });
 }
 
+/**
+ * Schema/warnPring used by validateProperty.
+ */
+function schemaWarning(
+  log: LogEntry[],
+  options: { logSink?: (entry: LogEntry) => void },
+  entry: Omit<LogEntry, "timestamp">,
+): void {
+  emitLog(log, entry);
+  if (options.logSink) {
+    try {
+      options.logSink(entry.timestamp ? entry : { ...entry, timestamp: new Date().toISOString() });
+    } catch {
+      // A failing sink must never break payload generation.
+    }
+  }
+}
+
+/**
+ * Extract the requirements from a schema (used to validate top-level fields).
+ */
 function getSchemaRequiredFields(schema: Record<string, unknown>): Set<string> {
   const out = new Set<string>();
   const required = schema.required;
@@ -296,7 +306,7 @@ function validateProperty(
         reason: `schema validation failed: expected ${type}, got ${typeof value}`,
         inputState: { value },
       };
-      emit(entry);
+      schemaWarning(log, options, entry);
       errors.push({
         field: propName,
         schemaPath: `properties/${propName}/type`,
@@ -316,7 +326,7 @@ function validateProperty(
         reason: `enum validation failed`,
         inputState: { value, enum: def.enum },
       };
-      emit(entry);
+      schemaWarning(log, options, entry);
       errors.push({
         field: propName,
         schemaPath: `properties/${propName}/enum`,
@@ -326,10 +336,6 @@ function validateProperty(
       });
     }
   }
-}
-
-function logEntry(log: LogEntry[], entry: Omit<LogEntry, "timestamp">): void {
-  log.push({ ...entry, timestamp: new Date().toISOString() });
 }
 
 /**
@@ -352,18 +358,6 @@ export function createPayloadGenerator(
   const logSink = options?.logSink;
   const logRef: LogEntry[] = [];
   const contextId = `gen:${payloadDefinition.id}`;
-
-  const emit = (entry: Omit<LogEntry, "timestamp">): void => {
-    const full: LogEntry = { ...entry, timestamp: new Date().toISOString() };
-    logRef.push(full);
-    if (logSink) {
-      try {
-        logSink(full);
-      } catch {
-        // A failing sink must never break payload generation.
-      }
-    }
-  };
 
   const planFields = (): OutputField[] => [...payloadDefinition.fields];
 
@@ -407,7 +401,7 @@ export function createPayloadGenerator(
 
     // Custom function
     if (field.customFunction && functions[field.customFunction]) {
-      value = functions[field.customFunction]({ context, resolved, sourcePath: field.source.path, outputName: field.name });
+      value = functions[field.customFunction]({ context, resolved, sourcePath: field.source.path });
     }
 
     // Enum mapping
@@ -429,7 +423,7 @@ export function createPayloadGenerator(
 
     for (const r of required) {
       if (!(r in payload) || payload[r] === undefined || payload[r] === null) {
-        emit({
+        emitLog(logRef, {
           level: "error",
           contextId,
           field: r,
@@ -457,7 +451,6 @@ export function createPayloadGenerator(
     const fields = planFields();
     const resolved = resolveAll(context, fields);
     const payload: Record<string, unknown> = {};
-    const errors: ValidationError[] = [];
 
     for (const field of fields) {
       const outName = field.alias ?? field.name;
@@ -473,7 +466,7 @@ export function createPayloadGenerator(
       const srcRes = resolved[field.source.path];
       if (!srcRes) {
         if (field.source.required) {
-          emit({
+          emitLog(logRef, {
             level: "error",
             contextId,
             field: outName,
@@ -490,7 +483,7 @@ export function createPayloadGenerator(
 
       if (!srcRes.exists) {
         if (field.source.required) {
-          emit({
+          emitLog(logRef, {
             level: "error",
             contextId,
             field: outName,
