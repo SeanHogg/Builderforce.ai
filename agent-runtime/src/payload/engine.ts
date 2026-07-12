@@ -289,21 +289,14 @@ function validateProperty(
       }
     })();
     if (!isValidType) {
-      emit({
+      const entry: LogEntry = {
         level: "error",
         contextId: options.contextId,
         field: propName,
         reason: `schema validation failed: expected ${type}, got ${typeof value}`,
         inputState: { value },
       };
-      log.push(entry);
-      if (options.logSink) {
-        try {
-          options.logSink(entry);
-        } catch {
-          // Log sink must not break validation.
-        }
-      }
+      emit(entry);
       errors.push({
         field: propName,
         schemaPath: `properties/${propName}/type`,
@@ -315,22 +308,15 @@ function validateProperty(
     }
   }
   if (def.enum && Array.isArray(def.enum)) {
-    if (!def.enum.some((entry) => entry === value)) {
-      emit({
+    if (!def.enum.some((ean) => ean === value)) {
+      const entry: LogEntry = {
         level: "error",
         contextId: options.contextId,
         field: propName,
         reason: `enum validation failed`,
         inputState: { value, enum: def.enum },
       };
-      log.push(entry);
-      if (options.logSink) {
-        try {
-          options.logSink(entry);
-        } catch {
-          // Log sink must not break validation.
-        }
-      }
+      emit(entry);
       errors.push({
         field: propName,
         schemaPath: `properties/${propName}/enum`,
