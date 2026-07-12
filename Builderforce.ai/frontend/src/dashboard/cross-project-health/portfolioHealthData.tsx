@@ -164,7 +164,7 @@ export const projects: ProjectHealth[] = [
 /* ── Portfolio Summary (derived, FR-4) ────────────────────────────────────── */
 
 function computeOverall(green: number, amber: number, red: number): RAG {
-  // Overall is the worst bucket that has plurality — RED if any reds exist.
+  // Overall is the worst denominator that exists — RED if any reds exist.
   if (red > 0) return 'Red';
   if (amber > 0) return 'Amber';
   return 'Green';
@@ -174,10 +174,11 @@ export function buildPortfolioSummary(
   projectList: ProjectHealth[],
   generatedAtIso?: string
 ): PortfolioSummary {
-  const derived = projectList.map((p) => ({ id: p.id, rag: deriveRagStatus(p) }));
-  const green = derived.filter((d) => d.rag === 'Green').length;
-  const amber = derived.filter((d) => d.rag === 'Amber').length;
-  const red = derived.filter((d) => d.rag === 'Red').length;
+  // Respect manual rag overrides stored in project health; derive counts from stored rag,
+  // not re-running rules to avoid double-counting or contradicting policy.
+  const green = projectList.filter((d) => d.rag === 'Green').length;
+  const amber = projectList.filter((d) => d.rag === 'Amber').length;
+  const red = projectList.filter((d) => d.rag === 'Red').length;
   return {
     generatedAt: generatedAtIso ?? new Date().toISOString(),
     totalProjects: projectList.length,
