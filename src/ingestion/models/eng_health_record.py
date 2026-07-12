@@ -27,9 +27,84 @@ class DataQualityFlag(str, Enum):
     MISSING_REQUIRED_FIELD = "missing_required_field"
     INVALID_TIMESTAMP = "invalid_timestamp"
     VALUE_OUT_OF_RANGE = "value_out_of_range"
-    LEADERSHIP = "leadership"
     PII_EXISTS = "pii_exists"
     IDENTITY_MISMATCH = "identity_mismatch"
+
+
+@dataclass
+class NormalizedFields:
+    """
+    Domain-specific normalized fields for different metric types.
+    Each type has its own sub-structure.
+    """
+    # Task Backlog
+    item_id: Optional[str] = None
+    item_type: Optional[str] = None
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    story_points: Optional[float] = None
+    age_days: Optional[float] = None
+    sprint_id: Optional[str] = None
+    iteration_id: Optional[str] = None
+    assignee_team: Optional[str] = None
+    
+    # Bug Count
+    severity: Optional[str] = None
+    created_date: Optional[datetime] = None
+    resolved_date: Optional[datetime] = None
+    lines_fixed: Optional[int] = None
+    
+    # PR Cycle Time
+    pr_id: Optional[str] = None
+    created_at: Optional[datetime] = None
+    first_review_at: Optional[datetime] = None
+    approved_at: Optional[datetime] = None
+    merged_at: Optional[datetime] = None
+    closed_at: Optional[datetime] = None
+    target_branch: Optional[str] = None
+    lines_changed: Optional[int] = None
+    review_count: Optional[int] = None
+    
+    # Build Failure Rate
+    pipeline_name: Optional[str] = None
+    trigger_type: Optional[str] = None
+    status: Optional[str] = None
+    duration_seconds: Optional[float] = None
+    failure_stage: Optional[str] = None
+    commit_sha: Optional[str] = None
+    branch: Optional[str] = None
+    
+    # Deployment Frequency
+    deploy_timestamp: Optional[datetime] = None
+    env: Optional[str] = None
+    version: Optional[str] = None
+    initiator: Optional[str] = None
+    outcome: Optional[str] = None
+    
+    # Incident Count
+    incident_id: Optional[str] = None
+    severity: Optional[str] = None
+    start_time: Optional[datetime] = None
+    acknowledged_time: Optional[datetime] = None
+    resolved_time: Optional[datetime] = None
+    postmortem_link: Optional[str] = None
+    
+    # Team Velocity
+    team: Optional[str] = None
+    sprint_id: Optional[str] = None
+    sprint_dates: Optional[Dict[str, datetime]] = None
+    planned_points: Optional[float] = None
+    completed_points: Optional[float] = None
+    carry_over_points: Optional[float] = None
+    scope_change_delta: Optional[float] = None
+    
+    # Resource Allocation
+    person_id_anonymized: Optional[str] = None
+    role: Optional[str] = None
+    level: Optional[str] = None
+    allocation_percentage: Optional[float] = None
+    effective_date_start: Optional[datetime] = None
+    effective_date_end: Optional[datetime] = None
 
 
 @dataclass
@@ -126,88 +201,13 @@ class EngHealthRecord:
         return json.dumps(self.to_dict(), default=str)
 
 
-@dataclass
-class NormalizedFields:
-    """
-    Domain-specific normalized fields for different metric types.
-    Each type has its own sub-structure.
-    """
-    # Task Backlog
-    item_id: Optional[str] = None
-    item_type: Optional[str] = None
-    status: Optional[str] = None
-    priority: Optional[str] = None
-    story_points: Optional[float] = None
-    age_days: Optional[float] = None
-    sprint_id: Optional[str] = None
-   iteration_id: Optional[str] = None
-    assignee_team: Optional[str] = None
-    
-    # Bug Count
-    severity: Optional[str] = None
-    created_date: Optional[datetime] = None
-    resolved_date: Optional[datetime] = None
-    lines_fixed: Optional[int] = None
-    
-    # PR Cycle Time
-    pr_id: Optional[str] = None
-    created_at: Optional[datetime] = None
-    first_review_at: Optional[datetime] = None
-    approved_at: Optional[datetime] = None
-    merged_at: Optional[datetime] = None
-    closed_at: Optional[datetime] = None
-    target_branch: Optional[str] = None
-    lines_changed: Optional[int] = None
-    review_count: Optional[int] = None
-    
-    # Build Failure Rate
-    pipeline_name: Optional[str] = None
-    trigger_type: Optional[str] = None
-    status: Optional[str] = None
-    duration_seconds: Optional[float] = None
-    failure_stage: Optional[str] = None
-    commit_sha: Optional[str] = None
-    branch: Optional[str] = None
-    
-    # Deployment Frequency
-    deploy_timestamp: Optional[datetime] = None
-    env: Optional[str] = None
-    version: Optional[str] = None
-    initiator: Optional[str] = None
-    outcome: Optional[str] = None
-    
-    # Incident Count
-    incident_id: Optional[str] = None
-    severite: Optional[str] = None
-    start_time: Optional[datetime] = None
-    acknowledged_time: Optional[datetime] = None
-    resolved_time: Optional[datetime] = None
-    postmortem_link: Optional[str] = None
-    
-    # Team Velocity
-    team: Optional[str] = None
-    sprint_id: Optional[str] = None
-    sprint_dates: Optional[Dict[str, datetime]] = None
-    planned_points: Optional[float] = None
-    completed_points: Optional[float] = None
-    carry_over_points: Optional[float] = None
-    scope_change_delta: Optional[float] = None
-    
-    # Resource Allocation
-    person_id_anonymized: Optional[str] = None
-    role: Optional[str] = None
-    level: Optional[str] = None
-    allocation_percentage: Optional[float] = None
-    effective_date_start: Optional[datetime] = None
-    effective_date_end: Optional[datetime] = None
-
-
 def create_record_id() -> str:
     """
     Generate a unique record ID.
     
     Uses timestamp + UUID for uniqueness.
     """
+    import uuid
     from uuid import uuid4
     return f"{datetime.utcnow().timestamp()}.{uuid4()}"
 
@@ -225,6 +225,7 @@ def sanitize_pii(text: str) -> str:
     if not text:
         return text
     
+    import re
     # Replace common PII patterns
     sanitized = text
     substitutions = {
@@ -234,7 +235,7 @@ def sanitize_pii(text: str) -> str:
     }
     
     for pattern, replacement in substitutions.items():
-        sanitized = __import__('re').sub(pattern, replacement, sanitized)
+        sanitized = re.sub(pattern, replacement, sanitized)
     
     return sanitized
 
