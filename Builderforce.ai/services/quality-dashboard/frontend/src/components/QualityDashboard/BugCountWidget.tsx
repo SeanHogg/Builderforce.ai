@@ -4,7 +4,7 @@
  */
 
 import React from "react";
-import { BugCountSummary } from "../../../types/quality";
+import { BugCountSummary } from "../../types/quality";
 import "./BugCountWidget.css";
 
 interface BugCountWidgetProps {
