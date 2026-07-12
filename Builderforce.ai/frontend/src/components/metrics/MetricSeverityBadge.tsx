@@ -52,6 +52,7 @@ export const MetricSeverityBadge: React.FC<MetricSeverityBadgeProps> = ({
   size = 'md',
   theme = 'light',
   allowNegative = false,
+  manualIcon,
 }) => {
   // Classify the metric
   const result: MetricResult = classifyMetric(value, { 
