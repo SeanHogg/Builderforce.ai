@@ -1,0 +1,304 @@
+{
+  "$schema": "http://json-schema.org/draft-2020-12/schema",
+  "$id": "https://builderforce.ai/spec/basis-payload/1.0.0/basis-payload.schema.json",
+  "title": "Agent/Board Basis Payload",
+  "description": "Canonical JSON payload structure for agent-issued basis data (facts, sources, weights, reasoning context) consumed by boards and other agents.",
+  "type": "object",
+  "required": ["schema_version", "basis_id", "agent_id", "claims"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Semantic version string (e.g. '1.0.0'). Consumers MUST reject payloads they do not support.",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "basis_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Globally unique identifier for this basis instance."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp indicating when the basis was created."
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Identifier of the agent that produced this basis."
+    },
+    "session_id": {
+      "type": ["string", "null"],
+      "description": "Optional session identifier, typically to correlate basis emissions from the same agent session."
+    },
+    "parent_basis_id": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "description": "Optional parent basis identifier. Set when this basis is a refinement or rebuttal of a prior basis."
+    },
+    "claims": {
+      "type": "array",
+      "description": "Array of atomic assertions made by the agent.",
+      "items": {
+        "type": "object",
+        "required": ["claim_id", "text"],
+        "properties": {
+          "claim_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for this claim."
+          },
+          "text": {
+            "type": "string",
+            "description": "Human-readable assertion text."
+          },
+          "confidence": {
+            "type": "number",
+            "description": "Confidence of the claim (float), 0.0 to 1.0.",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "confidence_method": {
+            "type": "string",
+            "description": "Method used to compute confidence.",
+            "enum": ["bayesian", "heuristic", "llm-self-report", "empirical"]
+          },
+          "tags": {
+            "type": "array",
+            "description": "Tags for categorization or filtering.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "string",
+            "description": "Current status of the claim.",
+            "default": "asserted",
+            "enum": ["asserted", "retracted", "superseded"]
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "description": "Evidence items referenced by one or more claims.",
+      "items": {
+        "type": "object",
+        "required": ["evidence_id", "claim_ids", "type"],
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for the evidence item."
+          },
+          "claim_ids": {
+            "type": "array",
+            "description": "List of claim id(s) that this evidence supports.",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "type": {
+            "type": "string",
+            "description": "Type of evidence source.",
+            "enum": ["document", "database_record", "api_response", "agent_output", "human_input", "computed"]
+          },
+          "uri": {
+            "type": ["string", "null"],
+            "description": "Optional URI or identifier for the original source."
+          },
+          "title": {
+            "type": ["string", "null"],
+            "description": "Optional human-readable title of the evidence."
+          },
+          "excerpt": {
+            "type": ["string", "null"],
+            "description": "Optional excerpt or preview of the evidence content."
+          },
+          "retrieved_at": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "Optional timestamp when the evidence was retrieved."
+          },
+          "weight": {
+            "type": "number",
+            "description": "Strength of support (float), 0.0 to 1.0, indicating how strongly this evidence supports the linked claim(s).",
+            "minimum": 0.0,
+            "maximum": 1.0
+          },
+          "provenance": {
+            "type": ["object", "null"],
+            "properties": {
+              "source_system": {
+                "type": "string",
+                "description": "Name of the upstream system that contributed this evidence."
+              },
+              "source_version": {
+                "type": ["string", "null"],
+                "description": "Optional version identifier of the contributing system or data."
+              },
+              "checksum": {
+                "type": ["string", "null"],
+                "description": "Optional SHA-256 checksum for the evidence item to enable reproducibility.",
+                "pattern": "^[a-fA-F0-9]{64}$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "reasoning_chain": {
+      "type": "array",
+      "description": "Optional ordered reasoning chain from which the claims were derived.",
+      "items": {
+        "type": "object",
+        "required": ["step", "description"],
+        "properties": {
+          "step": {
+            "type": "integer",
+            "description": "Sequential step number (starts at 1).",
+            "minimum": 1
+          },
+          "description": {
+            "type": "string",
+            "description": "Human-readable description of this step."
+          },
+          "evidence_ids": {
+            "type": "array",
+            "description": "IDs of evidence items used in this step (optional).",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "claim_ids": {
+            "type": "array",
+            "description": "IDs of claims that result from this step (optional).",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "inference_type": {
+            "type": "string",
+            "description": "Type of inference used in this step.",
+            "enum": ["deductive", "inductive", "abductive", "analogical", "lookup"]
+          }
+        }
+      }
+    },
+    "uncertainty": {
+      "type": "object",
+      "description": "Top-level summary of uncertainty and caveats about the basis.",
+      "properties": {
+        "overall_confidence": {
+          "type": "number",
+          "description": "Overall confidence across all claims (float), 0.0 to 1.0.",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "known_unknowns": {
+          "type": "array",
+          "description": "Known unknowns — explicitly unstated or ambiguous aspects.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "description": "Assumptions made in deriving the claims.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "contradictions": {
+          "type": "array",
+          "description": "Pairs of claims that are contradictory.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "claim_id_a": {
+                "type": "string",
+                "format": "uuid",
+                "description": "ID of the first claim."
+              },
+              "claim_id_b": {
+                "type": "string",
+                "format": "uuid",
+                "description": "ID of the second claim."
+              },
+              "description": {
+                "type": "string",
+                "description": "Short description of the contradiction."
+              }
+            }
+          }
+        }
+      }
+    },
+    "context": {
+      "type": "object",
+      "description": "Operational context in which the basis was produced.",
+      "properties": {
+        "task_id": {
+          "type": ["string", "null"],
+          "description": "Optional task ID if the basis pertains to a task (e.g., task board ticket)."
+        },
+        "task_description": {
+          "type": ["string", "null"],
+          "description": "Optional task description / prompt if the basis pertains to a task."
+        },
+        "model_id": {
+          "type": "string",
+          "description": "ID of the model used to generate this basis."
+        },
+        "model_version": {
+          "type": ["string", "null"],
+          "description": "Optional version identifier of the model used."
+        },
+        "tool_calls": {
+          "type": "array",
+          "description": "List of tools used during the basis generation process.",
+          "items": {
+            "type": "object",
+            "required": ["tool_name", "called_at"],
+            "properties": {
+              "tool_name": {
+                "type": "string",
+                "description": "Name of the tool invocation."
+              },
+              "input_summary": {
+                "type": "string",
+                "description": "Optional one-line summary of the tool input."
+              },
+              "output_summary": {
+                "type": "string",
+                "description": "Optional one-line summary of the tool output."
+              },
+              "called_at": {
+                "type": "string",
+                "format": "date-time",
+                "description": "ISO-8601 UTC timestamp of when the tool was called."
+              }
+            }
+          }
+        },
+        "environment": {
+          "type": "string",
+          "description": "Execution environment (e.g., production, staging, development).",
+          "enum": ["production", "staging", "development", "test"]
+        }
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Domain-specific or experimental fields without polluting the core schema. Consumers MUST ignore unknown namespaces.",
+      "patternProperties": {
+        "^[a-z][a-z0-9]*([.-][a-z][a-z0-9]*)*$": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
