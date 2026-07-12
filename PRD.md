@@ -1,55 +1,68 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #504
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# Product Requirements Document: Stakeholder Map Configuration and Store
 
-## Problem & Goal
+## 1. Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+### 1.1 Problem Statement
+Currently, there is no standardized or centralized mechanism within the platform to define and manage required approvers and informed parties for specific initiatives. This lack of clear stakeholder identification can lead to missed approvals, inefficient communication, and uncertainty regarding accountability, potentially delaying initiative progress and increasing operational overhead.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+### 1.2 Goal
+To implement a robust system that allows Product Managers to define, store, and manage stakeholder maps (comprising required approvers and informed parties) for each initiative. This system will provide a lightweight, dedicated data store, a secure CRUD API for updates without duplicating external prospectus data, and ensure visibility of these maps to all team members within the application, with role-based editing restrictions.
 
-## Target users / ICP roles
+## 2. Target Users / ICP Roles
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+*   **Product Managers (PMs):** Primary users responsible for creating, updating, and managing stakeholder maps for their initiatives.
+*   **All Team Members (Developers, Designers, QAs, etc.):** Viewers of stakeholder maps to understand initiative dependencies and communication channels.
+*   **System Integrators / Developers:** Consumers of the Stakeholder Map CRUD API for programmatically interacting with stakeholder data.
 
-## Scope
+## 3. Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This project encompasses the design, development, and implementation of:
 
-## Functional Requirements
+*   A data schema for defining stakeholder maps, including required approvers and informed parties per initiative.
+*   A lightweight, dedicated data store for stakeholder maps.
+*   A secure and performant CRUD (Create, Read, Update, Delete) API for managing stakeholder maps.
+*   API functionality to update maps without duplicating external prospectus data (e.g., referencing user IDs instead of full profiles).
+*   API functionality supporting `projectId` or `initiativeId`-loose matching for retrieval.
+*   Application-level visibility of stakeholder maps to all authenticated team members.
+*   Role-based access controls to restrict editing capabilities exclusively to Product Managers.
+*   Required Data Transfer Objects (DTOs) for listing and updating stakeholder maps.
+*   Comprehensive OpenAPI documentation for all API endpoints.
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+## 4. Functional Requirements
 
-## Acceptance Criteria
+*   **FR.1: Stakeholder Definition:** The system shall allow defining a list of required approvers and a list of informed parties for each unique initiative.
+*   **FR.2: Data Storage:** The system shall provide a dedicated and lightweight store for stakeholder maps, associated with initiatives.
+*   **FR.3: CRUD API:** The system shall expose a RESTful API for creating, reading, updating, and deleting stakeholder maps.
+*   **FR.4: Non-Duplication:** The API shall support updating stakeholder maps using references (e.g., user IDs) to avoid duplicating external prospectus data (e.g., full user profiles).
+*   **FR.5: Flexible Retrieval:** The API for retrieving stakeholder maps shall support "loose matching" by either `projectId` or `initiativeId`.
+*   **FR.6: Application Visibility:** Stakeholder maps shall be visible to all authenticated team members within the main application UI.
+*   **FR.7: PM Editing:** Product Managers shall be able to create, edit, and delete stakeholder maps via the application UI and API.
+*   **FR.8: Role-Based Editing Restriction:** Editing capabilities for stakeholder maps shall be restricted to users with the "Product Manager" role; other roles shall have read-only access.
+*   **FR.9: Stakeholder Map Schema:** A formal schema definition for the stakeholder map data structure shall be provided.
+*   **FR.10: DTOs:** Specific Data Transfer Objects (DTOs) for listing multiple stakeholder maps and for updating a single stakeholder map shall be defined and utilized by the API.
+*   **FR.11: API Documentation:** Comprehensive OpenAPI documentation shall be provided for all stakeholder map API endpoints, including request/response schemas.
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+## 5. Acceptance Criteria
 
-## Out of scope
+*   **AC.1:** An API endpoint exists and functions correctly to create a new stakeholder map for a given `initiativeId`, specifying lists of `approverIds` and `informedPartyIds`.
+*   **AC.2:** An API endpoint exists and functions correctly to retrieve a stakeholder map by `initiativeId`. The endpoint also supports retrieval by `projectId` (if multiple initiatives can map to a project, it should return relevant maps).
+*   **AC.3:** An API endpoint exists and functions correctly to update an existing stakeholder map for a given `initiativeId`, modifying its `approverIds` and `informedPartyIds`.
+*   **AC.4:** An API endpoint exists and functions correctly to delete a stakeholder map by `initiativeId`.
+*   **AC.5:** The stakeholder map schema is formally defined (e.g., as a JSON Schema) and covers `initiativeId`, `projectId` (optional), `approverIds[]`, and `informedPartyIds[]`.
+*   **AC.6:** The defined Stakeholder Map List DTO correctly represents a collection of stakeholder maps for API responses.
+*   **AC.7:** The defined Stakeholder Map Update DTO correctly represents the fields permitted for updates via the API.
+*   **AC.8:** All authenticated users can navigate to an initiative within the application UI and view its associated stakeholder map, including the lists of approvers and informed parties.
+*   **AC.9:** Only users assigned the "Product Manager" role can access the UI elements and API endpoints for creating, updating, or deleting stakeholder maps. Attempts by other roles will result in an authorization error (e.g., 403 Forbidden).
+*   **AC.10:** The OpenAPI specification clearly documents all stakeholder map API endpoints, their request/response formats, authentication requirements, and error codes.
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## 6. Out of Scope
+
+*   Detailed user profile management (assumed to be handled by an existing identity or user management service).
+*   Advanced workflow or approval logic beyond defining roles (e.g., sequential approvals, approval tracking status).
+*   Notification mechanisms (e.g., emails to approvers/informed parties when an initiative starts or requires approval).
+*   UI for editing or viewing external prospectus data directly within this feature.
+*   Complex querying of stakeholder maps based on user attributes (e.g., finding all initiatives where user X is an approver across all projects).
+*   Data migration of existing, unstandardized stakeholder information.
