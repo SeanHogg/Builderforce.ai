@@ -5,7 +5,7 @@
  */
 
 import React from "react";
-import { TrendData } from "../../../types/quality";
+import { TrendData } from "../../types/quality";
 import "./TrendLineChart.css";
 
 interface TrendLineChartProps {
