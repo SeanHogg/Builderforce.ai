@@ -13,33 +13,34 @@
  *   - Orchestrator functions coordinate the flow with latency tracking
  */
 
-import type { ConfidenceLevel, GapSeverity, FeedbackRating, Preferences, SuggestionFeedback } from './aiAssistance.types';
-import type { AiGenerator, RuntimeState } from './aiAssistance.service'; // self-import for refs
+import type {
+  ConfidenceLevel,
+  FeedbackRating,
+  Preferences,
+  SuggestionFeedback,
+} from './aiAssistance.types';
 
-/** Simplified simulation of an LLM embed response (reserved for future extensibility) */
-export interface EmbeddingResponse {
-  /** Embedding vector (normalized) */
-  embedding: number[];
-  /** Token count used for this request */
-  tokenCount: number;
-}
-
-/** Mockable service shim for embeddings + completion (breaks dependency until wired) */
-export interface AiGenerator {
-  embed(request: { text: string; tenantId: number; userId: number }): Promise<EmbeddingResponse | null>;
-
+/**
+ * Simplified simulation of a lightweight LLM client for unit-simulation.
+ * The real integration will swap this for LlmProxyService.complete.
+ */
+export interface CheapLlmClient {
   complete(body: {
     modelId: string;
     messages: Array<{ role: 'user' | 'assistant'; content: string }>;
     maxTokens?: number;
-  }): Promise<{
-    id: string;
-    content: string;
-    finishReason: 'stop' | 'length' | 'content_filter' | 'error';
-  }>;
+  }): Promise<{ id: string; content: string; finishReason: 'stop' | 'length' | 'content_filter' | 'error' }>;
 }
 
-type InjectedAiGenerator = AiGenerator | null;
+/**
+ * Runtime state for feedback suppression, exported for acceptance tests.
+ */
+export interface RuntimeState {
+  /** Unique session run identifier (for correlation) */
+  runId: string;
+  /** Mapping of runId to nested map of suppressed suggestion IDs */
+  rejectedSuggestions: Map<string, Map<string, boolean>>;
+}
 
 /**
  * Build a context description line from FR-1.4 inputs.
@@ -93,7 +94,7 @@ export async function buildInlineSuggestionPrompt(
       tenantOptedIn?: boolean;
     };
   },
-  generator: InjectedAiGenerator,
+  _client: CheapLlmClient,
 ): Promise<string> {
   const contextStr = contextDescription({
     sourceField: ctx.sourceField,
@@ -105,11 +106,17 @@ export async function buildInlineSuggestionPrompt(
     siblingFields: ctx.siblingFields,
   });
 
-  const sensibilityConstraint = ctx.fieldConfig?.isSensitive && !ctx.fieldConfig?.tenantOptedIn
-    ? `Do NOT suggest PII or sensitive values. If nothing appropriate can be offered, indicate with a placeholder.`
-    : `Suggest values that are useful, accurate, and aligned with typical norms for ${ctx.recordType}.`;
+  const sensibilityConstraint =
+    ctx.fieldConfig?.isSensitive && !ctx.fieldConfig?.tenantOptedIn
+      ? `Do NOT suggest PII or sensitive values. If nothing appropriate can be offered, indicate with a placeholder.`
+      : `Suggest values that are useful, accurate, and aligned with typical norms for ${ctx.recordType}.`;
 
-  const prompt = `You are an AI field-suggestion helper for the ${ctx.recordType} record type.\nThe user is focusing on the field "${ctx.fieldTitle}". Suggest up to 4 relevant values or corrections.\nUse the current value, sibling fields, and history if available.\n${sensibilityConstraint}\nField: ${ctx.fieldTitle}\nContext: ${contextStr}`;
+  const prompt = `You are an AI field-suggestion helper for the ${ctx.recordType} record type.
+The user is focusing on the field "${ctx.fieldTitle}". Suggest up to 4 relevant values or corrections.
+Use the current value, sibling fields, and history if available.
+${sensibilityConstraint}
+Field: ${ctx.fieldTitle}
+Context: ${contextStr}`;
 
   return prompt;
 }
@@ -132,14 +139,14 @@ export async function generateInlineSuggestions(
       isSensitive?: boolean;
       tenantOptedIn?: boolean;
     };
-    generator: InjectedAiGenerator;
+    client: CheapLlmClient;
     tenantId: number;
   },
-): Promise<{ durationMs: number; suggestions: { id: string; suggestion: string; confidence: ConfidenceLevel; rationale: string }[]; suppressed: boolean }> {
+): Promise<{ durationMs: number; suggestions: Array<{ id: string; suggestion: string; confidence: ConfidenceLevel; rationale: string }>; suppressed: boolean }> {
   const start = performance.now();
   const runId = ctx.sourceField + ':' + ctx.recordId;
 
-  if (!ctx.generator) {
+  if (!ctx.client) {
     return {
       durationMs: Math.round(performance.now() - start),
       suggestions: [],
@@ -147,9 +154,9 @@ export async function generateInlineSuggestions(
     };
   }
 
-  const prompt = await buildInlineSuggestionPrompt(ctx, ctx.generator);
+  const prompt = await buildInlineSuggestionPrompt(ctx, ctx.client);
 
-  // Suppress for PII/mental-health triggers.
+  // Suppress for PII/mental-health triggers
   const isLikelyPii = /password|ssn|credit.?card|insurance.+number|id.+number|medical|patient|specimen/i.test(
     ctx.currentValue,
   );
@@ -171,13 +178,13 @@ export async function generateInlineSuggestions(
     { role: 'user', content: prompt },
   ];
 
-  const response = await ctx.generator.complete({
+  const response = await ctx.client.complete({
     modelId: 'minimaxai/minimax-m2.7',
     messages,
     maxTokens: 256,
   });
 
-  let suggestions: { id: string; suggestion: string; confidence: ConfidenceLevel; rationale: string }[] = [];
+  let suggestions: Array<{ id: string; suggestion: string; confidence: ConfidenceLevel; rationale: string }> = [];
   try {
     const cleanResponse = response.content.replace(/```|```json/g, '').trim();
     const parsed = JSON.parse(cleanResponse);
@@ -241,7 +248,7 @@ export async function buildAutoFillPrompt(
       tenantOptedIn?: boolean;
     };
   },
-  generator: InjectedAiGenerator,
+  _client: CheapLlmClient,
 ): Promise<string> {
   const contextStr = contextDescription({
     sourceField: ctx.sourceField,
@@ -253,11 +260,19 @@ export async function buildAutoFillPrompt(
     siblingFields: ctx.siblingFields,
   });
 
-  const sensibilityConstraint = ctx.fieldConfig?.isSensitive && !ctx.fieldConfig?.tenantOptedIn
-    ? `Do NOT suggest PII or sensitive values. If none available, indicate with a placeholder.`
-    : `Suggest values that are typical and useful.\nConstraints (AUTO-FILL ONLY):\n  - Never overwrite an already-entered value.\n  - If a parent or sibling implies a unique answer, pick that and justify.`;
+  const sensibilityConstraint =
+    ctx.fieldConfig?.isSensitive && !ctx.fieldConfig?.tenantOptedIn
+      ? `Do NOT suggest PII or sensitive values. If none available, indicate with a placeholder.`
+      : `Suggest values that are typical and useful.
+Constraints (AUTO-FILL ONLY):
+  - Never overwrite an already-entered value.
+  - If a parent or sibling implies a unique answer, pick that and justify.`;
 
-  const prompt = `You are an AI auto-fill helper for Builderforce fact records.\nThe user hasn't yet filled in "${ctx.fieldTitle}". Propose a well-justified value.\n${sensibilityConstraint}\nField: ${ctx.fieldTitle}\nContext: ${contextStr}`;
+  const prompt = `You are an AI auto-fill helper for Builderforce fact records.
+The user hasn't yet filled in "${ctx.fieldTitle}". Propose a well-justified value.
+${sensibilityConstraint}
+Field: ${ctx.fieldTitle}
+Context: ${contextStr}`;
 
   return prompt.trim();
 }
@@ -280,7 +295,7 @@ export async function proposeAutoFill(
       isSensitive?: boolean;
       tenantOptedIn?: boolean;
     };
-    generator: InjectedAiGenerator;
+    client: CheapLlmClient;
     tenantId: number;
   },
 ): Promise<{ durationMs: number; proposal: { value: string; confidence: ConfidenceLevel; rationale: string } | null; suppressed: string | false }> {
@@ -297,13 +312,13 @@ export async function proposeAutoFill(
     };
   }
 
-  if (!ctx.generator) {
+  if (!ctx.client) {
     return { durationMs: Math.round(performance.now() - start), proposal: null, suppressed: true };
   }
 
-  const prompt = await buildAutoFillPrompt(ctx, ctx.generator);
+  const prompt = await buildAutoFillPrompt(ctx, ctx.client);
 
-  const response = await ctx.generator.complete({
+  const response = await ctx.client.complete({
     modelId: 'minimaxai/minimax-m2.7',
     messages: [
       { role: 'system', content: `You act as an auto-fill assistant for Builderforce fact records. Respond with one plain-value line (no JSON, no prose). If no appropriate auto-fill is available, output a placeholder like "---".` },
@@ -317,8 +332,7 @@ export async function proposeAutoFill(
     value = '';
   }
 
-  const confidence: ConfidenceLevel = value ? 'high' : null;
-  const confidenceRaw = confidence ?? 'low';
+  const confidenceRaw: ConfidenceLevel = value ? 'high' : 'low';
 
   return {
     durationMs: Math.round(performance.now() - start),
@@ -343,8 +357,8 @@ export async function detectGaps(
       gapRulesEnabled?: boolean;
     };
   },
-  generator: InjectedAiGenerator,
-): Promise<{ durationMs: number; gaps: { fieldId: string; fieldTitle: string; severity: GapSeverity; description: string; action: 'jump' | 'info' | 'skip' }[] }> {
+  _client: CheapLlmClient,
+): Promise<{ durationMs: number; gaps: Array<{ fieldId: string; fieldTitle: string; severity: 'blocking' | 'warning' | 'suggestion'; description: string; action: 'jump' | 'info' | 'skip' }> }> {
   const start = performance.now();
 
   const valueEmpty = !ctx.currentValue || ctx.currentValue.trim() === '';
@@ -360,7 +374,7 @@ export async function detectGaps(
   const suggestions: Array<{
     fieldId: string;
     fieldTitle: string;
-    severity: GapSeverity;
+    severity: 'blocking' | 'warning' | 'suggestion';
     description: string;
     action: 'jump' | 'info' | 'skip';
   }> = [];
@@ -375,6 +389,7 @@ export async function detectGaps(
     });
   }
 
+  // FR-3.2: detect warnings on heuristics (simple lexical check)
   const synergyKeywords = ['annual', 'quarterly', 'monthly'];
   const lower = ctx.currentValue.toLowerCase() || '';
   const synergyScore = synergyKeywords.filter((kw) => lower.includes(kw)).length;
@@ -425,7 +440,7 @@ export function getAiMetrics(): {
   editAfterAcceptRate: number;
   lastUpdated: string;
 } {
-  // seed to make output stable per unit test, but realistically this would aggregate DB rows.
+  // Seed to make output stable per unit test, but realistically this would aggregate DB rows.
   const seed = Math.floor(Math.random() * 100);
   const acceptanceRate = Math.min(100, Math.max(0, 75 + seed - 60));
   const rejectionRate = Math.min(100, Math.max(0, 15 + seed - 15));
