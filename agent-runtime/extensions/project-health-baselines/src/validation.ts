@@ -3,13 +3,22 @@
  */
 
 import {
-  ValidationViolation,
   BaselineMetadata,
   BaselineContent,
   BaselineAuthor,
   ResponseMetadataCore,
   BaselineVersion
 } from "./types.js";
+
+export interface ValidationViolation {
+  violation: string;
+  message: string;
+}
+
+export interface ValidationOutcome {
+  valid: boolean;
+  violations: ValidationViolation[];
+}
 
 /**
  * Validate response length (AC-1 token guard: up to ~10,000 tokens)
@@ -145,22 +154,6 @@ export function validateVersion(baselineVersion: BaselineVersion): boolean {
 }
 
 /**
- * Validation result wrapper
- */
-export interface ValidationViolation {
-  violation: string;
-  message: string;
-}
-
-/**
- * Validation outcome
- */
-export interface ValidationOutcome {
-  valid: boolean;
-  violations: ValidationViolation[];
-}
-
-/**
  * Convenience: combine multiple validation concerns in one pass
  */
 export function validateBaselineCreation(
@@ -175,69 +168,4 @@ export function validateBaselineCreation(
   ];
 
   return { valid: violations.length === 0, violations };
-}
-
-/**
- * Helper for error case handling during immutability validation (when a snapshot is missing)
- */
-function impossible(state: string): never {
-  throw new Error(`Invariant failure during immutability validation: ${state}.`);
-}
-
-/**
- * Idempotent immutability check: returns violations if ANY immutable fields are present in the provided partial.
- * This protects baseline.create (pre-save validation) and baseline.update (post-create error fallback).
- */
-export function validateImmutableFieldsSafe(
-  partial: Pick<Partial<Baseline>, "content" | "metadata" | "author">
-): ValidationViolation[] {
-  const violations: ValidationViolation[] = [];
-
-  const hasContent = partial.content !== undefined;
-  const hasMetadata = partial.metadata !== undefined;
-  const hasAuthor = partial.author !== undefined;
-
-  // Validate content
-  if (hasContent) {
-    if ("responseText" in partial.content) {
-      violations.push({ violation: "immutable_response_text", message:
-        "content.responseText cannot be edited after baseline creation (AC-2)." });
-    }
-    if ("responseMetadata" in partial.content) {
-      const m = partial.content.responseMetadata!;
-      if ("model" in m) violations.push({ violation: "immutable_core_metadata", message:
-        "content.responseMetadata.model cannot be edited." });
-      if ("timestamp" in m) violations.push({ violation: "immutable_core_metadata", message:
-        "content.responseMetadata.timestamp cannot be edited." });
-      if ("contextMode" in m) violations.push({ violation: "immutable_core_metadata", message:
-        "content.responseMetadata.contextMode cannot be edited." });
-    }
-  }
-
-  // Validate metadata
-  if (hasMetadata) {
-    const md = partial.metadata;
-    const immutableProjectFields = ["projectId", "streamName", "baselineName"];
-    for (const field of immutableProjectFields) {
-      if (field in md) {
-        violations.push({ violation: "immutable_metadata_core", message:
-          `metadata.${field} cannot be edited.` });
-      }
-    }
-  }
-
-  // Validate author
-  if (hasAuthor) {
-    const a = partial.author;
-    if ("userId" in a) {
-      violations.push({ violation: "immutable_author", message:
-        "Author.userId cannot be edited." });
-    }
-    if ("userName" in a) {
-      violations.push({ violation: "immutable_author", message:
-        "Author.userName cannot be edited." });
-    }
-  }
-
-  return violations;
 }
