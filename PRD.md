@@ -1,55 +1,116 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #335
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# PRD: Data Completeness Scoring
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+Data consumers across analytics, sales, and operations workflows encounter records with missing, null, or partially populated fields, leading to unreliable reporting, failed automations, and poor decision-making. There is no consistent, programmatic way to quantify how "complete" a record or dataset is.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+**Goal:** Build a reusable data completeness scoring engine that assigns a numeric score (0–100%) to any record or dataset, surfacing gaps clearly so downstream agents, users, and systems can act on them.
 
-## Target users / ICP roles
+---
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## Target Users / ICP Roles
+
+| Role | Need |
+|---|---|
+| Data Engineers | Embed scoring into pipelines; monitor dataset health over time |
+| Data Analysts | Quickly identify incomplete records before analysis |
+| Business/Ops Managers | Understand data quality at a glance via dashboards |
+| Downstream AI/Automation Agents | Gate or weight decisions based on completeness threshold |
+
+---
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+The scoring engine covers:
+- Single records (row-level scoring)
+- Collections of records (dataset-level aggregate scoring)
+- Configurable field weighting (not all fields are equally important)
+- Multiple data formats: JSON objects, CSV rows, relational table rows
+
+---
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### FR-1 · Field Presence Check
+The system MUST detect and flag fields that are:
+- `null` / `None`
+- Empty string (`""`)
+- Whitespace-only strings
+- Placeholder values (configurable list, e.g., `"N/A"`, `"unknown"`, `"-"`)
+
+### FR-2 · Per-Record Score Calculation
+The system MUST calculate a completeness score per record using the formula:
+
+```
+score = (Σ weight_i × present_i) / (Σ weight_i) × 100
+```
+
+Where:
+- `weight_i` = configured weight for field `i` (default: 1.0 for all fields)
+- `present_i` = 1 if field has a valid value, 0 if missing/empty/placeholder
+
+### FR-3 · Field Weight Configuration
+Users MUST be able to define per-field weights via a configuration schema (JSON or YAML). Fields not listed in the config default to weight `1.0`. Fields explicitly set to weight `0` are excluded from scoring.
+
+### FR-4 · Dataset-Level Aggregate Score
+The system MUST compute an aggregate completeness score for a dataset as the mean of all per-record scores, and MUST also report:
+- Minimum record score
+- Maximum record score
+- Standard deviation
+- Per-field completeness rate (% of records where that field is populated)
+
+### FR-5 · Missing Field Report
+For every scored record or dataset, the system MUST produce a structured report listing:
+- Fields that are missing and their configured weights
+- The fields contributing most to score reduction (ranked)
+
+### FR-6 · Threshold & Alerting Rules
+The system MUST support configurable thresholds:
+- `critical` (default: < 50%)
+- `warning` (default: 50–79%)
+- `passing` (default: ≥ 80%)
+
+Each scored record and dataset MUST be tagged with the appropriate threshold tier.
+
+### FR-7 · API / Callable Interface
+The scoring engine MUST expose:
+- A programmatic function/method callable by other agents or pipeline steps
+- Input: record(s) + optional weight config
+- Output: score, tier, missing-field report (structured dict/JSON)
+
+### FR-8 · Batch Processing
+The engine MUST support batch scoring of up to **1 million records** without loading the entire dataset into memory simultaneously (streaming or chunked processing).
+
+---
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+| ID | Criterion |
+|---|---|
+| AC-1 | A record with all fields populated returns a score of exactly 100. |
+| AC-2 | A record with all fields empty/null returns a score of exactly 0. |
+| AC-3 | A record missing only fields with weight 0 returns a score of 100. |
+| AC-4 | Weighted scoring: a record missing only a field with weight 2 (all others weight 1, 5 total fields) returns a score of `(1+1+1+1)/(1+1+1+1+2) × 100 = 66.67%`. |
+| AC-5 | Placeholder values defined in config (e.g., `"N/A"`) are treated as missing. |
+| AC-6 | Dataset aggregate score equals the arithmetic mean of all per-record scores ± 0.01%. |
+| AC-7 | Per-field completeness rates in the dataset report are accurate to ± 0.1%. |
+| AC-8 | A batch of 1,000,000 records completes scoring in ≤ 60 seconds on a standard 4-core machine. |
+| AC-9 | Records scoring below the `critical` threshold are tagged `"critical"` in output. |
+| AC-10 | The callable API returns valid structured JSON for both single-record and batch inputs. |
+| AC-11 | Missing config for a field defaults weight to 1.0 without error. |
+| AC-12 | Unit test coverage ≥ 90% across scoring logic modules. |
 
-## Out of scope
+---
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## Out of Scope
+
+- **Data repair / imputation** — the engine scores completeness; it does not fill missing values.
+- **Schema inference** — field definitions and expected fields must be supplied explicitly; the engine does not auto-detect expected schema from data alone.
+- **Data type validation** — a field containing a value of the wrong type (e.g., string where integer expected) is considered *present* unless it matches a placeholder pattern; type validation is a separate concern.
+- **Deduplication** — duplicate records are scored independently; de-duplication is out of scope.
+- **UI / dashboard** — visualisation layers are downstream consumers of the API output and are not part of this engine.
+- **PII detection or masking** — handling of sensitive fields is managed externally.
+- **Real-time streaming ingestion** — batch and on-demand invocation only; native Kafka/Flink stream processing is not in scope for v1.
