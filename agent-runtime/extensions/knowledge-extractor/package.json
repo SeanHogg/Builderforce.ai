@@ -1,6 +1,6 @@
 {
   "name": "@builderforce/knowledge-extractor",
-  "version": "2026.3.21",
+  "version": "2026.3.22",
   "private": true,
   "description": "Post-execution Knowledge Extractor — delta detection engine for Evermind learning",
   "type": "module",
@@ -13,7 +13,7 @@
   },
   "builderforce": {
     "extensions": [
-      "./index.ts"
+      "./src/index.ts"
     ]
   }
 }
