@@ -30,19 +30,22 @@ export enum FailureMode {
 
 /** Validation contract attached to a pipeline step */
 export type StepContract = {
-  stepId: string;
-  stepName?: string;
-  inputContract?: Schema;
-  outputContract?: Schema;
+  step_id: string;
+  step_name?: string;
+  input_contract?: Schema;
+  output_contract?: Schema;
   mode?: ContractMode;
-  failureMode?: FailureMode;
+  failure_mode?: FailureMode;
   description?: string;
   version?: string;
 };
 
 /** Validation result: success or error + structural details */
 export type ValidationResult =
-  | { ok: true; output: unknown }
+  | {
+      ok: true;
+      output: unknown;
+    }
   | {
       ok: false;
       error: ValidationError;
@@ -53,10 +56,10 @@ export type ValidationError = {
   step_id: string;
   step_name?: string;
   contract_type: "input" | "output";
-  failed_rules: Array<{
-    field_path: string;
-    constraint: string;
-    actual_value: unknown;
+  failed_rules: ReadonlyArray<{
+    readonly field_path: string;
+    readonly constraint: string;
+    readonly actual_value: unknown;
   }>;
   pipeline_run_id?: string;
   timestamp: string;
@@ -66,33 +69,38 @@ export type ValidationError = {
 
 /** Validation hook context (LLM tool-call or equivalent) */
 export type ValidationHookContext = {
-  runId?: string;
+  run_id?: string;
   source?: string;
-  metadata?: Record<string, unknown>;
-  // Intentionally minimal: minimal payload for AGENTS SDK usage without deep routing
+  metadata?: Readonly<Record<string, unknown>>;
 };
 
 /**
- * LLM tool-call hook signature:
- * Called BEFORE the tool executes (pre validation) if an inputContract is present.
- * Returns a stepId from metadata or uses a default, then normalizes to a string.
+ * LLM tool-call pre-hook signature:
+ * Called BEFORE the tool executes (pre validation) if an input_contract is present.
+ * Returns a step_id derived from metadata or uses a default, then returns a { ok: false, error: ValidationError } | { ok: true, validated_input: unknown } result, to be consumed by the caller.
  *
  * Hooks MUST consume latest plugin config each call to ensure enforce/enforced behavior respects mode.
  */
 export type PreInputValidationHook = (
-  ctx: ValidationHookContext & { input: unknown }
-) => Promise<{ ok: false; error: ValidationError } | { ok: true; validatedInput: unknown }>;
+  ctx: ValidationHookContext & Readonly<{ input: unknown }>
+) => Promise<
+  | { ok: false; error: ValidationError }
+  | { ok: true; validated_input: unknown }
+>;
 
 /**
- * LLM tool-call hook signature:
- * Called AFTER the tool returns (post validation) if an outputContract is present.
- * Returns a stepId from metadata or uses a default, then normalizes to a string.
+ * LLM tool-call post-hook signature:
+ * Called AFTER the tool returns (post validation) if an output_contract is present.
+ * Returns a step_id derived from metadata or uses a default, then returns a { ok: false, error: ValidationError } | { ok: true, validated_output: unknown } result, to be consumed by the caller.
  *
  * Hooks MUST consume latest plugin config each call to ensure enforce/enforced behavior respects mode.
  */
 export type PostOutputValidationHook = (
-  ctx: ValidationHookContext & { output: unknown }
-) => Promise<{ ok: false; error: ValidationError } | { ok: true; validatedOutput: unknown }>;
+  ctx: ValidationHookContext & Readonly<{ output: unknown }>
+) => Promise<
+  | { ok: false; error: ValidationError }
+  | { ok: true; validated_output: unknown }
+>;
 
 /** LLM tool-call pre/post hook pair for use with @validate_step or hybrid sync/async composition */
 export type ValidationHooks = {
