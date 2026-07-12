@@ -1,474 +1,477 @@
 /**
  * Override Workflow Service
- * Handles approval-mode routing, escalation timeouts, and unblock-on-approval
+ * Manages override requests, approvals, escalations, and unblock-on-approval
  */
 
 import { 
   OverrideRequest, 
+  ApprovalStep, 
   ApprovalChain, 
-  ApprovalEscalation, 
   ApprovalStatus, 
-  ApprovalStrategy,
-  ApprovalConfig,
-  DEFAULT_APPROVAL_CONFIG,
-  DEFAULT_ESCALATION_RULES,
-  EscalationRules
+  EscalationRule,
+  ApprovalDecision,
 } from './types';
-
-interface OverrideStorage {
-  get(id: string): Promise<OverrideRequest | null>;
-  set(id: string, request: OverrideRequest): Promise<void>;
-  list(filter?: any): Promise<OverrideRequest[]>;
-  delete(id: string): Promise<void>;
-}
-
-interface Callbacks {
-  onApprove?: (request: OverrideRequest) => Promise<void>;
-  onReject?: (request: OverrideRequest, reason: string) => Promise<void>;
-  onCancel?: (request: OverrideRequest) => Promise<void>;
-  onEscalate?: (request: OverrideRequest, escalation: ApprovalEscalation) => Promise<void>;
-}
+import { ApprovalStorage, ApprovalChainStorage } from './storage';
+import { NotifyService } from './notifications';
+import { EmailService } from './email-service';
 
 export class OverrideWorkflowService {
-  private alerts: Set<string> = new Set();
-  
+  private overrides: Map<string, OverrideRequest> = new Map();
+  private approvalChains: Map<string, ApprovalChain> = new Map();
+  private readonly approvalStorage: ApprovalStorage;
+  private readonly chainStorage: ApprovalChainStorage;
+  private readonly notifyService: NotifyService;
+  private readonly emailService: EmailService;
+  private escalationRules: Map<string, EscalationRule> = new Map();
+
   constructor(
-    private storage: OverrideStorage,
-    private callbacks: Callbacks = {},
-    private config: ApprovalConfig = DEFAULT_APPROVAL_CONFIG,
-    private escalationRules: EscalationRules = DEFAULT_ESCALATION_RULES
-  ) {}
+    approvalStorage: ApprovalStorage = new ApprovalStorage(),
+    chainStorage: ApprovalChainStorage = new ApprovalChainStorage(),
+    notifyService: NotifyService = new NotifyService(),
+    emailService: EmailService = new EmailService()
+  ) {
+    this.approvalStorage = approvalStorage;
+    this.chainStorage = chainStorage;
+    this.notifyService = notifyService;
+    this.emailService = emailService;
+
+    this.enableEscalationMonitoring();
+  }
 
   /**
    * Create a new override request
    */
-  async createOverrideRequest(request: Omit<OverrideRequest, 'id' | 'status' | 'createdAt' | 'updatedAt' | 'expired'>): Promise<OverrideRequest> {
-    const overrideId = this.generateOverrideId();
-    const expiryTime = new Date(Date.now() + this.config.defaultTimeoutMinutes * 60 * 1000);
-
-    const overrideRequest: OverrideRequest = {
-      id: overrideId,
-      ...request,
-      approvedAt: undefined,
-      rejectedAt: undefined,
-      cancelledAt: undefined,
-      expiryAt: expiryTime,
-      expired: false,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    await this.saveOverride(overrideRequest);
-
-    // Start approval process
-    if (overrideRequest.requiresApproval && overrideRequest.enabled) {
-      await this.startApprovalProcess(overrideRequest);
+  async createOverrideRequest(
+    data: {
+      title: string;
+      description?: string;
+      entityType: string;
+      entityId: string;
+      reason: string;
+      enabled: boolean;
+      requiresApproval: boolean;
+      approvers?: string[];
     }
-
-    return overrideRequest;
-  }
-
-  /**
-   * Start approval process for override
-   */
-  private async startApprovalProcess(request: OverrideRequest): Promise<void> {
-    // Determine approvers based on strategy
-    const approvers = await this.getApprovers(request);
-
-    if (approvers.length === 0) {
-      console.log(`[OverrideWorkflow] No approvers available for ${request.id}`);
-      return;
-    }
-
-    // Create approval chain
-    for (let i = 0; i < approvers.length; i++) {
-      await this.createApprovalChain(request, approvers[i], i + 1);
-    }
-
-    // Schedule escalation check
-    this.scheduleEscalationCheck(request);
-  }
-
-  /**
-   * Get approvers for an override request
-   */
-  private async getApprovers(request: OverrideRequest): Promise<Array<{ id: string; name: string }>> {
-    // In a real implementation, this would fetch approvers based on:
-    // 1. Requester role
-    // 2. Alert/rule type
-    // 3. Configured approval hierarchy
-    // 4. Workforce/team assignments
+  ): Promise<OverrideRequest> {
+    const id = this.generateId();
     
-    // Demo: Return default admin approvers
-    return [
-      { id: 'admin_1', name: 'Admin user 1' },
-      request.requesterId !== 'admin_1' ? { id: 'admin_2', name: 'Admin user 2' } : { id: 'admin_1', name: 'Admin user 1' },
-    ];
-  }
-
-  /**
-   * Create approval chain entry
-   */
-  private async createApprovalChain(
-    request: OverrideRequest,
-    approver: { id: string; name: string },
-    order: number
-  ): Promise<ApprovalChain> {
-    const chain: ApprovalChain = {
-      id: this.generateChainId(),
-      overrideRequestId: request.id,
-      approverId: approver.id,
-      approverName: approver.name,
-      order,
-      status: 'pending',
+    const override: OverrideRequest = {
+      id,
+      title: data.title,
+      description: data.description,
+      entityType: data.entityType,
+      entityId: data.entityId,
+      reason: data.reason,
+      enabled: data.enabled,
+      requiresApproval: data.requiresApproval,
+      approvalStatus: data.requiresApproval ? 'pending' : 'approved',
+      entityTypeDisplay: this.getEntityTypeDisplay(data.entityType),
+      requestMetadata: {},
+      approvalChain: [],
+      createdById: 'system', // TODO: attach requester
+      createdAt: new Date(),
+      expiresAt: null,
+      escalatedTo: null,
     };
 
-    await this.storage.set(`chain_${request.id}_${order}`, chain);
-    return chain;
+    if (data.approvers && data.requiresApproval) {
+      override.approvalChain = this.generateApprovalChain(override, data.approvers);
+    }
+
+    this.overrides.set(id, override);
+    await this.saveOverride(override);
+
+    // Create approval if required
+    if (data.requiresApproval) {
+      for (const approverId of (data.approvers || [])) {
+        await this.createApproverStep(override, approverId);
+      }
+    }
+
+    console.log(`[OverrideWorkflow] Created override: ${id} - ${title}`);
+    return override;
   }
 
   /**
-   * Process approval
+   * Get override by ID
+   */
+  async getOverride(id: string): Promise<OverrideRequest | null> {
+    const override = this.overrides.get(id);
+    return override || null;
+  }
+
+  /**
+   * List overrides with filters
+   */
+  async listOverrides(filters?: {
+    status?: ApprovalStatus;
+    requesterId?: string;
+    entityType?: string;
+    requiresApproval?: boolean;
+  }): Promise<OverrideRequest[]> {
+    const all = Array.from(this.overrides.values()).filter((o) => {
+      if (filters?.status && o.approvalStatus !== filters.status) return false;
+      if (filters?.requesterId && o.createdById !== filters.requesterId) return false;
+      if (filters?.entityType && o.entityType !== filters.entityType) return false;
+      if (filters?.requiresApproval && o.requiresApproval !== filters.requiresApproval) return false;
+      return true;
+    });
+
+    return all.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  /**
+   * Approve override
    */
   async approve(
-    requestId: string,
+    overrideId: string,
     approverId: string,
-    comment?: string
+    comment: string
   ): Promise<boolean> {
-    const request = await this.storage.get(requestId);
-    
-    if (!request || request.approvedAt) {
+    const override = this.overrides.get(overrideId);
+    if (!override) return false;
+
+    console.log(`[OverrideWorkflow] Approving override ${overrideId} by ${approverId}`);
+
+    // Get current step
+    const currentStep = this.getCurrentApprovalStep(override);
+    if (!currentStep || currentStep.approverId !== approverId) {
+      console.error(`[OverrideWorkflow] Approver not authorized for step or step not pending: ${approverId}`);
       return false;
     }
 
-    // Check if approver is in chain
-    const chain = await this.storage.get(`chain_${requestId}_${request.approvedCount + 1}`);
-    if (!chain || chain.approverId !== approverId || chain.status !== 'pending') {
-      return false;
+    // Update step status
+    const updatedStep: ApprovalStep = {
+      ...currentStep,
+      status: 'approved',
+      decision: 'approve' as ApprovalDecision,
+      approverId,
+      evaluatedAt: new Date(),
+      comments: comment || null,
+    };
+
+    // Remove current step from chain (it was pending)
+    const nextIndex = this.approvalChain.indexOf(currentStep);
+    if (nextIndex !== -1) {
+      this.approvalChain.splice(nextIndex, 1);
+      override.approvalChain.splice(nextIndex, 1);
+    }
+    
+    // Add approved step to chain
+    override.approvalChain.push(updatedStep);
+    this.approvalChain.push(updatedStep);
+
+    // Check if all approvers have approved
+    const approvedSteps = override.approvalChain.filter(s => s.decision === 'approve');
+    const approvalCount = approvedSteps.length;
+    const totalRequired = this.approvalChain.filter(s => s.required).length;
+
+    if (approvalCount === totalRequired && totalRequired > 0) {
+      // Unblock on approval
+      await this.unblockOnApproval(override);
     }
 
-    // Record approval
-    chain.status = 'approved';
-    chain.result = 'approved';
-    chain.comment = comment;
-    chain.approvedAt = new Date();
-    
-    await this.storage.set(`chain_${requestId}_${request.approvedCount + 1}`, chain);
+    // Persist
+    this.overrides.set(overrideId, override);
+    await this.saveOverride(override);
 
-    request.approvedAt = chain.approvedAt;
-    request.approvedCount = (request.approvedCount || 0) + 1;
-    request.approvedBy = approverId;
-    request.approvalStatus = request.approvedCount >= this.config.minimumRequiredApprovals ? 'approved' : 'pending';
-    
-    await this.saveOverride(request);
-
-    // Trigger callbacks
-    await this.callbacks.onApprove?.(request);
-
-    // Unblock if all approvals received
-    if (request.approvedCount >= this.config.minimumRequiredApprovals) {
-      await this.applyOverride(request);
-    }
+    // Notify
+    this.notifyService.notifyApproval(override, approverId, comment);
+    this.notifyService.notifyRequester(override, 'approved');
 
     return true;
   }
 
   /**
-   * Process rejection
+   * Reject override
    */
   async reject(
-    requestId: string,
+    overrideId: string,
     approverId: string,
     reason: string
   ): Promise<boolean> {
-    const request = await this.storage.get(requestId);
-    
-    if (!request || request.rejectedAt) {
-      return false;
-    }
+    const override = this.overrides.get(overrideId);
+    if (!override) return false;
 
-    // Check if approver is in chain
-    const chain = await this.storage.get(`chain_${requestId}_${request.approvedCount + 1}`);
-    if (!chain || chain.approverId !== approverId) {
-      return false;
-    }
+    console.log(`[OverrideWorkflow] Rejecting override ${overrideId} by ${approverId}`);
 
-    // Record rejection
-    chain.status = 'rejected';
-    chain.result = 'rejected';
-    chain.comment = reason;
-    chain.rejectedAt = new Date();
-    
-    await this.storage.set(`chain_${requestId}_${request.approvedCount + 1}`, chain);
+    // Get current step
+    const currentStep = this.getCurrentApprovalStep(override);
+    if (!currentStep) return false;
 
-    request.rejectedAt = chain.rejectedAt;
-    request.approvedAt = undefined;
-    request.approvalStatus = 'rejected';
-    
-    await this.saveOverride(request);
+    // Update step status
+    const rejectedStep: ApprovalStep = {
+      ...currentStep,
+      status: 'rejected',
+      decision: 'reject' as ApprovalDecision,
+      approverId,
+      evaluatedAt: new Date(),
+      comments: reason,
+    };
 
-    // Trigger callbacks
-    await this.callbacks.onReject?.(request, reason);
+    // Remove from pending chain
+    const nextIndex = this.approvalChain.indexOf(currentStep);
+    if (nextIndex !== -1) {
+      this.approvalChain.splice(nextIndex, 1);
+      override.approvalChain.splice(nextIndex, 1);
+    },
+    override.approvalChain.push(rejectedStep);
+    this.approvalChain.push(rejectedStep);
 
-    return true;
-  }
+    override.approvalStatus = 'rejected';
 
-  /**
-   * Cancel override request
-   */
-  async cancel(requestId: string, initiatorId: string, reason?: string): Promise<boolean> {
-    const request = await this.storage.get(requestId);
-    
-    if (!request || request.cancelledAt) {
-      return false;
-    }
+    // Persist
+    this.overrides.set(overrideId, override);
+    await this.saveOverride(override);
 
-    request.cancelledAt = new Date();
-    request.expired = true;
-    request.approvalStatus = 'cancelled';
-    await this.saveOverride(request);
-
-    // Cancel all pending approvals
-    await this.cancelAllApprovers(requestId);
-
-    // Trigger callback
-    await this.callbacks.onCancel?.(request);
+    // Notify
+    this.notifyService.notifyApproval(override, approverId, reason);
+    this.notifyService.notifyRequester(override, 'rejected');
 
     return true;
   }
 
   /**
-   * Cancel all pending approval requests
+   * Cancel override
    */
-  private async cancelAllApprovers(requestId: string): Promise<void> {
-    const request = await this.storage.get(requestId);
-    if (!request) return;
+  async cancel(
+    overrideId: string,
+    requesterId: string,
+    reason: string
+  ): Promise<boolean> {
+    const override = this.overrides.get(overrideId);
+    if (!override) return false;
 
-    for (let i = 0; i < request.approvedCount + 1; i++) {
-      const chain = await this.storage.get(`chain_${requestId}_${i + 1}`);
-      if (chain && chain.status === 'pending') {
-        chain.status = 'cancelled';
-        await this.storage.set(`chain_${requestId}_${i + 1}`, chain);
+    if (override.createdById !== requesterId && requesterId !== 'admin') {
+      console.error(`[OverrideWorkflow] User not authorized to cancel: ${requesterId}`);
+      return false;
+    }
+
+    override.approvalStatus = 'cancelled';
+    override.cancelledById = requesterId;
+    override.cancelledAt = new Date();
+    override.cancellationReason = reason;
+
+    this.overrides.set(overrideId, override);
+    await this.saveOverride(override);
+
+    this.notifyService.notifyCancellation(override, requesterId, reason);
+
+    return true;
+  }
+
+  /**
+   * Unblock on approval
+   */
+  private async unblockOnApproval(override: OverrideRequest): Promise<void> {
+    console.log(`[OverrideWorkflow] Auto-unblock requested: ${override.id}`);
+    
+    // Enable the override and mark the entity
+    override.enabled = true;
+    override.unblockedAt = new Date();
+    override.approvalStatus = 'approved';
+
+    this.overrides.set(override.id, override);
+    await this.saveOverride(override);
+
+    notifyService.notifyUnblockSuccess(override);
+  }
+
+  /**
+   * Get approval chain
+   */
+  async getApprovalChain(id: string): Promise<ApprovalChain> {
+    const override = this.overrides.get(id);
+    if (!override) {
+      return { steps: [] };
+    }
+
+    return {
+      steps: override.approvalChain,
+      chainId: id,
+    };
+  }
+
+  /**
+   * Check escalation status
+   */
+  async checkEscalation(overrideId: string): Promise<void> {
+    const override = this.overrides.get(overrideId);
+    if (!override || override.escalatedTo) return;
+
+    const currentStep = this.getCurrentApprovalStep(override);
+    if (!currentStep) return;
+
+    // Check if this step has passed timeout
+    const elapsedTime = new Date().getTime() - currentStep.createdAt.getTime();
+    const timeoutMs = currentStep.timeout || 30 * 60 * 1000; // default 30 minutes
+
+    if (elapsedTime > timeoutMs) {
+      const nextApproverId = this.getNextApproverId(override, currentStep.approverId);
+      
+      if (nextApproverId) {
+        console.log(`[OverrideWorkflow] Escalating override ${overrideId} to ${nextApproverId}`);
+        
+        override.escalatedTo = nextApproverId;
+        override.escalationTriggeredAt = new Date();
+        
+        await this.emailService.sendEscalationEmail(override, currentStep.approverId, nextApproverId);
+        this.notifyService.notifyEscalation(override, currentStep.approverId, nextApproverId);
+        
+        this.overrides.set(overrideId, override);
+        await this.saveOverride(override);
       }
     }
   }
 
   /**
-   * Apply override (unblock-on-approval)
+   * Enable escalation monitoring
    */
-  private async applyOverride(request: OverrideRequest): Promise<void> {
-    console.log(`[OverrideWorkflow] Applying override ${request.id}`);
-    
-    // Apply override to the entity
-    await this.executeOverride(request);
+  private enableEscalationMonitoring(): void {
+    const checkInterval = setInterval(async () => {
+      const overrides = Array.from(this.overrides.values()).filter(
+        o => o.approvalStatus === 'pending' && !o.expired
+      );
 
-    // Notify requester and approvers
-    await this.notifyOverrideApplied(request);
+      for (const override of overrides) {
+        await this.checkEscalation(override.id);
+      }
+    }, 60 * 1000); // check every minute
   }
 
   /**
-   * Execute override on the target entity
-   * In a real implementation, this would update the alert config, rule, etc.
+   * Get current approval step
    */
-  private async executeOverride(request: OverrideRequest): Promise<void> {
-    console.log(`[OverrideWorkflow] Executing override for ${request.entityType}:${request.entityId}`);
-    
-    // This would typically:
-    // 1. Create or update a temporary override record
-    // 2. Modify the affected system (e.g., disable alert rule, modify route)
-    // 3. Log the override for auditing
-    
-    this.alerts.add(request.entityId);
+  private getCurrentApprovalStep(override: OverrideRequest): ApprovalStep | undefined {
+    return this.approvalChain.find(step => 
+      step.status === 'pending' && step.entityId === override.id
+    );
   }
 
   /**
-   * Notify relevant parties when override is applied
+   * Get next approver ID
    */
-  private async notifyOverrideApplied(request: OverrideRequest): Promise<void> {
-    const message = `Override #${request.id} has been applied successfully for ${request.entityType} "${request.title}"`;
-    
-    // Notify requesters
-    console.log(`[OverrideNotification] Requester ${request.requesterId}: ${message}`);
-    
-    // Notify all approvers
-    const requestLoaded = await this.storage.get(request.id);
-    if (requestLoaded?.approvedBy) {
-      console.log(`[OverrideNotification] Approver ${requestLoaded.approvedBy}: ${message}`);
-    }
+  private getNextApproverId(override: OverrideRequest, currentApproverId: string): string | null {
+    // For demo, return a hardcoded second approver
+    // In production, resolve from escalation rules
+    return 'admin_2'; // TODO: fetch from configuration
   }
 
   /**
-   * Schedule escalation check for override
+   * Generate approval chain
    */
-  private scheduleEscalationCheck(request: OverrideRequest): void {
-    const escalationLevel = 1;
-    const timeoutMs = (this.escalationRules as any)[`${escalationLevel}ApproverTimeout`] * 60000;
-    
-    setTimeout(async () => {
-      await this.checkEscalation(request);
-    }, timeoutMs);
+  private generateApprovalChain(
+    override: OverrideRequest,
+    approverIds: string[]
+  ): ApprovalStep[] {
+    return approverIds.map((approverId, index) => ({
+      id: `approver_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`,
+      notifyMethod: 'email',
+      email: `${approverId}@example.com`,
+      approverId,
+      required: true,
+      status: 'pending',
+      decision: null,
+      createdAt: new Date(),
+      timeout: 30 * 60 * 1000, // 30 minute timeout
+    }));
   }
 
   /**
-   * Check if escalation is needed
+   * Create approval step
    */
-  private async checkEscalation(request: OverrideRequest): Promise<void> {
-    if (request.approvalStatus === 'approved' || request.approvalStatus === 'rejected') {
-      return; // No longer pending
-    }
-
-    // Determine primary approver
-    const chain = await this.storage.get(`chain_${request.id}_${request.approvedCount + 1}`);
-    if (!chain || chain.status !== 'pending') {
-      return; // Previous approver already acted
-    }
-
-    // Check if approver responded
-    const elapsed = Date.now() - chain.approvedAt?.getTime() || 0;
-    const timeoutMs = (this.escalationRules as any).primaryApproverTimeout * 60000;
-    
-    if (elapsed > timeoutMs) {
-      // Escalate to next level
-      await this.escalateToNextApprover(request, chain);
-    }
-  }
-
-  /**
-   * Escalate to next approver level
-   */
-  private async escalateToNextApprover(
-    request: OverrideRequest,
-    previousChain: ApprovalChain
+  private async createApproverStep(
+    override: OverrideRequest,
+    approverId: string
   ): Promise<void> {
-    console.log(`[OverrideWorkflow] Escalating ${request.id} to next level`);
-
-    const escalation: ApprovalEscalation = {
-      id: this.generateEscalationId(),
-      overrideRequestId: request.id,
-      escalationLevel: (request.approvalLevel || 0) + 1,
-      previousApproverId: previousChain.approverId,
-      currentApproverId: this.getNextApproverId(request, request.approvalLevel || 0),
-      escalationTriggeredAt: new Date(),
-      responseDeadlineAt: new Date(Date.now() + (this.escalationRules.secondaryApproverTimeout || 15) * 60000),
-    };
-
-    await this.storage.set(`escalation_${request.id}_${escalation.id}`, escalation);
-
-    // Notify target
-    await this.callbacks.onEscalate?.(request, escalation);
-
-    console.log(`[OverrideWorkflow] Notified escalation target ${escalation.currentApproverId}`);
+    // In production, persist the step
+    this.approvalChain.push({
+      id: `approver_step_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      notifyMethod: 'email',
+      email: `${approverId}@example.com`,
+      approverId,
+      required: true,
+      status: 'pending',
+      decision: null,
+      createdAt: new Date(),
+      timeout: 30 * 60 * 1000,
+    });
   }
 
   /**
-   * Get next approver ID based on escalation level
+   * Save override
    */
-  private getNextApproverId(request: OverrideRequest, level: number): string {
-    const approvers = ['admin_1', 'admin_2', 'admin_3'];
-    return approvers[level] || 'admin_last';
+  private async saveOverride(override: OverrideRequest): Promise<void> {
+    // In production, persist to database
+    await this.approvalStorage.save(override);
   }
 
   /**
-   * Get override request details
+   * Generate unique ID
    */
-  async getOverride(requestId: string): Promise<OverrideRequest | null> {
-    return this.storage.get(requestId);
-  }
-
-  /**
-   * Get approval chain for override
-   */
-  async getApprovalChain(requestId: string): Promise<ApprovalChain[]> {
-    const request = await this.storage.get(requestId);
-    if (!request) return [];
-
-    const chains: ApprovalChain[] = [];
-    for (let i = 0; i < request.approvedCount + 1; i++) {
-      const chain = await this.storage.get(`chain_${requestId}_${i + 1}`);
-      if (chain) chains.push(chain);
-    }
-    return chains;
-  }
-
-  /**
-   * List all override requests with optional filters
-   */
-  async listOverrides(filter?: { status?: ApprovalStatus; requesterId?: string; entityType?: string }): Promise<OverrideRequest[]> {
-    return this.storage.list(filter);
-  }
-
-  /**
-   * Save override request
-   */
-  private async saveOverride(request: OverrideRequest): Promise<void> {
-    request.updatedAt = new Date();
-    await this.storage.set(request.id, request);
-  }
-
-  /**
-   * Check if override should be applied (unblock-on-approval)
-   */
-  async shouldAutoApply(requestId: string): Promise<OverrideRequest | null> {
-    const request = await this.storage.get(requestId);
-    
-    if (!request) {
-      return null;
-    }
-
-    return request.enabled && 
-           request.requiresApproval && 
-           request.approvedCount >= this.config.minimumRequiredApprovals &&
-           request.approvalStatus === 'pending'
-      ? request
-      : null;
-  }
-
-  /**
-   * Generate unique override ID
-   */
-  private generateOverrideId(): string {
+  private generateId(): string {
     return `override_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
   /**
-   * Generate unique chain ID
+   * Get entity type display
    */
-  private generateChainId(): string {
-    return `chain_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  private getEntityTypeDisplay(entityType: string): string {
+    const displays: Record<string, string> = {
+      rule: 'Alert Rule',
+      schedule: 'Schedule',
+      route: 'Route',
+      service: 'Service',
+      pipeline: 'Pipeline',
+    };
+    return displays[entityType] || entityType;
   }
 
   /**
-   * Generate unique escalation ID
+   * Get escalation rules
    */
-  private generateEscalationId(): string {
-    return `escalation_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  getEscalationRules(): EscalationRule[] {
+    return Array.from(this.escalationRules.values());
+  }
+
+  /**
+   * Set escalation rule
+   */
+  setEscalationRule(rule: EscalationRule): void {
+    this.escalationRules.set(rule.id, {
+      ...rule,
+      createdAt: new Date(),
+    });
+  }
+
+  /**
+   * Get aggregates
+   */
+  async getAggregates(): Promise<{
+    total: number;
+    pending: number;
+    approved: number;
+    rejected: number;
+    requiresApproval: number;
+  }> {
+    const all = Array.from(this.overrides.values());
+    
+    return {
+      total: all.length,
+      pending: all.filter(o => o.approvalStatus === 'pending').length,
+      approved: all.filter(o => o.approvalStatus === 'approved').length,
+      rejected: all.filter(o => o.approvalStatus === 'rejected').length,
+      requiresApproval: all.filter(o => o.requiresApproval).length,
+    };
   }
 }
 
-// Export singleton instance
-export const overrideWorkflowService = new OverrideWorkflowService(
-  // Mock storage
-  {
-    async get(id: string) {
-      // In-memory storage would be used
-      return mockOverrides.get(id);
-    },
-    async set(id: string, request: OverrideRequest) {
-      mockOverrides.set(id, request);
-    },
-    async list(filter?: any) {
-      return Array.from(mockOverrides.values());
-    },
-    async delete(id: string) {
-      mockOverrides.delete(id);
-    },
-  },
-  {
-    async onApprove(request) {
-      console.log(`[OverrideWorkflow] Auto-applied: ${request.id}`);
-    },
-  }
-);
+// Import notification services
+import { NotifyService } from './notifications';
+import { NotificationService } from './notifications';
+import { NotificationService } from './notifications';
+import { EmailService } from './email-service';
+import { ApprovalStorage, ApprovalChainStorage } from './storage';
 
-// In-memory storage for demo
-const mockOverrides = new Map<string, OverrideRequest>();
+// Export singleton
+export const overrideWorkflowService = new OverrideWorkflowService();
