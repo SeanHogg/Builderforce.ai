@@ -75,7 +75,7 @@ export const MisalignmentFlag = ({
         className={`${color} ${size === 'sm' ? 'px-1.5 py-0 text-[10px]' : 'px-2 py-1 text-xs'} ${className}`}
       >
         <span className="mr-1">{icon}</span>
-        {priorityLabels[severity] ?? severity}
+        {severity === 'warning' ? 'Warning' : 'Error'}
       </Badge>
     </Tooltip>
   );
