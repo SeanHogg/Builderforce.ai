@@ -20,33 +20,50 @@
 import React from 'react';
 import { projects, portfolioSummary, type ProjectHealth } from './portfolioHealthData';
 
-/* ── Utility colors from CSS variable tokens (matches EvermindBrainMap/IDE theme) ───────────────── */
+/* ─── Design tokens (inlined, matching EvermindBrainMap vibes) ───────────────── */
 
 const colors = {
   green: '#22c55e',
   amber: '#f59e0b',
   red: '#ef4444',
   muted: '#9ca3af',
-  emergency: '#fbbf24', // prompt header tone
+  emergency: '#fbbf24',
   subtle: '#4b5563',
+  text: 'var(--text)',
 } as const;
 
-/* ── Project Card Component (FR-1) ────────────────────────────────────────────────────────────── */
+/* ─── Utility types for type-safe color lookups ────────────────────────────── */
+
+type ColorKey = 'green' | 'amber' | 'red';
+
+function getColorKey(color: string): ColorKey | null {
+  if (color === 'Green') return 'green';
+  if (color === 'Amber') return 'amber';
+  if (color === 'Red') return 'red';
+  return null;
+}
+
+function getEmoji(rag: string): string {
+  if (rag === 'Green') return '🟢';
+  if (rag === 'Amber') return '🟡';
+  return '🔴';
+}
+
+/* ─── Project Card Component (FR-1) ──────────────────────────────────────── */
 
 interface ProjectCardProps {
   p: ProjectHealth;
 }
 
 function ProjectCard({ p }: ProjectCardProps) {
-  const rag = p.rag ?? 'Red'; // safe fallback
-  const ragColor = colors[rag.toLowerCase()] as 'green' | 'amber' | 'red';
-  const ragLabel = rag === 'Green' ? '🟢' : rag === 'Amber' ? '🟡' : '🔴';
+  const ragColorKey = getColorKey(p.rag ?? 'Red');
+  const ragEmoji = getEmoji(p.rag ?? 'Red');
 
   return (
     <div
       style={cardStyle}
       role="region"
-      aria-label={`${p.name}: ${ragLabel} — ${p.completionPct ?? 'N/A'}% complete`}
+      aria-label={`${p.name}: ${ragEmoji} — ${p.completionPct ?? 'N/A'}% complete`}
     >
       {/* Status bar with RAG badge (FR-6 coloring) */}
       <div style={statusRowStyle}>
@@ -61,10 +78,10 @@ function ProjectCard({ p }: ProjectCardProps) {
             gap: 6,
             fontWeight: 600,
             fontSize: '1.1rem',
-            color: colors[ragColor],
+            color: ragColorKey ? (colors as Record<ColorKey, string>)[ragColorKey] : colors.red,
           }}
         >
-          {ragLabel}
+          {ragEmoji}
           <span>{p.rag ?? 'Red'}</span>
         </div>
       </div>
@@ -81,13 +98,12 @@ function ProjectCard({ p }: ProjectCardProps) {
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: 2 }}>
             <span style={{ color: colors.green, fontWeight: 600 }}>{p.completionPct}%</span>
           </div>
-          {/* Progress bar ready for dark background override on embedding */}
           <div
             style={{
               width: '100%',
               height: 10,
               borderRadius: 10,
-              backgroundColor: `rgba(107, 114, 128, 0.2)`, // Blended progress bar tint
+              backgroundColor: 'rgba(107, 114, 128, 0.2)',
               overflow: 'hidden',
               position: 'relative',
             }}
@@ -96,7 +112,7 @@ function ProjectCard({ p }: ProjectCardProps) {
               style={{
                 width: `${p.completionPct}%`,
                 height: '100%',
-                backgroundColor: colors.green,
+                backgroundColor: p.rag === 'Green' ? colors.green : p.rag === 'Amber' ? colors.amber : colors.red,
                 position: 'absolute',
               }}
             />
@@ -126,7 +142,7 @@ function ProjectCard({ p }: ProjectCardProps) {
   );
 }
 
-/* ── Portfolio Summary Component (FR-4) ─────────────────────────────────────────────────────── */
+/* ─── Portfolio Summary Component (FR-4) ─────────────────────────────────── */
 
 function PortfolioSummary({ summary }: { summary: typeof portfolioSummary }) {
   const { greenCount, amberCount, redCount, overall, topPriorityActions } = summary;
@@ -137,22 +153,25 @@ function PortfolioSummary({ summary }: { summary: typeof portfolioSummary }) {
         Portfolio Snapshot
       </h2>
       <div style={summaryGridStyle}>
-        <div style={statCardStyle(green)} aria-label='Green projects'>
-          <div style={statCountStyle(greenCount)}>{greenCount}</div>
+        <div style={statCardStyle(greenCount)} aria-label="Green projects">
+          <div style={statCountStyle(greenCount, 'green')}>{greenCount}</div>
           <div style={statLabelStyle}>🟢 Green</div>
         </div>
-        <div style={statCardStyle(amber)} aria-label='Amber projects'>
-          <div style={statCountStyle(amberCount)}>{amberCount}</div>
+        <div style={statCardStyle(amberCount)} aria-label="Amber projects">
+          <div style={statCountStyle(amberCount, 'amber')}>{amberCount}</div>
           <div style={statLabelStyle}>🟡 Amber</div>
         </div>
-        <div style={statCardStyle(red)} aria-label='Red projects'>
-          <div style={statCountStyle(redCount)}>{redCount}</div>
+        <div style={statCardStyle(redCount)} aria-label="Red projects">
+          <div style={statCountStyle(redCount, 'red')}>{redCount}</div>
           <div style={statLabelStyle}>🔴 Red</div>
         </div>
       </div>
 
       <div style={overallBannerStyle}>
-        <strong>Overall portfolio health:</strong> <span style={{ color: colors[overall.toLowerCase() as 'green' | 'amber' | 'red' }] }}>{overall}</span>
+        <strong>Overall portfolio health:</strong>{' '}
+        <span style={{ color: overall === 'Red' ? colors.red : overall === 'Amber' ? colors.amber : colors.green }}>
+          {overall}
+        </span>
       </div>
 
       <div style={{ marginTop: 12 }}>
@@ -169,7 +188,13 @@ function PortfolioSummary({ summary }: { summary: typeof portfolioSummary }) {
   );
 }
 
-/* ── Main View (FR-1 FR-6) ─────────────────────────────────────────────────────────────── */
+function statCountStyle(count: number, fallback: ColorKey): React.CSSProperties {
+  if (count === 0) return { fontSize: 32, fontWeight: 700, color: colors.muted };
+  if (count >= 3) return { fontSize: 32, fontWeight: 700, color: colors.red };
+  return { fontSize: 32, fontWeight: 700, color: colors.green };
+}
+
+/* ─── Main View (FR-1 FR-6) ─────────────────────────────────────────────── */
 
 export function CrossProjectHealthDashboard() {
   return (
@@ -197,7 +222,7 @@ export function CrossProjectHealthDashboard() {
   );
 }
 
-/* ── Design Tokens (inlined, matching EvermindBrainMap vibes) ─────────────────────────────── */
+/* ─── Design tokens (fulfilling tokens used in main body) ──────────────────── */
 
 const mainStyle: React.CSSProperties = {
   display: 'flex',
@@ -207,20 +232,20 @@ const mainStyle: React.CSSProperties = {
   marginInline: 'auto',
   paddingInline: 32,
   paddingBottom: 48,
-  color: 'var(--text)',
+  color: colors.text,
   backgroundColor: '#fafbfc',
 };
 
 const headingStyle: React.CSSProperties = {
   fontSize: 20,
   fontWeight: 600,
-  color: 'var(--text)',
+  color: colors.text,
 };
 
 const subHeadingStyle: React.CSSProperties = {
   fontSize: 16,
   fontWeight: 500,
-  color: 'var(--text)',
+  color: colors.text,
 };
 
 const pageheadingStyle: React.CSSProperties = {
@@ -259,17 +284,11 @@ const statCardStyle = (count: number): React.CSSProperties => ({
   borderRadius: 8,
   padding: 12,
   textAlign: 'center',
-  boxShadow: `0 1px 2px rgba(0, 0, 0, 0.05)`,
-});
-
-const statCountStyle = (c: number): React.CSSProperties => ({
-  fontSize: 32,
-  fontWeight: 700,
-  color: c > 0 ? (c >= 3 ? colors.red : colors.green) : colors.muted,
+  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
 });
 
 const statLabelStyle: React.CSSProperties = {
-  fontSize: 0.8,
+  fontSize: '0.8rem',
   color: colors.subtle,
   marginTop: 4,
   textTransform: 'uppercase',
@@ -278,11 +297,11 @@ const statLabelStyle: React.CSSProperties = {
 
 const overallBannerStyle: React.CSSProperties = {
   backgroundColor: '#fff',
-  border: `1px solid ${colors[portfolioSummary.overall.toLowerCase() as 'green' | 'amber' | 'red']}`,
+  border: `1px solid ${colors.red}`,
   borderRadius: 8,
   paddingInline: 16,
   marginBottom: 12,
-  fontSize: 0.9rem,
+  fontSize: '0.9rem',
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',
@@ -314,18 +333,18 @@ const cardStyle: React.CSSProperties = {
   border: `1px solid ${colors.emergency}`,
   borderRadius: 10,
   padding: 20,
-  boxShadow: `0 2px 6px rgba(0, 0, 0, 0.08)`,
+  boxShadow: '0 2px 6px rgba(0, 0, 0, 0.08)',
 };
 
 const sectionLabelStyle: React.CSSProperties = {
-  fontSize: 0.85rem,
+  fontSize: '0.85rem',
   lineHeight: 1.4,
   color: colors.subtle,
   marginBottom: 4,
 };
 
 const naStyle: React.CSSProperties = {
-  fontSize: 0.8rem,
+  fontSize: '0.8rem',
   color: colors.muted,
   marginBottom: 8,
 };
