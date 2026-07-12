@@ -165,6 +165,14 @@ export interface StreamChatResult {
    * is self-explaining instead of looking like "nothing connected".
    */
   byoUnresolved?: string;
+  /**
+   * BYO providers that hit a usage/capacity cap this turn (from
+   * `x-builderforce-provider-cap`, comma-separated) — e.g. the tenant's Anthropic
+   * key hit its monthly spend limit, or Meta MUSE quota was exhausted. Only set
+   * when the tenant's OWN key hit the cap (never the shared operator pool). The
+   * client should prompt the user to manage their provider keys in settings.
+   */
+  providerCap?: string;
   /** Token usage for this completion, when the gateway reported it. */
   usage?: CompletionUsage;
 }
@@ -243,6 +251,13 @@ export async function streamChatCompletion(
   let headerByoUnresolved: string | null = null;
   try { headerByoUnresolved = res.headers?.get?.('x-builderforce-byo-unresolved') || null; } catch { headerByoUnresolved = null; }
   const byoUnresolved = (): string | undefined => headerByoUnresolved ?? undefined;
+  // BYO providers that hit a usage/capacity cap this turn (e.g. Anthropic "reached
+  // your API usage limits", Meta MUSE quota exhausted). Comma-separated provider
+  // names matching the settings-page provider ids (anthropic, openai, google, meta).
+  // Only set when the tenant's OWN key hit the cap (not the shared operator pool).
+  let headerProviderCap: string | null = null;
+  try { headerProviderCap = res.headers?.get?.('x-builderforce-provider-cap') || null; } catch { headerProviderCap = null; }
+  const providerCap = (): string | undefined => headerProviderCap ?? undefined;
 
   // Token usage from the trailing `usage` chunk (or a non-streaming body). Kept
   // as the last non-empty usage seen so a mid-stream partial can't clobber the
@@ -283,7 +298,7 @@ export async function streamChatCompletion(
     });
     finishReason = choice?.finish_reason ?? null;
     handlers.onDone?.(finishReason);
-    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), usage };
+    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
   }
 
   const decoder = new TextDecoder();
@@ -302,7 +317,7 @@ export async function streamChatCompletion(
         const tail = xml.flush();
         if (tail) handlers.onTextDelta?.(tail);
         handlers.onDone?.(finishReason);
-        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), usage };
+        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
       }
       let parsed: {
         model?: string;

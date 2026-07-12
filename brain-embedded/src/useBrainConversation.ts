@@ -162,6 +162,13 @@ export interface UseBrainConversation {
    */
   byoUnresolved: string[];
   /**
+   * BYO providers that hit a usage/capacity cap this run (e.g. Anthropic monthly
+   * spend limit, Meta MUSE quota exhausted). A mounted view renders a "manage your
+   * API keys" banner so the user can top up or switch providers. Empty when no cap
+   * was hit this run.
+   */
+  providerCap: string[];
+  /**
    * Assemble a paste-able triage report of the active chat's execution — the LLM
    * steps, the full tool chain (args + results), intermediate assistant messages,
    * every error, and the visible transcript. `agentLabel` names the persona the
@@ -530,6 +537,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
      *  subscription) — a mounted view renders a passive "reconnect your account"
      *  banner off this. Empty when everything resolved. */
     byoUnresolved: snapshot.byoUnresolved,
+    providerCap: snapshot.providerCap,
     buildTriageReport,
   };
 }
