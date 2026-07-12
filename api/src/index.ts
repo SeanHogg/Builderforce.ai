@@ -513,6 +513,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
 
   // Phase 6 — Dev Analytics & Team Intelligence
   app.route('/api/integrations',    createIntegrationRoutes(db, env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET));
+  app.route('/api/integrations',    createIntegrationHealthRoutes(db));
   app.route('/api/contributors',    createContributorRoutes(db));
   app.route('/api/dev-teams',       createDevTeamRoutes(db));
   app.route('/api/reports',         createReportRoutes(db));
