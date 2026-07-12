@@ -216,7 +216,16 @@ export class Task {
       >
     >,
   ): Task {
-    return new Task({ ...this.props, ...updates, updatedAt: new Date() });
+    // Strip undefined keys to respect PATCH semantics: omitting a field = no-op.
+    // { ...this.props, ...updates } would overwrite when `updates[parentTaskId]` is undefined.
+    const merged = { ...this.props };
+    for (const key in updates) {
+      const value = (updates as Record<string, TaskProps[keyof TaskProps]>)[key];
+      if (value !== undefined) {
+        (merged as Record<string, unknown>)[key] = value;
+      }
+    }
+    return new Task({ ...merged, updatedAt: new Date() });
   }
 
   /**
