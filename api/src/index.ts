@@ -574,6 +574,8 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/monitoring',        createMonitoringRoutes(db));
   app.route('/api/knowledge',         createKnowledgeRoutes(db));
   app.route('/api/knowledge-market',  createKnowledgeMarketRoutes(db)); // PUBLIC browse (logged-out)
+  // Capacity estimation — velocity collection, utilization mapping, time-to-completion projections
+  app.route('/api/capacity',          createCapacityRoutes(db, env));
 
   app.onError(errorHandler);
   app.notFound((c) => addCorsToResponse(c, c.json({ error: 'Not found' }, 404)));
