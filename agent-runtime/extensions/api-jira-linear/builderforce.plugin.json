@@ -1,0 +1,11 @@
+{
+  "id": "jira-linear",
+  "channels": ["jira-linear"],
+  "apiVersion": "1.0.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "description": "Jira / Linear project management integration channel"
+}
