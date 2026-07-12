@@ -88,7 +88,9 @@ export function generateCSVRow(metric: MetricExportRow, options: ExportOptions):
   }
   
   if (options.includeSeverity !== false) {
-    row.push(metric.severity);
+    // AC-10: severity column is populated with the human-readable label
+    // ("Critical" / "Normal" / "No Data"), not the raw enum value.
+    row.push(getExportSeverityLabel(metric.severity));
   }
   
   return row.map(cell => {
