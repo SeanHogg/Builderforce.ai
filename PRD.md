@@ -1,55 +1,67 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #382
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# Product Requirements Document: Promoted / Featured Listings
 
-## Problem & Goal
+## 1. Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+### 1.1 Problem Statement
+Our platform currently lacks mechanisms for users to enhance the visibility of their job postings or freelancer profiles beyond standard listings, limiting potential reach and user control over exposure. This also represents an untapped revenue stream for the platform.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+### 1.2 Goal
+Implement a "Promoted/Featured Listings" system to allow employers to boost job postings and freelancers to promote their profiles. This will serve as a new monetization lever beyond existing listing fees, while enhancing user experience by offering controlled visibility improvements.
 
-## Target users / ICP roles
+---
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## 2. Target Users / ICP Roles
 
-## Scope
+*   **Employers:** Seeking to increase visibility and applicant volume for their job postings.
+*   **Freelancers:** Seeking to increase profile views and project invitations.
+*   **Platform Administrators:** For monitoring and managing promoted content.
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+---
 
-## Functional Requirements
+## 3. Scope
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+This initial release will focus on providing core promotion functionality for both job postings and freelancer profiles. The feature will allow users to pay for time-boxed, enhanced placement on relevant search and browse pages.
 
-## Acceptance Criteria
+---
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+## 4. Functional Requirements
 
-## Out of scope
+*   **FR1: Promotion Selection (Employer)** As an Employer, I can select an active job posting from my dashboard to promote.
+*   **FR2: Promotion Duration (Employer)** As an Employer, I can choose a specific duration for the job posting promotion (e.g., 3 days, 7 days).
+*   **FR3: Payment Integration (Employer)** As an Employer, I can complete the payment process for the selected job posting promotion.
+*   **FR4: Promotion Selection (Freelancer)** As a Freelancer, I can select my active profile from my dashboard to boost.
+*   **FR5: Promotion Duration (Freelancer)** As a Freelancer, I can choose a specific duration for my profile boost.
+*   **FR6: Payment Integration (Freelancer)** As a Freelancer, I can complete the payment process for the selected profile boost.
+*   **FR7: Featured Display:** Promoted job postings and boosted profiles must be visually distinguishable from standard listings (e.g., a "Featured" badge, distinct background, or border).
+*   **FR8: Prominent Placement:** Promoted/boosted listings will appear in designated "featured" sections at the top of relevant search results and category browse pages.
+*   **FR9: Automatic Demotion:** The system must automatically revert a listing to its standard status and remove featured placement once its promotion duration expires.
+*   **FR10: User Tracking:** Users can view the active status and remaining duration of their promoted/boosted listings on their respective dashboards.
+*   **FR11: Admin Tracking:** Platform administrators can view a consolidated list of all currently active promoted/boosted listings, their associated users, and remaining durations.
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+---
+
+## 5. Acceptance Criteria
+
+*   **AC1: Job Promotion Success:** An employer successfully promotes a job posting, the job posting immediately gains a "Featured" badge, and appears in the designated featured section for the specified duration.
+*   **AC2: Profile Boost Success:** A freelancer successfully boosts their profile, the profile immediately gains a "Featured" badge, and appears in the designated featured section for the specified duration.
+*   **AC3: Payment Completion:** Payment for a promotion is successfully processed and recorded in the system upon selection.
+*   **AC4: Timed Demotion:** Upon expiration of the chosen promotion duration, the listing automatically loses its "Featured" badge and prominent placement, reverting to a standard listing.
+*   **AC5: Visual Distinction:** Promoted/boosted listings are clearly and consistently visually distinguishable from non-promoted listings across all relevant pages.
+*   **AC6: Status Tracking:** Users can accurately view the active status and precise remaining time for their promoted/boosted listings.
+*   **AC7: Admin Overview:** Administrators can access an up-to-date list of all active promoted/boosted listings with their start/end times and current status.
+
+---
+
+## 6. Out of Scope
+
+*   Advanced analytics or reporting for promotion performance (e.g., click-through rates specifically for promoted listings, conversion metrics).
+*   A/B testing of different promotion display mechanisms or pricing models.
+*   Tiered promotion packages (e.g., "Premium," "Gold," "Silver" tiers with varying benefits beyond simple duration/placement).
+*   Dynamic pricing for promotions based on demand or other factors.
+*   Campaign management tools for scheduling multiple promotions or recurring boosts.
+*   Refund mechanisms for promotions.
+*   Ability for users to extend an active promotion before it expires.
+*   Notifications for expiring promotions.
