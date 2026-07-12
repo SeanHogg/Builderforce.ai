@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: quality-dashboard-backend
+    ports:
+      - "8001:8001"
+    restart: unless-stopped
+    environment:
+      - PYTHONENV=/app/env
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: quality-dashboard-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8001
+    depends_on:
+      - backend
+    restart: unless-stopped

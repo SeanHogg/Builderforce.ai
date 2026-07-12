@@ -1,55 +1,111 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #280
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# PRD: Quality & Bugs Dashboard — Bug Count, Severity & Trend
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+Engineering leads, QA managers, and product owners lack a single, real-time view of bug health across the codebase. Bug data is scattered across issue trackers, spreadsheets, and status meetings, making it difficult to answer three core questions quickly:
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+1. **How many bugs exist right now?**
+2. **How severe are they?**
+3. **Is quality improving or degrading over time?**
 
-## Target users / ICP roles
+**Goal:** Deliver a focused Quality & Bugs module that surfaces bug count, severity distribution, and trend lines in one coherent view, enabling data-driven prioritization and release-readiness decisions.
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+---
+
+## Target Users / ICP Roles
+
+| Role | Primary Need |
+|---|---|
+| Engineering Lead / Tech Lead | Monitor team bug backlog; spot regressions before they escalate |
+| QA Manager | Track open vs. resolved counts; validate severity classifications |
+| Product Manager | Assess release readiness; communicate quality status to stakeholders |
+| VP Engineering / CTO | High-level trend visibility; identify systemic quality issues |
+
+---
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+### In Scope
+- Aggregation of bug data from connected issue trackers (e.g., Jira, GitHub Issues, Linear)
+- Bug count metrics (total open, newly opened, resolved, net change)
+- Severity breakdown (Critical, High, Medium, Low) based on source-system labels/priority fields
+- Trend visualization over configurable time windows (7d, 30d, 90d, custom)
+- Filterable by project, team, component, assignee, and severity
+- Exportable summary report (CSV, PDF)
+
+### Out of Scope
+- Root-cause analysis or automatic bug triage
+- Code-level diagnostics or log ingestion
+- SLA / SLO breach alerting (tracked separately)
+- Customer-facing status pages
+
+---
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### FR-1: Bug Count Summary
+- The system **must** display a real-time count of total open bugs.
+- The system **must** show the delta (opened vs. closed) for the selected time window.
+- Counts **must** update on a maximum 15-minute polling interval or via webhook push.
+
+### FR-2: Severity Distribution
+- Bugs **must** be classified into four severity tiers: **Critical, High, Medium, Low**.
+- Severity mapping **must** be configurable per integration (e.g., map Jira `Blocker` → `Critical`).
+- A donut or stacked-bar chart **must** show the proportion of each severity tier for the current open backlog.
+
+### FR-3: Trend Analysis
+- The system **must** render a time-series line chart showing:
+  - Total open bug count over time
+  - New bugs opened per period
+  - Bugs closed/resolved per period
+- Users **must** be able to toggle individual series on/off.
+- Default time window is **30 days**; users can select 7d, 30d, 90d, or a custom date range.
+
+### FR-4: Filtering & Segmentation
+- Users **must** be able to filter all views by: project, team, component, severity, and assignee.
+- Applied filters **must** persist per user session and be shareable via URL parameters.
+
+### FR-5: Data Source Integration
+- The system **must** support at minimum **Jira** and **GitHub Issues** as data sources at launch.
+- Integration status (connected / error / last synced) **must** be visible in the UI.
+
+### FR-6: Export
+- Users **must** be able to export the current filtered view as **CSV**.
+- Users **must** be able to export a formatted summary report as **PDF**.
+- Exports **must** reflect the active filters and time window.
+
+### FR-7: Access Control
+- Bug data **must** only be visible to users with access rights to the corresponding project in the source system.
+- Role-based visibility rules from the connected issue tracker **must** be respected.
+
+---
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+| ID | Criterion |
+|---|---|
+| AC-01 | Given a connected Jira project, total open bug count matches the Jira backlog count within ±2 bugs after a forced sync. |
+| AC-02 | Severity donut chart renders correctly with all four tiers; slices are proportionally accurate to underlying data. |
+| AC-03 | Trend line chart displays 30 days of data by default and re-renders within 2 seconds when the time window is changed. |
+| AC-04 | Applying a filter by severity updates all widgets (count, chart, trend) simultaneously without a full page reload. |
+| AC-05 | A URL with encoded filter parameters loads the dashboard in the same filtered state for any user with access. |
+| AC-06 | CSV export contains columns: Bug ID, Title, Severity, Status, Assignee, Created Date, Resolved Date. |
+| AC-07 | PDF export includes the summary counts, severity chart, and trend chart as rendered at time of export. |
+| AC-08 | A user without access to a project in Jira receives no bug data for that project in the dashboard. |
+| AC-09 | Data staleness indicator shows last-synced timestamp; alert badge appears if last sync is >30 minutes old. |
+| AC-10 | Dashboard loads to interactive state in under 3 seconds on a standard broadband connection with up to 10,000 bugs. |
 
-## Out of scope
+---
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## Out of Scope
+
+- Automated bug assignment or triage recommendations
+- AI-generated fix suggestions or code analysis
+- Integration with test management tools (e.g., TestRail) — future phase
+- Mobile-native application — web-responsive only at launch
+- Real-time push notifications or alerting rules
+- Billing, licensing, or subscription management
+- Custom severity tier creation (four-tier model is fixed at v1)

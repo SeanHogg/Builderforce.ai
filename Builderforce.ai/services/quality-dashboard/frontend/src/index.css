@@ -1,0 +1,16 @@
+/**
+ * Tailwind CSS Entry Point
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles for the dashboard */
+body {
+  @apply bg-gray-50;
+}
+
+#root {
+  @apply min-h-screen;
+}
