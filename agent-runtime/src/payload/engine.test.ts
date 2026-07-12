@@ -532,25 +532,39 @@ describe("Payload Generation Engine", () => {
     expect(result.errors[0].type).toBe("required");
   });
 
-  it("array transform map(prop) extracts nested property", () => {
+  it("array transform map(prop) extracts a property from each element", () => {
     const def: PayloadDefinition = {
       id: "array-map",
       name: "Array Map",
       fields: [
         { name: "id", source: { path: "user.id", required: true } },
-        { name: "tagNames", source: { path: "user.tags" } },
-        // Using arrayTransform to map each tag to its uppercase via fn
+        {
+          name: "seatNumbers",
+          source: { path: "user.passengers" },
+          transform: {
+            arrayTransform: { field: "user.passengers", transform: "map(seat)" },
+          },
+        },
       ],
       schema: {
         required: ["id"],
-        properties: { id: { type: "string" }, tagNames: { type: "array" } },
+        properties: { id: { type: "string" }, seatNumbers: { type: "array" } },
       },
     };
 
     const gen = createPayloadGenerator(def);
-    const result = gen.generate(userContext());
+    const ctx = userContext({
+      user: {
+        ...(userContext().user as Record<string, unknown>),
+        passengers: [
+          { seat: "1A", name: "Bob" },
+          { seat: "2B", name: "Alice" },
+        ],
+      },
+    });
+    const result = gen.generate(ctx);
     expect(result.success).toBe(true);
     if (!result.success) return;
-    expect(result.data.tagNames).toEqual(["math", "computing"]);
+    expect(result.data.seatNumbers).toEqual(["1A", "2B"]);
   });
 });
