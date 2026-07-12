@@ -1,9 +1,7 @@
 'use client';
 
 import React from 'react';
-import { GreenStatusIndicator } from '@/components/ui/GreenStatusIndicator';
 import { STATUS } from '@/types/status';
-import { type ScoreDisplay } from '@/types/status';
 
 /** GreenStatusIndicatorProps */
 export interface GreenStatusIndicatorProps {
@@ -58,7 +56,11 @@ export function GreenStatusIndicator({
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style={{ display: 'block', width: 'inherit', height: 'inherit' }}>
           {/* Friendly text */}
-          {customAriaLabel.length < 50 && <text x="8" y="11" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="600">✓</text>}
+          {customAriaLabel != null && customAriaLabel.trim().length > 0 && customAriaLabel.length < 50 && (
+            <text x="8" y="11" textAnchor="middle" fill="currentColor" fontSize="10" fontWeight="600">
+              ✓
+            </text>
+          )}
           {/* Filled circle fallback */}
           <circle cx="8" cy="8" r="7.5" />
         </svg>
@@ -84,41 +86,4 @@ export function GreenStatusIndicator({
       <span className="text-on-track">On Track</span>
     </span>
   );
-}
-
-/** GreenStatusIndicatorStyle helpers (computed when designed top-down). */
-export namespace GreenStatusIndicatorStyle {
-  /** Canonical status label for display and aria-labeling. */
-  const CANONICAL_LABEL = 'On Track';
-  /** Canonical aria-label (FR‑6). */
-  const CANONICAL_ARIA_LABEL = 'Status: Green, On Track';
-  /** Friendly /-visible text (FR‑2 / AC‑7). */
-  const FRIENDLY_TEXT = CANONICAL_LABEL;
-  /** Icon-only aria. */
-  const ICON_ONLY_ARIA = 'Green indicator';
-
-  /** Build up the full props to pass to the component without React runtime reflection. */
-  export function buildProps(score: number | null | undefined) {
-    const isGreen = score !== null && score !== undefined && score >= 75 && score <= 100;
-    if (!isGreen) {
-      return null;
-    }
-    return {
-      score,
-      variant: 'default',
-      ariaLabel: CANONICAL_ARIA_LABEL,
-    };
-  }
-
-  namespace Render {
-    /** Default element role */
-    export const DEFAULT_ROLE: React.AriaRole = 'status';
-  }
-
-  namespace Format {
-    /** Friendly text for visibility (always present). */
-    export const FRIENDLY = FRIENDLY_TEXT;
-    /** Canonical aria label (screen reader). */
-    export const ARIA_LABEL = CANONICAL_ARIA_LABEL;
-  }
 }
