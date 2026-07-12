@@ -30,10 +30,10 @@ const COLOR_SUCCESS = 'var(--success)';
 const COLOR_DANGER = 'var(--error)';
 
 /**
- * ProgressListProgress - A vertical list of items, each with label, slim progress bar,
+ * CompactListProgress - A vertical list of items, each with label, slim progress bar,
  * numeric or percentage value, and a status badge.
  *
-   FR-1, FR-2, FR-3, FR-4, FR-7.
+   FR-1, FR-2, FR-8, FR-3, FR-7.
  *
    <CompactListProgress
      items={items}
@@ -52,19 +52,16 @@ export function CompactListProgress({
   isLoading?: boolean;
   emptyText?: string;
 }) {
-  let displayItems: ProgressItem[] = (items ?? []).map((item): ProgressItem => ({
-    ...item,
-    __order: Math.random(),
-  }));
+  let displayItems: ProgressItem[] = items ?? [];
 
   if (sortBy === 'progress_desc' && items?.length) {
-    displayItems.sort((a, b) => {
+    displayItems = [...displayItems].sort((a, b) => {
       const pctA = calculatePct(a.completed, a.total);
       const pctB = calculatePct(b.completed, b.total);
       return pctB - pctA;
     });
   } else if (sortBy === 'progress_asc' && items?.length) {
-    displayItems.sort((a, b) => {
+    displayItems = [...displayItems].sort((a, b) => {
       const pctA = calculatePct(a.completed, a.total);
       const pctB = calculatePct(b.completed, b.total);
       return pctA - pctB;
@@ -76,9 +73,11 @@ export function CompactListProgress({
       completed: 2,
       blocked: 3,
     };
-    displayItems.sort((a, b) => order[a.status] - order[b.status]);
+    displayItems = [...displayItems].sort((a, b) => order[a.status] - order[b.status]);
   } else if (sortBy === 'label_asc' && items?.length) {
-    displayItems.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+    displayItems = [...displayItems].sort((a, b) =>
+      a.label.localeCompare(b.label, undefined, { numeric: true })
+    );
   }
 
   if (isLoading) {
@@ -86,11 +85,12 @@ export function CompactListProgress({
       <div role="list" aria-busy="true">
         {Array.from({ length: 3 }, (_, i) => (
           <span key={i} style={ROW_CONTAINER}>
-            <span style={[LABEL, { width: '100px', overflow: 'hidden' }]} aria-hidden>
+            <span style={LABEL_WRAPPER} aria-hidden>
               ¬—
             </span>
-            <span style={[PERC, { width: `${40 + i * 5}%` }]} aria-hidden />
-            <span aria-hidden>{(i - 1) / 3 * 100}%</span>
+            <span style={PERC_WRAPPED} aria-hidden>
+              {(i - 1) / 3 * 100}%
+            </span>
           </span>
         ))}
       </div>
@@ -117,7 +117,7 @@ export function CompactListProgress({
             if (e.key === 'Enter') window.open(`#${item.id}`, '_blank');
           }}
         >
-          <span style={LABEL} title={item.label} aria-label={`${item.label} (${item.status})`}>
+          <span style={LABEL_WRAPPER} aria-label={`${item.label} (${item.status})`}>
             {item.label}
           </span>
           <span style={BAR_CONTAINER}>
@@ -132,10 +132,23 @@ export function CompactListProgress({
               aria-valuenow={calculatePct(item.completed, item.total)}
               aria-valuemin={0}
               aria-valuemax={100}
-              aria-label={`${item.label} progress`}
+              aria-label={`${item.label} progress with ${calculatePct(item.completed, item.total).toFixed(1)}% completion`}
+            />
+            <span
+              style={[
+                PROGRESS_BAR_FG,
+                {
+                  width: `${calculatePct(item.completed, item.total)}%`,
+                },
+              ]}
+              role="progressbar"
+              aria-valuenow={calculatePct(item.completed, item.total)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={`${item.label} progress with ${calculatePct(item.completed, item.total).toFixed(1)}% completion`}
             />
           </span>
-          <span style={PERC}>{item.completed}/{item.total}</span>
+          <span style={PERC_WRAPPER}>{item.completed}/{item.total}</span>
           <span aria-label={`${item.label} status: ${item.status}`}>
             <StatusBadge status={item.status} />
           </span>
@@ -145,11 +158,11 @@ export function CompactListProgress({
   );
 }
 
-// ProgressListProgress public helpers.
+// Public helpers.
 export { calculatePct, getStatusColor };
 export type { ProgressItem, PList, SortBy };
 
-// CompactListProgress internals.
+// Prism internals.
 function calculatePct(completed: number, total: number): number {
   if (total <= 0) return 0;
   let pct = (completed / total) * 100;
@@ -176,12 +189,11 @@ const ROW_CONTAINER: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: '8px',
-  height: '36px', // design target (scaled visual density)
+  height: '36px',
   width: '100%',
 };
 
-// Inline style object mapping for AB/FLAT manual lifting.
-const LABEL: CSSProperties = {
+const LABEL_WRAPPER: CSSProperties = {
   fontSize: '0.84rem',
   fontWeight: 600,
   color: 'var(--text-primary)',
@@ -194,7 +206,7 @@ const LABEL: CSSProperties = {
   flex: '0 0 auto',
 };
 
-const PERC: CSSProperties = {
+const PERC_WRAPPER: CSSProperties = {
   fontSize: '0.72rem',
   fontWeight: 500,
   color: 'var(--text-secondary)',
@@ -243,7 +255,7 @@ const EMPTY_STATE: CSSProperties = {
   fontStyle: 'italic',
 };
 
-// StatusBadge for CompactListProgress (not an import to avoid dependency on StatusBadge; FR-8 requires self-contained).
+// Self-contained status badge (FR-8).
 function StatusBadge({ status }: { status: string }) {
   const base: CSSProperties = {
     display: 'inline-block',
