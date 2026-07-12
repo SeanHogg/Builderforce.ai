@@ -151,10 +151,13 @@ export function ProgressiveRevealOrchestrator({
   /**
    * Helper to get effective timeout for a priority tier.
    */
-  const getTimeout = useCallback((priority: PriorityTier): number => {
-    const stageToTimeout: Record<PriorityTier, number> = { critical: 5_000, secondary: 10_000, deferred: 15_000 };
-    return stageToTimeout[priority] ?? 10_000;
-  }, []);
+  const getTimeout = useCallback(
+    (priority: PriorityTier): number => {
+      const stageToTimeout: Record<PriorityTier, number> = { critical: 5_000, secondary: 10_000, deferred: 15_000 };
+      return stageToTimeout[priority] ?? 10_000;
+    },
+    [],
+  );
 
   /**
    * Start timeout tracking for a newly registered stream.
