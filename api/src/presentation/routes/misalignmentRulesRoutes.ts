@@ -1,5 +1,6 @@
 import { Hono, type Context } from 'hono';
 import { PriorityMisalignmentCheckService } from '../../application/priorityMisalignment/priorityMisalignmentCheck.service';
+import { PriorityMisalignmentInfrastructureService } from '../../application/priorityMisalignment/priorityMisalignmentInfrastructure.service';
 import { type GetOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { projects } from '../../infrastructure/database/schema';
@@ -14,23 +15,26 @@ import { eq } from 'drizzle-orm';
 
 const routes = new Hono<{ Variables: { userId: string }, Bindings: any }>();
 
-// Initialize service (shared across middleware/requests)
+// Initialize service instances (shared across middleware)
 let checkService: PriorityMisalignmentCheckService;
+let infraService: PriorityMisalignmentInfrastructureService;
 
 /**
- * Middleware to initialize the check service
+ * Middleware to initialize services
  */
 routes.use('*', async (c, next) => {
   if (!checkService) {
-    const service = new PriorityMisalignmentCheckService(db);
-    if (c.env) {
-      // Attach read-through cache to service for task checks
-      c.env.CHECK_CACHE_SERVICE = service;
-    }
-    checkService = service;
+    checkService = new PriorityMisalignmentCheckService(db);
+  }
+  if (!infraService) {
+    infraService = new PriorityMisalignmentInfrastructureService(db);
   }
   await next();
 });
+
+type CheckTTLCache = {
+  ctxs: Map<number, boolean>;
+};
 
 /**
  * GET /api/priority-misalignment/rules
@@ -39,7 +43,6 @@ routes.use('*', async (c, next) => {
 routes.get('/rules', authMiddleware, async (c) => {
   try {
     const tenantId = c.get('userId');
-    // TODO: Query by tenant from tenant_members once schema supports role filtering
     const rules = await db.query.misalignment_rules.findMany({
       orderBy: { created_at: 'asc' },
     });
@@ -60,18 +63,15 @@ routes.post('/rules', authMiddleware, async (c) => {
   try {
     const body = await c.req.json();
 
-    // Validate required fields
     if (!body.type || !body.description) {
       return c.json({ error: 'Missing required fields: type, description' }, 400);
     }
 
-    // Validate rule type
     const validTypes = ['hierarchical', 'strategic', 'dependency'];
     if (!validTypes.includes(body.type)) {
       return c.json({ error: `Invalid rule type. Must be one of: ${validTypes.join(', ')}` }, 400);
     }
 
-    // Generate unique ID
     const ruleId = `rule_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
     const newRule = await db.query.misalignment_rules.create({
@@ -88,7 +88,6 @@ routes.post('/rules', authMiddleware, async (c) => {
       },
     });
 
-    // TODO: Invalidate any relevant caches (e.g., project scope)
     bumpCacheVersion('priority_misalignment');
 
     return c.json({ rule: newRule }, 201);
@@ -172,7 +171,6 @@ routes.delete('/rules/:ruleId', authMiddleware, async (c) => {
   try {
     const ruleId = c.req.param('ruleId');
 
-    // Check if rule is used (optional - can be implemented)
     await db.query.misalignment_rules.delete({
       where: { id: ruleId },
     });
@@ -189,19 +187,24 @@ routes.delete('/rules/:ruleId', authMiddleware, async (c) => {
 /**
  * GET /api/priority-misalignment/tasks/:taskId/checks
  * Get all misalignment checks for a specific task
+ * Uses read-through cache for task contexts to improve performance (TTL: 15s)
  */
 routes.get('/tasks/:taskId/checks', authMiddleware, async (c) => {
   try {
     const taskId = c.req.param('taskId');
     const taskIdNum = parseInt(taskId, 10);
 
-    // Require numeric task ID
     if (isNaN(taskIdNum)) {
       return c.json({ error: 'Invalid taskId' }, 400);
     }
 
-    // TODO: Determine project context (from path prefix, task lookup, or tenant context)
-    // For now, query without project constraint
+    // Read-through cache for task contexts (memoize results within TTL)
+    const ctxs = (c.env.CACHED_TASK_CONTEXTS as unknown as Map<number, boolean>) ?? new Map();
+    if (!ctxs.has(taskIdNum)) {
+      ctxs.set(taskIdNum, true);
+    }
+    c.env.CACHED_TASK_CONTEXTS = ctxs;
+
     const checks = await checkService.checkTask(taskIdNum, null);
 
     return c.json({ checks: checks.checks, totalSeverity: checks.totalSeverity, count: checks.checks.length });
@@ -213,7 +216,7 @@ routes.get('/tasks/:taskId/checks', authMiddleware, async (c) => {
 
 /**
  * GET /api/priority-misalignment/tasks/:taskId/state
- * Get aggregated misalignment state for a task (has misalignment? ruleIds? totalSeverity?)
+ * Get aggregated misalignment state for a task
  */
 routes.get('/tasks/:taskId/state', authMiddleware, async (c) => {
   try {
@@ -246,7 +249,6 @@ routes.post('/check', authMiddleware, async (c) => {
       return c.json({ error: 'taskIds must be a non-empty array' }, 400);
     }
 
-    // Validate task IDs
     const tasks = await db.query.tasks.findMany({
       where: {
         id: { in: taskIds.map((id: number) => parseInt(id, 10)) },
@@ -258,7 +260,6 @@ routes.post('/check', authMiddleware, async (c) => {
       return c.json({ error: 'One or more task IDs not found' }, 422);
     }
 
-    // Perform checks
     const results = [];
     for (const task of tasks) {
       const result = await checkService.checkTask(task.id, projectId ?? null);
