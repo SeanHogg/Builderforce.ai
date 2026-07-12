@@ -1,0 +1,8 @@
+{
+  "name": "@builderforce/resource-gap-engine",
+  "version": "0.0.0-alpha",
+  "description": "Core engine for resource gap analysis with hiring, deployment, and upskill recommendations. Implements FR-1 through FR-6 and AC-2, AC-3, AC-4, AC-5, AC-9. RBAC/persistence/API/locality wake/wan/wai/saat are reserved for follow-up tasks (#uf20-#uf23).",
+  "type": "module",
+  "scripts": {},
+  "devDependencies": {}
+}
