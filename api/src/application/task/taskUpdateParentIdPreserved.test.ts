@@ -195,8 +195,6 @@ describe('Task.update() partial-update semantics (AC-1..AC-5)', () => {
       TENANT as number,
     );
 
-    const originalAgent = child.assignedAgentRef;
-
     // Explicitly clear the parentTaskId.
     const updated = await service.updateTask(child.id as number, {
       assignedAgentRef: 'ide-agent-88',
