@@ -188,6 +188,11 @@ export class TaskService {
   }
 
   async updateTask(id: number, dto: UpdateTaskDto): Promise<Task> {
+    // Read-modify-write: fetch the current row (404s via getTask if missing/deleted —
+    // FR-6, no silent create), merge ONLY the fields explicitly present in `dto`, then
+    // persist the merged Task. `Task.update` strips undefined keys, so a field omitted
+    // from `dto` is a no-op — this is what keeps `parentTaskId` (and every other
+    // unrelated field) intact when only `assignedAgentRef`/`status` is supplied.
     const task = await this.getTask(id);
     const wasAssignedToAgent = task.isAssignedToAgent;
     const updated = task.update({
