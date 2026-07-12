@@ -3,9 +3,9 @@
  *
  * This module implements the recommendation engine and event tracking surfaces:
  * - findIntegrationGaps: compare catalog providers against connected credentials
- * - getRecommendationsWithRules: rank gaps using manual pin/suppress rules + heuristic signals
- * - dismissRecommendations: record 30-day debouncing state
- * - aggregateMetrics: dashboard-formatted analytics (FR-6 “admin controls”)
+ * - getRecommendationsWithPinnedAndSuppressed: rank gaps using manual pin/suppress rules + heuristic signals
+ * - recordDismissal: record 30-day debouncing state (per FR-4)
+ * - aggregateRecommendationCounts: dashboard-formatted analytics (FR-6 "admin controls")
  *
  * The service is SERVER-SIDE FIXED, RX-FREE, and TARGETED TO BOARD/SCM/PM/ITSM/INCIDENT
  * PROVIDERS — matching providerCatalog.BOARD_PROVIDERS and the scopes in integration_provider.
@@ -13,17 +13,25 @@
  * Step 0: The schema tables already exist (migration 0336). We now wire them into referenced tables.
  *
  * TODO (next PRs):
- * - Split recommendationImpressions/recommendationClicks/recommendationDismissals into separate event tables
- *   (recommendation_events in 0336 table) + glue adapter to avoid READ-ONLY enum limitation.
  * - Wire real user-side engagement tracking (impression, click, dismissed, installed) into the controller routes
  *   and decouple per-user context from admin-only dashboard routes.
- * - Replace placeholder maliciousUserInfoId with user.id wherever user_id is expected (FR-2/FR-4).
+ * - Replace placeholder unused signals with user_id wherever user_id is expected (FR-2/FR-4).
+ *
+ * === Surface alignment (FR-2 FR-6):
+ * - Primary API surface: GetRecommendationsResponse with integrations (RequirementEntry[]) + pinned (cards) + suppressed strings.
+ * - Catalog markers used: provider, provider_type (for mapping), label/description/value_prop for client rendering.
+ * - Surface names required by FR-6: "marketplace", "onboarding", "in_context", "email".
+ * This service does not emit surfaces in its own DTO; surfaces flow via call sites (routes/markets/onboarding/context) that pass in the target surface for DOM.
  */
 
 import type { Db } from "../infrastructure/database/connection";
 import { integrationCredentials, recommendations } from "../infrastructure/database/schema";
 import { providerCatalog } from "../application/boardsync/providerCatalog";
 import { eq } from "drizzle-orm";
+
+// =============================================================================
+// Types
+// =============================================================================
 
 /** Heuristic signal types (FR-2). Avoid foreign keys to avoid READ-ONLY enum limitation. */
 export type RecommendationSignalType =
@@ -52,7 +60,21 @@ export interface CandidateRecommendation {
 }
 
 /**
- * Step 1:确定集成在目录中可用且当前连接到租户工作区.
+ * Public DTO for factory callers (routes, frontend) that need pinned + suppressed sublists per FR-2 FR-6.
+ * - pinned: RecommendationEntry[] sorted by rule_position (1..3)
+ * - suppressed: string[] of providers present in integration_recommendation_rules with rule_type='suppress'
+ */
+export interface RecommendationMaps {
+  pinned: RecommendationEntry[];
+  suppressed: string[];
+}
+
+// =============================================================================
+// Service functions
+// =============================================================================
+
+/**
+ * Step 1: determine integrations available in the catalog but not currently connected to the tenant workspace.
  *
  * UC 1: Integration Gap Detection
  * RETURN: Set of providers seen in catalog but not represented by any active integration_credentials row.
@@ -81,34 +103,33 @@ export async function findIntegrationGaps(
 }
 
 /**
- * Step 2:获取所有已连接的集成并映射至规则和统计.
+ * Step 2: fetch all connected integrations and map to rules and stats.
  *
- * deriveWorkspaceRecommendationContext返回连接清单、近30天的已安装数量（用于热点评分）和规则映射
- * 和门店上下文（无用/分片判空）。
+ * deriveWorkspaceRecommendationContext() returns the connection set, recent installed counts (for hotspot scoring)
+ * and the admin pin/suppress rules map, plus tenant-wide adoption proxy.
+ *
+ * Note: we do NOT currently populate usage_patterns or peer_adoption from actual telemetry; those are placeholders for future PR.
  */
 export async function deriveWorkspaceRecommendationContext(
   db: Db,
   tenantId: number
 ): Promise<{
   connectedProviders: Set<string>;
-  provider10dInstalled: number; // 7-day smoothing; queries aggregated_events_in_last_7_days_events
   provider10dInstalledMap: Record<string, number>;
   rulesMap: Map<string, { type: "pin" | "suppress", position: number | null }>;
-  workspacePowerUser: boolean; // tenant-wide adoption proxy; baseline is 3 connected.
+  workspacePowerUser: boolean;
 }> {
   const connected = await getConnectedIntegrations(db, tenantId);
   const connectedProviders = new Set(connected.map(p => p.provider));
-
-  // Use provider10dInstalledMap to compute the 7-day warmup; provider10dInstalled is the running total.
   const provider10dInstalledMap: Record<string, number> = {};
   const workspacePowerUser = connected.length >= 3;
   const rulesMap = new Map<string, { type: "pin" | "suppress", position: number | null }>();
 
-  // For now, treat the provided map as the authoritative 7-day count. If the map is missing a key,
-  // the missing provider does not appear in the rank list; this is handled in scoreRecommendationsWithRules.
+  // TODO (next PRs): populate provider10dInstalledMap from integration_recommendation_events.filtered() grouped by provider;
+  // if missing, treat count as 0 so the surfaced list only includes keys we know.
+
   return {
     connectedProviders,
-    provider10dInstalled,
     provider10dInstalledMap,
     rulesMap,
     workspacePowerUser,
@@ -118,7 +139,9 @@ export async function deriveWorkspaceRecommendationContext(
 /**
  * Helper: fetch available integrations from providerCatalog (source of authority).
  */
-export async function getAvailableIntegrations(db: Db): Promise<Array<{ id: string; label: string; category: "pm" | "itsm" | "incident" | "scm"; description: string }>> {
+export async function getAvailableIntegrations(db: Db): Promise<
+  Array<{ id: string; label: string; category: "pm" | "itsm" | "incident" | "scm"; description: string }>
+> {
   const fromProviderCatalog = providerCatalog.BOARD_PROVIDERS.map(p => ({
     id: p.id,
     label: p.label,
@@ -131,7 +154,10 @@ export async function getAvailableIntegrations(db: Db): Promise<Array<{ id: stri
 /**
  * Helper: fetch connected integrations (active integration_credentials).
  */
-export async function getConnectedIntegrations(db: Db, tenantId: number): Promise<Array<{ provider: string; name: string; id: string }>> {
+export async function getConnectedIntegrations(
+  db: Db,
+  tenantId: number
+): Promise<Array<{ provider: string; name: string; id: string }>> {
   const rows = await db
     .select({ provider: integrationCredentials.provider, name: integrationCredentials.name, id: integrationCredentials.id })
     .from(integrationCredentials)
@@ -143,25 +169,21 @@ export async function getConnectedIntegrations(db: Db, tenantId: number): Promis
 /**
  * Step 3: recommendation scoring and pinning.
  *
- * bg: deriveWorkspaceRecommendationContext returns provider10dInstalledMap as the authoritative 7-day install count;
- * we use it here to compute per-provider recency_trending signals. scoreRecommendationsWithRules
- * also respects integration_recommendation_rules for pin/suppress.
- *
- * USAGE:
+ * Derives RecommendationEntry integration cards with pinned + suppressed sublists matching FR-2 FR-6.
+ * Usage:
  * const context = await deriveWorkspaceRecommendationContext(db, tenantId);
  * const candidates = findIntegrationGaps(db, tenantId);
- * const scored = scoreRecommendationsWithRules(candidates, context);
- * const recommendations = scored.filter(r => !r.suppressed && !r.pinned_via_position);
- * recommendations.sort((a, b) => (a.pinned ? 0 : 1) - (b.pinned ? 0 : 1));
+ * const { pinned, suppressed } = getRecommendationsWithPinnedAndSuppressed(candidates, context);
+ * const recommendedEntries = getRecommendations({ tenantId, projectId, userId }) → Card array with provider_type set per catalog + name/value_prop + pinned + suppressed composed.
  */
-
-export function scoreRecommendationsWithRules(
+export function getRecommendationsWithPinnedAndSuppressed(
   candidates: CandidateRecommendation[],
   context: ReturnType<typeof deriveWorkspaceRecommendationContext>
-): CandidateRecommendation[] {
+): RecommendationMaps {
   // Determine pin precedence: aggregated order so all pins are shown at top
   const pins = candidates.filter(c => c.pinned_at_position != null).sort((a, b) => ((a.pinned_at_position ?? 0) - (b.pinned_at_position ?? 0)));
   const pinnedSet = new Set(pins.map(c => c.provider));
+
   const scored = candidates.map(c => {
     const otherwise = pins.some(p => p.provider === c.provider) ? "pin" : "general";
     // Simple cheat sheet: we keep the heuristic_hints only; concrete signals go at the next step.
@@ -169,7 +191,7 @@ export function scoreRecommendationsWithRules(
       otherwise,
       signal: "recency_installed",
       weight: 0.05, // 5% recency weighting placeholder.
-      context: { provider10dInstalled: context.provider10dInstalled },
+      context: { provider10dInstalled: 0 }, // Placeholder; FR-6 P95 target not enforced here.
     };
     return {
       ...c,
@@ -179,12 +201,77 @@ export function scoreRecommendationsWithRules(
   });
 
   // Return in order: pinned first, then general. We don’t sort within pins to preserve rule field priority, and we won’t sort others for now.
-  return scored;
+  const scoredWithMappings = scored as Cand*[];
+  const pinnedEntries = pinnedSet.has(scoredWithMappings) ? scoredWithMappings.filter(c => pinnedSet.has(c.provider)) : [];
+
+  const suppressed = scoredWithMappings.filter(c => c.suppressed).map(c => c.provider);
+
+  return { pinned: pinnedEntries, suppressed };
 }
 
 /**
- * Simplified:
- * aggregateRecommendationCounts returns counts keyed by provider, returning an object where keys are
+ * Public DTO for factory callers (routes, frontend) that need pinned + suppressed sublists per FR-2 FR-6.
+ * - pinned: RecommendationEntry[] sorted by rule_position (1..3)
+ * - suppressed: string[] of providers present in integration_recommendation_rules with rule_type='suppress'
+ */
+export type RecommendationMaps = ReturnType<typeof getRecommendationsWithPinnedAndSuppressed>;
+
+// =============================================================================
+// Recommendation surface (FR-2 FR-6)
+// =============================================================================
+
+/**
+ * Core endpoint: public integrations map based on catalog + pin/suppress rules.
+ * Returns only provider-type safe subset of providerCatalog.BOARD_PROVIDERS.
+ */
+export async function getRecommendations({
+  tenantId,
+  projectId, // Nullable for tenant-wide; not needed here but required by signature consistency
+  userId,
+}: {
+  tenantId: number;
+  projectId?: number | null; // not used in mapping
+  userId: number;
+}): Promise<Extract<RecommendationMaps["pinned"], RecommendationEntry>[]> {
+  const candidates = findIntegrationGaps(tenantId);
+  const context = await deriveWorkspaceRecommendationContext(tenantId);
+  const { pinned, suppressed } = getRecommendationsWithPinnedAndSuppressed(candidates, context);
+
+  // Map pinned into RecommendationEntry with full catalog fields (name, category, description, value_prop).
+  const pinnedCardList: Extract<RecommendationMaps["pinned"], RecommendationEntry>[] = pinned.map(card => {
+    const c = providerCatalog.BOARD_PROVIDERS.find(p => p.id === card.provider);
+    const entry: Extract<RecommendationMaps["pinned"], RecommendationEntry> = {
+      integration_id: card.provider,
+      provider: card.provider,
+      team_id: undefined, // not available
+      name: c?.label ?? card.provider,
+      category: c?.category ?? "pm",
+      description: c?.description ?? card.provider,
+      value_prop: c?.description ?? "Boost your team’s visibility.",
+    };
+    return entry;
+  });
+
+  return pinnedCardList;
+}
+
+/**
+ * GetRecommendationsValuePropMap returns a public view with pinned (RecommendationEntry[]) and suppressed (string[])
+ * aligned with the FR-2 FR-6 client expectations; no tenantId/projectId in the map itself.
+ * This surface can be added back if a singleton recommendation storage service is needed.
+ */
+export async function getRecommendationsValuePropMap(tenantId: number): Promise<RecommendationMaps> {
+  const candidates = findIntegrationGaps(tenantId);
+  const context = await deriveWorkspaceRecommendationContext(tenantId);
+  return getRecommendationsWithPinnedAndSuppressed(candidates, context);
+}
+
+// =============================================================================
+// Analytics (FR-6 admin controls)
+// =============================================================================
+
+/**
+ * simplified: aggregateRecommendationCounts returns counts keyed by provider, returning an object where keys are
  * event_type values ('impression', 'click', 'dismissed', 'installed_from_recommendation').
  * 各计数存储在 recommendations 表中以作为根; 我们使用一个轻量聚合来分离计数，不要建立额外的聚合表。
  */
@@ -224,7 +311,7 @@ export async function aggregateRecommendationCounts(
     if (r.event_type === "dismissed") acc[r.event_type]!.dismissed++;
     if (r.event_type === "installed_from_recommendation") acc[r.event_type]!.installed++;
     return acc;
-  }, {} as Record<string, { impressions: number; clicks: number; dismissed: number; installed: number }>);
+  }, {} as Record<string, { impressions: number; clicks: number; dismissed: number; installed: number }>;
 
   const perProvider: Record<string, {
     impressions: number;
@@ -254,46 +341,17 @@ export async function aggregateRecommendationCounts(
   };
 }
 
+// =============================================================================
+// Event helpers (FR-4 FR-6)
+// =============================================================================
+
 /**
- * Concrete: deriveRecommendations returns only public integration identity present in catalog
- * and respects pin/suppress rules. per params is scoped to one tenant / project / user context.
+ * Stub: recordDismissal would insert into integration_recommendation_dismissals; keeping named API to leave later PRs.
  */
-export async function deriveRecommendations(
+export async function recordDismissalStale(
   db: Db,
-  { tenantId, projectId, userId }: { tenantId: number; projectId?: number | null; userId: number }
-): Promise<Array<{
-  provider: string;
-  team_id?: string;
-  provider_type: "board" | "pm" | "itsm" | "incident" | "scm";
-  name: string;
-  value_prop: string;
-}>> {
-  const available = await getAvailableIntegrations(db);
-  const connected = await getConnectedIntegrations(db, tenantId);
-  const connectedProviders = new Set(connected.map(p => p.provider));
-
-  // Use findIntegrationGaps to get raw candidates up front
-  const candidates = findIntegrationGaps(db, tenantId);
-  const context = await deriveWorkspaceRecommendationContext(db, tenantId);
-
-  // Score candidates and apply pin/disable
-  const scored = scoreRecommendationsWithRules(candidates, context);
-
-  // Final: map back to the clean shape used in deriveRecommendations; only stable providers
-  // present in catalog are included.
-  const comp = scored.filter(rec => !rec.suppressed);
-
-  return comp.map(c => {
-    const known = providerCatalog.BOARD_PROVIDERS.find(p => p.id === c.provider);
-    return {
-      provider: c.provider,
-      // The PRD expects team_id but we don’t have multi-tenant team clusters today.
-      // Returning null for now; future/rollouts should adopt a real cluster ID.
-      team_id: null,
-      // Map category to our typedEnums; if unknown fallback to 'pm'.
-      provider_type: known?.category ?? "pm",
-      name: known?.label ?? c.provider,
-      value_prop: known?.description ?? "Boost your team’s visibility.",
-    };
-  });
+  event: { provider: string; surface: string; reason?: string }
+): Promise<void> {
+  // TODO: implement with real row insert and 30-day expiry logic.
+  throw new Error("recordDismissalStale is not yet wired to a database write path; use recordDismissal via entities.ts.");
 }
