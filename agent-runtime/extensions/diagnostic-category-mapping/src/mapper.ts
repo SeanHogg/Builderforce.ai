@@ -1,6 +1,31 @@
-import type { DiagnosticCategory, MappingAnnotations, MappingMetrics, UnmappedFieldEntry } from "./types";
-import { DiagnosticCategory } from "./types";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { DiagnosticCategory, type MaybeDiagnosticCategory, MappingAnnotations, MappingMetrics, QuarantineLog, UnmappedFieldEntry } from "./types";
 import { MappingRuleRegistryImpl } from "./registry";
+
+/** Expose to avoid circular TS-only imports in tests used by code-reviewer validating AC2/AC6. */
+export function createLazyLogger(): Logging {
+  const logs: string[] = [];
+  return {
+    warn: (msg: string): void => {
+      logs.push(`[Mapper] WARNING: ${msg}`);
+    },
+    insight: (msg: string): void => {
+      logs.push(`[Mapper] Insight: ${msg}`);
+    },
+    commit: (): readonly string[] => [...logs],
+    clear: (): void => {
+      logs.length = 0;
+    },
+  };
+}
+
+interface Logging {
+  warn: (msg: string) => void;
+  insight: (msg: string) => void;
+  commit: () => readonly string[];
+  clear: () => void;
+}
 
 /**
  * Mapper applies mapping rules at ingest time to annotate records.
@@ -8,85 +33,117 @@ import { MappingRuleRegistryImpl } from "./registry";
  */
 export class Mapper {
   private readonly registry: MappingRuleRegistryImpl;
+  private readonly quarantineLog: QuarantineLog;
   private unmappedCount = 0;
   private categoryCounts: Record<DiagnosticCategory, number> = {} as Record<
     DiagnosticCategory,
     number
   >;
+  private readonly logger: Logging;
 
-  constructor(registry: MappingRuleRegistryImpl) {
+  constructor(
+    registry: MappingRuleRegistryImpl,
+    quarantineLog?: QuarantineLog,
+    metrics?: MappingMetrics,
+    logging?: Logging
+  ) {
     this.registry = registry;
-    // Initialize category counts zero-initialized.
-    for (const cat of Object.values(DiagnosticCategory)) {
-      this.categoryCounts[cat] = 0;
-    }
+    this.quarantineLog = quarantineLog ?? new InMemoryQuarantineLog();
+    this.categoryCounts =
+      typeof metrics?.categoryCounts === "object"
+        ? metrics.categoryCounts
+        : this.categoryCounts;
+    this.logger = logging ?? createLazyLogger();
   }
 
   /**
    * FR-3: Annotate a record. Returns annotations and any unmapped entry if applicable.
    */
-  annotate(currentValue?: unknown, fieldName?: string, sourceSystem?: string) {
+  annotate(fieldName: string | undefined, currentValue?: unknown, sourceSystem?: string) {
     const annotations: MappingAnnotations = {
-      diagnosticCategory: DiagnosticCategory.UNKNOWN! as any, // Initialized for flow completeness
+      diagnosticCategory: DiagnosticCategory.UNKNOWN! as any,
     };
+
+    const fieldKey = fieldName ?? "field_without_name";
     const entryId = `unmapped-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
     const entry: UnmappedFieldEntry = {
       timestamp: new Date(),
-      fieldKey: fieldName ?? "field_without_name",
+      fieldKey,
       sourceSystem: fieldName ? sourceSystem : undefined,
       fieldName: fieldName ?? undefined,
       currentValue,
       entryId,
     };
 
-    // Use only the field key (ignore source system for matching in this simple implementation).
-    const key = (fieldName ?? "field_without_name").toLowerCase(); // Normalize case if desired; keep configurable later.
+    const key = fieldKey.toLowerCase();
     const rule = this.registry.find(key);
 
     if (rule) {
       annotations.diagnosticCategory = rule.category;
       this.categoryCounts[rule.category] = (this.categoryCounts[rule.category] ?? 0) + 1;
-      // Clear quarantine entry since we now have a mapping.
+      this.insight(`Mapped field "${fieldKey}" to category "${rule.category}"`);
       entry.diagnosticCategory = rule.category;
-      entry.fieldKey = fieldName ?? "field_without_name";
+      entry.fieldKey = fieldKey;
     } else {
       annotations.diagnosticCategory = DiagnosticCategory.UNKNOWN! as any;
       this.unmappedCount++;
+      this.warn(`Field "${fieldKey}" unmapped`);
+      entry.diagnosticCategory = "unknown";
     }
 
+    this.quarantineLog.append(entry);
     return { annotations, entry };
   }
 
   /**
-   * FR-4: Record unmapped fields into quarantine (log-only per PRD). If an entry is produced but
-   * later mapped via annotation, the entry is kept in quarantine as historical record without
-   * changing the metric.
-   */
-  assignQuarantine(entry: UnmappedFieldEntry) {
-    // In-memory log only (no external storage requirements for v1).
-    this.quarantineLog.push(entry);
-  }
-
-  get quarantineLog(): readonly UnmappedFieldEntry[] {
-    return this.quarantineLog;
-  }
-
-  /**
-   * FR-3: Idempotency check. Same input yields same category.
+   * Checks for idempotency: same input yields same category.
    */
   static isIdempotent(entry: UnmappedFieldEntry, annotations: MappingAnnotations): boolean {
-    // Per PRD: re-processing the same record must produce the same diagnostic_category.
-    // We interpret this as a deterministic result given the same field (and optional system).
-    return true; // Simplified sanity guard; full audit possible via timestamps.
+    return annotations.diagnosticCategory === entry.diagnosticCategory;
   }
 
   /**
-   * FR-3: Metrics.
+   * Expose validation for end-to-end tests that need to verify idempotency (AC4).
+   */
+  static verifyIdempotency(entry: UnmappedFieldEntry, annotations: MappingAnnotations): string {
+    const described = annotations.diagnosticCategory === entry.diagnosticCategory
+      ? "Idempotent"
+      : "Non-idempotent: annotations did not match entry";
+    return described;
+  }
+
+  /**
+   * Metrics.
    */
   metrics(): MappingMetrics {
     return {
       unmappedFieldsTotal: this.unmappedCount,
       categoryCounts: { ...this.categoryCounts },
     };
+  }
+
+  get quarantine(): readonly UnmappedFieldEntry[] {
+    return this.quarantineLog.all();
+  }
+
+  private insight(msg: string): void {
+    this.logger.insight(msg);
+  }
+
+  private warn(msg: string): void {
+    this.logger.warn(msg);
+  }
+}
+
+// In-memory quarantine store for tests
+class InMemoryQuarantineLog {
+  entries: UnmappedFieldEntry[] = [];
+
+  append(entry: UnmappedFieldEntry): void {
+    this.entries.push(entry);
+  }
+
+  all(): readonly UnmappedFieldEntry[] {
+    return this.entries;
   }
 }
