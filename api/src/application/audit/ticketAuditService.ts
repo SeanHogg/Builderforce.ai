@@ -24,6 +24,7 @@ import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/rea
 import { recordManagerAction } from '../manager/ManagerService';
 import { computeCoverage, type AuditSignals, type RequirementInput } from './auditRules';
 import type { CoverageResult, UnmetRequirement } from './auditRules';
+import { requirementApplies } from '../kanban/types';
 
 const flaggedKey = (tenantId: number) => `audit:flagged:${tenantId}`;
 
@@ -92,7 +93,7 @@ export class TicketAuditService {
    */
   async computeAudit(env: Env, tenantId: number, taskId: number): Promise<TicketAuditResult> {
     const [task] = await this.db
-      .select({ id: tasks.id, projectId: tasks.projectId, status: tasks.status })
+      .select({ id: tasks.id, projectId: tasks.projectId, status: tasks.status, taskType: tasks.taskType, actionType: tasks.actionType })
       .from(tasks)
       .where(eq(tasks.id, taskId))
       .limit(1);
@@ -123,6 +124,10 @@ export class TicketAuditService {
           .where(inArray(swimlaneRequirements.swimlaneId, applicable.map((l) => l.id)));
         reqs = reqRows
           .filter((r) => laneById.has(r.swimlaneId))
+          // Ticket-type / condition scoping: a requirement only counts for the ticket
+          // types it applies to (a Security ticket requires the security role; a docs
+          // ticket doesn't require QA). Shared with the manifest + gate for consistency.
+          .filter((r) => requirementApplies({ ticketType: r.ticketType, condition: r.condition }, { taskType: task.taskType, actionType: task.actionType }))
           .map((r): RequirementInput => {
             const lane = laneById.get(r.swimlaneId)!;
             return {
@@ -133,6 +138,7 @@ export class TicketAuditService {
               responsibility: (r.responsibility as RequirementInput['responsibility']) ?? undefined,
               isRequired: r.isRequired,
               description: r.description ?? undefined,
+              quorum: r.quorum,
             };
           });
       }

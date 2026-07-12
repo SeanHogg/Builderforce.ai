@@ -94,6 +94,21 @@ export function parseCloudAgentRef(payload: string | undefined): string | undefi
   }
 }
 
+/** The ROLE a run ran AS, off its payload — the reviewer round-trip stamps `reviewRole`,
+ *  a role-attributed producer stamps `actAsRole`. Drives manifest attribution at finalize
+ *  and the approvals→sign-off bridge (a human approving a role's gate records that role's
+ *  sign-off). Null when the run carries no role stamp. */
+export function parseActAsRole(payload: string | null | undefined): string | undefined {
+  if (!payload) return undefined;
+  try {
+    const p = JSON.parse(payload) as { actAsRole?: unknown; reviewRole?: unknown };
+    const role = typeof p.actAsRole === 'string' ? p.actAsRole : typeof p.reviewRole === 'string' ? p.reviewRole : undefined;
+    return role && role.trim() ? role.trim() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Run-time repo selection off the payload. Returns:
  *   • a trimmed repo id  — pin this run to that repo,

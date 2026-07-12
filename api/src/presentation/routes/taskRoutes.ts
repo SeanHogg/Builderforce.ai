@@ -22,6 +22,7 @@ import { recordCloudToolEvent } from '../../application/runtime/cloudAgentEngine
 import { evaluateTaskAutoRun, type AutoRunReason } from '../../application/swimlane/evaluateAutoRun';
 import { enforceLaneRequirements } from '../../application/swimlane/laneRequirementGate';
 import { TicketAuditService } from '../../application/audit/ticketAuditService';
+import { TicketParticipantsService } from '../../application/kanban/ticketParticipants';
 import { SecurityTicketAccessService } from '../../application/security/SecurityTicketAccessService';
 import { ChatTicketService } from '../../application/brain/ChatTicketService';
 import { resolveTicketViewer } from '../../application/security/resolveTicketViewer';
@@ -664,6 +665,16 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const prevStatus = (body.status !== undefined || body.assignedAgentRef !== undefined)
       ? (await db.select({ status: tasks.status, projectId: tasks.projectId, assignedAgentRef: tasks.assignedAgentRef }).from(tasks).where(eq(tasks.id, id)).limit(1))[0]
       : undefined;
+
+    // Done gate (AC-2): on a lifecycle-managed board, block a move to a terminal lane
+    // while any required participant is not completed-with-evidence — the board shows
+    // the outstanding roles instead of letting an incomplete ticket reach Done.
+    if (body.status !== undefined && prevStatus && body.status !== prevStatus.status) {
+      const gate = await new TicketParticipantsService(db).doneGate(c.env as Env, c.get('tenantId') as number, id, body.status).catch(() => ({ blocked: false, outstanding: [] as string[] }));
+      if (gate.blocked) {
+        return c.json({ error: 'done_blocked', message: `Cannot move to Done — outstanding required roles: ${gate.outstanding.join(', ')}`, outstanding: gate.outstanding }, 409);
+      }
+    }
 
     const task = await taskService.updateTask(id, body);
     // A PATCH can change parent/sprint/title/status — any of which reshapes a tree.

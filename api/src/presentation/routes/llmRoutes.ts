@@ -67,6 +67,7 @@ import {
   resolveTenantVendorKeys,
   resolveTenantLlmCredentials,
   listTenantProviderKeys,
+  setTenantProviderPriority,
   deleteTenantProviderKey,
   isSupportedProvider,
   byoVendorIdSet,
@@ -778,13 +779,14 @@ function proxyForCompletion(
   env: Env,
   access: TenantAccess,
   body: ChatCompletionRequest,
-  opts: { disablePaidOverflow: boolean; anthropicOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null },
+  opts: { disablePaidOverflow: boolean; anthropicOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; byoVendorPriority?: readonly string[] },
 ): ReturnType<typeof llmProxyForPlan> {
   return llmProxyForPlan(env, access.effectivePlan, access.premiumOverride, {
     disablePaidOverflow: opts.disablePaidOverflow,
     ...(isAgenticToolTurn(body as { tools?: unknown }) ? { codingOnly: true, backstopModels: CODING_BACKSTOP_MODELS } : {}),
     ...(opts.anthropicOAuthToken ? { anthropicOAuthToken: opts.anthropicOAuthToken } : {}),
     ...(opts.tenantVendorKeys ? { tenantVendorKeys: opts.tenantVendorKeys } : {}),
+    ...(opts.byoVendorPriority?.length ? { byoVendorPriority: opts.byoVendorPriority } : {}),
   });
 }
 
@@ -897,7 +899,8 @@ export function createLlmRoutes(): Hono<HonoEnv> {
   // BYO provider credentials — tenant-managed Anthropic auth. Two shapes:
   //   • API key (paste `sk-ant-…`), or
   //   • Claude Pro/Max SUBSCRIPTION via OAuth (connect your own Claude account).
-  // GET    /provider-keys                       → configured providers + auth type
+  // GET    /provider-keys                       → configured providers + auth type + priority
+  // PUT    /provider-keys/priority              → set BYO precedence { order: provider[] }
   // PUT    /provider-keys/:provider             → set/replace the API key { apiKey }
   // DELETE /provider-keys/:provider             → remove the credential
   // POST   /provider-keys/anthropic/oauth/start    → begin subscription connect (PKCE)
@@ -907,8 +910,23 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     let access: TenantAccess;
     try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
     const details = await listTenantProviderKeys(c.env, access.tenantId);
-    // `providers` (id array) kept for backward compatibility; `details` carries auth type.
+    // `providers` (id array) kept for backward compatibility; `details` carries auth type
+    // + tenant-set BYO precedence (ordered by `priority`, most-preferred first).
     return c.json({ providers: details.map((d) => d.provider), details });
+  });
+
+  // Set the BYO precedence — the ordered provider list (most-preferred first) the
+  // auto-select cloud pin leads its connected flagships by (e.g. Meta first). Registered
+  // BEFORE `:provider` so the literal `priority` segment isn't captured as a provider id.
+  router.put('/provider-keys/priority', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const body = await c.req.json<{ order?: unknown }>().catch(() => ({} as { order?: unknown }));
+    if (!Array.isArray(body.order) || !body.order.every((p) => typeof p === 'string' && isSupportedProvider(p))) {
+      return c.json({ error: 'order must be an array of supported provider ids' }, 400);
+    }
+    await setTenantProviderPriority(c.env, access.tenantId, body.order as LlmProvider[]);
+    return c.json({ ok: true, order: body.order });
   });
 
   router.put('/provider-keys/:provider', async (c) => {
@@ -1499,7 +1517,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // a plain chat keeps the general pool. Reuses the credentials resolved above so
     // any direct-Claude resolution rides the tenant subscription and BYO vendors
     // serve from the tenant's own account.
-    const service = proxyForCompletion(c.env, access, body, { disablePaidOverflow, anthropicOAuthToken, tenantVendorKeys });
+    const service = proxyForCompletion(c.env, access, body, { disablePaidOverflow, anthropicOAuthToken, tenantVendorKeys, byoVendorPriority: tenantCreds.vendorPriority });
     // Context-fit seeding: estimate the turn's tokens so the proxy drops
     // small-window models from the first-pass seed. This is the preventive half
     // of the Brain "dies after several executions" fix — the reactive 413
