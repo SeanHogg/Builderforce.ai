@@ -294,14 +294,14 @@ describe('TaskService.updateTask side-effect behavior (FR-2)', () => {
     service = s;
   });
 
-  it('fire auto-run onAssignedToAgent hook exactly once per true assignment transition', async () => {
+  it('auto-run side effect fires exactly once per qualifying assignment transition', async () => {
     // Parent
     const parent = Task.create({
       projectId: PROJECT_ID,
       title: 'Parent Task',
       description: null,
-      status: TaskStatus.TODO as any,
-      priority: TaskPriority.MEDIUM,
+      status: undefined as never,
+      priority: undefined as never,
       assignedAgentType: AgentType.CLAUDE,
       assignedAgentHostId: null,
       assignedAgentRef: null,
@@ -318,8 +318,8 @@ describe('TaskService.updateTask side-effect behavior (FR-2)', () => {
       projectId: PROJECT_ID,
       title: 'Child Task',
       description: null,
-      status: TaskStatus.TODO as any,
-      priority: TaskPriority.MEDIUM,
+      status: undefined as never,
+      priority: undefined as never,
       assignedAgentType: AgentType.CLAUDE,
       assignedAgentHostId: null,
       assignedAgentRef: null,
@@ -328,9 +328,8 @@ describe('TaskService.updateTask side-effect behavior (FR-2)', () => {
       persona: null,
       projectKey: 'CHILD',
       lastKeySeq: 0,
+      parentTaskId: parent.id,
     });
-    child.parentTaskId = parent.id;
-    child.taskType = TaskType.TASK;
     await repo.save(child);
 
     // Transition from unassigned → assigned — assess should fire exactly once
