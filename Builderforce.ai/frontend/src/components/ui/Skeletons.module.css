@@ -54,8 +54,8 @@
   }
 }
 
-/* Minimal class fallback for platforms that don’t support module CSS resolution, to avoid build/type errors */
-.default .shimmer {
+/* Minimal fallback without .default prefix to avoid conflict / duplicate */
+.shimmer {
   position: relative;
   overflow: hidden;
   background: var(--bg-surface-subtle, #e5e7eb);
@@ -63,7 +63,7 @@
   flex-shrink: 0;
 }
 
-.default .shimmer::after {
+.shimmer::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -81,7 +81,7 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .default .shimmer::after {
+  .shimmer::after {
     animation-duration: 2s;
     animation-timing-function: ease-in-out;
     animation-iteration-count: infinite;
