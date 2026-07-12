@@ -323,11 +323,31 @@ export function createPayloadGenerator(
   payloadDefinition: PayloadDefinition,
   options?: {
     functions?: Record<string, CustomFunction>;
+    /**
+     * Optional callback invoked for every log entry as it is emitted, enabling
+     * real-time observability (FR-6) without polling `getLog()`. The callback
+     * must not throw; any error it raises is swallowed so logging never breaks
+     * payload generation.
+     */
+    logSink?: (entry: LogEntry) => void;
   },
 ): PayloadGenerator {
   const functions = options?.functions ?? {};
+  const logSink = options?.logSink;
   const logRef: LogEntry[] = [];
   const contextId = `gen:${payloadDefinition.id}`;
+
+  const emit = (entry: Omit<LogEntry, "timestamp">): void => {
+    const full: LogEntry = { ...entry, timestamp: new Date().toISOString() };
+    logRef.push(full);
+    if (logSink) {
+      try {
+        logSink(full);
+      } catch {
+        // A failing sink must never break payload generation.
+      }
+    }
+  };
 
   const planFields = (): OutputField[] => [...payloadDefinition.fields];
 
