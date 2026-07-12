@@ -1,4 +1,5 @@
 > **PRD** — drafted by Ada (Sr. Product Mgr) · task #675
+> **Updated by:** BuilderForce Agent (payload-engine.ts, asyncExplore) · signed: 2025-06-18
 > _Each agent that updates this PRD signs its change below._
 
 # PRD: Payload Generation Logic
