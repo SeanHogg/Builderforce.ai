@@ -136,6 +136,8 @@ export interface ExecutionResultPayload {
   Agent?: { id: string; reportedChanges: boolean; logs: unknown[]; result: string };
   Url?: string;
   Prompt?: string;
+  /** Earliest-scheduled start time for this execution (FR-4), if known */
+  earliestScheduledTime?: number;
 }
 
 /** UI timing metadata to associate with a step (FR-7) */
