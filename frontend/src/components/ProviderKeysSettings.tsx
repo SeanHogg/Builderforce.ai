@@ -35,6 +35,9 @@ const PROVIDERS: ProviderConfig[] = [
   { id: 'openai',    label: 'OpenAI',             keyPlaceholder: 'sk-…',     supportsOauth: true },
   { id: 'google',    label: 'Google (Gemini)',    keyPlaceholder: 'AIza…',   supportsOauth: false },
   { id: 'meta',      label: 'Meta AI (MUSE)',     keyPlaceholder: 'meta-…',  supportsOauth: false },
+  { id: 'kimi',      label: 'Kimi',                keyPlaceholder: 'sk-…',    supportsOauth: false },
+  { id: 'qwen',      label: 'Qwen',                keyPlaceholder: 'sk-…',    supportsOauth: false },
+  { id: 'minimax',   label: 'MiniMax',             keyPlaceholder: 'sk-…',    supportsOauth: false },
 ];
 
 const cardStyle: React.CSSProperties = {
@@ -72,6 +75,9 @@ const PROVIDER_LABEL: Record<LlmProvider, string> = {
   openai: 'OpenAI',
   google: 'Google (Gemini)',
   meta: 'Meta AI (MUSE)',
+  kimi: 'Kimi',
+  qwen: 'Qwen',
+  minimax: 'MiniMax',
 };
 
 /**

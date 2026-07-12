@@ -7652,6 +7652,15 @@
       },
       "meta": {
         "blurb": "Paste a Meta AI API key to run MUSE models (muse-spark-1.1) on your own Meta AI account."
+      },
+      "kimi": {
+        "blurb": "Paste a Kimi Code subscription key or Moonshot API key to run Kimi models on your own account."
+      },
+      "qwen": {
+        "blurb": "Paste an Alibaba DashScope API key to run Qwen models on your own account."
+      },
+      "minimax": {
+        "blurb": "Paste a MiniMax API key to run MiniMax models on your own account."
       }
     }
   },

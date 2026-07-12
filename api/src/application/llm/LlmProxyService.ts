@@ -1434,6 +1434,9 @@ export class LlmProxyService {
       // A tenant BYO OpenAI key overrides the operator OpenAI key (spread above)
       // for the `openai` vendor — marked tenant-funded → byo, $0 to us.
       ...(this.tenantVendorKeys.openai ? { OPENAI_API_KEY: this.tenantVendorKeys.openai } : {}),
+      ...(this.tenantVendorKeys.kimi ? { MOONSHOT_API_KEY: this.tenantVendorKeys.kimi } : {}),
+      ...(this.tenantVendorKeys.qwen ? { QWEN_API_KEY: this.tenantVendorKeys.qwen } : {}),
+      ...(this.tenantVendorKeys.minimax ? { MINIMAX_API_KEY: this.tenantVendorKeys.minimax } : {}),
       // A tenant BYO Meta AI key powers the `meta` vendor (MUSE models). There is
       // NO operator-level Meta key — this is the ONLY source. When absent the meta
       // vendor no-key-skips at dispatch, same as any other unbound vendor.

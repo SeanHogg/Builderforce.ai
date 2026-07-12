@@ -7650,7 +7650,10 @@
       },
       "meta": {
         "blurb": "粘贴 Meta AI API 密钥，在您自己的 Meta AI 账户上运行 MUSE 模型（muse-spark-1.1）。"
-      }
+      },
+      "kimi": { "blurb": "粘贴 Kimi Code 订阅密钥或 Moonshot API 密钥。" },
+      "qwen": { "blurb": "粘贴阿里云 DashScope API 密钥以运行 Qwen 模型。" },
+      "minimax": { "blurb": "粘贴 MiniMax API 密钥以运行 MiniMax 模型。" }
     }
   },
   "modelSelect": {

@@ -25,8 +25,8 @@ import { refreshOpenAICodexToken, type OpenAICodexOAuthTokens } from './openaiCo
 
 type Env = HonoEnv['Bindings'];
 
-export type LlmProvider = 'anthropic' | 'openai' | 'google' | 'meta';
-export const SUPPORTED_PROVIDERS: readonly LlmProvider[] = ['anthropic', 'openai', 'google', 'meta'];
+export type LlmProvider = 'anthropic' | 'openai' | 'google' | 'meta' | 'kimi' | 'qwen' | 'minimax';
+export const SUPPORTED_PROVIDERS: readonly LlmProvider[] = ['anthropic', 'openai', 'google', 'meta', 'kimi', 'qwen', 'minimax'];
 
 export type ProviderAuthType = 'api_key' | 'oauth';
 
@@ -34,11 +34,14 @@ export type ProviderAuthType = 'api_key' | 'oauth';
  *  overrides. `oauth` marks the provider that ALSO supports a connected
  *  subscription (Anthropic today) — the OAuth path is resolved separately via
  *  {@link resolveAnthropicOAuthToken}, so it isn't part of the api-key overlay. */
-export const PROVIDER_VENDOR_MAP: Record<LlmProvider, { vendorId: string; envKey: 'CLAUDE_API_KEY' | 'OPENAI_API_KEY' | 'GOOGLE_API_KEY' | 'META_API_KEY'; oauth: boolean }> = {
+export const PROVIDER_VENDOR_MAP: Record<LlmProvider, { vendorId: string; envKey: 'CLAUDE_API_KEY' | 'OPENAI_API_KEY' | 'GOOGLE_API_KEY' | 'META_API_KEY' | 'MOONSHOT_API_KEY' | 'QWEN_API_KEY' | 'MINIMAX_API_KEY'; oauth: boolean }> = {
   anthropic: { vendorId: 'anthropic', envKey: 'CLAUDE_API_KEY', oauth: true },
   openai:    { vendorId: 'openai',    envKey: 'OPENAI_API_KEY', oauth: true },
   google:    { vendorId: 'googleai',  envKey: 'GOOGLE_API_KEY', oauth: false },
   meta:      { vendorId: 'meta',      envKey: 'META_API_KEY',   oauth: false },
+  kimi:      { vendorId: 'moonshot',  envKey: 'MOONSHOT_API_KEY', oauth: false },
+  qwen:      { vendorId: 'qwen',      envKey: 'QWEN_API_KEY', oauth: false },
+  minimax:   { vendorId: 'minimax',   envKey: 'MINIMAX_API_KEY', oauth: false },
 };
 
 /** A tenant's resolved BYO API keys keyed by provider (decrypted, api_key mode

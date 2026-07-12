@@ -26,7 +26,7 @@ export type VendorId =
   //    ride the shared transport. Reachable via an explicit `<vendor>/<id>` pin
   //    (autoRoute:false — they don't pollute the auto-selected FREE/PRO pools) and
   //    participate in the same dispatch/cooldown/fallback machinery as the rest.
-  | 'openai' | 'groq' | 'deepseek' | 'mistral' | 'together' | 'fireworks'
+  | 'openai' | 'groq' | 'deepseek' | 'mistral' | 'together' | 'fireworks' | 'qwen'
   | 'deepinfra' | 'xai' | 'perplexity' | 'moonshot' | 'hyperbolic' | 'novita'
   | 'sambanova' | 'lepton' | 'anyscale' | 'octoai' | 'featherless' | 'inferencenet'
   | 'targon' | 'avian' | 'nebius' | 'baseten' | 'lambda' | 'klusterai'
@@ -106,6 +106,7 @@ export interface VendorEnv {
   PERPLEXITY_API_KEY?: string | null;
   /** Moonshot AI (Kimi) — api.moonshot.cn/v1. */
   MOONSHOT_API_KEY?: string | null;
+  QWEN_API_KEY?: string | null;
   /** Hyperbolic — api.hyperbolic.xyz/v1. */
   HYPERBOLIC_API_KEY?: string | null;
   /** Novita AI — api.novita.ai/v3/openai. */
