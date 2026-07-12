@@ -132,19 +132,19 @@ export function ProgressiveRevealOrchestrator({
     const fresh = state.streams.get(key);
     if (!fresh || fresh.resolved) return;
 
-    if (fresh.timeoutHandle) clearTimeout(fresh.timeoutHandle);
+    cleanupStream(fresh);
 
-    const prior = fresh; // to preserve onMap
+    const resolvedBean: StreamBean = { ...fresh, resolved: true, data, timestamp: performance.now(), timeoutHandle: undefined } as StreamBean;
     setState(old => {
       const next = new Map([...old.streams]);
-      next.set(key, { ...fresh, resolved: true, data, timestamp: performance.now() } as StreamBean);
+      next.set(key, resolvedBean);
       return { ...old, streams: next };
     });
 
-    callbacks?.onStreamResolve?.(state.streams.get(key) as ProgressiveRevealStream);
+    callbacks?.onStreamResolve?.(resolvedBean as unknown as ProgressiveRevealStream);
     activitiesRef.current = {
       ...activitiesRef.current,
-      [fresh.priority + 'Resolved']: activitiesRef.current[fresh.priority + 'Resolved'] + 1,
+      [fresh.priority]: activitiesRef.current[fresh.priority] + 1,
     };
 
     lastStateRef.current = {
