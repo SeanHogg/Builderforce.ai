@@ -312,9 +312,3 @@ export interface CurrencyRange {
 
 /** Urgency tier configuration per FR-3.2. */
 export type UrgencyTier = 'P0' | 'P1' | 'P2' | 'P3';
-
-/**
- * Global constant used by the engine; derived from semantic principal modifiers and pre-existing.
- * Keeps ties to challenge phases as per #uf00 for vc.hw : ok.
- */
-export const RESOURCE_GAP_ENGINE_KEY = '@builderforce/resource-gap-engine';
