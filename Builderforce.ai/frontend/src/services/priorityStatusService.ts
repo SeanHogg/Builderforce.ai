@@ -1,243 +1,237 @@
-/**
- * Priority Status Service API Client
- * 
- * Handles communication with the PriorityStatusService for low-priority task status management.
- * Implements the FR6 API endpoints:
- * - setStatusOnHold(taskId, note?) returns update
- * - setStatusDeferred(taskId, note?) returns update
- * - getTaskStatus(taskId) returns current status + flags
- */
-
 import type {
-  LowPriorityStatus,
-  LowPriorityFlags,
-  GetTaskStatusResponse,
-  SetStatusRequest,
-  SetStatusResponse,
-} from '../types/priority-status';
+    GetTaskStatusResponse,
+    LowPriorityFlags,
+    SetStatusRequest,
+    SetStatusResponse,
+    StatusTransition
+} from '@/types/priority-status';
 
-interface MockTaskState {
-    taskId: string;
+// Re-export types for convenience
+export type { GetTaskStatusResponse, LowPriorityFlags, SetStatusRequest, SetStatusResponse, StatusTransition, LowPriorityStatus };
+
+/**
+ * Service for managing task priority (low-priority) status transitions.
+ * In production, this would call a real REST API endpoint.
+ */
+
+// In-memory mock storage for demo (replace with real database in production)
+const mockTaskStatuses = new Map<string, {
     status: string;
-    flags: { isLowPriority: boolean };
+    isLowPriority: boolean;
     priorityStatus?: LowPriorityStatus;
-    createdAt: string;
-    updatedAt: string;
-    lastStatusChange: {
-        status: LowPriorityStatus;
-        timestamp: string;
-        user: string;
-        note?: string;
-    } | null;
-}
+    history: StatusTransition[];
+}>();
 
-// In-memory storage for demo purposes
-const mockTasks: Record<string, MockTaskState> = {
-    'task-1': {
-        taskId: 'task-1',
-        status: 'in_progress',
-        flags: { isLowPriority: false },
-        createdAt: '2025-01-15T10:00:00Z',
-        updatedAt: '2025-01-16T14:30:00Z',
-        lastStatusChange: null,
-    },
-    'task-2': {
-        taskId: 'task-2',
-        status: 'on_hold',
-        flags: { isLowPriority: true },
-        priorityStatus: 'on_hold',
-        createdAt: '2025-01-12T09:00:00Z',
-        updatedAt: '2025-01-15T11:00:00Z',
-        lastStatusChange: {
-            status: 'on_hold',
-            timestamp: '2025-01-15T11:00:00Z',
-            user: 'jane@example.com',
-            note: 'Waiting for API documentation review',
-        },
-    },
-    'task-3': {
-        taskId: 'task-3',
-        status: 'deferred',
-        flags: { isLowPriority: true },
-        priorityStatus: 'deferred',
-        createdAt: '2025-01-10T08:00:00Z',
-        updatedAt: '2025-01-14T16:00:00Z',
-        lastStatusChange: {
-            status: 'deferred',
-            timestamp: '2025-01-14T16:00:00Z',
-            user: 'bob@example.com',
-            note: 'Postponed due to resource constraints',
-        },
-    },
-};
-
-// Simulated API delay
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const mockUser = 'current-user';
 
 /**
- * Mock PriorityStatusService implementation
+ * Set a task's status to "on_hold" with optional note.
+ *
+ * @param taskId - The task identifier
+ * @param note - Optional audit note explaining why the task is on hold
+ * @returns Object with previous status, new status, and audit information
+ *
+ * @example
+ * await PriorityStatusService.setStatusOnHold('task-1', 'Waiting for API documentation review');
  */
-
-/**
- * Set task status to "on_hold"
- * @param taskId - The task ID
- * @param note - Optional explanatory note
- * @returns Status update response
- */
-export async function setStatusOnHold(
-    taskId: string,
-    note?: string
-): Promise<SetStatusResponse> {
-    await sleep(300); // Simulate network latency
-
-    const task = mockTasks[taskId];
-    if (!task) {
-        throw new Error(`Task not found: ${taskId}`);
+export async function setStatusOnHold(taskId: string, note?: string): Promise<SetStatusResponse> {
+    // Validate input
+    if (!taskId) {
+        throw new Error('Task ID is required');
     }
 
-    const previousStatus = task.status;
-    const currentTime = new Date().toISOString();
-    const user = 'current-user@example.com'; // Would come from auth context
+    // Simulate network delay (replace with real API call)
+    await new Promise(resolve => setTimeout(resolve, 300));
 
-    // Update task state
-    task.status = 'on_hold';
-    task.flags = { isLowPriority: true };
-    task.priorityStatus = 'on_hold';
-    task.updatedAt = currentTime;
-    task.lastStatusChange = {
-        status: 'on_hold',
-        timestamp: currentTime,
-        user,
-        note,
+    // Get current state or initialize
+    const current = mockTaskStatuses.get(taskId) || {
+        status: 'todo',
+        isLowPriority: false,
+        history: []
     };
 
-    return {
+    // Validate transition: can only go to on_hold from certain states
+    if (!isValidTransition(current.status, 'on_hold')) {
+        throw new Error(`Cannot transition from ${current.status} to on_hold`);
+    }
+
+    // Create status transition record
+    const transition: StatusTransition = {
         taskId,
-        previousStatus,
+        previousStatus: current.status,
         newStatus: 'on_hold',
-        timestamp: currentTime,
-        user,
-        note,
-    };
-}
-
-/**
- * Set task status to "deferred"
- * @param taskId - The task ID
- * @param note - Optional explanatory note
- * @returns Status update response
- */
-export async function setStatusDeferred(
-    taskId: string,
-    note?: string
-): Promise<SetStatusResponse> {
-    await sleep(300); // Simulate network latency
-
-    const task = mockTasks[taskId];
-    if (!task) {
-        throw new Error(`Task not found: ${taskId}`);
-    }
-
-    const previousStatus = task.status;
-    const currentTime = new Date().toISOString();
-    const user = 'current-user@example.com'; // Would come from auth context
-
-    // Update task state
-    task.status = 'deferred';
-    task.flags = { isLowPriority: true };
-    task.priorityStatus = 'deferred';
-    task.updatedAt = currentTime;
-    task.lastStatusChange = {
-        status: 'deferred',
-        timestamp: currentTime,
-        user,
-        note,
+        timestamp: new Date().toISOString(),
+        user: mockUser,
+        note
     };
 
+    // Update state
+    current.status = 'on_hold';
+    current.isLowPriority = true;
+    current.priorityStatus = 'on_hold';
+    current.history.push(transition);
+    mockTaskStatuses.set(taskId, current);
+
+    // Simulate API response
     return {
         taskId,
-        previousStatus,
-        newStatus: 'deferred',
-        timestamp: currentTime,
-        user,
-        note,
+        previousStatus: current.status,
+        newStatus: 'on_hold',
+        timestamp: transition.timestamp,
+        user: mockUser,
+        note
     };
 }
 
 /**
- * Get current task status including low-priority flags
- * @param taskId - The task ID
- * @returns Task status with flags
+ * Set a task's status to "deferred" with optional note.
+ *
+ * @param taskId - The task identifier
+ * @param note - Optional audit note explaining why the task is deferred
+ * @returns Object with previous status, new status, and audit information
+ *
+ * @example
+ * await PriorityStatusService.setStatusDeferred('task-1', 'Backend API not available yet');
  */
-export async function getTaskStatus(
-    taskId: string
-): Promise<GetTaskStatusResponse> {
-    await sleep(100); // Simulate network latency
-
-    const task = mockTasks[taskId];
-    if (!task) {
-        throw new Error(`Task not found: ${taskId}`);
+export async function setStatusDeferred(taskId: string, note?: string): Promise<SetStatusResponse> {
+    // Validate input
+    if (!taskId) {
+        throw new Error('Task ID is required');
     }
+
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    // Get current state or initialize
+    const current = mockTaskStatuses.get(taskId) || {
+        status: 'todo',
+        isLowPriority: false,
+        history: []
+    };
+
+    // Validate transition: can only go to deferred from certain states
+    if (!isValidTransition(current.status, 'deferred')) {
+        throw new Error(`Cannot transition from ${current.status} to deferred`);
+    }
+
+    // Create status transition record
+    const transition: StatusTransition = {
+        taskId,
+        previousStatus: current.status,
+        newStatus: 'deferred',
+        timestamp: new Date().toISOString(),
+        user: mockUser,
+        note
+    };
+
+    // Update state
+    current.status = 'deferred';
+    current.isLowPriority = true;
+    current.priorityStatus = 'deferred';
+    current.history.push(transition);
+    mockTaskStatuses.set(taskId, current);
+
+    // Simulate API response
+    return {
+        taskId,
+        previousStatus: current.status,
+        newStatus: 'deferred',
+        timestamp: transition.timestamp,
+        user: mockUser,
+        note
+    };
+}
+
+/**
+ * Get current status and flags for a task.
+ *
+ * @param taskId - The task identifier
+ * @returns Object with status and flags (including isLowPriority)
+ *
+ * @example
+ * const { flags, taskId } = await PriorityStatusService.getTaskStatus('task-1');
+ * if (flags.isLowPriority) {
+ *     console.log(`Task is ${flags.priorityStatus}`);
+ * }
+ */
+export async function getTaskStatus(taskId: string): Promise<GetTaskStatusResponse> {
+    // Validate input
+    if (!taskId) {
+        throw new Error('Task ID is required');
+    }
+
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    // Get current state or initialize with defaults
+    const current = mockTaskStatuses.get(taskId);
 
     const flags: LowPriorityFlags = {
-        isLowPriority: task.flags.isLowPriority,
-        priorityStatus: task.priorityStatus,
+        isLowPriority: current?.isLowPriority || false,
+        priorityStatus: current?.priorityStatus
     };
 
+    // Simulate API response
     return {
-        status: task.status,
-        flags,
         taskId,
+        status: current?.status || 'todo',
+        flags
     };
 }
 
 /**
- * Type guard to check if a status is a low-priority status
+ * Type guard for LowPriorityStatus
  */
 export function isLowPriorityStatus(status: string): status is LowPriorityStatus {
-    const lowPriorityStatuses: LowPriorityStatus[] = [
-        'on_hold',
-        'deferred',
-        'backlog',
-        'todo',
-        'ready',
-        'in_progress',
-        'in_review',
-        'done',
-        'blocked',
-    ];
-    return lowPriorityStatuses.includes(status as LowPriorityStatus);
+    const lowPriorityValues: LowPriorityStatus[] = ['on_hold', 'deferred'];
+    return lowPriorityValues.includes(status as LowPriorityStatus);
 }
 
 /**
- * Get valid transitions from a given status
+ * Get list of valid transitions from a given status
  */
-export function getValidTransitions(currentStatus: string): string[] {
-    // Define valid status transitions
-    // These can be customized based on business rules
-    
-    const transitions: Record<string, string[]> = {
-        on_hold: ['todo', 'deferred'],
-        deferred: ['todo', 'on_hold'],
-        backlog: ['ready', 'todo'],
-        todo: ['ready', 'in_progress'],
-        ready: ['in_progress', 'backlog'],
-        in_progress: ['in_review', 'ready', 'blocked'],
-        in_review: ['done', 'in_progress'],
+export function getValidTransitions(currentStatus: LowPriorityStatus): LowPriorityStatus[] {
+    const validTransitions: Record<LowPriorityStatus, LowPriorityStatus[]> = {
+        'on_hold': ['todo', 'deferred'],
+        'deferred': ['todo', 'on_hold'],
+        backlog: ['todo', 'ready'],
+        todo: ['ready', 'in_progress', 'on_hold', 'deferred'],
+        ready: ['in_progress', 'backlog', 'on_hold', 'deferred'],
+        'in_progress': ['in_review', 'ready', 'blocked', 'on_hold', 'deferred'],
+        'in_review': ['done', 'in_progress'],
         done: [],
-        blocked: ['in_progress', 'on_hold'],
+        blocked: ['in_progress', 'on_hold']
     };
 
-    return transitions[currentStatus] || [];
+    return validTransitions[currentStatus] || [];
 }
 
 /**
  * Check if a transition from one status to another is valid
  */
-export function isValidTransition(
-    fromStatus: string,
-    toStatus: string
-): boolean {
-    const validTransitions = getValidTransitions(fromStatus);
-    return validTransitions.includes(toStatus);
+export function isValidTransition(fromStatus: string, toStatus: LowPriorityStatus): boolean {
+    const current = fromStatus as LowPriorityStatus;
+    const validTransitionsForCurrent = getValidTransitions(current);
+    return validTransitionsForCurrent.includes(toStatus);
 }
+
+/**
+ * Helper to safely parse task ID from context
+ */
+export function parseTaskId(taskIdOrId: string | number): string {
+    if (typeof taskIdOrId === 'number') {
+        return String(taskIdOrId);
+    }
+    return taskIdOrId.trim();
+}
+
+/**
+ * Get history for a task (best for debugging)
+ */
+export function getTaskHistory(taskId: string): StatusTransition[] {
+    const current = mockTaskStatuses.get(taskId);
+    return current?.history || [];
+}
+
+// Export the full type
+export type LowPriorityStatus = 'on_hold' | 'deferred' | 'backlog' | 'todo' | 'ready' | 'in_progress' | 'in_review' | 'done' | 'blocked';
