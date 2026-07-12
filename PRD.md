@@ -1,174 +1,182 @@
 > **PRD** — drafted by John Coder ((V2) (Durable)) · task #618
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Task Execution & Agent Activity Surface (MCP)
+# PRD: MCP Task Activity & Agent Role Surface
 
 ## Problem & Goal
 
 ### Problem
-When an orchestrating agent reviews a task marked `in_review` or `done`, it cannot quickly determine *who* actually worked the task, *what* they produced, or *when* the last meaningful activity occurred. Reconstructing this requires stitching together results from `executions.list_for_task`, trace lookups, and `file_changes` — multiple round-trips that still do not expose the **agent role** (coder, PM, BA, validator, tester) that opened or last updated a PR.
 
-The practical failure mode: a task is flagged "100% done" but a PM or BA authored the PR (writing docs or a PRD), no coder ever ran, and no code was produced. This is invisible to downstream gates and validator sweeps.
+When an orchestrating agent inspects a task, it cannot determine — in a single MCP call — whether a coder has actually executed against that task, what that execution produced, or how recently it happened. Answering the question *"has real implementation work occurred here?"* currently requires stitching together three or more separate MCP calls (`executions.list_for_task`, trace fetch, `file_changes`), and even then the **agent role** (coder, PM, BA, validator, tester) that authored a PR or last touched the ticket is not surfaced at all.
+
+This gap causes false confidence in task status. A task marked `done` or `in_review` may have been closed by a PM writing a PRD with no coder ever running — a condition that is currently undetectable without expensive multi-hop reasoning.
 
 ### Goal
-Surface a concise, single-call activity signal per task that lets any agent — in one MCP tool response — answer:
-- Has a **coder** ever executed on this task?
-- Did that execution produce **code** (not just docs)?
-- **When** was the last execution, and by **whom** (agent ref + role)?
-- Is this task **stalling** — open PR, but no qualifying coder run?
+
+Surface a concise, pre-computed **task activity signal** via MCP so any agent can answer the following questions in a single tool call, with no downstream aggregation required:
+
+- Has a coder ever executed on this task?
+- Did that execution produce code (non-doc file changes)?
+- When did it last happen?
+- Who (agent ref + role) opened or last updated the PR?
+- Is this task stalling or falsely closed?
 
 ---
 
 ## Target Users / ICP Roles
 
-| Consumer | Need |
+| Consumer | How they use this |
 |---|---|
-| **Orchestrator / PM agent** | Determine whether a task is genuinely implemented before marking done or escalating |
-| **Validator / QA agent** | Gate on `lastCoderRunProducedCode` before approving a PR |
-| **Accounting / billing agent** | Correlate execution cost to role type; detect ghost completions (#615) |
-| **Human engineering lead** | Audit task history without manually querying execution traces |
+| **Orchestrator / Brain agent** | Decides whether to re-queue a task, escalate, or trust its `done` status |
+| **Validator / Tester agent** | Gates PR acceptance on confirmed coder execution producing real code |
+| **PM / BA agent** | Detects tasks where spec work is complete but implementation has not started |
+| **Human engineering lead** (secondary) | Reviews MCP-powered dashboards for stalled or zombie tasks |
 
 ---
 
 ## Scope
 
-### In Scope
-- A new MCP tool **`tasks.get_activity`** (preferred) **or** augmenting the existing `tasks.get` response with an `activity` block
-- Role classification for known agent archetypes: `coder | pm | ba | validator | tester | unknown`
-- File-output classification: `code | docs | config | mixed | none`
-- A computed `staleness` flag with a defined triggering condition
-- PR authorship role exposure (who opened / last updated the linked PR)
-- Rollup fields usable as gate inputs by downstream agents without further API calls
-
-### Out of Scope
-- Changes to how executions are stored or traced (read-only aggregation layer)
-- Role *assignment* or agent identity management
-- UI/dashboard rendering of this data
-- Diff-content summarization (covered by the diff-summary capability ticket)
-- Progress breakdown scoring (covered by the progress-breakdown capability ticket)
+This capability covers read-only activity metadata attached to a task. It does **not** change task state, trigger re-execution, or modify PR metadata directly.
 
 ---
 
 ## Functional Requirements
 
-### FR-1 — `tasks.get_activity` Tool (or `activity` block on `tasks.get`)
+### FR-1 — `tasks.get_activity` tool (new) or `tasks.get` enrichment
 
-The tool accepts a `task_id` and returns an `activity` object with the following fields:
+A single MCP-accessible entry point must return the following payload for any given `task_id`:
 
-```jsonc
-{
-  "taskId": "string",
-  "activity": {
-    // Execution rollup
-    "executionsCount": "integer",           // total executions ever recorded for this task
-    "lastExecutionAt": "ISO-8601 | null",   // timestamp of most recent execution (any role)
-    "lastExecutionAgentRef": "string | null", // stable agent identifier
-    "lastExecutionAgentRole": "coder | pm | ba | validator | tester | unknown | null",
-
-    // Coder-specific rollup
-    "lastCoderExecutionAt": "ISO-8601 | null",
-    "lastCoderExecutionAgentRef": "string | null",
-    "lastCoderRunProducedCode": "boolean | null", // null = no coder run ever recorded
-
-    // Output classification of the last coder run
-    "lastCoderRunOutputType": "code | docs | config | mixed | none | null",
-
-    // PR authorship
-    "prOpenedByAgentRef": "string | null",
-    "prOpenedByAgentRole": "coder | pm | ba | validator | tester | unknown | null",
-    "prLastUpdatedByAgentRef": "string | null",
-    "prLastUpdatedByAgentRole": "coder | pm | ba | validator | tester | unknown | null",
-
-    // Staleness
-    "isStale": "boolean",
-    "stalenessReasons": ["string"]  // human-readable list of triggered conditions
-  }
+```
+taskActivity {
+  taskId:                    string
+  lastExecutionAt:           ISO-8601 timestamp | null
+  lastExecutionAgentRef:     string | null          // agent identifier
+  lastExecutionAgentRole:    enum(coder, pm, ba, validator, tester, unknown)
+  executionsCount:           integer                // total executions across all agents
+  coderExecutionsCount:      integer                // executions where role == coder
+  lastCoderRunAt:            ISO-8601 timestamp | null
+  lastCoderRunProducedCode:  bool | null            // null if no coder run exists
+  prOpenedByAgentRef:        string | null
+  prOpenedByAgentRole:       enum(coder, pm, ba, validator, tester, unknown) | null
+  prLastUpdatedByAgentRef:   string | null
+  prLastUpdatedByAgentRole:  enum(coder, pm, ba, validator, tester, unknown) | null
+  stalenessFlag:             bool
+  stalenesReason:            string | null          // human-readable, e.g. "in_review but no coder execution has produced code"
 }
 ```
 
-### FR-2 — Agent Role Classification
+### FR-2 — Role classification for agent executions
 
-- Role is derived from the agent's registered metadata (agent type tag or name pattern).
-- If role cannot be determined, it resolves to `"unknown"` — never omitted or `null` except when no execution exists.
-- Role classification must be consistent across `lastExecutionAgentRole`, `prOpenedByAgentRole`, and `prLastUpdatedByAgentRole`.
+Each execution record must carry a resolved `agentRole` enum value. Role is determined by:
 
-### FR-3 — Output-Type Classification
+1. Agent self-declared role in its registration metadata (authoritative).
+2. Fallback: heuristic based on agent name/ref pattern (e.g. `coder-*`, `pm-*`).
+3. Final fallback: `unknown`.
 
-For the most recent coder execution, classify file changes as:
+Role resolution must be stable across calls for the same execution record.
 
-| Label | Condition |
+### FR-3 — `lastCoderRunProducedCode` rollup
+
+This boolean is computed as:
+
+- `true` — the most recent coder execution resulted in ≥ 1 file change where the file extension or path is **not** exclusively documentation (`.md`, `.txt`, `.rst`, `docs/`, `wiki/`).
+- `false` — the most recent coder execution produced only doc-type file changes, or produced zero file changes.
+- `null` — no coder execution on record.
+
+Doc vs. non-doc classification uses a configurable extension/path exclusion list (see Out of Scope for schema governance).
+
+### FR-4 — PR authorship attribution
+
+For each PR linked to the task:
+
+- `prOpenedByAgentRef` and `prOpenedByAgentRole` are populated from the execution that triggered the PR creation event.
+- `prLastUpdatedByAgentRef` and `prLastUpdatedByAgentRole` reflect the most recent execution that pushed commits or comments to the PR.
+- If the PR was opened by a human (no agent ref), both fields are `null` and `prOpenedByAgentRole` is omitted.
+
+### FR-5 — Staleness flag
+
+`stalenessFlag` is set to `true` when **any** of the following conditions hold:
+
+| Condition | `stalenessReason` value |
 |---|---|
-| `code` | ≥1 file changed with extension in the registered code-extension set (`.py`, `.ts`, `.js`, `.go`, `.rs`, `.java`, `.rb`, `.cs`, `.cpp`, `.c`, `.swift`, `.kt`, etc.) |
-| `docs` | All changed files are `.md`, `.txt`, `.rst`, `.adoc`, or files under `docs/` |
-| `config` | All changed files are config/infra types (`.yaml`, `.json`, `.toml`, `.env`, `.tf`, `.hcl`, etc.) |
-| `mixed` | Changed files span more than one of the above categories |
-| `none` | Execution recorded but zero file changes detected |
+| Task status is `in_review` or `done` AND `lastCoderRunProducedCode` is `false` or `null` | `"status_advanced_without_coder_code_output"` |
+| Task status is `in_review` or `done` AND `prOpenedByAgentRole != coder` AND `coderExecutionsCount == 0` | `"pr_opened_by_non_coder_no_coder_run"` |
+| Task status is `in_progress` AND `lastExecutionAt` is > 24 h ago AND `coderExecutionsCount == 0` | `"in_progress_no_coder_activity"` |
 
-### FR-4 — Staleness Flag
+Multiple conditions may be true simultaneously; `stalenessReason` returns the highest-priority match (order as listed above).
 
-`isStale` is `true` and `stalenessReasons` is populated when **any** of the following conditions are met:
+### FR-6 — Integration with `tasks.get`
 
-| Condition ID | Trigger |
-|---|---|
-| `STALE_NO_CODER_RUN` | Task status is `in_review` or `done` and `lastCoderExecutionAt` is `null` |
-| `STALE_CODER_NO_CODE` | Task status is `in_review` or `done` and `lastCoderRunProducedCode` is `false` |
-| `STALE_PR_BY_NON_CODER` | A PR is linked and `prOpenedByAgentRole` is not `coder` and no subsequent coder execution exists |
-| `STALE_NO_ACTIVITY` | Task status is `in_review` or `done` and `lastExecutionAt` is more than `N` hours ago (default `N = 48`, configurable per workspace) |
+`tasks.get` must include a `activitySummary` sub-object containing at minimum:
 
-Each triggered condition appends a short human-readable string to `stalenessReasons`, e.g.:
-- `"Task is in_review but no coder execution has ever run"`
-- `"PR was opened by a pm agent; no coder has executed since"`
+- `lastExecutionAt`
+- `lastExecutionAgentRole`
+- `lastCoderRunProducedCode`
+- `stalenessFlag`
 
-### FR-5 — Integration Points
+Full detail is available via `tasks.get_activity`. This avoids bloating every `tasks.get` response while still making the signal zero-hop for common orchestrator checks.
 
-- `lastCoderRunProducedCode: false` **or** `isStale: true` MUST be usable as a boolean gate input by the validator sweep and the #615 accounting fix without any additional API calls.
-- The `activity` block MUST be includable in `tasks.list` responses via an opt-in parameter (`include_activity: true`) to avoid payload bloat on bulk queries.
+### FR-7 — Feed into validator / #615 gate
+
+`stalenessFlag: true` with reason `status_advanced_without_coder_code_output` or `pr_opened_by_non_coder_no_coder_run` must be consumable as a structured signal by the validator sweep (ticket #615). No additional MCP call should be required by the validator to make a gate decision.
 
 ---
 
 ## Acceptance Criteria
 
-### AC-1 — Execution Rollup Fields Present
-Given a task with at least one recorded execution, `tasks.get_activity` returns non-null values for `executionsCount`, `lastExecutionAt`, `lastExecutionAgentRef`, and `lastExecutionAgentRole`.
+### AC-1 — Single-call activity retrieval
 
-### AC-2 — Coder Run Detection
-Given a task where a coder agent has executed, `lastCoderExecutionAt` and `lastCoderExecutionAgentRef` reflect that run, and `lastCoderRunProducedCode` is `true` if any code-extension file was changed.
+`tasks.get_activity(taskId)` returns a valid `taskActivity` object with all required fields populated (or explicit `null` where no data exists) in ≤ 1 MCP round trip. No caller-side aggregation across multiple tools is required.
 
-### AC-3 — "PR by Non-Coder, Never Implemented" Detection
-Given a task with a linked PR opened by a PM agent and zero coder executions:
-- `prOpenedByAgentRole = "pm"`
-- `lastCoderExecutionAt = null`
-- `lastCoderRunProducedCode = null`
-- `isStale = true`
-- `stalenessReasons` contains the `STALE_PR_BY_NON_CODER` message
+### AC-2 — Role surfaced on PR
 
-### AC-4 — Staleness on Done with No Code
-Given a task in status `done` where all executions were by a BA and produced only `.md` files:
-- `lastCoderRunProducedCode = null`
-- `isStale = true`
-- `stalenessReasons` contains both `STALE_NO_CODER_RUN` and `STALE_CODER_NO_CODE` conditions
+Given a task where the only PR was opened by a PM agent with no subsequent coder execution:
 
-### AC-5 — Single Call Sufficiency
-An orchestrator agent MUST be able to determine task legitimacy (coder ran + produced code + not stale) using only the response from `tasks.get_activity` — no follow-up calls to `executions.list_for_task`, trace, or `file_changes` required.
+- `prOpenedByAgentRole == "pm"`
+- `coderExecutionsCount == 0`
+- `lastCoderRunProducedCode == null`
+- `stalenessFlag == true`
+- `stalenessReason == "pr_opened_by_non_coder_no_coder_run"`
 
-### AC-6 — Bulk List Opt-In
-`tasks.list` with `include_activity: true` returns the `activity` block for each task. Without the flag, `activity` is absent from list responses.
+This state is directly detectable by an agent reading `tasks.get_activity` without additional calls.
 
-### AC-7 — No Coder Run Null Safety
-When zero executions exist for a task, all `lastCoder*` fields are `null`, `lastCoderRunProducedCode` is `null` (not `false`), and `executionsCount` is `0`. No fields are omitted.
+### AC-3 — Staleness flag correctness
 
-### AC-8 — Role Classification Consistency
-The same agent ref resolves to the same role value in `lastExecutionAgentRole`, `prOpenedByAgentRole`, and `prLastUpdatedByAgentRole` within the same response.
+A task with status `done` where the sole execution was by a coder that committed only `.md` files:
+
+- `lastCoderRunProducedCode == false`
+- `stalenessFlag == true`
+- `stalenessReason == "status_advanced_without_coder_code_output"`
+
+A task with status `done` where a coder committed at least one `.py` file:
+
+- `lastCoderRunProducedCode == true`
+- `stalenessFlag == false`
+
+### AC-4 — `tasks.get` includes activity summary
+
+`tasks.get` response includes `activitySummary` containing `lastExecutionAt`, `lastExecutionAgentRole`, `lastCoderRunProducedCode`, and `stalenessFlag`. Existing `tasks.get` callers are unaffected (additive field only).
+
+### AC-5 — Role enum completeness
+
+All execution records in the system, including historical records pre-dating this feature, return a resolved `agentRole`. Records with no deterministic role signal return `"unknown"` — never an error or missing field.
+
+### AC-6 — Validator gate compatibility
+
+The validator agent for task #615 can read `stalenessFlag` and `stalenessReason` from `tasks.get_activity` and make a binary gate decision (pass/block) without calling `executions.list_for_task`, trace APIs, or `file_changes` directly.
+
+### AC-7 — Performance
+
+`tasks.get_activity` p95 latency ≤ 300 ms for tasks with up to 500 execution records. Activity fields in `tasks.get` add ≤ 50 ms to existing p95 baseline.
 
 ---
 
 ## Out of Scope
 
-- **Writing or mutating execution records** — this capability is read-only aggregation
-- **Agent identity provisioning or role assignment** — roles are read from existing agent metadata
-- **Diff content summarization** — covered by the diff-summary capability ticket
-- **Progress percentage or breakdown scoring** — covered by the progress-breakdown capability ticket
-- **Notification or alerting on staleness** — consumers poll; no push/webhook in this ticket
-- **UI rendering** — API/MCP surface only
-- **Historical role changes** — role is resolved at query time from current agent metadata; past role changes are not tracked
-- **Cross-task or project-level rollups** — per-task only; aggregate dashboards are out of scope
+- **Write operations**: this capability is read-only. Re-queuing, reassigning, or changing task status based on staleness is handled by the orchestrator consuming this signal, not by this tool.
+- **Doc/non-doc exclusion list governance**: the configurable extension/path list for `lastCoderRunProducedCode` classification is managed via a separate configuration schema ticket; this PRD assumes a reasonable static default list at launch.
+- **Human-authored PR attribution**: PRs opened manually by humans (no agent ref) are surfaced as `null` role fields and are explicitly out of scope for role-based staleness logic.
+- **Real-time push / webhooks**: activity data is available on-demand via MCP pull only. Streaming or push notification of staleness changes is a future capability.
+- **Cross-task rollups**: aggregate views (e.g., "all stale tasks in sprint") are out of scope; this PRD covers per-task signals only.
+- **Execution content analysis beyond file changes**: the tool does not parse code quality, test coverage, or semantic correctness of outputs. It signals whether non-doc files were changed, not whether those changes are correct.
+- **Backfill SLA**: historical execution records missing role metadata will return `"unknown"` — a backfill migration to resolve historical roles is a separate ops task.
