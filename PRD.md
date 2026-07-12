@@ -1,55 +1,62 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #342
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# Product Requirements Document: Backlog Health Monitoring
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+### Problem
+Teams lack consistent visibility into the readiness and health of their product backlog. This often leads to inefficient sprint planning sessions, increased risk of committing to undefined or unsized work, and an inability to forecast future work accurately. Key issues include:
+*   Difficulty identifying immediately actionable work.
+*   Last-minute grooming during sprint planning.
+*   Uncertainty about the scope and effort of upcoming items.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+### Goal
+To provide product teams and stakeholders with clear, real-time visibility into the health of their backlog by displaying the ratio of groomed versus ungroomed, and sized versus unsized backlog items. This will enable proactive backlog management, improve planning efficiency, and facilitate more accurate forecasting.
 
-## Target users / ICP roles
-
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## Target Users / ICP Roles
+*   **Product Managers / Product Owners:** To understand the readiness of their backlog for upcoming sprints and ensure continuous grooming.
+*   **Engineering Leads / Managers:** To assess the availability of well-defined work for their teams and contribute to sizing efforts.
+*   **Scrum Masters / Agile Coaches:** To identify coaching opportunities for backlog refinement processes and promote good agile practices.
+*   **Team Members:** To gain insight into the state of the backlog they will be working from.
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This feature will introduce a new report or dashboard widget that calculates and displays two primary ratios for a selected backlog:
+1.  **Groomed vs Ungroomed:** Percentage of backlog items that meet the definition of "groomed".
+2.  **Sized vs Unsized:** Percentage of backlog items that have a defined estimate (e.g., story points).
+
+The report will enable filtering by project or team and display the current state of the backlog health.
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+*   **FR1: Calculate Groomed Ratio:** The system shall calculate the percentage of "groomed" backlog items out of the total relevant backlog items.
+    *   *Definition of "Groomed":* A backlog item is considered "groomed" if it is in the `Ready for Development` workflow state AND has content in its `Acceptance Criteria` field.
+*   **FR2: Calculate Sized Ratio:** The system shall calculate the percentage of "sized" backlog items out of the total relevant backlog items.
+    *   *Definition of "Sized":* A backlog item is considered "sized" if its `Story Points` field (or equivalent numerical estimate field) contains a positive integer value (`> 0`).
+*   **FR3: Display Ratios:** The system shall display the calculated "Groomed" and "Sized" percentages prominently in a dedicated dashboard widget or report view.
+*   **FR4: Filtering:** The report shall allow users to filter the displayed ratios by:
+    *   Project
+    *   Team
+    *   Backlog query (e.g., "items in sprint N+1, N+2")
+*   **FR5: Data Refresh:** The displayed ratios shall be updated daily automatically and offer a manual "Refresh" option for on-demand updates.
+*   **FR6: Item Inclusion:** The calculation shall include all `Story`, `Bug`, and `Task` type work items within the selected scope that are not in a `Done` or `Closed` state.
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+*   **AC1:** Users can navigate to the "Backlog Health" report/widget from the main project dashboard.
+*   **AC2:** The report clearly displays two distinct percentages: "X% Groomed" and "Y% Sized".
+*   **AC3:** The displayed percentages are accurate based on the definitions in FR1 and FR2 when manually verified against a sample set of backlog items.
+*   **AC4:** When a user applies a filter (e.g., selects a different project), the displayed ratios update correctly to reflect the filtered backlog.
+*   **AC5:** Clicking the "Refresh" button immediately updates the displayed percentages with the latest data.
+*   **AC6:** The UI for the report is intuitive and provides a quick overview of backlog health without requiring deep drill-down for initial assessment.
 
-## Out of scope
+## Out of Scope
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+*   **Trend Analysis:** Tracking backlog health ratios over time or displaying historical graphs.
+*   **Alerting:** Automated notifications or alerts based on predefined thresholds for backlog health ratios.
+*   **Configuration of Definitions:** Allowing users to customize the definitions of "groomed" or "sized" beyond the specified workflow states and fields.
+*   **Root Cause Analysis:** Providing automated insights into *why* items are ungroomed or unsized (e.g., missing specific sub-fields of acceptance criteria).
+*   **Predictive Analytics:** Forecasting future backlog health based on current trends.
+*   **Automated Grooming/Sizing:** Any functionality that automatically modifies backlog items (e.g., adding story points, marking as groomed).
+*   **Detailed Item Lists:** Displaying the full list of groomed/ungroomed or sized/unsized items directly within this primary report (this should be a drill-down capability if implemented separately).
