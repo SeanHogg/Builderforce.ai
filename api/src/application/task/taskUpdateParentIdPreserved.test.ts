@@ -418,7 +418,7 @@ describe('TaskService.updateTask (FR-3)', () => {
     service = s;
   });
 
-  it('does NOT fire auto-run side effect when assignedAgentRef value is unchanged', async () => {
+  it('does NOT fire auto-run side effect when assignedAgentRef value is unchanged (no transition)', async () => {
     // Parent
     const parent = Task.create({
       projectId: PROJECT_ID,
@@ -437,7 +437,7 @@ describe('TaskService.updateTask (FR-3)', () => {
     });
     await repo.save(parent);
 
-    // Unassigned child linked to parent
+    // Already assigned child linked to parent
     const child = Task.create({
       projectId: PROJECT_ID,
       title: 'Child Task',
@@ -446,7 +446,7 @@ describe('TaskService.updateTask (FR-3)', () => {
       priority: undefined as never,
       assignedAgentType: AgentType.CLAUDE,
       assignedAgentHostId: null,
-      assignedAgentRef: null,
+      assignedAgentRef: 'agentA',
       startDate: null,
       dueDate: null,
       persona: null,
@@ -456,9 +456,9 @@ describe('TaskService.updateTask (FR-3)', () => {
     });
     await repo.save(child);
 
-    // Unassigned → same empty string (still unassigned) should not transition
+    // Reassign to same agent — assess should NOT fire (no transition)
     await expect(
-      service.updateTask(child.id as number, { assignedAgentRef: '' }),
+      service.updateTask(child.id as number, { assignedAgentRef: 'agentA' }),
     ).resolves.not.toThrow();
 
     expect(spyDecomposer.assess).not.toHaveBeenCalled();
