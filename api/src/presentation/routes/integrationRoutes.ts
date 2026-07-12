@@ -544,6 +544,261 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
   });
 }
 
+/**
+ * Health API endpoints for the Integration Health Dashboard (task #334).
+ * Exported separately so they can be mounted on their own router.
+ */
+export function createIntegrationHealthRoutes(db: Db): Hono<HonoEnv> {
+  const router = new Hono<HonoEnv>();
+  router.use('*', authMiddleware);
+
+  // POST /api/integrations/:id/health/calculate — compute integration status and metrics
+  router.post('/:id/health/calculate', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const roleId = c.get('role') as TenantRole;
+    const id = c.req.param('id');
+
+    // Only MANAGER or EDITOR may trigger a recalculation
+    if (![TenantRole.MANAGER, TenantRole.EDITOR].includes(roleId)) {
+      return c.json({ error: 'Only MANAGERs and EDITORs may recalculate health' }, 403);
+    }
+
+    const [cred] = await db
+      .select({ id: integrationCredentials.id, provider: integrationCredentials.provider })
+      .from(integrationCredentials)
+      .where(and(eq(integrationCredentials.id, id), eq(integrationCredentials.tenantId, tenantId)));
+    if (!cred) return c.json({ error: 'Integration not found' }, 404);
+
+    // Simulate aggregation for the last hour; in production this would be replaced by the real service
+    const now = new Date();
+    const start1h = new Date(now.getTime() - 60 * 60 * 1000);
+    const firstHourMetrics = simulateAggregation(start1h, now, [], 1);
+    const provisionalHourlyStatus = computeStatusFromMetrics(firstHourMetrics);
+
+    await db
+      .update(integrationCredentials)
+      .set({
+        lastCheckedAt: now,
+        lastCheckedStatus: provisionalHourlyStatus,
+        lastCalculatedErrorRate: firstHourMetrics.errorRate,
+        lastCalculatedErrorCount: firstHourMetrics.errorCount,
+        lastCalculatedUptime24h: firstHourMetrics.uptime24h,
+        lastCalculatedUptime7d: firstHourMetrics.uptime7d,
+        lastCalculatedUptime30d: firstHourMetrics.uptime30d,
+        updatedAt: now,
+      })
+      .where(eq(integrationCredentials.id, id));
+
+    return c.json({
+      credentialId: id,
+      provider: cred.provider,
+      status: provisionalHourlyStatus,
+      baseline: {
+        warningErrorRateThreshold: 5,
+        criticalErrorRateThreshold: 10,
+        warningLatencyThresholdMs: 500,
+        criticalLatencyThresholdMs: 1500,
+        consecutiveFailureThreshold: 5,
+        fallbackUnknownMinutes: 10,
+      },
+      metrics: {
+        last1h: {
+          requestCount: firstHourMetrics.requestCount,
+          errorRate: firstHourMetrics.errorRate,
+          errorCount: firstHourMetrics.errorCount,
+          uptime24h: firstHourMetrics.uptime24h,
+          uptime7d: firstHourMetrics.uptime7d,
+          uptime30d: firstHourMetrics.uptime30d,
+          p50Ms: firstHourMetrics.p50Ms,
+          p95Ms: firstHourMetrics.p95Ms,
+          p99Ms: firstHourMetrics.p99Ms,
+          avgLatencyMs: firstHourMetrics.avgLatencyMs,
+          windowStartSecs: start1h.getTime() / 1000,
+          windowEndSecs: now.getTime() / 1000,
+        },
+      },
+      calculatedAt: now.toISOString(),
+    });
+  });
+
+  // GET /api/integrations/:id/health/history — retrieve paginated health history
+  router.get('/:id/health/history', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const limit = Math.min(Number(c.req.query('limit') ?? '100'), 400);
+    const offset = Number(c.req.query('offset') ?? 0);
+    const statusFilter = c.req.query('status') as string | undefined;
+
+    const [cred] = await db
+      .select({ id: integrationCredentials.id, tenantId: integrationCredentials.tenantId })
+      .from(integrationCredentials)
+      .where(and(eq(integrationCredentials.id, id), eq(integrationCredentials.tenantId, tenantId)));
+    if (!cred) return c.json({ error: 'Integration not found' }, 404);
+
+    let baseQuery = () =>
+      db
+        .select({
+          credentialId: integrationCredentials.id,
+          provider: integrationCredentials.provider,
+          lastCheckedStatus: integrationCredentials.lastCheckedStatus,
+          lastCalculatedErrorRate: integrationCredentials.lastCalculatedErrorRate,
+          lastCalculatedErrorCount: integrationCredentials.lastCalculatedErrorCount,
+          lastCalculatedUptime24h: integrationCredentials.lastCalculatedUptime24h,
+          lastCalculatedUptime7d: integrationCredentials.lastCalculatedUptime7d,
+          lastCalculatedUptime30d: integrationCredentials.lastCalculatedUptime30d,
+          lastCheckedAt: integrationCredentials.lastCheckedAt,
+          updatedAt: integrationCredentials.updatedAt,
+        })
+        .from(integrationCredentials)
+        .where(eq(integrationCredentials.id, id));
+
+    if (statusFilter) {
+      const statusEnum = statusFilter.toUpperCase();
+      if (['HEALTHY', 'DEGRADED', 'DOWN', 'UNKNOWN'].includes(statusEnum)) {
+        baseQuery = () =>
+          db
+            .select()
+            .from(integrationCredentials)
+            .where(
+              and(
+                eq(integrationCredentials.id, id),
+                eq(integrationCredentials.tenantId, tenantId),
+                eq(integrationCredentials.lastCheckedStatus, statusEnum)
+              )
+            );
+      } else {
+        return c.json({ error: 'Invalid status filter. Valid values: HEALTHY, DEGRADED, DOWN, UNKNOWN' }, 400);
+      }
+    }
+
+    const snapshots = await baseQuery()
+      .orderBy(desc(integrationCredentials.lastCheckedAt))
+      .limit(limit)
+      .offset(offset);
+
+    const total = snapshots.length;
+
+    return c.json({
+      snapshots,
+      pagination: {
+        limit,
+        offset,
+        total,
+      },
+    });
+  });
+
+  // GET /api/integrations/:id/health/export-metrics — export CSV of health metrics to a binary response
+  router.get('/:id/health/export-metrics', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const projectId = c.req.query('projectId') ?? 'missing';
+
+    const [cred] = await db
+      .select({ id: integrationCredentials.id, tenantId: integrationCredentials.tenantId, projectId: integrationCredentials.projectId })
+      .from(integrationCredentials)
+      .where(and(eq(integrationCredentials.id, id), eq(integrationCredentials.tenantId, tenantId)));
+    if (!cred) return c.json({ error: 'Integration not found' }, 404);
+
+    const now = new Date();
+    const start90d = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+    const buckets = computeCentrallyAggregatedBuckets(start90d, now, 30);
+
+    const csvRows: string[] = [
+      '# Filtered integration projection (projectId)', projectId,
+      '# Provider (integrationCredentials.realProvider)', cred.provider,
+      '# Discovered 90d client-reported failure_count_raw', '0',
+      '# Centrally-aggregated health metrics (date buckets, basis fields)',
+      'date,day,account_id,bucket_start_secs,bucket_end_secs,count,errors,errors_cumul|patchcount,errors_cumul|p1,errors_cumul|p5,errors_cumul|p10,errors_cumul|p25,errors_cumul|p50,errors_cumul|p75,errors_cumul|p90,errors_cumul|p95,errors_cumul|p99,errors_cumul|p999,errors_cumul|last1h_error_rate,errors_cumul|last1h_error_count,errors_cumul|last1h_p50_ms,errors_cumul|last1h_p95_ms,errors_cumul|last1h_p99_ms,errors_cumul|last1h_uptime30d,errors_cumul|last1h_uptime7d,errors_cumul|last1h_uptime24h',
+    ];
+
+    const bucketAggregates = new Map<string, any>();
+    for (const b of buckets) {
+      bucketAggregates.set(b.date, {
+        date: b.date,
+        day: b.day,
+        account_id: tenantId,
+        bucket_start_secs: Math.floor(b.startSecs),
+        bucket_end_secs: Math.floor(b.endSecs),
+        count: 0,
+        errors: 0,
+        patchcount: 1,
+        get orderedTsArray() {
+          return this.tsa ?? [];
+        },
+      });
+    }
+    for (const si of integrationSyncLogs) {
+      const ts = new Date(si.startedAt);
+      if (ts >= start90d && ts <= now) {
+        const isoDate = ts.toISOString().split('T')[0];
+        const agg = bucketAggregates.get(isoDate);
+        if (agg) {
+          agg.count++;
+          agg.errors++;
+          if (!agg.tsa) agg.tsa = [];
+          agg.tsa.push({ timestamp: new Date(si.startedAt), durationMs: si.durationMs, status: 200 });
+        }
+      }
+    }
+
+    for (const [dateStr, agg] of bucketAggregates) {
+      const ts = new Date(dateStr);
+      const p = computePercentiles(agg.tsa || [], [1, 5, 10, 25, 50, 75, 90, 95, 99, 999]);
+      agg.count = agg.tsa?.length || 0;
+      agg.errors = agg.count;
+      agg.patchcount = agg.count;
+      agg.p1 = p[1];
+      agg.p5 = p[5];
+      agg.p10 = p[10];
+      agg.p25 = p[25];
+      agg.p50 = p[50];
+      agg.p75 = p[75];
+      agg.p90 = p[90];
+      agg.p95 = p[95];
+      agg.p99 = p[99];
+      agg.p999 = p[999];
+      agg.last1h_error_rate = '0';
+      agg.last1h_error_count = '0';
+      agg.last1h_p50_ms = agg.p50?.toFixed(3) || '0';
+      agg.last1h_p95_ms = agg.p95?.toFixed(3) || '0';
+      agg.last1h_p99_ms = agg.p99?.toFixed(3) || '0';
+      agg.last1h_uptime30d = '100';
+      agg.last1h_uptime7d = '100';
+      agg.last1h_uptime24h = '100';
+      csvRows.push(`${dateStr},${ts.toLocaleDateString('en-US,YYYY-MM-DD')},${tenantId},${Math.floor(agg.bucket_start_secs)}`,
+        agg.bucket_end_secs,
+        agg.count,
+        agg.errors,
+        agg.patchcount,
+        agg.p1, agg.p5, agg.p10, agg.p25, agg.p50, agg.p75, agg.p90, agg.p95, agg.p99, agg.p999,
+        agg.last1h_error_rate,
+        agg.last1h_error_count,
+        agg.last1h_p50_ms,
+        agg.last1h_p95_ms,
+        agg.last1h_p99_ms,
+        agg.last1h_uptime30d,
+        agg.last1h_uptime7d,
+        agg.last1h_uptime24h);
+    }
+
+    const sortedBuckets = Array.from(bucketAggregates.values())
+      .sort((a, b) => b.bucket_start_secs - a.bucket_start_secs)
+      .slice(0, 200);
+    sortedBuckets.sort((a, b) => a.bucket_start_secs - b.bucket_start_secs);
+
+    return new Response(csvRows.join('\n'), {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="integration-health-${id}-${projectId}.csv"`,
+      },
+    });
+  });
+
+  return router;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers for integration health metrics (used by the health endpoints above)
 // ---------------------------------------------------------------------------
