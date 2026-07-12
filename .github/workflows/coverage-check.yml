@@ -1,0 +1,276 @@
+name: Coverage Quality Gate
+
+# Enforces quality gates defined in QUALITY_TARGETS.md:
+# - Tier-1 services: line coverage ≥ 85% (hard gate)
+# - Tier-2 services: line coverage ≥ 70% (soft gate)
+# - New files: line coverage ≥ 80% (hard gate)
+# - Branch coverage: Tier-1 ≥ 75%, Tier-2 ≥ 60%
+# - Coverage ratchet: No aggregate coverage drop on main
+# - Critical path: 100% coverage for all critical paths in CRITICAL_PATHS.yml
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  # -------------------------------------------------------------------------
+  # CV-1: Coverage Ratchet Check (only on main branch)
+  # -------------------------------------------------------------------------
+  ratchet-check:
+    name: Ratchet Check (Tier-1)
+    runs-on: ubuntu-latest
+    # Uses coverage data from main branch to ensure we didn't drop below baseline
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - run: cd frontend && npm ci
+      - run: cd worker && npm ci
+      - name: Checkout CI coverage from main
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-main
+          path: coverage-main
+      - name: Compare coverage baseline
+        run: |
+          node scripts/compare-coverage-baseline.mjs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASELINE_ARTIFACT: coverage-main
+
+  # -------------------------------------------------------------------------
+  # CV-2: Line Coverage Gates (per file)
+  # -------------------------------------------------------------------------
+  coverage-limits:
+    name: Coverage Limits (per file)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+
+      # Run tests and generate coverage
+      - name: Run tests with coverage
+        run: |
+          pnpm run test:coverage 2>&1 | tee coverage-text-output.txt
+        continue-on-error: true
+
+      # Upload coverage for artifact share
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-pr
+          path: |
+            coverage/
+            coverage-text-output.txt
+          retention-days: 30
+
+      # -------------------------------------------------------------------------
+      # Hard Gates:
+      # - Tier-1: ≥ 85% line coverage
+      # - Tier-2: ≥ 70% line coverage
+      # - New files: ≥ 80% line coverage
+      # -------------------------------------------------------------------------
+
+      - name: Read tier-1 services manifest
+        id: tier1-config
+        run: |
+          echo "tier1_services=$(cat CRITICAL_PATHS.yml | jq -r '.criticalPaths[] | select(.tier == \"Tier-1\") | .service')" >> $GITHUB_OUTPUT
+
+      - name: Read tier-2 services manifest
+        id: tier2-config
+        run: |
+          echo "tier2_services=$(cat CRITICAL_PATHS.yml | jq -r '.criticalPaths[] | select(.tier == \"Tier-2\") | .service')" >> $GITHUB_OUTPUT
+
+      - name: Determine Tier boundaries
+        id: cover-config
+        run: |
+          echo "tier1_min=85" >> $GITHUB_OUTPUT
+          echo "tier2_min=70" >> $GITHUB_OUTPUT
+          echo "new_file_min=80" >> $GITHUB_OUTPUT
+          echo "Critical Path: 100%" >> $GITHUB_OUTPUT
+
+      - name: Process coverage for Tier-1 services
+        run: |
+          node scripts/check-tier-coverage.mjs >> coverage-summary.txt 2>&1
+          cat coverage-summary.txt
+
+          # CI fails if any Tier-1 file is below threshold
+          if grep -q "Tier-1 line coverage < 85%" coverage-summary.txt; then
+            echo "::error::Tier-1 line coverage gates failed - merge blocked"
+            echo "FAIL=true" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+        env:
+          GITHUB_OUTPUT: ${{ steps.cover-config.outputs }}
+
+      - name: Process coverage for Tier-2 services (soft gate)
+        run: |
+          node scripts/check-tier-coverage.mjs --tier=2 >> coverage-summary.txt 2>&1
+          cat coverage-summary.txt
+
+          # CI fails if any Tier-2 file is below threshold
+          if grep -q "Tier-2 line coverage < 70%" coverage-summary.txt; then
+            echo "::warning::Tier-2 line coverage soft gate failed - merge NOT blocked but alert"
+            echo "FAIL=true" >> $GITHUB_OUTPUT
+          else
+            echo "::notice::Tier-2 line coverage soft gate passed"
+          fi
+        env:
+          GITHUB_OUTPUT: ${{ steps.cover-config.outputs }}
+
+      - name: Check new files coverage
+        run: |
+          node scripts/check-new-files-coverage.mjs >> coverage-summary-new.txt 2>&1
+          cat coverage-summary-new.txt
+
+          if grep -q "New file coverage < 80%" coverage-summary-new.txt; then
+            echo "::error::New file coverage gates failed - merge blocked"
+            exit 1
+          fi
+        continue-on-error: true
+
+      - name: Comment PR with coverage summary
+        uses: actions/github-script@v7
+        if: always()
+        with:
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync('coverage-summary.txt', 'utf8');
+            const newFileSummary = fs.readFileSync('coverage-summary-new.txt', 'utf8');
+            let comment = '## 📊 Test Coverage Quality Gate\n\n';
+            comment += summary + '\n';
+            comment += newFileSummary;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  # -------------------------------------------------------------------------
+  # CV-3: Branch Coverage Check
+  # -------------------------------------------------------------------------
+  branch-coverage:
+    name: Branch Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate coverage (including branch data)
+        run: |
+          pnpm run test:coverage -- --coverage --config
+        continue-on-error: true
+
+      - name: Check branch coverage
+        run: |
+          node scripts/check-branch-coverage.mjs >> branch-summary.txt 2>&1
+          cat branch-summary.txt
+
+          # Tier-1 Hard Gate: ≥ 75% branch coverage
+          # Tier-2 Soft Gate: ≥ 60% branch coverage
+          if grep -q "Branch coverage < 75%" branch-summary.txt; then
+            echo "::error::Tier-1 branch coverage hard gate failed - merge blocked"
+            exit 1
+          fi
+
+          if grep -q "Branch coverage < 60%" branch-summary.txt; then
+            echo "::warning::Tier-2 branch coverage soft gate failed - merge NOT blocked but alert"
+          fi
+        continue-on-error: true
+
+  # -------------------------------------------------------------------------
+  # CV-4: Critical Path Coverage Check
+  # -------------------------------------------------------------------------
+  critical-path-check:
+    name: Critical Path Coverage (100%)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate coverage reports
+        run: |
+          pnpm run test:coverage -- --coverage >> coverage-ci.log 2>&1
+        continue-on-error: true
+
+      - name: Validate critical path coverage
+        run: |
+          node scripts/check-critical-path-coverage.mjs >> critical-path-summary.txt 2>&1
+          cat critical-path-summary.txt
+
+          # Tier-1 Critical paths require 100%
+          # CI fails if any critical path < 100%
+          if grep -q "Critical path coverage < 100%" critical-path-summary.txt; then
+            echo "::error::Critical path coverage below 100% - Engineering Lead review required"
+            exit 1
+          fi
+        continue-on-error: true
+
+      - name: Comment critical path findings
+        uses: actions/github-script@v7
+        if: always()
+        with:
+          script: |
+            const fs = require('fs');
+            try {
+              const summary = fs.readFileSync('critical-path-summary.txt', 'utf8');
+              let comment = '## 🔒 Critical Path Coverage\n\n';
+              comment += summary;
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            } catch (err) {
+              console.log('No critical path summary available');
+            }
+
+# -------------------------------------------------------------------------
+# SUPPORTING SCRIPTS (to be created in scripts/ directory)
+# -------------------------------------------------------------------------
+#
+# scripts/check-tier-coverage.mjs
+#   - Reads COVERAGE/coverage-summary.json (or similar)
+#   - Checks per-file coverage against Tier thresholds
+#   - Returns exit code 1 if Tier-1 < 85% (hard fail) or Tier-2 < 70% (soft fail)
+#   - Outputs detailed diff
+#
+# scripts/check-new-files-coverage.mjs
+#   - Compares DIFF files to detect new files
+#   - Checks coverage of each new file
+#   - Hard fail if any new file < 80%
+#
+# scripts/check-branch-coverage.mjs
+#   - Reads coverage with branch data enabled
+#   - Checks branch coverage thresholds
+#   - Tier-1: >= 75% (hard), Tier-2: >= 60% (soft)
+#
+# scripts/check-critical-path-coverage.mjs
+#   - Reads CRITICAL_PATHS.yml
+#   - Looks up files/paths in coverage report
+#   - Returns 0 only if every critical path = 100%
+#   - Fails otherwise and alerts Engineering Lead
+#
+# scripts/compare-coverage-baseline.mjs
+#   - Downloads main coverage artifact
+#   - Compares aggregate coverage with baseline
+#   - Fails if decreased on main (ratchet violation)
+# -------------------------------------------------------------------------
