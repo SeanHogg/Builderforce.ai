@@ -1,8 +1,8 @@
 {
   "metadata": {
-    "version": "0.1.0",
-    "schema": "2026-06-18",
-    "description": "Job category taxonomy for skills/faceted search filters (optional identifier tracking: parentId, tags, orderMeta/sortValues). Designed for later integration with jobs and freelancers tables."
+    "version": "0.1.1",
+    "schema": "2026-06-20",
+    "description": "Job category taxonomy for skills/faceted search filters with months/years preferred-duration metadata. Leaf skill entries have optional months/years preferences for duration. Designed for later integration with jobs and freelancers tables."
   },
   "categories": [
     {
@@ -18,28 +18,32 @@
           "name": "UI/UX Design",
           "parentId": "design",
           "description": "End-to-end product interaction flows and screen layouts.",
-          "tags": ["ui", "ux", "user-journey"]
+          "tags": ["ui", "ux", "user-journey"],
+          "preferredDuration": { "minMonths": 1, "maxMonths": 3 }
         },
         {
           "id": "design-brand",
           "name": "Brand Design",
           "parentId": "design",
           "description": "Visual identity, logos, brand guidelines, and design systems.",
-          "tags": ["brand", "identity", "design-system"]
+          "tags": ["brand", "identity", "design-system"],
+          "preferredDuration": { "minMonths": 2, "maxMonths": 6 }
         },
         {
           "id": "design-graphic",
           "name": "Graphic Design",
           "parentId": "design",
           "description": "Static graphics, illustrations, and visual assets.",
-          "tags": ["graphic", "vector", "poster"]
+          "tags": ["graphic", "vector", "poster"],
+          "preferredDuration": { "minWeeks": 2, "maxWeeks": 8 }
         },
         {
           "id": "design-identity",
           "name": "Identity Design",
           "parentId": "design",
           "description": "Facial look-and-feel, typography direction, and social assets.",
-          "tags": ["identity", "social", "avatar"]
+          "tags": ["identity", "social", "avatar"],
+          "preferredDuration": { "minYears": 1 }
         }
       ]
     },
@@ -55,7 +59,126 @@
           "name": "Brand Identity",
           "parentId": "design-identify",
           "description": "Shop logos, guidelines, tone-of-voice decks covering name, tagline, style direction.",
-          "tags": ["brand", "identity", "logos"]
+          "tags": ["brand", "identity", "logos"],
+          "preferredDuration": { "minMonths": 2, "maxMonths": 5 }
+        }
+      ]
+    },
+    {
+      "id": "video",
+      "name": "Video",
+      "parentId": null,
+      "description": "Video production, editing, animation, and visual effects.",
+      "orderMeta": 2,
+      "tags": ["video", "editing", "motion"],
+      "skills": [
+        {
+          "id": "video-prod",
+          "name": "Video Production",
+          "parentId": "video",
+          "description": "Full production workflows from concept to final delivery, including planning, shooting, and full post.",
+          "tags": ["video", "production", "full-production"],
+          "preferredDuration": { "minWeeks": 4 }
+        },
+        {
+          "id": "video-edit",
+          "name": "Video Editing",
+          "parentId": "video",
+          "description": "Editing raw footage into final cuts, with sound design and color grading.",
+          "tags": ["video", "editing", "post-production"],
+          "preferredDuration": { "minWeeks": 2, "maxWeeks": 8 }
+        },
+        {
+          "id": "video-motion",
+          "name": "Motion Graphics",
+          "parentId": "video",
+          "description": "Animated graphics, kinetic typography, 2D/3D motion, overlays, and title sequences.",
+          "tags": ["motion", "animation", "kinetic"],
+          "preferredDuration": { "minWeeks": 3 }
+        },
+        {
+          "id": "video-vfx",
+          "name": "Visual Effects (VFX)",
+          "parentId": "video",
+          "description": "Compositing, particle effects, matte painting, and multi-shot VFX integration.",
+          "tags": ["vfx", "effects", "compositing"],
+          "preferredDuration": { "minWeeks": 6 }
+        }
+      ]
+    },
+    {
+      "id": "llm",
+      "name": "LLM",
+      "parentId": null,
+      "description": "Large Language Model development, integration, optimization, and evaluation.",
+      "orderMeta": 3,
+      "tags": ["llm", "generative-ai", "ai"],
+      "skills": [
+        {
+          "id": "llm-finetuning",
+          "name": "LLM Fine-tuning",
+          "parentId": "llm",
+          "description": "Adapting a foundation LLM to specialized domains using instruction tuning or PEFT techniques.",
+          "tags": ["llm", "fine-tuning", "instruction-tuning"],
+          "preferredDuration": { "minWeeks": 4 }
+        },
+        {
+          "id": "llm-rag",
+          "name": "RAG / Retrieval-Augmented Generation",
+          "parentId": "llm",
+          "description": "Building retrieval pipelines with vector DBs to ground LLM responses on proprietary data.",
+          "tags": ["llm", "rag", "retrieval", "vector-db"],
+          "preferredDuration": { "minWeeks": 3 }
+        },
+        {
+          "id": "llm-prompting",
+          "name": "LLM Prompt Engineering",
+          "parentId": "llm",
+          "description": "Designing and optimizing prompts for reliability, safety, and output quality.",
+          "tags": ["llm", "prompting", "chain-of-thought"],
+          "preferredDuration": { "minWeeks": 2 }
+        },
+        {
+          "id": "llm-evaluation",
+          "name": "LLM Evaluation",
+          "parentId": "llm",
+          "description": "Model evaluation frameworks, benchmarks, and human-in-the-loop testing workflows.",
+          "tags": ["llm", "evaluation", "benchmarking"],
+          "preferredDuration": { "minWeeks": 3 }
+        }
+      ]
+    },
+    {
+      "id": "designer",
+      "name": "Designer",
+      "parentId": null,
+      "description": "Generalist design work across products, systems, and assets.",
+      "orderMeta": 4,
+      "tags": ["design", "general", "product"],
+      "skills": [
+        {
+          "id": "designer-product",
+          "name": "Product Design",
+          "parentId": "designer",
+          "description": "End-to-end product UX and UI, from wireframes to high-fidelity screens and design systems.",
+          "tags": ["product", "ux", "ui-system"],
+          "preferredDuration": { "minMonths": 2 }
+        },
+        {
+          "id": "designer-brand-identity",
+          "name": "Brand Identity",
+          "parentId": "designer",
+          "description": "Building and evolving brand visual identity, logos, assets, and guidelines.",
+          "tags": ["brand", "identity", "guidelines"],
+          "preferredDuration": { "minMonths": 2, "maxMonths": 4 }
+        },
+        {
+          "id": "designer-mm12e",
+          "name": "MM12E",
+          "parentId": "designer",
+          "description": "Market Member 12-Entry (MM12E) model-based design; customizing templates for market positioning and brand assets.",
+          "tags": ["mm12e", "market-member", "template-customization"],
+          "preferredDuration": { "minWeeks": 4 }
         }
       ]
     }
