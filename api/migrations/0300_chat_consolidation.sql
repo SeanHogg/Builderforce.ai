@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS chat_consolidation_links (
   -- Order within the consolidated view (used for display)
   display_order  INTEGER NOT NULL DEFAULT 0,
   -- Metadata for UI: title/name of the original source, custom notes
-  source_title   VARCHAR(500),
+  source_title   VARCHAR(VARYING(500)),
   source_summary TEXT,
   -- Timestamp when this link was created
   created_at     TIMESTAMP NOT NULL DEFAULT NOW(),
