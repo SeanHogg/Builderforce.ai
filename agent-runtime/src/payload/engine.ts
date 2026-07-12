@@ -4,6 +4,7 @@
  */
 
 import type {
+  CustomFunction,
   FieldResolution,
   InputContext,
   LogEntry,
@@ -14,15 +15,6 @@ import type {
   TypeCoercion,
   ValidationError,
 } from "./types.js";
-
-/**
- * Custom function registry signature.
- */
-export type CustomFunction = (args: {
-  context: InputContext;
-  resolved: Record<string, FieldResolution>;
-  sourcePath: string;
-}) => unknown;
 
 /**
  * Path components for source resolution.
