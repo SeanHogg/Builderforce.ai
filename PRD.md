@@ -5,7 +5,9 @@
 
 ## Problem & Goal
 
-There is an unverified behavioral contract around auto-run side effects: when a value is assigned, the associated side effect must fire **exactly once**. Duplicate firings cause bugs such as double API calls, duplicate UI updates, and corrupted state. The goal is to confirm—through targeted tests and, if necessary, corrective implementation—that every auto-run side effect fires exactly once per assignment, never zero times and never more than once.
+When an assignment triggers an auto-run side effect (e.g., a reactive callback, lifecycle hook, watcher, or event handler bound to a value assignment), the side effect is firing **twice** instead of **once** in at least one confirmed code path. This causes duplicate API calls, incorrect state mutations, redundant renders, and unpredictable application behavior.
+
+**Goal:** Guarantee that every auto-run side effect fires **exactly once** per assignment, and prove this guarantee with a targeted, reproducible test.
 
 ---
 
@@ -13,75 +15,82 @@ There is an unverified behavioral contract around auto-run side effects: when a 
 
 | Role | Concern |
 |---|---|
-| **Frontend / fullstack engineers** | Rely on reactive primitives (signals, observables, stores) behaving predictably |
-| **QA / test engineers** | Need deterministic, reproducible side-effect counts to write reliable assertions |
-| **Platform / infra engineers** | Depend on side-effect guarantees when wiring event pipelines and cache invalidation |
+| **Frontend / fullstack engineers** | Rely on predictable reactivity; duplicate side effects cause UI bugs and wasted network requests |
+| **QA / SDET engineers** | Need a deterministic test harness to confirm the fix and prevent regression |
+| **Platform / infra engineers** | Duplicate effects can cause double-writes to databases or message queues |
 
 ---
 
 ## Scope
 
-### In Scope
-
-- The auto-run / reactive execution engine and its scheduling logic
-- All code paths that trigger side-effect execution upon an assignment (direct set, batch set, derived/computed propagation)
-- Unit and integration tests that assert exactly-once firing semantics
-- Any bug fixes required to uphold the exactly-once contract
-
-### Out of Scope
-
-- Unrelated reactivity features (lazy evaluation, memoization caching correctness, etc.)
-- Side effects triggered by reads (get-side-effects), not writes
-- Performance profiling or optimization work beyond what is needed to fix double-firing
-- Changes to the public API surface
+This work covers the specific execution lifecycle of **auto-run side effects triggered by a single assignment event** within the reactive system (scheduler, signal graph, or equivalent mechanism). It does not cover manually invoked effects or effects triggered by multiple distinct assignments.
 
 ---
 
 ## Functional Requirements
 
-### FR-1 — Single Fire on Simple Assignment
-When a reactive variable is assigned a new value, every registered auto-run side effect that depends on that variable **must execute exactly once**.
+### FR-1 — Single Execution Per Assignment
+When a value is assigned exactly once, any auto-run side effect registered against that value **must execute exactly one time** before the next assignment or tick boundary.
 
-### FR-2 — Single Fire on Batch Assignment
-When multiple reactive variables are updated inside a batch/transaction block, each dependent auto-run side effect **must execute exactly once** after the batch completes, regardless of how many of its dependencies changed within that batch.
+### FR-2 — No Deduplication Suppression
+The fix must not prevent legitimate re-execution when a **second distinct assignment** occurs. Clamping, deduplication, or batching strategies must not collapse two real assignments into zero or one effect invocation.
 
-### FR-3 — Single Fire on Derived/Computed Propagation
-When an assignment causes a computed/derived value to update, any auto-run side effect depending on that derived value **must execute exactly once** per batch cycle.
+### FR-3 — Synchronous and Asynchronous Paths
+The single-execution guarantee applies to both:
+- Synchronous assignment → synchronous effect
+- Synchronous assignment → asynchronous/scheduled effect (e.g., microtask, `requestAnimationFrame`, `setTimeout`)
 
-### FR-4 — No Fire on Same-Value Assignment
-When a reactive variable is assigned a value **equal to its current value** (by the configured equality check), no auto-run side effect **must** fire.
+### FR-4 — No Side-Effect State Leakage Between Tests
+The effect execution counter must be reset cleanly between test cases. Any global scheduler state, signal registry, or subscription list must be torn down after each test.
 
-### FR-5 — Execution Count Is Observable
-The side-effect execution count must be programmatically observable in tests (e.g., via a counter mock, spy, or stub) to allow deterministic assertion.
-
-### FR-6 — Scheduler De-duplication
-The internal scheduler must de-duplicate pending auto-run jobs queued within the same microtask/tick so that diamond-dependency graphs (A → B, A → C, B+C → D) do not cause D's side effect to fire more than once.
+### FR-5 — Observable Execution Count
+The system must expose (or the test must instrument) a reliable mechanism to count how many times a specific side effect callback was invoked — e.g., a spy, mock function, or explicit counter variable.
 
 ---
 
 ## Acceptance Criteria
 
-| ID | Criterion | Pass Condition |
-|---|---|---|
-| AC-1 | Simple assignment fires side effect once | Spy call count === 1 after one assignment |
-| AC-2 | Rapid successive assignments fire side effect once per assignment | Spy call count === N after N sequential assignments (one per assignment, not batched) |
-| AC-3 | Batch of M dependency changes fires side effect once | Spy call count === 1 after a single batch touching M dependencies |
-| AC-4 | Diamond-dependency graph fires leaf side effect once | Spy call count === 1 when common ancestor is assigned once |
-| AC-5 | Same-value assignment does not fire side effect | Spy call count === 0 after assigning identical value |
-| AC-6 | Derived value propagation fires side effect once | Spy call count === 1 when source changes, causing computed change |
-| AC-7 | All existing reactive test suites pass without regression | CI green on full test run |
-| AC-8 | No new test is skipped or marked `xtest`/`xit` | Zero skipped tests in the auto-run suite |
+```
+AC-1  GIVEN a reactive variable with one registered auto-run side effect
+      WHEN the variable is assigned a new value exactly once
+      THEN the side effect callback is invoked exactly 1 time
+
+AC-2  GIVEN a reactive variable with one registered auto-run side effect
+      WHEN the variable is assigned a new value twice in sequence
+      THEN the side effect callback is invoked exactly 2 times (once per assignment)
+
+AC-3  GIVEN the same setup as AC-1
+      WHEN the assignment occurs inside an async context (Promise, setTimeout, etc.)
+      THEN the side effect callback is still invoked exactly 1 time after the scheduler flushes
+
+AC-4  GIVEN two independent reactive variables each with their own auto-run side effect
+      WHEN each variable is assigned once
+      THEN each respective side effect fires exactly 1 time and neither fires for the other's assignment
+
+AC-5  GIVEN the test suite runs AC-1 through AC-4 in sequence
+      WHEN each test begins
+      THEN all effect counters and scheduler state are in a clean initial state (no carry-over from prior tests)
+```
+
+---
+
+## Implementation Notes
+
+- Investigate **double-registration** in the subscriber/dependency tracking phase — a common root cause is the effect being added to a dependency set twice (e.g., during both the `track` and `trigger` phases).
+- Inspect scheduler **flush logic** for redundant queue processing (e.g., a queue that re-enqueues an effect before draining).
+- Check whether `cleanup` / `dispose` functions are being called prematurely, causing the effect to re-subscribe mid-flush.
+- Use a `vi.fn()` / `jest.fn()` spy (or equivalent) as the canonical counter — do not rely on internal flags that may themselves be buggy.
 
 ---
 
 ## Out of Scope
 
-- Subscription/observable patterns not using the auto-run primitive
-- Server-side rendering or SSR hydration edge cases
-- Cross-context (worker thread / iframe) reactivity
-- Async side effects and cancellation semantics
-- Throttle, debounce, or rate-limiting wrappers around auto-run
-- Changes to equality-check configuration or custom comparators
+- Effects triggered by **computed/derived values** (separate dependency graph layer)
+- Batch-update APIs that intentionally coalesce multiple assignments into a single effect run
+- Performance optimization of the scheduler beyond correctness
+- Changes to the public API surface of the reactive system
+- Cross-framework compatibility (Vue, MobX, Solid, etc.) — this targets the project's own reactive primitive only
+- Visual regression or end-to-end browser testing
 
 ## Requirements
 
@@ -90,10 +99,6 @@ _Owned by the business-analyst — to be authored._
 ## Design
 
 _Owned by the architect — to be authored._
-
-## Implementation Notes
-
-_Owned by the developer — to be authored._
 
 ## Review
 
