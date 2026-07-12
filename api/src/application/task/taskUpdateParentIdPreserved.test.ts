@@ -241,13 +241,13 @@ describe('TaskService.updateTask parentTaskId preservation (FR-1)', () => {
     });
     await repo.save(parent);
 
-    // Create child already assigned to agent A, but link? No, we'll test reassign
+    // Create child already assigned to agent A
     const child = Task.create({
       projectId: PROJECT_ID,
       title: 'Child Task',
       description: null,
-      status: TaskStatus.TODO as any,
-      priority: TaskPriority.MEDIUM,
+      status: undefined as never,
+      priority: undefined as never,
       assignedAgentType: AgentType.CLAUDE,
       assignedAgentHostId: null,
       assignedAgentRef: 'ide-agent-5',
@@ -256,8 +256,8 @@ describe('TaskService.updateTask parentTaskId preservation (FR-1)', () => {
       persona: null,
       projectKey: 'CHILD',
       lastKeySeq: 0,
+      parentTaskId: parent.id,
     });
-    child.parentTaskId = parent.id;
     await repo.save(child);
 
     // Reassign to different agent — parentTaskId should stay
