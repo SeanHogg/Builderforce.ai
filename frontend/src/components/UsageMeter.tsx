@@ -67,7 +67,7 @@ const METER_ICON: Record<MeterSnapshot['key'], string> = {
  * → the Finance hub where that metered activity is reported.
  */
 const METER_CONFIG_HREF: Record<MeterSnapshot['key'], string> = {
-  ai_tokens: '/settings/api-keys',
+  ai_tokens: '/settings/integrations',
   cloud_runs: '/ide/dashboard',
   ingestion: '/settings/integrations',
   error_events: '/quality?tab=collectors',

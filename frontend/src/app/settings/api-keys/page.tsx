@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { useRouter } from 'next/navigation';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { tenantApiKeysApi, type TenantApiKey } from '@/lib/builderforceApi';
 import { getStoredTenant } from '@/lib/auth';
@@ -56,8 +57,9 @@ function fmtDate(iso: string | null | undefined): string {
   return new Date(iso).toLocaleString();
 }
 
-export default function ApiKeysPage() {
+export default function ApiKeysContent({ embedded = false, showProviderKeys = true, search = '', externalViewMode }: { embedded?: boolean; showProviderKeys?: boolean; search?: string; externalViewMode?: ViewMode } = {}) {
   const t = useTranslations('apiKeys');
+  const router = useRouter();
   const confirm = useConfirm();
   const tenant = getStoredTenant();
   const tenantId = tenant ? Number(tenant.id) : NaN;
@@ -77,6 +79,8 @@ export default function ApiKeysPage() {
   const [savingEdit, setSavingEdit] = useState(false);
   const [expandedKeyId, setExpandedKeyId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('card');
+  const effectiveViewMode = externalViewMode ?? viewMode;
+  const visibleKeys = keys.filter((key) => !search.trim() || key.name.toLowerCase().includes(search.trim().toLowerCase()));
 
   useEffect(() => {
     if (!isOwner || !Number.isFinite(tenantId)) { setLoading(false); return; }
@@ -85,6 +89,10 @@ export default function ApiKeysPage() {
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, [isOwner, tenantId]);
+
+  useEffect(() => { if (!embedded) router.replace('/settings/integrations'); }, [embedded, router]);
+
+  if (!embedded) return null;
 
   if (!tenant) {
     return (
@@ -157,14 +165,14 @@ export default function ApiKeysPage() {
   };
 
   return (
-    <PageContainer width="narrow" style={{ padding: '32px 40px' }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>{t('title')}</h1>
-      <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 24 }}>
+    <PageContainer width={embedded ? 'full' : 'narrow'} style={{ padding: embedded ? 0 : '32px 40px' }}>
+      {!embedded && <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>{t('title')}</h1>}
+      {!embedded && <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 24 }}>
         {t.rich('subtitle', {
           code: (chunks) => <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{chunks}</code>,
           strong: (chunks) => <strong style={{ color: 'var(--text-primary)' }}>{chunks}</strong>,
         })}
-      </p>
+      </p>}
 
       {revealedKey && (
         <div style={{ marginBottom: 20 }}>
@@ -176,9 +184,9 @@ export default function ApiKeysPage() {
         </div>
       )}
 
-      <div style={{ marginBottom: 20 }}>
+      {showProviderKeys && <div style={{ marginBottom: 20 }}>
         <ProviderKeysSettings />
-      </div>
+      </div>}
 
       <div style={{ ...cardStyle, marginBottom: 20 }}>
         <div style={sectionTitle}>{t('createTitle')}</div>
@@ -218,7 +226,7 @@ export default function ApiKeysPage() {
       <div style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ ...sectionTitle, marginBottom: 0 }}>{t('activeAndRevoked')}</div>
-          <ViewToggle value={viewMode} onChange={setViewMode} />
+          {!externalViewMode && <ViewToggle value={viewMode} onChange={setViewMode} />}
         </div>
         <div style={{ marginBottom: 14 }} />
         {error && (
@@ -226,11 +234,11 @@ export default function ApiKeysPage() {
         )}
         {loading ? (
           <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>
-        ) : keys.length === 0 ? (
+        ) : visibleKeys.length === 0 ? (
           <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('noKeys')}</div>
-        ) : viewMode === 'card' ? (
+        ) : effectiveViewMode === 'card' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {keys.map((k) => {
+            {visibleKeys.map((k) => {
               const revoked = !!k.revokedAt;
               const isEditing = editingKeyId === k.id;
               return (
@@ -326,7 +334,7 @@ export default function ApiKeysPage() {
                 </tr>
               </thead>
               <tbody>
-                {keys.map((k) => {
+                {visibleKeys.map((k) => {
                   const revoked = !!k.revokedAt;
                   const isEditing = editingKeyId === k.id;
                   return (
