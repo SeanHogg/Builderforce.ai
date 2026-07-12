@@ -1,12 +1,20 @@
+# -*- coding: utf-8 -*-
 """
-Base adapter interface for all domain-specific ingestion adapters.
+Base adapter interface and shared utilities for domain-specific ingestion adapters.
+
+All adapters inherit BaseAdapter and must declare a metric_domain property.
+Factory code imports from this file to register adapters; adapters package
+imports from.models.eng_health_record for types (MetricDomain, EngHealthRecord,
+DataQualityFlag). This approach avoids cyclic dependencies and keeps the
+factory independent of domain implementations.
 """
 
-import json
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Optional
 from datetime import datetime
-from ...models.eng_health_record import EngHealthRecord, MetricDomain, DataQualityFlag
+from typing import Dict, List, Any, Optional
+import json
+
+from ..models.eng_health_record import EngHealthRecord, MetricDomain, DataQualityFlag
 
 
 class BaseAdapter(ABC):
@@ -17,7 +25,7 @@ class BaseAdapter(ABC):
     webhook-driven ingestion and polling fallback.
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any]) -> None:
         """
         Initialize adapter with configuration.
 
@@ -30,7 +38,11 @@ class BaseAdapter(ABC):
     @property
     @abstractmethod
     def metric_domain(self) -> MetricDomain:
-        """Return the metric domain this adapter handles."""
+        """
+        Return the metric domain this adapter handles.
+
+        Must be implemented by subclasses.
+        """
         pass
 
     @abstractmethod
@@ -66,6 +78,9 @@ class BaseAdapter(ABC):
         """
         pass
 
+    # ----------------------------------------------------------------------
+    # Validation and Normalization
+    # ----------------------------------------------------------------------
     def validate_payload(self, payload: Dict[str, Any]) -> bool:
         """
         Validate that payload contains expected fields for this domain.
@@ -77,7 +92,7 @@ class BaseAdapter(ABC):
             True if valid, raises IngestionError otherwise
 
         Raises:
-            IngestionError: If validation fails
+            IngestionError: If validation fails for required fields
         """
         raise NotImplementedError(
             f"Subclass {self.__class__.__name__} must implement validate_payload"
@@ -126,10 +141,16 @@ class BaseAdapter(ABC):
             errors = self._extract_validation_errors(payload)
             record = EngHealthRecord(
                 record_id=self.config.get("record_id_prefix", "ingestion") + "_" +
-                        str(hash(str(payload)) % 10**12),
+                        str(abs(hash(json.dumps(payload))) % 10**12),
                 source_system=self.config.get("source_system", "unknown"),
                 metric_domain=self.metric_domain,
-                raw_payload=payload
+                team_id=payload.get("team", ""),
+                service_id=payload.get("service", ""),
+                environment=payload.get("environment"),
+                event_timestamp=self._extract_timestamp(payload),
+                raw_payload=payload,
+                normalized_fields={},
+                data_quality_flags=[]
             )
             for error in errors:
                 record.data_quality_flags.append(DataQualityFlag(error))
@@ -149,7 +170,8 @@ class BaseAdapter(ABC):
             environment=payload.get("environment"),
             event_timestamp=self._extract_timestamp(payload),
             raw_payload=payload,
-            normalized_fields=normalized_fields
+            normalized_fields=normalized_fields,
+            data_quality_flags=[]
         )
 
         # Detect quality flags
@@ -158,6 +180,9 @@ class BaseAdapter(ABC):
 
         return record
 
+    # ----------------------------------------------------------------------
+    # Timestamp and Date Helpers
+    # ----------------------------------------------------------------------
     def _extract_timestamp(self, payload: Dict[str, Any]) -> Optional[datetime]:
         """
         Extract timestamp from payload.
@@ -172,7 +197,13 @@ class BaseAdapter(ABC):
                 if isinstance(value, str):
                     return self._parse_timestamp(value)
                 elif isinstance(value, (int, float)):
-                    return datetime.fromtimestamp(value / 1000.0)
+                    # Assume milliseconds
+                    try:
+                        return datetime.fromtimestamp(value / 1000.0)
+                    except (ValueError, TypeError):
+                        pass
+                    # Assume seconds
+                    return datetime.fromtimestamp(value)
 
         # For resource allocation, use effective_date_start
         if self.metric_domain == MetricDomain.RESOURCE_ALLOCATION and "effective_date_start" in payload:
@@ -188,32 +219,20 @@ class BaseAdapter(ABC):
 
         Supports ISO 8601 and common date formats.
         """
-        # Try ISO format first
+        # Try ISO format first with Z handling
+        if timestamp_str.endswith("Z"):
+            timestamp_str = timestamp_str[:-1] + "+00:00"
         try:
-            return datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+            return datetime.fromisoformat(timestamp_str)
         except (ValueError, AttributeError):
             pass
 
         # Try common date formats
-        try:
-            return datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M:%S.%f")
-        except (ValueError, AttributeError):
-            pass
-
-        try:
-            return datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M:%S")
-        except (ValueError, AttributeError):
-            pass
-
-        try:
-            return datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
-        except (ValueError, AttributeError):
-            pass
-
-        try:
-            return datetime.strptime(timestamp_str, "%Y-%m-%d")
-        except (ValueError, AttributeError):
-            pass
+        for fmt in ("%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(timestamp_str, fmt)
+            except (ValueError, AttributeError):
+                pass
 
         return None
 
@@ -228,6 +247,17 @@ class BaseAdapter(ABC):
             key: payload.get(key)
             for key in ["team", "service", "environment", "timestamp", "created_at", "updated_at"]
         }
+
+    def _extract_validation_errors(self, payload: Dict[str, Any]) -> List[str]:
+        """
+        Extract validation errors from payload.
+
+        Default implementation uses validate_payload; subclasses may customize.
+        """
+        # If validate_payload raises, it will have produced the errors already.
+        # The default in BaseAdapter raises NotImplementedError; callers should
+        # expect valid payloads and handle the error case explicitly.
+        return ["validate_payload not implemented by this adapter"]
 
 
 class IngestionError(Exception):
