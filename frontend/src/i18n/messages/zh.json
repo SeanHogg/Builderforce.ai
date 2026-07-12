@@ -5715,7 +5715,8 @@
     },
     "audit": {
       "flagged": "已标记",
-      "flaggedTitle": "此工单跳过了必需的角色或诊断——需要复核"
+      "flaggedTitle": "此工单跳过了必需的角色或诊断——需要复核",
+      "participantsTitle": "必需角色参与情况：已完成 & 必需"
     }
   },
   "projectsContent": {
@@ -6902,6 +6903,7 @@
     "deleteTask": "删除任务",
     "tabAgent": "智能体 / 能力",
     "tabPrd": "PRD",
+    "tabAccountability": "签核与问责",
     "changeStatusTitle": "点击更改状态",
     "changePriorityTitle": "点击更改优先级",
     "viewCodeChangesTitle": "在 GitHub 上查看代码更改",
@@ -9350,5 +9352,62 @@
     "statusError": "错误",
     "errFailed": "邀请失败",
     "laterHint": "你也可以稍后在<link>工作团队</link>邀请队友。"
+  },
+  "accountability": {
+    "loading": "正在加载问责信息…",
+    "signedHeader": "{total} 个必需角色中已有 {done} 个签核",
+    "unassigned": "未分配",
+    "addedBadge": "新增",
+    "gaps": {
+      "title": "{count} 项问责缺口",
+      "kind": {
+        "unsigned": "未签核",
+        "unstaffed": "资源缺口",
+        "no_contribution": "无贡献记录",
+        "waived": "已豁免",
+        "changes_requested": "要求修改"
+      }
+    },
+    "table": {
+      "title": "签核与问责",
+      "role": "角色",
+      "who": "签核人",
+      "state": "状态",
+      "verdict": "裁定",
+      "when": "时间",
+      "comments": "备注",
+      "contribution": "贡献",
+      "empty": "此工单暂无必需角色。"
+    },
+    "verdict": {
+      "approved": "已批准",
+      "changes_requested": "要求修改",
+      "waived": "已豁免",
+      "delegated": "已委派"
+    },
+    "state": {
+      "pending": "待处理",
+      "assigned": "已分配",
+      "in_progress": "进行中",
+      "completed": "已完成",
+      "changes_requested": "要求修改",
+      "waived": "已豁免",
+      "skipped": "已跳过",
+      "unstaffed": "缺人手"
+    },
+    "responsibility": {
+      "owner": "负责人",
+      "reviewer": "评审人",
+      "contributor": "参与者"
+    },
+    "assess": {
+      "title": "资源评估",
+      "help": "为此工单添加模板之外所需的角色（如设计师、安全工程师）。若没有可用的合格资源，将标记为资源缺口。",
+      "rolePlaceholder": "选择角色…",
+      "notePlaceholder": "为何需要此角色？（可选）",
+      "add": "添加必需角色",
+      "materialize": "创建工作项",
+      "materializeHelp": "为每个资源生成一个子任务，使进度汇总到此工单。"
+    }
   }
 }

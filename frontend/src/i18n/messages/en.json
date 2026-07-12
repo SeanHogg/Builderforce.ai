@@ -5717,7 +5717,8 @@
     },
     "audit": {
       "flagged": "Flagged",
-      "flaggedTitle": "This ticket skipped a required role or diagnostic — review needed"
+      "flaggedTitle": "This ticket skipped a required role or diagnostic — review needed",
+      "participantsTitle": "Required-role participation: complete of required"
     }
   },
   "projectsContent": {
@@ -6904,6 +6905,7 @@
     "deleteTask": "Delete task",
     "tabAgent": "Agent / Capabilities",
     "tabPrd": "PRD",
+    "tabAccountability": "Sign-off & Accountability",
     "changeStatusTitle": "Click to change status",
     "changePriorityTitle": "Click to change priority",
     "viewCodeChangesTitle": "View the code changes on GitHub",
@@ -9352,5 +9354,62 @@
     "statusError": "Error",
     "errFailed": "Failed to invite",
     "laterHint": "You can also invite teammates later from <link>Workforce</link>."
+  },
+  "accountability": {
+    "loading": "Loading accountability…",
+    "signedHeader": "{done} of {total} required roles signed off",
+    "unassigned": "Unassigned",
+    "addedBadge": "added",
+    "gaps": {
+      "title": "{count} accountability gap(s)",
+      "kind": {
+        "unsigned": "Unsigned",
+        "unstaffed": "Resource gap",
+        "no_contribution": "No contribution",
+        "waived": "Waived",
+        "changes_requested": "Changes requested"
+      }
+    },
+    "table": {
+      "title": "Sign-off & Accountability",
+      "role": "Role",
+      "who": "Who",
+      "state": "State",
+      "verdict": "Verdict",
+      "when": "When",
+      "comments": "Comments",
+      "contribution": "Contribution",
+      "empty": "No required roles for this ticket yet."
+    },
+    "verdict": {
+      "approved": "Approved",
+      "changes_requested": "Changes requested",
+      "waived": "Waived",
+      "delegated": "Delegated"
+    },
+    "state": {
+      "pending": "Pending",
+      "assigned": "Assigned",
+      "in_progress": "In progress",
+      "completed": "Completed",
+      "changes_requested": "Changes requested",
+      "waived": "Waived",
+      "skipped": "Skipped",
+      "unstaffed": "Unstaffed"
+    },
+    "responsibility": {
+      "owner": "Owner",
+      "reviewer": "Reviewer",
+      "contributor": "Contributor"
+    },
+    "assess": {
+      "title": "Resource assessment",
+      "help": "Add a role this ticket needs beyond the template (e.g. designer, security engineer). If no capable resource is available it is flagged as a resource gap.",
+      "rolePlaceholder": "Select a role…",
+      "notePlaceholder": "Why is this role needed? (optional)",
+      "add": "Add required role",
+      "materialize": "Create work items",
+      "materializeHelp": "Spin up a child task per resource so progress rolls up to this ticket."
+    }
   }
 }

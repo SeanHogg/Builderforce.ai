@@ -154,7 +154,7 @@ export const toolsApi = {
 
 import type {
   JobRole, KanbanTemplate, TemplateSummary, RecommendedRoster, TicketAudit, FlaggedTicket, TemplateVisibility,
-  RoleAssignment, AssigneeKind,
+  RoleAssignment, AssigneeKind, AccountabilityReport, ManifestParticipant, SignoffContribution, ParticipantsSummaryRow,
 } from './kanban';
 
 export interface AssignableWorkforceDto {
@@ -234,8 +234,21 @@ export const kanbanApi = {
     request<{ audit: TicketAudit | null }>(`/api/kanban/tasks/${taskId}/audit`).then((r) => r.audit),
   recomputeAudit: (taskId: number): Promise<TicketAudit> =>
     request<{ audit: TicketAudit }>(`/api/kanban/tasks/${taskId}/audit/recompute`, { method: 'POST' }).then((r) => r.audit),
-  signoff: (taskId: number, body: { roleKey: string; laneKey?: string; verdict?: 'approved' | 'changes_requested'; summary?: string }): Promise<TicketAudit> =>
+  signoff: (taskId: number, body: { roleKey: string; laneKey?: string; verdict?: 'approved' | 'changes_requested' | 'waived' | 'delegated'; summary?: string; waiveReason?: string; contribution?: SignoffContribution }): Promise<TicketAudit> =>
     request<{ audit: TicketAudit }>(`/api/kanban/tasks/${taskId}/signoff`, { method: 'POST', body: JSON.stringify(body) }).then((r) => r.audit),
+  // Coordinated Role Participation — manifest + accountability record.
+  accountability: (taskId: number): Promise<AccountabilityReport> =>
+    request<{ accountability: AccountabilityReport }>(`/api/kanban/tasks/${taskId}/accountability`).then((r) => r.accountability),
+  participants: (taskId: number): Promise<ManifestParticipant[]> =>
+    request<{ participants: ManifestParticipant[] }>(`/api/kanban/tasks/${taskId}/participants`).then((r) => r.participants),
+  assessResource: (taskId: number, body: { roleKey: string; responsibility?: 'owner' | 'reviewer' | 'contributor'; stageKey?: string; note?: string }): Promise<ManifestParticipant | null> =>
+    request<{ participant: ManifestParticipant | null }>(`/api/kanban/tasks/${taskId}/participants`, { method: 'POST', body: JSON.stringify(body) }).then((r) => r.participant),
+  removeParticipant: (taskId: number, participantId: string): Promise<void> =>
+    request<{ ok: boolean }>(`/api/kanban/tasks/${taskId}/participants/${participantId}`, { method: 'DELETE' }).then(() => undefined),
+  materializeParticipants: (taskId: number): Promise<number> =>
+    request<{ created: number }>(`/api/kanban/tasks/${taskId}/participants/materialize`, { method: 'POST' }).then((r) => r.created),
+  participantsSummary: (projectId: number): Promise<ParticipantsSummaryRow[]> =>
+    request<{ summary: ParticipantsSummaryRow[] }>(`/api/kanban/projects/${projectId}/participants-summary`).then((r) => r.summary),
 };
 
 // ---------------------------------------------------------------------------
@@ -4582,6 +4595,155 @@ export const factsApi = {
     request<Fact>(`/api/facts/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   remove: (id: string): Promise<{ deleted: string }> =>
     request<{ deleted: string }>(`/api/facts/${id}`, { method: 'DELETE' }),
+};
+
+// ---------------------------------------------------------------------------
+// RFP / RFQ Response — /api/rfp  (PRD 15). Pre-sales proposal generation.
+// ---------------------------------------------------------------------------
+
+export interface BrandPalette {
+  primary: string;
+  secondary: string;
+  accent: string;
+  text: string;
+  background: string;
+  logoUrl?: string | null;
+}
+
+export interface RfpCostLineItem {
+  label: string;
+  category: 'build' | 'agentic' | 'marketing' | 'contingency' | 'margin';
+  amountUsd: number;
+}
+
+export interface RfpCostModel {
+  buildCostUsd: number;
+  agenticCostUsd: number;
+  marketingCostUsd: number;
+  contingencyUsd: number;
+  subtotalCostUsd: number;
+  marginPct: number;
+  marginUsd: number;
+  quotedPriceUsd: number;
+  effortWeeks: number;
+  lineItems: RfpCostLineItem[];
+}
+
+export interface RfpCapabilityRoster {
+  capabilities: string[];
+  keyComponents: { name: string; responsibility: string }[];
+  frameworks: string[];
+  primaryLanguages: string[];
+  valueProps: string[];
+  source: 'diagnostics' | 'audit' | 'greenfield';
+}
+
+export interface RfpPhase {
+  name: string;
+  startDate: string;
+  endDate: string;
+  milestones: { name: string; date: string }[];
+}
+
+export interface RfpRisk { title: string; severity: 'low' | 'medium' | 'high'; mitigation: string }
+export interface RfpDependency { title: string; type: 'internal' | 'external' | 'third_party'; note: string }
+export interface RfpPortfolioMatch { projectId: number; name: string; score: number; rationale: string }
+
+export interface RfpScanFreshness {
+  toolId: string;
+  lastScanAt: string | null;
+  ageDays: number | null;
+  refreshed: boolean;
+}
+
+export interface RfpResponseBody {
+  executiveSummary: string;
+  grounding: { mode: 'new' | 'existing'; projectId?: number; projectName?: string; scanFreshness?: RfpScanFreshness };
+  capabilityRoster: RfpCapabilityRoster;
+  costModel: RfpCostModel;
+  plan: { phases: RfpPhase[] };
+  risks: RfpRisk[];
+  dependencies: RfpDependency[];
+  timeline: { startDate: string; endDate: string; weeks: number };
+  branding: { requester: BrandPalette; tenant: BrandPalette; blended: BrandPalette };
+  portfolioMatches?: RfpPortfolioMatch[];
+}
+
+export interface RfpRequestRow {
+  id: string;
+  tenantId: number;
+  title: string;
+  requesterOrgName: string | null;
+  requesterBrand: BrandPalette | null;
+  requirements: string | null;
+  sourceMode: 'new' | 'existing_project';
+  basedOnProjectId: number | null;
+  marginPct: number | null;
+  marketingPct: number | null;
+  contingencyPct: number | null;
+  dueDate: string | null;
+  status: 'draft' | 'analyzing' | 'ready' | 'submitted';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RfpResponseRow {
+  id: string;
+  tenantId: number;
+  requestId: string;
+  projectId: number | null;
+  status: 'draft' | 'ready' | 'submitted';
+  body: RfpResponseBody | null;
+  docHtml: string | null;
+  quotedPriceUsdCents: number | null;
+  marginPct: number | null;
+  scanRefreshed: boolean;
+  generatedBy: { cto: string | null; productOwner: string | null } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type RfpResponseSummary = Pick<RfpResponseRow, 'id' | 'requestId' | 'status' | 'quotedPriceUsdCents' | 'marginPct' | 'scanRefreshed' | 'createdAt'>;
+export type RfpRequestListRow = RfpRequestRow & { latestResponse: RfpResponseSummary | null };
+
+export interface RfpRequestInput {
+  title: string;
+  requesterOrgName?: string | null;
+  requesterBrand?: BrandPalette | null;
+  requirements?: string | null;
+  sourceMode?: 'new' | 'existing_project';
+  basedOnProjectId?: number | null;
+  marginPct?: number | null;
+  marketingPct?: number | null;
+  contingencyPct?: number | null;
+  dueDate?: string | null;
+}
+
+export interface RfpGenerateResult {
+  responseId: string;
+  body: RfpResponseBody;
+  quotedPriceUsdCents: number;
+  marginPct: number;
+  scanRefreshed: boolean;
+  generatedBy: { cto: string | null; productOwner: string | null };
+  docHtml: string;
+}
+
+export const rfpApi = {
+  list: (): Promise<{ requests: RfpRequestListRow[] }> =>
+    request<{ requests: RfpRequestListRow[] }>('/api/rfp'),
+  getRequest: (id: string): Promise<{ request: RfpRequestRow; responses: RfpResponseRow[] }> =>
+    request<{ request: RfpRequestRow; responses: RfpResponseRow[] }>(`/api/rfp/requests/${id}`),
+  createRequest: (body: RfpRequestInput): Promise<RfpRequestRow> =>
+    request<RfpRequestRow>('/api/rfp/requests', { method: 'POST', body: JSON.stringify(body) }),
+  updateRequest: (id: string, body: Partial<RfpRequestInput>): Promise<RfpRequestRow> =>
+    request<RfpRequestRow>(`/api/rfp/requests/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  generate: (id: string): Promise<RfpGenerateResult> =>
+    request<RfpGenerateResult>(`/api/rfp/requests/${id}/generate`, { method: 'POST' }),
+  getResponse: (id: string): Promise<RfpResponseRow> =>
+    request<RfpResponseRow>(`/api/rfp/responses/${id}`),
+  portfolioMatch: (requirements: string, excludeProjectId?: number | null): Promise<{ matches: RfpPortfolioMatch[] }> =>
+    request<{ matches: RfpPortfolioMatch[] }>('/api/rfp/portfolio-match', { method: 'POST', body: JSON.stringify({ requirements, excludeProjectId }) }),
 };
 
 // ---------------------------------------------------------------------------
