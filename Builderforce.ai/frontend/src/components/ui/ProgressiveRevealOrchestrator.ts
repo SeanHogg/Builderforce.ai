@@ -283,53 +283,15 @@ export function ProgressiveRevealOrchestrator({
     }
   }, []);
 
-  // Dispatch activities when resolve is called
-  resolve.useEffect(() => {
-    // patch resolve to call track? Not possible; track is a pointer to a function.
-    // For now we accept the opensource limitation: currentStage tracks resolved only. If we require started counts, we’ll wait for start events from fetcher.
-  }, []);
-
-  // Stop tracking when reset
-  reset.useEffect(() => {
-    activitiesRef.current.criticalResolved = 0;
-    activitiesRef.current.secondaryResolved = 0;
-    activitiesRef.current.deferredResolved = 0;
-  }, [reset]);
-
-  // Start tracking when a stream resolves
-  const trackStreamResolvedUseEffect = useCallback(() => {
-    return () => {};
-  }, []);
-
-  // Auto-cleanup timeouts on unmount
-  useRef(() => {
-    streamsRef.current.forEach(s => {
-      if (s.timeoutHandle) clearTimeout(s.timeoutHandle);
-    });
-    streamsRef.current.clear();
-  });
-
-  const scheduleCleanup = useCallback(() => {
-    streamsRef.current.forEach(s => {
-      if (s.timeoutHandle) clearTimeout(s.timeoutHandle);
-    });
-  }, []);
-
-  // Initialize resolution tracking in long-term memory per the project rule
-  if (process.env.NEXT_PUBLIC_TRACK_START_EVENTS === 'true') {
-    // Placeholder: long-term resolvers for start events (e.g., fetcher side, or a bridge)
-    // For now we rely on trackStreamStarted callbacks from backend if provided.
-  }
-
   // Memoize final state
+  // currentStage = max resolved stage (0 if none resolved); stage values come from resolved streams only.
   const value = useMemo(
     (): ProgressiveRevealContextValue => ({
       currentStage:
-        streamsRef.current.size > 0 ? activitiesRef.current.criticalResolved + activitiesRef.current.secondaryResolved + activitiesRef.current.deferredResolved > 0 
-          ? Math.max(...([activitiesRef.current.criticalResolved ? 1 : 0, activitiesRef.current.secondaryResolved ? 2 : 0, activitiesRef.current.deferredResolved ? 3 : 0])) 
-          : 0 : 0,
-      currentStage,
-      lastTransitionAt: valueRef.current.lastTransitionAt,
+        activitiesRef.current.criticalResolved + activitiesRef.current.secondaryResolved + activitiesRef.current.deferredResolved > 0
+          ? Math.max(...([activitiesRef.current.criticalResolved ? 1 : 0, activitiesRef.current.secondaryResolved ? 2 : 0, activitiesRef.current.deferredResolved ? 3 : 0]))
+          : 0,
+      lastTransitionAt: updateCurrentStage() > 0 ? lastStateRef.current.lastTransitionAt : undefined,
       streams: streamsRef.current,
       callbacks,
       register,
@@ -343,7 +305,7 @@ export function ProgressiveRevealOrchestrator({
       secondaryCount: activitiesRef.current.secondaryResolved,
       deferredCount: activitiesRef.current.deferredResolved,
     }),
-    [callbacks, register, resolve, fail, reset, stage1Data, stage2Data, stage3Data],
+    [callbacks, register, resolve, fail, reset, stage1Data, stage2Data, stage3Data, updateCurrentStage],
   );
 
   return <ProgressiveRevealContext.Provider value={value}>{children}</ProgressiveRevealContext.Provider>;
