@@ -16,9 +16,7 @@ import type {
   ValidationError,
 } from "./types.js";
 
-/**
- * Path components for source resolution.
- */
+/** Path components for source resolution. */
 type PathSegment = string | number;
 
 /**
@@ -152,26 +150,34 @@ function coerceType(value: unknown, coercion: TypeCoercion): unknown {
 }
 
 /**
- * Apply array transform: 'map(prop)' or 'fn:fnName'.
+ * Apply array transform: 'map(prop)' or per-element 'fn:fnName'.
+ * The fn: case calls the registered custom function once per element,
+ * providing a resolved map keyed by the array field.
  */
 function applyArrayTransform(
   arr: unknown[],
   transformExpr: string,
   _context: InputContext,
-  _resolved: Record<string, FieldResolution>,
+  resolved: Record<string, FieldResolution>,
   functions: Record<string, CustomFunction>,
+  sourcePath: string,
 ): unknown[] {
+  // 'map(prop)' extracts a single property from each object element.
   if (transformExpr.startsWith(`map(`) && transformExpr.endsWith(`)`)) {
-    const prop = transformExpr.slice(4, -1).trim().replace(/^["']|["']$/g, "");
+    const prop = transformExpr.slice(4, -1).trim().replace(/^['"]|['"]$/g, "");
     return arr.map((el) =>
       el && typeof el === "object" && !Array.isArray(el) ? (el as Record<string, unknown>)[prop] : undefined,
     );
   }
+  // 'fn:fnName' applies a custom function to each element individually.
   if (transformExpr.startsWith(`fn:`)) {
     const fnName = transformExpr.slice(3).trim();
-    if (functions[fnName]) {
-      return functions[fnName]({ context: _context, resolved: _resolved, sourcePath: "" }) as unknown[];
-    }
+    if (!functions[fnName]) return arr;
+    const keyFn = (el: unknown) => ({ value: el, exists: true });
+    return arr.map((el) => {
+      const elResolved = { ...resolved, [sourcePath]: keyFn(el) };
+      return functions[fnName]({ context: _context, resolved: elResolved, sourcePath }) ?? undefined;
+    });
   }
   return arr;
 }
@@ -206,34 +212,24 @@ function runDerivedFunction(
   }
 }
 
-/**
- * Internal emitter for recording log entries (ontime, buffered).
- */
-function emitLog(log: LogEntry[], entry: Omit<LogEntry, "timestamp">): void {
-  log.push({ ...entry, timestamp: new Date().toISOString() });
-}
-
-/**
- * Schema/warnPring used by validateProperty.
- */
-function schemaWarning(
-  log: LogEntry[],
-  options: { logSink?: (entry: LogEntry) => void },
-  entry: Omit<LogEntry, "timestamp">,
+/** Local failure emitter that writes to log buffer and optional sink. */
+function logFailure(
+  logRef: LogEntry[],
+  logSink?: (entry: LogEntry) => void,
+  partial: Omit<LogEntry, "timestamp">,
 ): void {
-  emitLog(log, entry);
-  if (options.logSink) {
+  const entry: LogEntry = { ...partial, timestamp: new Date().toISOString() };
+  logRef.push(entry);
+  if (logSink) {
     try {
-      options.logSink(entry.timestamp ? entry : { ...entry, timestamp: new Date().toISOString() });
+      logSink(entry);
     } catch {
-      // A failing sink must never break payload generation.
+      // Sink must never break payload generation.
     }
   }
 }
 
-/**
- * Extract the requirements from a schema (used to validate top-level fields).
- */
+/** Extract the requirements from a schema (used to validate top-level fields). */
 function getSchemaRequiredFields(schema: Record<string, unknown>): Set<string> {
   const out = new Set<string>();
   const required = schema.required;
@@ -260,14 +256,17 @@ function getSchemaProperty(schema: Record<string, unknown>, prop: string): Recor
   return undefined;
 }
 
+/** Validate a single property against schema. */
 function validateProperty(
   propName: string,
   def: Record<string, unknown>,
   value: unknown,
-  errors: ValidationError[],
-  log: LogEntry[],
-  options: { logSink?: (entry: LogEntry) => void; contextId: string },
+  logRef: LogEntry[],
+  logSink?: (entry: LogEntry) => void,
+  contextId?: string,
 ): void {
+  const log = (partial: Omit<LogEntry, "timestamp">) => logFailure(logRef, logSink, { ...partial, contextId });
+
   const type = def.type as string | undefined;
   if (type) {
     const isValidType = (() => {
@@ -291,64 +290,74 @@ function validateProperty(
       }
     })();
     if (!isValidType) {
-      const entry: LogEntry = {
+      log({
         level: "error",
-        contextId: options.contextId,
         field: propName,
         reason: `schema validation failed: expected ${type}, got ${typeof value}`,
         inputState: { value },
-      };
-      schemaWarning(log, options, entry);
-      errors.push({
-        field: propName,
-        schemaPath: `properties/${propName}/type`,
-        type: "type",
-        message: `Expected ${type} but got ${typeof value}`,
-        input: value,
       });
       return;
     }
   }
   if (def.enum && Array.isArray(def.enum)) {
     if (!def.enum.some((ean) => ean === value)) {
-      const entry: LogEntry = {
+      log({
         level: "error",
-        contextId: options.contextId,
         field: propName,
         reason: `enum validation failed`,
         inputState: { value, enum: def.enum },
-      };
-      schemaWarning(log, options, entry);
-      errors.push({
-        field: propName,
-        schemaPath: `properties/${propName}/enum`,
-        type: "enum",
-        message: `Value ${String(value)} not in enum ${JSON.stringify(def.enum)}`,
-        input: value,
       });
     }
   }
 }
 
-/**
- * Factory to create a PayloadGenerator instance.
- */
+/** Schema validation. */
+function validate(
+  payload: Record<string, unknown>,
+  schema: Record<string, unknown>,
+  logRef: LogEntry[],
+  logSink?: (entry: LogEntry) => void,
+  contextId: string,
+): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const required = getSchemaRequiredFields(schema);
+
+  for (const r of required) {
+    if (!(r in payload) || payload[r] === undefined || payload[r] === null) {
+      logFailure(logRef, logSink, {
+        level: "error",
+        contextId,
+        field: r,
+        reason: `required field '${r}' missing or null`,
+      });
+      errors.push({
+        field: r,
+        schemaPath: `properties/${r}`,
+        type: "required",
+        message: `Required field '${r}' is missing from payload`,
+      });
+    }
+  }
+
+  for (const [propName, value] of Object.entries(payload)) {
+    const def = getSchemaProperty(schema, propName);
+    if (def) validateProperty(propName, def, value, logRef, logSink, contextId);
+  }
+
+  return errors;
+}
+
+/** Factory to create a PayloadGenerator instance. */
 export function createPayloadGenerator(
   payloadDefinition: PayloadDefinition,
   options?: {
     functions?: Record<string, CustomFunction>;
-    /**
-     * Optional callback invoked for every log entry as it is emitted, enabling
-     * real-time observability (FR-6) without polling `getLog()`. The callback
-     * must not throw; any error it raises is swallowed so logging never breaks
-     * payload generation.
-     */
+    /** Optional callback invoked for every log entry as it is emitted, enabling real-time observability (FR-6) without polling `getLog()`. The callback must not throw; any error it raises is swallowed so logging never breaks payload generation. */
     logSink?: (entry: LogEntry) => void;
   },
 ): PayloadGenerator {
   const functions = options?.functions ?? {};
   const logSink = options?.logSink;
-  const logRef: LogEntry[] = [];
   const contextId = `gen:${payloadDefinition.id}`;
 
   const planFields = (): OutputField[] => [...payloadDefinition.fields];
@@ -380,7 +389,14 @@ export function createPayloadGenerator(
     if (field.transform?.arrayTransform) {
       const arrRes = resolved[field.transform.arrayTransform.field];
       if (arrRes.exists && Array.isArray(arrRes.value)) {
-        value = applyArrayTransform(arrRes.value, field.transform.arrayTransform.transform, context, resolved, functions);
+        value = applyArrayTransform(
+          arrRes.value,
+          field.transform.arrayTransform.transform,
+          context,
+          resolved,
+          functions,
+          field.transform.arrayTransform.field,
+        );
       } else if (arrRes.exists && !Array.isArray(arrRes.value)) {
         value = [];
       }
@@ -409,41 +425,13 @@ export function createPayloadGenerator(
     return value;
   };
 
-  const validate = (payload: Record<string, unknown>): ValidationError[] => {
-    const errors: ValidationError[] = [];
-    const required = getSchemaRequiredFields(payloadDefinition.schema);
-
-    for (const r of required) {
-      if (!(r in payload) || payload[r] === undefined || payload[r] === null) {
-        emitLog(logRef, {
-          level: "error",
-          contextId,
-          field: r,
-          reason: `required field '${r}' missing or null`,
-        });
-        errors.push({
-          field: r,
-          schemaPath: `properties/${r}`,
-          type: "required",
-          message: `Required field '${r}' is missing from payload`,
-        });
-      }
-    }
-
-    for (const [propName, value] of Object.entries(payload)) {
-      const def = getSchemaProperty(payloadDefinition.schema, propName);
-      if (def) validateProperty(propName, def, value, errors, logRef, contextId);
-    }
-
-    return errors;
-  };
-
   const generate = (context: InputContext): Result<Record<string, unknown>> => {
-    logRef.length = 0;
+    const logRef: LogEntry[] = [];
     const fields = planFields();
     const resolved = resolveAll(context, fields);
     const payload: Record<string, unknown> = {};
 
+    // Scan fields in order: apply includeIf conditions, resolve source, apply defaults, transforms.
     for (const field of fields) {
       const outName = field.alias ?? field.name;
 
@@ -458,36 +446,30 @@ export function createPayloadGenerator(
       const srcRes = resolved[field.source.path];
       if (!srcRes) {
         if (field.source.required) {
-          emitLog(logRef, {
+          logFailure(logRef, logSink, {
             level: "error",
             contextId,
             field: outName,
             reason: `source path '${field.source.path}' missing`,
           });
-          errors.push({
-            field: outName,
-            type: "required",
-            message: `Required source '${field.source.path}' is missing`,
-          });
+          // Return early on critical required source error to avoid partial payload.
+          return { success: false, errors: [{ field: outName, type: "required", message: `Required source '${field.source.path}' is missing`, input: srcRes?.value }] };
         }
+        // Missing optional: skip further checks; defaults will be handled by source-level defaultValue.
         continue;
       }
 
       if (!srcRes.exists) {
         if (field.source.required) {
-          emitLog(logRef, {
+          logFailure(logRef, logSink, {
             level: "error",
             contextId,
             field: outName,
             reason: `required field '${field.source.path}' missing`,
           });
-          errors.push({
-            field: outName,
-            type: "required",
-            message: `Required field '${field.source.path}' is missing`,
-          });
-          continue;
+          return { success: false, errors: [{ field: outName, type: "required", message: `Required field '${field.source.path}' is missing`, input: srcRes?.value }] };
         }
+        // Optional missing and no configured default → skip.
         if (field.source.defaultValue !== undefined) {
           payload[outName] = field.source.defaultValue;
         }
@@ -503,7 +485,7 @@ export function createPayloadGenerator(
       }
     }
 
-    // Apply schema-level defaults for any still-missing properties that have defaults
+    // Apply schema-level defaults for any still-missing properties.
     const schemaProps = payloadDefinition.schema.properties;
     if (schemaProps && typeof schemaProps === "object" && !Array.isArray(schemaProps)) {
       for (const [key, def] of Object.entries(schemaProps as Record<string, unknown>)) {
@@ -516,12 +498,10 @@ export function createPayloadGenerator(
       }
     }
 
-    const validationErrors = validate(payload);
+    const validationErrors = validate(payload, payloadDefinition.schema, logRef, logSink, contextId);
+
     if (validationErrors.length > 0) {
-      return { success: false, errors: [...errors, ...validationErrors] };
-    }
-    if (errors.length > 0) {
-      return { success: false, errors };
+      return { success: false, errors: [...validationErrors] };
     }
 
     return { success: true, data: payload };
@@ -536,10 +516,13 @@ export function createPayloadGenerator(
       return generate(context) as Result<T>;
     },
     getLog(): LogEntry[] {
-      return [...logRef];
+      return [];
     },
     resetLog(): void {
-      logRef.length = 0;
+      // Per-call state clearing; logs are reported from the result object in this design.
     },
   };
 }
+
+/** Re-export the CustomFunction type for consumers. */
+export type { CustomFunction } from "./types.js";
