@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { BugFilter } from "../types/quality";
 import { BugCountWidget } from "./BugCountWidget";
 import { SeverityDonutChart } from "./SeverityDonutChart";
@@ -8,16 +8,9 @@ import { BugTable } from "./BugTable";
 import { useQualityData } from "../../hooks/useQualityData";
 import "./index.css";
 
-export function QualityDashboard() {
-  const [filter, setFilter] = React.useState<BugFilter>({
-    project_id: undefined,
-    team: undefined,
-    component: undefined,
-    assignee: undefined,
-    severity_threshold: undefined,
-    time_window_days: 30,
-  });
-  const [autoRefresh, setAutoRefresh] = React.useState(true);
+export function QualityDashboardView(initialFilter: BugFilter) {
+  const [filter, setFilter] = React.useState<BugFilter>(initialFilter);
+  const [autoRefresh, setAutoRefresh] = React.useState(false); // Start auto-refresh only after initial load
 
   const {
     bugCountSummary,
@@ -28,22 +21,34 @@ export function QualityDashboard() {
     lastSynced,
     syncing,
     syncError,
+    sync: handleSync,
+    clearSyncError,
   } = useQualityData(filter);
 
-  const handleSync = async () => {
-    try {
-      // Trigger manual sync (this will refresh the data)
-      // In a real implementation, this would call the sync endpoints
-      await fetch("/api/v1/health", {
-        headers: { "Cache-Control": "no-cache" },
-      });
-      setAutoRefresh(true); // Reset auto-refresh timer
-      alert("Data synced successfully!");
-    } catch (error) {
-      console.error("Sync failed:", error);
-      alert("Data sync failed. Please try again later.");
+  // Auto-enable auto-refresh only after first successful data load
+  React.useEffect(() => {
+    if (!loading && bugCountSummary) {
+      setAutoRefresh(true);
     }
+  }, [loading, bugCountSummary]);
+
+  // Apply initial filter from URL without updating URL yet
+  React.useEffect(() => {
+    setFilter(initialFilter);
+  }, [initialFilter]);
+
+  const handleSyncClick = () => {
+    clearSyncError();
+    handleSync(); // Refresh using whatever source hooks are configured
+    setAutoRefresh(true);
   };
+
+  const isStale = useMemo(() => {
+    if (!lastSynced) return false;
+    const syncTime = new Date(lastSynced).getTime();
+    const now = Date.now();
+    return (now - syncTime) > 30 * 60 * 1000; // 30 minutes
+  }, [lastSynced]);
 
   if (loading && !bugCountSummary) {
     return (
@@ -67,9 +72,18 @@ export function QualityDashboard() {
             </span>
           )}
           {syncing && <span className="syncing">Syncing...</span>}
-          {syncError && <span className="sync-error">Sync failed</span>}
+          {syncError && (
+            <span className="sync-error" title={syncError}>
+              Sync failed
+            </span>
+          )}
+          {isStale && !syncing && (
+            <span className="staleness-badge" title="Data has not been updated in the last 30 minutes">
+              Data stale
+            </span>
+          )}
           <button
-            onClick={handleSync}
+            onClick={handleSyncClick}
             disabled={syncing || loading}
             className="sync-button"
           >
