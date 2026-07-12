@@ -6,7 +6,6 @@ import { TrendLineChart } from "./TrendLineChart";
 import { FiltersBar } from "./FiltersBar";
 import { BugTable } from "./BugTable";
 import { useQualityData } from "../../hooks/useQualityData";
-import { useAllBugs } from "../../hooks/useAllBugs";
 import { exportBugSummary } from "../../utils/exports";
 import { updateUrlFilters } from "../../utils/filters";
 import "./index.css";
