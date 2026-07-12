@@ -1,55 +1,82 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #469
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# PRD: Fix Duplicate `padding` Key in `TeamMemberAvatarFilter.tsx`
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+A style object in `TeamMemberAvatarFilter.tsx` declares the `padding` property twice within the same object literal:
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+```ts
+padding: '0 12px',
+// ... other keys ...
+padding: 0,
+```
 
-## Target users / ICP roles
+TypeScript (enforced during the Next.js type-check / build step) rejects duplicate keys in object literals with the error:
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+> **An object literal cannot have multiple properties with the same name.**
+
+The build is currently broken. The goal is to remove the duplicate `padding` declaration so the build passes with no regressions to the visual appearance of the "All" chip.
+
+---
+
+## Target Users / ICP Roles
+
+| Role | Interest |
+|---|---|
+| Frontend Engineers | Unblocked local dev and CI builds |
+| CI/CD Pipeline | Green build required before any deploy |
+| QA / Design | "All" chip renders correctly post-fix |
+
+---
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+Single file change in the frontend codebase:
+
+```
+components/TeamMemberAvatarFilter.tsx   (or equivalent path)
+```
+
+---
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### FR-1 — Remove the Duplicate Key
+Exactly one `padding` declaration must remain in the style object that styles the "All" chip. The surviving value must correctly reproduce the intended spacing.
+
+### FR-2 — Preserve Intended Visual Behaviour
+The "All" chip must retain horizontal padding of `12px` on each side and `0` vertical padding, matching the design intent expressed by `padding: '0 12px'`. If the later `padding: 0` was meant to override or serve a different purpose (e.g., reset on a nested element), it must be moved to its own separate, correctly scoped style object instead of being deleted silently.
+
+### FR-3 — Build Must Pass
+Running the Next.js type-check (`next build` / `tsc --noEmit`) must complete without TypeScript errors related to this file.
+
+### FR-4 — No Other Style Regressions
+No other properties in the same style object may be altered, removed, or reordered as a side-effect of this fix.
+
+### FR-5 — Lint Clean
+The file must pass the project's ESLint rules after the change (no new warnings or errors introduced).
+
+---
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+| # | Criterion | How Verified |
+|---|---|---|
+| AC-1 | `TeamMemberAvatarFilter.tsx` contains exactly **one** `padding` key in the "All" chip style object | Code review / `grep` |
+| AC-2 | The retained value is `'0 12px'` (or an equivalent longhand achieving the same box model) | Code review |
+| AC-3 | `next build` or `tsc --noEmit` exits with code `0` | CI log |
+| AC-4 | ESLint exits with code `0` for the changed file | CI log |
+| AC-5 | Visual snapshot / manual QA shows the "All" chip unchanged in appearance | QA sign-off or snapshot diff |
+| AC-6 | No other files are modified | `git diff --name-only` |
 
-## Out of scope
+---
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## Out of Scope
+
+- Refactoring or renaming any other style objects in the file
+- Migrating styles to CSS Modules, Tailwind, or any other styling system
+- Changing the behaviour or layout of any chip other than "All"
+- Updating tests unrelated to this bug
+- Any changes to backend code or API contracts
