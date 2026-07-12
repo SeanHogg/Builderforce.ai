@@ -17,7 +17,7 @@ import type {
   DashboardFilters,
   TimePeriod,
   DistributionMethod,
-} from '@/types/dashboard';
+} from '../../../frontend/src/types/dashboard';
 
 /**
  * Dashboard Panel Props
