@@ -226,8 +226,8 @@ class BudgetEnforcement {
     userId: string,
     action: 'grant_exception' | 'increase_cap'
   ): Promise<boolean> {
-    // Find the override by ID (all overrides are accessible via constraintId for now).
-    const override = this.overrides.values().find(o => o.id === overrideId);
+    // Find the override by ID across all constraints.
+    const override = this.findOverrideById(overrideId);
     if (!override) {
       console.warn(`[BudgetEnforcement] approveOverride: Override ${overrideId} not found`);
       return false;
