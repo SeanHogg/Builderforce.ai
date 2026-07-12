@@ -590,6 +590,73 @@ export {
 };
 
 /**
+ * Format recovery plan for human-readable output
+ * Supports FR-6.4: Markdown and JSON export formats
+ */
+export function formatRecoveryPlanSummary(
+  plan: RecoveryPlan
+): string {
+  const lines: string[] = [];
+  
+  lines.push(`# Schedule Acceleration Recovery Plan`);
+  lines.push(`Generated: ${new Date(plan.timestamp).toLocaleString()}`);
+  lines.push(``);
+  lines.push(`## Scope`);
+  lines.push(`- **Baseline Slippage**: ${plan.scope.baselineSlippage.toFixed(2)}%`);
+  lines.push(`- **Severity**: ${plan.scope.severity.toUpperCase()}`);
+  lines.push(``);
+  lines.push(`## Projected Recovery`);
+  lines.push(`- **Total Time Saved (All Recommendations)**: ~${Math.round(plan.projectedRecovery.allRecommendation) || 0} hours`);
+  lines.push(`- **Parallelization Only**: ~${Math.round(plan.projectedRecovery.parallelizationOnly) || 0} hours`);
+  lines.push(`- **Scope Reduction Only**: ~${Math.round(plan.projectedRecovery.scopeReductionOnly) || 0} hours`);
+  lines.push(``);
+  lines.push(`## Recommendations`);
+  lines.push(``);
+  
+  // Parallelization recommendations
+  lines.push(`### 🔄 Parallelization Opportunities (${plan.recommendations.parallelization.length})`);
+  plan.recommendations.parallelization.forEach((op, idx) => {
+    const taskIds = Array.isArray(op.taskIds) ? op.taskIds.join(", ") : op.taskIds;
+    lines.push(`**Option ${idx + 1}:** ${taskIds}`);
+    lines.push(`- Time Saved: ${op.estimatedTimeSaved.toFixed(1)} hours`);
+    lines.push(`- Risk Level: ${op.riskLevel.toUpperCase()}`);
+    lines.push(`- Impact on Critical Path: ${op.impactOnCriticalPath.toFixed(1)} hours`);
+    lines.push(`- Rationale: ${op.rationale.substring(0, 150)}...`);
+    lines.push(``);
+  });
+  
+  // Scope reduction recommendations
+  lines.push(`### 📉 Scope Reduction (${plan.recommendations.scopeReduction.length})`);
+  plan.recommendations.scopeReduction.forEach((rec, idx) => {
+    lines.push(`**Option ${idx + 1}:** ${rec.description}`);
+    lines.push(`- Tasks Deferred: ${rec.tasksDeferred.length}`);
+    lines.push(`- Effort Recovered: ${rec.impact.effortRecovered.toFixed(1)} hours`);
+    lines.push(`- Deferral Milestone: ${rec.deferralMilestone}`);
+    lines.push(`- Requires Approval: ${rec.requiresApproval}`);
+    lines.push(``);
+  });
+  
+  // Resource deployment recommendations
+  lines.push(`### ⚡ Resource Deployment (${plan.recommendations.resourceDeployment.length})`);
+  plan.recommendations.resourceDeployment.forEach((dep, idx) => {
+    lines.push(`**Option ${idx + 1}:** Target agent: ${dep.recommendedAgentType}`);
+    lines.push(`- Tasks: ${dep.targetTasks.join(", ")}`);
+    lines.push(`- Net Time Saved: ${dep.netTimeSaved.toFixed(1)} hours`);
+    lines.push(`- Brooks' Law Risk: ${dep.brooksLawRisk ? "🔴 HIGH" : "🟢 LOW"}`);
+    lines.push(``);
+  });
+  
+  lines.push(`## Risk Assessment: ${plan.riskAssessment.toUpperCase()}`);
+  lines.push(``);
+  lines.push(`## JSON Export (FR-6.4)`);
+  lines.push(`\`\`\`json`);
+  lines.push(JSON.stringify(plan, null, 2));
+  lines.push(`\`\`\``);
+  
+  return lines.join("\n");
+}
+
+/**
  * Example usage (for documentation and testing)
  */
 async function exampleUsage() {
