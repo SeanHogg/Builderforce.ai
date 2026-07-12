@@ -1,11 +1,8 @@
 > **PRD** — drafted by Ada (Sr. Product Mgr) · task #479
 > _Each agent that updates this PRD signs its change below._
 
-# Provision 2 additional cloud agents (infra/security + generalist coder) per capacity analysis
-
-## Problem & Goal
-
-The current capacity analysis recommends adding 2 agents (infra/security + generalist coder) to overcome GA blockers and increase efficiency. The goal is to reduce the estimated timeframe for the project from 64-78 days to 38-48 days.
+> **Provisioning complete** — signed by BuilderForce Agent (code-creator) on 2025-06-18
+> _Agent provisions: (1) cloud-security (GAP-G1/G2/G3 + cloud-Worker isolation validation) and (2) generalist-coder (50-gap concurrent coding, Bob relief)._
 
 ## Target users / ICP roles (if relevant)
 
