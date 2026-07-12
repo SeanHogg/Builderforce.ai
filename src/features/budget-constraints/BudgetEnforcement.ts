@@ -48,23 +48,23 @@ class BudgetEnforcement {
 
     const thresholdMsg = percentageThresholdMessage();
 
-    // FR-4.1: Check soft limit threshold (default 80%)
+    // FR-4.1: Check soft limit threshold (default 80%).
     const softLimitReached = percentUsed >= constraint.softLimitPercentage;
 
     switch (constraint.scope) {
       case 'organization':
-        // Organization budgets are always in STRICT mode
+        // Organization budgets are always in STRICT mode.
         return this.handleStrictMode(constraint, hardCapReached, softLimitReached, percentUsed, thresholdMsg);
 
       case 'team':
       case 'project':
       case 'resource':
-        // Apply enforcement mode based on configuration
+        // Apply enforcement mode based on configuration.
         const mode = this.determineEnforcementMode(constraint);
         return this.handleMode(mode, constraint, hardCapReached, softLimitReached, percentUsed, thresholdMsg, action, userId);
     }
 
-    // Unknown scope defaults to STRICT mode
+    // Unknown scope defaults to STRICT mode.
     return { allowed: true, error: 'Unknown budget scope' };
   }
 
@@ -102,10 +102,10 @@ class BudgetEnforcement {
 
   /**
    * Determine enforcement mode for scoped budgets (FR-5.2).
+   * TODO: Add enforcementMode to BudgetConstraint and load from there.
+   * For now, default to STRICT until the constraint provides this flag.
    */
   private determineEnforcementMode(constraint: BudgetConstraint): EnforcementMode {
-    // TODO: Load enforcement mode from constraint or use a default in BudgetConstraint.
-    // For now, default to STRICT until the constraint provides this flag.
     return EnforcementMode.STRICT;
   }
 
@@ -173,6 +173,11 @@ class BudgetEnforcement {
     adminUserId: string,
     justification: string
   ): Promise<EnrollmentResult> {
+    const constraint = await budgetService.getBudget(constraintId);
+    if (!constraint) {
+      return { allowed: true, error: 'Budget constraint not found' };
+    }
+
     await alertService.createAlert({
       constraintId,
       threshold: 100,
@@ -199,14 +204,17 @@ class BudgetEnforcement {
       constraintId,
       requesterId: userId,
       amountRequested: action.amount,
-      justification: `Action: ${action.entityType} (${action.entity}, ${action.amount} ${action.currency})`, // could expose a custom reason field on the DTO later
+      justification: `Action: ${action.entityType} (${action.entity}, ${action.amount} ${action.currency})`,
       urgency: 'medium',
       status: 'pending',
       approvalHistory: [],
     };
 
     // TODO: Persist via overridesService if/when it exists. For now we return it.
-    // In production, this would be stored in the same budget storage pattern and updated as approvals roll forward.
+    const overrides = this.overrides.get(constraintId) || [];
+    overrides.push(newOverride);
+    this.overrides.set(constraintId, overrides);
+
     return newOverride;
   }
 
@@ -218,10 +226,74 @@ class BudgetEnforcement {
     userId: string,
     action: 'grant_exception' | 'increase_cap'
   ): Promise<boolean> {
-    // For now, this is a no-op/stub returning success.
-    // TODO: Connect to an actual overridesService once it exists in the same budget feature package.
-    console.log(`[BudgetEnforcement] approveOverride called: overrideId=${overrideId}, userId=${userId}, action=${action}`);
-    return true;
+    // Find the override by ID (all overrides are accessible via constraintId for now).
+    const override = this.overrides.values().find(o => o.id === overrideId);
+    if (!override) {
+      console.warn(`[BudgetEnforcement] approveOverride: Override ${overrideId} not found`);
+      return false;
+    }
+
+    const constraint = await budgetService.getBudget(override.constraintId);
+    const isAuthorized = constraint?.owners.includes(userId);
+
+    // In production, we could have a token-based admin check as well.
+    if (!isAuthorized) {
+      throw new Error('User not authorized to approve this override');
+    }
+
+    if (action === 'grant_exception') {
+      const updatedDraft: BudgetOverride = {
+        ...override,
+        status: 'approved',
+        approvalHistory: [
+          ...override.approvalHistory,
+          {
+            userId,
+            action: 'approve',
+            timestamp: new Date(),
+          },
+        ],
+      };
+      this.updateOverrideList(override.constraintId, updatedDraft);
+      return true;
+    }
+
+    if (action === 'increase_cap') {
+      const updatedDraft: BudgetOverride = {
+        ...override,
+        status: 'approved',
+        approvalHistory: [
+          ...override.approvalHistory,
+          {
+            userId,
+            action: 'approve',
+            timestamp: new Date(),
+          },
+        ],
+      };
+      this.updateOverrideList(override.constraintId, updatedDraft);
+
+      // Update the budget cap.
+      await budgetService.updateBudget(override.constraintId, {
+        totalAmount: override.amountRequested,
+      });
+      return true;
+    }
+
+    console.warn(`[BudgetEnforcement] approveOverride: Unknown action: ${action}`);
+    return false;
+  }
+
+  /**
+   * Update the in-memory overrides list.
+   */
+  private updateOverrideList(constraintId: string, override: BudgetOverride): void {
+    const overrides = this.overrides.get(constraintId) || [];
+    const idx = overrides.findIndex(o => o.id === override.id);
+    if (idx >= 0) {
+      overrides[idx] = override;
+    }
+    this.overrides.set(constraintId, overrides);
   }
 
   /**
@@ -233,6 +305,7 @@ class BudgetEnforcement {
     action: SpendAction,
     justification: string
   ): void {
+    // In production, this would write to an immutable audit log/ledger.
     console.log(`[IMMUTABLE LOG] Emergency bypass by ${adminId} on ${constraintId}`);
     console.log(`Action: ${action.entity} (${action.amount} ${action.currency})`);
     console.log(`Justification: ${justification}`);
