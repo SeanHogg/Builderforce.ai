@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS health_profiles (
   custom_fields jsonb NOT NULL DEFAULT '{}', -- unknown question keys go here
   created_at   timestamp NOT NULL DEFAULT now(),
   updated_at   timestamp NOT NULL DEFAULT now(),
-  actor_id     integer NOT NULL, -- user_id of the actor who made this version
+  actor_ref    varchar(64) NOT NULL, -- users.id (UUID) of the actor who made this version
   CONSTRAINT uq_project_health_profile UNIQUE (tenant_id, project_id)
 );
 
