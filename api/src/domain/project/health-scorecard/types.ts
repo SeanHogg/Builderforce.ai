@@ -1,172 +1,92 @@
 /**
- * 6-dimension Health Scorecard domain types.
+ * Domain types for the 6-dimension Project Health Scorecard.
  *
- * The scoring engine computeProjectHealthScore() is pure over DB I/O in conjunction
- * with evaluateDimension(s) aggregators.
+ * Pure model types; no DB coupling. Each DimensionScore is produced by a
+ * deterministic evaluate<Dimension> function over its data shape.
+ *
+ * See domain/project/health-scorecard/rules.ts for the scoring logic.
  */
 
-export type ScoreBand = 'green' | 'yellow' | 'red';
+export type HealthBand = 'green' | 'yellow' | 'red';
 
-/** Human-readable labels for score bands. */
-export const BAND_LABELS: Record<ScoreBand, string> = {
-  green: 'On track',
-  yellow: 'At risk',
-  red: 'Critical',
+export type DimensionKey =
+  | 'schedule'
+  | 'quality'
+  | 'budget'
+  | 'scope'
+  | 'team'
+  | 'risk';
+
+export const DIMENSION_LABELS: Record<DimensionKey, string> = {
+  schedule: 'Schedule',
+  quality: 'Quality',
+  budget: 'Budget',
+  scope: 'Scope',
+  team: 'Team',
+  risk: 'Risk',
 };
 
-/** Lookup breakdown from the PRD: green≥75, yellow≥50, red≤49. */
-export const BAND_THRESHOLDS: Record<ScoreBand, { max: number; min: number }> = {
-  green: { max: 100, min: 75 },
-  yellow: { max: 74, min: 50 },
-  red: { max: 49, min: 0 },
+export interface EvidenceItem {
+  key: string;
+  label: string;
+  value: string | number;
+}
+
+export interface DimensionScore {
+  score: number;           // 0–100
+  band: HealthBand;
+  evidence: EvidenceItem[];
+  flags: string[];         // 'stale' | 'partial' | 'no-data' | custom
+}
+
+export interface HealthScorecard {
+  projectId: number;
+  composite: number;       // 0–100 weighted average
+  band: HealthBand;
+  dimensions: Record<DimensionKey, DimensionScore>;
+  computedAt: string;      // ISO-8601
+  snapshotHash: string;    // deterministic hash of input data (for AC-7)
+}
+
+/** Traffic-light thresholds from PRD: green ≥75, yellow 50–74, red <50. */
+export const BAND_THRESHOLDS: Record<HealthBand, { min: number; max: number }> = {
+  green: { min: 75, max: 100 },
+  yellow: { min: 50, max: 74 },
+  red: { min: 0, max: 49 },
 };
 
-/** Determine the band for a score. */
-export function bandFromScore(score: number): ScoreBand {
+/** Determine the health band for a 0–100 score. */
+export function computeBand(score: number): HealthBand {
   if (score >= 75) return 'green';
   if (score >= 50) return 'yellow';
   return 'red';
 }
 
-export interface DimensionKey {
-  readonly __tag: symbol;
-  readonly [key: string]: never;
-}
-
-/** Singleton constructors for each dimension key. */
-const createDimensionKey = (name: string): DimensionKey => {
-  const s: symbol = Symbol(name);
-  return Object.freeze(s);
-};
-
-/** Predefined dimension keys required by the 6-dimension Health Scorecard. */
-export const DIMENSION_KEYS = Object.freeze([
-  'schedule',
-  'quality',
-  'budget',
-  'scope',
-  'team',
-  'risk',
-] as const);
-
-export function toCdr(code: any): DimensionKey {
-  for (const k of DIMENSION_KEYS) {
-    if ((k as any) === code) return k;
-  }
-  throw new Error(`Unknown dimension key: ${code}`);
-}
-
-export interface DimensionScore<Data extends Record<string, unknown>> {
-  /** Dimension key this score belongs to. */
-  key: DimensionKey;
-  /** Human-readable label (e.g., "Schedule Health"). */
-  label: string;
-  /** Dimension score (0–100). */
-  score: number;
-  /** Band (green/yellow/red). */
-  band: ScoreBand;
-  /** Evidence items showing how the score was computed. */
-  evidence: EvidenceItem<Data>[];
-  /** Stale flag if underlying data for this dimension is outdated. */
-  stale: boolean;
-}
-
-export interface EvidenceItem<Data extends Record<string, unknown>> {
-  /** Computed condition key (e.g., "milestones_recent", "bugs_fresh"). */
-  key: string;
-  /** Human-readable label (e.g., "Milestones aged ≤30 days"). */
-  label: string;
-  /** Value (string summary). */
-  value: string;
-}
-
-export interface CompositeScore<Data extends Record<string, unknown>> {
-  /** Overall composite score (0–100). */
-  composite: number;
-  /** Overall band (derived from the composite). */
-  band: ScoreBand;
-  /** Overall evidence item. */
-  evidence: EvidenceItem<Data>[];
-  /** Global stale flag if any dimension's data is outdated. */
-  stale: boolean;
-  /** Map of per-dimension scores. */
-  dimensions: {
-    [K in DimensionKey]?: DimensionScore<Data>;
+/** Default symmetric weights (16.7% each, approx 100/6). */
+export function defaultWeights(): Record<DimensionKey, number> {
+  return {
+    schedule: 167,
+    quality: 167,
+    budget: 166,
+    scope: 166,
+    team: 167,
+    risk: 167,
   };
 }
 
-/** Requirement-style scoring rule: name + matcher + evaluation. */
-export interface Rule<Data extends Record<string, unknown>> {
-  /** Unique rule identifier. */
-  id: string;
-  /** Human-readable rule name. */
-  name: string;
-  /** Whether total weights per rule group must be 100 (structure integrity). */
-  enforceTotalWeight?: boolean;
-  /** Evaluation function: returns partially computed data for the dimension. */
-  evaluate: (ctx: RuleContext) => Partial<RuleResult<Data>>;
-}
-
 /**
- * Context provided to rules: nowIso is included so we can compute tens of days.
- * We don't instantiate a full DB connection here; callers supply prepared Data rows.
+ * Compute the weighted composite score from per-dimension scores.
+ * Uses integer weights in tenths-of-percent to avoid floating drift.
  */
-export interface RuleContext<Data extends Record<string, unknown>> {
-  nowIso: string;
-  /** Dimension key this rule belongs to. */
-  dimensionKey: DimensionKey;
-  /** Raw dimension data prepared by the caller (DB rows aggregated into primitive values). */
-  data: Data;
-}
-
-/**
- * Partial outcome from evaluating a rule — sub-dimensions/factors must be consumable
- * by the carrier language. Structured data to avoid days of analysis.
- */
-export interface RuleResult<Data extends Record<string, unknown>> {
-  /** Weight for this sub-ruleset (0–100). */
-  weight: number;
-  /** Dimension-level evidence items. */
-  evidence: EvidenceItem<Data>[];
-  /** Any dimension-level flags (e.g., partial/stale). */
-  flags?: string[];
-  /** Results for each SubRule (for proxy injection). */
-  subRules?: SubRuleResult<Data>[];
-}
-
-/** Sub-rule result for evaluation of individual component metrics within a dimension. */
-export interface SubRuleResult<Data extends Record<string, unknown>> {
-  /** Sub-rule ID. */
-  id: string;
-  /** Human-readable label. */
-  label: string;
-  /** Weight (percentage of dimension) — must be >= 0 and sum with dimension weight to 100. */
-  weight: number;
-  /** Computed raw score (0–100). */
-  score: number;
-  /** Sub-rule evidence items. */
-  evidence: EvidenceItem<Data>[];
-  /** Any sub-rule flags (e.g., partial/stale). */
-  flags?: string[];
-}
-
-/**
- * Weighted aggregation of rules within a dimension.
- * All weights must sum to 100 for each dimension; composite uses defaults of 10% per dimension.
- */
-export interface DimensionRules<Data extends Record<string, unknown>> {
-  /** Weighted sub-rules. */
-  rules: Rule<Data>[];
-  /** Dry run only; for core diagnostics we always return actual scores. */
-  disabled?: boolean;
-}
-
-/** Dimension-level config: list of rules and absolute weight override. Not persisted. */
-export interface DimensionConfig<Data extends Record<string, unknown>> {
-  /** Human-readable label. */
-  label: string;
-  /** Ruleset. */
-  config: DimensionRules<Data>;
-  /** Override absolute weight (0–100). */
-  weightOverride?: number;
+export function computeCompositeScore(
+  scores: Record<DimensionKey, number>,
+  weights: Record<DimensionKey, number>,
+): number {
+  const totalWeight = Object.values(weights).reduce((a, b) => a + b, 0);
+  if (totalWeight <= 0) return 100;
+  const weighted = Object.entries(weights).reduce(
+    (sum, [key, w]) => sum + (scores[key as DimensionKey] ?? 0) * w,
+    0,
+  );
+  return Math.round((weighted / totalWeight) * 10) / 10; // one decimal
 }
