@@ -13,8 +13,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type {
   DashboardDTO,
-  DashboardFilters,
   WeeklyDigest,
+  DashboardFilters,
   TimePeriod,
   DistributionMethod,
 } from '@/types/dashboard';
@@ -89,7 +89,7 @@ const MetricsCards: React.FC<{ summary: DashboardDTO['summary'] }> = ({ summary 
         return (
           <div
             key={index}
-            className={`${style.bg} rounded-lg p-4 border border-${style.text.replace('text-', '')}-100`}
+            className={`${style.bg} rounded-lg p-4 border border-gray-200`}
           >
             <div className="flex items-center justify-between">
               <div>
@@ -175,8 +175,8 @@ const WeeklyDigestPanel: React.FC<{
   const [visible, setVisible] = useState(false);
 
   return (
-    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 p-6 mt-6">
-      <div className="flex items-start justify-between">
+    <div className="mt-6 rounded-lg overflow-hidden bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200">
+      <div className="px-6 py-4 border-b border-blue-200 flex items-start justify-between">
         <div className="flex items-start space-x-3">
           <div className="flex-shrink-0">
             <div className="bg-blue-100 rounded-full p-2">
@@ -198,7 +198,9 @@ const WeeklyDigestPanel: React.FC<{
           <div>
             <h3 className="text-lg font-medium text-gray-900">Weekly Stakeholder Digest</h3>
             <p className="text-sm text-gray-600 mt-1">
-              {digest ? `Last generated: ${new Date(digest.generatedAt).toLocaleString()}` : ''}
+              {digest
+                ? `Last generated: ${new Date(digest.generatedAt).toLocaleString()}`
+                : 'Waiting for latest digest...'}
             </p>
           </div>
         </div>
@@ -220,7 +222,7 @@ const WeeklyDigestPanel: React.FC<{
       </div>
 
       {visible && digest && (
-        <div className="mt-4 bg-white rounded-lg border border-blue-200 p-4">
+        <div className="p-4 bg-white">
           <div
             className="text-sm whitespace-pre-wrap text-gray-700"
             dangerouslySetInnerHTML={{ __html: this.escapeHtml(digest.content) }}
@@ -238,6 +240,13 @@ const WeeklyDigestPanel: React.FC<{
     </div>
   );
 };
+
+// Helper to escape HTML for safe rendering
+function escapeHtml(text: string): string {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
 
 /**
  * Stakeholder Alignment Dashboard Component
@@ -259,12 +268,8 @@ export const StakeholderAlignmentDashboard: React.FC<Props> = ({ initialFilters 
   const fetchDashboardData = useCallback(async () => {
     setIsLoading(true);
     try {
-      // In production, this would call the backend API endpoint
-      // const response = await fetch('/api/dashboard', { method: 'POST', body: JSON.stringify(filters) });
-      // const data: DashboardDTO = await response.json();
-
-      // Mock data for demo
-      await new Promise((resolve) => setTimeout(resolve, 300)); // Simulate network delay
+      // Mock implementation - in production, call backend API
+      await new Promise((resolve) => setTimeout(resolve, 300));
       setData({
         summary: {
           totalApprovedPriorities: 47,
@@ -316,17 +321,14 @@ export const StakeholderAlignmentDashboard: React.FC<Props> = ({ initialFilters 
    */
   const fetchDigest = useCallback(async () => {
     try {
-      // In production, this would call the backend digest API endpoint
-      // const response = await fetch('/api/digest/latest');
-      // const digest: WeeklyDigest = await response.json();
-
-      // Mock digest data for demo
-      await new Promise((resolve) => setTimeout(resolve, 200)); // Simulate network delay
+      // Mock implementation - in production, call backend digest API
+      await new Promise((resolve) => setTimeout(resolve, 200));
       setDigest({
         digestId: 'digest_1700000000000',
         generatedAt: new Date().toISOString(),
         recipients: [],
-        content: '📊 23 open sign-offs, 4 pending escalations — full view: /dashboard\n\n🔴 Top Conflicts:\n- Priority Conflict in Customer Experience Platform (P0)\n- Resource Allocation Disagreement (P1)\n\n⚠️ Urgent Action Items:\n- Resolve priority conflict for Customer Experience Platform (due: 2025-06-20)\n- Approve pending sign-offs for AI Agent Training (due: 2025-06-21)',
+        content:
+          '📊 23 open sign-offs, 4 pending escalations — full view: /dashboard\n\n🔴 Top Conflicts:\n- Priority Conflict in Customer Experience Platform (P0)\n- Resource Allocation Disagreement (P1)\n\n⚠️ Urgent Action Items:\n- Resolve priority conflict for Customer Experience Platform (due: 2025-06-20)\n- Approve pending sign-offs for AI Agent Training (due: 2025-06-21)',
         metrics: {
           totalOpenSignOffs: 23,
           pendingEscalations: 4,
@@ -365,12 +367,9 @@ export const StakeholderAlignmentDashboard: React.FC<Props> = ({ initialFilters 
    * Handle filter changes
    */
   const handleFilterChange = (newFilters: Partial<DashboardFilters>) => {
-    // Convert timePeriod string to enum value
     const convertedFilters: DashboardFilters = {
-      timePeriod: new Filters }?.timePeriod || 'last_30_days',
-      projectIds: newFilters.projectIds,
-      stakeholderIds: newFilters.stakeholderIds,
-      timeRange: newFilters.timeRange,
+      ...filters,
+      ...newFilters,
     };
 
     setFilters(convertedFilters);
@@ -403,7 +402,9 @@ export const StakeholderAlignmentDashboard: React.FC<Props> = ({ initialFilters 
           <div className="flex space-x-2">
             <select
               value={filters.timePeriod}
-              onChange={(e) => handleFilterChange({ timePeriod: e.target.value as TimePeriod })}
+              onChange={(e) =>
+                handleFilterChange({ timePeriod: e.target.value as TimePeriod })
+              }
               className="rounded-md border-gray-300 text-sm focus:border-blue-500 focus:ring-blue-500"
             >
               <option value="last_7_days">Last 7 Days</option>
@@ -466,17 +467,8 @@ export const StakeholderAlignmentDashboard: React.FC<Props> = ({ initialFilters 
           />
         </>
       ) : (
-        <div className="text-center py-12 text-gray-500">
-          No data available
-        </div>
+        <div className="text-center py-12 text-gray-500">No data available</div>
       )}
     </div>
   );
 };
-
-// Helper to escape HTML for safe rendering
-function escapeHtml(text: string): string {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
