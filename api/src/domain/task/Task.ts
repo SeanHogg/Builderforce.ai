@@ -216,7 +216,15 @@ export class Task {
       >
     >,
   ): Task {
-    return new Task({ ...this.props, ...updates, updatedAt: new Date() });
+    // Only apply keys that were explicitly provided. An `undefined` value means
+    // "no change" — spreading it as-is would clobber the existing prop (e.g. a
+    // `tasks.update` that changes only `assignedAgentRef` passes
+    // `parentTaskId: undefined`, which must NOT drop the task's parent link).
+    const applied: Partial<TaskProps> = {};
+    for (const [k, v] of Object.entries(updates)) {
+      if (v !== undefined) (applied as Record<string, unknown>)[k] = v;
+    }
+    return new Task({ ...this.props, ...applied, updatedAt: new Date() });
   }
 
   /**
