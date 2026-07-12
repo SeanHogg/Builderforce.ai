@@ -1,24 +1,20 @@
-/** toolId */ export const TOOL_STAKEHOLDER_ALIGNMENT = 'agentic-maturity';
+/** toolId */ export const TOOL_STAKEHOLDER_ALIGNMENT = 'stakeholder-alignment';
 
-export const stakeholderAlignmentToolDefinition = {
+export const stakeholderAlignmentToolDefinition: import('./toolTypes').QuestionnaireTool = {
   id: TOOL_STAKEHOLDER_ALIGNMENT,
   name: 'Stakeholder Alignment',
   tagline: 'Are priorities clear and agreed across key stakeholders?',
   icon: '🤝',
   category: 'governance',
-  // Public compute endpoint (no auth required for preview)
-  computeEndpoint: '/api/tools/agentic-maturity/compute',
-  kind: 'questionnaire' as const,
-  about: 'Diagnose alignment gaps by scoring five canonical questions. Supports guided step-by-step input, inline comments, and follow-on drill into root causes (multiple P0s, missed deadlines, outdated maps, silent divergence).',
-  scoreLabel: 'Alignment Score',
-  scoreMax: 5,
-  /** 5-point scale like the product diagnostic tools: Very High → Very Low */
+  kind: 'questionnaire',
+  about:
+    'Diagnose alignment gaps by scoring five canonical questions: Priority Clarity, Documentation & Access, Conflict Detection, Sign-Off Process, and Visibility & Audit. The tool surfaces top-of-funnel risks like competing P0s, missed deadlines, and outdated maps.',
   scale: [
-    { value: 5, label: 'Very High', summary: 'All key stakeholders are on the same page; priorities are documented and agreed.' },
-    { value: 4, label: 'High', summary: 'Most stakeholders are aligned; known gaps are tracked and visible.' },
-    { value: 3, label: 'Moderate', summary: 'Some gaps are visible; decisions are made in persona meetings without full coverage.' },
-    { value: 2, label: 'Low', summary: 'Many gaps; priorities are scattered across docs and conversations.' },
-    { value: 1, label: 'Very Low', summary: 'No shared source of truth; rework is common and trust is eroding.' },
+    { value: 5, label: 'Very High' },
+    { value: 4, label: 'High' },
+    { value: 3, label: 'Moderate' },
+    { value: 2, label: 'Low' },
+    { value: 1, label: 'Very Low' },
   ],
   sections: [
     {
@@ -27,7 +23,11 @@ export const stakeholderAlignmentToolDefinition = {
       description: 'Do we maintain a single, versioned source of truth for agreed priorities?',
       questions: [
         { id: 'clarity_documented', text: 'Are priorities clearly documented and agreed across key stakeholders?', dimension: 'Alignment' },
-        { id: 'clarity_competing_reconciled', text: 'Have competing P0 requests been explicitly reconciled or escalated?', dimension: 'Alignment' },
+        {
+          id: 'clarity_competing_reconciled',
+          text: 'Have competing P0 requests been explicitly reconciled or escalated?',
+          dimension: 'Alignment',
+        },
       ],
       recommendations: {
         4: 'Your alignment record is robust — keep it fresh as work evolves.',
@@ -41,8 +41,16 @@ export const stakeholderAlignmentToolDefinition = {
       name: 'Documentation & Access',
       description: 'How accessible and current are our documented stakeholders and sign-off rules?',
       questions: [
-        { id: 'doc_stakeholder_map', text: 'Is the list of Required Approvers for key initiatives current and accessible?', dimension: 'Stakeholder Map' },
-        { id: 'doc_review_timing', text: 'Are sign-off windows (default 48 hours) enforced and acknowledged?', dimension: 'Process' },
+        {
+          id: 'doc_stakeholder_map',
+          text: 'Is the list of Required Approvers for key initiatives current and accessible?',
+          dimension: 'Stakeholder Map',
+        },
+        {
+          id: 'doc_review_timing',
+          text: 'Are sign-off windows (default 48 hours) enforced and acknowledged?',
+          dimension: 'Process',
+        },
       ],
       recommendations: {
         4: 'Your documentation is current and enforced — easy for anyone to verify.',
@@ -56,7 +64,11 @@ export const stakeholderAlignmentToolDefinition = {
       name: 'Conflict Detection',
       description: 'Are competitive priorities detected early and escalated when needed?',
       questions: [
-        { id: 'conflict_p0_duplication', text: 'Do we detect when the same stakeholder team is targeted by competing P0 requests?', dimension: 'Conflict' },
+        {
+          id: 'conflict_p0_duplication',
+          text: 'Do we detect when the same stakeholder team is targeted by competing P0 requests?',
+          dimension: 'Conflict',
+        },
       ],
       recommendations: {
         4: 'Your conflict detection flagging is solid — keep the SLA and reminder automation in place.',
@@ -70,8 +82,16 @@ export const stakeholderAlignmentToolDefinition = {
       name: 'Sign-Off Process',
       description: 'Is the sign-off protocol enforced and adhered to?',
       questions: [
-        { id: 'signoff_all_required', text: 'Is a version blocked until all Required Approvers have responded?', dimension: 'Process' },
-        { id: 'signoff_blocker_triggers', text: 'Does a single Block response halt approval and open an escalation thread?', dimension: 'Process' },
+        {
+          id: 'signoff_all_required',
+          text: 'Is a version blocked until all Required Approvers have responded?',
+          dimension: 'Process',
+        },
+        {
+          id: 'signoff_blocker_triggers',
+          text: 'Does a single Block response halt approval and open an escalation thread?',
+          dimension: 'Process',
+        },
       ],
       recommendations: {
         4: 'Your gate enforces coverage and blockers correctly — maintain it.',
@@ -85,7 +105,11 @@ export const stakeholderAlignmentToolDefinition = {
       name: 'Visibility & Audit',
       description: 'Are status updates, roadmaps, and decisions logged and visible to all?',
       questions: [
-        { id: 'visibility_status_vs_agreement', text: 'Do recent status updates and roadmaps reflect the agreed priorities, or are there known divergence points?', dimension: 'Alignment' },
+        {
+          id: 'visibility_status_vs_agreement',
+          text: 'Do recent status updates and roadmaps reflect the agreed priorities, or are there known divergence points?',
+          dimension: 'Alignment',
+        },
       ],
       recommendations: {
         4: 'Your dashboard shows alignment metrics and divergences clearly — consider more drill-in items.',
@@ -96,5 +120,8 @@ export const stakeholderAlignmentToolDefinition = {
     },
   ],
 };
+
+// Public compute endpoint (stub) matching agentic-maturity; real scoring is via the score() method.
+export const stakeholderAlignmentComputeEndpoint = '/api/tools/stakeholder-alignment/compute';
 
 /** For public GET /api/tools returns summaries only. This file defines the full tool. */
