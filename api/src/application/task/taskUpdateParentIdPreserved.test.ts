@@ -168,7 +168,7 @@ describe('TaskService.updateTask parentTaskId preservation (FR-1)', () => {
 
   beforeEach(() => {
     spyDecomposer = { assess: vi.fn() };
-    spyDecomposer.assess.mockResolvedValue(heuristicEpicDecomposer.assess);
+    spyDecomposer.assess.mockResolvedValue({ isEpic: false, children: [] });
     const { repo: r, service: s } = makeService(spyDecomposer as EpicDecomposer);
     repo = r;
     service = s;
@@ -180,8 +180,8 @@ describe('TaskService.updateTask parentTaskId preservation (FR-1)', () => {
       projectId: PROJECT_ID,
       title: 'Parent Task',
       description: null,
-      status: TaskStatus.TODO as any, // workaround for Task.create
-      priority: TaskPriority.MEDIUM,
+      status: undefined as never,
+      priority: undefined as never,
       assignedAgentType: AgentType.CLAUDE,
       assignedAgentHostId: null,
       assignedAgentRef: null,
