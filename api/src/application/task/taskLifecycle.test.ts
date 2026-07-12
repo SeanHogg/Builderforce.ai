@@ -532,7 +532,7 @@ describe('completeTaskOnMerge — negative / edge cases (FR-3)', () => {
     await completeTaskOnMerge(env, db as never, { tenantId: 5, taskId: 600 });
     const secondCount = inserts.filter((i) => (i.values as any)?.fromStatus !== undefined).length;
 
-    assert.strictEqual(firstCount, secondCount, 'transition inserts count must not increase on re-completion');
+    assertFromChai.strictEqual(firstCount, secondCount, 'transition inserts count must not increase on re-completion');
   });
 });
 
