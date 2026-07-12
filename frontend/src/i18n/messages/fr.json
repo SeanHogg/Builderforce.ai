@@ -9273,7 +9273,18 @@
     "deleteContactConfirm": "Supprimer le contact « {name} » ?",
     "oncallSubtitle": "Les rotations d’astreinte déterminent qui est alerté en premier lorsqu’un incident se déclenche.",
     "escalationSubtitle": "Les politiques d’escalade parcourent les cibles et les canaux jusqu’à ce que quelqu’un réponde.",
-    "contactsSubtitle": "Contacts professionnels que vous pouvez alerter ou vers qui escalader pendant un incident."
+    "contactsSubtitle": "Contacts professionnels que vous pouvez alerter ou vers qui escalader pendant un incident.",
+    "implicated": {
+      "title": "Tickets de livraison impliqués",
+      "help": "Le(s) ticket(s) de livraison dont le changement a causé cet incident — chacun avec sa responsabilité pour que le RCA voie où le processus a été ignoré ou dispensé.",
+      "loading": "Chargement…",
+      "empty": "Aucun ticket impliqué lié pour le moment.",
+      "signed": "{done}/{total} validés",
+      "gaps": "{count} lacune(s)",
+      "remove": "Retirer",
+      "add": "Lier un ticket",
+      "addPlaceholder": "Ticket n°"
+    }
   },
   "monitoring": {
     "boardsTitle": "Surveillance active",

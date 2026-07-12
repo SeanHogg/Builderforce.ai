@@ -9275,7 +9275,18 @@
     "deleteContactConfirm": "Delete contact \"{name}\"?",
     "oncallSubtitle": "On-call rotations decide who gets paged first when an incident fires.",
     "escalationSubtitle": "Escalation policies climb through targets and channels until someone responds.",
-    "contactsSubtitle": "Business contacts you can page or escalate to during an incident."
+    "contactsSubtitle": "Business contacts you can page or escalate to during an incident.",
+    "implicated": {
+      "title": "Implicated delivery tickets",
+      "help": "The delivery ticket(s) whose change caused this incident — each with its accountability so RCA can see where the process was skipped or waived.",
+      "loading": "Loading…",
+      "empty": "No implicated tickets linked yet.",
+      "signed": "{done}/{total} signed off",
+      "gaps": "{count} gap(s)",
+      "remove": "Remove",
+      "add": "Link ticket",
+      "addPlaceholder": "Ticket #"
+    }
   },
   "monitoring": {
     "boardsTitle": "Active Monitoring",

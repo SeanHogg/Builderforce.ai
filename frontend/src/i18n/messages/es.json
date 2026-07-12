@@ -9273,7 +9273,18 @@
     "deleteContactConfirm": "¿Eliminar el contacto «{name}»?",
     "oncallSubtitle": "Las rotaciones de guardia deciden a quién se avisa primero cuando se dispara un incidente.",
     "escalationSubtitle": "Las políticas de escalación recorren objetivos y canales hasta que alguien responde.",
-    "contactsSubtitle": "Contactos de negocio a los que puedes avisar o escalar durante un incidente."
+    "contactsSubtitle": "Contactos de negocio a los que puedes avisar o escalar durante un incidente.",
+    "implicated": {
+      "title": "Tickets de entrega implicados",
+      "help": "El/los ticket(s) de entrega cuyo cambio causó este incidente, cada uno con su responsabilidad para que el RCA vea dónde se omitió o eximió el proceso.",
+      "loading": "Cargando…",
+      "empty": "Aún no hay tickets implicados vinculados.",
+      "signed": "{done}/{total} aprobados",
+      "gaps": "{count} brecha(s)",
+      "remove": "Quitar",
+      "add": "Vincular ticket",
+      "addPlaceholder": "Ticket n.º"
+    }
   },
   "monitoring": {
     "boardsTitle": "Monitorización activa",

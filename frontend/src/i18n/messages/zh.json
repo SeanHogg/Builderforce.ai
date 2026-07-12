@@ -9273,7 +9273,18 @@
     "deleteContactConfirm": "删除联系人“{name}”？",
     "oncallSubtitle": "值班轮换决定当事件触发时最先呼叫谁。",
     "escalationSubtitle": "升级策略会依次通过各目标和渠道升级，直到有人响应。",
-    "contactsSubtitle": "在事件期间可呼叫或升级至的业务联系人。"
+    "contactsSubtitle": "在事件期间可呼叫或升级至的业务联系人。",
+    "implicated": {
+      "title": "受牵连的交付工单",
+      "help": "其变更导致本次事故的交付工单——每个都附带问责信息，便于 RCA 查看流程在何处被跳过或豁免。",
+      "loading": "加载中…",
+      "empty": "尚未关联受牵连的工单。",
+      "signed": "{done}/{total} 已签核",
+      "gaps": "{count} 项缺口",
+      "remove": "移除",
+      "add": "关联工单",
+      "addPlaceholder": "工单 #"
+    }
   },
   "monitoring": {
     "boardsTitle": "主动监控",

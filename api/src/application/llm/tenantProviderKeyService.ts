@@ -436,6 +436,11 @@ export async function setTenantProviderPriority(
   const sql = neon(env.NEON_DATABASE_URL);
   const ranked = order.filter(isSupportedProvider);
   // Clear any provider NOT in the new order back to unset, then stamp the ranked ones.
+  // Empty order → clear ALL (a plain UPDATE; `= ANY('{}')` can't infer its element type).
+  if (ranked.length === 0) {
+    await sql`UPDATE tenant_llm_provider_keys SET priority = NULL, updated_at = NOW() WHERE tenant_id = ${tenantId}`;
+    return;
+  }
   await sql`
     UPDATE tenant_llm_provider_keys SET priority = NULL, updated_at = NOW()
     WHERE tenant_id = ${tenantId}

@@ -211,3 +211,13 @@ export interface ParticipantsSummaryRow {
   required: number;
   percent: number;
 }
+
+/** An incident's implicated delivery ticket + its Accountability Report (RCA linkage). */
+export interface ImplicatedTicket {
+  taskId: number;
+  title: string;
+  status: string;
+  relation: string;
+  note: string | null;
+  accountability: AccountabilityReport;
+}
