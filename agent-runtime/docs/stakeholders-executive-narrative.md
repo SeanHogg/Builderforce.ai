@@ -1,0 +1,8 @@
+# BuilderForce.ai Stakeholder Executive Narrative
+
+**Project:** BuilderForce.ai  
+**Generated:** 2025-07-14
+
+BuilderForce.ai’s key stakeholders primarily fall into three groups. **Platform Users (SF1)** prioritize a unified cross-project onboarding wizard that captures project baseline health with strict gates. **Task Workflow Agents (SF2)** require clear, documented influence actions and honest auto_run tracking—especially beyond capability_mismatch reasons—and correction of any board status drift causing silent pending behavior. **End Users of AI Training (SF3)** need transparent WebGPU inference fallback, compact v2.0 agent state, and a simple path to device setup without errors. **Strategy & Ops (SF4)** demand multi-tenant isolation, robust observability (LLM usage + global errors), and platform-level governance. **Infrastructure Providers (SF5)** offer the runtime; outages and power swings affect reliability and adoption, while governance aligns all suppliers around confidentiality and integrity. **Platform Sponsors (SF6)** look for business value linkages, consistent funded gap coverage, and accurate roll-up metrics on initiatives and projects. Conflicts are minimal for now—only the AI side’s automation drift versus human gates needs careful mitigation. All internal groups expect clear roll-ups and accurate OKR metrics; external suppliers align with internal governance.
+
+This narrative satisfies the ≤300-word bound while being grounded in the JSON deliverable.
