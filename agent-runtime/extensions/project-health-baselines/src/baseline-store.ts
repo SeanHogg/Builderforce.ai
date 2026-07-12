@@ -11,14 +11,6 @@ import { AuditLogLine } from "./types.js";
 type CollectionKey = `baselines:${number}:${string}`; // projectId:streamName
 
 /**
- * State interface
- */
-interface State {
-  baselines: Record<string, Baseline>;
-  auditTrail: string []; // JSON serialization repo keys
-}
-
-/**
  * Baseline store implementation
  */
 export class BaselineStore {
@@ -59,7 +51,7 @@ export class BaselineStore {
   list(projectId: number, filters: {
     streamName?: string;
     status?: string;
-    tags?: string [];
+    tags?: string[];
     name?: string;
     author?: string;
     fromDate?: Date;
@@ -109,7 +101,7 @@ export class BaselineStore {
   /**
    * Upsert: get if exists or auto-increment version
    */
-  upsert(projectId: number, streamName: string, currentIds: number []): Baseline | undefined {
+  upsert(projectId: number, streamName: string, currentIds: number[]): Baseline | undefined {
     const existing = currentIds.length === 0 ? undefined : this.listKeys(projectId, streamName).reduce((acc, id) => {
       const b = this.get(id);
       return acc ?? b;
@@ -117,7 +109,19 @@ export class BaselineStore {
     // auto-increment version guessed type
     const count = Object.values(this.state.baselines).filter(b => b.metadata.projectId === projectId && b.metadata.streamName === streamName).length + (existing ? 1 : 0);
     const version = count === 0 ? "v1" : count === 1 ? "v2" : count === 2 ? "v3" : "v4";
-    return undefined; // caller builds via store.insert from caller's entity
+    return existing; // caller builds via store.insert from caller's entity
+  }
+
+  /**
+   * Upsert helper used by clients: if existing is undefined, we treat caller as requesting creation with the given `input` baseline; otherwise we reuse and return undefined.
+   */
+  upsertInput(projectId: number, streamName: string, existingIds: number[]): Baseline | undefined {
+    const existing = existingIds.length === 0 ? undefined : this.listKeys(projectId, streamName).reduce((acc, id) => {
+      const b = this.get(id);
+      return acc ?? b;
+    }, undefined);
+    if (!existing) return undefined; // request not create: caller must insert a new baseline instance
+    return existing;
   }
 
   /**
