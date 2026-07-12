@@ -85,7 +85,38 @@ _Owned by the business-analyst — to be authored._
 
 ## Design
 
-_Owned by the architect — to be authored._
+### Root Cause
+
+The bug originated from a naïve `{ ...this.props, ...updates }` spread in the merge step, where omitted fields filled in as `undefined` in `updates`. The persistence layer (Postgres via Drizzle) interprets an omitted field during `UPDATE` as "do not touch this column". However, upstream code that accepted payload merging (awaited `FieldService.update(...)`) and the persistence layer which wrote `null` for `undefined`-valued DTO fields had a cross-cutting bug: an omitted-field DTO could be silently coerced to `null` on write, not just omitted.
+
+### Fix Strategy
+
+We enforce true partial-update semantics by making three guarantees across the update path:
+
+1. **Merge Surgery (Task.update) — the ringmaster:** A partial-update promise is enforced BEFORE persistence. `Task.update` only merges keys with a defined value: `Object.fromEntries(Object.entries(updates).filter(([, value]) => value !== undefined))`. `undefined`-valued keys are discarded, and only fields the caller explicitly provided propagate into the `TaskProps`. This ensures `this.props` (with its current persisted value) is never clobbered by an omitted field.
+
+2. **DTO Passing Guard (TaskService.updateTask):** The service never propagates an implicit `undefined` into the domain merge. For each nullable DTO field (e.g., `parentTaskId`, `assignedAgentHostId`), if there is no change (`dto.field === undefined`), we pass `undefined` directly; otherwise we pass the coerced value (`dto.field != null ? coerce(dto.field) : null`). This mirrors the pattern in `Task.update` and guarantees that the domain merge receives a clean set of fields.
+
+3. **Persistence Layer (TaskRepository.update):** Writes `plain.parentTaskId ?? null` and `plain.assignedAgentRef ?? null`. Because `Task.update` returns a new `Task` whose `parentTaskId` is always a concrete value (never `undefined`), `plain.parentTaskId` is the real forced-merge value. Drizzle's Postgres driver omits `undefined` from the `SET` clause, so:
+   - If `parentTaskId === undefined` on the plain object, the column is left untouched (preserve existing).
+   - If `parentTaskId === null`, the column is written as `NULL` (explicit clear).
+   - If `parentTaskId` is a concrete `TaskId`, the column is written to the new value.
+
+The combination guarantees:
+- Omitted fields → undefined passed through → not merged by `Task.update` → left untouched in DB.
+- Explicit null request → `null` passed through → merged as `null` in `Task.update` → written as `NULL`.
+- Multiple partial fields in one call → all present values are merged into `TaskProps` → all written atomically.
+
+### Scope
+
+- **Not touched:** `tasks.create` (full-object semantics are intentional at creation time; constraints like `parentTaskId: null` are the exception).
+- **Not touched:** validation or business logic beyond merging.
+- **Not touched:** schema migrations (`parentTaskId` already exists as nullable).
+- **Not touched:** bulk-update endpoints (addressed separately if issues surface there).
+- **Not touched:** UI or API contract (request/response shape stays identical).
+- **Not touched:** performance optimizations unrelated to field merging.
+
+---
 
 ## Implementation Notes
 
