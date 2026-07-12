@@ -69,12 +69,9 @@ export function ProgressiveRevealOrchestrator({
   const [state, setState] = useState<ReactiveState>({
     streams: new Map(),
     activities: {
-      criticalResolved: 0,
-      secondaryResolved: 0,
-      deferredResolved: 0,
-      criticalStarted: 0,
-      secondaryStarted: 0,
-      deferredStarted: 0,
+      critical: 0,
+      secondary: 0,
+      deferred: 0,
     },
     currentStage: 0,
     lastTransitionAt: undefined,
