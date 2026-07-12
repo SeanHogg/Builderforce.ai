@@ -1,55 +1,102 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #213
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# PRD: Backlog Burn-Rate Estimator
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+Engineering teams and project managers lack a quick, data-driven answer to the question: **"At our current pace, when will we finish?"** Existing tools (Jira, Linear, GitHub Projects) surface raw backlog counts but do not automatically compute a forward-looking time estimate anchored to measured velocity. This feature closes that gap by calculating estimated agent-hours or human-hours required to clear the remaining backlog, given observed throughput.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+**Goal:** Deliver a single, trustworthy estimate — and the reasoning behind it — that any stakeholder can act on immediately.
 
-## Target users / ICP roles
+---
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## Target Users / ICP Roles
+
+| Role | Need |
+|---|---|
+| **Engineering Manager / Tech Lead** | Forecast sprint or release completion dates; identify if current velocity is sufficient |
+| **Project Manager / Scrum Master** | Communicate delivery timelines to stakeholders without manual spreadsheet work |
+| **AI Agent Orchestrator** | Programmatically receive a structured estimate to gate downstream planning tasks |
+| **Product Owner** | Understand trade-offs between scope cuts and timeline pressure |
+
+---
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This document covers the **estimation calculation layer** — ingesting backlog and velocity data, computing remaining effort, and surfacing the result. It does not cover the upstream tooling that manages backlog items or the downstream scheduling of work.
+
+---
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### FR-1 · Velocity Ingestion
+- Accept a velocity figure expressed as **story points, tasks, or hours completed per unit time** (e.g., 12 story points/sprint, 4 tasks/day, 6 agent-hours/hour).
+- Support manual entry and structured data input (JSON/CSV).
+- Allow velocity to be provided as a **single value** or as a **time-series** (last N sprints / last N days) from which the system computes a rolling average.
+- Support separate velocity tracks for **human workers** and **AI agents** when both are active.
+
+### FR-2 · Backlog Ingestion
+- Accept a backlog expressed as a **list of items with effort estimates** (story points, hours, or task counts).
+- Accept a **pre-aggregated total** (e.g., "142 story points remaining") as an alternative.
+- Categorise items by status: `remaining`, `in-progress` (partially counted), `blocked` (optionally excluded or flagged).
+- Support import from plain text, JSON, CSV, or GitHub/Linear/Jira webhook payload.
+
+### FR-3 · Estimation Calculation
+- Compute **estimated hours to completion** using:
+
+  ```
+  Remaining Effort (normalised units)
+  ─────────────────────────────────── × Hours per Time Unit = Estimated Hours
+        Velocity (units / time unit)
+  ```
+
+- Apply a **confidence interval** (pessimistic / expected / optimistic) based on velocity variance when a time-series is provided; default to ±20 % when only a single velocity value is given.
+- Distinguish and report **agent-hours** and **human-hours** separately when dual-track data is present.
+- Surface a **calendar estimate** (completion date/time) when working-hours-per-day or agent-uptime-per-day is provided.
+
+### FR-4 · Output Report
+- Return a structured result containing:
+  - Remaining backlog size (normalised)
+  - Observed / computed velocity (with source period)
+  - **Estimated hours to completion** — pessimistic / expected / optimistic
+  - Estimated completion date (if calendar context provided)
+  - Key assumptions list
+  - Confidence level (Low / Medium / High) based on data quality
+- Render as **human-readable markdown summary** and **machine-readable JSON**.
+
+### FR-5 · Sensitivity Analysis
+- Show the effect on the estimate if velocity changes by −25 %, −10 %, +10 %, +25 %.
+- Highlight the **break-even velocity** needed to hit a user-supplied deadline.
+
+### FR-6 · Blocking & Risk Flags
+- Flag backlog items marked `blocked` and report how many hours of work are at risk.
+- Warn when velocity data covers fewer than 3 time periods (low confidence).
+- Warn when in-progress items represent more than 30 % of remaining effort (WIP risk).
+
+---
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+| ID | Criterion |
+|---|---|
+| AC-1 | Given a single velocity value and a pre-aggregated backlog total, the system returns an expected-hours estimate within 2 seconds. |
+| AC-2 | Given a velocity time-series of ≥ 3 periods, the system computes pessimistic / expected / optimistic bounds and labels confidence **Medium** or **High**. |
+| AC-3 | When agent and human velocities are supplied separately, the output report contains distinct agent-hours and human-hours figures that sum to total estimated hours. |
+| AC-4 | When a target deadline is provided, the system outputs the required velocity needed to meet it and flags whether current velocity is sufficient. |
+| AC-5 | The JSON output validates against the published schema with no missing required fields. |
+| AC-6 | When fewer than 3 velocity periods are available, the output carries a **Low** confidence label and displays an explicit assumption warning. |
+| AC-7 | Blocked items are excluded from the default estimate and reported in a separate `blocked_hours_at_risk` field. |
+| AC-8 | The sensitivity table reflects accurate re-calculations for all four velocity-change scenarios (±10 %, ±25 %). |
 
-## Out of scope
+---
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## Out of Scope
+
+- **Backlog prioritisation or re-ordering** — the estimator treats the backlog as-is.
+- **Sprint planning or task assignment** — no scheduling of who does what.
+- **Real-time integration / live sync** with Jira, Linear, or GitHub (webhook ingestion is supported, but continuous polling is not).
+- **Capacity planning** (vacation, holidays, headcount changes) — callers must pre-adjust velocity before input.
+- **Cost estimation** (dollar amounts, billing rates) — hours only.
+- **Historical trend forecasting beyond the supplied dataset** — no ML model training.
+- **UI/dashboard** — this PRD covers the calculation engine and its output contract; any front-end is a separate workstream.
