@@ -13,6 +13,7 @@ import {
   scoreQuestionnaire,
   scoreQuiz,
 } from './toolTypes';
+import { stakeholderAlignmentToolDefinition } from './stakeholderAlignmentTool';
 
 const TIER_NAME = ['Low', 'Low', 'Medium', 'High', 'Elite'];
 const tierName = (t: number): string => TIER_NAME[Math.max(1, Math.min(5, Math.round(t))) - 1]!;
