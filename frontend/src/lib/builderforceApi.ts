@@ -154,7 +154,7 @@ export const toolsApi = {
 
 import type {
   JobRole, KanbanTemplate, TemplateSummary, RecommendedRoster, TicketAudit, FlaggedTicket, TemplateVisibility,
-  RoleAssignment, AssigneeKind, AccountabilityReport, ManifestParticipant, SignoffContribution, ParticipantsSummaryRow,
+  RoleAssignment, AssigneeKind, AccountabilityReport, ManifestParticipant, SignoffContribution, ParticipantsSummaryRow, ImplicatedTicket,
 } from './kanban';
 
 export interface AssignableWorkforceDto {
@@ -4969,6 +4969,14 @@ export const incidentsApi = {
 
   get: (id: string): Promise<{ incident: Incident; timeline: IncidentEvent[] }> =>
     request(`/api/incidents/${id}`),
+
+  // RCA linkage: implicated delivery ticket(s) + each one's Accountability Report.
+  implicated: (id: string): Promise<ImplicatedTicket[]> =>
+    request<{ implicated: ImplicatedTicket[] }>(`/api/incidents/${id}/implicated`).then((r) => r.implicated ?? []),
+  linkImplicated: (id: string, body: { taskId: number; relation?: string; note?: string }): Promise<{ ok: boolean }> =>
+    request(`/api/incidents/${id}/implicated`, { method: 'POST', body: JSON.stringify(body) }),
+  unlinkImplicated: (id: string, taskId: number): Promise<{ ok: boolean }> =>
+    request(`/api/incidents/${id}/implicated/${taskId}`, { method: 'DELETE' }),
 
   update: (id: string, body: Partial<{ severity: IncidentSeverity; status: IncidentStatus; impact: string; rootCause: string }>): Promise<{ ok: boolean }> =>
     request(`/api/incidents/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
