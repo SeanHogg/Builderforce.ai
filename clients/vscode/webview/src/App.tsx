@@ -23,6 +23,7 @@ import {
   type GlobalRunState,
   type EvermindRecallResult,
   type BrainTraceEvent,
+  type ChatDiagnosticsData,
 } from '@seanhogg/builderforce-brain-embedded';
 import { authedFetch } from './authedFetch';
 import {
@@ -67,6 +68,25 @@ function makeT(labels: LabelBundle) {
  * per chat across reloads.
  */
 const MEMORY_KEY = (chatId: number) => `bf_brain_memory:${chatId}`;
+
+/**
+ * Best-effort decode of the tenant JWT's claims for the diagnostics dump — the api
+ * mints `{ tid: tenantId, sub: userId }` (see `authMiddleware`). Pure client-side
+ * base64url decode (no verification — this is display-only); returns {} on any malformed
+ * token so "Copy diagnostics" never throws over identity it couldn't read.
+ */
+function decodeTokenClaims(token: string | null): { tid?: number | string; sub?: string } {
+  if (!token) return {};
+  try {
+    const part = token.split('.')[1];
+    if (!part) return {};
+    const json = atob(part.replace(/-/g, '+').replace(/_/g, '/'));
+    const claims = JSON.parse(json) as { tid?: number | string; sub?: string };
+    return { tid: claims.tid, sub: claims.sub };
+  } catch {
+    return {};
+  }
+}
 
 /** The subset of the host bundle the shared <BrainTimeline> consumes. */
 function timelineLabels(labels: LabelBundle): Partial<BrainTimelineLabels> {
@@ -1007,7 +1027,53 @@ function Chat({ init }: { init: InitData }) {
   // near the project directive above — reused here for the header + triage report.)
 
   const canCopy = hasTranscriptContent({ messages: conv.messages, trace: conv.trace, error: conv.error });
-  const copyTranscript = useCallback(() => {
+  // Copy DIAGNOSTICS (not just the transcript): gather the chat's identity + Evermind
+  // wiring state — the CHAT's own project (what the learn gate keys on, vs the panel's
+  // selected project), tenant/user, the project Evermind head (version/mode/learned/
+  // queued/last-learned), the last turn's learn-gate outcome, the invited agents, and the
+  // linked tickets — then hand it to the shared serializer, which appends a Signals
+  // section naming the likely cause of "Connected, yet nothing learns". Every source is
+  // best-effort (degrades to null/[]) so the copy never fails on a single bad fetch.
+  const copyTranscript = useCallback(async () => {
+    const pid = associatedProjectId;
+    const claims = decodeTokenClaims(getToken());
+    const [agents, tickets, evermind] = await Promise.all([
+      chatId != null ? ticketAdapter.listAgents(chatId).catch(() => []) : Promise.resolve([]),
+      chatId != null ? ticketAdapter.listTickets(chatId).catch(() => []) : Promise.resolve([]),
+      pid != null
+        ? apiReq<{ version: number; mode: string; inferenceEnabled: boolean; teacherModel: string | null; contributions: number; pending: number; lastLearnedAt: string | null }>(
+            `/api/projects/${pid}/evermind/contributions`,
+          ).catch(() => null)
+        : Promise.resolve(null),
+    ]);
+    // The learn-gate outcome for the most recent assistant turn (the persistence adapter
+    // attaches it from the server's send-messages response).
+    const lastLearn = [...conv.messages].reverse().find((m) => m.role === 'assistant' && m.evermindLearn)?.evermindLearn ?? null;
+    const diagnostics: ChatDiagnosticsData = {
+      surface: 'VS Code (VSIX)',
+      chatId,
+      chatTitle: activeChat?.title ?? null,
+      chatVisibility,
+      projectId: pid,
+      projectName: associatedProject?.name ?? null,
+      selectedProjectId: init.project?.id ?? null,
+      tenantId: claims.tid ?? null,
+      userId: claims.sub ?? null,
+      evermind: evermind
+        ? {
+            version: evermind.version,
+            mode: evermind.mode,
+            inferenceEnabled: evermind.inferenceEnabled,
+            teacherModel: evermind.teacherModel,
+            contributions: evermind.contributions,
+            pending: evermind.pending,
+            lastLearnedAt: evermind.lastLearnedAt,
+          }
+        : null,
+      lastLearn,
+      agents: agents.map((a) => ({ agentRef: a.agentRef, role: a.role })),
+      tickets: tickets.map((tk) => ({ kind: tk.kind, ref: tk.ref, label: tk.label, linkType: tk.linkType, status: tk.status })),
+    };
     post('copy', {
       text: buildTranscript({
         messages: conv.messages,
@@ -1018,11 +1084,12 @@ function Chat({ init }: { init: InitData }) {
         project: associatedProject,
         chatTitle: activeChat?.title,
         chatId,
+        diagnostics,
       }),
     });
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1500);
-  }, [conv.messages, conv.trace, conv.error, init.model, associatedProject, activeChat?.title, chatId]);
+  }, [conv.messages, conv.trace, conv.error, init.model, associatedProject, associatedProjectId, activeChat?.title, chatVisibility, chatId, ticketAdapter, apiReq, init.project?.id]);
 
   // Consolidate: summarize the whole chat into ONE compact assistant message tagged
   // as a consolidation marker. It's shown back to the user (the "flag"), and the
@@ -1158,10 +1225,10 @@ function Chat({ init }: { init: InitData }) {
         <button className="bf-btn" title={t('app.newChat', 'New chat')} onClick={() => setChatId(null)}>＋</button>
         <button
           className="bf-btn bf-btn--icon"
-          title={t('app.copyChat', 'Copy chat transcript (for triage)')}
-          aria-label={t('app.copyChat', 'Copy chat transcript (for triage)')}
+          title={t('app.copyChat', 'Copy chat diagnostics (identity + Evermind state + transcript)')}
+          aria-label={t('app.copyChat', 'Copy chat diagnostics (identity + Evermind state + transcript)')}
           disabled={!canCopy}
-          onClick={copyTranscript}
+          onClick={() => void copyTranscript()}
         >
           {copied ? '✓' : '⧉'}
         </button>

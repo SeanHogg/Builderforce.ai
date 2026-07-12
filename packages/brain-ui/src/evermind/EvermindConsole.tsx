@@ -12,7 +12,7 @@
  * disabled (not hidden) when `canManage` is false, mirroring the web RoleGate.
  * See [[evermind-learning-architecture]].
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   DEFAULT_EVERMIND_LABELS,
   type EvermindConsoleAdapter,
@@ -40,6 +40,15 @@ export interface EvermindConsoleProps {
   /** Show the "Recently learned" list. Default true; a host that renders its own
    *  learnings surface (e.g. the web Studio's region-filterable panel) passes false. */
   showRecent?: boolean;
+  /** Show the inline `↻` refresh button in the header. Default true. A host that
+   *  drives refresh from its OWN chrome (e.g. the VS Code sidebar view's title bar)
+   *  passes false and bumps {@link refreshSignal} instead, so the control lives in
+   *  the one place that host expects it rather than duplicated inside the card. */
+  showHeaderRefresh?: boolean;
+  /** A monotonic counter a host bumps to trigger an in-place reload from OUTSIDE the
+   *  console (e.g. a title-bar refresh action). Each new value re-fetches without the
+   *  loading flash — the same reload the inline `↻` runs. Undefined/0 = no external refresh. */
+  refreshSignal?: number;
   /** Called whenever a Validate runs (or is cleared, with null) — lets a host lift
    *  the recall result to a companion surface (e.g. highlight the matched memories
    *  on the web Studio's Knowledge Map). The console also renders the result inline. */
@@ -58,7 +67,7 @@ const C = {
   danger: 'var(--bf-ev-danger, var(--danger-text, #d9534f))',
 };
 
-export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000, projectName, showRecent = true, onValidate }: EvermindConsoleProps) {
+export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000, projectName, showRecent = true, showHeaderRefresh = true, refreshSignal, onValidate }: EvermindConsoleProps) {
   const t = useMemo<EvermindConsoleLabels>(() => ({ ...DEFAULT_EVERMIND_LABELS, ...(labels ?? {}) }), [labels]);
 
   const [data, setData] = useState<EvermindConsoleData | null>(null);
@@ -112,6 +121,17 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
     return () => clearInterval(id);
   }, [refreshMs, busy, reload]);
 
+  // Host-driven refresh: when a host bumps `refreshSignal` (e.g. a VS Code title-bar
+  // action), reload in place — the same effect as the inline `↻`, no loading flash.
+  // A ref tracks the last-handled value so the initial mount (and adapter-swap reload
+  // churn) never double-fires: only a genuinely NEW value triggers a reload.
+  const lastRefreshSignal = useRef<number | undefined>(refreshSignal);
+  useEffect(() => {
+    if (refreshSignal == null || refreshSignal === lastRefreshSignal.current) return;
+    lastRefreshSignal.current = refreshSignal;
+    void reload();
+  }, [refreshSignal, reload]);
+
   // Validate: preview which learned memories would answer a candidate task. Read-only
   // — never teaches. Stores the result for the inline list AND lifts it to the host
   // (onValidate) so a companion surface can highlight the matched memories.
@@ -161,7 +181,9 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
       {scopeName && <span style={{ fontSize: '0.8rem', color: C.text2 }} title={scopeName}>· {scopeName}</span>}
       {!loadFailed && <span style={pill(seeded)}>{seeded ? t.statusSeeded(data?.version ?? 0) : t.statusUnseeded}</span>}
       {!loadFailed && seeded && <RegressionChip t={t} evalPoint={data?.eval ?? null} />}
-      <button type="button" onClick={() => void reload()} disabled={busy} style={ghostBtn} title={t.refresh} aria-label={t.refresh}>↻</button>
+      {showHeaderRefresh && (
+        <button type="button" onClick={() => void reload()} disabled={busy} style={ghostBtn} title={t.refresh} aria-label={t.refresh}>↻</button>
+      )}
     </header>
   );
 

@@ -98,7 +98,7 @@ function buildLabels(): Record<string, string> {
     "app.rename": t("Rename chat"),
     "app.renamePlaceholder": t("Chat name"),
     "app.noProject": t("No project"),
-    "app.copyChat": t("Copy chat transcript (for triage)"),
+    "app.copyChat": t("Copy chat diagnostics (identity + Evermind state + transcript)"),
     // Consolidate + Fork composer actions
     "app.consolidate": t("Consolidate"),
     "app.consolidateHint": t("Summarize this chat into a compact context the rest of the conversation builds on"),
@@ -235,7 +235,7 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
       // webview can't), so a "No response" turn can be pasted out to debug.
       case "copy":
         await vscode.env.clipboard.writeText(typeof msg.text === "string" ? msg.text : "");
-        void vscode.window.showInformationMessage(vscode.l10n.t("Chat transcript copied to clipboard."));
+        void vscode.window.showInformationMessage(vscode.l10n.t("Chat diagnostics copied to clipboard."));
         break;
       // Open a linked work item (clicked in the ChatTicketsPanel) in its own view:
       // a task/epic/gap deep-links to its detail drawer (assignee/status/PRD) in the
