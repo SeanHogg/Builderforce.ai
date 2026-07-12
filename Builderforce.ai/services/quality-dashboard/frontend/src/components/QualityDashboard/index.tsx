@@ -1,10 +1,10 @@
 import React from "react";
 import { BugFilter } from "../../types/quality";
-import { BugCountWidget } from "../BugCountWidget";
-import { SeverityDonutChart } from "../SeverityDonutChart";
-import { TrendLineChart } from "../TrendLineChart";
-import { FiltersBar } from "../FiltersBar";
-import { BugTable } from "../BugTable";
+import { BugCountWidget } from "./BugCountWidget";
+import { SeverityDonutChart } from "./SeverityDonutChart";
+import { TrendLineChart } from "./TrendLineChart";
+import { FiltersBar } from "./FiltersBar";
+import { BugTable } from "./BugTable";
 import { useQualityData } from "../../hooks/useQualityData";
 import "./index.css";
 
