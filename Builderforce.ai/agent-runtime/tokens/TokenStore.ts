@@ -382,15 +382,24 @@ export class TokenStoreManager {
 }
 
 /**
- * AuthError serializers.
+ * Normalize an arbitrary error into a thrown AuthError. Always throws — never
+ * returns — so a caller can `toAuthError(...)` to guarantee a clear auth failure
+ * instead of a silent null/stale result.
  */
-export function toAuthError(err: unknown, executionId: string, operation: string, status?: number): never {
+export function toAuthError(
+  err: unknown,
+  executionId: string,
+  operation: string,
+  status?: number
+): never {
   if (err instanceof AuthError) {
-    return err;
+    throw err;
   }
   let message = "Authentication failed";
   if (err instanceof Error) {
     message = err.message;
+  } else if (typeof err === "string") {
+    message = err;
   }
   throw new AuthError(message, executionId, operation, status);
 }
