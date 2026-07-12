@@ -1,6 +1,6 @@
 /** Helper tests across isGreenStatus, ScoreDisplay, and formatScore (test coverage). */
 
-import { isGreenStatus, getGreenStatusDisplay, type ScoreDisplay } from '@/lib/statusHelpers';
+import { isGreenStatus, getGreenStatusDisplay, type ScoreDisplay } from '@/types/status';
 
 describe('isGreenStatus helper', () => {
   it('returns true when score = 75 (lower boundary inclusive)', () => {
