@@ -17,8 +17,6 @@
  * to the PRD (sync: 5–6s, async: 8s).
  */
 
-import { useRouter } from 'next/navigation';
-import { NextStep, StepGenerationResponse, ExecutionResponse, StepEvent } from './types';
 import { apiRequest } from './apiClient';
 import { getStoredTenantId } from './auth';
 
