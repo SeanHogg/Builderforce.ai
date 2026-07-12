@@ -407,11 +407,11 @@ export default function GuidedWizard({ userId, onCancel }: { userId: string | nu
       {step === 'success' && (
         <div style={{ padding: '24px', border: '1px solid var(--border-color)', borderRadius: '8px', textAlign: 'center' }}>
           <div style={{ fontSize: '3rem', color: 'green', marginBottom: '16px' }}>✓</div>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '16px' }}>{t('guided.steps.success.title')}</h2>
-          <p style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>{t('guided.steps.success.description')}</p>
+          <h2 style={{ fontSize: '1.5rem', marginBottom: '16px' }}>Import Successful!</h2>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>Your record has been created and is now available in the system.</p>
 
           <div style={{ padding: '16px', border: '1px solid var(--border-color)', borderRadius: '8px', marginBottom: '24px' }}>
-            <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '8px' }}>{t('guided.steps.success.referenceId')}</div>
+            <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Reference ID</div>
             <div style={{ fontSize: '1.2rem', fontFamily: 'monospace' }}>{referenceId}</div>
           </div>
 
@@ -427,7 +427,7 @@ export default function GuidedWizard({ userId, onCancel }: { userId: string | nu
                 cursor: 'pointer',
               }}
             >
-              {t('guided.buttons.createAnother')}
+              Create Another
             </button>
           </div>
         </div>
