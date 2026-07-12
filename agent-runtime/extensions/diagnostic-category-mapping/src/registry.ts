@@ -1,29 +1,30 @@
-import type {
-  DiagnosticCategory,
-  MappingRule,
-  MappingRuleRegistry,
-  ValidationError,
-} from "./types";
-import { DIAGNOSTIC_CATEGORIES } from "./types";
+import fs from "node:fs/promises";
+import path from "node:path";
+import type { MappingRule, MappingRuleRegistry, ValidationError } from "./types";
+import { CATEGORIES, DiagnosticCategory, type YAMLConfig } from "./types";
+import { InMemoryQuarantineLog, MappingMetrics } from "./types";
 
 /**
  * MappingRuleRegistryImpl implements FR-1: single source of truth registry that defines all valid
- * category IDs and their human-readable names, and versioned so changes are auditable.
+ * category IDs and their human-readable names, versioned so changes are auditable.
+ * Supports load-from-YAML and simple key-level validation (FR-2/FR-5).
  */
 export class MappingRuleRegistryImpl implements MappingRuleRegistry {
-  private readonly categories: ReadonlyMap<string, typeof DIAGNOSTIC_CATEGORIES[keyof typeof DIAGNOSTIC_CATEGORIES]>;
+  private readonly categories: ReadonlyMap<
+    DiagnosticCategory,
+    { name: string; diagnosticQuestion: string }
+  >;
   private readonly rules: readonly MappingRule[];
-  // Unique-key-to-first-metadata map: key = (fieldKey, sourceSystem?) tuple, value = rule
+  // Unique key => first rule that defined it.
   private readonly keyToRule: ReadonlyMap<string, MappingRule>;
 
   constructor(
     categories: Record<string, { name: string; diagnosticQuestion: string }>,
     rules: readonly MappingRule[]
   ) {
-    // Convert categories record to a Map for O(1) lookup.
     this.categories = new Map(
       Object.entries(categories).map(([id, meta]) => [
-        id,
+        DiagnosticCategory[id.toUpperCase() as keyof typeof DiagnosticCategory],
         {
           name: meta.name,
           diagnosticQuestion: meta.diagnosticQuestion,
@@ -32,51 +33,41 @@ export class MappingRuleRegistryImpl implements MappingRuleRegistry {
     );
     this.rules = rules;
 
-    // Build a map of unique keys (fieldKey + optional sourceSystem) to the first rule that defined it.
-    const keyMap = new Map<string, MappingRule>();
-    const seenErrors: ValidationError[] = [];
+    this.keyToRule = new Map();
+    const errors: ValidationError[] = [];
 
     for (const rule of rules) {
-      // Ensure the referenced category exists in the categories map.
-      if (!this.categories.has(rule.category)) {
-        seenErrors.push({
+      const category = DiagnosticCategory[rule.category.toUpperCase()];
+      if (!category) {
+        errors.push({
           type: "unknown_category",
-          message: `Category "${rule.category}" referenced in mapping rule does not exist in categories registry`,
+          message: `Category "${rule.category}" is not a member of DiagnosticCategory`,
           details: { rule },
         });
-        continue; // Skip invalid rules.
+        continue;
       }
 
-      const key = MappingRuleRegistryImpl.makeKey(rule.sourceFieldKey, rule.sourceSystem);
-      const existing = keyMap.get(key);
+      const key = this.makeKey(rule.sourceFieldKey, rule.sourceSystem);
+      const existing = this.keyToRule.get(key);
       if (existing) {
-        // Conflict detected: same key already mapped.
-        seenErrors.push({
+        errors.push({
           type: "duplicate_key",
           message: `Duplicate mapping key: ${key}`,
           details: { existingRule: existing, newRule: rule },
         });
-        continue; // An earlier rule wins, but we track the conflict.
+        continue;
       }
 
-      keyMap.set(key, rule);
+      this.keyToRule.set(key, rule);
     }
 
-    this.keyToRule = keyMap;
-
-    // Admit registry if there are no critical errors; log or raise ambiguous cases (not a blocker).
-    if (seenErrors.length > 0) {
-      console.warn(
-        `[MappingRuleRegistry] Registry loaded with warnings: ${seenErrors.length} issues detected.`
-      );
-      for (const err of seenErrors) {
-        console.warn(`  - ${err.message}`, err.details || "");
-      }
+    if (errors.length > 0) {
+      console.error("[MappingRuleRegistry] Registry load detected errors:", errors);
+      throw new Error("Registry load failed"); // TODO: distinguish errors.go from partial load?
     }
   }
 
-  private static makeKey(fieldKey: string, system?: string): string {
-    // Use required fieldKey always; prepend optional sourceSystem with a delimiter so (bug_count, Jira) != (bug_count, undefined).
+  private makeKey(fieldKey: string, system?: string): string {
     return system ? `${system}:${fieldKey}` : fieldKey;
   }
 
@@ -85,35 +76,115 @@ export class MappingRuleRegistryImpl implements MappingRuleRegistry {
     return this.rules;
   }
 
-  /** FR-2: Find a mapping rule by field key (and optional source system). */
+  /** FR-2: Find rule by key and optional source system. */
   find(key: string, system?: string): MappingRule | undefined {
-    const searchKey = MappingRuleRegistryImpl.makeKey(key, system);
+    const searchKey = this.makeKey(key, system);
     return this.keyToRule.get(searchKey);
   }
 
   /** FR-2: Check for conflicts for a specific key. */
   hasConflict(key: string, system?: string): boolean {
-    const searchKey = MappingRuleRegistryImpl.makeKey(key, system);
+    const searchKey = this.makeKey(key, system);
     return this.keyToRule.has(searchKey);
   }
 
-  /** FR-1: Validate category registry consistency. */
-  validate(): readonly ValidationError[] {
-    const errors: ValidationError[] = [];
+  static async readYamlFile(yamlPath: string): Promise<YAMLConfig> {
+    const content = await fs.readFile(yamlPath, "utf-8");
+    return YAMLConfigSchema.parse(JSON.parse(content));
+  }
 
-    for (const rule of this.rules) {
-      if (!this.categories.has(rule.category)) {
+  /** FR-5: Validate using internal schema. */
+  static validateRegistry(config: YAMLConfig): ReadonlyArray<ValidationError> {
+    const errors: ValidationError[] = [];
+    const categorySet = new Set(DiagnosticCategory);
+    const { categories, mappingRules } = config;
+
+    // Validate categories.
+    for (const [id, meta] of Object.entries(categories)) {
+      if (!categorySet.has(id as any)) {
         errors.push({
           type: "unknown_category",
-          message: `Category "${rule.category}" referenced in mapping rule does not exist in categories registry`,
-          details: { rule },
+          message: `Category "${id}" is not in the canonical DiagnosticCategory enum`,
+          details: { categoryId: id, meta },
         });
       }
     }
 
-    // Prevent cycles would require runtime rule graph inspection, out of scope for v1 (FR-2 only requires conflict detection, which we satisfy with key uniqueness).
-    // No circular checks performed now.
+    // Validate rules: each rule must reference an existing category and must not duplicate key+sourceSystem.
+    const keyToRule = new Map<string, MappingRule>();
+    for (const rule of mappingRules) {
+      if (!categorySet.has(rule.category)) {
+        errors.push({
+          type: "unknown_category",
+          message: `Category "${rule.category}" does not exist in categories`,
+          details: { rule },
+        });
+        continue;
+      }
 
+      const key = `${rule.sourceSystem}:${rule.sourceFieldKey}`;
+      const existing = keyToRule.get(key);
+      if (existing) {
+        errors.push({
+          type: "duplicate_key",
+          message: `Duplicate rule key: ${key}`,
+          details: { existingRule: existing, newRule: rule },
+        });
+        continue;
+      }
+
+      keyToRule.set(key, rule);
+    }
+
+    // Circular/discarding remains out-of-scope for v1 (FR-5 requires duplicate/unknown checks).
     return errors;
   }
 }
+
+function YAMLConfigSchema(data: unknown): YAMLConfig {
+  if (typeof data !== "object" || !data) throw new TypeError("Config must be an object");
+  const c = data as Record<string, unknown>;
+
+  const version = typeof c.version === "string" ? c.version : "1.0.0";
+  const categories = typeof c.categories === "object" ? c.categories : {};
+  const mappingRules = Array.isArray(c.mappingRules) ? c.mappingRules : [];
+  const id = typeof c.id === "string" ? c.id : undefined;
+  const tags = Array.isArray(c.tags) ? c.tags : undefined;
+
+  return {
+    version,
+    categories,
+    mappingRules,
+    id,
+    tags,
+  };
+}
+
+/** Public factory: build registry from YAML string content (FR-5). */
+export async function buildRegistryFromYaml(yamlContent: string): Promise<MappingRuleRegistryImpl> {
+  const config =
+    typeof yamlContent === "string"
+      ? YAMLConfigSchema.parse(JSON.parse(yamlContent))
+      : (YAMLConfigSchema(yamlContent) as YAMLConfig);
+  const errors = MappingRuleRegistryImpl.validateRegistry(config);
+  if (errors.length > 0) {
+    console.error("Registry validation errors:", errors);
+    throw new Error(`Registry validation failed: ${errors.length} errors`);
+  }
+  return new MappingRuleRegistryImpl(config.categories, config.mappingRules);
+}
+
+/** Public factory: build mapper from YAML with quarantine log support (FR-3, FR-4). */
+export async function buildMapperFromYaml(
+  yamlContent: string,
+  quarantineLog?: QuarantineLog,
+  metrics?: MappingMetrics
+): Promise<Mapper> {
+  const registry = await buildRegistryFromYaml(yamlContent);
+  return new Mapper(registry, quarantineLog ?? new InMemoryQuarantineLog(), metrics ?? {});
+}
+
+import type { QuarantineLog, MappingMetrics } from "./types";
+import { Mapper } from "./mapper";
+
+/** (Inlined import reordering; Mapper class ref is present in mapper.ts per previous writes.) */
