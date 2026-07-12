@@ -43,6 +43,7 @@ import {
   countReconciledMemories,
   type EvermindRunHooks,
   type EvermindRecallResult,
+  type MemoryFirstAnswer,
 } from './evermindMemory';
 
 /**
@@ -1110,6 +1111,42 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     }
   }
 
+  // Memory-first short-circuit: if the project's OWN memory can answer this request —
+  // an exact-repeat Q&A cache hit, or its Evermind SSM (opt-in) — adopt that answer and
+  // SKIP the paid model entirely. This is the token-reduction core: for a repeated or
+  // learned question we spend zero model tokens. Opt-in + best-effort — a host that
+  // doesn't inject `answer`, a non-project chat, or a miss falls straight through to the
+  // normal loop below. Only attempted on the run's FIRST turn (no tool results yet).
+  if (evermind?.answer && !c.abort?.signal.aborted) {
+    const query = latestUserText(convo);
+    if (query) {
+      let memAnswer: MemoryFirstAnswer | null = null;
+      try { memAnswer = await evermind.answer(query); } catch { memAnswer = null; }
+      const finalText = memAnswer?.text.trim();
+      if (finalText) {
+        convo.push({ role: 'assistant', content: finalText });
+        const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: finalText }]);
+        c.streamingText = '';
+        recordAppended(c, assistantMsg);
+        // Visible on the timeline: memory answered, the LLM was skipped.
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: 'recall',
+          label: memAnswer!.source === 'evermind' ? 'evermind.answer' : 'memory.answer',
+          args: { query },
+          result: {
+            source: memAnswer!.source,
+            skippedLlm: true,
+            ...(memAnswer!.evermindVersion != null ? { version: memAnswer!.evermindVersion } : {}),
+          },
+        });
+        emit(c);
+        onActivity?.(chatId);
+        return;
+      }
+    }
+  }
+
   // Per-turn system-prompt augmentation (the LIMBIC parity seam). Fetched once
   // at loop start with the latest user text; a non-empty return is appended to
   // the system prompt. Best-effort — a throw just skips it, exactly like the
@@ -1387,6 +1424,15 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         label: 'evermind.learn',
         result: { version: learn.version, skipped: true, reason: learn.reason },
       });
+    }
+
+    // Remember this (question → answer) so an exact repeat short-circuits next time
+    // (see the memory-first block at loop start) — the write half of the cache. Only
+    // caches genuine model answers; the server guards length + skips trivial ones.
+    // Best-effort, fire-and-forget — never delays or fails the reply.
+    if (evermind?.cacheAnswer) {
+      const q = latestUserText(convo);
+      if (q) { void Promise.resolve(evermind.cacheAnswer(q, finalText)).catch(() => { /* best-effort */ }); }
     }
 
     onActivity?.(chatId);

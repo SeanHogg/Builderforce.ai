@@ -18,6 +18,8 @@ import { projects } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 import { recallProjectFacts, upsertProjectFact } from '../../application/llm/projectFacts';
+import { resolveMemoryAnswer, cacheProjectAnswer } from '../../application/llm/projectMemory';
+import { evermindGenerate, type ArtifactStore } from '../../application/llm/evermindRuntime';
 
 /** Verify the project exists AND belongs to this tenant (IDOR guard). */
 async function ownsProject(db: Db, tenantId: number, projectId: number): Promise<boolean> {
@@ -58,6 +60,48 @@ async function rememberCore(env: Env, db: Db, tenantId: number, projectId: numbe
   return json({ ok, key: key.trim() });
 }
 
+/**
+ * Memory-first "answer without the LLM" resolver. Consults the ONE shared capability
+ * (`resolveMemoryAnswer`): the exact-repeat Q&A cache first (an O(1), read-through-cached
+ * PK lookup), then — only when the project opted into inference — the project's Evermind
+ * SSM run DIRECTLY (`evermindGenerate`, no gateway / no paid model). Returns `{ answer:null }`
+ * when memory can't confidently answer, so the caller runs its normal loop. The cheap path
+ * is cached; the Evermind path is bounded by the `inferenceEnabled` opt-in and is followed
+ * by a write-through to the Q&A cache (the caller's cache step), so repeats become O(1).
+ */
+async function resolveAnswerCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
+  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  const question = c.req.query('query') ?? '';
+  if (!question.trim()) return json({ error: 'query is required' }, 400);
+  const store = env.UPLOADS as ArtifactStore | undefined;
+  const runEvermind = store
+    ? async (ref: string, q: string): Promise<string | null> => {
+        try {
+          const gen = await evermindGenerate(store, ref, [{ role: 'user', content: q }], { maxTokens: 400 });
+          return gen.content ?? null;
+        } catch {
+          return null; // SSM miss/error → fall through to the LLM
+        }
+      }
+    : undefined;
+  const answer = await resolveMemoryAnswer(env, db, tenantId, projectId, question, { ...(runEvermind ? { runEvermind } : {}) });
+  return json({ answer });
+}
+
+/** Write-through a (question → answer) pair to the Q&A cache so the next exact repeat
+ *  short-circuits (no LLM). Best-effort — never fails the caller's reply. */
+async function cacheAnswerCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
+  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  const body = (await c.req.json<{ question?: unknown; answer?: unknown }>().catch(() => ({}))) as {
+    question?: unknown; answer?: unknown;
+  };
+  const question = typeof body.question === 'string' ? body.question : '';
+  const answer = typeof body.answer === 'string' ? body.answer : '';
+  if (!question.trim() || !answer.trim()) return json({ error: 'question and answer are required' }, 400);
+  await cacheProjectAnswer(env, db, tenantId, projectId, question, answer);
+  return json({ ok: true });
+}
+
 // ── JWT front door (web UI + VS Code + internal JWT callers) ──────────────────
 export function createProjectFactsRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -66,6 +110,9 @@ export function createProjectFactsRoutes(db: Db): Hono<HonoEnv> {
 
   router.get('/:projectId/facts', (c) => recallCore(c.env as Env, db, t(c), pid(c), c));
   router.post('/:projectId/facts', (c) => rememberCore(c.env as Env, db, t(c), pid(c), c));
+  // Memory-first: resolve an answer from memory (skip the LLM) / cache a Q&A pair.
+  router.get('/:projectId/answer', (c) => resolveAnswerCore(c.env as Env, db, t(c), pid(c), c));
+  router.post('/:projectId/answer', (c) => cacheAnswerCore(c.env as Env, db, t(c), pid(c), c));
   return router;
 }
 
@@ -85,6 +132,16 @@ export function createProjectFactsAgentRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = await auth(c);
     if (tenantId == null) return json({ error: 'unauthorized' }, 401);
     return rememberCore(c.env as Env, db, tenantId, pid(c), c);
+  });
+  router.get('/:projectId/answer', async (c) => {
+    const tenantId = await auth(c);
+    if (tenantId == null) return json({ error: 'unauthorized' }, 401);
+    return resolveAnswerCore(c.env as Env, db, tenantId, pid(c), c);
+  });
+  router.post('/:projectId/answer', async (c) => {
+    const tenantId = await auth(c);
+    if (tenantId == null) return json({ error: 'unauthorized' }, 401);
+    return cacheAnswerCore(c.env as Env, db, tenantId, pid(c), c);
   });
   return router;
 }

@@ -43,13 +43,34 @@ export interface EvermindRecallResult {
 }
 
 /**
- * The single hook a host injects into the run loop. Bound to the active chat's
- * project; returns null when the chat isn't project-scoped or recall is
- * unavailable (so the loop simply skips the memory steps).
+ * A memory-first answer that lets the run loop SKIP the paid model entirely — either
+ * an exact-repeat Q&A cache hit or the project's Evermind SSM. Returned by the opt-in
+ * {@link EvermindRunHooks.answer} hook; null means "memory can't answer, run the LLM".
+ */
+export interface MemoryFirstAnswer {
+  /** The answer text to adopt as the assistant turn. */
+  text: string;
+  /** Where it came from — drives the "no LLM" provenance/step. */
+  source: 'qa-cache' | 'evermind';
+  /** Evermind head version, when `source === 'evermind'`. */
+  evermindVersion?: number;
+}
+
+/**
+ * The hooks a host injects into the run loop. Bound to the active chat's project.
+ * `recall` grounds the answer (RAG); the OPTIONAL `answer`/`cacheAnswer` pair adds the
+ * memory-first short-circuit — answer from the project's own memory (Q&A cache or
+ * Evermind) BEFORE spending a model call, and remember a fresh (question→answer) pair
+ * so the next exact repeat is free. All return null / no-op when the chat isn't
+ * project-scoped or memory is unavailable, so the loop simply falls through to the LLM.
  */
 export interface EvermindRunHooks {
   /** Recall the project's learned memories most relevant to `query`. */
   recall(query: string): Promise<EvermindRecallResult | null>;
+  /** Try to answer `query` from memory WITHOUT the LLM; null → run the model. */
+  answer?(query: string): Promise<MemoryFirstAnswer | null>;
+  /** Remember a (question → answer) pair so an exact repeat short-circuits next time. */
+  cacheAnswer?(query: string, answer: string): void | Promise<void>;
 }
 
 /**

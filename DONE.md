@@ -4,6 +4,15 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-12 — `search_code` truncation loop + BYO-coder misclassification + auto-run circuit-breaker + scope-helper consolidation
+
+Three linked fixes from the task #467 triage (a coding ticket that auto-ran 30+ times, all failing):
+
+- **`search_code` scoped to a subdirectory now scopes SERVER-SIDE** via GitHub's `path:` qualifier (`api/src/application/repos/readRepoContents.ts`) instead of post-filtering the capped, relevance-ranked global top-30. The old post-filter silently dropped a subdir's real matches for a common term (they ranked below the cap) AND carried a stale `truncated` flag → the nonsensical `total:0, truncated:true` that looped the agent into "re-run narrower" when it already had. GitLab scopes by prefix-filter inside the one search fn (never reports `truncated` when scoped, to avoid the same false loop). Handler post-filter deleted (dead code).
+- **BYO frontier flagships are recognised as coders.** `direct/meta/muse-spark-1.1` (Meta MUSE), `direct/openai/gpt-4.1`, `googleai/gemini-2.5-pro` were mislabelled `coding_model_degraded` (non-coder backstop) because only the Anthropic direct floor had been hand-added to `CODING_MODEL_POOL`. New single-source `BYO_FRONTIER_FLAGSHIPS` map → `RECOGNIZED_CODER_MODELS = pool ∪ BYO coders`, used by `isCodingModelDegraded`/`seedIsCoder` + the tool/structured-output sets (`LlmProxyService.ts`, `cloudAgentEngine.ts`).
+- **Auto-run circuit-breaker.** After 3 consecutive failed runs a ticket returns `run_cap_exhausted` (`canRunNow:false`) from `evaluateTaskAutoRun` — the ONE evaluator every dispatch path funnels through — so autonomy stops re-dispatching an identically-failing run; a human Run-now (dispatches off `candidate`) still overrides. New `board.triage.reason.run_cap_exhausted` localized in all 5 catalogs.
+- **DRY consolidation:** shared `normalizeScopeDir` + `isUnderScopeDir` in `@builderforce/agent-tools` (`glob.ts`) now used by all three capability providers (cloud GitHub-API, on-prem ripgrep, VS Code walk) + `searchRepoCode`/`listRepoFiles`, replacing four hand-rolled copies of the scope-normalize/prefix-match logic. Also DRYed the cloud commit-message convention into one `agentCommitMessage` helper. Audit confirmed glob/string-edit/read-pagination were already shared. Tests: `scopeDir.test.ts`, `searchRepoCode.test.ts`, `cloudAgentEngine.test.ts`, `evaluateAutoRun.test.ts` all green; api + VS Code typecheck clean. (Remaining known dup: the local-disk path-escape resolver — logged in ROADMAP, blocked on Worker-safety of the shared package.)
+
 ## ✅ RESOLVED 2026-07-11 — Evermind chat-learning scope + run-milestone lifecycle: closed ALL residuals (web self-heal + native-participant self-heal & visible learn step + web "Copy diagnostics" parity + paused/cancelled chat milestones) (api 2026.7.84 · brain-embedded 2026.7.31 · VSIX 2026.7.73 · frontend 2026.7.58)
 
 Fixed (not logged) the remaining "chat learns nothing / agents don't report back / can't see why" gaps so every surface reliably trains the project Evermind AND narrates its full lifecycle:
