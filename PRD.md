@@ -1,55 +1,83 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #284
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# PRD: Project Status Dashboard Indicator
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+Teams and stakeholders lack a single, instantly readable signal for overall project health. Without a standardized status indicator, status updates are buried in meeting notes, Slack threads, or lengthy reports — leading to delayed escalations and misaligned expectations. The goal is to surface a clear, real-time **Green / Yellow / Red** project status that any stakeholder can interpret at a glance.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+---
 
-## Target users / ICP roles
+## Target Users / ICP Roles
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+| Role | Need |
+|---|---|
+| **Executive Sponsor** | Instant health check without reading full reports |
+| **Project Manager** | Canonical place to set and justify status |
+| **Team Lead** | Awareness of cross-team blockers affecting status |
+| **Stakeholder / Client** | Confidence that issues are visible and owned |
+
+---
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This PRD covers the definition, calculation, display, and update workflow for a single **Project Status Indicator** (PSI) surfaced on a project dashboard or status page.
+
+---
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### FR-1 — Status States
+The system MUST support exactly three status values:
+
+| Status | Meaning |
+|---|---|
+| 🟢 **Green** | On track — no critical blockers; timeline and budget within acceptable thresholds |
+| 🟡 **Yellow** | At risk — one or more concerns require attention; mitigation plan exists or in progress |
+| 🔴 **Red** | Blocked / off track — critical blocker, missed milestone, or budget/scope breach requiring escalation |
+
+### FR-2 — Status Ownership
+- A designated **Project Manager** (or delegate) MUST be able to manually set the current status.
+- Status changes MUST require a brief mandatory justification note (≤ 280 characters).
+
+### FR-3 — Status Display
+- The current status, last-updated timestamp, owner name, and justification note MUST be visible on the project's primary dashboard view.
+- Status MUST render accessibly (color + label text + icon — not color alone).
+
+### FR-4 — Status History
+- All status changes MUST be logged with: previous state → new state, timestamp, author, and justification note.
+- History MUST be viewable in reverse-chronological order.
+
+### FR-5 — Notifications
+- A status change to **Yellow** MUST notify the project team channel/email list.
+- A status change to **Red** MUST notify the project team **and** executive sponsor(s).
+- Notifications MUST include the justification note and a direct link to the project dashboard.
+
+### FR-6 — Staleness Warning
+- If the status has not been updated in **7 calendar days**, the UI MUST display a staleness warning prompting the PM to confirm or update the status.
+
+---
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+| # | Criterion |
+|---|---|
+| AC-1 | PM can set status to Green, Yellow, or Red from the dashboard in ≤ 3 clicks |
+| AC-2 | Status change without a justification note is rejected with an inline validation error |
+| AC-3 | Dashboard displays status label, icon, owner, timestamp, and note without requiring scroll on a 1280 px viewport |
+| AC-4 | Status change to Red triggers email/channel notification to team + sponsors within 60 seconds |
+| AC-5 | Full status history is accessible and shows all required fields for every past change |
+| AC-6 | Staleness warning appears on day 8 if no update has been made |
+| AC-7 | Status indicator passes WCAG 2.1 AA color-contrast and non-color-only requirements |
 
-## Out of scope
+---
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## Out of Scope
+
+- **Automated status calculation** from ticket velocity, CI pipelines, or budget tools (manual update only for v1)
+- **Per-workstream or sub-task status** — this covers project-level status only
+- **External public-facing status pages** (customer-facing communication is a separate surface)
+- **SLA enforcement or escalation workflows** beyond the notification requirement
+- **Mobile-native app** — web responsive is sufficient for v1
+- **Integration with specific third-party PM tools** (Jira, Asana, Monday) — API hooks deferred to v2
