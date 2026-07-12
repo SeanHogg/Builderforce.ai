@@ -1,55 +1,51 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #512
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# Product Requirements Document: FR1 - Unassigned High-Priority Task Identification API
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+**Problem:** Project managers and team leads need a quick, efficient way to identify critical tasks that have not yet been assigned to anyone. Delays in assigning high-priority work can lead to missed deadlines and overall project slowdowns.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+**Goal:** To provide a robust and performant API endpoint that allows clients (e.g., dashboards, reporting tools) to retrieve a filtered list of unassigned, high-priority tasks. This enables proactive task management, improved resource allocation, and ensures critical work is prioritized.
 
-## Target users / ICP roles
+## Target Users / ICP Roles
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+*   **Developers/Engineers:** Building front-end dashboards, internal tools, or integrations that consume task data.
+*   **Project Managers:** Utilizing dashboards to identify and assign critical unassigned tasks.
+*   **Team Leads:** Monitoring team workload and ensuring high-priority items are addressed.
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This PRD covers the development and deployment of a new read-only API endpoint responsible for identifying and listing unassigned high-priority tasks. It includes the definition of filtering, sorting, pagination, and caching mechanisms for this specific data set. The mock API implementation is complete and serves as the reference.
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+*   **FR1.1: Endpoint Availability:** A new `GET` endpoint `/api/tasks/unassigned-high-priority` must be available.
+*   **FR1.2: Priority Filtering:** The endpoint must return tasks with a `priority` level of `high` or `critical`.
+*   **FR1.3: Assignment Filtering:** The endpoint must only return tasks where `assignedUserId` is `NULL`.
+*   **FR1.4: Status Exclusion:** The endpoint must exclude tasks that are `archived` or marked as `done`/`completed`.
+*   **FR1.5: Pagination Support:** The endpoint must support standard pagination parameters (e.g., `page`, `pageSize`).
+*   **FR1.6: Project Filtering:** The endpoint must support filtering tasks by `projectId`.
+*   **FR1.7: Sorting Options:** The endpoint must support sorting by `dueDate`, `title`, and `createdAt`.
+*   **FR1.8: Caching Recommendation:** The API response must include `cacheInfo.validForSeconds` to inform clients about recommended caching duration.
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+*   **AC1:** The `GET /api/tasks/unassigned-high-priority` endpoint successfully returns a list of tasks.
+*   **AC2:** All tasks returned by the endpoint have a `priority` of either 'high' or 'critical'.
+*   **AC3:** All tasks returned by the endpoint have `assignedUserId` set to `NULL`.
+*   **AC4:** No `archived` or `done`/`completed` tasks are present in the returned list.
+*   **AC5:** The endpoint correctly applies pagination based on provided `page` and `pageSize` parameters.
+*   **AC6:** The endpoint accurately filters tasks when a `projectId` parameter is supplied.
+*   **AC7:** The endpoint correctly sorts the returned tasks based on `dueDate`, `title`, or `createdAt` as specified.
+*   **AC8:** The API response includes `cacheInfo.validForSeconds` with a value of at least 1800 (30 minutes), enabling clients to comfortably cache responses for this duration.
+*   **AC9:** The mock API implementation at `Builderforce.ai/mock-api/tasks/unassigned-high-priority.ts` fully demonstrates all specified functional requirements and adheres to the given criteria.
 
-## Out of scope
+## Out of Scope
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+*   User Interface (UI) development for consuming this API endpoint.
+*   Real-time push notifications for newly unassigned high-priority tasks.
+*   API for modifying task assignment or priority.
+*   Detailed error handling specifications (assumed to follow existing API standards).
+*   Authentication and Authorization (assumed to be handled by existing API gateway/middleware).
