@@ -19,6 +19,8 @@ export interface ProgressiveRevealStream {
   error: Error | null;
   timestamp: number;
   timeoutMs?: number;
+  /** Active timeout timer handle (internal to the orchestrator). */
+  timeoutHandle?: ReturnType<typeof setTimeout>;
 }
 
 export interface ProgressiveRevealCallbacks {
