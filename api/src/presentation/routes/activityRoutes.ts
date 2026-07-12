@@ -362,7 +362,9 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
   });
 
   // POST /:id/submit — worker submits a draft timecard for approval (notifies the
-  // employer who owns the engagement).
+  // employer who owns the engagement). Writes a state transition event to timecard_events.
+  router.post('/:id/submit', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as string;
   router.post('/:id/submit', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
@@ -370,6 +372,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
       UPDATE timecards SET status = 'submitted', submitted_at = NOW(), updated_at = NOW()
       WHERE id = ${id} AND user_id = ${userId} AND status = 'draft' RETURNING id, tenant_id, engagement_id, billable_minutes
     `;
+    const card = rows[0];
     const card = rows[0];
     if (!card) return c.json({ error: 'Not found or not draft' }, 404);
     const [eng] = await sql(c.env)`SELECT created_by_user_id FROM freelancer_engagements WHERE id = ${card.engagement_id}`;
@@ -382,6 +385,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
 
   // POST /:id/approve — employer approves a submitted timecard (tenant JWT). This
   // ISSUES an invoice (pending) for the billable amount and notifies the worker.
+  // Role guard: only an engagement's client-side admin (tenant owner) may approve.
   router.post('/:id/approve', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
