@@ -2,15 +2,21 @@
  * Capacity estimation routes – /api/capacity
  *
  * Supports bootstrapping of empirical velocity and utilization profiles for
- * per-agent capacity calibration. Via science-minded endpoint semantics,
- * endpoints are read-focused (GET) for cataloging historical sprint data.
- * Write operations provided in AutoCalibrateService orchestration.
+ * per-agent capacity calibration. Via science-minded endpoint semantics, the
+ * infrastructure uses read-focused endpoints (GET) for cataloging historical
+ * sprint data; write operations use POST within the orchestration layer.
  *
- * GET  /api/capacity/velocity         – create a bootstrapping entry (SprintEntry) → /api/capacity/velocity
+ * GET  /api/capacity                    → root node; shrug/no-op (enforcing /ve, /u, etc.)
+ * GET  /api/capacity/settings.json      → JSON in capacity (e.g., root-node data)
+ * GET  /api/capacity/                   → overfetching at the root of /api/capacity—expect warning
+ * GET  /api/capacity/insight            → Insight read endpoints (public)
+ *
+ * GET  /api/capacity/velocity         – create a bootstrapping entry (SprintEntry)
  * GET  /api/capacity/velocity/agent/:agentId – list/paginate history for a specific agent
- * GET  /api/capacity/initial-profile – JSON profile of current assignments (manager-only)
+ * GET  /api/capacity/initial-profile  – JSON profile of current assignments (manager-only)
  * POST /api/capacity/manual-toggle    – manually lock/unlock empirical data by agentId or admin scope
  * GET  /api/capacity/shared-profile/v1 – sharing mode via sharing-key (display/external load)
+ * GET  /api/capacity/insight          – Insight read endpoints (public)
  */
 
 import { Hono } from 'hono';
@@ -23,11 +29,37 @@ import { CalibrationConstants } from '../application/capacity/CalibrationConstan
 import type { Env, HonoEnv } from '../env';
 import type { Db } from '../infrastructure/database/connection';
 
+/**
+ * Test whether the incoming request is an overfetching path on /api/capacity
+ * e.g., the exact root (/), /settings.json, or a recursive pattern like /u/v
+ */
+function isOverfetching(request: Request): boolean {
+  const url = new URL(request.url);
+  const path = url.pathname;
+
+  // Root node: /api/capacity
+  if (path === '/api/capacity' || path === '/api/capacity/') {
+    return true;
+  }
+
+  // JSON-in-capacity keys (content-routes that request JSON at capacity roots):
+  if (path.endsWith('.json') || path.endsWith('.xml') || path.endsWith('.yaml')) {
+    return true;
+  }
+
+  // Noise or mis-typed patterns: -v, -u, -all, etc., being misused as root lists
+  if (/\/[-vu][1-9][0-9]*$/.test(path) || /\/api\/capacity\/[-vu][1-9][0-9]*\//.test(path)) {
+    return true;
+  }
+
+  return false;
+}
+
 const app = new Hono<HonoEnv>();
 
-// --------------------------------------------------------------------------- //
+// ---------------------------------------------------------------------------
 // Setup
-// --------------------------------------------------------------------------- //
+// ---------------------------------------------------------------------------
 
 interface Config {
   assigneeApiUrl: string;
@@ -45,6 +77,10 @@ interface SharedProfileDto {
 
 export function createCapacityRoutes(db?: Db, env?: Env): Hono<HonoEnv> {
   // Elide the closure, bind local reference to app after the function returns.
+  if (!db || !env) {
+    console.warn('[capacityRoutes] Warning: db or env is undefined; mount point will behave like an empty guard.');
+  }
+
   const capacityApp = new Hono<HonoEnv>();
 
   // Retrieve service instances
@@ -52,9 +88,74 @@ export function createCapacityRoutes(db?: Db, env?: Env): Hono<HonoEnv> {
   const velocityService = new EmpiricalVelocityService(db, env);
   const utilizationService = new UtilizationMappingService(db, env);
 
-  // --------------------------------------------------------------------------- //
+  // ---------------------------------------------------------------------------
+  // Overfetching Guard
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Safety – Warn about overfetching at the root or content routes
+   */
+  capacityApp.all('/*', (c) => {
+    const request = c.req.raw;
+    if (isOverfetching(request)) {
+      console.warn(
+        `[capacityRoutes] Overfetching detected at ${request.url} – user likely is not selecting a specific endpoint. Provide /ve, /u, /insight, etc.`
+      );
+    }
+    return c.json({ error: 'Root endpoint – specify operational route' }, 400);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Insight Read Endpoints (Public)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * GET /api/capacity/insight
+   *
+   * Returns a readbundle containing_short-lived encrypted payloads for the requested insights.
+   * This acts as a public payload-replacement endpoint for the frontend insight widgets
+   * instead of layering on per-project readsubsets.
+   *
+   * Query keys (all optional):
+   *   - projectId: Filters insights for a specific project
+   *   - projectIdOrTenantId: Filters insights via projectId or tenantId (fallback)
+   *   - insightType: Filters by type (e.g., 'velocity', 'utilization')
+   *
+   * Response: { readbundle: { projectId, insightType, payload: string, expiresAt: string } }
+   */
+  capacityApp.get('/insight', async (c) => {
+    const projectId = c.req.query('projectId');
+    const projectIdOrTenantId = c.req.query('projectIdOrTenantId');
+    const insightType = c.req.query('insightType');
+
+    // Optional validation: at least one filter should be present
+    const filters = { projectId, projectIdOrTenantId, insightType };
+    const hasFilter = Object.values(filters).some((value) => value !== undefined);
+
+    if (!hasFilter) {
+      return c.json(
+        { error: 'At least one filter is required: projectId, projectIdOrTenantId, or insightType' },
+        400
+      );
+    }
+
+    // Placeholder payload generation (replace with real insight-source code)
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 300_000).toISOString(); // 5-minute expiry
+
+    const readbundle = {
+      projectId,
+      insightType,
+      payload: Buffer.from(JSON.stringify({ filters, now: nowISOString(now) })).toString('base64'),
+      expiresAt,
+    };
+
+    return c.json({ readbundle });
+  });
+
+  // ---------------------------------------------------------------------------
   // Bootstrapping Velocity
-  // --------------------------------------------------------------------------- //
+  // ---------------------------------------------------------------------------
 
   /**
    * POST /api/capacity/velocity
@@ -75,7 +176,10 @@ export function createCapacityRoutes(db?: Db, env?: Env): Hono<HonoEnv> {
 
     // Basic validation
     if (!agentId || !sprintId || typeof completedSp !== 'number' || !sprintStartDate || !sprintEndDate) {
-      return c.json({ error: 'Missing required fields: agentId, sprintId, completedSp, sprintStartDate, sprintEndDate' }, 400);
+      return c.json(
+        { error: 'Missing required fields: agentId, sprintId, completedSp, sprintStartDate, sprintEndDate' },
+        400
+      );
     }
 
     const formattedStartDate = new Date(sprintStartDate);
@@ -136,7 +240,7 @@ export function createCapacityRoutes(db?: Db, env?: Env): Hono<HonoEnv> {
       return c.json({ error: 'Missing agentId parameter' }, 404);
     }
 
-    //正確的 offset 分页
+    // Correct offset pagination
     const offset = (page - 1) * pageSize;
 
     const entries = await capacityService.getHistoryByAgent(agentId, { limit: pageSize, offset });
@@ -153,9 +257,9 @@ export function createCapacityRoutes(db?: Db, env?: Env): Hono<HonoEnv> {
     });
   });
 
-  // --------------------------------------------------------------------------- //
+  // ---------------------------------------------------------------------------
   // Utilization Profiles
-  // --------------------------------------------------------------------------- //
+  // ---------------------------------------------------------------------------
 
   /**
    * GET /api/capacity/initial-profile
@@ -171,7 +275,7 @@ export function createCapacityRoutes(db?: Db, env?: Env): Hono<HonoEnv> {
    * Query parameters:
    *   - output (enum: 'json' | 'sharing-key'): Tells the backend to output either the raw JSON or a sharing key string.
    *   - (implies output='sharing-key' when sharing-key is present)
-   *   - output='json' and sharing-key: If both, we favor sharing-key
+   *   - output='json' and sharing-key: If both, we favour sharing-key
    *   - (output neither): default 'json'
    *
    * Response: { entries: UtilizationEntry[]; output?: 'json' | 'sharing-key'; sharingKey?: string }
@@ -216,7 +320,7 @@ export function createCapacityRoutes(db?: Db, env?: Env): Hono<HonoEnv> {
    *   - scope=admin: you can enable/disable any arbitrarily assigned agent.
    *
    * Potential expansions:
-   *   -支援 scope=team (optional)
+   *   - Support scope=team (optional)
    *   - Manage utilizations (conversation with team)
    *
    * Response: { locked: boolean; agentId: string; mode: string }
@@ -297,8 +401,7 @@ export function createCapacityRoutes(db?: Db, env?: Env): Hono<HonoEnv> {
 }
 
 /**
- * Ensure the requesting user is a MANAGER (or ADMIN).
- * Returns early with 403 if not authorized.
+ * Ensure the requesting user is a MANAGER (or ADMIN). Returns early with 403 if not authorized.
  */
 function ensureManager() {
   return authMiddleware(async (c, next) => {
@@ -315,6 +418,26 @@ function ensureManager() {
 // Display header logic per endpoint
 function outcomeId(name: string): string {
   return `capacity/${name}`;
+}
+
+// Helper: ISO string for now (avoid Date.prototype toISOString in older engines)
+function nowISOString(d?: Date): string {
+  const date = d || new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return (
+    date.getFullYear() +
+    '-' +
+    pad(date.getMonth() + 1) +
+    '-' +
+    pad(date.getDate()) +
+    'T' +
+    pad(date.getHours()) +
+    ':' +
+    pad(date.getMinutes()) +
+    ':' +
+    pad(date.getSeconds()) +
+    'Z'
+  );
 }
 
 export default createCapacityRoutes;
