@@ -23,6 +23,11 @@ export interface BacklogMetricWithFilters {
 	taskCount: number;
 	storyPointsTotal: number;
 	unpointedCount: number;
+	taskPoints: number;
+	unpointed: number;
+	projectId: number;
+	tenantId: number;
+	teamId?: number | null;
 	lastSnapshotAt: Date;
 }
 
@@ -38,7 +43,7 @@ export interface BacklogMetricSnapshot {
  * Computes the backlog metric for a given project, optional team.
  */
 export function computeBacklogMetric(
-	projectId: number,
+	project: { id: number; tenantId: number };
 	teamId?: number | null,
 ) {
 	// NOTE: Actual implementation should use the repository/pattern from sources like workforceMetrics.ts:
@@ -46,14 +51,20 @@ export function computeBacklogMetric(
 	//   - Ensure row-level security filters by tenantId (via tenant context)
 	//   - Return computed metric DTO
 	// Example structure:
-	//   SELECT tasks.{id, story_points, sprint_id} FROM tasks JOIN projects ON tasks.project_id = projects.id
+	//   SELECT
+	//     COUNT(*) AS task_count,
+	//     SUM(COALESCE(story_points, 0)) AS story_points_total,
+	//     SUM(CASE WHEN story_points IS NULL THEN 1 ELSE 0 END) AS unpointed_count
+	//   FROM tasks JOIN projects ON tasks.project_id = projects.id
 	//     WHERE tasks.project_id = $1
-	//       AND tasks.archived = false
+	//       AND tasks.tenant_id = $2
 	//       AND tasks.status = 'backlog'
+	//       AND tasks.archived = false
 	//       AND (tasks.sprint_id IS NULL OR sprints.state != 'active' AND sprints.state != 'future')
 	//       AND (teamId IS NULL OR tasks.assigned_user_id = teamId)
+	//   GROUP BY projects.tenant_id;
 
-	// This is a whitespace-not-in-place placeholder method:
+	// This is a placeholder method:
 	const metric: BacklogMetric = {
 		taskCount: 0,
 		storyPointsTotal: 0,
