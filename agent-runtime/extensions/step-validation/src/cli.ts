@@ -1,297 +1,160 @@
 #!/usr/bin/env node
 
 /**
- * @see https://www.npmjs.com/package/typescript
+ * Step Validation CLI
  *
- * CLI for inspecting and testing integration contract definitions.
+ * Usage:
+ *   validate-contracts --help
+ *   validate-contracts --lint contracts.json
+ *   validate-contracts --fixture test-payload.json --schema input-schema.json
+ *   validate-contracts --diff old.json new.json
  */
 
-import { ValidateContractsResult } from './validator.js';
-import { ValidationResult } from './types.js';
+'use strict';
 
-export function formatValidationError(error: ValidationResult): string {
-  return [
-    // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-    `ValidationError: ${error.contractType} at step '${error.stepName}'`,
-    `  Step ID:   ${error.stepId}`,
-    `  Pipeline:  ${error.pipelineRunId || 'N/A'}`,
-    `  Failed rules (${error.failedRules.length}):`,
-  ]
-    .concat(error.failedRules)
-    .map((rule) => `    - ${JSON.stringify(rule)}`)
-    .join('\n');
+import { program } from 'commander';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { validatePayload, clearSchemaCache, SchemaCache } from './validator.js';
+import type { FailedRule, ValidationResult } from './types.js';
+
+let globalSchemaCache: SchemaCache | undefined;
+
+/**
+ * Lint a single contract file for syntactic correctness.
+ */
+function lintContract(filePath: string): { ok: boolean; errors: string[] } {
+  try {
+    const content = readFileSync(filePath, 'utf-8');
+    const schema = JSON.parse(content);
+    if (!globalSchemaCache) globalSchemaCache = new SchemaCache();
+    globalSchemaCache.compile(schema);
+    return { ok: true, errors: [] };
+  } catch (err: unknown) {
+    if (err instanceof SyntaxError) {
+      return { ok: false, errors: [err.message] };
+    }
+    return { ok: false, errors: [(err as Error).message] };
+  }
 }
 
-export function formatValidateContractsResult(result: ValidateContractsResult): string {
-  const parts: string[] = [];
+/**
+ * Run contracts against fixture payloads.
+ */
+function validateAgainstFixture(
+  fixtureFile: string,
+  schemaFile: string,
+  contractType: 'input' | 'output',
+  verbose = false,
+): { exitCode: number; failures: ValidationResult[] } {
+  try {
+    const fixture = JSON.parse(readFileSync(fixtureFile, 'utf-8'));
+    const schemaStr = readFileSync(schemaFile, 'utf-8');
+    const schema = JSON.parse(schemaStr);
 
-  if (result.status === 'success') {
-    if (result.successCount === 0) {
-      parts.push('No contract files found at the configured directory.');
-    } else {
-      parts.push(
-        `Parsed ${result.parsedCount} contract file(s); ${result.successCount} passed, ${result.failureCount} failed.`,
-      );
-      parts.push('');
-      if (result.failures.length > 0) {
-        parts.push('Failed contracts:');
-        for (const failure of result.failures) {
-          parts.push(`  ${failure.fileName}:`);
-          for (const error of failure.errors) {
-            parts.push(formatValidationError(error));
-            parts.push('');
-          }
+    if (!globalSchemaCache) globalSchemaCache = new SchemaCache();
+    clearSchemaCache();
+
+    const result = validatePayload(fixture, schema, contractType, 'cli');
+
+    console.info(`[validate-contracts] contract_type=${contractType} payload_path=${fixtureFile}`);
+
+    if (result.valid) {
+      console.info('[validate-contracts] ✓ passed');
+      return { exitCode: 0, failures: [] };
+    }
+
+    console.error('[validate-contracts] ✗ validation failed');
+    if (verbose && result.errors) {
+      for (const fail of result.errors) {
+        console.error(`[validate-contracts]   rule: "${fail.rule}"  field: ${fail.fieldPath}  value: ${JSON.stringify(fail.value)}`);
+      }
+    }
+    return { exitCode: 1, failures: [result] };
+  } catch (err: unknown) {
+    console.error(`[validate-contracts] ✗ failed to compute: ${(err as Error).message}`);
+    return { exitCode: 2, failures: [] };
+  }
+}
+
+/**
+ * Diff two contracts and flag breaking changes.
+ */
+function diffContracts(oldFile: string, newFile: string): { exitCode: number; diffs: string[] } {
+  const oldJson = JSON.parse(readFileSync(oldFile, 'utf-8'));
+  const newJson = JSON.parse(readFileSync(newFile, 'utf-8'));
+
+  const diffs: string[] = [];
+
+  const compare = (objA: unknown, objB: unknown, path = 'root'): void => {
+    const keysA = Object.keys(objA || {});
+    const keysB = Object.keys(objB || {});
+
+    for (const k of keysB) {
+      const fullKey = path === 'root' ? k : `${path}.${k}`;
+      if (!(k in (objA as object))) {
+        diffs.push(`break: add required field "${fullKey}"`);
+      } else {
+        const valA = (objA as Record<string, unknown>)[k];
+        const valB = (objB as Record<string, unknown>)[k];
+        if (typeof valA === 'object' && typeof valB === 'object' && valA != null && valB != null) {
+          compare(valA, valB, fullKey);
+        } else if (JSON.stringify(valA) !== JSON.stringify(valB)) {
+          diffs.push(`break: field changed "${fullKey}"`);
         }
       }
     }
-  } else {
-    parts.push(`Fatal error: ${result.errorMessage}`);
-  }
-
-  return parts.join('\n');
-}
-
-/**
- * Main entry point that returns an exit code matching the passed/fail counts.
- *
- * Usage: npx @seanhogg/builderforce-agents/plugin-sdk run src/cli.ts [options]
- *
- *   --fixture string    Run contract validation against a JSON fixture file.
- *   --diff              Run validation in "diff" mode: compare contract vs fixture and exit on breaking changes.
- */
-export function runCli(args: string[]): number {
-  const baseUrl = getUrlFromArg('--base-url', args);
-  const fixturePath = getUrlFromArg('--fixture', args);
-  const diffModeArg = args.includes('--diff');
-  const contractDir = contractDirFromArg(args);
-  const maxRuleLength = 300; // limit for CLI length
-
-  if (!fixturePath) {
-    // No fixture specified: just lint/parse contracts.
-    const result = validateContracts({
-      contractDir,
-      baseUrl,
-      maxRuleLength,
-    });
-
-    if (result.status === 'error') {
-      console.error(result.errorMessage);
-      return 1;
-    }
-
-    if (result.failureCount === 0) {
-      console.log('All validated contracts passed.');
-    } else {
-      console.error(formatValidateContractsResult(result));
-    }
-    return result.failureCount === 0 ? 0 : 1;
-  }
-
-  // Fixture mode: load fixture and run validation against it.
-  const fixture = loadFixture(fixturePath);
-  if (!fixture) {
-    console.error(`Failed to load fixture from '${fixturePath}': ${fixture.error || 'unknown error'}`);
-    return 1;
-  }
-
-  // Validate fixture against the contract at the given path (from --base-url).
-  // If --base-url is not provided, we default to a placeholder.
-  const result = validateContractAgainstFixture({
-    contractPath: baseUrl || './contracts/dummy-contract.json',
-    fixture,
-    maxRuleLength,
-  });
-
-  if (result.status === 'error') {
-    console.error(result.errorMessage);
-    return 1;
-  }
-
-  if (result.valid) {
-    console.log('Fixture passed contract validation.');
-  } else {
-    console.error(`Fixture validation failed at step '${result.stepName}':\n${formatValidationError(result)}`);
-    return 1;
-  }
-
-  if (diffModeArg) {
-    // Diff mode: exit with non-zero when contracts had changes between versions.
-    // Currently, this performs a basic contract-only check without diff logic.
-    // For a robust diff implementation, we'd need a contract version source.
-    const diffResult = diffContracts(contractDir || './contracts', baseUrl || './contracts');
-    if (diffResult.pending) {
-      console.error(
-        `Diff-detected pending changes. Run --diff for full diff logic. See ${diffResult.msg} for details.`,
-      );
-      return 1;
-    }
-  }
-
-  return result.valid ? 0 : 1;
-}
-
-/**
- * Parse and validate contract definitions.
- *
- * @returns void; exit via console.error for errors.
- */
-export async function validateContracts(opts: {
-  contractDir?: string;
-  baseUrl?: string;
-  maxRuleLength?: number;
-}): Promise<void> {
-  const result = validateContractsImpl(opts);
-  const hasFailures = result.status === 'success' && result.failureCount > 0;
-
-  if (hasFailures || result.status === 'error') {
-    console.error(formatValidateContractsResult(result));
-    process.exit(hasFailures ? result.failureCount : 1);
-  }
-}
-
-export function loadFixture(pathName: string): { valid: boolean; data?: unknown; error?: string } | null {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  try {
-    const data = require(pathName);
-    return { valid: true, data };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { valid: false, error: `Failed to load fixture from '${pathName}': ${message}` };
-  }
-}
-
-/**
- * Validate a contract against a fixture, with a enforced rule-length cap.
- */
-function validateContractAgainstFixture(opts: {
-  contractPath: string;
-  fixture: unknown;
-  maxRuleLength?: number;
-}): ValidateContractsResult {
-  const { contractPath, fixture, maxRuleLength } = opts;
-
-  // Load the contract at `contractPath` from a local path or placeholder.
-  // At this time, we expect the contract to be JSON; for real work we’d
-  // integrate a contract loader that supports multiple formats (JSON,
-  // YAML, compiled code).
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  let contract: unknown;
-  try {
-    contract = require(contractPath);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return {
-      status: 'error',
-      errorMessage: `Failed to load contract from '${contractPath}': ${message}`,
-    };
-  }
-
-  // Serialize fixture to JSON string and validate JSON Schema.
-  const fixtureJson = JSON.stringify(fixture, null, 2);
-  if (typeof fixtureJson !== 'string') {
-    return {
-      status: 'error',
-      errorMessage: `Failed to serialize fixture to JSON string: ${String(fixtureJson)}`,
-    };
-  }
-
-  // Using Ajv; at present we only support JSON Schema for fixture validation.
-  const ajv = createAjv(maxRuleLength);
-  const validate: ((data: unknown) => boolean) | undefined = ajv.compile(contract as { $schema?: string });
-
-  if (!validate) {
-    return {
-      status: 'error',
-      errorMessage: `Failed to compile contract as JSON Schema at '${contractPath}'`,
-    };
-  }
-
-  const valid = validate(fixture);
-  const errors = validate.errors || [];
-
-  if (valid) {
-    return { status: 'success', successCount: 1, failureCount: 0 };
-  }
-
-  const illegalRules = errors.filter((err: any) => String(err.constraint || '').length > (maxRuleLength || Infinity));
-  return {
-    status: 'success',
-    successCount: 1,
-    failureCount: illegalRules.length || errors.length,
-    failures: illegalRules.length > 0
-      ? errors.filter((err: any) => String(err.constraint || '').length <= (maxRuleLength || Infinity))
-      : errors,
-    parsedCount: 1,
   };
+
+  compare(oldJson, newJson);
+
+  if (diffs.length > 0) {
+    console.error(`[validate-contracts] diffs detected:\n${diffs.map(d => `  ${d}`).join('\n')}`);
+    return { exitCode: 1, diffs };
+  }
+
+  console.info('[validate-contracts] no breaking diffs');
+  return { exitCode: 0, diffs };
 }
 
-function diffContracts(contractDir?: string, baseUrl?: string): { pending: boolean; msg?: string } {
-  // Placeholder for diff logic. For a robust implementation, compare contract versions
-  // and report breaking changes.
-  return { pending: false };
-}
+program.name('validate-contracts').description('Lint, test, and diff JSON Schema contracts for step validation').version('1.0.0');
 
-function createAjv(maxRuleLength: number = 300): any {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const Ajv = require('ajv');
-  const ajv = new Ajv({ allErrors: true });
-
-  // Ensure we don’t produce rule strings that exceed the CLI length budget.
-  ajv.addKeyword('maxLength', {
-    compile: (schema, parentSchema, it) => {
-      const maxLength = Math.max(String(schema).length, 0);
-      if (maxLength > maxRuleLength) {
-        throw new Error(`Constraint length exceeds maxRuleLength (${maxRuleLength})`);
-      }
-      return (data) => true; // placeholder; rule length check is enforced via keyword registration
-    },
+program
+  .command('lint')
+  .description('Lint a single contract file for syntax errors')
+  .requiredOption('--file <path>', 'Path to contract JSON file')
+  .action((opts: { file: string }) => {
+    const result = lintContract(resolve(opts.file));
+    if (result.ok) {
+      console.info('[validate-contracts] contract file is valid JSON');
+      process.exit(0);
+    }
+    console.error('[validate-contracts] contract file has errors');
+    result.errors.forEach((e) => console.error(`  ${e}`));
+    process.exit(1);
   });
 
-  ajv.addKeyword('pattern', {
-    compile: (schema, parentSchema, it) => {
-      try {
-        new RegExp(schema as string); // Placeholder; enforcement in live machinery
-      } catch (err) {
-        throw new Error('Invalid regular-expression pattern.');
-      }
-      return (data) => true; // placeholder; actual signature validation lives in the host engine
-    },
+program
+  .command('validate')
+  .description('Run contracts against fixture payloads')
+  .requiredOption('--fixture <path>', 'Path to payload JSON file')
+  .requiredOption('--schema <path>', 'Path to schema JSON file')
+  .option('--contract-type <type>', 'Type of contract (input | output)', 'input')
+  .option('--verbose', 'Print detailed errors', false)
+  .action((opts) => {
+    const contractType: 'input' | 'output' = opts.contractType === 'output' ? 'output' : 'input';
+    const result = validateAgainstFixture(resolve(opts.fixture), resolve(opts.schema), contractType, opts.verbose);
+    process.exit(result.exitCode);
   });
 
-  return ajv;
-}
+program
+  .command('diff')
+  .description('Flag breaking changes between two contract versions')
+  .requiredOption('--old <path>', 'Baseline contract (old version)')
+  .requiredOption('--new <path>', 'New contract (new version)')
+  .action((opts) => {
+    const result = diffContracts(resolve(opts.old), resolve(opts.new));
+    process.exit(result.exitCode);
+  });
 
-function getUrlFromArg(argName: string, args: string[]): string | undefined {
-  const idx = args.indexOf(argName);
-  if (idx < 0 || idx + 1 >= args.length || args[idx + 1].startsWith('-')) {
-    return undefined;
-  }
-  const val = args[idx + 1];
-  // Ensure path normalization for local-only use.
-  return val.startsWith('/') ? val : undefined;
-}
-
-function contractDirFromArg(args: string[]): string | undefined {
-  const idx = args.indexOf('--dir');
-  if (idx < 0 || idx + 1 >= args.length || args[idx + 1].startsWith('-')) {
-    return undefined;
-  }
-  const dir = args[idx + 1];
-  return dir.startsWith('/') ? dir : undefined;
-}
-
-function validateContractsImpl(opts: {
-  contractDir?: string;
-  baseUrl?: string;
-  maxRuleLength?: number;
-}): ValidateContractsResult {
-  // Placeholder for loading and validating contract files from the configured directory.
-  // Future implementation will read `.json`/`.yaml` contracts and filter duplicate file names.
-  return {
-    status: 'success',
-    successCount: 0,
-    failureCount: 0,
-    parsedCount: 0,
-    failures: [],
-  };
-}
+program.parse();
