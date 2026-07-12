@@ -172,7 +172,6 @@ describe('TaskService update preserves parentTaskId (AC-1..AC-4)', () => {
   it('AC-2: parentTaskId is preserved when the same payload also contains assignedAgentRef', async () => {
     repo.writes = [];
     const service = new TaskService(repo, new SingleProjectRepo(makeProject()));
-    const taskId = asTaskId(42);
     // Update with both parentTaskId and assignedAgentRef — ensure both survive
     const updated = await service.updateTask(42, {
       parentTaskId: 3,
