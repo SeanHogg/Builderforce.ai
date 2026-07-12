@@ -80,7 +80,7 @@ const SPECS: ReadonlyArray<VendorSpec> = [
   {
     id: 'xai', brand: 'xAI', apiKeyEnv: 'XAI_API_KEY',
     baseUrl: 'https://api.x.ai/v1/chat/completions',
-    models: ['grok-3', 'grok-3-mini', 'grok-2-1212'],
+    models: ['grok-4.5', 'grok-4.3', 'grok-3', 'grok-3-mini'],
   },
   {
     id: 'perplexity', brand: 'Perplexity', apiKeyEnv: 'PERPLEXITY_API_KEY',

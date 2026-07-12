@@ -94,6 +94,7 @@ import {
   parseOpenAICodexCallback,
   exchangeOpenAICodexCode,
 } from '../../application/llm/openaiCodexOAuth';
+import { buildXaiAuthorizeUrl, parseXaiCallback, exchangeXaiCode } from '../../application/llm/xaiOAuth';
 import { parseAnthropicSseUsage } from '../../application/llm/anthropicSseUsage';
 import {
   anthropicToOpenAiRequest,
@@ -1035,6 +1036,47 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       return c.json({ ok: true, provider: 'openai', authType: 'oauth' });
     } catch (e) {
       return c.json({ error: e instanceof Error ? e.message : 'OAuth exchange failed', code: 'oauth_exchange_failed' }, 502);
+    }
+  });
+
+  const xaiOauthPkceKey = (tenantId: number, state: string): string => `xai_oauth:${tenantId}:${state}`;
+
+  router.post('/provider-keys/xai/oauth/start', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const kv = (c.env as { AUTH_CACHE_KV?: KVNamespace }).AUTH_CACHE_KV;
+    if (!kv) return c.json({ error: 'OAuth connect unavailable (AUTH_CACHE_KV unbound)', code: 'oauth_unconfigured' }, 503);
+    const { verifier, challenge } = await generatePkce();
+    const state = generateState();
+    await kv.put(xaiOauthPkceKey(access.tenantId, state), JSON.stringify({ verifier, challenge }), { expirationTtl: OAUTH_PKCE_TTL_SECONDS });
+    try {
+      return c.json({ authorizeUrl: await buildXaiAuthorizeUrl({ state, challenge }), state });
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : 'xAI OAuth discovery failed', code: 'oauth_discovery_failed' }, 502);
+    }
+  });
+
+  router.post('/provider-keys/xai/oauth/complete', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const kv = (c.env as { AUTH_CACHE_KV?: KVNamespace }).AUTH_CACHE_KV;
+    if (!kv) return c.json({ error: 'OAuth connect unavailable (AUTH_CACHE_KV unbound)', code: 'oauth_unconfigured' }, 503);
+    const body = await c.req.json<{ code?: string; state?: string }>().catch(() => ({} as { code?: string; state?: string }));
+    const parsed = parseXaiCallback(body.code?.trim() ?? '');
+    const state = (parsed.state ?? body.state ?? '').trim();
+    if (!parsed.code || !state) return c.json({ error: 'Paste the full xAI redirect URL so code and state can be verified', code: 'oauth_missing_code_or_state' }, 400);
+    const key = xaiOauthPkceKey(access.tenantId, state);
+    const pendingRaw = await kv.get(key);
+    if (!pendingRaw) return c.json({ error: 'Connect session expired or invalid — start again.', code: 'oauth_state_expired' }, 400);
+    try {
+      const pending = JSON.parse(pendingRaw) as { verifier: string; challenge: string };
+      const tokens = await exchangeXaiCode({ code: parsed.code, verifier: pending.verifier, challenge: pending.challenge });
+      await setTenantProviderOAuth(c.env, access.tenantId, 'xai', tokens, access.userId);
+      await kv.delete(key).catch(() => {});
+      return c.json({ ok: true, provider: 'xai', authType: 'oauth' });
+    } catch (e) {
+      const status = (e as { status?: number }).status;
+      return c.json({ error: e instanceof Error ? e.message : 'xAI OAuth exchange failed', code: status === 403 ? 'oauth_subscription_not_entitled' : 'oauth_exchange_failed' }, status === 403 ? 403 : 502);
     }
   });
 

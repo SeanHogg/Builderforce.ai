@@ -11,6 +11,10 @@ describe('OpenAI Codex subscription vendor', () => {
       vendorPriority: ['openai-codex', 'anthropic'],
     })[0]).toBe('openai-codex/gpt-5.3-codex');
   });
+
+  it('allows an xAI subscription credential to lead the same BYO seed', () => {
+    expect(byoAutoSeedModels(new Set(['xai', 'anthropic']), { agentic: true, vendorPriority: ['xai', 'anthropic'] })[0]).toBe('direct/xai/grok-4.5');
+  });
   it('calls Codex Responses and normalizes the result', async () => {
     const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
       expect(init.headers).toMatchObject({ authorization: 'Bearer access', 'ChatGPT-Account-Id': 'acct' });
