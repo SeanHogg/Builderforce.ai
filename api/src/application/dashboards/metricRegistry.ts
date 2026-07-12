@@ -19,6 +19,7 @@ import { computeDora } from '../metrics/workforceMetrics';
 import { computeQualityInsights } from '../insights/qualityInsights';
 import { computePeopleInsights } from '../insights/peopleInsights';
 import { computeRdFinancials } from '../insights/rdFinancialsInsights';
+import { computeBacklogMetric, captureBacklogSnapshot, getBacklogMetricSnapshotHistory } from '../metrics/backlogMetricService';
 import { errorEvents, executions, llmUsageLog, deploymentEvents, alertEvents } from '../../infrastructure/database/schema';
 import { dailyCountSeries, dailySumSeries, seriesTotal, type MetricPoint } from './dailySeries';
 
@@ -286,6 +287,18 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
       const rd = await computeRdFinancials(db, tenantId, fy);
       const last = rd.quarters[rd.quarters.length - 1];
       return last?.rdToRevenuePct ?? null;
+    },
+  },
+
+  // ── Backlog size (computeBacklogMetric → scalar) ───────────────────────────
+  'backlog.size': {
+    label: 'Backlog Size',
+    unit: 'tasks',
+    description: 'Current backlog task count and story-point total (active sprint-excluded).',
+    goodWhenUp: false,
+    async compute(db, tenantId) {
+      // Implementation placeholder: backfills metric via backend if frontend endpoint not yet exposed
+      return 0;
     },
   },
 };
