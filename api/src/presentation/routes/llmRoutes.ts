@@ -785,12 +785,13 @@ function proxyForCompletion(
   env: Env,
   access: TenantAccess,
   body: ChatCompletionRequest,
-  opts: { disablePaidOverflow: boolean; anthropicOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; byoVendorPriority?: readonly string[] },
+  opts: { disablePaidOverflow: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; tenantVendorKeys?: TenantVendorKeys | null; byoVendorPriority?: readonly string[] },
 ): ReturnType<typeof llmProxyForPlan> {
   return llmProxyForPlan(env, access.effectivePlan, access.premiumOverride, {
     disablePaidOverflow: opts.disablePaidOverflow,
     ...(isAgenticToolTurn(body as { tools?: unknown }) ? { codingOnly: true, backstopModels: CODING_BACKSTOP_MODELS } : {}),
     ...(opts.anthropicOAuthToken ? { anthropicOAuthToken: opts.anthropicOAuthToken } : {}),
+    ...(opts.openaiCodexAuth ? { openaiCodexAuth: opts.openaiCodexAuth } : {}),
     ...(opts.tenantVendorKeys ? { tenantVendorKeys: opts.tenantVendorKeys } : {}),
     ...(opts.byoVendorPriority?.length ? { byoVendorPriority: opts.byoVendorPriority } : {}),
   });
@@ -1478,8 +1479,12 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // keys for their vendors so the tenant's own account serves the call ($0 to us,
     // metered byo). The connected vendors also unlock free-plan model choice.
     const tenantCreds = await resolveTenantLlmCredentials(c.env, access.tenantId);
-    const { anthropicOAuthToken, vendorKeys: tenantVendorKeys } = tenantCreds;
+    const { anthropicOAuthToken, openaiCodexAuth, vendorKeys: tenantVendorKeys } = tenantCreds;
     const byoVendors = byoVendorIdSet(providersFromCredentials(tenantCreds));
+    if (tenantCreds.openaiCodexAuth) {
+      byoVendors.delete('openai');
+      byoVendors.add('openai-codex');
+    }
 
     const queryStrict = c.req.query('strict') === 'true';
     const wantsStrict = resolveStrictPin(bodyAny, queryStrict);
@@ -1596,7 +1601,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // a plain chat keeps the general pool. Reuses the credentials resolved above so
     // any direct-Claude resolution rides the tenant subscription and BYO vendors
     // serve from the tenant's own account.
-    const service = proxyForCompletion(c.env, access, body, { disablePaidOverflow, anthropicOAuthToken, tenantVendorKeys, byoVendorPriority: tenantCreds.vendorPriority });
+    const service = proxyForCompletion(c.env, access, body, { disablePaidOverflow, anthropicOAuthToken, openaiCodexAuth, tenantVendorKeys, byoVendorPriority: tenantCreds.vendorPriority });
     // Context-fit seeding: estimate the turn's tokens so the proxy drops
     // small-window models from the first-pass seed. This is the preventive half
     // of the Brain "dies after several executions" fix — the reactive 413

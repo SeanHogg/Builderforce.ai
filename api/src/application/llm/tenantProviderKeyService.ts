@@ -82,6 +82,7 @@ export function byoVendorIdSet(providers: readonly LlmProvider[]): Set<string> {
 export function providersFromCredentials(creds: TenantLlmCredentials): LlmProvider[] {
   const set = new Set<LlmProvider>((Object.keys(creds.vendorKeys) as LlmProvider[]).filter((p) => creds.vendorKeys[p]));
   if (creds.anthropicOAuthToken) set.add('anthropic');
+  if (creds.openaiCodexAuth) set.add('openai');
   return [...set];
 }
 
@@ -312,6 +313,7 @@ export async function resolveTenantVendorKeys(env: Env, tenantId: number): Promi
  *  (OpenAI/Google/Anthropic). */
 export interface TenantLlmCredentials {
   anthropicOAuthToken: string | null;
+  openaiCodexAuth?: { accessToken: string; accountId: string } | null;
   vendorKeys: TenantVendorKeys;
   /** Every provider the tenant has a stored credential ROW for — regardless of whether
    *  it could be RESOLVED this call. A provider that is `configured` but absent from the
@@ -340,14 +342,16 @@ export interface TenantLlmCredentials {
  * WHY in `unresolvedReasons`) so the degrade to the shared pool is never silent.
  */
 export async function resolveTenantLlmCredentials(env: Env, tenantId: number): Promise<TenantLlmCredentials> {
-  const [anthropicRes, vendorKeys, configured] = await Promise.all([
+  const [anthropicRes, openaiRes, vendorKeys, configured] = await Promise.all([
     resolveAnthropicResolution(env, tenantId).catch(() => ({ auth: null }) as AnthropicResolution),
+    resolveOpenAICodexResolution(env, tenantId).catch(() => ({ auth: null }) as OpenAICodexResolution),
     resolveTenantVendorKeys(env, tenantId),
     listTenantProviderKeys(env, tenantId).catch(() => [] as ProviderKeySummary[]),
   ]);
   const anthropicOAuthToken = anthropicRes.auth?.mode === 'oauth' ? anthropicRes.auth.accessToken : null;
   const creds: TenantLlmCredentials = {
     anthropicOAuthToken,
+    openaiCodexAuth: openaiRes.auth,
     vendorKeys,
     // `configured` is already ordered by tenant-set precedence (listTenantProviderKeys),
     // so both the provider list and the vendor-priority order read straight off it.
@@ -362,7 +366,9 @@ export async function resolveTenantLlmCredentials(env: Env, tenantId: number): P
   const usable = new Set(providersFromCredentials(creds));
   for (const p of creds.configuredProviders) {
     if (usable.has(p)) continue;
-    creds.unresolvedReasons[p] = p === 'anthropic' ? (anthropicRes.reason ?? 'undecryptable') : 'undecryptable';
+    creds.unresolvedReasons[p] = p === 'anthropic'
+      ? (anthropicRes.reason ?? 'undecryptable')
+      : p === 'openai' ? (openaiRes.reason ?? 'undecryptable') : 'undecryptable';
   }
   return creds;
 }
@@ -495,7 +501,9 @@ export async function setTenantProviderPriority(
 export function byoVendorPriorityOrder(summaries: readonly ProviderKeySummary[]): string[] {
   return summaries
     .filter((s) => s.priority !== null)
-    .map((s) => PROVIDER_VENDOR_MAP[s.provider].vendorId);
+    .map((s) => s.provider === 'openai' && s.authType === 'oauth'
+      ? 'openai-codex'
+      : PROVIDER_VENDOR_MAP[s.provider].vendorId);
 }
 
 /** Remove a tenant's provider credential (API key or OAuth subscription). */
