@@ -1,0 +1,63 @@
+{
+  "metadata": {
+    "version": "0.1.0",
+    "schema": "2026-06-18",
+    "description": "Job category taxonomy for skills/faceted search filters (optional identifier tracking: parentId, tags, orderMeta/sortValues). Designed for later integration with jobs and freelancers tables."
+  },
+  "categories": [
+    {
+      "id": "design",
+      "name": "Design",
+      "parentId": null,
+      "description": "User interface, graphic visual design, and UX layout work.",
+      "orderMeta": 1,
+      "tags": ["design", "ui/ux", "graphics"],
+      "skills": [
+        {
+          "id": "design-ui",
+          "name": "UI/UX Design",
+          "parentId": "design",
+          "description": "End-to-end product interaction flows and screen layouts.",
+          "tags": ["ui", "ux", "user-journey"]
+        },
+        {
+          "id": "design-brand",
+          "name": "Brand Design",
+          "parentId": "design",
+          "description": "Visual identity, logos, brand guidelines, and design systems.",
+          "tags": ["brand", "identity", "design-system"]
+        },
+        {
+          "id": "design-graphic",
+          "name": "Graphic Design",
+          "parentId": "design",
+          "description": "Static graphics, illustrations, and visual assets.",
+          "tags": ["graphic", "vector", "poster"]
+        },
+        {
+          "id": "design-identity",
+          "name": "Identity Design",
+          "parentId": "design",
+          "description": "Facial look-and-feel, typography direction, and social assets.",
+          "tags": ["identity", "social", "avatar"]
+        }
+      ]
+    },
+    {
+      "id": "design-identify",
+      "name": "Identity",
+      "parentId": "design",
+      "orderMeta": 2,
+      "description": "Identity design and visual language for products/users.",
+      "skills": [
+        {
+          "id": "design-identify-brand",
+          "name": "Brand Identity",
+          "parentId": "design-identify",
+          "description": "Shop logos, guidelines, tone-of-voice decks covering name, tagline, style direction.",
+          "tags": ["brand", "identity", "logos"]
+        }
+      ]
+    }
+  ]
+}
