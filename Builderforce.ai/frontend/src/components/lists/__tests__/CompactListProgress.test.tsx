@@ -151,14 +151,15 @@ describe('CompactListProgress (AC-1..AC-11, FR-1..FR-8, FR-3, FR-6, FR-7, FR-8)'
           status: 'in_progress',
         },
       ];
+      const longLabel = 'VeryVeryVeryLongLabelThatExceedsAvailableWidthWithoutAnyEllipsisAtAll';
       render(<CompactListProgress items={longItems} emptyText="No items" />);
       const rows = screen.getAllByRole('listitem');
       expect(rows.length).toBe(1);
-      // Verify overflow/ellipsis via whitespace and text-overflow style (we don't test computed CSS).
-      const label = rows[0]?.querySelector('[role=listitem] > span')?.textContent;
-      if (label) {
-        expect(label.length).toBeGreaterThan(60); // confirm overflow
-      }
+      // The label span carries the ellipsis/overflow styling and a title for the full text.
+      const labelSpan = within(rows[0]!).getByText(longLabel);
+      expect(labelSpan).toBeInTheDocument();
+      expect(labelSpan).toHaveStyle({ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' });
+      expect(labelSpan).toHaveAttribute('title', longLabel);
     });
   });
 
