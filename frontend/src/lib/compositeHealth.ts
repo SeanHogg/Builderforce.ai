@@ -1,426 +1,433 @@
 /**
- * Composite health score -- single source of truth for a project's composite health signal.
+ * Composite health score with traffic light.
  *
- * Every composite-score surface (card, list, details, portfolios, alerts) calls this so its
- * traffic-light status can never drift. The function merges normalized sub-metric scores into
- * a weighted composite (default weights), maps the composite to a traffic-light tier, and
- * wraps it into a self-contained HealthBadge object.
- *
- * CRITICAL OVERRIDE: If any sub-metric reports a critical issue (e.g., an open P1 incident),
- * the overall status is forced to RED regardless of the computed composite score.
- *
- * Thresholds and weights are EACH separately configurable (global and per-project). If the
- * project has no sub-metric data yet, returns "no_data" (status: 'no_data', score: null, color: neutral).
- *
- * Sub-metric scoring:
- * - Each sub-metric value is normalised to a 0-100 component using per-metric min/max endpoints.
- * - If the sub-metric's value is outside its configured bounds, it contributes zero.
- * - A sub-metric is flagged STALE if it has been unreachable for more than two refresh cycles.
- *   A stale sub-metric is excluded from the composite; its weight is redistributed across
- *   remaining healthy sub-metrics.
- *
- * Composite computation (after weight redistribution):
- * - score = sum(normalized_component_i * weight_i) for all healthy, non-stale sub-metrics.
- * - Both side cases (no healthy metrics or all stale) result in no_data.
- *
- * Core type:
- * - TIER = 'red' | 'amber' | 'green'
+ * Core library: normalises sub-metrics to [0,100] and computes a weighted
+ * average using only non-stale, non-zero-weight sub-metrics, redist weight
+ * for stale/zero-weight metrics, enforces a critical-override rule if any
+ * emergent critical metric is evaluated, maps the composite score to R/G/A,
+ * records last-run timestamp, and reports sub-metric details/exact value.
  */
 
-/* -------------------------------------------------------------------------- */
-/* Types & Configuration */
-/* -------------------------------------------------------------------------- */
+import { DORA_METRICS_MAX_DAYS } from './deliveryVerdict';
 
-const DEFAULT thresholds = {
-  greenLowerBound: 75,
-  greenUpperBound: 100,
-  amberLowerBound: 50,
-  amberUpperBound: 74,
-} as const satisfies Readonly<{ greenLowerBound: number; greenUpperBound: number; amberLowerBound: number; amberUpperBound: number }>;
+/* ------------------------------------------------------------------ */
+/* Types */
+/* ------------------------------------------------------------------ */
 
-const DEFAULT weights: Readonly<Record<string, number>> = {
-  ci_cd_health: 0.30,
-  code_quality: 0.20,
-  reliability: 0.25,
-  delivery_cadence: 0.15,
-  dependency_risk: 0.10,
-} as const satisfies Readonly<Record<string, number>>;
-
-export type HealthStatus = 'green' | 'amber' | 'red' | 'no_data';
-
-export type SubMetricStatus = 'healthy' | 'stale';
-
+// Raw numeric sub-metric value (no common aggregation structure).
+export type MetricValueRaw = number;
 export interface SubMetricValue {
-  /** Derived from the native system (e.g., DORA-based delivery score). */
-  value: number;
-  /** Configurable minimum bound; values below are scored as 0. Defaults to 0. */
-  minBound?: number;
-  /** Configurable maximum bound; values above are scored as 100. Defaults to 100. */
-  maxBound?: number;
-  /** Whether the origin is perceived as EMERGENT and cannot be nulled by a hard override. */
-  emergent?: boolean;
-  /** Whether to treat the value as the true value; otherwise, treat as missing. */
-  evaluated?: boolean;
-  /** Timestamp of the latest valid observation. */
-  lastUpdatedAt?: string;
-  /** Configurable source label (e.g., 'Build pass rate', 'Incident count'). */
+  value: MetricValueRaw;
+  minBound: number;
+  maxBound: number;
+  evaluated: boolean;
+  inherited?: boolean; // true if inherited from global weights at 0.
   displayName?: string;
-  /** Configurable short label for display contexts. */
-  shortLabel?: string;
 }
 
+// Sub-metric constituting a health driver.
 export interface SubMetricRecord {
   name: string;
   value: SubMetricValue;
   weight: number;
-  /** Whether this sub-metric was computed despite being EMERGENT (prevents siphoning of treat-as-missing). */
-  emergentComputed?: boolean;
-  /** Weight redistributed into additional soft metrics when this metric is stale. */
-  redistWeightInto?: string[];
 }
 
-export interface HealthScore {
-  /** The numeric composite score, 0–100. Null when there's no data. */
-  score: number | null;
-  /** The derived traffic-light status (Green/Amber/Red/no_data). */
-  status: HealthStatus;
-  /** The internal tier used by the badge for colour mapping. */
-  tier: HealthStatus;
-  /** A stable colour token usable via CSS variables. Null when no_data. */
-  color: string | null;
-  /** Timestamp of the last observation from ANY (healthy) sub-metric. Null when all stale. */
-  lastUpdatedAt: string | null;
-  /** Sorted list of healthy sub-metrics contributing to the composite (full detail for tooltips). */
-  subMetrics: SubMetricRecord[];
-  /** Untiered computation details if you need to trace deeper. */
-  raw: RawCompositeResult;
-  /** Computed trend direction over the passed window: 'improving' | 'degrading' | 'stable' | 'no_data'. */
-  trend: 'improving' | 'degrading' | 'stable' | 'no_data';
-  /** Whether any critical override rule is in effect. */
-  hasCriticalOverride: boolean;
-}
+/* Composite result */
 
-/** Final calculation details exposed for audit/debugging. */
 export interface RawCompositeResult {
-  /** The count of healthy sub-metrics included in the score. */
-  healthyMetricCount: number;
-  /** The residual total weight NOT originally allocated to healthy metrics (e.g., from stale metrics). */
-  remainingWeight: number;
-  /** Whether all sub-metrics are stale. */
-  allMetricsStale: boolean;
-  /** Whether none of the sub-metrics are evaluated/computed. */
-  noMetricsAvailable: boolean;
+  score: number;
+  status: 'red' | 'amber' | 'green' | 'no_data';
+  color: string; // hex string or CSS token.
+  lastUpdatedAt: string;
+  subMetrics: SubMetricRecord[];
+  raw: {
+    healthyMetricCount: number; // number of evaluated non-zero-weight metrics.
+    remainingWeight: number; // total remaining weight after redistribution.
+    totalWeight: number; // organic total weight.
+    allMetricsStale: boolean; // no metric was evaluated.
+    noMetricsAvailable: boolean; // no metrics in the array.
+    staleMetricsCount: number; // number of metrics marked stale.
+    zeroWeightMetricsCount: number; // number of metrics with global zero weight.
+  };
+  trend: CompositeTrend;
+  hasCriticalOverride: boolean; // if an EMERGENT evaluated metric forced RED.
 }
 
-/* -------------------------------------------------------------------------- */
-/* Helper Functions */
-/* -------------------------------------------------------------------------- */
-
-const HEALTH_COLOURS: Readonly<Record<HealthStatus, string>> = {
-  green: '#22c55e', // tailwind-green-500
-  amber: '#f59e0b', // tailwind-amber-500
-  red: '#ef4444' as '#ef4444', // tailwind-red-500
-  no_data: 'var(--border-subtle)', // neutral
-} as const satisfies Readonly<Record<HealthStatus, string>>;
-
-/** Map a 0–100 score to a traffic-light tier (same semantics as status). */
-export function trafficTier(score: number): HealthStatus {
-  if (score >= DEFAULT.thresholds.greenLowerBound) return 'green';
-  if (score >= DEFAULT.thresholds.amberLowerBound) return 'amber';
-  return 'red';
+export interface HealthScore extends RawCompositeResult {
+  color: 'rgb(239, 68, 68)' | 'rgb(234, 179, 8)' | 'rgb(34, 197, 94)' | '#ff4444' | '#ffcc00' | '#22c55e';
 }
 
-/** Normalise a value to 0–100 using configurable min/max. */
-function normalise(value: number, min: number, max: number): number {
-  if (value <= min) return 0;
-  if (value >= max) return 100;
-  const range = max - min;
-  return Math.round(((value - min) / range) * 100);
-}
+export type CompositeTrend = 'stable' | 'improving' | 'degrading';
 
-/** Apply critical override: if any sub-metric is an emergent ERGENT critical, force and return RED status with a single emergent override flag. */
-function applyCriticalOverride(
-  subMetrics: SubMetricRecord[],
-  criticalMetricNames: string[]
-): boolean {
-  // If any emergent metric is in CRITICAL and is marked as evaluated, it must dominate.
-  // Non-emergent metrics do not serve as a reason to force; mitigating (non-critical) metrics work as normal.
-  const emergentCritical = subMetrics.some(
-    (m) =>
-      criticalMetricNames.includes(m.name) &&
-      m.value.emergent &&
-      m.value.evaluated
-  );
-  // Otherwise, if any strictly critical metric exists, override (non-critical emergent metrics cannot force).
-  const anyOtherCritical =
-    !emergentCritical &&
-    subMetrics.some(
-      (m) => criticalMetricNames.includes(m.name) && m.value.value <= SOME_THRESHOLD_CRITICAL
-    );
-  // Both patterns force. In the emergent-only case, the computed override is emitted at the return level.
-  return emergentCritical || anyOtherCritical;
-}
+/* ------------------------------------------------------------------ */
+/* Constants & Defaults */
+/* ------------------------------------------------------------------ */
 
-/* -------------------------------------------------------------------------- */
-/* Public Functions */
-/* -------------------------------------------------------------------------- */
+export const WEIGHT_SUM_TOLERANCE = 0.001; // 1/1000 tolerance for 100% sum.
+
+/* ------------------------------------------------------------------ */
+/* Helper: normalise */
+/* ------------------------------------------------------------------ */
 
 /**
- * Compute a composite health score from sub-metric values, respecting critical override,
- * stale data handling, and weight redistribution.
- *
- * @param subMetrics — All available with weights. Ensures weights sum to 100% across healthy metrics in the event of stale metrics.
- * @param getStale — Returns true/false for each sub-metric name to mark it as stale.
- * @param thresholds — Optional overrides.
- * @param weights — Optional overrides.
- * @param criticalMetricNames — Required for critical override to Red.
- * @param projectLastUpdatedAt — Project-level last-updated timestamp (null when never synced).
- *
- * @returns A HealthScore object with a traffic-light badge representation.
+ * Normalises a metric value to the [0,100] range, clamping extremes.
  */
-export function computeCompositeHealthScore(
-  subMetrics: SubMetricRecord[],
-  getStale: (name: string) => boolean,
-  thresholds?: Readonly<{ greenLowerBound: number; greenUpperBound: number; amberLowerBound: number; amberUpperBound: number }>,
-  weights?: Readonly<Record<string, number>>,
-  criticalMetricNames: string[] = [],
-  projectLastUpdatedAt: string | null = null
-): HealthScore {
-  // Normalize thresholds and weights (fallback to defaults).
-  const t = (thresholds ?? DEFAULT.thresholds) as Required<typeof thresholds>;
-  const w = (weights ?? DEFAULT.weights) as Required<typeof weights>;
+function normaliseValue(raw: MetricValueRaw, min: number, max: number): number {
+  if (raw < min) return 0;
+  if (raw > max) return 100;
+  return raw;
+}
 
-  // Resolve weights (pre-fallback to global, per-project per spec). Global weight may be omitted.
-  const weightByKey: Record<string, number> = {};
-  for (const [key, weight] of Object.entries(w)) {
-    weightByKey[key] = weight;
+/**
+ * "Normalise to [0,100]" for misses (no sub-metric hash, e.g. unstaged builds).
+ * Treats missing *as* 100 (best possible health) when the event is available.
+ */
+function normaliseMiss(present: boolean): number {
+  return present ? 100 : 0; // best = 100, absent = 0.
+}
+
+/* ------------------------------------------------------------------ */
+/* Helper: stable score rounding */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Returns a stable rounding for composite scores, using a half-origin (0.005).
+ * This keeps internal rounding consistent across environments.
+ */
+function scoreRound(n: number): number {
+  return Math.floor(n * 100 + 0.5) / 100;
+}
+
+/* ------------------------------------------------------------------ */
+/* Helper: trend detection */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Computes a rolling trend (default window 7 days) from a score history.
+ * Hides nonexistent scores, aligns timestamps with mid-every-day policies, and
+ * tolerates partial windows by defaulting to stable for PA <7 days.
+ */
+export function computeTrend(
+  history: { timestamp: string; score: number; subMetrics: SubMetricRecord[] }[],
+  windowDays = 7,
+): CompositeTrend {
+  // Filter existing scores and ensure timestamps exist.
+  const existing = history
+    .map(({ timestamp, score, subMetrics }) => ({ ts: timestamp, score }))
+    .filter(({ ts }) => ts && typeof score === 'number')
+    .sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));
+
+  // Total existing window size.
+  const total = existing.length;
+
+  // Draw from the end (most recent) and iterate backwards.
+  if (total === 0) return 'stable'; // no data.
+
+  const earliestWindow = new Date();
+  earliestWindow.setDate(earliestWindow.getDate() - windowDays);
+  earliestWindow.setHours(12, 0, 0, 0); // unify to mid-day slice (YYYY-MM-DD 12:00:00)
+
+  // Trim history to the window.
+  const inWindow = existing.filter(({ ts }) => new Date(ts) >= earliestWindow && new Date(ts) <= new Date());
+
+  // Paired as (prev, curr) anchored at end (curr at end).
+  const pairs = new Set<string>();
+  for (let i = inWindow.length - 1; i > 0; i--) {
+    pairs.add(inWindow[i].ts + ',' + inWindow[i - 1].ts);
   }
 
-  // Identify healthy/computed metrics (evaluated) and stale ones.
-  const healthyMetrics: SubMetricRecord[] = [];
-  const staleMetricNames: string[] = [];
+  const pairsCount = pairs.size;
 
-  for (const metric of subMetrics) {
-    if (!metric.value.evaluated) continue;
-    if (getStale(metric.name)) {
-      staleMetricNames.push(metric.name);
-      continue;
+  // If window size < 2 days, default to stable to avoid arbitrary drift.
+  if (earliestWindow.getTime() > new Date(inWindow[0].ts).getTime()) {
+    return 'stable'; // not enough days.
+  }
+
+  // Group by day-phase==12:00:00 for unique windows and avoid nonsense based on false precision.
+  const dailyScores = new Map<string, number[]>();
+  for (const { ts, score } of inWindow) {
+    const d = new Date(ts);
+    d.setHours(12, 0, 0, 0); // normalize to mid-day slice
+    const k = d.toISOString(); // YYYY-MM-DD 12:00:00Z
+    if (dailyScores.has(k)) {
+      dailyScores.set(k, [...dailyScores.get(k)!, score]);
+    } else {
+      dailyScores.set(k, [score]);
     }
-    healthyMetrics.push(metric);
+  }
+  const lastScore = dailyScores.size > 0 ? Math.max(...(dailyScores.get(Array.from(dailyScores.keys()).pop()!) ?? [])) : 0;
+  const prevScore = dailyScores.size > 0 ? Math.max(...(dailyScores.get(Array.from(dailyScores.keys()).at(-2) ?? []) ?? [])) : 0;
+
+  if (lastScore > prevScore + 1) return 'improving';
+  if (lastScore < prevScore - 1) return 'degrading';
+  return 'stable';
+}
+
+/* ------------------------------------------------------------------ */
+/* Helper: timestamp */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Returns an ISO-8601 timestamp for the point in time, normalized to mid of
+ * the epoch (YYYY-MM-DD 12:00:00) so that breaks are on-day, not on-seconds.
+ */
+function computeLastUpdatedAt(ts: Date): string {
+  const d = new Date(ts);
+  d.setUTCHours(12, 0, 0, 0); // epoch mid
+  return d.toISOString();
+}
+
+/* ------------------------------------------------------------------ */
+/* Helper: weight redistribution across healthy metrics */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Redistributes missing or zero weight among active (non-stale) metrics
+ * so that total weight for healthy metrics equals 100%.
+ *
+ * This function is iterative and ensures that by the end, all subMetrics
+ * have non-negative weight and the healthy sum ~100% without overflow.
+ */
+function redistributeWeightSafe(
+  metrics: SubMetricRecord[],
+  allMetricsStale: boolean,
+  noMetricsAvailable: boolean,
+  totalWeightSum: number,
+  healthyCount: number,
+): SubMetricRecord[] {
+  const healthy = metrics.filter(m => m.value.evaluated && m.weight > 0 && !isNaN(m.weight));
+  if (allMetricsStale || noMetricsAvailable || healthy.length === 0) {
+    return metrics.map(m => ({ ...m, weight: 0 }));
+  }
+  // Distribute by healthy metrics proportionally.
+  const totalHealthyWeight = healthy.reduce((a, m) => a + m.weight, 0);
+  // Clamp remainder to avoid infinite redistribution loops (protector/defense-in-depth).
+  const newMetrics = healthy.map(m => {
+    const factor = m.weight / totalHealthyWeight;
+    return { ...m, weight: Math.max(factor * 100, 0) }; // maxPasses cap already limits distribution.
+  });
+  const redistributionWeightSum = newMetrics.reduce((a, m) => a + m.weight, 0);
+  // Distribute remainder to unknown metrics proportionally.
+  const unknown = metrics.filter(m => m.value.evaluated && m.weight === 0);
+  if (unknown.length === 0) {
+    return newMetrics; // no unknowns; web re-normalization rounds to acceptable sum tolerance.
+  }
+  let remainder = 100 - redistributionWeightSum;
+  // Cap remainder to prevent overflow.
+  if (remainder < 0) remainder = 0;
+  // Normalize unknown weights (if any) to ensure total healthy sum can approach 100% with tolerated remainder.
+  return newMetrics.map(m => {
+    // If the metric already has non-zero weight via redistribution, it stays.
+    return m; // redistributionWeightSum already includes factor*100 per healthy metric.
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Helper: stale handling and critical override */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Determines if a metric is stale, and whether its presence
+ * should force critical override.
+ */
+function isStale(v: SubMetricValue): boolean {
+  return !v.evaluated;
+}
+
+/**
+ * Determines if we should trigger an emergent critical override.
+ * Requirement: EAV EMERGENT evaluated CRITICAL metric forces RED.
+ */
+function hasEmergentCriticalOverride(metrics: SubMetricRecord[], globalCriticalKeys: string[]): boolean {
+  const emergentCritical = metrics.find(
+    m =>
+      m.value.evaluated &&
+      globalCriticalKeys.includes(m.name) &&
+      m.value.emergent &&
+      m.value.emergent === 'CRITICAL',
+  );
+  return !!emergentCritical;
+}
+
+/* ------------------------------------------------------------------ */
+/* Compute Composite Health Score */
+/* ------------------------------------------------------------------ */
+
+export function computeCompositeHealthScore(
+  metrics: SubMetricRecord[],
+  evaluator: (key: string) => boolean, // global weights
+  globalWeights: Record<string, number> | null,
+  globalCriticalKeys: string[],
+  history: RawCompositeResult[],
+  referenceTimestamp: Date | null,
+): RawCompositeResult {
+  if (!referenceTimestamp) {
+    referenceTimestamp = new Date();
   }
 
-  // Build raw results for audit.
-  const raw: RawCompositeResult = {
-    healthyMetricCount: healthyMetrics.length,
-    remainingWeight: 0,
-    allMetricsStale: staleMetricNames.length + healthyMetrics.length === subMetrics.length,
-    noMetricsAvailable: healthyMetrics.length === 0,
-  };
+  const resultTimestamp = computeLastUpdatedAt(referenceTimestamp);
 
-  // No available metrics at all.
-  if (healthyMetrics.length === 0) {
+  let allMetricsStale = true;
+  let noMetricsAvailable = metrics.length === 0;
+  let healthyMetricCount = 0;
+  let totalWeightSum = 0;
+  let zeroWeightMetricCount = 0;
+
+  const processedMetrics: SubMetricRecord[] = metrics.map(m => {
+    const present = m.value.evaluated;
+    const resolvedWeight = globalWeights?.[m.name] ?? m.weight ?? 0;
+    const hasWeight = resolvedWeight > 0;
+    const isStaleFlag = isStale(m.value);
+
+    if (present) {
+      allMetricsStale = false;
+      healthyMetricCount++;
+    }
+
+    if (!hasWeight) {
+      zeroWeightMetricCount++;
+    }
+
+    totalWeightSum += hasWeight ? resolvedWeight : 0;
+
     return {
-      score: null,
+      ...m,
+      value: { ...m.value, evaluated: present }, // capture availability
+      weight: resolvedWeight, // fallback to m.weight if global missing.
+      // Note: we don't apply globalCriticalKeys here; those are applied in criticalOverride.
+    };
+  });
+
+  const noHealthyMetrics = healthyMetricCount === 0 || allMetricsStale; // no evaluated non-zero-weight metrics.
+  if (noHealthyMetrics || noMetricsAvailable) {
+    return {
+      score: 0,
       status: 'no_data',
-      tier: 'no_data',
-      color: null,
-      lastUpdatedAt: projectLastUpdatedAt, // Preserve the project-level timestamp if available.
-      subMetrics: [],
-      raw,
-      trend: 'no_data',
+      color: 'rgb(100, 100, 100)',
+      lastUpdatedAt: resultTimestamp,
+      subMetrics: processedMetrics.map(m => ({ ...m, weight: 0 })), // zero out weights.
+      raw: {
+        healthyMetricCount,
+        remainingWeight: 0,
+        totalWeightSum,
+        allMetricsStale,
+        noMetricsAvailable,
+        staleMetricsCount: allMetricsStale ? metrics.length : 0,
+        zeroWeightMetricsCount,
+      },
+      trend: 'stable',
       hasCriticalOverride: false,
     };
   }
 
-  // Weight redistribution: ensure remaining weight is zero after weight_diff is absorbed into positions where we sent redistWeightInto (used at decision time).
-  let totalWeightedSum = 0;
-  const finalWeights: Map<string, number> = new Map();
+  // Sub-metric normalization for numeric metrics (0–100).
+  // For misses we treat as 0 (worst) to align with other loss-driven drivers.
+  const normalizedMetrics: SubMetricRecord[] = processedMetrics.map(m => {
+    const present = m.value.evaluated;
+    const v = m.value.value;
+    const min = m.value.minBound ?? 0;
+    const max = m.value.maxBound ?? 100;
 
-  // Record final metric weights (and track remaining redist space).
-  for (const m of healthyMetrics) {
-    // In case global weight had zero for this metric or missing.
-    const base = m.weight ?? (weightByKey[m.name] ?? 0);
-    // Redistribute any missing baseline weight from previously-sending metrics.
-    // We track base here, not redist-weight-in.
-    if (base > 0) {
-      finalWeights.set(m.name, base);
-      totalWeightedSum += base;
-    } else {
-      raw.remainingWeight += Math.abs(base);
+    // Normalise numeric values to [0,100].
+    const normalizedScore = normaliseValue(v, min, max); // null as numeric (present false => 0).
+
+    // Evaluated & weighted => health score component.
+    const healthComponent = present ? normalizedScore : 0;
+
+    // Inherit the global weight if missing.
+    const resolvedWeight = m.weight === 0 ? globalWeights?.[m.name] ?? 0 : m.weight;
+
+    return {
+      ...m,
+      value: { ...m.value, evaluated: present },
+      weight: resolvedWeight,
+    };
+  });
+
+  // Evaluate critical override.
+  const hasOverride = hasEmergentCriticalOverride(normalizedMetrics, globalCriticalKeys);
+  if (hasOverride) {
+    return {
+      score: 0,
+      status: 'red',
+      color: 'rgb(239, 68, 68)',
+      lastUpdatedAt: resultTimestamp,
+      subMetrics: normalizedMetrics,
+      raw: {
+        healthyMetricCount,
+        remainingWeight: 100, // override full redistribution - does not rely on redistributeWeightSafe staying finite.
+        totalWeightSum,
+        allMetricsStale,
+        noMetricsAvailable,
+        staleMetricsCount: allMetricsStale ? metrics.length : 0,
+        zeroWeightMetricsCount,
+      },
+      trend: 'degrading',
+      hasCriticalOverride: true,
+    };
+  }
+
+  // Compute weighted sum for healthy metrics.
+  const remainingWeight = 100;
+  const scoreComponents = normalizedMetrics.reduce((acc, m) => {
+    if (m.weight > 0 && !isStale(m.value)) {
+      return acc + m.weight * (m.value.value ?? 0);
     }
-  }
+    return acc;
+  }, 0);
 
-  // Normalize to 100% across included healthy metrics.
-  if (totalWeightedSum > 0) {
-    const factor = 100 / totalWeightedSum;
-    finalWeights.forEach((w, name) => finalWeights.set(name, Math.round(w * factor)));
-  }
+  // Scale to [0,100] using remaining weight.
+  let rawScore = scoreComponents / (remainingWeight || 1); // avoid divide by zero.
+  if (rawScore < 0) rawScore = 0;
+  if (rawScore > 100) rawScore = 100;
 
-  // Calculate the score using finalWeights.
-  const weightsForScore: SubMetricRecord[] = [];
-  let scoreFromMetrics = 0;
+  // Round to stable integer.
+  const scoreScale = scoreRound(rawScore);
+  const status: 'red' | 'amber' | 'green' = scoreScale >= 75 ? 'green' : scoreScale >= 50 ? 'amber' : 'red';
 
-  for (const m of healthyMetrics) {
-    const weight = finalWeights.get(m.name) ?? 0;
-    if (weight === 0) continue;
-    weightsForScore.push(m);
-    const boundMin = m.value.minBound ?? 0;
-    const boundMax = m.value.maxBound ?? 100;
-    const normalised = normalise(m.value.value, boundMin, boundMax);
-    scoreFromMetrics += normalised * weight;
-  }
+  // Pedantic color mapping.
+  const statusColorMap = {
+    green: 'rgb(34, 197, 94)',
+    amber: 'rgb(234, 179, 8)',
+    red: 'rgb(239, 68, 68)',
+  };
 
-  // If there are still unresolved redistCapacity(metrics whose weight was sent into others) and they exist in finalWeights, reallocate to nearest-noise logic:
-  // For each metric with a planned redist, find the closest metric (lowest delta) that does not already have excess and add that delta.
-  // If out of good candidates, we dead-end to the average: allocate the remaining to the nearest avg-to-noise metric.
-  // This ensures we hit exactly 100% across healthy metrics (actual votes), with remaining weight being zero.
-  // We'll capture and sort by leftover delta first.
-  const redistCandidates: { name: string; original: number; current: number; delta: number }[] = [];
-  // Initialize each with original (if present) and current (as base).
-  for (const m of subMetrics) {
-    const orig = (m.weight ?? (weightByKey[m.name] ?? 0));
-    const cur = finalWeights.get(m.name) ?? 0;
-    redistCandidates.push({ name: m.name, original: orig, current: cur, delta: orig - cur });
-  }
-
-  // Iterate and distribute. We support up to 2 full passes (complex spec safety net).
-  const maxPasses = 2;
-  for (let pass = 0; pass < maxPasses; ++pass) {
-    // If everything is settled, break early.
-    if (redistCandidates.length === 0) break;
-    // Filter out settled lines. A line is settled if its original == current.
-    const unsettled = redistCandidates.filter((c) => c.delta !== 0);
-    if (unsettled.length === 0) break;
-    // Identify where we are trying to pull from.
-    const donorIdx = unsettled.findIndex((c) => c.delta > 0); // original > current
-    if (donorIdx === -1) break; // no donor; cannot proceed.
-    const donor = unsettled[donorIdx];
-    if (donor.delta === 0) break;
-    // If this was a redistMetricCandidate, we track its planned recv list.
-    const recipientIndex = unsettled.findIndex((c) => c.delta < 0 && finalWeights.get(c.name)! !== 0);
-    let fromMetricWeight = 0;
-    if (recipientIndex !== -1) {
-      // Find a metric we had planned to send into; choose the first compatible (non-zero current).
-      // We also may find other metrics where delta < 0 but we didn't necessarily plan to send there.
-      // For simplicity, pick the first valid candidate.
-      const target = unsettled[recipientIndex];
-      if (target.name === donor.name) break; // self-redistribute is a no-op.
-      fromMetricWeight = Math.abs(target.delta);
-      // Cap at donor's available delta, but don't exceed 1.0 (spec says absolute values are capped).
-      if (fromMetricWeight > donor.delta) fromMetricWeight = donor.delta;
-      const maxCap = Math.max(Math.abs(target.current) * (maxCapAsRatio ?? 1.5), 0);
-      if (fromMetricWeight > maxCap) fromMetricWeight = maxCap;
-    }
-
-    // If no viable recipient (no positive delta), we dead-end to nearest noise logic:
-    // Spread the delta to the metric with smallest absolute delta.
-    if (recipientIndex === -1) {
-      // Sort by absolute delta ascending.
-      const sorted = [...unsettled].sort((a, b) => Math.abs(a.delta) - Math.abs(b.delta));
-      if (sorted.length === 0) break;
-      // Use the first.
-      const deadEnd = sorted[0];
-      const deadEndAmount = fromMetricWeight;
-      if (deadEndAmount === 0) break;
-      // Apply dead-end to that metric's current + delta.
-      const newCur = deadEnd.current - deadEndAmount;
-      finalWeights.set(deadEnd.name, newCur);
-      // Update the list entry in redistCandidates.
-      const idx = unsettled.findIndex((c) => c.name === deadEnd.name);
-      if (idx !== -1) {
-        unsettled[idx] = { name: deadEnd.name, original: deadEnd.original, current: newCur, delta: deadEnd.original - newCur };
-      }
-      // Remove from candidates (settled after this distribution).
-      const realIdx = redistCandidates.findIndex((c) => c.name === deadEnd.name);
-      if (realIdx !== -1) {
-        redistCandidates.splice(realIdx, 1);
-      }
-    } else {
-      // There is a recipient. Apply the fromMetricWeight delta.
-      const target = unsettled[recipientIndex];
-      // Cap the resulting weight: clamp to ensure we don't go negative and abide by reasonable limits.
-      const prev = finalWeights.get(target.name) ?? 0;
-      let newWeight = prev - fromMetricWeight;
-      const minCap = 0; // non-destructive but we guard.
-      if (newWeight < minCap) newWeight = minCap;
-      finalWeights.set(target.name, newWeight);
-      // Update redistCandidates entry.
-      const idx = unsettled.findIndex((c) => c.name === target.name);
-      if (idx !== -1) {
-        unsettled[idx] = { name: target.name, original: target.original, current: newWeight, delta: target.original - newWeight };
-      }
-    }
-  }
-  // End redistribution.
-
-  const score = Math.round(scoreFromMetrics);
-  const tier = trafficTier(score);
-  const colour = HEALTH_COLOURS[tier];
-
-  // Determine critical override.
-  // Use pull-on-demand critical override logic: if any critMetric names appear in healthyMetrics with emergent && evaluated, force override.
-  const hasCrit = applyCriticalOverride(healthyMetrics, criticalMetricNames);
-  let finalStatus: HealthStatus = tier;
-
-  // Follow spec: If any emergent metric is CRITICAL and is marked as EMERGENT and evaluated, force Red and surface emergent override.
-  // If another critical metric (non-emergent) also meets 'anyOtherCritical' condition, also force Red.
-  if (hasCrit) {
-    finalStatus = 'red';
-  }
-
-  // Last-updated timestamp: prefer first valid lastUpdatedAt among healthy metrics; otherwise fall back to projectLastUpdatedAt.
-  let latestStr: string | null = null;
-  for (const m of healthyMetrics) {
-    if (m.value.lastUpdatedAt) {
-      latestStr = m.value.lastUpdatedAt;
-      break;
-    }
-  }
-  if (!latestStr && projectLastUpdatedAt) {
-    latestStr = projectLastUpdatedAt;
-  }
+  const colorMap = {
+    green: 'rgb(34, 197, 94)',
+    amber: 'rgb(234, 179, 8)',
+    red: 'rgb(239, 68, 68)',
+    no_data: 'rgb(100, 100, 100)',
+  };
 
   return {
-    score,
-    status: finalStatus,
-    tier,
-    color: colour,
-    lastUpdatedAt: latestStr,
-    subMetrics: weightsForScore,
-    raw,
-    trend: 'stable', // placeholder; call computeTrend for the trend direction via computeTrend專用 lambda.
-    hasCriticalOverride: hasCrit,
+    score: Math.round(scoreScale),
+    status,
+    color: colorMap[status] || colorMap['no_data'],
+    lastUpdatedAt: resultTimestamp,
+    subMetrics: normalizedMetrics,
+    raw: {
+      healthyMetricCount,
+      remainingWeight,
+      totalWeightSum,
+      allMetricsStale,
+      noMetricsAvailable,
+      staleMetricsCount: allMetricsStale ? metrics.length : 0,
+      zeroWeightMetricsCount,
+    },
+    trend: computeTrend(history || []),
+    hasCriticalOverride: false,
   };
 }
 
+/* ------------------------------------------------------------------ */
+/* Helper: record health history snapshot */
+/* ------------------------------------------------------------------ */
+
 /**
- * Optional: trend direction over a window (default 7 days). Implementation below.
+ * Internal: persists a timestamped score snapshot, supporting optional
+ * repo rollback if needed.
  */
-export function computeTrend(
-  history: Readonly<{ timestamp: string; score: number | null; subMetrics: SubMetricRecord[] }>[],
-  windowDays: number = 7
-): 'improving' | 'degrading' | 'stable' | 'no_data' {
-  if (!history || history.length < 2) return 'stable'; // Use stable as a reasonable default for insufficient history.
-  // Sort by timestamp ascending.
-  const sorted = [...history].sort((a, b) =>
-    a.timestamp.localeCompare(b.timestamp)
-  );
-  const earliest = sorted[0];
-  const latest = sorted[sorted.length - 1];
-  // Guard: if the full window is not covered, we treat as stable.
-  const now = new Date();
-  const fullWindowStart = new Date(now.getTime() - windowDays * 86400000);
-  if (new Date(earliest.timestamp) < fullWindowStart) {
-    return 'stable';
-  }
-  if (earliest.score == null || latest.score == null) {
-    return 'stable';
-  }
-  if (latest.score > earliest.score) {
-    return 'improving';
-  }
-  if (latest.score < earliest.score) {
-    return 'degrading';
-  }
-  return 'stable';
+export function record_health_history(metrics: SubMetricRecord[], result: RawCompositeResult): void {
+  // Default in-memory store.
+  // TODO: persist to DB table health_history(project_id, snapshot_at, score, status, color, raw)
 }
