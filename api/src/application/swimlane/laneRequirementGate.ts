@@ -32,6 +32,19 @@ import { normalizeRoleText } from '../kanban/roleMatch';
 import { BUILTIN_ROLES } from '../kanban/roleCatalog';
 import { resolveRoleCapableAgents } from '../kanban/roleCapability';
 import { TicketParticipantsService } from '../kanban/ticketParticipants';
+import { recordActivity, cloudAgentActor } from '../activity/activityLog';
+
+/** Emit the Coordinator hand-off signal: role R was dispatched to work the ticket. */
+async function emitRoleDispatched(env: Env, db: Db, a: { tenantId: number; projectId: number; taskId: number; roleKey: string; roleName: string; agentRef: string; responsibility: 'reviewer' | 'producer' }): Promise<void> {
+  await recordActivity(env, db, {
+    tenantId: a.tenantId, projectId: a.projectId,
+    actor: cloudAgentActor(a.agentRef, a.roleName),
+    verb: 'ticket.role.dispatched',
+    targetType: 'task', targetId: String(a.taskId), targetLabel: `#${a.taskId}`,
+    summary: `${a.roleName} dispatched as ${a.responsibility} for ticket #${a.taskId}`.slice(0, 300),
+    metadata: { roleKey: a.roleKey, responsibility: a.responsibility, agentRef: a.agentRef },
+  }).catch(() => {});
+}
 
 export interface LaneGateOutcome {
   /** Suppress the lane's normal auto-run this hop (a reviewer round-trip or producer
@@ -155,6 +168,7 @@ export async function enforceLaneRequirements(
         await Promise.allSettled(deferred);
         // Attribution (§5.6): record the reviewer is now engaged (execution-linked).
         if (execId != null) await participants.markRoleInProgress(env, args.tenantId, args.taskId, req.ref, args.status, execId).catch(() => {});
+        await emitRoleDispatched(env, db, { tenantId: args.tenantId, projectId: args.projectId, taskId: args.taskId, roleKey: req.ref, roleName: roleName(req.ref), agentRef, responsibility: 'reviewer' });
         dispatchedReviewers.push(req.ref);
         break; // one reviewer per hop — keeps the round-trip serial and loop-safe
       }
@@ -195,6 +209,7 @@ export async function enforceLaneRequirements(
         }).catch(() => null);
         await Promise.allSettled(deferred);
         if (execId != null) await participants.markRoleInProgress(env, args.tenantId, args.taskId, req.ref, args.status, execId).catch(() => {});
+        await emitRoleDispatched(env, db, { tenantId: args.tenantId, projectId: args.projectId, taskId: args.taskId, roleKey: req.ref, roleName: roleName(req.ref), agentRef, responsibility: 'producer' });
         dispatchedProducers.push(req.ref);
       }
     }
