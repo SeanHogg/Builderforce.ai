@@ -1,55 +1,45 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #404
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# Product Requirements Document: Automated Chat Title Generation
 
-## Problem & Goal
+## 1. Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+### 1.1 Problem
+Users currently encounter generic "New chat" titles for all their newly initiated conversations. This lack of descriptive context makes it difficult to quickly identify, navigate, and re-engage with past discussions, leading to a poor user experience and increased cognitive load when managing chat history.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+### 1.2 Goal
+Automatically generate concise, descriptive, and relevant titles for new chats based on their initial content. This will significantly improve chat history navigability, enhance user experience, and reduce friction in managing conversations.
 
-## Target users / ICP roles
+## 2. Target Users / ICP Roles
+All users of the chat application who create or engage in new conversations.
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## 3. Scope
+This PRD covers the implementation, display, and user interaction with automatically generated chat titles.
 
-## Scope
+## 4. Functional Requirements
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+*   **FR1: Automatic Title Generation:** The system MUST analyze the initial user input (e.g., first few messages or a specified character count) to infer the primary topic or intent of the chat.
+*   **FR2: Descriptive Title Output:** The system MUST generate a concise and descriptive title based on the analysis from FR1.
+*   **FR3: Title Replacement:** The automatically generated title MUST immediately replace the default "New Chat" title for the respective conversation.
+*   **FR4: Display in Chat History:** The generated titles MUST be prominently displayed in the chat history/sidebar list.
+*   **FR5: Manual Title Editing:** Users MUST be able to manually edit any chat title (generated or default) at any time.
+*   **FR6: Title Persistence:** Manually edited titles MUST persist indefinitely and override any subsequent automatic generation attempts for that specific chat.
+*   **FR7: Performance:** The title generation process MUST be performant and not introduce noticeable latency or disrupt the user's chat experience.
 
-## Functional Requirements
+## 5. Acceptance Criteria
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+*   **AC1: No Generic Titles:** A new chat initiated with meaningful user content will no longer display "New Chat" as its title; instead, a generated title will be present.
+*   **AC2: Title Relevance:** In at least 85% of test cases, the automatically generated title accurately reflects the main topic or intent of the initial conversation segment.
+*   **AC3: Title Conciseness:** Generated titles are concise, typically between 3-10 words and under 50 characters, ensuring readability in the chat list.
+*   **AC4: User Editability:** Users can successfully click/tap on a chat title in the chat history or within the chat view to enter an edit mode.
+*   **AC5: Edited Title Persistence:** After a user manually edits and saves a title, the new title is immediately reflected in the chat list and chat view, and persists across sessions.
+*   **AC6: No Performance Impact:** The generation of the chat title does not cause a discernible delay (e.g., more than 500ms) in the initial loading or responsiveness of the chat interface after the first user input.
 
-## Acceptance Criteria
+## 6. Out of Scope
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
-
-## Out of scope
-
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+*   Batch renaming of multiple chats by users.
+*   Automatic re-generation of titles for chats whose topic significantly diverges *after* the initial generation and *without* manual user edits.
+*   User preferences for title generation style, length, or prompt parameters.
+*   Renaming existing chats titled "New chat" that were created *prior* to the deployment of this feature.
+*   Advanced AI model fine-tuning specifically for title generation (focus is on integration and basic functionality first).
