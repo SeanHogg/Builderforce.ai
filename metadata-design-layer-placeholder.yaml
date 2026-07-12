@@ -1,0 +1,22 @@
+---
+# Metadata Design Layer Placeholder Artifact
+# Task: PRD #380 GAP P2-11
+# Status: Governance/Defense Layer
+# Purpose: Prevent accidental landing of provisional design-layer artifacts before integration surfaces are stable and tested.
+# Lifecycle expectations: This artifact is meant to be preserved until PRD #380 is materially implemented (jobs marketplace + freelancers). After integration succeeds and user acceptance achieved, delete this file and all corresponding design-layer artifacts (job-category-taxonomy.json, filter-types.ts).
+#
+# Policy: Under no circumstances ship the design-layer artifacts listed below as code logic or persistent configuration to any delivered branch or codebase until PRD #380 functional completion is verified via a follow-up Integration-and-Validation ticket.
+#
+# Design-Layer Artifacts (tracked for later cleanup):
+# - Builderforce.ai/taxonomy/job-category-taxonomy.json
+# - Builderforce.ai/taxonomy/filter-types.ts
+#
+# Suggested Follow-up Task Label/Stage:
+# - Label: Metadata/Design-Layer/Phase-1-Checklist
+# - Stage: Farewell/Metadata-Design-Layer (Post-merge Candidate)
+#
+# Notes:
+# - Intended to serve as a collaborative checkpoint for developers and reviewers to quickly determine whether a given commit is actionable in scope.
+# - Do NOT inhibit meaningful UI/text or database schema work; it’s purely a cleanup checkpoint for provisional forms.
+# - Intentional exception: Any taxonomy/filter design work that results from your local iteration/exploration (e.g., docs, diagrams, non-commitable notes) is out of scope for this artifact. This artifact only tracks deliverable forms that have or could have landed in code.
+# - This file is intentionally not integrated into any CI gating to avoid false positives; defer to a downstream ticket for explicit criteria.
