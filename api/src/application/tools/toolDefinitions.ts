@@ -813,6 +813,7 @@ const ticketRoleCoverage: QuestionnaireTool = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const TOOLS: Tool[] = [
+  stakeholderAlignmentToolDefinition,
   agenticMaturity,
   ticketRoleCoverage,
   aiDevMaturity,
