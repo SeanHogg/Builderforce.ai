@@ -1,55 +1,72 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #380
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# Job Category Taxonomy & Advanced Search/Filters
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+**Problem:** The current job posting and freelancer search functionality is limited, primarily relying on a single `discipline` filter. This hinders effective matching between job opportunities and qualified freelancers, leading to a less efficient marketplace.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+**Goal:** To enhance the job and freelancer marketplace by introducing a comprehensive job category taxonomy and advanced faceted search capabilities. This will enable users to more precisely discover relevant opportunities and talent based on specific skills, budget, duration, and experience levels.
 
-## Target users / ICP roles
+## Target Users / ICP Roles
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+*   **Employers/Hiring Managers:** Seeking to efficiently find freelancers with specific skills and qualifications.
+*   **Freelancers:** Looking for job opportunities that align with their skills, experience, and desired working conditions.
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This PRD covers the development of:
+
+1.  **Job Category Taxonomy:** A structured hierarchy for classifying job roles and skills.
+2.  **Advanced Search & Filters:** Implementation of new filter options for jobs and freelancers.
+3.  **Integration:** Seamless integration of the new taxonomy and filters into the existing job and freelancer search interfaces.
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+1.  **Job Category Taxonomy Development:**
+    *   Define a multi-level taxonomy for job categories and associated skills.
+    *   The taxonomy should support hierarchical relationships (e.g., "Design" > "Graphic Design" > "Logo Design").
+    *   Each category/skill should have a unique identifier and human-readable name.
+    *   The taxonomy should be extensible for future additions.
+2.  **Advanced Search & Filter Implementation (Jobs):**
+    *   Implement a **Skills** filter based on the developed taxonomy. Users should be able to select multiple skills.
+    *   Implement a **Budget Range** filter (e.g., min/max value for hourly or project-based budgets).
+    *   Implement a **Duration** filter (e.g., short-term, medium-term, long-term, or specific date ranges).
+    *   Implement an **Experience Level** filter (e.g., Entry-level, Mid-level, Senior, Expert).
+    *   Combine these new filters with the existing `discipline` filter.
+3.  **Advanced Search & Filter Implementation (Freelancers):**
+    *   Implement a **Skills** filter based on the developed taxonomy. Users should be able to select multiple skills.
+    *   Implement a **Budget Range** filter (e.g., min/max hourly or project rate).
+    *   Implement a **Availability/Duration** filter indicating preferred project length or availability for ongoing work.
+    *   Implement an **Experience Level** filter (e.g., Entry-level, Mid-level, Senior, Expert).
+    *   Combine these new filters with the existing `discipline` filter.
+4.  **User Interface (UI) Updates:**
+    *   Design and implement intuitive UI elements for the new filters in both job and freelancer search results pages.
+    *   Ensure clear visual feedback on selected filters.
+    *   Provide a mechanism to easily clear all applied filters.
+5.  **Backend Logic:**
+    *   Develop robust backend logic to handle faceted search queries incorporating all new and existing filter criteria.
+    *   Optimize search performance for a large dataset of jobs and freelancers.
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+*   Users can successfully search for jobs and freelancers using filters for:
+    *   Specific skills (from the defined taxonomy).
+    *   Budget range (min and max values).
+    *   Project duration (predefined categories or specific ranges).
+    *   Experience level (predefined categories).
+*   All new filters can be used in conjunction with the existing `discipline` filter.
+*   The search results accurately reflect the applied filter criteria.
+*   The UI for filters is intuitive and responsive across different devices.
+*   Users can easily add and remove multiple filter selections.
+*   A clear "Clear All Filters" option is available and functional.
+*   Search performance remains acceptable even with multiple filters applied.
 
-## Out of scope
+## Out of Scope
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+*   Development of a freelancer skills assessment or verification system.
+*   Automated job/freelancer recommendation engine based on the new taxonomy.
+*   Advanced natural language processing (NLP) for skill extraction from job descriptions or freelancer profiles (beyond matching against the predefined taxonomy).
+*   Management of the job category taxonomy itself (e.g., an admin interface for taxonomy editing) – this is assumed to be handled by a separate process or team.
+*   Real-time updating of search results as filters are applied (unless technically trivial and agreed upon during sprint planning).
