@@ -156,8 +156,8 @@ export default function GuidedWizard({ userId, onCancel }: { userId: string | nu
       {/* Step 0: Info/Overview (step-info) */}
       {step === 'info' && (
         <div style={{ padding: '24px', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '16px' }}>{t('guided.steps.info.title')}</h2>
-          <p style={{ color: 'var(--text-muted)' }}>{t('guided.steps.info.description')}</p>
+          <h2 style={{ fontSize: '1.5rem', marginBottom: '16px' }}>Welcome to the Guided Import</h2>
+          <p style={{ color: 'var(--text-muted)' }}>Enter your record details step by step with guidance and validation.</p>
           <button
             onClick={handleNextStep}
             style={{
@@ -171,7 +171,7 @@ export default function GuidedWizard({ userId, onCancel }: { userId: string | nu
               fontSize: '0.95rem',
             }}
           >
-            {t('guided.buttons.next', { step: 'Info' })}
+            Next: Fields
           </button>
         </div>
       )}
