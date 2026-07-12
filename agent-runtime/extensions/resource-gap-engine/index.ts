@@ -1,5 +1,6 @@
-import type { AnyAgentTool, BuilderForceAgentsPluginApi } from "../../src/plugins/types.js";
+import { Type } from "@seanhogg/builderforce-agents/plugin-sdk";
+import { createResourceGapTool } from "./src/tool.js";
 
-export function register(api: BuilderForceAgentsPluginApi): void {
+export function register(api) {
   api.registerTool(createResourceGapTool(api), { optional: true });
 }
