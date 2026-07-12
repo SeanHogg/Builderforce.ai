@@ -20,9 +20,7 @@ import * as T from "./src/types.js";
 import * as VS from "./src/validation.js";
 import * as BS from "./src/baseline-store.js";
 import { BaselineService } from "./src/service.js";
-import { baselineCreateTool, baselineListTool, baselineGetTool } from "./src/tools.js";
-import { baselinePromoteTool, baselineArchiveTool } from "./src/tools.ts";
-import { baselineDiffTool } from "./src/tools.ts";
+import { BaselineToolFn } from "./src/baseline-tool-fnstype.js";
 
 // =============================================================================
 // Tool Register Sequences
@@ -33,16 +31,16 @@ import { baselineDiffTool } from "./src/tools.ts";
  */
 export default function register(api: BuilderForceAgentsPluginApi): void {
   // Core tool declarations (fully implemented)
-  api.registerTool(baselineCreateTool, { optional: true });
-  api.registerTool(baselineListTool, { optional: true });
-  api.registerTool(baselineGetTool, { optional: true });
+  api.registerTool(storeCreateTool, { optional: true });
+  api.registerTool(storeListTool, { optional: true });
+  api.registerTool(storeGetTool, { optional: true });
 
   // Lifecycle actions
-  api.registerTool(baselinePromoteTool, { optional: true });
-  api.registerTool(baselineArchiveTool, { optional: true });
+  api.registerTool(storePromoteTool, { optional: true });
+  api.registerTool(storeArchiveTool, { optional: true });
 
   // Compute/describe tools
-  api.registerTool(baselineDiffTool, { optional: true });
+  api.registerTool(storeDiffTool, { optional: true });
 }
 
 // =============================================================================
@@ -67,20 +65,56 @@ export default function register(api: BuilderForceAgentsPluginApi): void {
  * - Permissions: Editor role enforced (future through role tool).
  * - "under-construction" placeholders disallowed; enforce FR-1 immutability at tool layer now.
  */
-export function createCreateBaselineTool(api: BuilderForceAgentsPluginApi) {
+export function storeCreateTool(api: BuilderForceAgentsPluginApi): BaselineToolFn {
   return {
     name: "baseline.create",
     label: "Create Baseline",
-    description:
-      "Save an AI response as an immutable baseline version for a stream (e.g., performance-baseline). Requires name and response text.",
-    async execute(_id: string, params: Record<string, unknown>) {
-      // TODO: Extract projectId from api.config or params; validate permissions.
-      // await api.config.projects(...);
-      // const projectId = number ?? Number(params.projectId);
-      // Check editor role (future AC-7).
-      // Build baseline entity from params.
-      // FOR NOW, throw not-implemented until fully wired to build context.
-      throw new Error("Not implemented yet (baseline.create Tool stub)");
+    description: "Save an AI response as an immutable baseline version for a stream (e.g., performance-baseline). Requires name and response text.",
+    async execute(_id: string, params: Record<string, unknown>): Promise<T.Baseline> {
+      // Resolve projectId from context if given, otherwise throw.
+      const config = (api.config as any) || {};
+      const projectId = config.projectId;
+      if (!projectId) {
+        throw new Error("Missing projectId from build context. Provide via 'build' call or context.");
+      }
+
+      // Resolve author from role tool; escalate later.
+      const author = config.authorId || "anonymous"; // TODO: resolve via authorization tools
+      const metadata = {
+        author,
+        projectId: Number(projectId),
+        streamName: "performance-baseline",
+        tags: (params.tags as string[]) || [],
+        createdAt: new Date().toISOString(),
+      };
+
+      // Build response metadata fields.
+      const responseMetadata = {
+        model: params.model as string,
+        timestamp: params.timestamp as string,
+        contextMode: params.contextMode as string,
+      };
+
+      // Build baseline entity body.
+      const body = {
+        name: params.name as string,
+        version: params.version as number,
+        description: (params.description as string) || undefined,
+        body: params.body as string,
+        responseMetadata,
+      };
+
+      // Immutable baseline fields driven by immutability flags on Baseline.
+      const baseline = BS.buildBaselineEntity(metadata, body);
+
+      // Validate before persisting.
+      VS.validateBaselineCreation(baseline);
+
+      // Insert into baseline store; baselineStore is in-process memory store.
+      BS.insertBaseline(baseline);
+
+      // NOTE: Audit log entry is produced asynchronously by baseline-store; observability not enforced for v1.
+      return baseline;
     },
   };
 }
@@ -98,15 +132,41 @@ export function createCreateBaselineTool(api: BuilderForceAgentsPluginApi) {
  * - FR-3 also supports optional filters (status, tags, name, author, date).
  * - View-only. No promotion/deletion (permissions deferred).
  */
-export function createListBaselinesTool(api: BuilderForceAgentsPluginApi) {
+export function storeListTool(api: BuilderForceAgentsPluginApi): BaselineToolFn {
   return {
     name: "baseline.list",
     label: "List Baselines",
-    description:
-      "List all baselines for a project stream, with optional pagination and filter options (status, tags, name, author, date, limit/offset).",
-    async execute(_id: string, params?: Record<string, unknown>) {
-      // TODO: extract projectId, streamName; apply filters; page; return list.
-      throw new Error("Not implemented yet (baseline.list Tool stub)");
+    description: "List all baselines for a project stream, with optional pagination and filter options (status, tags, name, author, date, limit/offset).",
+    async execute(_id: string, params?: Record<string, unknown>): Promise<T.Baseline[]> {
+      // Resolve projectId from context if available.
+      const config = (api.config as any) || {};
+      const projectId = config.projectId;
+      if (!projectId) {
+        return [];
+      }
+
+      const limit = (params?.limit as number) ?? 50;
+      const offset = (params?.offset as number) ?? 0;
+      const streamName = (params?.streamName as string) ?? "performance-baseline";
+      const filter = {
+        streamName,
+        projectId: Number(projectId),
+        name: (params?.name as string) ?? undefined,
+        status: (params?.status as T.BaselineStatus) ?? undefined,
+        tags: params?.tags as string[] | undefined,
+        author: (params?.author as string) ?? undefined,
+        beforeDate: (params?.beforeDate as string) ?? undefined,
+        afterDate: (params?.afterDate as string) ?? undefined,
+      };
+
+      const items = BS.listBaselines({ ...filter, limit, offset });
+
+      // Sort by createdAt descending using in-memory sorting.
+      items.sort((a, b) => b.metadata.createdAt.localeCompare(a.metadata.createdAt));
+
+      // Enforce pagination limits; slice after sorting.
+      const end = offset + limit;
+      return items.slice(offset, end);
     },
   };
 }
@@ -119,15 +179,34 @@ export function createListBaselinesTool(api: BuilderForceAgentsPluginApi) {
  * - Validate constraints: no under-construction placeholders.
  * - Return full T.Baseline entity.
  */
-export function createGetBaselineTool(api: BuilderForceAgentsPluginApi) {
+export function storeGetTool(api: BuilderForceAgentsPluginApi): BaselineToolFn {
   return {
     name: "baseline.get",
     label: "Get Baseline",
-    description:
-      "Retrieve a specific baseline by ID or name+version (if unique for the stream).",
-    async execute(_id: string, params?: Record<string, unknown>) {
-      // TODO: parse id/version/name; resolve baseline; return entity.
-      throw new Error("Not implemented yet (baseline.get Tool stub)");
+    description: "Retrieve a specific baseline by ID or name+version (if unique for the stream).",
+    async execute(_id: string, params?: Record<string, unknown>): Promise<T.Baseline> {
+      // Resolve projectId from context if given.
+      const config = (api.config as any) || {};
+      const projectId = config.projectId;
+      if (!projectId) {
+        throw new Error("Missing projectId from build context. Provide via 'build' call or context.");
+      }
+
+      const streamName = (params?.streamName as string) ?? "performance-baseline";
+      const filter = {
+        streamName,
+        projectId: Number(projectId),
+        name: params?.name as string | undefined,
+        version: params?.version ? Number(params.version as string) : undefined,
+      };
+
+      const baseline = BS.listBaselines(filter).find(Boolean);
+
+      if (!baseline) {
+        throw new Error("Baseline not found for the given criteria.");
+      }
+
+      return baseline;
     },
   };
 }
@@ -139,15 +218,28 @@ export function createGetBaselineTool(api: BuilderForceAgentsPluginApi) {
  * - Returns the active Baseline entity for project/stream.
  * - Active status only; if none, undefined.
  */
-export function createActiveBaselineTool(api: BuilderForceAgentsPluginApi) {
+export function storeActiveBaselineTool(api: BuilderForceAgentsPluginApi): BaselineToolFn {
   return {
     name: "baseline.active",
     label: "Get Active Baseline",
-    description:
-      "Retrieve the currently active baseline for a project stream.",
-    async execute(_id: string, params?: Record<string, unknown>) {
-      // TODO: get active via baselineStore.getActive; return entity.
-      throw new Error("Not implemented yet (baseline.active Tool stub)");
+    description: "Retrieve the currently active baseline for a project stream.",
+    async execute(_id: string, params?: Record<string, unknown>): Promise<T.Baseline | undefined> {
+      // Resolve projectId from context if given.
+      const config = (api.config as any) || {};
+      const projectId = config.projectId;
+      if (!projectId) {
+        return undefined;
+      }
+
+      const streamName = (params?.streamName as string) ?? "performance-baseline";
+
+      const baseline = BS.listBaselines({
+        streamName,
+        projectId: Number(projectId),
+        status: "active",
+      })[0];
+
+      return baseline;
     },
   };
 }
@@ -160,15 +252,46 @@ export function createActiveBaselineTool(api: BuilderForceAgentsPluginApi) {
  * - Update baselineStore.updateStatus(active => false); new entity active.
  * - Audit trail persisted to baselineStore.
  */
-export function createPromoteBaselineTool(api: BuilderForceAgentsPluginApi) {
+export function storePromoteBaselineTool(api: BuilderForceAgentsPluginApi): BaselineToolFn {
   return {
     name: "baseline.promote",
     label: "Promote Baseline",
-    description:
-      "Promote a baseline to active status within its stream; automatically archives the previous active baseline for that stream (AC-5).",
-    async execute(_id: string, params?: Record<string, unknown>) {
-      // TODO: enforce AC-5; call baselineStore.updateStatus; audit.
-      throw new Error("Not implemented yet (baseline.promote Tool stub)");
+    description: "Promote a baseline to active status within its stream; automatically archives the previous active baseline for that stream (AC-5).",
+    async execute(_id: string, params?: Record<string, unknown>): Promise<T.Baseline> {
+      // Resolve projectId from context if given.
+      const config = (api.config as any) || {};
+      const projectId = config.projectId;
+      if (!projectId) {
+        throw new Error("Missing projectId from build context. Provide via 'build' call or context.");
+      }
+
+      const streamName = (params?.streamName as string) ?? "performance-baseline";
+      const targetId = (params.id as string) ?? (params.name as string);
+      if (!targetId) {
+        throw new Error("promote requires an (id or name) for the baseline to promote.");
+      }
+
+      // Promoted baseline is assumed active; previous active must be archived.
+      const toPromote = BS.listBaselines({
+        streamName,
+        projectId: Number(projectId),
+        status: "active",
+      })[0];
+
+      // We're patching immutability flags later at the store level; for AC-5 we use baseline-store's patch logic.
+      const updated = await BaselineService.promoteBaselines(
+        String(projectId),
+        streamName,
+        targetId,
+        archiveSelf: true,
+      );
+
+      const promoted = BS.listBaselines({ streamName, projectId: Number(projectId), id: targetId })[0];
+      if (!promoted) {
+        throw new Error("Failed to locate the promoted baseline after promotion call.");
+      }
+
+      return promoted;
     },
   };
 }
@@ -180,15 +303,37 @@ export function createPromoteBaselineTool(api: BuilderForceAgentsPluginApi) {
  * - Marks baseline as "archived" (soft delete). Hard-delete reserved for Owners only (future AC-7).
  * - Updates audit log.
  */
-export function createArchiveBaselineTool(api: BuilderForceAgentsPluginApi) {
+export function storeArchiveBaselineTool(api: BuilderForceAgentsPluginApi): BaselineToolFn {
   return {
     name: "baseline.archive",
     label: "Archive Baseline",
-    description:
-      "Mark a baseline as archived (soft delete). Hard delete reserved for Owner role only.",
-    async execute(_id: string, params?: Record<string, unknown>) {
-      // TODO: call baselineStore.updateStatus; audit.
-      throw new Error("Not implemented yet (baseline.archive Tool stub)");
+    description: "Mark a baseline as archived (soft delete). Hard delete reserved for Owner role only.",
+    async execute(_id: string, params?: Record<string, unknown>): Promise<T.Baseline> {
+      // Resolve projectId from context if given.
+      const config = (api.config as any) || {};
+      const projectId = config.projectId;
+      if (!projectId) {
+        throw new Error("Missing projectId from build context. Provide via 'build' call or context.");
+      }
+
+      const streamName = (params?.streamName as string) ?? "performance-baseline";
+      const targetId = (params.id as string) ?? (params.name as string);
+      if (!targetId) {
+        throw new Error("archive requires an (id or name) for the baseline to archive.");
+      }
+
+      // BaselineStore.archiver returns the updated Baseline entity.
+      const archived = await BaselineService.archiveBaselines(
+        String(projectId),
+        streamName,
+        targetId,
+      );
+
+      if (!archived) {
+        throw new Error("Baseline not found or failed to archive.");
+      }
+
+      return archived;
     },
   };
 }
@@ -200,53 +345,13 @@ export function createArchiveBaselineTool(api: BuilderForceAgentsPluginApi) {
  * - Compute paragraph-level diff; return additions, deletions, unchanged blocks; health delta summary.
  * - AC-8: summary within 10s for responses up to 10000 tokens (placeholder stub).
  */
-export function createDiffBetweenBaselinesTool(api: BuilderForceAgentsPluginApi) {
+export function storeDiffTool(api: BuilderForceAgentsPluginApi): BaselineToolFn {
   return {
     name: "baseline.diff",
     label: "Diff Baselines",
-    description:
-      "Compute paragraph-level side-by-side diff between two baselines (or a baseline and a response). Returns additions, deletions, unchanged blocks, and an AI-assisted health delta summary (AC-4, AC-8).",
-    async execute(_id: string, params?: Record<string, unknown>) {
-      // TODO: paragraph-level Levenshtein; summary; return typed diff.
-      throw new Error("Not implemented yet (baseline.diff Tool stub)");
-    },
-  };
-}
-
-/**
- * produce-output-digest — generate a periodic digest of active/open baselines (global).
- *
- * Requirements (quick-start):
- * - Brief overview of active baselines (summary view).
- */
-export function produceOutputDigestTool(api: BuilderForceAgentsPluginApi) {
-  return {
-    name: "produce-output-digest",
-    label: "Output Digest",
-    description:
-      "Generate a brief overview of active baselines for the project (quick-start view).",
-    async execute(_id: string, params?: Record<string, unknown>) {
-      // TODO: list streams/baselines; summary; return TBD.
-      throw new Error("Not implemented yet (produceOutputDigest Tool stub)");
-    },
-  };
-}
-
-/**
- * project-status-explanation — explanation tool (tooling mechanic).
- *
- * Requirements (quick-start):
- * - Exposes plugin mechanics and links to key signatures (no customer-facing use).
- */
-export function projectStatusExplanationTool(api: BuilderForceAgentsPluginApi) {
-  return {
-    name: "project-status-explanation",
-    label: "Project Status Explanation",
-    description:
-      "Explanation of the plugin mechanics and references to key signatures (not for end-user consumer).",
-    async execute(_id: string, params?: Record<string, unknown>) {
-      // TODO: static content + typed signature mapping.
-      throw new Error("Not implemented yet (projectStatusExplanation Tool stub)");
+    description: "Compute paragraph-level side-by-side diff between two baselines (or a baseline and a response). Returns additions, deletions, unchanged blocks, and an AI-assisted health delta summary (AC-4, AC-8).",
+    async execute(_id: string, params?: Record<string, unknown>): Promise<any> {
+      throw new Error("Baseline diff not implemented in this run; to complete AC-4/AC-8: compute paragraph-level diffs and summary.");
     },
   };
 }
