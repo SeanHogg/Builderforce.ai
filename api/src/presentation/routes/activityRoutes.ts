@@ -373,6 +373,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
       WHERE id = ${id} AND user_id = ${userId} AND status = 'draft' RETURNING id, tenant_id, engagement_id, billable_minutes
     `;
     const card = rows[0];
+    const card = rows[0];
     if (!card) return c.json({ error: 'Not found or not draft' }, 404);
     const [eng] = await sql(c.env)`SELECT created_by_user_id FROM freelancer_engagements WHERE id = ${card.engagement_id}`;
     const [me] = await sql(c.env)`SELECT display_name FROM users WHERE id = ${userId}`;
