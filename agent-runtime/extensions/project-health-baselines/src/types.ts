@@ -78,9 +78,8 @@ export type BaselineAuditEntry = {
  * Full immutable baseline entity
  *
  * @invariants:
- * - `id`, `version`, `status`, `metadata.projectId`, `metadata.streamName`, `baselineName`,
- *   `content.responseText`, `content.responseMetadata.model`, `content.responseMetadata.timestamp`,
- *   `content.responseMetadata.contextMode`, `author`, `createdAt`, `updatedAt`, `auditTrail` are immutable
+ * - `id`, `version`, `status`, `metadata.projectId`, `metadata.streamName`, `baselineName`, `content.responseText`, `content.responseMetadata.model`, `content.responseMetadata.timestamp`, `content.responseMetadata.contextMode` are immutable
+ * - `auditTrail` is append-only
  * - Deleted baselines are soft-deleted (status "archived") at project boundary
  * - Unique constraint (projectId, streamName, version) enforced at persistence layer
  */
@@ -143,56 +142,4 @@ export type DeltaDiffBlock = {
 export type HealthDeltaSummary = {
   summary: string;
   summary_type: HealthDeltaSummaryType;
-};
-
-/**
- * Diff request: two baselines for side-by-side comparison
- */
-export type DiffRequest = {
-  baselineId1: number;
-  baselineId2: number;
-  host: string;                     // telemetry: tool invocation host
-  traceId?: string;                 // telemetry: correlation ID
-};
-
-/**
- * File-backed audit log line
- */
-export type AuditLogLine = {
-  entity: Baseline;
-  timestamp: string;
-  action: BaselineAuditEntry["action"];
-  host: string;
-  traceId?: string;
-};
-
-/**
- * Permission roles for RBAC
- */
-export type ProjectRole = "owner" | "admin" | "editor" | "viewer";
-
-/**
- * Role permission map for baseline operations (per PRD FR-7)
- */
-export type RolePermissions = Partial<Record<ProjectRole, Permission[]>>;
-
-/**
- * Allowed operations
- */
-export type Permission =
-  | "create"
-  | "list"
-  | "get"
-  | "diff"
-  | "promote"
-  | "archive"
-  | "active";
-
-/**
- * Valid configuration options (per builderforce.plugin.json schema)
- */
-export type PluginConfig = {
-  maxBaselinesPerProject: number;
-  auditLogPath: string;
-  diffTokenBudget: number;
 };
