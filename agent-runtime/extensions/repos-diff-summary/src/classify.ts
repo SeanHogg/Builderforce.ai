@@ -1,6 +1,8 @@
-import type { Capture, Type } from "@sinclair/typebox";
-import fg from "fast-glob";
-import { union } from "./errors.js";
+import minimatch from "minimatch";
+import { readFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import type { Type } from "@sinclair/typebox";
+import { DiffSummaryError } from "./errors.js";
 
 const DEFAULT_CATEGORIES: readonly CategoryRule[] = [
   {
@@ -26,61 +28,77 @@ const DEFAULT_CATEGORIES: readonly CategoryRule[] = [
 ];
 
 /**
- * Minimal YAML parsing for .mcp-diff-categories.yml override.
- * Handles an override at each glob pattern or at a top level.
- * Errors are COERCED into TOOL_ERRORS (union), not thrown directly.
+ * Minimal parser for .mcp-diff-categories.yml override.
+ *
+ * Recognized format:
+ *   glob/path: category
+ *   wildcard/path: anotherCategory
  */
-function parseYamlOverrideOverride(str: string): CategoryRule[] | TOOL_ERRORS {
-  try {
-    const lines = str.split("\n");
-    const rules: CategoryRule[] = [];
-    // Simple line-by-line parser.
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i]!.trim();
-      // Skip comments, empty/blank.
-      if (!line || line.startsWith("#") || /^[\s\r]+$/.test(line)) continue;
-      // Glob: category: path…
-      const globMatch = line.match(/^([^\s]+):\s*(.+)$/);
-      if (globMatch) {
-        const [, glob, category] = globMatch;
-        let patternList = [glob];
-        // Multi-line patterns after the first line (same category).
-        const currentCategory = category.trim().replace(/^["'`]|[`'""]$/g, "").trim();
-        for (i++; i < lines.length; i++) {
-          const nextLine = lines[i]!;
-          const trimmed = nextLine.trim();
-          if (!trimmed) break;
-          if (trimmed.startsWith("#") || /^[\s\r]+$/.test(trimmed)) continue;
-          const multiGlobMatch = trimmed.match(/^([^\s]+):\s*(.+)$/);
-          if (multiGlobMatch) {
-            break; // Finished this section
-          }
-          const added patternList = [...patternList, trimmed];
-        }
-        rules.push({ category: currentCategory, patterns: patternList });
-      }
-      // Catch-all category without explicit glob lines? (EXAMPLE: "all: path…"). We won't handle for now to keep minimal.
+function parseYamlOverride(content: string): CategoryRule[] {
+  const lines = content.split("\n");
+  const rules: CategoryRule[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i]!.trim();
+    if (!line || line.startsWith("#")) {
+      i++;
+      continue;
     }
-    if (rules.length === 0) return [];
-    return rules;
-  } catch (err) {
-    return new UnexpectedParseError("Failed to parse .mcp-diff-categories.yml: " + String(err));
+    const match = line.match(/^([^:\s]+):\s*(.+)$/);
+    if (!match) {
+      i++;
+      continue;
+    }
+    let [pattern, catStr] = match.slice(1);
+    // protect base path
+    let basePath: string;
+    if (pattern.includes("/") || pattern.includes("*") || pattern.includes("?") || pattern.includes("{") || pattern.includes("[")) {
+      basePath = pattern;
+    } else {
+      basePath = `**/${pattern}`;
+    }
+    // strip quotes? Not needed for strict parsing.
+    category = catStr.trim();
+    rules.push({ category, patterns: [basePath] });
+
+    // conflate following lines until next assignment
+    let addedPatterns: string[] = [basePath];
+    i++;
+    while (i < lines.length) {
+      const nextLine = lines[i] !.trim();
+      if (!nextLine || nextLine.startsWith("#")) {
+        i++;
+        continue;
+      }
+      const nextMatch = nextLine.match(/^([^:\s]+):\s*(.+)$/);
+      if (nextMatch) {
+        break;
+      }
+      // concat path segments
+      addedPatterns.push(nextLine);
+      i++;
+    }
+    rules[rules.length - 1] = { category, patterns: addedPatterns };
   }
+  return rules;
 }
 
-/**
- * Unified error type used by classification module.
- */
-type TOOL_ERRORS = TASK_NOT_LINKED | NOT_FOUND | FORBIDDEN | UnexpectedParseError;
-
-type TASK_NOT_LINKED = { kind: "TASK_NOT_LINKED"; message: string };
-type NOT_FOUND = { kind: "NOT_FOUND"; message: string };
-type FORBIDDEN = { kind: "FORBIDDEN"; message: string };
-type UnexpectedParseError = { kind: "UnexpectedParseError"; message: string };
-
-function parseOverrideFile(content: string): CategoryRule[] | TOOL_ERRORS {
-  return parseYamlOverrideOverride(content);
+export interface CategoryRule {
+  category: Category;
+  patterns: string[];
 }
+
+export interface ClassificationOptions {
+  repoPath: string;
+}
+
+export type Category =
+  | "sourceCode"
+  | "test"
+  | "docs"
+  | "config"
+  | "migration"
+  | "asset";
 
 const CATEGORY_ORDINALS: Record<Category, number> = {
   sourceCode: 0,
@@ -91,87 +109,44 @@ const CATEGORY_ORDINALS: Record<Category, number> = {
   asset: 5,
 };
 
-type Category =
-  | "sourceCode"
-  | "test"
-  | "docs"
-  | "config"
-  | "migration"
-  | "asset";
-
-type MatchingRule = {
-  category: Category;
-  patterns: string[];
-  matchIndex: number; // longest path wins
-};
-
-export interface ClassificationOptions {
-  override: string | TOOL_ERRORS;
-  basename: string;
+export function classify(path: string, options: ClassificationOptions): Category {
+  try {
+    const overridePath = resolve(options.repoPath, ".mcp-diff-categories.yml");
+    const overrideContent = readFileSync(overridePath, "utf-8");
+    const overrideRules = parseYamlOverride(overrideContent);
+    if (overrideRules.length === 0) {
+      return classifyWithoutOverride(path);
+    }
+    return bestMatch(path, [...DEFAULT_CATEGORIES, ...overrideRules]);
+  } catch (err) {
+    // If file missing or unparsable, fall back to default
+    return classifyWithoutOverride(path);
+  }
 }
 
-/**
- * Classify a path into a category based on override, longest-path glob wins.
- * Returns TOOL_ERRORS for malformed YAML; consumed by the tool layer.
- */
-export function classify(path: string, options: ClassificationOptions): Category | TOOL_ERRORS {
-  // Resolve override lazily after parse error resolution.
-  let overrideRules: CategoryRule[] = [];
-  if (options.override !== "TOOL_ERRORS") {
-    // Override should be already normalized to CategoryRule[]
-    overrideRules = options.override;
-  }
-
-  // Determine best matching rule across both defaults and overrides.
-  const match = bestMatchRule(path, [...DEFAULT_CATEGORIES, ...overrideRules]);
-
-  if (match === null) {
-    return "sourceCode";
-  }
-
-  const category = match.category;
-  return CATEGORY_ORDINALS[category] <= CATEGORY_ORDINALS.sourceCode ? category : "sourceCode";
+function classifyWithoutOverride(path: string): Category {
+  return bestMatch(path, DEFAULT_CATEGORIES);
 }
 
-function bestMatchRule(path: string, rules: readonly CategoryRule[]): MatchingRule | null {
-  let longestMatch: MatchingRule | null = null;
+function bestMatch(path: string, rules: readonly CategoryRule[]): Category {
+  let bestMatch: CategoryRule | null = null;
+  let bestPriority = -1;
   for (const rule of rules) {
-    for (let i = 0; i < rule.patterns.length; i++) {
-      const pattern = rule.patterns[i]!;
-      if (!matchGlob(pattern, path)) continue;
-      const { options, error } = matchGlobMeta(pattern, path);
-      if (error) continue;
-      const matchIndex = options.matchCount + (options.isExtensionMatch ? 0 : -0.1);
-      if (!longestMatch || matchIndex > matchGlobMeta(longestMatch.category === "sourceCode" ? "" : "", path).options.matchCount) {
-        longestMatch = { category: rule.category, patterns: rule.patterns, matchIndex };
-      }
+    const prior = CATEGORY_ORDINALS[rule.category] ?? -1;
+    if (prior <= bestPriority) continue;
+    if (matchesAny(rule, path)) {
+      bestMatch = rule;
+      bestPriority = prior;
     }
   }
-  return longestMatch;
+  return bestMatch?.category ?? "sourceCode";
 }
 
-function matchGlob(pattern: string, path: string): boolean {
-  // fast-glob includes globstar support; we don't restrict delimiters here.
-  return fg.sync(pattern, { onlyFiles: false }).includes(path);
+function matchesAny(rule: CategoryRule, path: string): boolean {
+  return rule.patterns.some(p => minimatch(path, p, { dot: true, nocase: true }));
 }
 
-// Temporary lightweight glob meta-finder (extension-match heuristic)
-function matchGlobMeta(pattern: string, path: string): { options: { matchCount: number; isExtensionMatch: boolean }; error: boolean } {
-  const noWildcard = !pattern.match(/[*?{}[\]]/);
-  if (noWildcard) {
-    const exactMatch = pattern === path;
-    return { options: { matchCount: exactMatch ? 1 : 0, isExtensionMatch: path.includes(".") && path.endsWith(pattern) }, error: false };
-  }
-  const matches = fg.sync(pattern, { onlyFiles: false }).map(p => p.replace(/\/+/g, "/"));
-  // Multi-pattern simplistic count
-  for (const m of matches) {
-    // Use String.includes as a rough heuristic; we only evaluate explicitly specified patterns.
-    if (path.includes(m)) return { options: { matchCount: 1, isExtensionMatch: false }, error: false };
-  }
-  return { options: { matchCount: 0, isExtensionMatch: false }, error: false };
-}
-
-export interface CategoryRule {
-  category: Category;
-  patterns: string[];
-}
+export const classifySchema = Type.Object({
+  path: Type.String(),
+  options: Type.Reference(() => ClassificationOptions),
+}) as Type.Infer<typeof classifySchema>;
