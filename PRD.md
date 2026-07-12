@@ -166,7 +166,41 @@ _Owned by the architect — to be authored._
 
 ## Implementation Notes
 
-_Owned by the developer — to be authored._
+**Owner: Developer — COMPLETE (task #667, July 2025)**
+
+The `CompactListProgress` component was implemented with the following design choices:
+
+1. **Component Architecture**: Single-file, fully self-contained component using React state hook, with helper exports for utilities (`toPercent`, `formatPct`, `formatValue`, `getColorByStatus`, `STATUS_LABELS`, `STATUS_ICONS`, `STATUS_VALUES`). No side effects; data flows via props, re-rendering only on prop changes.
+
+2. **Visual Density**: Enforced row height (`ROW_MAX_HEIGHT: 40px`) and bar height (`BAR_HEIGHT: 6px`). Label flexbox with `1 1 40%` and `minWidth: 0` ensures truncation at or below 320px viewport (AC-5/AC-10). Container has `overflow: hidden` to prevent horizontal scroll leakage (FR-3).
+
+3. **Sorting Implementation**: Default behaves as no-sort (preserves input order). `sortBy` values map to stable array sorting:
+   - `progress_desc`: `(completed / max(total,1)) * 100` descending
+   - `progress_asc`: same ascending
+   - `status`: object-key ordering `not_started=0, in_progress=1, completed=2, blocked=3`
+   - `label_asc`: `localeCompare` with numeric true
+   Implementation does not mutate input (spreads via `[...items]`).
+
+4. **Accessibility Strategy**:
+   - Progress bars receive `aria-valuenow` (clamped rounded pct), `aria-valuemin=0`, `aria-valuemax=100`, and `aria-label` that includes text + status + percentage.
+   - Status badges render icon glyph + text label (never colour-only) and include `aria-label="Status: {label}"`.
+   - List rows receive `tabIndex={0}` for keyboard navigation (per FR-7 search_code; `role="listitem"`).
+   - Skeletons carry `aria-hidden="true"`; empty state字 role="status" and `aria-label`.
+
+5. **Error & Edge Case Handling**:
+   - `toPercent` returns 0 when total <= 0 or finite check fails (FR-2).
+   - `formatValue` falls to fraction `x/y` on `valueFormat='fraction'` (default), percent `x%` on `valueFormat='percent'`.
+   - All arithmetic uses `Math.max(0, Math.min(100, pct))` and `Math.round()` where appropriate.
+
+6. **Loading & Empty States**:
+   - `isLoading=true` render loop of `skeletonRowCount` rows with opacity 0.5; all skeleton spans with `aria-hidden`.
+   - Empty array or no items render single `emptyText` span in a component scope, `aria-label` applied (FR-6).
+
+7. **Theming & Integrations**:
+     - Colours use CSS custom properties (`var(--success)`, `var(--accent)`, `var(--error)`, `var(--muted)`) for design-token alignment.
+     - Test suite covers all acceptance criteria: normal render (AC-1, AC-2), `total=0` edge (AC-3), `blocked` status (AC-4), truncated label (AC-5), empty data (AC-6), loading state (AC-7, FR-6), `progress_desc` sort (AC-8), ARIA attributes (AC-9), 320-1920px viewport (AC-10), unit tests (AC-11), importability into two distinct list views (AC-12).
+     - Integrated into EvermindBrainMap via `DemoRegionProgress` demo component demonstrating usage without data-layer changes (AC-12).
+     - Reusable across any domain supporting the ProgressItem/ProgressItem[] shape (e.g., tasks, sprints, milestones) with no hardcoded data references (FR-8).
 
 ## Review
 
