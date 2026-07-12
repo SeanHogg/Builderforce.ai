@@ -1,55 +1,83 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #290
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# PRD: Top 3 Current Risks — Risk Identification & Visibility Tool
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+Teams lack a shared, authoritative view of the top risks facing the product or project at any given moment. This causes misaligned prioritization, delayed escalations, and reactive rather than proactive decision-making. The goal is to surface, rank, and communicate the top 3 active risks in a lightweight, structured format that any downstream agent or stakeholder can immediately act on.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+---
 
-## Target users / ICP roles
+## Target Users / ICP Roles
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+| Role | Need |
+|---|---|
+| Product Manager | Prioritize roadmap and mitigation work |
+| Engineering Lead | Identify blockers and technical exposure |
+| Executive Sponsor | Understand escalation-worthy issues |
+| Program / Delivery Manager | Track dependencies and timelines |
+
+---
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This PRD covers the process and output format for identifying, ranking, and documenting the **top 3 risks** at a given point in time. It applies to any active product, initiative, or sprint in flight.
+
+---
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### FR-1: Risk Identification
+- The system or process must ingest signals from at least three sources: engineering status, product roadmap, and external dependencies.
+- Each risk must be identified by a unique ID and a plain-language title.
+
+### FR-2: Risk Ranking
+- Risks must be ranked using a composite score of **Impact × Likelihood** (each scored 1–5).
+- The top 3 risks by composite score must be surfaced prominently.
+
+### FR-3: Risk Record Structure
+Each risk record must include:
+- **Risk ID** — unique identifier
+- **Title** — one-line summary
+- **Description** — 2–3 sentence explanation of the risk
+- **Impact** — score (1–5) + qualitative label (Low / Medium / High / Critical)
+- **Likelihood** — score (1–5) + qualitative label
+- **Composite Score** — Impact × Likelihood
+- **Owner** — named individual or role responsible for mitigation
+- **Mitigation Plan** — at least one concrete action with a due date
+- **Status** — Open / Mitigating / Resolved
+
+### FR-4: Output & Visibility
+- The top 3 risks must be renderable as a markdown table for async consumption by all downstream agents.
+- Risks must be reviewable at a cadence no less frequent than weekly.
+
+### FR-5: Escalation Trigger
+- Any risk with a composite score ≥ 20 must automatically be flagged for executive review.
+
+---
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+| # | Criterion |
+|---|---|
+| AC-1 | Exactly 3 risks are ranked and documented in the standard record format |
+| AC-2 | Each risk record contains all 9 required fields with no blanks |
+| AC-3 | Composite scores are calculated correctly (Impact × Likelihood) |
+| AC-4 | At least one mitigation action per risk includes a named owner and a due date |
+| AC-5 | Any risk scoring ≥ 20 is explicitly flagged as requiring executive escalation |
+| AC-6 | The output is valid GitHub-flavored markdown readable without additional tooling |
 
-## Out of scope
+---
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## Out of Scope
+
+- Risks beyond the top 3 (full risk register management is a separate workstream)
+- Automated real-time risk detection or ML-based scoring
+- Integration with third-party risk management platforms (e.g., Jira, ServiceNow) in this iteration
+- Historical trend analysis or risk velocity tracking
+- Legal, compliance, or security risk domains (handled by dedicated frameworks)
+
+---
+
+*Document status: WIP — to be reviewed and updated each weekly risk sync.*
