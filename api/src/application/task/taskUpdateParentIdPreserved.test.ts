@@ -189,7 +189,6 @@ describe('TaskService update preserves parentTaskId (AC-1..AC-4)', () => {
   it('AC-4: update without parentTaskId retains existing stored parentTaskId (no accidental null-out)', async () => {
     repo.writes = [];
     const service = new TaskService(repo, new SingleProjectRepo(makeProject()));
-    const taskId = asTaskId(42);
     // Task starts with parentTaskId=1 (set in findById mock). Update with unrelated field only.
     const updated = await service.updateTask(42, {
       status: 'in-progress' as never,
