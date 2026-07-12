@@ -42,7 +42,31 @@ export function formatValue(
   return `${completed}/${total}`;
 }
 
-/** Get color token by status (FR-4). */
+/** All valid status values (FR-2). */
+export const STATUS_VALUES: ProgressItem['status'][] = [
+  'not_started',
+  'in_progress',
+  'completed',
+  'blocked',
+];
+
+/** Human-readable status labels — used for text badges + ARIA (FR-7, not colour-alone). */
+export const STATUS_LABELS: Record<ProgressItem['status'], string> = {
+  not_started: 'Not started',
+  in_progress: 'In progress',
+  completed: 'Completed',
+  blocked: 'Blocked',
+};
+
+/** Small non-colour glyph per status so meaning is conveyed beyond colour (FR-7). */
+export const STATUS_ICONS: Record<ProgressItem['status'], string> = {
+  not_started: '○',
+  in_progress: '◐',
+  completed: '✓',
+  blocked: '⚠',
+};
+
+/** Design-token colour per status (FR-4). Unknown values fall back to the neutral token. */
 export function getColorByStatus(status: string): CSSProperties['color'] {
   switch (status) {
     case 'completed':
