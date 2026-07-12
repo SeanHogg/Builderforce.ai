@@ -216,15 +216,9 @@ export class Task {
       >
     >,
   ): Task {
-    // ROOT-CAUSE FIX (parentTaskId drop): a partial update must only touch the
-    // fields the caller actually sent. TaskService masks an OMITTED field as
-    // `undefined` (vs. an explicit `null`, which means "clear this column").
-    // Spreading `updates` straight onto props would write those `undefined`s over
-    // the stored values — so an update carrying `assignedAgentRef` (or any other
-    // field) but NOT `parentTaskId` used to blow away the existing parentTaskId,
-    // which the repository then persisted as NULL (`plain.parentTaskId ?? null`).
-    // Stripping `undefined` keys here preserves omitted fields while still honoring
-    // an explicit `null` (detach) — for parentTaskId, assignees, and every field.
+    // 3-layer fix: First, Task.update strips undefined keys (no overwrites),
+    // then TaskService passes only defined dto fields to avoid schema merging,
+    // and TaskRepository.update writes plain.parentTaskId(non-empty)?nonEmpty:null.
     const stripped = Object.fromEntries(
       Object.entries(updates).filter(([, v]) => v !== undefined),
     );
