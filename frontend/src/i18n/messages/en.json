@@ -3160,6 +3160,7 @@
       "integrations": "Integrations",
       "content": "Content",
       "ceremonies": "Ceremonies",
+      "incidents": "Incidents",
       "wfPlan": "Workforce plan",
       "empAllocation": "Allocation",
       "empCollaboration": "Collaboration",
@@ -3254,6 +3255,10 @@
       "obsContentByKind": "Documents by kind",
       "obsCeremonyCadence": "Ceremony cadence",
       "obsCeremonyBalance": "Ceremony talk balance",
+      "incStatus": "Open incidents",
+      "incSeverity": "Incidents by severity",
+      "incSystems": "Incidents by system",
+      "incMttr": "Mean time to resolve",
       "wfpCostSplit": "Hire vs. agent cost",
       "wfpCapacity": "Capacity vs WIP",
       "wfpGap": "Allocatable gap",
@@ -3386,6 +3391,19 @@
       "humanTalk": "Human",
       "agentTalk": "AI agent",
       "completed": "completed"
+    },
+    "inc": {
+      "noIncidents": "No incidents",
+      "ofTotal": "of {total} in window",
+      "openNudge": "{count} needing attention",
+      "allClear": "All clear",
+      "incidents": "incidents",
+      "unclassified": "Unclassified",
+      "mttrSub": "mean time to resolve",
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
     },
     "reorder": {
       "drag": "Drag to reorder",
@@ -7608,6 +7626,14 @@
     "errStartConnect": "Failed to start connect",
     "errConnectSubscription": "Failed to connect subscription",
     "errRemove": "Failed to remove credential",
+    "precedence": {
+      "title": "Provider priority",
+      "subtitle": "When more than one of your accounts is connected, cloud agents lead with the provider at the top and fail over down the list. Put Meta first to route cloud agents through it.",
+      "leads": "Leads",
+      "moveUp": "Move {provider} up",
+      "moveDown": "Move {provider} down",
+      "errSave": "Failed to save priority"
+    },
     "provider": {
       "anthropic": {
         "blurb": "Connect your Claude Pro/Max subscription (no per-token billing) or paste an Anthropic API key.",
@@ -9168,6 +9194,8 @@
       "publishedNote": "A root-cause analysis has been published for this incident.",
       "prompt": "This incident is resolved. Publish a root-cause analysis to the knowledge base.",
       "formTitle": "Publish root-cause analysis",
+      "fishTitle": "Why did this occur?",
+      "fishAria": "Fishbone root-cause diagram for {title}",
       "summary": "Summary",
       "summaryPlaceholder": "One-paragraph overview of the incident…",
       "rootCause": "Root cause",

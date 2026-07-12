@@ -2495,6 +2495,9 @@ export type ProviderAuthType = 'api_key' | 'oauth';
 export interface ProviderKeySummary {
   provider: LlmProvider;
   authType: ProviderAuthType;
+  /** Tenant-set BYO precedence — LOWER = tried first by the auto-select cloud pin;
+   *  `null` = unset (falls back to catalog-tier ordering). */
+  priority: number | null;
 }
 
 export const providerKeysApi = {
@@ -2510,6 +2513,14 @@ export const providerKeysApi = {
 
   remove: (provider: LlmProvider): Promise<{ ok: true }> =>
     request<{ ok: true }>(`/llm/provider-keys/${provider}`, { method: 'DELETE' }),
+
+  /** Set the BYO precedence — the ordered provider list (most-preferred first) the
+   *  auto-select cloud pin leads its connected flagships by (e.g. Meta first). */
+  setPriority: (order: LlmProvider[]): Promise<{ ok: true; order: LlmProvider[] }> =>
+    request<{ ok: true; order: LlmProvider[] }>('/llm/provider-keys/priority', {
+      method: 'PUT',
+      body: JSON.stringify({ order }),
+    }),
 
   /** Begin connecting a Claude subscription — returns the Claude.ai authorize URL
    *  the user opens to grant access (PKCE verifier is held server-side). */

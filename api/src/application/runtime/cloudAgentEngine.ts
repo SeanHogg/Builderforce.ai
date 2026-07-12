@@ -13,6 +13,7 @@ import { and, desc, eq, or, isNull } from 'drizzle-orm';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { buildCloudMemoryCapability } from './cloudMemory';
 import { isValidatorReviewPayload } from '../validation/validatorReviewMarker';
+import { recordActivity, SYSTEM_ACTOR } from '../activity/activityLog';
 import { isIncidentTriagePayload, incidentIdFromPayload } from '../incident/incidentTriageMarker';
 import { resolveTicketRepoContext, commitAgentFile, deleteAgentFile, type TicketRepoContext } from '../repos/commitFileAsPendingChange';
 import { commitPrdAsPendingChange } from '../repos/commitPrdToRepo';
@@ -381,6 +382,17 @@ async function landPrdChange(
       .set({ gitBranch: committed.branch, updatedAt: new Date() })
       .where(eq(tasks.id, args.taskId))
       .catch(() => { /* best-effort */ });
+  } else {
+    // The DB PRD copy (specs.prd) stands but the repo PRD.md commit failed — the 3 copies
+    // have DIVERGED. Surface it on the audit trail (a reconcile signal) instead of silently
+    // dropping it (PRD §5.7), so an operator/agent can re-land the repo copy.
+    await recordActivity(env, db, {
+      tenantId: args.tenantId, projectId: null, actor: SYSTEM_ACTOR,
+      verb: 'ticket.prd.reconcile_needed',
+      targetType: 'task', targetId: String(args.taskId), targetLabel: `#${args.taskId}`,
+      summary: `PRD repo commit failed (${committed.reason ?? 'unknown'}) — the DB PRD and repo PRD.md have diverged; re-land needed`.slice(0, 300),
+      metadata: { reason: committed.reason ?? null, executionId: args.executionId },
+    }).catch(() => { /* best-effort — telemetry must not block the run */ });
   }
 
   notifyExecutionSubscribers(args.executionId, {
@@ -1064,6 +1076,8 @@ export async function handleContainerOp(
       // Context-aware seed: a small-window model isn't picked for a big container turn.
       estimatedTokens: estimateRequestTokens(sendMessages, containerTools),
       byoVendors: byoVendorIdSet(providersFromCredentials(containerCreds)),
+      // Tenant BYO precedence — lead with the owner's chosen account (e.g. Meta first).
+      byoVendorPriority: containerCreds.vendorPriority,
     });
     const result = await llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}), ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}) }).complete({
       messages: sendMessages as unknown as ChatMessage[], tools: containerTools, tool_choice: 'auto',
@@ -1527,6 +1541,8 @@ export async function runCloudToolLoop(
         estimatedTokens: estimateRequestTokens(messages, cloudTools),
         // A free tenant may pin a model their connected provider (BYO) serves.
         byoVendors: byoVendorIdSet(providersFromCredentials(loopCreds)),
+        // Tenant BYO precedence — lead with the owner's chosen account (e.g. Meta first).
+        byoVendorPriority: loopCreds.vendorPriority,
       });
   // Mutable: a 429 on the pinned model drops the strict pin so the proxy cascades
   // (see the per-turn cascade below); the run then stays unpinned for later turns.

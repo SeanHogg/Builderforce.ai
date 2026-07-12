@@ -1902,11 +1902,13 @@ export const workflows = pgTable('workflows', {
   projectId:    integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   /** Source definition this run was instantiated from (0094); null for ad-hoc runs. */
   workflowDefinitionId: uuid('workflow_definition_id').references(() => workflowDefinitions.id, { onDelete: 'set null' }),
-  /** Reliability linkage (0330): the incident/monitor whose event fired this run —
+  /** Reliability linkage (0337): the incident/monitor whose event fired this run —
    *  set on event-trigger runs and on a manual runbook launched from an incident, so
-   *  the incident detail can list "workflows run for this incident". Null otherwise. */
-  sourceIncidentId: uuid('source_incident_id').references(() => prodIncidents.id, { onDelete: 'set null' }),
-  sourceMonitorId:  uuid('source_monitor_id').references(() => monitors.id, { onDelete: 'set null' }),
+   *  the incident detail can list "workflows run for this incident". Null otherwise.
+   *  Plain uuids (no ORM FK) — mirrors monitors.current_incident_id; the value is only
+   *  ever an equality filter and the tables are declared later in this module. */
+  sourceIncidentId: uuid('source_incident_id'),
+  sourceMonitorId:  uuid('source_monitor_id'),
   /** Where this run executes: 'host' (self-hosted agentHost) | 'cloud' (builderforce-hosted). */
   runtime:      varchar('runtime', { length: 16 }).notNull().default('host'),
   /** ide_agents.id of the cloud agent serving the run when runtime='cloud'. */

@@ -18,6 +18,7 @@ import { Select } from '@/components/Select';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useRole, hasMinRole } from '@/lib/rbac';
 import { MonitorsSection, MonitoringReporting } from '@/components/reliability/MonitoringSections';
+import { FishboneChart, type FishboneCategory } from '@/components/charts/FishboneChart';
 import {
   incidentsApi,
   workflowDefinitions,
@@ -62,6 +63,14 @@ function fmt(dt: string | null | undefined): string {
   if (!dt) return '—';
   const d = new Date(dt);
   return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+}
+
+/** Split a free-text RCA field into discrete causes — one per line / semicolon. */
+function splitCauses(s: string | null | undefined): string[] {
+  return (s ?? '')
+    .split(/[\n;]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
 }
 
 export default function IncidentsPageClient() {
@@ -347,6 +356,20 @@ function IncidentDetailPanel({ t, tc, canManage, incidentId, onClose, onChanged 
               <DetailRow label={t('rootCause')} value={incident.rootCause || '—'} />
             </div>
 
+            {/* Why did this occur? — fishbone RCA (renders once a root cause is known) */}
+            {incident.rootCause && (() => {
+              const categories: FishboneCategory[] = [
+                { label: t('rca.rootCause'), causes: splitCauses(incident.rootCause) },
+                ...(incident.impact ? [{ label: t('rca.impact'), causes: splitCauses(incident.impact) }] : []),
+              ];
+              return (
+                <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>{t('rca.fishTitle')}</div>
+                  <FishboneChart problem={incident.title} categories={categories} ariaLabel={t('rca.fishAria', { title: incident.title })} />
+                </div>
+              );
+            })()}
+
             {/* Actions */}
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8 }}>{t('actions')}</div>
@@ -531,6 +554,23 @@ function RcaSection({ t, tc, canManage, incident, onPublished }: SectionProps & 
           <textarea className="input" style={{ minHeight: 60 }} value={whatWentWrong} onChange={(e) => setWhatWentWrong(e.target.value)} />
         </Field>
       </div>
+
+      {/* Live "why did this occur?" fishbone — updates as the RCA is written */}
+      {(rootCause.trim() || contributingFactors.trim() || whatWentWrong.trim() || impact.trim()) && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>{t('rca.fishTitle')}</span>
+          <FishboneChart
+            problem={incident.title}
+            ariaLabel={t('rca.fishAria', { title: incident.title })}
+            categories={[
+              { label: t('rca.rootCause'), causes: splitCauses(rootCause) },
+              { label: t('rca.contributingFactors'), causes: splitCauses(contributingFactors) },
+              { label: t('rca.whatWentWrong'), causes: splitCauses(whatWentWrong) },
+              { label: t('rca.impact'), causes: splitCauses(impact) },
+            ].filter((c) => c.causes.length > 0)}
+          />
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>{t('rca.actionItems')}</span>

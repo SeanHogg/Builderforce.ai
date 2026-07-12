@@ -55,6 +55,38 @@ describe('requirementUnmetReason', () => {
   });
 });
 
+describe('computeCoverage — reviewer quorum (AC-4)', () => {
+  const rev = (ref: string, quorum?: number): RequirementInput => ({ laneKey: 'in_review', laneName: 'Review', kind: 'review', ref, isRequired: true, quorum });
+
+  it('a 2-of-3 reviewer set advances on the 2nd approval, not the 1st', () => {
+    const reqs = [rev('code-reviewer', 2), rev('architect', 2), rev('team-lead', 2)];
+    const s = emptySignals();
+    // 0 approvals → flagged, needs 2.
+    let r = computeCoverage(reqs, s);
+    expect(r.status).toBe('flagged');
+    expect(r.requiredCount).toBe(2);       // quorum, not 3
+    // 1 approval → still short.
+    s.approvedRoles.add('code-reviewer');
+    r = computeCoverage(reqs, s);
+    expect(r.status).toBe('flagged');
+    expect(r.satisfiedCount).toBe(1);
+    // 2 approvals → quorum met, pass (the 3rd is not required).
+    s.approvedRoles.add('architect');
+    r = computeCoverage(reqs, s);
+    expect(r.status).toBe('pass');
+    expect(r.satisfiedCount).toBe(2);
+  });
+
+  it('no quorum set = all reviewers must approve (legacy behaviour)', () => {
+    const reqs = [rev('code-reviewer'), rev('architect')];
+    const s = emptySignals();
+    s.approvedRoles.add('code-reviewer');
+    const r = computeCoverage(reqs, s);
+    expect(r.status).toBe('flagged');
+    expect(r.requiredCount).toBe(2);
+  });
+});
+
 describe('computeCoverage', () => {
   it('passes when there are no required checks (100% coverage)', () => {
     const r = computeCoverage([req({ isRequired: false })], emptySignals());

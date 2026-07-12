@@ -66,6 +66,82 @@ const dividerLine: React.CSSProperties = { flex: 1, height: 1, background: 'var(
 
 type TFn = ReturnType<typeof useTranslations>;
 
+/** Provider display label by id — literal brand names (not translated). */
+const PROVIDER_LABEL: Record<LlmProvider, string> = {
+  anthropic: 'Anthropic (Claude)',
+  openai: 'OpenAI',
+  google: 'Google (Gemini)',
+  meta: 'Meta AI (MUSE)',
+};
+
+/**
+ * BYO PRECEDENCE — the ordered list (most-preferred first) the auto-select cloud pin
+ * leads its connected flagships by. Shown only when 2+ providers are connected (order
+ * is moot with one). Reordering persists the whole list via `setPriority`, so an owner
+ * at their Anthropic quota can put **Meta first** and have cloud agents route there.
+ */
+function PrecedencePanel({
+  order,
+  onReorder,
+  t,
+}: {
+  order: LlmProvider[];
+  onReorder: (next: LlmProvider[]) => void;
+  t: TFn;
+}) {
+  const move = (index: number, dir: -1 | 1) => {
+    const target = index + dir;
+    if (target < 0 || target >= order.length) return;
+    const next = [...order];
+    [next[index], next[target]] = [next[target], next[index]];
+    onReorder(next);
+  };
+
+  return (
+    <div style={{ ...cardStyle, marginBottom: 20 }}>
+      <div style={sectionTitle}>{t('precedence.title')}</div>
+      <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 12px' }}>{t('precedence.subtitle')}</p>
+      <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {order.map((p, i) => (
+          <li
+            key={p}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+              background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8,
+            }}
+          >
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', minWidth: 18, textAlign: 'center' }}>{i + 1}</span>
+            <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', minWidth: 0 }}>{PROVIDER_LABEL[p]}</span>
+            {i === 0 && (
+              <span style={{ fontSize: 10.5, fontWeight: 700, color: 'rgba(34,197,94,0.9)', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                {t('precedence.leads')}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => move(i, -1)}
+              disabled={i === 0}
+              aria-label={t('precedence.moveUp', { provider: PROVIDER_LABEL[p] })}
+              style={{ ...buttonPrimary, padding: '2px 9px', opacity: i === 0 ? 0.4 : 1 }}
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              onClick={() => move(i, 1)}
+              disabled={i === order.length - 1}
+              aria-label={t('precedence.moveDown', { provider: PROVIDER_LABEL[p] })}
+              style={{ ...buttonPrimary, padding: '2px 9px', opacity: i === order.length - 1 ? 0.4 : 1 }}
+            >
+              ↓
+            </button>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 /**
  * One provider's connect card. Owns its own draft/busy/connect state and decides
  * its own UI from the provider config (OAuth block only when supported). Reports
@@ -232,6 +308,9 @@ function ProviderConnectionCard({
 export function ProviderKeysSettings() {
   const t = useTranslations('providerKeys');
   const [authByProvider, setAuthByProvider] = useState<Partial<Record<LlmProvider, ProviderAuthType>>>({});
+  // BYO precedence — connected providers, most-preferred first. Seeded from the backend
+  // order (priority asc, unset last), then kept in sync as providers connect/disconnect.
+  const [order, setOrder] = useState<LlmProvider[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -241,11 +320,31 @@ export function ProviderKeysSettings() {
         const map: Partial<Record<LlmProvider, ProviderAuthType>> = {};
         for (const d of r.details) map[d.provider] = d.authType;
         setAuthByProvider(map);
+        // r.details already arrives ordered by tenant precedence — connected only.
+        setOrder(r.details.map((d) => d.provider));
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
 
   useEffect(() => { void refresh(); }, []);
+
+  // Reflect a connect/disconnect in the precedence list: append a newly-connected
+  // provider to the tail (lowest precedence until reordered), drop a removed one.
+  const syncOrder = (provider: LlmProvider, authType: ProviderAuthType | null) =>
+    setOrder((prev) =>
+      authType === null ? prev.filter((p) => p !== provider)
+      : prev.includes(provider) ? prev
+      : [...prev, provider],
+    );
+
+  const persistOrder = async (next: LlmProvider[]) => {
+    setOrder(next); // optimistic
+    try {
+      await providerKeysApi.setPriority(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('precedence.errSave'));
+    }
+  };
 
   return (
     <div>
@@ -257,24 +356,28 @@ export function ProviderKeysSettings() {
       {loading ? (
         <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>
       ) : (
-        <div style={wrapStyle}>
-          {PROVIDERS.map((p) => (
-            <ProviderConnectionCard
-              key={p.id}
-              config={p}
-              authType={authByProvider[p.id] ?? null}
-              t={t}
-              onChange={(authType) =>
-                setAuthByProvider((prev) => {
-                  const next = { ...prev };
-                  if (authType === null) delete next[p.id];
-                  else next[p.id] = authType;
-                  return next;
-                })
-              }
-            />
-          ))}
-        </div>
+        <>
+          {order.length >= 2 && <PrecedencePanel order={order} onReorder={persistOrder} t={t} />}
+          <div style={wrapStyle}>
+            {PROVIDERS.map((p) => (
+              <ProviderConnectionCard
+                key={p.id}
+                config={p}
+                authType={authByProvider[p.id] ?? null}
+                t={t}
+                onChange={(authType) => {
+                  setAuthByProvider((prev) => {
+                    const next = { ...prev };
+                    if (authType === null) delete next[p.id];
+                    else next[p.id] = authType;
+                    return next;
+                  });
+                  syncOrder(p.id, authType);
+                }}
+              />
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

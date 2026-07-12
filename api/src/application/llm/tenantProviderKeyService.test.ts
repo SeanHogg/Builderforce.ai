@@ -119,6 +119,7 @@ describe('formatByoUnresolvedHeader — provider:reason encoding', () => {
     vendorKeys: {},
     configuredProviders: ['anthropic'],
     unresolvedReasons: { anthropic: 'revoked' },
+    vendorPriority: [],
   };
 
   it('encodes a same-tenant unresolved provider with its reason', () => {
@@ -130,7 +131,7 @@ describe('formatByoUnresolvedHeader — provider:reason encoding', () => {
   });
 
   it('is empty when everything resolved and nothing is connected elsewhere', () => {
-    const ok: TenantLlmCredentials = { anthropicOAuthToken: 'tok', vendorKeys: {}, configuredProviders: ['anthropic'], unresolvedReasons: {} };
+    const ok: TenantLlmCredentials = { anthropicOAuthToken: 'tok', vendorKeys: {}, configuredProviders: ['anthropic'], unresolvedReasons: {}, vendorPriority: [] };
     expect(formatByoUnresolvedHeader(ok)).toBe('');
   });
 });

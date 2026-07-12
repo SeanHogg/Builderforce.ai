@@ -290,7 +290,8 @@
       "myWorkspace": "Mein Bereich",
       "marketplace": "Marktplatz",
       "incidents": "Vorfälle",
-      "monitoring": "Überwachung"
+      "monitoring": "Überwachung",
+      "reliability": "Zuverlässigkeit"
     },
     "tab": {
       "projects": "Projekte",
@@ -365,6 +366,7 @@
       "escalation": "Eskalation",
       "contacts": "Kontakte",
       "boards": "Boards",
+      "monitors": "Monitore",
       "reporting": "Berichte",
       "rfp": "RFP"
     }
@@ -3158,6 +3160,7 @@
       "integrations": "Integrationen",
       "content": "Inhalte",
       "ceremonies": "Zeremonien",
+      "incidents": "Vorfälle",
       "wfPlan": "Personalplan",
       "empAllocation": "Zuteilung",
       "empCollaboration": "Zusammenarbeit",
@@ -3252,6 +3255,10 @@
       "obsContentByKind": "Dokumente nach Typ",
       "obsCeremonyCadence": "Zeremonien-Takt",
       "obsCeremonyBalance": "Redeanteil-Verteilung",
+      "incStatus": "Offene Vorfälle",
+      "incSeverity": "Vorfälle nach Schweregrad",
+      "incSystems": "Vorfälle nach System",
+      "incMttr": "Mittlere Lösungszeit",
       "wfpCostSplit": "Kosten Einstellen vs. Agent",
       "wfpCapacity": "Kapazität vs. WIP",
       "wfpGap": "Zuteilbare Lücke",
@@ -3384,6 +3391,19 @@
       "humanTalk": "Mensch",
       "agentTalk": "KI-Agent",
       "completed": "abgeschlossen"
+    },
+    "inc": {
+      "noIncidents": "Keine Vorfälle",
+      "ofTotal": "von {total} im Zeitraum",
+      "openNudge": "{count} benötigen Aufmerksamkeit",
+      "allClear": "Alles in Ordnung",
+      "incidents": "Vorfälle",
+      "unclassified": "Nicht klassifiziert",
+      "mttrSub": "mittlere Lösungszeit",
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
     },
     "reorder": {
       "drag": "Zum Umsortieren ziehen",
@@ -7604,6 +7624,14 @@
     "errStartConnect": "Verbindung konnte nicht gestartet werden",
     "errConnectSubscription": "Abo konnte nicht verbunden werden",
     "errRemove": "Zugangsdaten konnten nicht entfernt werden",
+    "precedence": {
+      "title": "Anbieter-Priorität",
+      "subtitle": "Wenn mehrere Ihrer Konten verbunden sind, beginnen Cloud-Agenten mit dem obersten Anbieter und wechseln bei Ausfall die Liste hinab. Setzen Sie Meta an die erste Stelle, um Cloud-Agenten darüber zu leiten.",
+      "leads": "Bevorzugt",
+      "moveUp": "{provider} nach oben",
+      "moveDown": "{provider} nach unten",
+      "errSave": "Priorität konnte nicht gespeichert werden"
+    },
     "provider": {
       "anthropic": {
         "blurb": "Verbinden Sie Ihr Claude-Pro/Max-Abo (keine Abrechnung pro Token) oder fügen Sie einen Anthropic-API-Schlüssel ein.",
@@ -9095,6 +9123,16 @@
       "escalation": "Eskalation",
       "contacts": "Kontakte"
     },
+    "workflows": {
+      "title": "Runbooks & Workflows",
+      "blurb": "Führen Sie einen benutzerdefinierten Workflow für diesen Vorfall aus oder sehen Sie die von seinen Ereignissen ausgelösten Workflows.",
+      "pick": "Workflow",
+      "pickPlaceholder": "Workflow auswählen…",
+      "run": "Workflow ausführen",
+      "create": "Workflow erstellen",
+      "runs": "Ausführungen für diesen Vorfall",
+      "noRuns": "Noch keine Workflow-Ausführungen."
+    },
     "severity": {
       "sev1": "SEV1",
       "sev2": "SEV2",
@@ -9154,6 +9192,8 @@
       "publishedNote": "Für diesen Vorfall wurde eine Ursachenanalyse veröffentlicht.",
       "prompt": "Dieser Vorfall ist behoben. Veröffentlichen Sie eine Ursachenanalyse in der Wissensdatenbank.",
       "formTitle": "Ursachenanalyse veröffentlichen",
+      "fishTitle": "Warum ist das passiert?",
+      "fishAria": "Ishikawa-Ursachendiagramm für {title}",
       "summary": "Zusammenfassung",
       "summaryPlaceholder": "Überblick über den Vorfall in einem Absatz…",
       "rootCause": "Grundursache",

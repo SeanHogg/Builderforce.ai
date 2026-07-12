@@ -278,11 +278,12 @@ function frontierTierRank(model: string): number {
  *
  * Purely REGISTRATION-DRIVEN and multi-provider: it reflects exactly what the tenant
  * connected — connect only OpenAI → GPT leads; connect all three → all three frontier
- * flagships lead, ordered by catalog TIER (ULTRA → PREMIUM → STANDARD) so the
- * strongest frontier model is tried first and the cascade then fails over across the
- * owner's OTHER connected accounts before ever touching a free/paid pool model. There
- * is NO hardcoded vendor preference — a tie in tier keeps the vendor set's iteration
- * order. It is a SOFT seed: the plan pool stays behind the list as fallback.
+ * flagships lead. Ordering: the tenant's own BYO PRECEDENCE (`opts.vendorPriority`,
+ * most-preferred gateway vendor id first — e.g. Meta first) wins, with catalog TIER
+ * (ULTRA → PREMIUM → STANDARD) as the tiebreak for un-ranked vendors. With no precedence
+ * set it degrades to pure tier order (the prior behaviour). The cascade then fails over
+ * across the owner's OTHER connected accounts in that order before ever touching a
+ * free/paid pool model. It is a SOFT seed: the plan pool stays behind the list as fallback.
  *
  * `byoVendors` is the gateway VENDOR-id set the tenant can serve from their own
  * account (see `byoVendorIdSet` / the proxy's connected set). Returns `[]` when
@@ -294,15 +295,32 @@ function frontierTierRank(model: string): number {
  */
 export function byoAutoSeedModels(
   byoVendors: ReadonlySet<string> | null | undefined,
-  opts: { agentic: boolean },
+  opts: { agentic: boolean; vendorPriority?: readonly string[] },
 ): string[] {
   if (!byoVendors || byoVendors.size === 0) return [];
   const flagships = [...byoVendors]
     .map((v) => providerFrontierFlagship(v, opts.agentic))
     .filter((m): m is string => m !== null && isDispatchableSeed(m));
-  // Stable sort by frontier tier (strongest first); Array.prototype.sort is stable in
-  // V8, so same-tier flagships keep the connected-set order (no vendor value judgement).
-  return flagships.sort((a, b) => frontierTierRank(a) - frontierTierRank(b));
+  // TENANT PRECEDENCE first, catalog tier as tiebreak. `vendorPriority` is the tenant's
+  // ordered gateway vendor ids (most-preferred first — e.g. Meta first); a flagship's
+  // vendor is matched via vendorForModel so `direct/meta/…` → 'meta' lines up. A vendor
+  // NOT in the list sorts after every ranked one (Infinity), then falls back to tier —
+  // so with NO precedence set this is exactly the prior tier-only order. Array.prototype
+  // .sort is stable in V8, so equal keys keep the connected-set iteration order.
+  const priority = opts.vendorPriority ?? [];
+  // A vendor NOT in the precedence ranks AFTER every ranked one — but with a FINITE
+  // sentinel (`priority.length`), not Infinity: two un-ranked vendors must compare
+  // EQUAL (rank − rank = 0 → tier tiebreak), and Infinity − Infinity is NaN, which
+  // corrupts Array.sort. With no precedence set every rank is 0 → pure tier order.
+  const priorityRank = (m: string): number => {
+    const i = priority.indexOf(vendorForModel(m));
+    return i === -1 ? priority.length : i;
+  };
+  return flagships.sort((a, b) => {
+    const p = priorityRank(a) - priorityRank(b);
+    if (p !== 0) return p;
+    return frontierTierRank(a) - frontierTierRank(b);
+  });
 }
 
 /**
@@ -929,6 +947,11 @@ export interface LlmProxyOptions {
    *  so its usage is $0 to us and metered per the BYO rules. Resolved per request
    *  from {@link resolveTenantVendorKeys}. */
   tenantVendorKeys?: TenantVendorKeys | null;
+  /** The tenant's BYO PRECEDENCE as ordered gateway vendor ids (most-preferred first).
+   *  Threaded into the auto-select connected-flagship seed ({@link byoAutoSeedModels})
+   *  so the gateway completion seed leads with the owner's chosen account (e.g. Meta
+   *  first), matching the cloud-agent pin. Empty/undefined = catalog-tier order. */
+  byoVendorPriority?: readonly string[];
 }
 
 export class LlmProxyService {
@@ -944,6 +967,7 @@ export class LlmProxyService {
   private readonly freeBudget: number;
   private readonly anthropicOAuthToken: string | null;
   private readonly tenantVendorKeys: TenantVendorKeys;
+  private readonly byoVendorPriority: readonly string[];
 
   constructor(env: ProxyEnv, options?: LlmProxyOptions) {
     this.env = env;
@@ -958,6 +982,7 @@ export class LlmProxyService {
     this.freeBudget = options?.freeBudget && options.freeBudget > 0 ? options.freeBudget : FREE_ATTEMPT_BUDGET;
     this.anthropicOAuthToken = options?.anthropicOAuthToken ?? null;
     this.tenantVendorKeys = options?.tenantVendorKeys ?? {};
+    this.byoVendorPriority = options?.byoVendorPriority ?? [];
     // Mark every vendor a BYO key overrides as tenant-funded up front, so any
     // resolution landing on that vendor this request is stamped byo (cost 0,
     // on-prem/VSIX exempt). vendorEnv() applies the matching key override.
@@ -1116,7 +1141,7 @@ export class LlmProxyService {
     // failover after the connected account rather than being dropped.
     const hasCallerModel = typeof callerModel === 'string' && callerModel.length > 0;
     const callerLeads = hasCallerModel && explicitModelPreemptsByo(callerModel as string, this.connectedByoVendors);
-    const byoSeeds = callerLeads ? [] : byoAutoSeedModels(this.connectedByoVendors, { agentic: this.codingOnly });
+    const byoSeeds = callerLeads ? [] : byoAutoSeedModels(this.connectedByoVendors, { agentic: this.codingOnly, vendorPriority: this.byoVendorPriority });
     const seedHead: readonly string[] = callerLeads ? [callerModel as string] : byoSeeds;
     const basePool: readonly string[] = (hasCallerModel && !callerLeads && !fittedPool.includes(callerModel as string))
       ? [callerModel as string, ...fittedPool]
@@ -2006,7 +2031,7 @@ export function llmProxyForPlan(
   env: ProxyEnv,
   effectivePlan: EffectivePlan,
   premiumOverride = false,
-  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; vendorCallTimeoutMs?: number },
+  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; vendorCallTimeoutMs?: number; byoVendorPriority?: readonly string[] },
 ): LlmProxyService {
   const routing = resolveRouting(effectivePlan, premiumOverride);
   const { productName, modelPool } = routing;
@@ -2039,6 +2064,9 @@ export function llmProxyForPlan(
     // BYO api-keys (OpenAI/Google/Anthropic) override the operator keys for their
     // vendors and mark those calls tenant-funded (byo).
     ...(opts?.tenantVendorKeys ? { tenantVendorKeys: opts.tenantVendorKeys } : {}),
+    // Tenant BYO precedence — leads the connected-flagship seed with the owner's
+    // chosen account (e.g. Meta first), matching the cloud-agent pin.
+    ...(opts?.byoVendorPriority?.length ? { byoVendorPriority: opts.byoVendorPriority } : {}),
   });
 }
 
@@ -2166,6 +2194,10 @@ export interface PickCloudModelOptions {
    *  (BYO). A free tenant may pin a model owned by one of these — they pay their
    *  own provider — so the free-plan "can't choose a model" gate is lifted for it. */
   byoVendors?: ReadonlySet<string>;
+  /** The tenant's BYO PRECEDENCE as ordered gateway vendor ids (most-preferred first).
+   *  When set, the connected-flagship soft seed leads with the owner's chosen account
+   *  (e.g. Meta first) instead of catalog-tier order. See {@link byoAutoSeedModels}. */
+  byoVendorPriority?: readonly string[];
 }
 
 /** Headroom over the prompt estimate to reserve for the model's OUTPUT tokens +
@@ -2236,11 +2268,12 @@ export function pickCloudModel(
   // with the strongest connected frontier flagship as the soft seed so an auto-select
   // cloud run uses the owner's account before the free/paid coding pool.
   // Registration-driven (byoAutoSeedModels orders the connected providers' flagships by
-  // tier — a cloud run is always an agentic tool-loop, so Anthropic contributes Opus);
+  // the tenant's BYO precedence, tier as tiebreak — a cloud run is always an agentic
+  // tool-loop, so Anthropic contributes Opus);
   // the run locks onto whatever this seed resolves on turn 1. Shared with the gateway
   // completion seed so both surfaces agree. Soft (not strict) so a transient provider
   // error still fails over.
-  const byoSeed = byoAutoSeedModels(opts?.byoVendors, { agentic: true })[0];
+  const byoSeed = byoAutoSeedModels(opts?.byoVendors, { agentic: true, vendorPriority: opts?.byoVendorPriority })[0];
   if (byoSeed) return { model: byoSeed, strict: false };
 
   // Soft-seed branch — the ONLY place learned routing changes anything. Reorder the

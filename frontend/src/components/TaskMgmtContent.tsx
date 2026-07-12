@@ -255,28 +255,64 @@ export function TaskMgmtContent({
     setDrawerTask(t);
   }, []);
 
-  // Deep-link to a ticket's DETAIL drawer via a `?task=<id>` query param — the target
-  // the Brain ChatTicketsPanel "Open" now routes to for a linked task/epic/gap (so the
-  // chip opens the ticket's details, not just the board). Opens once per id after the
-  // matching task has loaded, then strips the param so closing the drawer doesn't
-  // re-open it and the URL stays clean. A ref guards against re-opening on re-render.
   const router = useRouter();
   const searchParams = useSearchParams();
   const deepLinkedTaskRef = useRef<string | null>(null);
+
+  // Close the drawer AND strip a lingering `?task=` deep-link param, so the board
+  // URL stays clean and the drawer can't re-open on the next render. Every
+  // user-facing close affordance (overlay, close button) goes through this.
+  // Programmatic closes (delete/move) call setDrawerTask(null) directly — the row
+  // is gone, so there's no deep-link left to honour.
+  const closeDrawer = useCallback(() => {
+    setDrawerTask(null);
+    if (searchParams?.get('task')) {
+      const params = new URLSearchParams(Array.from(searchParams.entries()));
+      params.delete('task');
+      const qs = params.toString();
+      router.replace(qs ? `?${qs}` : '?', { scroll: false });
+    }
+  }, [searchParams, router]);
+
+  // Deep-link to a ticket's DETAIL drawer via a `?task=<id>` query param — the target
+  // the Brain ChatTicketsPanel "Open" routes to for a linked task/epic/gap (so the
+  // chip opens the ticket's details, not just the board). Resolve from the loaded
+  // board list when the ticket is present (instant), otherwise FETCH it directly:
+  // the global ProjectScope resolving `?project=` and the scoped task list loading
+  // race, so at the moment this runs the target may not yet be in `tasks` (or may sit
+  // in a different project scope). A list-only lookup would silently no-op there.
+  // We deliberately KEEP the `?task=` param in place while the drawer is open
+  // (closeDrawer strips it) so a transient remount during auth/scope hydration
+  // RE-opens the drawer instead of dropping to the bare board — the "redirects back
+  // with no panel" symptom. The ref guards against re-opening the same id per mount.
   useEffect(() => {
     const raw = searchParams?.get('task');
-    if (!raw || deepLinkedTaskRef.current === raw) return;
+    if (!raw) return;
     const id = Number(raw);
-    if (!Number.isInteger(id)) return;
-    const match = tasks.find((t) => t.id === id);
-    if (!match) return; // not on this board yet — wait for load (or a foreign id we ignore)
-    deepLinkedTaskRef.current = raw;
-    openTask(match);
-    const params = new URLSearchParams(Array.from(searchParams.entries()));
-    params.delete('task');
-    const qs = params.toString();
-    router.replace(qs ? `?${qs}` : '?', { scroll: false });
-  }, [searchParams, tasks, openTask, router]);
+    if (!Number.isInteger(id) || id <= 0) return;
+    if (drawerTask?.id === id) return;             // already open on this ticket
+    if (deepLinkedTaskRef.current === raw) return; // handled this id already this mount
+    const inList = tasks.find((t) => t.id === id);
+    if (inList) {
+      deepLinkedTaskRef.current = raw;
+      openTask(inList);
+      return;
+    }
+    // Not in the (scoped) list — fetch it directly. GET /api/tasks/:id is tenant-
+    // scoped server-side (404s for a foreign / other-tenant id), so an inaccessible
+    // id just leaves the board unchanged. Guarded so a late resolve can't open a
+    // drawer the list-path already opened.
+    let alive = true;
+    tasksApi.get(id)
+      .then((full) => {
+        if (alive && full && deepLinkedTaskRef.current !== raw) {
+          deepLinkedTaskRef.current = raw;
+          openTask(full);
+        }
+      })
+      .catch(() => { /* not found / not accessible — leave the board as-is */ });
+    return () => { alive = false; };
+  }, [searchParams, tasks, openTask, drawerTask?.id]);
 
   // Load whether the open ticket is already published to the marketplace, so the
   // drawer can show a "Published" badge + Unpublish, or offer to publish. Best-effort:
@@ -1943,7 +1979,7 @@ export function TaskMgmtContent({
               inset: 0,
               zIndex: 10002,
             }}
-            onClick={() => setDrawerTask(null)}
+            onClick={closeDrawer}
           />
           <div
             className="slide-panel-drawer"
@@ -2046,7 +2082,7 @@ export function TaskMgmtContent({
               )}
               <button
                 type="button"
-                onClick={() => setDrawerTask(null)}
+                onClick={closeDrawer}
                 style={{
                   width: 36,
                   height: 36,

@@ -141,6 +141,28 @@ export type EnsureTaskPrdResult = { specId: string; prd: string; status: 'reused
  * the cloud-execution wrapper, the on-demand "Generate PRD" endpoint, and the
  * swimlane auto-PRD gate. Never throws.
  */
+/** The anchored per-role hand-off sections of a task PRD (PRD §5.7). Each role authors
+ *  its section; a section's presence is part of verifying that role participated. */
+export const PRD_ROLE_SECTIONS: ReadonlyArray<{ heading: string; role: string }> = [
+  { heading: 'Requirements', role: 'business-analyst' },
+  { heading: 'Design', role: 'architect' },
+  { heading: 'Implementation Notes', role: 'developer' },
+  { heading: 'Review', role: 'code-reviewer' },
+  { heading: 'Test Evidence', role: 'qa-tester' },
+  { heading: 'Acceptance', role: 'validator' },
+];
+
+/** Ensure the PRD carries the per-role hand-off sections. Idempotent — only appends a
+ *  section header that's missing, so re-running never duplicates or clobbers content. */
+export function scaffoldPrdSections(prd: string): string {
+  let out = prd.trimEnd();
+  for (const s of PRD_ROLE_SECTIONS) {
+    const re = new RegExp(`^##\\s+${s.heading}\\b`, 'im');
+    if (!re.test(out)) out += `\n\n## ${s.heading}\n\n_Owned by the ${s.role} — to be authored._`;
+  }
+  return out;
+}
+
 export async function ensureTaskPrdRecord(
   db: Db,
   env: Env,
@@ -159,7 +181,9 @@ export async function ensureTaskPrdRecord(
 
   const body = await draftTaskPrd(env, args.tenantId, { title: args.title, description: args.description }, args.model);
   if (!body) return null;
-  const prd = buildPrdWithAttribution(body, args.agentLabel, args.taskId);
+  // Scaffold the per-role hand-off sections so every task PRD carries the role
+  // structure each participant fills (§5.7) — the shared hand-off contract.
+  const prd = scaffoldPrdSections(buildPrdWithAttribution(body, args.agentLabel, args.taskId));
 
   const specId = existing?.id ?? crypto.randomUUID();
   const now = new Date();

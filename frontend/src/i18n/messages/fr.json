@@ -290,7 +290,8 @@
       "myWorkspace": "Mon espace",
       "marketplace": "Marché",
       "incidents": "Incidents",
-      "monitoring": "Surveillance"
+      "monitoring": "Surveillance",
+      "reliability": "Fiabilité"
     },
     "tab": {
       "projects": "Projets",
@@ -365,6 +366,7 @@
       "escalation": "Escalade",
       "contacts": "Contacts",
       "boards": "Tableaux",
+      "monitors": "Moniteurs",
       "reporting": "Rapports",
       "rfp": "Appels d'offres"
     }
@@ -3158,6 +3160,7 @@
       "integrations": "Intégrations",
       "content": "Contenu",
       "ceremonies": "Cérémonies",
+      "incidents": "Incidents",
       "wfPlan": "Plan des effectifs",
       "empAllocation": "Répartition",
       "empCollaboration": "Collaboration",
@@ -3252,6 +3255,10 @@
       "obsContentByKind": "Documents par type",
       "obsCeremonyCadence": "Cadence des cérémonies",
       "obsCeremonyBalance": "Répartition de la parole",
+      "incStatus": "Incidents ouverts",
+      "incSeverity": "Incidents par gravité",
+      "incSystems": "Incidents par système",
+      "incMttr": "Temps moyen de résolution",
       "wfpCostSplit": "Coût recruter vs. agent",
       "wfpCapacity": "Capacité vs WIP",
       "wfpGap": "Marge allouable",
@@ -3384,6 +3391,19 @@
       "humanTalk": "Humain",
       "agentTalk": "Agent IA",
       "completed": "terminées"
+    },
+    "inc": {
+      "noIncidents": "Aucun incident",
+      "ofTotal": "sur {total} dans la fenêtre",
+      "openNudge": "{count} à traiter",
+      "allClear": "Tout va bien",
+      "incidents": "incidents",
+      "unclassified": "Non classé",
+      "mttrSub": "temps moyen de résolution",
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
     },
     "reorder": {
       "drag": "Glisser pour réorganiser",
@@ -7604,6 +7624,14 @@
     "errStartConnect": "Échec du démarrage de la connexion",
     "errConnectSubscription": "Échec de la connexion de l'abonnement",
     "errRemove": "Échec de la suppression de l'identifiant",
+    "precedence": {
+      "title": "Priorité des fournisseurs",
+      "subtitle": "Lorsque plusieurs de vos comptes sont connectés, les agents cloud commencent par le fournisseur placé en tête et basculent vers le suivant en cas d'échec. Placez Meta en premier pour y acheminer les agents cloud.",
+      "leads": "Prioritaire",
+      "moveUp": "Monter {provider}",
+      "moveDown": "Descendre {provider}",
+      "errSave": "Échec de l'enregistrement de la priorité"
+    },
     "provider": {
       "anthropic": {
         "blurb": "Connectez votre abonnement Claude Pro/Max (sans facturation par token) ou collez une clé d'API Anthropic.",
@@ -9095,6 +9123,16 @@
       "escalation": "Escalade",
       "contacts": "Contacts"
     },
+    "workflows": {
+      "title": "Runbooks et workflows",
+      "blurb": "Exécutez un workflow personnalisé pour cet incident ou consultez les workflows déclenchés par ses événements.",
+      "pick": "Workflow",
+      "pickPlaceholder": "Choisir un workflow…",
+      "run": "Exécuter le workflow",
+      "create": "Créer un workflow",
+      "runs": "Exécutions pour cet incident",
+      "noRuns": "Aucune exécution de workflow pour le moment."
+    },
     "severity": {
       "sev1": "SEV1",
       "sev2": "SEV2",
@@ -9154,6 +9192,8 @@
       "publishedNote": "Une analyse des causes racines a été publiée pour cet incident.",
       "prompt": "Cet incident est résolu. Publiez une analyse des causes racines dans la base de connaissances.",
       "formTitle": "Publier l'analyse des causes racines",
+      "fishTitle": "Pourquoi cela s'est-il produit ?",
+      "fishAria": "Diagramme en arêtes de poisson des causes racines pour {title}",
       "summary": "Résumé",
       "summaryPlaceholder": "Aperçu de l'incident en un paragraphe…",
       "rootCause": "Cause racine",
