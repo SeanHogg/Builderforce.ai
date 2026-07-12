@@ -1,4 +1,5 @@
 > **PRD** — drafted by Validator · task #481
+> Signed by Code: BuilderForce Security Agent (security-t1)
 > _Each agent that updates this PRD signs its change below._
 
 # PRD: Infrastructure/Cloud Security Agent — GAP-G* P0 Validation
