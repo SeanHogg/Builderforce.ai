@@ -1,47 +1,46 @@
 /**
- * Conflict Detection Rules and Alerts - Type Definitions
+ * Type Definitions
  * 
- * This module defines the data structures for conflict detection:
- * - Conflict Alert DTO
- * - Conflict Rule Spec
- * - Priority values and stakeholder data
- * - Detection results
+ * Core TypeScript types for the Conflict Detection Rules and Alerts system.
  */
 
 /**
- * Priority severity levels
+ * Priority levels for requests
  */
-export type PriorityLevel = 'P0' | 'P1' | 'P2' | 'P3' | null;
+export type PriorityLevel = 'P0' | 'P1' | 'P2' | 'P3';
+export const PRIORITY_LEVELS: readonly PriorityLevel[] = ['P0', 'P1', 'P2', 'P3'] as const;
 
 /**
- * Utility to validate priority levels
+ * Conflict alert statuses
  */
-export function isValidPriority(level: string): level is PriorityLevel {
-  return ['P0', 'P1', 'P2', 'P3'].includes(level as PriorityLevel);
-}
+export type ConflictStatus = 'open' | 'acknowledged' | 'resolved' | 'dismissed';
 
 /**
- * Stakeholder data
+ * Conflict severities
+ */
+export type ConflictSeverity = 'critical' | 'high' | 'medium' | 'low';
+
+/**
+ * Stakeholder information
  */
 export interface Stakeholder {
-  id: string;
-  name: string;
-  email: string;
+  stakeholderId: string;
+  stakeholderName: string;
   role?: string;
-  userId?: string;
+  email?: string;
 }
 
 /**
- * Team identifier
+ * Team information
  */
 export interface Team {
-  id: string;
-  name: string;
+  teamId: string;
+  teamName: string;
   organization?: string;
 }
 
 /**
- * Priority request/incident record
+ * Source request information
  */
 export interface PriorityRequest {
   id: string;
@@ -49,19 +48,30 @@ export interface PriorityRequest {
   description?: string;
   priority: PriorityLevel;
   stakeholderId: string;
-  stakeholder: Partial<Stakeholder>; // Partial to allow flexible structure
+  stakeholder: Stakeholder;
   teamId: string;
-  team: Partial<Team>;
-  versionId?: string; // Associated priority version identifier
-  reviewWindowStart?: string; // ISO 8601 date
-  reviewWindowEnd?: string; // ISO 8601 date
-  createdAt: string; // ISO 8601 timestamp
+  team: Team;
+  versionId?: string;
+  reviewWindowStart?: string;
+  reviewWindowEnd?: string;
+  createdAt: string;
   updatedAt?: string;
-  sourceSystem?: string; // e.g., "prioozzer", "manual-submit"
+  sourceSystem?: string;
 }
 
 /**
- * Unique conflict key for deduplication
+ * Conflicting priorities representation
+ */
+export interface ConflictingPriorities {
+  stakeholder1: Stakeholder;
+  stakeholder2: Stakeholder;
+  team: Team;
+  priority1: PriorityLevel;
+  priority2: PriorityLevel;
+}
+
+/**
+ * Conflict key - unique identifier for a conflict based on involved entities
  */
 export interface ConflictKey {
   stakeholderId1: string;
@@ -71,165 +81,171 @@ export interface ConflictKey {
 }
 
 /**
- * Conflicting priority values at the same team
- */
-export interface ConflictingPriorities {
-  stakeholder1: {
-    stakeholderId: string;
-    stakeholderName: string;
-    priority: PriorityLevel;
-  };
-  team: {
-    teamId: string;
-    teamName: string;
-  };
-  priority1: PriorityLevel;
-  priority2: PriorityLevel;
-}
-
-/**
- * Conflict Rule Specification
- * 
- * Defines the logic for detecting conflicts.
- * Current rule: "Two distinct stakeholders assign different P0 priorities to
- * the same team within the same review window."
- */
-export interface ConflictRule {
-  id: string;
-  name: string;
-  description: string;
-  active: boolean;
-  ruleLogic: {
-    type: 'priority_mismatch_for_same_team_in_same_window';
-    priorityLevel: 'P0'; // Currently only detects P0 conflicts
-    windowSizeDays?: number; // Optional window size for same review period
-    distinctStakeholders: true; // Must be different stakeholders
-    sameTeam: true; // Same team
-  };
-  estimation: {
-    complexity: 'low';
-    performanceImpact: 'negligible';
-  };
-}
-
-/**
- * Conflict alert data
+ * Conflict alert - core entity for conflict management
  */
 export interface ConflictAlert {
   id: string;
-  key: ConflictKey; // For deduplication
+  key: ConflictKey;
   title: string;
   description: string;
-  summary: string; // Concise explanation of the conflict
-  severity: 'critical' | 'high' | 'medium' | 'low';
-  detectedAt: string; // ISO 8601 timestamp
-  expiresAt?: string; // When to auto-close the alert
-  status: 'open' | 'acknowledged' | 'resolved' | 'dismissed';
-  
-  // Conflicting information
+  summary: string;
+  severity: ConflictSeverity;
+  detectedAt: string;
+  status: ConflictStatus;
   conflictingPriorities: ConflictingPriorities;
-  
-  // Involved stakeholders (from both requests)
-  stakeholders: Array<{
-    stakeholderId: string;
-    stakeholderName: string;
-    role?: string;
-  }>;
-  
-  // Linked version IDs
+  stakeholders: Stakeholder[];
   versionIds: string[];
-  
-  // Manual resolution notes
+  sourceRequestIds: string[];
+  conflictCount: number;
   resolutionNote?: string;
   resolvedBy?: string;
   resolvedAt?: string;
-  
-  // Metadata
-  sourceRequestIds: string[]; // IDs of requests that triggered this conflict
-  
-  // Metrics
-  conflictCount: number; // How many times this conflict occurred (for tracking)
 }
 
 /**
- * Conflict detection request/response DTOs
+ * Conflict detection request
  */
 export interface DetectConflictsRequest {
   requests: PriorityRequest[];
-  versionId?: string; // If detecting within a specific priority version
-  windowThresholdDays?: number; // Override default review window size
+  versionId?: string;
+  windowThresholdDays?: number;
 }
 
+/**
+ * Conflict detection response
+ */
 export interface DetectConflictsResponse {
   success: boolean;
   conflicts: ConflictAlert[];
-  duplicatesFound: number; // Conflicts that were quieted due to deduplication
+  duplicatesFound: number;
   error?: string;
 }
 
 /**
- * List conflicts request parameters
+ * Conflict detection rule specification
  */
-export interface ListConflictsRequest {
-  status?: 'open' | 'acknowledged' | 'resolved' | 'dismissed' | 'all';
+export interface ConflictRule {
+  name: string;
+  description: string;
+  severityLevels: Array<{
+    level: string;
+    condition: string;
+    threshold?: number;
+  }>;
+  stakeholderConstraints: {
+    mustBeDistinct: boolean;
+    maxConcurrentRequestsPerStakeholder?: number;
+  };
+  priorityConstraints: {
+    minThreshold: PriorityLevel;
+    maxThreshold: PriorityLevel;
+    exactMatch?: boolean;
+  };
+  teamConstraints: {
+    allowMultipleTeams: boolean;
+    teamScope?: string;
+  };
+  windowConstraints: {
+    defaultDays: number;
+    maxWindowDays: number;
+    allowOverlap: boolean;
+  };
+}
+
+/**
+ * List conflicts query parameters
+ */
+export interface ListConflictsQuery {
+  status?: ConflictStatus;
   versionId?: string;
   teamId?: string;
   stakeholderId?: string;
-  severity?: 'critical' | 'high' | 'medium' | 'low';
+  severity?: ConflictSeverity;
   page?: number;
   limit?: number;
 }
 
 /**
- * List conflicts response
- */
-export interface ListConflictsResponse {
-  conflicts: ConflictAlert[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}
-
-/**
- * Conflict resolution request
+ * Resolve conflict request
  */
 export interface ResolveConflictRequest {
-  alertId: string;
   action: 'acknowledge' | 'resolve' | 'dismiss';
   note?: string;
   resolverUserId?: string;
 }
 
 /**
- * Conflict resolution response
+ * API response wrapper
  */
-export interface ResolveConflictResponse {
-  success: boolean;
-  alert?: ConflictAlert;
-  error?: string;
+export interface ApiSuccessResponse<T> {
+  success: true;
+  data: T;
+  timestamp: string;
+}
+
+export interface ApiErrorResponse {
+  success: false;
+  error: string;
+  details?: any;
+  timestamp: string;
+}
+
+export type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
+
+/**
+ * Health check response
+ */
+export interface HealthCheckResponse {
+  status: 'healthy' | 'unhealthy' | 'degraded';
+  service: string;
+  version: string;
+  timestamp: string;
+  details?: Record<string, any>;
 }
 
 /**
- * API route definitions
+ * Pagination response
  */
-export interface ConflictDetectionAPI {
-  POST /detect: DetectConflictsRequest -> DetectConflictsResponse;
-  GET /conflicts: ListConflictsRequest | string (id) -> ConflictAlert | ListConflictsResponse;
-  POST /conflicts/:id/resolve: ResolveConflictRequest -> ResolveConflictResponse;
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+  timestamp: string;
 }
 
 /**
- * Priority version identifier
+ * Conflict notification payload
  */
-export interface PriorityVersion {
+export interface ConflictNotificationPayload {
+  conflictId: string;
+  title: string;
+  summary: string;
+  severity: ConflictSeverity;
+  detectedAt: string;
+  stakeholders: string[];
+  versionId?: string;
+  sourceSystem?: string;
+}
+
+/**
+ * Audit log entry
+ */
+export interface ConflictAuditEntry {
   id: string;
-  versionNumber: number;
-  createdAt: string;
-  displayName?: string;
+  conflictId: string;
+  action: ConflictStatus | 'created' | 'acknowledged' | 'resolved' | 'dismissed' | 'commented';
+  previousStatus?: ConflictStatus;
+  newStatus?: ConflictStatus;
+  actor: {
+    type: 'system' | 'external' | 'internal';
+    userId: string;
+    username: string;
+  };
+  note?: string;
+  timestamp: string;
+  metadata?: Record<string, any>;
 }
-
-/** Sent to builderforce.memory-core for persistence */
-export type PersistableConflictAlert = Omit<ConflictAlert, 'conflictingPriorities'> & {
-  conflictingPriorities: string; // JSON string
-};
