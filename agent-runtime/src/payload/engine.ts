@@ -193,7 +193,7 @@ function applyArrayTransform(
 function runDerivedFunction(
   fnName: string,
   raw: unknown,
-  context: InputContext,
+  _context: InputContext,
   resolved: Record<string, FieldResolution>,
 ): unknown {
   switch (fnName) {
