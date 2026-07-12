@@ -10,7 +10,9 @@ import {
   getSeverityBreakdown,
   getBugList,
   healthCheck,
-} from "./apiClient";
+  syncJira,
+  syncGitHub,
+} from "../utils/apiClient";
 
 const POLLING_INTERVAL = 15000; // 15 minutes
 
@@ -42,7 +44,7 @@ export function useQualityData(filter: BugFilter) {
       setSeverityBreakdown(breakdown);
       setBugList(list);
 
-      // Update last synced time and check staleness
+      // Update last synced time from healthCheck
       const health = await healthCheck();
       setLastSynced(health.timestamp);
     } catch (error) {
@@ -66,11 +68,31 @@ export function useQualityData(filter: BugFilter) {
     return () => clearInterval(intervalId);
   }, [fetchData, filter.time_window_days]);
 
-  const handleSync = async () => {
+  const handleSync = async (source?: ("jira" | "github" | undefined)) => {
     setSyncing(true);
-    await fetchData(); // Refresh data
-    setSyncing(false);
+    setSyncError(null);
+
+    try {
+      // REAL sync: call the appropriate sync endpoint
+      if (source === "jira") {
+        await syncJira(filter.project_id);
+      } else if (source === "github") {
+        await syncGitHub();
+      } else {
+        // No source specified — rely on the next refresh of fetchData
+      }
+
+      await fetchData(); // Refresh everything after manual sync
+      setLastSynced(new Date().toISOString()); // Expect hard poll to also set it
+    } catch (error) {
+      console.error("Sync failed:", error);
+      setSyncError(error instanceof Error ? error.message : "Sync failed");
+    } finally {
+      setSyncing(false);
+    }
   };
+
+  const clearSyncError = () => setSyncError(null);
 
   return {
     bugCountSummary,
@@ -82,5 +104,6 @@ export function useQualityData(filter: BugFilter) {
     syncing,
     syncError,
     sync: handleSync,
+    clearSyncError,
   };
 }
