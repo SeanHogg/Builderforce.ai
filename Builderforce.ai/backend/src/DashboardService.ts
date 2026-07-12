@@ -15,11 +15,11 @@ import type {
   MetricsSummary,
   ProjectMetrics,
   DashboardFilters,
-  PriorityMetrics as PriorityMetricsType,
-  SignOffMetrics as SignOffMetricsType,
-  ConflictMetrics as ConflictMetricsType,
-  EscalationMetrics as EscalationMetricsType,
-} from '@builderforce/shared/types/dashboard';
+  PriorityMetrics,
+  SignOffMetrics,
+  ConflictMetrics,
+  EscalationMetrics,
+} from './definitions';
 
 /**
  * Cache TTL for dashboard metrics (FR3.3)
