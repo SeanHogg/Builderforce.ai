@@ -1450,6 +1450,7 @@ export type AutoRunReason =
   | 'no_agent'
   | 'capability_mismatch'
   | 'already_running'
+  | 'run_cap_exhausted'
   | 'not_executable';
 
 export interface AutoRunDiagnostic {

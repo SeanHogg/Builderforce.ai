@@ -5697,6 +5697,7 @@
         "already_running": "Läuft bereits",
         "human_gate": "Warte auf Freigabe",
         "capability_mismatch": "Agent fehlen erforderliche Fähigkeiten",
+        "run_cap_exhausted": "Zu viele fehlgeschlagene Läufe — zur Prüfung pausiert",
         "no_agent": "Kein Agent zugewiesen",
         "no_board": "Kein Board konfiguriert",
         "no_lane": "Spur nicht konfiguriert",

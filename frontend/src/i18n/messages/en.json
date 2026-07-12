@@ -5699,6 +5699,7 @@
         "already_running": "Already running",
         "human_gate": "Waiting for approval",
         "capability_mismatch": "Agent missing required skills",
+        "run_cap_exhausted": "Too many failed runs — paused for review",
         "no_agent": "No agent assigned",
         "no_board": "No board configured",
         "no_lane": "Lane not configured",
