@@ -1,55 +1,113 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #293
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# PRD: Conditional Logic for Adaptive Questions
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+Static question flows present every respondent with the same set of questions regardless of their previous answers. This creates poor user experiences — irrelevant questions frustrate respondents, inflate completion time, and reduce data quality. The goal is to implement conditional logic that dynamically shows, hides, or branches questions based on prior answers, producing a personalized, relevant question flow for each respondent.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+---
 
-## Target users / ICP roles
+## Target Users / ICP Roles
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+| Role | Need |
+|---|---|
+| **Form / Survey Builders** | Configure conditional rules without writing code |
+| **End Respondents** | Experience a concise, relevant question flow |
+| **Analysts / Data Owners** | Receive clean, logically consistent response data |
+| **Developers / Integrators** | Access a well-defined rule schema for programmatic form creation |
+
+---
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This document covers the definition, configuration, evaluation, and rendering of conditional logic rules within the question flow engine. It applies to all question types supported by the platform.
+
+---
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### FR-1 — Rule Definition
+- A builder must be able to attach one or more conditional rules to any question or question group.
+- Each rule must specify:
+  - **Trigger source**: the question(s) whose answer drives the condition.
+  - **Operator**: equality, inequality, contains, does not contain, greater than, less than, is empty, is not empty, matches regex.
+  - **Trigger value**: the value(s) to compare against (static literal or reference to another answer).
+  - **Action**: `show`, `hide`, `skip to`, `require`, `set value`.
+- Rules must support **multiple conditions** combined with `AND` / `OR` logical operators.
+- Rules must support **nested condition groups** (e.g., `(A AND B) OR C`).
+
+### FR-2 — Supported Question Types
+Conditional logic must work as both trigger source and target for:
+- Single-choice (radio, dropdown)
+- Multi-choice (checkbox)
+- Short text / Long text
+- Number / Slider
+- Date / Date-range
+- Rating / NPS
+- File upload (trigger: is empty / is not empty only)
+- Matrix / Grid
+
+### FR-3 — Rule Evaluation Engine
+- Rules must be evaluated **in real time** as the respondent answers each question (client-side evaluation for latency < 100 ms).
+- Server-side re-evaluation must occur at submission to prevent manipulation.
+- Evaluation order must follow **question sequence order** to avoid circular dependency conflicts.
+- Circular dependency detection must run at **save time**; the builder must be blocked from saving a form with circular rules and shown a clear error.
+
+### FR-4 — Question Visibility & Flow
+- Hidden questions must not be reachable via keyboard navigation or assistive technology.
+- Hidden questions must **not** be included in submission payloads unless they hold a pre-filled default value explicitly marked for submission.
+- When a `skip to` action fires, all intermediate questions must be marked as skipped (not hidden) and excluded from required-field validation.
+- If a previously shown question becomes hidden due to a changed answer, its answer must be **cleared** unless the builder has enabled the "retain hidden answer" option.
+
+### FR-5 — Builder UI
+- Condition rules must be configurable via a visual rule builder (no code required).
+- The builder must provide a **plain-language summary** of each rule (e.g., *"Show this question if Q3 answer is 'Yes'"*).
+- The builder must offer a **live preview mode** where the builder can simulate different answer values and observe the resulting question flow.
+- Conflicting or redundant rules must surface a **non-blocking warning** in the builder UI.
+
+### FR-6 — Rule Storage & Schema
+- Rules must be stored as a **JSON schema** attached to each question object.
+- The schema must be versioned to support backward-compatible migrations.
+- Rules must be exportable and importable alongside the form definition.
+
+### FR-7 — Progress & Completion Indicators
+- Progress bars / step counters must dynamically reflect only the questions that will be shown based on current answers, not the total question count.
+- The estimated completion time indicator (if present) must update dynamically.
+
+### FR-8 — Accessibility
+- Show/hide transitions must respect `prefers-reduced-motion`.
+- Screen readers must announce when a new question becomes visible.
+- Focus must move automatically to the first newly revealed question.
+
+---
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+| ID | Criterion |
+|---|---|
+| AC-1 | A builder can create a rule that hides Question B when Question A equals a specific value, and the rule is saved and persists across sessions. |
+| AC-2 | During form fill, Question B disappears within 100 ms after the triggering answer is entered for Question A. |
+| AC-3 | A hidden question's answer is cleared from the submission payload (unless "retain hidden answer" is enabled). |
+| AC-4 | Server-side re-evaluation at submission rejects or flags any response set that violates defined conditional rules. |
+| AC-5 | The builder cannot save a form containing a circular dependency; an error message identifies the conflicting questions. |
+| AC-6 | Live preview mode correctly simulates all configured conditional paths without requiring form publication. |
+| AC-7 | Progress indicator updates dynamically and never counts questions that will not be shown given current answers. |
+| AC-8 | `AND` / `OR` compound conditions with at least two levels of nesting evaluate correctly in automated test suite (≥ 50 test cases). |
+| AC-9 | A `skip to` action causes all skipped intermediate questions to pass required-field validation without error. |
+| AC-10 | Screen reader announces newly revealed questions; verified with VoiceOver (macOS) and NVDA (Windows). |
+| AC-11 | Rules export with the form definition and re-import with identical behavior on a clean instance. |
+| AC-12 | All conditional logic evaluates correctly on the latest two versions of Chrome, Firefox, Safari, and Edge. |
 
-## Out of scope
+---
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## Out of Scope
+
+- **AI/ML-driven adaptive questioning** (dynamically generated rules based on response patterns — future phase).
+- **Cross-form conditional logic** (rules that reference answers from a different form or prior form session).
+- **Time-based or geolocation-based conditions** (e.g., show question only between certain hours or in certain regions).
+- **A/B testing or randomization** of question paths.
+- **Offline / service-worker caching** of conditional rule evaluation.
+- **Legacy form migration tooling** to automatically convert existing static forms to conditional logic (separate migration project).
+- **Pricing or quota enforcement** tied to conditional logic feature tiers (handled by billing team).
