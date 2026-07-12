@@ -1,55 +1,75 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #291
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# PRD: Stakeholder Identification & Priority Mapping Tool
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+Teams building products, running projects, or drafting strategy documents frequently lack a shared, structured understanding of who the key stakeholders are and what each one prioritizes. This leads to misaligned decisions, missed sign-offs, and rework. The goal is to produce a living, queryable stakeholder map that captures identities, roles, interests, influence levels, and ranked priorities — enabling every downstream agent and human collaborator to make stakeholder-aware decisions from a single source of truth.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+---
 
-## Target users / ICP roles
+## Target Users / ICP Roles
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+| Role | Primary Need |
+|---|---|
+| Product Manager | Align roadmap trade-offs with stakeholder priorities |
+| Program / Project Manager | Identify approvers, blockers, and communication cadence |
+| Strategy & Ops Lead | Surface cross-functional dependencies and political risk |
+| AI Agent Orchestrator | Feed structured stakeholder context into downstream tasks |
+| Executive Sponsor | Confirm representation and accountability coverage |
+
+---
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This PRD covers the **identification, classification, and priority-ranking** of stakeholders relevant to the current task or initiative. It does not cover stakeholder communication planning or RACI chart generation (see Out of Scope).
+
+---
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### FR-1 — Stakeholder Identification
+- The system shall enumerate all individuals, teams, and external entities with a material interest in or influence over the initiative.
+- Each stakeholder entry must include: **Name / Role**, **Organization / Team**, **Stakeholder Type** (Internal / External / Regulatory), and **Engagement Stage** (Aware / Consulted / Decision-maker / Approver).
+
+### FR-2 — Priority & Interest Mapping
+- Each stakeholder shall have an explicit **Priority Tier** (Tier 1 = Critical, Tier 2 = High, Tier 3 = Informational).
+- Each stakeholder shall have documented **Top 3 Priorities** — specific outcomes they want from this initiative.
+- Conflicting priorities between stakeholders shall be flagged explicitly.
+
+### FR-3 — Influence & Impact Assessment
+- The system shall assign an **Influence Score** (High / Medium / Low) based on decision authority and resource control.
+- The system shall assign an **Impact Score** (High / Medium / Low) based on how much the initiative affects the stakeholder.
+- A 2×2 influence-impact matrix view shall be derivable from these scores.
+
+### FR-4 — Conflict & Alignment Detection
+- The system shall identify pairs or groups of stakeholders with **conflicting priorities**.
+- The system shall identify **alignment clusters** — stakeholders who share compatible goals and can be leveraged together.
+
+### FR-5 — Structured Output
+- The final deliverable shall be machine-readable (JSON or structured markdown table) so downstream agents can ingest it without parsing ambiguity.
+- A human-readable summary narrative (≤ 300 words) shall accompany the structured data.
+
+---
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+| # | Criterion | Verification Method |
+|---|---|---|
+| AC-1 | Every stakeholder with decision authority is captured at Tier 1 | Manual review by PM or Sponsor |
+| AC-2 | Each stakeholder has ≥ 1 and ≤ 3 documented priorities | Schema validation |
+| AC-3 | All priority conflicts are explicitly flagged with the conflicting parties named | Diff against stakeholder priority list |
+| AC-4 | Influence and Impact scores are assigned to 100% of listed stakeholders | Completeness check |
+| AC-5 | Output passes JSON schema validation or renders correctly as a markdown table | Automated lint / render test |
+| AC-6 | No stakeholder entry contains bracketed placeholders or undefined fields | String scan for `[` and `]` patterns |
 
-## Out of scope
+---
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## Out of Scope
+
+- **RACI / DACI chart generation** — addressed in a separate PRD.
+- **Stakeholder communication plans** (cadence, channel, messaging) — follow-on work.
+- **Org-chart or hierarchy visualization** — requires dedicated tooling.
+- **Sentiment analysis or relationship health scoring** — future iteration.
+- **Regulatory or legal compliance review** of stakeholder obligations — handled by Legal team separately.
