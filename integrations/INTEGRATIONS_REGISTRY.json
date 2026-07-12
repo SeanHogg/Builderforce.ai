@@ -35,9 +35,11 @@
         "description": "Issue tracking with OAuth 2.0 (3-legged)",
         "targetUsers": ["Software Engineer", "Engineering Manager", "Product Manager"],
         "minimumScope": [
-          "chat:write",
-          "channels:read",
-          "users:read"
+          "read:jira-work",
+          "write:jira-work",
+          "read:jira-user",
+          "manage:jira-webhook",
+          "offline_access"
         ],
         "auth": {
           "method": "OAUTH_2.0_THREE_LEGGED",
