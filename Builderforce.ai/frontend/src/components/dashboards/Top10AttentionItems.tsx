@@ -2,12 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useTranslations } from 'next-intl';
-import { AttentionItem, getTop10AttentionItems, calculateScore, refreshAttentionItems } from '@/lib/attentionApi';
+import { AttentionItem, getTop10AttentionItems, refreshAttentionItems } from '@/lib/attentionApi';
 
 /* ── Types ──────────────────────────────────────────────────────────────────── */
 type ItemVariant = 'top' | 'normal';
 
 /* ── Constants ───────────────────────────────────────────────────────────────── */
+const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes per FR5
+const MAX_ITEMS = 10; // FR1 maximum list size
+const TITLE_MAX_LENGTH = 100; // FR2 max title length
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes per FR5
 const MAX_ITEMS = 10; // FR1 maximum list size
 const TITLE_MAX_LENGTH = 100; // FR2 max title length
