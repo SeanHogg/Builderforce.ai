@@ -267,9 +267,9 @@ export class AutoCalibrateService {
    * @param profile Updates to apply to the agent's utilization profile.
    * @returns The updated utilization profile.
    */
-  async updateAgentUtilizationProfile(curveData:
- extends Partial<Omit<UtilizationEntry, 'id'>>):
-Promise<CalibratedUtilizationProfile> {
+  async updateAgentUtilizationProfile(
+    curveData: Partial<Omit<UtilizationEntry, 'id'>>
+  ): Promise<CalibratedUtilizationProfile> {
     // Impl: UPDATE agent_utilization_profile SET ... WHERE agentId = ?
     return {
       agentId: curveData.agentId || 'agent-1',
