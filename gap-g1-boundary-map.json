@@ -1,0 +1,155 @@
+{
+  "gap_id": "GAP-G1",
+  "title": "Sandbox / Egress Boundary Validation",
+  "generated_at": "2025-09-19T12:00:00.000Z",
+  "source": {
+    "repository": "seanhogg/builderforce.ai",
+    "reference_files": [
+      "agent-runtime/src/agents/sandbox/validate-sandbox-security.ts",
+      "agent-runtime/src/agents/sandbox/config.ts",
+      "agent-runtime/src/config/types.sandbox.ts",
+      "agent-runtime/src/agents/sandbox/types.docker.ts",
+      "docs-site/src/content/docs/gateway/sandboxing.md"
+    ],
+    "snapshot_hash": "e4341ff5abc65e42d5f57323d23f603d9a896b5efb900c9c6a86b94dc0844015",
+    "enumeration_timestamp": "2025-09-19T12:00:00.000Z"
+  },
+  "boundary_topology": {
+    "sandboxes": [
+      {
+        "sandbox_id": "builderforce-sandbox-default",
+        "mode": "agents.defaults.sandbox.mode",
+        "policy_layer": "Sandbox DockerConfig + Browser Override",
+        "network_mode": {
+          "default": "none",
+          "allowed_values": ["bridge", "none", "custom"],
+          "blocked_values": ["host"]
+        },
+        "egress_vectors": [
+          {
+            "vector": "tcp_port_443_outbound",
+            "protocol": "TCP",
+            "source_code_reference": "agent-runtime/src/agents/sandbox/config.ts (resolveSandboxDockerConfig)",
+            "source_control_reference": "validate-sandbox-security.ts (validateNetworkMode)",
+            "policy_classification": "IMPLICIT_DENY",
+            "justification": "Network mode defaults to none per docs and config defaults; document says default docker.network is 'none' — no explicit bridge for sandbox containers unless overridden",
+            "NOTICE": "If CI/app needs outbound, override configuration to bridge and run the test case for this vector."
+          },
+          {
+            "vector": "dns_resolution_outbound",
+            "protocol": "DNS (UDP 53/TCP 53)",
+            "source_code_reference": "docs-site/src/content/docs/gateway/sandboxing.md (setupCommand requirement)",
+            "source_control_reference": "agent-runtime/src/agents/sandbox/config.ts (resolveSandboxDockerConfig)",
+            "policy_classification": "IMPLICIT_DENY",
+            "justification": "Default network mode is none — DNS resolution not available from sandbox container unless network mode is overridden to bridge",
+            "NOTICE": "If CI/app needs DNS, override network mode to bridge (non-blocking) and run the test case for this vector."
+          },
+          {
+            "vector": "tcp_port_8080_outbound_non_browser",
+            "protocol": "TCP",
+            "source_code_reference": "agent-runtime/src/agents/sandbox/config.ts (resolveSandboxDockerConfig)",
+            "source_control_reference": "validate-sandbox-security.ts (validateNetworkMode)",
+            "policy_classification": "IMPLICIT_DENY",
+            "justification": "No special provisions for non-browser outbound; effective default remains none"
+          },
+          {
+            "vector": "http_https_proxy_route",
+            "protocol": "HTTP/HTTPS",
+            "source_code_reference": "docs-site/src/content/docs/gateway/sandboxing.md (setupCommand and browser network)",
+            "source_control_reference": "agent-runtime/src/agents/sandbox/config.ts (resolveSandboxBrowserDockerCreateConfig)",
+            "policy_classification": "EXPLICIT_ALLOW",
+            "justification": "Browser container uses network:bridge by design per config.ts; this enables browser tool network access per docs",
+            "NOTICE": "Targeted specifically to the browser container; non-browser sandboxes lack such explicit allowance."
+          },
+          {
+            "vector": "icmp_probe",
+            "protocol": "ICMP",
+            "source_code_reference": "agent-runtime/src/agents/sandbox/config.ts (resolveSandboxDockerConfig)",
+            "source_control_reference": "validate-sandbox-security.ts (validateNetworkMode)",
+            "policy_classification": "IMPLICIT_DENY",
+            "justification": "Docker bridge and none do not imply ICMP via CI; no explicit ICMP whitelist defined — probe falls under default egress policy"
+          }
+        ]
+      },
+      {
+        "sandbox_id": "builderforce-sandbox-browser",
+        "mode": "agents.defaults.sandbox.browser.enabled",
+        "policy_layer": "Browser Container Override",
+        "network_mode": {
+          "default": "bridge",
+          "allowed_values": ["bridge"],
+          "description": "Browser container uses network:bridge by design for Chrome, downloads, CDP"
+        },
+        "egress_vectors": [
+          {
+            "vector": "tcp_port_443_outbound",
+            "protocol": "TCP",
+            "source_code_reference": "agent-runtime/src/agents/sandbox/config.ts (resolveSandboxBrowserDockerCreateConfig)",
+            "source_control_reference": "docs-site/src/content/docs/gateway/sandboxing.md (allows downloads/CDP)",
+            "policy_classification": "EXPLICIT_ALLOW",
+            "justification": "Browser container explicitly set to network:bridge to enable outbound connections for Chrome and downloaded files"
+          },
+          {
+            "vector": "http_https_proxy_route",
+            "protocol": "HTTP/HTTPS",
+            "source_code_reference": "agent-runtime/src/agents/sandbox/config.ts (resolveSandboxBrowserDockerCreateConfig)",
+            "source_control_reference": "docs-site/src/content/docs/gateway/sandboxing.md (browser notes)",
+            "policy_classification": "EXPLICIT_ALLOW",
+            "justification": "Chrome and browser tool operations rely on outbound HTTP/HTTPS for downloads and CDP communication"
+          },
+          {
+            "vector": "dns_resolution_outbound",
+            "protocol": "DNS",
+            "source_code_reference": "agent-runtime/src/agents/sandbox/config.ts (resolveSandboxBrowserDockerCreateConfig)",
+            "source_control_reference": "docs-site/src/content/docs/gateway/sandboxing.md (download requirements)",
+            "policy_classification": "EXPLICIT_ALLOW",
+            "justification": "Chrome downloads and standard browser operations require DNS resolution"
+          },
+          {
+            "vector": "tcp_port_9222_cdp",
+            "protocol": "TCP",
+            "source_code_reference": "agent-runtime/src/agents/sandbox/config.ts (resolveSandboxBrowserDockerCreateConfig)",
+            "source_control_reference": "docs-site/src/content/docs/gateway/sandboxing.md (CDP for control)",
+            "policy_classification": "EXPLICIT_ALLOW",
+            "justification": "CDP port required for browser tool session control"
+          }
+        ]
+      }
+    ]
+  },
+  "risk_summary": {
+    "classification": "low_moderate",
+    "reason": "Network mode defaults to none by design; any outbound requires explicit override (bridge/custom). The host network mode is blocked to prevent bypass. Browser sandbox subset uses bridge only for browser operations — no unintended general-purpose egress."
+  },
+  "proposed_test_vectors": {
+    "generic_tcp": {
+      "description": "Test outbound TCP connectivity to a public endpoint from a sandbox container with network=bridge",
+      "categories": [
+        "tcp_port_443_outbound",
+        "tcp_port_8080_outbound_non_browser"
+      ],
+      "notes": "Run from a session with sandbox.mode=all and network:bridge override if targeting non-browser vectors."
+    },
+    "generic_dns": {
+      "description": "Test outbound DNS resolution from a sandbox container with network=bridge",
+      "categories": [
+        "dns_resolution_outbound"
+      ]
+    },
+    "generic_icmp": {
+      "description": "Test ICMP reachability from a sandbox container with network=bridge (probe only)",
+      "categories": [
+        "icmp_probe"
+      ]
+    },
+    "browser_use_cases": {
+      "description": "Test the browser-only egress paths (CDP, downloads, HTTP/HTTPS)",
+      "categories": [
+        "tcp_port_443_outbound",
+        "http_https_proxy_route",
+        "dns_resolution_outbound",
+        "tcp_port_9222_cdp"
+      ]
+    }
+  }
+}
