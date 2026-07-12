@@ -1,8 +1,11 @@
 import * as vscode from "vscode";
+import * as fs from "fs/promises";
+import * as path from "path";
 import { canManageActiveWorkspace, getTenantJwt } from "./bfApi";
 import { getBaseUrl, SECRET_KEY } from "./gateway";
 import { getSelectedProject } from "./projectState";
 import { renderWebviewHtml } from "./webviewShared";
+import { parseSnapshotArray, snapshotEntryKey, snapshotEntryContent, setSnapshotEntryContent, memoryStub, isStub } from "./memorySnapshot";
 
 /**
  * The Evermind sidebar view — a bundled-React webview view that renders the SHARED
@@ -48,7 +51,7 @@ export class EvermindViewProvider implements vscode.WebviewViewProvider {
     void this.view?.webview.postMessage({ type: "refresh" });
   }
 
-  private async onMessage(msg: { type?: string; id?: string }): Promise<void> {
+  private async onMessage(msg: { type?: string; id?: string; path?: string; absorbedKeys?: string[]; version?: number }): Promise<void> {
     switch (msg.type) {
       case "ready":
         await this.sendInit();
@@ -61,12 +64,81 @@ export class EvermindViewProvider implements vscode.WebviewViewProvider {
       case "signin":
         void vscode.commands.executeCommand("builderforce.signIn");
         break;
+      // Import step 1 — let the user pick a builderforce-memory snapshot; read + parse it
+      // and hand the webview the learnable entries (already-stubbed ones are excluded so
+      // re-import is idempotent). The FILE touch lives here because only the host has fs.
+      case "evermind.pickMemory":
+        await this.pickMemory(msg.id);
+        break;
+      // Import step 3 — after the gateway absorbed the entries, rewrite THOSE to terse
+      // stubs in place (preserving every other field), recovering the context they ate.
+      case "evermind.compactMemory":
+        await this.compactMemory(msg.id, msg.path, msg.absorbedKeys, msg.version);
+        break;
     }
   }
 
-  private respond(id: string | undefined, ok: boolean, result?: unknown): void {
+  /** Open a snapshot, parse it, and return `{ path, fileName, entries:[{key,text}] }` —
+   *  or `null` (a plain no-op) when the user cancels the picker. */
+  private async pickMemory(id: string | undefined): Promise<void> {
+    try {
+      const picked = await vscode.window.showOpenDialog({
+        canSelectMany: false,
+        openLabel: vscode.l10n.t("Import"),
+        title: vscode.l10n.t("Import builderforce-memory snapshot"),
+        filters: { "builderforce-memory (JSON)": ["json"], "All files": ["*"] },
+      });
+      const uri = picked?.[0];
+      if (!uri) { this.respond(id, true, null); return; }
+      const text = await fs.readFile(uri.fsPath, "utf8");
+      const entries = parseSnapshotArray(text);
+      if (!entries) {
+        this.respond(id, false, undefined, vscode.l10n.t("Unrecognized file — expected a builderforce-memory JSON snapshot (an array of {{ key, content }} entries)."));
+        return;
+      }
+      const wire = entries
+        .map((e) => ({ key: snapshotEntryKey(e), content: snapshotEntryContent(e) }))
+        .filter((e) => e.key && e.content.trim() && !isStub(e.content))
+        .map((e) => ({ key: e.key, text: e.content }));
+      this.respond(id, true, { path: uri.fsPath, fileName: path.basename(uri.fsPath), entries: wire });
+    } catch (e) {
+      this.respond(id, false, undefined, e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  /** Rewrite each absorbed entry's body to a `[absorbed→Evermind vN] …` stub, in place,
+   *  preserving all other fields. Returns `{ compacted, bytesSaved }`. */
+  private async compactMemory(id: string | undefined, filePath?: string, absorbedKeys?: string[], version?: number): Promise<void> {
+    try {
+      if (!filePath) { this.respond(id, false, undefined, "missing file path"); return; }
+      const absorbed = new Set(Array.isArray(absorbedKeys) ? absorbedKeys : []);
+      const v = typeof version === "number" ? version : 0;
+      const text = await fs.readFile(filePath, "utf8");
+      const entries = parseSnapshotArray(text);
+      if (!entries) { this.respond(id, false, undefined, vscode.l10n.t("Could not re-read the memory file to compact it.")); return; }
+      let compacted = 0;
+      let bytesSaved = 0;
+      for (const e of entries) {
+        const key = snapshotEntryKey(e);
+        if (!absorbed.has(key)) continue;
+        const content = snapshotEntryContent(e);
+        if (!content || isStub(content)) continue;
+        const stub = memoryStub(content, v);
+        if (stub.length >= content.length) continue; // never grow an entry
+        setSnapshotEntryContent(e, stub);
+        compacted++;
+        bytesSaved += content.length - stub.length;
+      }
+      if (compacted > 0) await fs.writeFile(filePath, `${JSON.stringify(entries, null, 2)}\n`);
+      this.respond(id, true, { compacted, bytesSaved });
+    } catch (e) {
+      this.respond(id, false, undefined, e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  private respond(id: string | undefined, ok: boolean, result?: unknown, error?: string): void {
     if (!id || !this.view) return;
-    void this.view.webview.postMessage({ type: "response", id, ok, result });
+    void this.view.webview.postMessage({ type: "response", id, ok, result, ...(error ? { error } : {}) });
   }
 
   /** Hand the React app its config: gateway URL, tenant token, active project, the
@@ -146,6 +218,13 @@ function buildEvermindLabels(): Record<string, string> {
     "ev.flushing": t("Learning…"),
     "ev.flushedNone": t("Nothing queued to learn yet."),
     "ev.flushedN": t("Merged {merged} contribution(s) into v{version}."),
+    // Import from builderforce-memory (editor-only — the host has filesystem access).
+    "ev.importTitle": t("Import from builderforce-memory"),
+    "ev.importHint": t("Fold a local memory snapshot into this model, then compact the absorbed facts to stubs so they stop filling your context."),
+    "ev.importCta": t("Import & compact…"),
+    "ev.importing": t("Importing…"),
+    "ev.importDone": t("Absorbed {absorbed} memory(ies) into v{version}; compacted {compacted} to stubs (~{savedKb} KB recovered)."),
+    "ev.importNothing": t("Nothing to import — no learnable facts in that file."),
     "ev.inspectTitle": t("Recently learned"),
     "ev.inspectEmpty": t("Nothing learned yet. Runs and teaching will appear here."),
     "ev.kindText": t("Run"),

@@ -1677,6 +1677,12 @@ var DEFAULT_EVERMIND_LABELS = {
   flushing: "Learning\u2026",
   flushedNone: "Nothing queued to learn yet.",
   flushedN: (merged, version) => `Merged ${merged} contribution(s) into v${version}.`,
+  importTitle: "Import from builderforce-memory",
+  importHint: "Fold a local memory snapshot into this model, then compact the absorbed facts to stubs so they stop filling your context.",
+  importCta: "Import & compact\u2026",
+  importing: "Importing\u2026",
+  importDone: (absorbed, version, compacted, savedKb) => `Absorbed ${absorbed} memor${absorbed === 1 ? "y" : "ies"} into v${version}; compacted ${compacted} to stubs (~${savedKb} KB recovered).`,
+  importNothing: "Nothing to import \u2014 no learnable facts in that file.",
   validateCta: "Validate",
   validating: "Checking\u2026",
   validateHint: "Check which learned memories would answer this task \u2014 before you teach it.",
@@ -1931,6 +1937,21 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           data?.pending
         ] })
       ] }),
+      canManage && adapter.importMemory && /* @__PURE__ */ jsx9(
+        ImportBox,
+        {
+          t,
+          busy,
+          frozen,
+          onImport: () => run(async () => {
+            const report = await adapter.importMemory();
+            if (!report) return;
+            setNotice(
+              report.absorbed > 0 ? t.importDone(report.absorbed, report.version, report.compacted, (report.bytesSaved / 1024).toFixed(1)) : t.importNothing
+            );
+          })
+        }
+      ),
       showRecent && /* @__PURE__ */ jsx9(RecentList, { t, entries: data?.recent ?? [] })
     ] }),
     notice && /* @__PURE__ */ jsx9("p", { style: { margin: 0, fontSize: "0.74rem", color: C.accent }, role: "status", children: notice }),
@@ -2105,6 +2126,14 @@ function TeachBox({
       /* @__PURE__ */ jsx9("button", { type: "button", onClick: onTeach, disabled: busy || !canTeach, style: primaryBtn(busy || !canTeach), children: busy ? t.teaching : teaching ? t.teachTeacherCta : t.teachCta }),
       /* @__PURE__ */ jsx9("button", { type: "button", onClick: onValidate, disabled: busy || validating || !canValidate, style: secondaryBtn(busy || validating || !canValidate), title: t.validateHint, children: validating ? t.validating : t.validateCta })
     ] })
+  ] });
+}
+function ImportBox({ t, busy, frozen, onImport }) {
+  const disabled = busy || frozen;
+  return /* @__PURE__ */ jsxs9("div", { style: { display: "flex", flexDirection: "column", gap: 6, borderTop: `1px solid ${C.border}`, paddingTop: 10 }, children: [
+    /* @__PURE__ */ jsx9("div", { style: fieldTitle, children: t.importTitle }),
+    /* @__PURE__ */ jsx9("div", { style: fieldHint, children: t.importHint }),
+    /* @__PURE__ */ jsx9("button", { type: "button", onClick: onImport, disabled, style: { ...secondaryBtn(disabled), alignSelf: "flex-start" }, children: busy ? t.importing : t.importCta })
   ] });
 }
 function ValidateResults({ t, result, onClear }) {
