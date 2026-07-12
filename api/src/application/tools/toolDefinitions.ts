@@ -823,7 +823,6 @@ export const TOOLS: Tool[] = [
   securityPosture,
   techDebtEstimator,
   buildBuyAgent,
-  aiResourcePlanner,
 ];
 
 export function getTool(id: string): Tool | undefined {
