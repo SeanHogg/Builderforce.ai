@@ -1,11 +1,9 @@
 /**
- * Alert Delivery System
- * Handles sending alerts via email, Slack, and SMS with delivery status and SLA tracking
+ * Alert Delivery Types
  */
 
 export type DeliveryChannel = 'email' | 'slack' | 'sms';
-
-export type DeliveryStatus = 'pending' | 'sent' | 'delivered' | 'failed';
+export type DeliveryStatus = 'pending' | 'sent' | 'delivered' | 'failed' | 'partial' | 'sla-breach';
 
 export interface Alert {
   id: string;
@@ -16,61 +14,96 @@ export interface Alert {
   channel: DeliveryChannel[];
   status: DeliveryStatus;
   createdAt: Date;
-  sentAt?: Date;
-  deliveredAt?: Date;
-  failedAt?: Date;
-  error?: string;
-  retryCount: number;
-  maxRetries: number;
-  slaBreached: boolean;
-  slaBreachedAt?: Date;
-  metadata?: Record<string, any>;
+  sentAt: Date | null;
+  deliveredAt: Date | null;
+  failedAt: Date | null;
+  failureReason: string | null;
+  metadata: Record<string, any>;
+  slaBreached?: boolean;
 }
 
-export interface AlertDeliveryEvent {
-  id: string;
+export interface DeliveryResult {
   alertId: string;
   channel: DeliveryChannel;
-  action: 'sent' | 'delivered' | 'failed' | 'retry';
+  status: 'sent' | 'delivered' | 'failed';
+  sentAt: Date;
   timestamp: Date;
-  recipient: string;
   error?: string;
-  response?: any;
 }
 
-export interface AlertDeliveryMetrics {
+export interface SLAConfig {
+  requiredDeliveryRate: number; // 0.99 = 99%
+  slatimeMinutes: number; // 5 minutes
+  maxRetries: number; // 2
+}
+
+export interface ChannelConfig {
+  enabled: boolean;
+  apiKey: string;
+  rateLimit: number;
+  templates: {
+    email: string;
+    slack: string;
+    sms: string;
+  };
+  channels: Record<DeliveryChannel, {
+    enabled: boolean;
+    provider: string; // sendgrid, slack api, twilio
+    config: Record<string, any>;
+  }>;
+}
+
+export interface ChannelResult {
+  channel: DeliveryChannel;
+  success: boolean;
+  message: string;
+  error?: string;
+}
+
+export interface AlertFilters {
+  status?: DeliveryStatus;
+  channel?: DeliveryChannel[];
+  severity?: string;
+  startDate?: Date;
+  endDate?: Date;
+  minDeliveryTimeMs?: number;
+}
+
+export interface AlertMetrics {
   totalSent: number;
   totalDelivered: number;
   totalFailed: number;
   slaBreached: number;
-  slaComplianceRate: number;
+  complianceRate: number;
   averageDeliveryTimeMs: number;
   channelStats: {
-    email: {
-      sent: number;
-      delivered: number;
-      failed: number;
-    };
-    slack: {
-      sent: number;
-      delivered: number;
-      failed: number;
-    };
-    sms: {
-      sent: number;
-      delivered: number;
-      failed: number;
-    };
+    email: { sent: number; delivered: number; failed: number };
+    slack: { sent: number; delivered: number; failed: number };
+    sms: { sent: number; delivered: number; failed: number };
   };
 }
 
-/**
- * SLA Configuration
- * 5-minute SLA for alert delivery (99% compliance target)
- */
-export const SLA_CONFIG = {
-  deliveryTimeoutMs: 5 * 60 * 1000, // 5 minutes
-  retryAttempts: 2,
-  retryDelayMs: 5000, // 5 seconds between retries
-  breachNotificationThreshold: 50, // Alert milestone for avg breaches
-};
+export interface AlertHistoryEntry {
+  alertId: string;
+  action: 'sent' | 'delivered' | 'failed' | 'retry';
+  timestamp: Date;
+  details: Record<string, any>;
+}
+
+export interface NotificationPreferences {
+  email: {
+    enabled: boolean;
+    channel: DeliveryChannel[];
+    template: string;
+  };
+  webhook: {
+    enabled: boolean;
+    url: string;
+    events: string[];
+  };
+  alertRate: {
+    enabled: boolean;
+    maxAlertsPerMin: number;
+    cooldownMs: number;
+  };
+}
