@@ -1,0 +1,39 @@
+{
+  "id": "data-completeness",
+  "kind": "utility",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "placeholders": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "thresholds": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "critical": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "warning": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "passing": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "required": []
+      }
+    },
+    "required": []
+  }
+}
