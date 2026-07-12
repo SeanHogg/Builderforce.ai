@@ -40,8 +40,7 @@ export async function chats_consolidate(
   }
 
   // FR8: Invalid Target Chat Handling
-  // In a real implementation, this would call the platform to verify the target chat exists
-  // For now, we'll simulate this check
+  // Simulate platform validation
   if (!target_chat_id.startsWith('chat_')) {
     return {
       success: false,
