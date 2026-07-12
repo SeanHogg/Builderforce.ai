@@ -1,8 +1,4 @@
-/**
- * Quality & Bugs Dashboard - Main container
- * Integrates all widgets: count summary, severity chart, trend chart, filters, and bug table
- */
-
+import React from "react";
 import { BugFilter } from "../../types/quality";
 import { BugCountWidget } from "../BugCountWidget";
 import { SeverityDonutChart } from "../SeverityDonutChart";
