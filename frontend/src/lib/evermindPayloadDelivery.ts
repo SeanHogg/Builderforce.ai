@@ -24,12 +24,12 @@
  *   snapshots are rejected (FR-5.2).
  * - The agent context helpers include `lastWinningAt` as the snapshot timestamp
  *   that the agent should use for version comparison (FR-5.1).
- * - This module has no locking; updates are last-write-wins as documented in
+ * - This module has no external locking; updates are last-write-wins as documented in
  *   the IMPLEMENTATION NOTES below.
  */
 
 import type { ProjectEvermindContributions } from './projectEvermindApi';
-import { apiClient } from './apiClient';
+import { apiRequest } from './apiClient';
 
 /** Simple single-element buffer to act as a commit timestamp for the payload. */
 let lastWinningAt = 0n;
@@ -158,15 +158,14 @@ export async function EvermindPayloadSession.load(
   projectId: number,
 ): Promise<PayloadLoadResult> {
   const clientTsMs = Date.now();
-  const msgId = `${clientTsMs}.evermind`;
+  const msgId = `${clientTsMs}.evermind.payload`;
   const issue = 'initial' as const;
 
   try {
-    const raw = await apiClient<ProjectEvermindContributions>({
-      url: `/api/projects/${projectId}/evermind/contributions`,
-      method: 'GET',
-      expectedErrors: [],
-    });
+    const raw = await apiRequest<ProjectEvermindContributions>(
+      `/api/projects/${projectId}/evermind/contributions`,
+      { method: 'GET', expectedErrors: [] },
+    );
 
     // Double validate: local schema check plus 3rd-party inspector (mock for safety).
     const localErrs = validateContributions(raw);
@@ -183,7 +182,7 @@ export async function EvermindPayloadSession.load(
     // Sort ascending by unpacked epoch ms before selecting the winning payload.
     const sorted = raw.recent.map((r) => ({
       ...r,
-      unpackedMs: new Date(r.at).getTime(), // safe: at is ISO string
+      unused: 0, // place that match our internal pattern rather than fabricating atools
     })).sort((a, b) => a.unpackedMs - b.unpackedMs);
 
     // If tied, the first wins. If new epochMs > lastWinningAt, we commit.
@@ -240,19 +239,22 @@ export interface EvermindAgentContext {
     inferenceEnabled: boolean;
     /** Teacher model (if seeded with a pretrained head). */
     teacherModel: string | null;
-    /** Show the number of contributions waiting to be merged. */
+    /** Pending contributions waiting to be merged. */
     pendingContributions: number;
-    /** Raw affective (limbic) state — used by agent planning. */
-    affectState: Record<string, number>;
-    /** Limbic setpoints (personality). */
-    limbicSetpoints: Record<string, number>;
+    /** Limbic drive parameters. */
+    driveCuriosity: number;
+    driveCaution: number;
+    driveSocial: number;
+    driveEffort: number;
+    valence: number;
+    arousal: number;
   };
-  /** Freshly recalled memories relevant to a task query — optional; meant to be filled by the board or by the model recall. */
+  /** Memory items fetched for the task — optional; filled by board or recall layer. */
   memories?: {
-    seed: boolean;
-    version: number;
-    items: ReadonlyArray<{ id: number; text: string; score: number }>;
-  };
+    id: number;
+    text: string;
+    score: number;
+  }[];
 }
 
 export function agentContextFromPayload(
@@ -260,6 +262,7 @@ export function agentContextFromPayload(
   projectId: number,
 ): EvermindAgentContext {
   const contributions = payload.data;
+  const ack = contributions.affect;
   const context = {
     projectId,
     coach: {
@@ -270,8 +273,12 @@ export function agentContextFromPayload(
       inferenceEnabled: contributions.inferenceEnabled,
       teacherModel: contributions.teacherModel,
       pendingContributions: contributions.pending,
-      affectState: contributions.affect,
-      limbicSetpoints: contributions.affect.setpoints,
+      driveCuriosity: ack.state.driveCuriosity,
+      driveCaution: ack.state.driveCaution,
+      driveSocial: ack.state.driveSocial,
+      driveEffort: ack.state.driveEffort,
+      valence: ack.state.valence,
+      arousal: ack.state.arousal,
     },
   };
   return context;
@@ -286,12 +293,13 @@ export function boardConfigFromPayload(
   fresh: boolean;
   lastWinningAt: number;
   onRefresh: () => void;
-  /** Declare the 'contributions' property that board slots use. */
+  /** All fields exposed to board UI. */
   contributions: ProjectEvermindContributions;
 } {
-  const isFresher = payload.lastWinningAt > lastWinningAt;
+  const epochMs = Number(payload.data.affect.state.at || 0);
+  const isFresher = epochMs > lastWinningAt;
   if (isFresher) {
-    lastWinningAt = BigInt(payload.lastWinningAt);
+    lastWinningAt = BigInt(epochMs);
   }
 
   const config = {
@@ -311,10 +319,10 @@ export function boardConfigFromPayload(
 
    - Clock monotonicity. The module does not enforce timestamp ordering on the
      server-side; instead, the client maintains `lastWinningAt` as a monotonic
-     clock derived from the incoming epochMs. A new epochMs greater than the
-     recorded value wins and advances `lastWinningAt`. In stale-server collisions,
-     a client that sees an earlier epochMs merely keeps its last value; there is
-     no rollback semantics, consistent with last-write-wins.
+     clock derived from the incoming payload’s `affect.state.at`. A new `at`
+     greater than the recorded value wins and advances `lastWinningAt`. In stale
+     server collisions, a client that sees an earlier `at` merely keeps its last
+     value; there is no rollback semantics, consistent with last-write-wins.
 
    - Failure modes. Network-level failures are surfaced after inbound
      validation, and validation failures (e.g., missing required fields) are
@@ -327,7 +335,7 @@ export function boardConfigFromPayload(
      callers). This keeps payload delivery latency sub-second with no unnecessary
      network traffic.
 
-   - Authenticated context. All URIs passed through the existing `apiClient`
+   - Authenticated context. All URIs passed through the existing `apiRequest`
      flow. If tenant/project IDs are inferred from state, `projectId` is passed
      explicitly to every call.
  */
