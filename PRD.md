@@ -223,11 +223,17 @@ List of business requirements to be satisfied by the current ratified version.
 
 ## Design
 
-The design of the versioned JSON contract is authored in
+The design of the versioned JSON contract is documented in
 [`docs/design/basis-payload-v1-design.md`](docs/design/basis-payload-v1-design.md).
-It covers the producer/consumer architecture, the rationale for payload-level
-(rather than claim-nested) evidence, the enum choices, and the validation +
-versioning strategy.
+It covers the payload structure overview, field definitions, enum choices,
+validation strategy, and rationale for design decisions at a high level.
+
+**Key design points** (see design doc for full detail):
+
+- **Payload-level vs per-claim evidence** — FR-4 says each *claim* MAY reference evidence items, but AC-1 requires rejecting payloads missing `evidence` at the top level. v1 resolves this by making the top-level `evidence` array **required** (like `claims`); a claim may still reference zero evidence items.
+- **Extensions namespacing** — Unknown fields outside `extensions` must cause a *warning* (not hard error) in consumer logs (AC-6), so the root uses `additionalProperties: true` and only the `extensions` object supplies patternProperties for reverse-DNS keys.
+- **Uncertainty block** — Required during ratification; includes `overall_confidence` bounded [0,1], `known_unknowns`, `assumptions` arrays, and an optional `contradictions[]` of paired claim IDs.
+- **Reasoning chain ordering** — Steps MUST be sequentially numbered starting at 1; the schema enforces `step >= 1` but sequential enforcement (no gaps) is documented guidance for producers/consumers.
 
 ## Implementation Notes
 
