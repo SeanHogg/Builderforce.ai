@@ -38,7 +38,7 @@ export type SourceDefinition = {
  */
 export type TypeCoercion = {
   /** Type to coerce to */
-  type: 'string' | 'number' | 'integer' | 'boolean' | 'date' | 'epoch' | 'number-or-null' | /* extendable */;
+  type: 'string' | 'number' | 'integer' | 'boolean' | 'date' | 'epoch';
   /** If true, allow null/undefined as-is after date parse (date/epoch) */
   nullable?: boolean;
 };
