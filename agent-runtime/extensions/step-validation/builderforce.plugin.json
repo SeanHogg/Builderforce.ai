@@ -6,7 +6,7 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {
-      "defaultContractMode": {
+      "defaultEnforcementMode": {
         "type": "string",
         "enum": ["enforced", "audit-only", "disabled"],
         "default": "enforced"
