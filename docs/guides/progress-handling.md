@@ -75,7 +75,7 @@ class SimpleProgressTracker:
         # Canonical pattern on the event: if progressPct is exactly 100, stop polling.
         pct = payload.get("progressPct")
         st = payload.get("status")
-        if isinstance(pct, (int, float)) and pct == 100.0:
+        if isinstance(pct, (int, float)) and pct == 100:
             if st == "completed":
                 self._on_completion()
             # If status != completed but progressPct is 100, treat it as suspicious.
