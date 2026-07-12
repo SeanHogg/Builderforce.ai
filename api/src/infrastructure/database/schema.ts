@@ -6552,6 +6552,57 @@ export const facts = pgTable('facts', {
 ]);
 
 // ---------------------------------------------------------------------------
+// RFP / RFQ Response (PRD 15, migration 0335) — pre-sales proposal generation.
+// A request captures the asking business's brand + requirements and is either
+// greenfield or grounded on an existing project; a response is the co-branded
+// proposal (capability roster + P&L + phase plan + risks + branded document).
+// ---------------------------------------------------------------------------
+export const rfpRequests = pgTable('rfp_requests', {
+  id:               uuid('id').primaryKey().defaultRandom(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:        uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  title:            varchar('title', { length: 255 }).notNull(),
+  requesterOrgName: varchar('requester_org_name', { length: 255 }),
+  requesterBrand:   jsonb('requester_brand'),                 // BrandPalette of the asking business
+  requirements:     text('requirements'),
+  sourceMode:       varchar('source_mode', { length: 16 }).notNull().default('new').$type<'new' | 'existing_project'>(),
+  basedOnProjectId: integer('based_on_project_id').references(() => projects.id, { onDelete: 'set null' }),
+  marginPct:        real('margin_pct'),
+  marketingPct:     real('marketing_pct'),
+  contingencyPct:   real('contingency_pct'),
+  dueDate:          timestamp('due_date', { withTimezone: true }),
+  status:           varchar('status', { length: 24 }).notNull().default('draft').$type<'draft' | 'analyzing' | 'ready' | 'submitted'>(),
+  createdBy:        varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:        timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_rfp_requests_tenant').on(t.tenantId, t.updatedAt),
+  index('idx_rfp_requests_project').on(t.basedOnProjectId),
+]);
+
+export const rfpResponses = pgTable('rfp_responses', {
+  id:                 uuid('id').primaryKey().defaultRandom(),
+  tenantId:           integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:          uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  requestId:          uuid('request_id').notNull().references(() => rfpRequests.id, { onDelete: 'cascade' }),
+  projectId:          integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  status:             varchar('status', { length: 24 }).notNull().default('draft').$type<'draft' | 'ready' | 'submitted'>(),
+  body:               jsonb('body'),                          // RfpResponseBody (typed in application/rfp/types.ts)
+  docHtml:            text('doc_html'),
+  quotedPriceUsdCents: integer('quoted_price_usd_cents'),
+  marginPct:          real('margin_pct'),
+  scanRefreshed:      boolean('scan_refreshed').notNull().default(false),
+  generatedBy:        jsonb('generated_by'),                  // { cto, productOwner } agent refs
+  createdBy:          varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:          timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:          timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_rfp_responses_tenant').on(t.tenantId, t.updatedAt),
+  index('idx_rfp_responses_request').on(t.requestId, t.createdAt),
+  index('idx_rfp_responses_project').on(t.projectId),
+]);
+
+// ---------------------------------------------------------------------------
 // Generic, timestamped catalog adoption event log (skill | persona | prompt).
 // Feeds the over-time series in /api/catalog-analytics. Append-only. Mig 0301.
 // ---------------------------------------------------------------------------

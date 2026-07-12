@@ -121,6 +121,11 @@ export const CAPABILITIES = {
   'facts.view':            'viewer',
   'facts.manage':          'developer',
 
+  // RFP / RFQ Response — pre-sales proposal generation. Reads open to any member;
+  // creating/generating is developer+ (mirrors the API requireRole(DEVELOPER)).
+  'rfp.view':              'viewer',
+  'rfp.manage':            'developer',
+
   // EMP buyer-checklist lenses (manager-gated, mirroring server requireRole(MANAGER)).
   'insights.crossTeam':      'manager', // EMP-5  internal cross-team benchmarking
   'insights.delayTaxonomy':  'manager', // EMP-9  delay root-cause taxonomy

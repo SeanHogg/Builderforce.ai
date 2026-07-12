@@ -175,6 +175,50 @@ export async function resolveEvermindTargets(
   return heads;
 }
 
+/** Is this head a LIVE learning target — seeded (has a base model) AND connected
+ *  (not frozen/read-only)? The ONE predicate every fan-out shares, so "which Everminds
+ *  actually receive a contribution" is defined in a single place. */
+export function isLiveLearnTarget(head: ProjectEvermindHead): boolean {
+  return head.version >= 1 && head.mode === 'connected';
+}
+
+/** One target that received a contribution in a fan-out. */
+export interface EvermindContribution {
+  projectId: number;
+  ref: string | null;
+  version: number;
+  name: string;
+}
+
+/**
+ * Contribute `text` to EVERY live Evermind a surface bound to `projectId` targets
+ * (self + IDE builds; see {@link resolveEvermindTargets}) — the ONE learn fan-out every
+ * NON-chat surface uses (cloud engine, on-prem runner, any run that produces a learnable
+ * exemplar). The chat learn gate ({@link import('../brain/brainEvermindLearning')}) uses
+ * the same resolver + {@link isLiveLearnTarget} predicate to compute its per-target
+ * outcome, so all surfaces agree on which Everminds learn. Best-effort per target; a
+ * single coordinator failure never blocks the others. Returns the targets contributed to
+ * (for reporting / provenance). No-op on empty/short text.
+ */
+export async function contributeTextToProjectEverminds(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+  text: string,
+  weight?: number,
+  prompt?: string | null,
+): Promise<EvermindContribution[]> {
+  if ((text ?? '').trim().length < 20) return [];
+  const targets = (await resolveEvermindTargets(env, db, tenantId, projectId)).filter(isLiveLearnTarget);
+  await Promise.all(
+    targets.map((h) =>
+      dispatchProjectEvermindLearnText(env, tenantId, h.projectId, text, weight, prompt).catch(() => { /* per-target best-effort */ }),
+    ),
+  );
+  return targets.map((h) => ({ projectId: h.projectId, ref: h.ref, version: h.version, name: h.name }));
+}
+
 /** Minimal R2 slice we use for writing model versions (keeps this mockable). */
 export interface ArtifactWriteStore {
   put(key: string, value: ArrayBuffer | string): Promise<unknown>;

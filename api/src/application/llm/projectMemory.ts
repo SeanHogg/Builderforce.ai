@@ -22,7 +22,7 @@
 
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
-import { getProjectEvermindHead } from './projectEvermind';
+import { resolveEvermindTargets } from './projectEvermind';
 import { getProjectFactByKey, upsertProjectFact, QA_CACHE_SOURCE } from './projectFacts';
 
 /** An Evermind reply shorter than this isn't a real answer — fall through to the LLM.
@@ -37,6 +37,9 @@ export interface MemoryAnswer {
   source: MemoryAnswerSource;
   /** Present when `source === 'evermind'` — the head version that served it. */
   evermindVersion?: number;
+  /** Present when `source === 'evermind'` — WHICH Evermind (project id) answered, so a
+   *  multi-Evermind project's memory hit is triageable. */
+  evermindProjectId?: number;
 }
 
 export interface ResolveMemoryDeps {
@@ -99,13 +102,16 @@ export async function resolveMemoryAnswer(
     return { text: cached.trim(), source: 'qa-cache' };
   }
 
-  // 2) Evermind-first (opt-in). Same gate BrainService + the cloud engine use.
+  // 2) Evermind-first (opt-in). A project can target MANY Everminds (its own head + the
+  // IDE builds grouped under it); try each inference-enabled, seeded one in order and
+  // adopt the FIRST substantive reply. Same resolver every surface uses.
   if (deps.runEvermind) {
-    const head = await getProjectEvermindHead(env, db, tenantId, projectId).catch(() => null);
-    if (head?.inferenceEnabled && head.version >= 1 && head.ref) {
-      const text = await deps.runEvermind(head.ref, q).catch(() => null);
+    const targets = (await resolveEvermindTargets(env, db, tenantId, projectId).catch(() => []))
+      .filter((h) => h.inferenceEnabled && h.version >= 1 && h.ref);
+    for (const head of targets) {
+      const text = await deps.runEvermind(head.ref as string, q).catch(() => null);
       if (text && text.trim().length >= EVERMIND_ANSWER_MIN_CHARS) {
-        return { text: text.trim(), source: 'evermind', evermindVersion: head.version };
+        return { text: text.trim(), source: 'evermind', evermindVersion: head.version, evermindProjectId: head.projectId };
       }
     }
   }

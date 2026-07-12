@@ -35,6 +35,8 @@ export const BUILTIN_ROLES: JobRole[] = [
     description: 'Confirms the delivered work meets acceptance criteria and business intent.', builtin: true, position: 11 },
   { key: 'product-owner', name: 'Product Owner', discipline: 'product', icon: '🎯', color: 'fuchsia',
     description: 'Accountable for value and acceptance — signs off that the ticket is done-done.', builtin: true, position: 12 },
+  { key: 'designer', name: 'Designer', discipline: 'design', icon: '🎨', color: 'pink',
+    description: 'Owns UX/UI and visual design — often a resource-assessment add for design-heavy tickets.', builtin: true, position: 13 },
 ];
 
 const BY_KEY = new Map(BUILTIN_ROLES.map((r) => [r.key, r]));

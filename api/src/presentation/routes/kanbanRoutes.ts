@@ -8,19 +8,33 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { authMiddleware, isManager } from '../middleware/authMiddleware';
-import { projects } from '../../infrastructure/database/schema';
+import { projects, tasks } from '../../infrastructure/database/schema';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { JobRoleService } from '../../application/kanban/jobRoleService';
 import { KanbanTemplateService } from '../../application/kanban/kanbanTemplateService';
 import { RosterService } from '../../application/kanban/rosterService';
 import { RoleAssignmentService } from '../../application/kanban/roleAssignmentService';
-import { TicketAuditService } from '../../application/audit/ticketAuditService';
+import { TicketAuditService, type SignoffVerdict, type SignoffContribution } from '../../application/audit/ticketAuditService';
+import { TicketParticipantsService } from '../../application/kanban/ticketParticipants';
+import { isAgentRefRoleCapable, humanIsRoleCapable, resolveMemberDisplayName } from '../../application/kanban/roleCapability';
+import { BUILTIN_ROLES } from '../../application/kanban/roleCatalog';
 import { loadAssignableWorkforce } from '../../application/kanban/assignableWorkforce';
 import { loadAssigneeProfiles, assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { recordActivity, cloudAgentActor, resolveHumanActor } from '../../application/activity/activityLog';
 
-export function createKanbanRoutes(db: Db): Hono<HonoEnv> {
+/** Create a child work-item task under a parent ticket — injected from the composition
+ *  root (needs TaskService's key allocation). Absent ⇒ materialize endpoint 503s. */
+export type CreateChildTaskPort = (args: {
+  projectId: number; tenantId: number; title: string; parentTaskId: number;
+  assignedAgentRef?: string | null; assignedUserId?: string | null;
+}) => Promise<{ id: number }>;
+
+const ROLE_LABEL = new Map(BUILTIN_ROLES.map((r) => [r.key, r.name]));
+const roleLabel = (key: string): string => ROLE_LABEL.get(key) ?? key;
+
+export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
@@ -29,6 +43,7 @@ export function createKanbanRoutes(db: Db): Hono<HonoEnv> {
   const assignmentService = new RoleAssignmentService(db);
   const rosterService = new RosterService(db, templateService, roleService, assignmentService);
   const auditService = new TicketAuditService(db);
+  const participantsService = new TicketParticipantsService(db);
 
   const env = (c: { env: unknown }) => c.env as Env;
 
@@ -211,27 +226,115 @@ export function createKanbanRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const taskId = Number(c.req.param('taskId'));
     const body = await c.req.json<{
-      roleKey: string; laneKey?: string; verdict?: 'approved' | 'changes_requested'; summary?: string;
-      memberKind?: string; memberRef?: string;
+      roleKey: string; laneKey?: string; verdict?: SignoffVerdict; summary?: string;
+      memberKind?: string; memberRef?: string; contribution?: SignoffContribution; waiveReason?: string;
     }>();
     if (!body.roleKey) return c.json({ error: 'roleKey is required' }, 400);
+    const verdict: SignoffVerdict = ['approved', 'changes_requested', 'waived', 'delegated'].includes(body.verdict as string) ? (body.verdict as SignoffVerdict) : 'approved';
+    if ((verdict === 'waived' || verdict === 'delegated') && !body.waiveReason?.trim() && !body.summary?.trim()) {
+      return c.json({ error: 'a reason is required to waive or delegate a required role' }, 400);
+    }
     try {
-      // The reviewer identity defaults to the authed human, but an AGENT acting as a
-      // role reviewer (via the kanban.signoff MCP tool) supplies its own kind/ref so
-      // the audit ledger attributes the sign-off to the agent, not a phantom human.
+      // The signer identity defaults to the authed human, but an AGENT acting as a role
+      // reviewer (via the kanban.signoff MCP tool) supplies its own kind/ref so the
+      // ledger attributes the sign-off to the agent, not a phantom human.
       const memberKind = body.memberKind === 'agent' || body.memberKind === 'human' ? body.memberKind : 'human';
-      const memberRef = body.memberRef?.trim() || (c.get('userId') as string) || null;
+      const userId = (c.get('userId') as string) || null;
+      const memberRef = body.memberRef?.trim() || userId;
+
+      // RBAC (default-deny, AC-6): only a member ROLE-CAPABLE of roleKey may sign off as
+      // it. Agents check capability; humans pass if manager, pinned, or discipline-matched.
+      const capable = memberKind === 'agent'
+        ? await isAgentRefRoleCapable(db, tenantId, memberRef, body.roleKey)
+        : (isManager(c) || await humanIsRoleCapable(db, tenantId, memberRef, body.roleKey));
+      if (!capable) return c.json({ error: `not authorized to sign off as role '${body.roleKey}'` }, 403);
+
+      const memberName = await resolveMemberDisplayName(db, tenantId, memberKind, memberRef);
       const audit = await auditService.recordSignoff(env(c), tenantId, {
         taskId,
         roleKey: body.roleKey,
         laneKey: body.laneKey,
-        verdict: body.verdict ?? 'approved',
+        verdict,
         summary: body.summary,
         memberKind,
         memberRef,
+        memberName,
+        contribution: body.contribution ?? null,
+        waiveReason: body.waiveReason ?? null,
+      });
+      // Keep the participation manifest in step with the ledger.
+      await participantsService.syncStates(env(c), tenantId, taskId);
+      await participantsService.invalidate(env(c), taskId);
+
+      // Emit the accountability trail on the HTTP path too (previously MCP-only).
+      const [proj] = await db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+      const actor = memberKind === 'agent'
+        ? cloudAgentActor(memberRef ?? 'agent', memberName ?? memberRef ?? 'agent')
+        : await resolveHumanActor(env(c), db, tenantId, memberRef ?? userId ?? '');
+      await recordActivity(env(c), db, {
+        tenantId, projectId: proj?.projectId ?? null, actor,
+        verb: verdict === 'approved' || verdict === 'waived' ? 'ticket.role.completed' : 'ticket.signed_off',
+        targetType: 'task', targetId: String(taskId), targetLabel: `#${taskId}`,
+        summary: `${roleLabel(body.roleKey)} ${verdict.replace('_', ' ')}${body.summary ? `: ${body.summary}` : ''}`.slice(0, 300),
+        metadata: { roleKey: body.roleKey, verdict, laneKey: body.laneKey ?? null },
       });
       return c.json({ audit });
     } catch (e) { return c.json({ error: (e as Error).message }, 400); }
+  });
+
+  // ── Participation manifest & Accountability Report ───────────────────────────
+  // The manifest (who MUST participate, who has, with what evidence) — cached.
+  router.get('/tasks/:taskId/participants', async (c) =>
+    c.json({ participants: await participantsService.listParticipants(env(c), c.get('tenantId') as number, Number(c.req.param('taskId'))) }));
+
+  // The Accountability Report — Who / When / Verdict / Comments / Contribution + gaps.
+  router.get('/tasks/:taskId/accountability', async (c) =>
+    c.json({ accountability: await participantsService.getAccountability(env(c), c.get('tenantId') as number, Number(c.req.param('taskId'))) }));
+
+  // Per-project participation progress for the board's %-complete chips (cached).
+  router.get('/projects/:projectId/participants-summary', async (c) =>
+    c.json({ summary: await participantsService.projectSummary(env(c), c.get('tenantId') as number, Number(c.req.param('projectId'))) }));
+
+  // Resource Assessment — add a role the ticket needs beyond the template (designer,
+  // security engineer, …). Manager-gated. An unstaffed add surfaces as a resource gap.
+  router.post('/tasks/:taskId/participants', async (c) => {
+    if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
+    const tenantId = c.get('tenantId') as number;
+    const taskId = Number(c.req.param('taskId'));
+    const body = await c.req.json<{ roleKey: string; responsibility?: 'owner' | 'reviewer' | 'contributor'; stageKey?: string; note?: string }>();
+    if (!body.roleKey) return c.json({ error: 'roleKey is required' }, 400);
+    const participant = await participantsService.addParticipant(env(c), tenantId, taskId, {
+      roleKey: body.roleKey, responsibility: body.responsibility, stageKey: body.stageKey, note: body.note,
+    });
+    if (participant) {
+      const [proj] = await db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+      await recordActivity(env(c), db, {
+        tenantId, projectId: proj?.projectId ?? null, actor: await resolveHumanActor(env(c), db, tenantId, (c.get('userId') as string) ?? ''),
+        verb: 'ticket.resource.assessed', targetType: 'task', targetId: String(taskId), targetLabel: `#${taskId}`,
+        summary: `Added required role ${roleLabel(body.roleKey)}${participant.state === 'unstaffed' ? ' (resource gap — unstaffed)' : ''}`.slice(0, 300),
+        metadata: { roleKey: body.roleKey, state: participant.state },
+      });
+    }
+    return c.json({ participant });
+  });
+
+  router.delete('/tasks/:taskId/participants/:participantId', async (c) => {
+    if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
+    await participantsService.removeParticipant(env(c), c.get('tenantId') as number, Number(c.req.param('taskId')), c.req.param('participantId'));
+    return c.json({ ok: true });
+  });
+
+  // Materialize a child work-item task per resolved participant (the %-complete rollup).
+  router.post('/tasks/:taskId/participants/materialize', async (c) => {
+    if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
+    if (!createChild) return c.json({ error: 'child-task creation unavailable' }, 503);
+    const tenantId = c.get('tenantId') as number;
+    const taskId = Number(c.req.param('taskId'));
+    const [proj] = await db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+    if (!proj) return c.json({ error: 'task not found' }, 404);
+    const created = await participantsService.materializeChildTasks(env(c), tenantId, taskId, (input) =>
+      createChild({ projectId: proj.projectId, tenantId, title: input.title, parentTaskId: input.parentTaskId, assignedAgentRef: input.assignedAgentRef, assignedUserId: input.assignedUserId }));
+    return c.json({ created });
   });
 
   return router;
