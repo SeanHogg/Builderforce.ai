@@ -161,4 +161,24 @@ Maintainability note (non-blocking): the "convert `undefined` → coerced-or-nul
 
 ## Test Evidence
 
-_Owned by the qa-tester — to be authored._
+New coverage lives in `api/src/application/task/taskUpdateParentIdPreserved.test.ts`. It exercises the full DTO → `TaskService.updateTask` → `Task.update` → `ITaskRepository.update` path using in-memory fakes (`InMemoryTaskRepo`, `InMemoryProjectRepo`), and asserts on BOTH the returned entity and the value re-read from the repo (persistence round-trip), so a bug in either the domain merge or the persistence write is caught.
+
+| AC | Test | Assertion |
+|---|---|---|
+| AC-1 | "should preserve existing parentTaskId when only assignedAgentRef changes" | After `updateTask(child, { assignedAgentRef })`, both the returned task and the repo re-read keep `parentTaskId === epic.id` and gain the new `assignedAgentRef`. |
+| AC-2 | "should set parentTaskId to null and assignedAgentRef in the same payload" | `updateTask(child, { assignedAgentRef, parentTaskId: null })` → child's persisted `parentTaskId` is `null` and `assignedAgentRef` is set (round-trip verified against the CHILD). |
+| AC-3 | "should leave assignedAgentRef unchanged when only parentTaskId changes" | `updateTask(child, { parentTaskId })` → returned + persisted `assignedAgentRef` unchanged, `parentTaskId` re-parented. |
+| AC-4 | "should leave the task unchanged when no fields are provided" | `updateTask(child, {})` → `parentTaskId` and `assignedAgentRef` both identical to pre-call state. |
+| AC-5 | "should apply full update when all fields are provided" | `updateTask(child, {all fields})` → every provided field (`title`, `status`, `priority`, `assignedAgentRef`, `parentTaskId`) is written. |
+
+Regression safety (AC-7): the change to `Task.update` only strips `undefined`-valued keys before merge — a no-op for any caller that always supplies concrete values — so existing suites (`epicDecomposition.test.ts`, `listTasksArchived.test.ts`, `taskDependencies.test.ts`, `RuntimeService.laneChaining.test.ts`) are unaffected.
+
+> Note: this executor has no shell, so the suite was NOT run here. CI on the pull request is the source of truth for the pass/fail result.
+
+---
+
+### Sign-offs
+
+- **code-creator / developer** — implemented the `undefined`-stripping merge in `Task.update` and the per-field guard in `TaskService.updateTask`; confirmed `TaskRepository.update` writes authoritative `null` only for concrete values.
+- **code-reviewer** — reviewed correctness against FR-1..FR-6 and AC-1..AC-8; verdict APPROVED.
+- **test-generator / qa-tester** — authored `taskUpdateParentIdPreserved.test.ts` covering AC-1..AC-5 with persistence round-trip assertions.
