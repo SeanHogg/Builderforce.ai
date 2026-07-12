@@ -29,6 +29,12 @@ export const BUILTIN_ROLES: JobRole[] = [
     description: 'Documents the change for users and the team.', builtin: true, position: 8 },
   { key: 'manager', name: 'Delivery Manager', discipline: 'other', icon: '🧑‍💼', color: 'slate',
     description: 'Coordinates the roster, unblocks work, and audits ticket coverage.', builtin: true, position: 9 },
+  { key: 'team-lead', name: 'Team Lead', discipline: 'engineering', icon: '🧭', color: 'cyan',
+    description: 'Senior engineer who reviews implementation quality and mentors the team.', builtin: true, position: 10 },
+  { key: 'validator', name: 'Validator', discipline: 'qa', icon: '✅', color: 'green',
+    description: 'Confirms the delivered work meets acceptance criteria and business intent.', builtin: true, position: 11 },
+  { key: 'product-owner', name: 'Product Owner', discipline: 'product', icon: '🎯', color: 'fuchsia',
+    description: 'Accountable for value and acceptance — signs off that the ticket is done-done.', builtin: true, position: 12 },
 ];
 
 const BY_KEY = new Map(BUILTIN_ROLES.map((r) => [r.key, r]));

@@ -49,6 +49,7 @@ import { resolveManagerTypeById, normalizeManagerType } from './managerTypes';
 import { listActiveManagerDirectives } from './managerDirectives';
 import { RoleAssignmentService, type AssigneeKind } from '../kanban/roleAssignmentService';
 import { recommendTopAssignee } from '../metrics/assigneeRecommender';
+import { producerRoleForActionType } from '../kanban/roleCapability';
 import { mergeRecordedPullRequest } from '../repos/mergeRecordedPr';
 import { pollPrCiStatus } from '../repos/pollPrCiStatus';
 import { dispatchTaskFinalize } from '../../presentation/routes/taskRoutes';
@@ -669,7 +670,11 @@ export async function runManagerForProject(
       .slice(0, MAX_ASSIGNMENTS_PER_RUN);
     for (const t of unowned) {
       try {
-        const pick = await recommendTopAssignee(env, db, projectId, []);
+        // Role-aware: constrain the pick to the ticket's producer role (from its
+        // technical action-type) so a coding ticket never lands on a role-incapable
+        // owner (the #467 root cause). No constraint when the type implies no role.
+        const roleKey = producerRoleForActionType((t as { actionType?: string | null }).actionType);
+        const pick = await recommendTopAssignee(env, db, projectId, roleKey ? { roleKey } : {});
         if (!pick) continue;
         const set: Record<string, unknown> = { assignedUserId: null, assignedAgentRef: null, assignedAgentHostId: null, updatedAt: new Date() };
         let label = '';

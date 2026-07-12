@@ -868,6 +868,19 @@ function attachEvermindLearn(messages, outcome) {
 }
 function formatEvermindLearnStep(outcome) {
   if (!outcome) return null;
+  const targets = outcome.targets;
+  if (targets && targets.length > 0) {
+    const label = (t) => `${t.name} (proj #${t.projectId}${t.version ? ` v${t.version}` : ""})`;
+    const learned = targets.filter((t) => t.learned);
+    const skipped = targets.filter((t) => !t.learned && t.reason && t.reason !== "too-short");
+    const parts = [];
+    if (learned.length > 0) parts.push(`Contributed this turn to ${learned.map(label).join(", ")}`);
+    for (const t of skipped) {
+      const why = t.reason === "not-seeded" ? "not set up yet" : t.reason === "frozen" ? "frozen (read-only)" : String(t.reason);
+      parts.push(`skipped ${label(t)} \u2014 ${why}`);
+    }
+    return parts.length > 0 ? `\u{1F9E0} ${parts.join("; ")}.` : null;
+  }
   if (outcome.learned) return `\u{1F9E0} Contributed this turn to the project Evermind (v${outcome.version}).`;
   switch (outcome.reason) {
     case "not-attached":

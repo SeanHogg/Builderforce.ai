@@ -167,7 +167,12 @@ export async function resolveEvermindTargets(
     { kvTtlSeconds: 60 },
   );
   const ids = [...new Set<number>([projectId, ...childIds])];
-  return Promise.all(ids.map((pid) => getProjectEvermindHead(env, db, tenantId, pid)));
+  // Sequential (not Promise.all) for a deterministic, ordered result — each head read
+  // is version-token cached (L1 Map + L2 KV), so the cost is a Map hit once warm and the
+  // target count is bounded by a project's IDE builds. Order = [self, …builds].
+  const heads: ProjectEvermindHead[] = [];
+  for (const pid of ids) heads.push(await getProjectEvermindHead(env, db, tenantId, pid));
+  return heads;
 }
 
 /** Minimal R2 slice we use for writing model versions (keeps this mockable). */

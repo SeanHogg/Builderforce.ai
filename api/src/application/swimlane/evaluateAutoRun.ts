@@ -12,10 +12,11 @@
  * diagnostic can never disagree about whether a ticket runs — the triage UI shows
  * precisely the condition the trigger evaluates.
  */
-import { and, eq } from 'drizzle-orm';
-import { boards, swimlanes, swimlaneAgentAssignments, tasks } from '../../infrastructure/database/schema';
+import { and, asc, eq } from 'drizzle-orm';
+import { boards, swimlanes, swimlaneAgentAssignments, swimlaneRequirements, tasks } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveArtifacts } from '../artifact/resolveArtifacts';
+import { isAgentRefRoleCapable } from '../kanban/roleCapability';
 import { decideLaneAutoRun, withOwnerAgentFallback, type LaneAgentLike, type LaneAutoRunDecision } from './laneAutoRun';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import { ExecutionStatus, TaskStatus } from '../../domain/shared/types';
@@ -210,7 +211,26 @@ export async function evaluateTaskAutoRun(
   );
   const staffedAgentRefs = laneAgents.map((a) => a.agentRef).filter((r): r is string => !!r);
 
-  const agents = withOwnerAgentFallback(laneAgents, { agentRef: assignedAgentRef });
+  // Owner-fallback guardrail — the #467 fix. If this lane has a required PRODUCER role
+  // (a role requirement with owner/contributor responsibility), the ticket owner may
+  // be used as the auto-run fallback ONLY when it is actually capable of that role.
+  // A Product Manager owner must never auto-run an Implementation stage as the coder;
+  // suppressing the fallback surfaces the lane as `no_agent` so the Coordinator/manager
+  // resolves the right producer instead of the wrong owner burning failing runs.
+  let ownerFallbackRef: string | null = assignedAgentRef;
+  if (assignedAgentRef) {
+    const reqRows = await db
+      .select({ ref: swimlaneRequirements.ref, responsibility: swimlaneRequirements.responsibility, position: swimlaneRequirements.position })
+      .from(swimlaneRequirements)
+      .where(and(eq(swimlaneRequirements.swimlaneId, lane.id), eq(swimlaneRequirements.kind, 'role'), eq(swimlaneRequirements.isRequired, true)))
+      .orderBy(asc(swimlaneRequirements.position));
+    const producer = reqRows.find((r) => r.responsibility == null || r.responsibility === 'owner' || r.responsibility === 'contributor');
+    if (producer && !(await isAgentRefRoleCapable(db, args.tenantId, assignedAgentRef, producer.ref))) {
+      ownerFallbackRef = null;
+    }
+  }
+
+  const agents = withOwnerAgentFallback(laneAgents, { agentRef: ownerFallbackRef });
   const decision = decideLaneAutoRun(agents, gate);
   // The agent a manual Run-now would use: the same pick, but gate-blind (a human
   // click overrides a 'human' gate). decideLaneAutoRun(_, 'auto') never returns a

@@ -206,7 +206,7 @@ export async function learnFromPersistedTurns(
   schedule: (p: Promise<unknown>) => void,
 ): Promise<BrainLearnOutcome> {
   const gate: BrainLearnGate = await evaluateBrainLearnGate(env, db, chatId, tenantId, inserted).catch(
-    () => ({ outcome: { learned: false, version: 0, reason: null }, projectId: null, assistant: null }),
+    () => ({ outcome: { learned: false, version: 0, reason: null }, projectId: null, contributedProjectIds: [], assistant: null }),
   );
   schedule(dispatchBrainLearn(env, db, chatId, tenantId, inserted, gate).catch(() => { /* never fail the write */ }));
   return gate.outcome;
