@@ -170,11 +170,10 @@ export function Top10AttentionItems({ projectId }: { projectId: number }) {
     const displayItems = items.slice(0, MAX_ITEMS);
     return (
       <div className="attention-list">
-        {displayItems.map((item, index) => (
+        {displayItems.map((item) => (
           <RenderedItem
             key={item.id}
             item={item}
-            isFirst={index === 0}
             isLoading={false}
           />
         ))}
