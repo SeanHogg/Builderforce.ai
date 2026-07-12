@@ -6,6 +6,8 @@ import { TrendLineChart } from "./TrendLineChart";
 import { FiltersBar } from "./FiltersBar";
 import { BugTable } from "./BugTable";
 import { useQualityData } from "../../hooks/useQualityData";
+import { useAllBugs } from "../../hooks/useAllBugs";
+import { exportBugSummary } from "../../utils/exports";
 import { updateUrlFilters } from "../../utils/filters";
 import "./index.css";
 
@@ -22,22 +24,17 @@ export function QualityDashboardView({ initialFilter }: QualityDashboardViewProp
     updateUrlFilters(next);
   }, []);
 
-  const {
-    bugCountSummary,
-    trendData,
-    severityBreakdown,
-    bugList,
-    loading,
-    lastSynced,
-    syncing,
-    syncError,
-    sync: handleSync,
-    clearSyncError,
-  } = useQualityData(filter);
+  const { bugCountSummary, trendData, severityBreakdown, loading, lastSynced, syncing, syncError, sync: handleSync, clearSyncError } = useQualityData(filter);
+  const { allBugs } = useAllBugs(filter);
 
   const handleSyncClick = () => {
     clearSyncError();
     handleSync();
+  };
+
+  const handleExportPDF = async () => {
+    if (!bugCountSummary) return;
+    await exportBugSummary(filter, bugCountSummary, trendData);
   };
 
   const isStale = useMemo(() => {
@@ -135,10 +132,17 @@ export function QualityDashboardView({ initialFilter }: QualityDashboardViewProp
           />
         </section>
 
-        {/* Bug Table */}
+        {/* Bug List */}
         <section className="dashboard-section table-section">
-          <h2>Bug List</h2>
-          <BugTable bugs={bugList?.bugs ?? []} loading={syncing} />
+          <div className="table-row">
+            <h2>Bug List</h2>
+            <div className="table-actions">
+              <button onClick={async () => exportBugSummary(filter, bugCountSummary, trendData)}>
+                Export PDF
+              </button>
+            </div>
+          </div>
+          <BugTable />
         </section>
       </div>
     </div>
