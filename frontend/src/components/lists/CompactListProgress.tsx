@@ -309,9 +309,9 @@ const skeletonLabel: CSSProperties = {
 
 const skeletonBar: CSSProperties = {
   flex: '1 1 auto',
-  height: PROGRESS_BAR_HEIGHT,
+  height: BAR_HEIGHT,
   minWidth: '80px',
-  borderRadius: PROGRESS_BAR_HEIGHT,
+  borderRadius: '999px',
   background: 'var(--surface-muted, rgba(148, 163, 184, 0.25))',
 };
 
