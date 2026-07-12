@@ -134,3 +134,39 @@ export interface DigestTemplate {
 
 /** Distribution method type */
 export type DistributionMethod = 'email' | 'slack' | 'both';
+
+/** Priority metrics type for query results */
+export interface PriorityMetrics {
+  totalApproved: number;
+  pendingReview: number;
+  totalAssigned: number;
+}
+
+/** Sign-off metrics type for query results */
+export interface SignOffMetrics {
+  open: number;
+  pending: number;
+  overdue: number;
+  lastSignOffDate: string;
+}
+
+/** Conflict metrics type for query results */
+export interface ConflictMetrics {
+  active: number;
+  thisWeek: number;
+  types: string[];
+}
+
+/** Escalation metrics type for query results */
+export interface EscalationMetrics {
+  overdue: number;
+  pending: number;
+  thisMonth: number;
+}
+
+/** Union type for all metric types */
+export type MetricsSummaryType =
+  | PriorityMetrics
+  | SignOffMetrics
+  | ConflictMetrics
+  | EscalationMetrics;
