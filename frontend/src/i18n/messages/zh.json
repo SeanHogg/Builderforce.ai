@@ -5697,6 +5697,7 @@
         "already_running": "已在运行",
         "human_gate": "等待人工批准",
         "capability_mismatch": "智能体缺少所需技能",
+        "run_cap_exhausted": "失败次数过多——已暂停以待人工检查",
         "no_agent": "未分配智能体",
         "no_board": "未配置看板",
         "no_lane": "泳道未配置",

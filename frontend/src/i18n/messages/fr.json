@@ -5697,6 +5697,7 @@
         "already_running": "Déjà en cours",
         "human_gate": "En attente d'approbation",
         "capability_mismatch": "Compétences requises manquantes",
+        "run_cap_exhausted": "Trop d'exécutions en échec — en pause pour révision",
         "no_agent": "Aucun agent assigné",
         "no_board": "Aucun tableau configuré",
         "no_lane": "Voie non configurée",
