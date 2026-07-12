@@ -211,6 +211,14 @@ import { errorHandler }   from './presentation/middleware/errorHandler';
 import { rateLimitMiddleware } from './presentation/middleware/rateLimitMiddleware';
 import { emulationMiddleware } from './presentation/middleware/emulationMiddleware';
 
+/**
+ * Shared display-header/outcome-id generation. Returns a stable, traceable header.
+ * Can be used from index.ts or other route modules.
+ */
+const buildDisplayHeader = (packageId: string, outcomeName: string): string => {
+  return `${packageId}/${outcomeName}`;
+};
+
 // Durable Objects (must be re-exported so the Workers runtime can instantiate them)
 export { AgentHostRelayDO } from './infrastructure/relay/AgentHostRelayDO';
 export { SessionRoomDO } from './infrastructure/relay/SessionRoomDO';
