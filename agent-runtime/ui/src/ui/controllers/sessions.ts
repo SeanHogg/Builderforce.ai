@@ -91,6 +91,43 @@ export async function patchSession(
   }
 }
 
+/**
+ * Rename a session with title validation.
+ *
+ * Validates that the title is between 1-100 characters and contains no
+ * forbidden characters (control characters, null bytes).
+ *
+ * @param state - Session management state
+ * @param key - Session key to rename
+ * @param newTitle - New title for the session
+ * @returns true if rename succeeded, false if validation failed
+ */
+export async function renameSession(
+  state: SessionsState,
+  key: string,
+  newTitle: string,
+): Promise<boolean> {
+  // FR3: Title Validation - 1-100 characters
+  const trimmed = newTitle.trim();
+  if (trimmed.length < 1 || trimmed.length > 100) {
+    state.sessionsError =
+      "Title must be between 1 and 100 characters.";
+    return false;
+  }
+
+  // Check for forbidden characters (control characters and null byte)
+  if (/\p{C}/u.test(trimmed)) {
+    state.sessionsError =
+      "Title cannot contain control characters.";
+    return false;
+  }
+
+  // Phone FAX: Update the session label via backend
+  await patchSession(state, key, { label: trimmed });
+  state.sessionsError = null;
+  return true;
+}
+
 export async function deleteSession(state: SessionsState, key: string): Promise<boolean> {
   if (!state.client || !state.connected) {
     return false;
