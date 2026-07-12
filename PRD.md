@@ -106,6 +106,56 @@ This initiative covers the design and implementation of a reusable compact list 
 - **Custom theming** beyond the existing design token system
 - **Mobile-native** (iOS/Android) implementations; scope is limited to the web UI
 
+## Usage
+
+```tsx
+import { CompactListProgress, ProgressItem, ValueFormat, STATUS_LABELS } from './lists';
+
+// Example: progress_array drop (aligns with qlist API shape)
+interface TaskWithProgress extends ProgressItem {
+  // optional extra fields (e.g. description) are ignored by this component
+}
+
+const data: ProgressItem[] = [
+  { id: '1', label: 'Background task', completed: 5, total: 10, status: 'in_progress' },
+  { id: '2', label: 'Long task name that exceeds available width without any ellipsis', completed: 8, total: 8, status: 'completed' },
+  { id: '3', label:  'Draft', completed: 0, total: 10, status: 'blocked' },
+];
+
+// Default: fraction `x/y` per item (output axis), label truncates (FR-1/FC-2/FR-3/FR-7)
+<CompactListProgress items={data} />
+
+// With percent value column (`70%`), sorted descending, compact proportions (FR-2/FR-5/FR-3)
+<CompactListProgress
+  items={data}
+  valueFormat="percent"
+  sortBy="progress_desc"
+  emptyText="No items"
+  aria-label="Task progress"
+/>
+
+// A compact list view for a Kanban board (dummy data scoped to the current board scope)
+const boardData: ProgressItem[] = data; // same structure; row height fits 40px (FR-3)
+
+// A compact list view for a project’s milestone breakdown (same shape)
+const milestoneData: ProgressItem[] = data; // no transformation needed — component is domain-agnostic (FR-8)
+```
+
+Notes:
+- The component never writes to the prop: reads only. Value column output is either fraction (`5/10`) or percent (`50%`) via `valueFormat='fraction'|'percent'` (FR-2).
+- For AC-12 targets, integrate the same data shape at Kanban board lists and project milestone lists without data-layer changes.
+
+### Design Checklist
+
+- FR-1 (compact list, progress bars, values, status) — data-sensitive, enabling inline progression in list views.
+- FR-2 (binding, percent & clamping, total=0 handling) — validated reachable via `toPercent` and `formatValue`.
+- FR-3 (max 40px rows, 6px bars, truncation, no horizontal scroll) — styles tightened; label flexible to shrink (flex: 1 1 40%, minWidth 0) to prevent overflow at 320px (AC-5/AC-10).
+- FR-6 (empty—show default text, loading—3 skeleton rows) — `aria-busy="true"` and distinct skeleton styles.
+- FR-7 (ARIA, no colour alone, keyboard nav) — added `STATUS_LABELS` and `STATUS_ICONS` to badges; progress bars have aria-valuenow/min/max; rows have `tabIndex={0}`.
+- FR-8 (self-contained, domain-agnostic) — no data-domain references.
+
+---
+
 ## Requirements
 
 _Owned by the business-analyst — to be authored._
