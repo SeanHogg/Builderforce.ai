@@ -2184,8 +2184,11 @@ const CATALOG: BuiltinTool[] = [
   },
 
   // ---- Kanban: role sign-off (the reviewer round-trip, first-class for agents) ----
-  { tool: 'kanban.signoff', mutates: true, description: 'Record a role SIGN-OFF on a ticket as a reviewer acting AS a role (satisfies a lane\'s role/review requirement so the audit clears and the swimlane can advance). verdict "approved" (default) or "changes_requested". Pass laneKey to scope the sign-off to a lane; memberKind defaults to "agent" (you), memberRef to your agent id.', parameters: obj({ taskId: N, roleKey: S, laneKey: S, verdict: { type: 'string', enum: ['approved', 'changes_requested'] }, summary: S, memberRef: S }, ['taskId', 'roleKey']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${num(a.taskId)}/signoff`, { roleKey: str(a.roleKey), laneKey: a.laneKey != null ? str(a.laneKey) : undefined, verdict: a.verdict === 'changes_requested' ? 'changes_requested' : 'approved', summary: a.summary != null ? str(a.summary) : undefined, memberKind: 'agent', memberRef: a.memberRef != null ? str(a.memberRef) : (ctx.userId ?? undefined) }) },
+  { tool: 'kanban.signoff', mutates: true, description: 'Record a role SIGN-OFF on a ticket as a reviewer acting AS a role (satisfies a lane\'s role/review requirement so the audit clears and the swimlane can advance). verdict "approved" (default), "changes_requested", "waived", or "delegated" (waive/delegate need a reason). ALWAYS pass `contribution` linking the actual work (executionId, prUrl, diffFiles, prdRevision, toolRunId) — an approval with no linked contribution is itself an audit finding. memberKind defaults to "agent" (you), memberRef to your agent id.', parameters: obj({ taskId: N, roleKey: S, laneKey: S, verdict: { type: 'string', enum: ['approved', 'changes_requested', 'waived', 'delegated'] }, summary: S, memberRef: S, waiveReason: S, contribution: { type: 'object' } }, ['taskId', 'roleKey']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${num(a.taskId)}/signoff`, { roleKey: str(a.roleKey), laneKey: a.laneKey != null ? str(a.laneKey) : undefined, verdict: ['approved', 'changes_requested', 'waived', 'delegated'].includes(String(a.verdict)) ? str(a.verdict) : 'approved', summary: a.summary != null ? str(a.summary) : undefined, waiveReason: a.waiveReason != null ? str(a.waiveReason) : undefined, contribution: a.contribution != null && typeof a.contribution === 'object' ? a.contribution : undefined, memberKind: 'agent', memberRef: a.memberRef != null ? str(a.memberRef) : (ctx.userId ?? undefined) }) },
   { tool: 'kanban.audit', mutates: false, description: 'Get a ticket\'s role/diagnostic coverage audit (which required lane checks are satisfied vs missing).', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/kanban/tasks/${num(a.taskId)}/audit`) },
+  { tool: 'kanban.participants', mutates: false, description: 'Get a ticket\'s Participation Manifest — every required role, its resolved assignee, and its state (pending/assigned/in_progress/completed/changes_requested/waived/unstaffed). An `unstaffed` row is a RESOURCE GAP (no capable resource available).', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/kanban/tasks/${num(a.taskId)}/participants`) },
+  { tool: 'kanban.accountability', mutates: false, description: 'Get a ticket\'s Accountability Report — per required role: Who signed, When, Verdict, Comments, and the linked Contribution — plus gaps (unstaffed/unsigned roles, sign-offs with no contribution, waivers) and %-complete.', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/kanban/tasks/${num(a.taskId)}/accountability`) },
+  { tool: 'kanban.assess_resource', mutates: true, description: 'RESOURCE ASSESSMENT — add a role the ticket needs beyond the template (e.g. designer, security). It becomes a required manifest participant that must execute + sign off; if no capable resource is available it is flagged as a resource gap. responsibility defaults to "owner".', parameters: obj({ taskId: N, roleKey: S, responsibility: { type: 'string', enum: ['owner', 'reviewer', 'contributor'] }, stageKey: S, note: S }, ['taskId', 'roleKey']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${num(a.taskId)}/participants`, { roleKey: str(a.roleKey), responsibility: a.responsibility != null ? str(a.responsibility) : undefined, stageKey: a.stageKey != null ? str(a.stageKey) : undefined, note: a.note != null ? str(a.note) : undefined }) },
 
   // ---- Workflow DEFINITIONS: write/run/import + computed reads not backed by a plain table op ----
   { tool: 'workflows.create', mutates: true, description: 'Create a workflow definition.', parameters: obj({ name: S, description: S, projectId: N }, ['name']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/workflow-definitions', { name: str(a.name), description: a.description != null ? str(a.description) : undefined, projectId: a.projectId != null ? num(a.projectId) : undefined }) },
@@ -2530,7 +2533,7 @@ export function resolveCloudAgentPlatformTool(advertised: string): string | unde
  *  dotted tool id (still readable, e.g. "portfolios.create"). */
 const MCP_VERB: Record<string, string> = {
   'tasks.create': 'task.created', 'tasks.update': 'task.updated', 'tasks.move': 'task.moved', 'tasks.delete': 'task.deleted',
-  'kanban.signoff': 'ticket.signed_off',
+  // kanban.signoff / kanban.assess_resource self-emit at their HTTP routes (see SELF_EMITTING_TOOLS).
   'objectives.create': 'okr.objective_created', 'objectives.update': 'okr.objective_updated', 'objectives.delete': 'okr.objective_deleted',
   'key_results.create': 'okr.kr_created',
   'marketplace.publish_ticket': 'gig.published', 'marketplace.unpublish_ticket': 'gig.unpublished',
@@ -2542,7 +2545,12 @@ const MCP_VERB: Record<string, string> = {
 /** Best-effort audit emit for a mutating built-in tool — the ONE place every
  *  MCP-/Brain-/agent-driven mutation (OKR, portfolio, brain-created ticket, …)
  *  reaches the unified activity log. Never throws. */
+/** Tools whose replayed HTTP route now records its OWN (richer, role-attributed)
+ *  activity — skip the generic wrapper emit for them to avoid a double entry. */
+const SELF_EMITTING_TOOLS = new Set(['kanban.signoff', 'kanban.assess_resource']);
+
 async function emitBuiltinToolActivity(env: Env, db: Db, tenantId: number, userId: string | null | undefined, tool: string, result: unknown): Promise<void> {
+  if (SELF_EMITTING_TOOLS.has(tool)) return;
   try {
     const actor = userId ? await resolveHumanActor(env, db, tenantId, userId) : SYSTEM_ACTOR;
     const r = (result && typeof result === 'object') ? (result as Record<string, unknown>) : null;

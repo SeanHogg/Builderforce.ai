@@ -37,6 +37,15 @@ function roleName(key: string): string {
 }
 
 const versionKey = (taskId: number) => `participants:task:${taskId}`;
+const projectVersionKey = (projectId: number) => `participants:project:${projectId}`;
+
+/** Compact per-ticket progress for the board — the %-complete rollup chip. */
+export interface ParticipantsSummaryRow {
+  taskId: number;
+  completed: number;
+  required: number;
+  percent: number;
+}
 
 export type ParticipantState =
   | 'pending' | 'assigned' | 'in_progress' | 'completed' | 'changes_requested' | 'waived' | 'skipped' | 'unstaffed';
@@ -118,6 +127,42 @@ export class TicketParticipantsService {
 
   private async bump(env: Env, taskId: number): Promise<void> {
     await bumpCacheVersion(env, versionKey(taskId));
+    const projectId = await this.taskProjectId(taskId);
+    if (projectId != null) await bumpCacheVersion(env, projectVersionKey(projectId));
+  }
+
+  /** Invalidate a ticket's cached manifest/accountability + its project summary. */
+  async invalidate(env: Env, taskId: number): Promise<void> {
+    await this.bump(env, taskId);
+  }
+
+  /**
+   * Per-ticket participation progress for a whole project's board — the %-complete
+   * chip. Cached on the project version token (bumped on any participant write).
+   * Only tickets with a materialized manifest appear.
+   */
+  async projectSummary(env: Env, tenantId: number, projectId: number): Promise<ParticipantsSummaryRow[]> {
+    const version = await getCacheVersion(env, projectVersionKey(projectId));
+    return getOrSetCached(env, `participants:summary:project:${projectId}:v:${version}`, async () => {
+      const rows = await this.db
+        .select({ taskId: ticketParticipants.taskId, required: ticketParticipants.required, state: ticketParticipants.state })
+        .from(ticketParticipants)
+        .innerJoin(tasks, eq(tasks.id, ticketParticipants.taskId))
+        .where(and(eq(ticketParticipants.tenantId, tenantId), eq(tasks.projectId, projectId)));
+      const done = new Set<ParticipantState>(['completed', 'waived', 'skipped']);
+      const byTask = new Map<number, { completed: number; required: number }>();
+      for (const r of rows) {
+        if (!r.required) continue;
+        const agg = byTask.get(r.taskId) ?? { completed: 0, required: 0 };
+        agg.required += 1;
+        if (done.has(r.state as ParticipantState)) agg.completed += 1;
+        byTask.set(r.taskId, agg);
+      }
+      return [...byTask.entries()].map(([taskId, a]) => ({
+        taskId, completed: a.completed, required: a.required,
+        percent: a.required === 0 ? 100 : Math.round((a.completed / a.required) * 100),
+      }));
+    });
   }
 
   private async taskProjectId(taskId: number): Promise<number | null> {

@@ -635,6 +635,19 @@ function Chat({ init }: { init: InitData }) {
           method: 'POST',
           body: JSON.stringify({ query }),
         }).catch(() => null),
+      // Memory-first: BEFORE the paid model, ask the project's own memory (exact-repeat
+      // Q&A cache, then its Evermind SSM). A substantive hit short-circuits the LLM.
+      answer: (query: string) =>
+        req<{ answer: { text: string; source: 'qa-cache' | 'evermind'; evermindVersion?: number } | null }>(
+          `/api/projects/${evermindProjectId}/answer?query=${encodeURIComponent(query)}`,
+        ).then((r) => r?.answer ?? null).catch(() => null),
+      // Remember a fresh (question → answer) so the next exact repeat is free.
+      cacheAnswer: (query: string, answer: string) => {
+        void req(`/api/projects/${evermindProjectId}/answer`, {
+          method: 'POST',
+          body: JSON.stringify({ question: query, answer }),
+        }).catch(() => { /* best-effort */ });
+      },
     };
   }, [evermindProjectId, init.baseUrl]);
 

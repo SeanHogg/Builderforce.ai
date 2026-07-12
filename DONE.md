@@ -4,6 +4,28 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-12 — Coordinated Role Participation Phases 1–2 (role-aware assignment + participation manifest + accountability record) — mig 0334
+
+Implements Phases 1–2 of `PRD-coordinated-role-participation.md` end-to-end (the deepest #467 fix + the operator's headline accountability surface), plus the operator's two live refinements (dynamic **Resource Assessment** and **child-task %-complete rollup**).
+
+**Phase 1 — role-aware assignment (stops the #467 class).**
+- First-class agent↔role capability: `ide_agents.role_keys` (JSONB, mig 0334) + new `api/src/application/kanban/roleCapability.ts` — `agentRoleKeys` (explicit `role_keys` → `builtin_kind`-derived `BUILTIN_KIND_ROLE_KEYS` → fuzzy title/skill fallback), `agentIsRoleCapable`, `resolveRoleCapableAgents` (cached, precedence pin→capability), `ROLE_PERSONA_ALIASES` (deterministic role→runtime-persona map), `producerRoleForActionType`, `humanIsRoleCapable`, `resolveMemberDisplayName`.
+- `recommendTopAssignee` is now role-aware (`{ roleKey }` option restricts to role-capable agents/humans; returns null rather than mis-assign). Manager assign step derives the producer role from the ticket's `action_type`.
+- **Owner-fallback guardrail** in `evaluateTaskAutoRun` (`evaluateAutoRun.ts`): a role-incapable owner (a PM) can no longer be the auto-run fallback executor on a producer stage — the exact Ada/#467 mechanism. Regression proven in `roleCapability.test.ts` (a `product_manager` agent is NOT developer-capable).
+- 4 new built-in roles: `team-lead`, `validator`, `product-owner`, `designer` (`roleCatalog.ts`).
+
+**Phase 2 — participation manifest + accountability record.**
+- New `ticket_participants` table (mig 0334) + `TicketParticipantsService` (`ticketParticipants.ts`): derives the per-ticket manifest from board requirements, resolves each slot's assignee by capability, syncs per-participant state (pending/assigned/in_progress/completed/changes_requested/waived/unstaffed) from the sign-off ledger + child-task status, all version-token cached.
+- Enriched **append-only** `ticket_role_signoffs` (mig 0334: `member_name`, `contribution` JSONB, `waive_reason`; verdict widened to approved|changes_requested|waived|delegated) — the immutable accountability record capturing Who/When/Verdict/Comments/Contribution.
+- **Accountability Report** read model + `GET /api/kanban/tasks/:id/accountability` (per-role Who/When/Verdict/Comments/Contribution + gaps: unstaffed/unsigned/no-contribution/waived + %-complete). `GET /participants`, `GET /projects/:id/participants-summary` (board chip), `POST /participants` (assess), `POST /participants/materialize`, `DELETE /participants/:id`.
+- **Sign-off route hardened**: default-deny **RBAC** (only role-capable members may sign off as a role — AC-6, 403 otherwise), emits `activity_log` (`ticket.role.completed`/`ticket.signed_off`/`ticket.resource.assessed`) on the HTTP path (previously MCP-only), accepts contribution/evidence + waive reason, and keeps the manifest in step.
+- **MCP**: `kanban.participants`, `kanban.accountability`, `kanban.assess_resource` added; `kanban.signoff` gains `contribution`/`waived`/`delegated`; double-emit avoided via `SELF_EMITTING_TOOLS`.
+- **Resource Assessment** (operator refinement): `addParticipant` adds a needed role (designer/security/…) beyond the template; an unresolved add lands `unstaffed` = an audited, blocking **resource gap** surfaced in the report.
+- **Child-task %-complete rollup** (operator refinement): `materializeChildTasks` spawns one child task (`parent_task_id`) per resolved participant via injected `TaskService`; parent %-complete rolls up from participant/child completion.
+- **Frontend** (localized 5 catalogs, dark/light, responsive): new `AccountabilityTab.tsx` (Sign-off & Accountability table + gaps + %-bar + Resource-Assessment control + materialize) wired as a ticket-drawer tab in `TaskMgmtContent.tsx`; board card `X/Y` participants chip; `kanbanApi.accountability/participants/assessResource/materializeParticipants/participantsSummary` + `kanban.ts` types; `accountability` + `board.audit.participantsTitle` keys in en/zh/es/fr/de.
+
+Verification: api `tsgo` clean, frontend `tsc` clean, schema-drift + migration guards pass, `vitest` green (roleCapability 9, auditRules + evaluateAutoRun 23). Remaining Phases 3–5 (producer-gate dispatch, Coordinator tick + assignee→executor removal, `actAsRole` attribution, approvals↔sign-off bridge, evidence predicates/quorum/ticket-type templates, structured PRD sections, incident RCA linkage) tracked in ROADMAP.
+
 ## ✅ RESOLVED 2026-07-12 — `search_code` truncation loop + BYO-coder misclassification + auto-run circuit-breaker + scope-helper consolidation
 
 Three linked fixes from the task #467 triage (a coding ticket that auto-ran 30+ times, all failing):

@@ -5715,7 +5715,8 @@
     },
     "audit": {
       "flagged": "Markiert",
-      "flaggedTitle": "Dieses Ticket hat eine erforderliche Rolle oder Diagnose übersprungen – Prüfung nötig"
+      "flaggedTitle": "Dieses Ticket hat eine erforderliche Rolle oder Diagnose übersprungen – Prüfung nötig",
+      "participantsTitle": "Beteiligung erforderlicher Rollen: abgeschlossen von erforderlich"
     }
   },
   "projectsContent": {
@@ -6902,6 +6903,7 @@
     "deleteTask": "Aufgabe löschen",
     "tabAgent": "Agent / Fähigkeiten",
     "tabPrd": "PRD",
+    "tabAccountability": "Freigaben & Verantwortlichkeit",
     "changeStatusTitle": "Zum Ändern des Status klicken",
     "changePriorityTitle": "Zum Ändern der Priorität klicken",
     "viewCodeChangesTitle": "Die Code-Änderungen auf GitHub ansehen",
@@ -9350,5 +9352,62 @@
     "statusError": "Fehler",
     "errFailed": "Einladung fehlgeschlagen",
     "laterHint": "Du kannst Teammitglieder auch später über <link>Team</link> einladen."
+  },
+  "accountability": {
+    "loading": "Verantwortlichkeit wird geladen…",
+    "signedHeader": "{done} von {total} erforderlichen Rollen haben freigegeben",
+    "unassigned": "Nicht zugewiesen",
+    "addedBadge": "hinzugefügt",
+    "gaps": {
+      "title": "{count} Verantwortlichkeitslücke(n)",
+      "kind": {
+        "unsigned": "Nicht freigegeben",
+        "unstaffed": "Ressourcenlücke",
+        "no_contribution": "Kein Beitrag",
+        "waived": "Erlassen",
+        "changes_requested": "Änderungen angefordert"
+      }
+    },
+    "table": {
+      "title": "Freigaben & Verantwortlichkeit",
+      "role": "Rolle",
+      "who": "Wer",
+      "state": "Status",
+      "verdict": "Urteil",
+      "when": "Wann",
+      "comments": "Kommentare",
+      "contribution": "Beitrag",
+      "empty": "Noch keine erforderlichen Rollen für dieses Ticket."
+    },
+    "verdict": {
+      "approved": "Genehmigt",
+      "changes_requested": "Änderungen angefordert",
+      "waived": "Erlassen",
+      "delegated": "Delegiert"
+    },
+    "state": {
+      "pending": "Ausstehend",
+      "assigned": "Zugewiesen",
+      "in_progress": "In Bearbeitung",
+      "completed": "Abgeschlossen",
+      "changes_requested": "Änderungen angefordert",
+      "waived": "Erlassen",
+      "skipped": "Übersprungen",
+      "unstaffed": "Unbesetzt"
+    },
+    "responsibility": {
+      "owner": "Verantwortlich",
+      "reviewer": "Prüfer",
+      "contributor": "Mitwirkender"
+    },
+    "assess": {
+      "title": "Ressourcenbewertung",
+      "help": "Fügen Sie eine Rolle hinzu, die dieses Ticket über die Vorlage hinaus benötigt (z. B. Designer, Sicherheitsingenieur). Ist keine geeignete Ressource verfügbar, wird dies als Ressourcenlücke markiert.",
+      "rolePlaceholder": "Rolle auswählen…",
+      "notePlaceholder": "Warum wird diese Rolle benötigt? (optional)",
+      "add": "Erforderliche Rolle hinzufügen",
+      "materialize": "Arbeitspakete erstellen",
+      "materializeHelp": "Erstellt pro Ressource eine Unteraufgabe, sodass der Fortschritt zu diesem Ticket zusammenläuft."
+    }
   }
 }

@@ -23,8 +23,9 @@ interface BuiltinAgentSeed {
 }
 
 /** The seeded built-in workforce — kept in sync with migrations 0271 (Validator),
- *  0291 (Security), 0293 (Product Manager + Designer) and 0326 (Incident Manager) so
- *  an existing-tenant backfill and a new-tenant provision agree. */
+ *  0291 (Security), 0293 (Product Manager + Designer), 0326 (Incident Manager) and
+ *  0335 (CTO + Product Owner) so an existing-tenant backfill and a new-tenant provision
+ *  agree. */
 const BUILTIN_AGENTS: BuiltinAgentSeed[] = [
   {
     kind: 'validator',
@@ -65,6 +66,22 @@ const BUILTIN_AGENTS: BuiltinAgentSeed[] = [
     title: 'Incident Manager — help-desk triage, on-call paging & escalation',
     bio: 'Runs the help desk and the first minutes of incident response. Reads inbound support tickets (Freshdesk / Freshservice), works out which system the issue pertains to, and for anything that reads as an incident opens a first-class incident — a tracked board ticket bridged to the incident record with a severity. It then pages the right on-call list, opens an on-call war-room chat, posts status updates (in-app + MS Teams), and escalates to the next on-call tier and business contacts on a timer until someone acknowledges.',
     skills: ['incident-response', 'triage', 'on-call', 'itsm', 'escalation', 'help-desk'],
+  },
+  {
+    kind: 'cto',
+    idPrefix: 'cto-t',
+    name: 'CTO',
+    title: 'CTO — technical feasibility, architecture, effort & risk for pre-sales',
+    bio: "Assesses an RFP from the build side: judges technical feasibility against the tenant's real capabilities, proposes an architecture and phase plan, estimates build effort and agentic cost, and surfaces the key delivery risks and dependencies so the proposal is grounded, not aspirational.",
+    skills: ['architecture', 'feasibility', 'estimation', 'risk-analysis', 'technical-strategy'],
+  },
+  {
+    kind: 'product_owner',
+    idPrefix: 'product-owner-t',
+    name: 'Product Owner',
+    title: 'Product Owner — scope, value framing, roadmap & win themes for pre-sales',
+    bio: 'Shapes the RFP response from the product side: frames the scope and value proposition against the buyer\'s stated needs, sequences the roadmap into phases and milestones, and writes the executive summary and win themes that co-brand the responder with the requesting organisation.',
+    skills: ['product-management', 'scoping', 'value-proposition', 'roadmapping', 'proposal-writing'],
   },
 ];
 

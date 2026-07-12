@@ -29,6 +29,7 @@ import type { Env, HonoEnv } from '../../env';
 import { seedProjectEvermindFromPublished } from '../../application/llm/evermindRecipes';
 import {
   getProjectEvermindHead,
+  resolveEvermindTargets,
   seedProjectEvermind,
   setProjectEvermindMode,
   setProjectEvermindInference,
@@ -63,6 +64,28 @@ async function headCore(env: Env, db: Db, tenantId: number, projectId: number): 
   if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   const head = await getProjectEvermindHead(env, db, tenantId, projectId);
   return json({ version: head.version, ref: head.ref, mode: head.mode, name: head.name, contributions: head.contributions, inferenceEnabled: head.inferenceEnabled, teacherModel: head.teacherModel, lastLearnedAt: head.lastLearnedAt, seeded: head.version > 0 });
+}
+
+/**
+ * List ALL Everminds this project targets — its own head plus the heads of the IDE
+ * builds grouped under it (`resolveEvermindTargets`). The one enumeration a surface uses
+ * to show/triage "which Everminds does this project have"; each carries its id + ref +
+ * version so a fan-out is legible. Cached via the resolver.
+ */
+async function targetsCore(env: Env, db: Db, tenantId: number, projectId: number): Promise<Response> {
+  if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
+  const heads = await resolveEvermindTargets(env, db, tenantId, projectId);
+  return json({
+    targets: heads.map((h) => ({
+      projectId: h.projectId,
+      ref: h.ref,
+      version: h.version,
+      name: h.name,
+      mode: h.mode,
+      inferenceEnabled: h.inferenceEnabled,
+      seeded: h.version > 0,
+    })),
+  });
 }
 
 /** Read the inspection console payload: head summary + queued depth + recent-learned ring. */
@@ -155,6 +178,7 @@ export function createProjectEvermindRoutes(db: Db): Hono<HonoEnv> {
   const t = (c: Context) => c.get('tenantId') as number;
 
   router.get('/:projectId/evermind/head', (c) => headCore(c.env as Env, db, t(c), pid(c)));
+  router.get('/:projectId/evermind/targets', (c) => targetsCore(c.env as Env, db, t(c), pid(c)));
   router.get('/:projectId/evermind/contributions', (c) => contributionsCore(c.env as Env, db, t(c), pid(c)));
   router.post('/:projectId/evermind/validate', (c) => validateCore(c.env as Env, db, t(c), pid(c), c));
   router.post('/:projectId/evermind/recall', (c) => recallCore(c.env as Env, db, t(c), pid(c), c));
@@ -317,6 +341,11 @@ export function createProjectEvermindAgentRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = await auth(c);
     if (tenantId == null) return json({ error: 'unauthorized' }, 401);
     return headCore(c.env as Env, db, tenantId, pid(c));
+  });
+  router.get('/:projectId/evermind/targets', async (c) => {
+    const tenantId = await auth(c);
+    if (tenantId == null) return json({ error: 'unauthorized' }, 401);
+    return targetsCore(c.env as Env, db, tenantId, pid(c));
   });
   router.get('/:projectId/evermind/model', async (c) => {
     const tenantId = await auth(c);

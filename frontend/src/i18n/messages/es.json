@@ -5715,7 +5715,8 @@
     },
     "audit": {
       "flagged": "Marcado",
-      "flaggedTitle": "Este ticket omitió un rol o diagnóstico requerido: requiere revisión"
+      "flaggedTitle": "Este ticket omitió un rol o diagnóstico requerido: requiere revisión",
+      "participantsTitle": "Participación de roles requeridos: completados de requeridos"
     }
   },
   "projectsContent": {
@@ -6902,6 +6903,7 @@
     "deleteTask": "Eliminar tarea",
     "tabAgent": "Agente / Capacidades",
     "tabPrd": "PRD",
+    "tabAccountability": "Aprobaciones y responsabilidad",
     "changeStatusTitle": "Haz clic para cambiar el estado",
     "changePriorityTitle": "Haz clic para cambiar la prioridad",
     "viewCodeChangesTitle": "Ver los cambios de código en GitHub",
@@ -9350,5 +9352,62 @@
     "statusError": "Error",
     "errFailed": "No se pudo invitar",
     "laterHint": "También puedes invitar a compañeros más tarde desde <link>Equipo</link>."
+  },
+  "accountability": {
+    "loading": "Cargando responsabilidad…",
+    "signedHeader": "{done} de {total} roles requeridos han aprobado",
+    "unassigned": "Sin asignar",
+    "addedBadge": "añadido",
+    "gaps": {
+      "title": "{count} brecha(s) de responsabilidad",
+      "kind": {
+        "unsigned": "Sin aprobar",
+        "unstaffed": "Falta de recurso",
+        "no_contribution": "Sin contribución",
+        "waived": "Exento",
+        "changes_requested": "Cambios solicitados"
+      }
+    },
+    "table": {
+      "title": "Aprobaciones y responsabilidad",
+      "role": "Rol",
+      "who": "Quién",
+      "state": "Estado",
+      "verdict": "Veredicto",
+      "when": "Cuándo",
+      "comments": "Comentarios",
+      "contribution": "Contribución",
+      "empty": "Aún no hay roles requeridos para este ticket."
+    },
+    "verdict": {
+      "approved": "Aprobado",
+      "changes_requested": "Cambios solicitados",
+      "waived": "Exento",
+      "delegated": "Delegado"
+    },
+    "state": {
+      "pending": "Pendiente",
+      "assigned": "Asignado",
+      "in_progress": "En progreso",
+      "completed": "Completado",
+      "changes_requested": "Cambios solicitados",
+      "waived": "Exento",
+      "skipped": "Omitido",
+      "unstaffed": "Sin personal"
+    },
+    "responsibility": {
+      "owner": "Responsable",
+      "reviewer": "Revisor",
+      "contributor": "Colaborador"
+    },
+    "assess": {
+      "title": "Evaluación de recursos",
+      "help": "Añade un rol que este ticket necesita más allá de la plantilla (p. ej., diseñador, ingeniero de seguridad). Si no hay un recurso capaz disponible, se marca como brecha de recurso.",
+      "rolePlaceholder": "Selecciona un rol…",
+      "notePlaceholder": "¿Por qué se necesita este rol? (opcional)",
+      "add": "Añadir rol requerido",
+      "materialize": "Crear elementos de trabajo",
+      "materializeHelp": "Genera una subtarea por recurso para que el progreso se agregue a este ticket."
+    }
   }
 }
