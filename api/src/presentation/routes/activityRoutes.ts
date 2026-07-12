@@ -385,6 +385,7 @@ export function createTimecardRoutes(): Hono<HonoEnv> {
 
   // POST /:id/approve — employer approves a submitted timecard (tenant JWT). This
   // ISSUES an invoice (pending) for the billable amount and notifies the worker.
+  // Role guard: only an engagement's client-side admin (tenant owner) may approve.
   router.post('/:id/approve', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
     const actor = c.get('userId') as string;
