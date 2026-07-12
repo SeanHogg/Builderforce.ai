@@ -10,6 +10,7 @@ import {
   TenantId,
   TaskStatus,
   TaskPriority,
+  ProjectStatus,
   asTaskId,
   asProjectId,
   asTenantId,
