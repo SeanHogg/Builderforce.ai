@@ -104,7 +104,7 @@ _Owned by the business-analyst — to be authored._
 
 ## Design
 
-**Decision (Architect, Task #672):** All documentation updates will target the canonical schema definitions and reference pages from task #674 (basis-payload.schema.json) and integration guide skeleton documented in docs/guides/progress-handling.md (also created in this spread). The design enforces FR-1 (clear K-V glossary entry), FR-2 (scalar constraints in schema), FR-3 (event-coded examples), consistency controls (Fr-5), and sign-offs per AC-7.
+**Decision (Architect, Task #672):** All documentation updates will target the canonical schema definitions and reference pages documented in docs/guides/progress-handling.md and the canonical schema file docs/api/event-payload.schema.json. The design enforces FR-1 (clear K-V glossary entry), FR-2 (scalar constraints in schema), FR-3 (event-coded examples), consistency controls (Fr-5), and sign-offs per AC-7.
 
 ### Fr-1: Canonical Rule Statement (Prototype)
 
