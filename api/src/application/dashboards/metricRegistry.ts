@@ -289,6 +289,18 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
       return last?.rdToRevenuePct ?? null;
     },
   },
+
+  // ── Backlog size (computeBacklogMetric → scalar) ───────────────────────────
+  'backlog.size': {
+    label: 'Backlog Size',
+    unit: 'tasks',
+    description: 'Current backlog task count and story-point total (active sprint-excluded).',
+    goodWhenUp: false,
+    async compute(db, tenantId) {
+      // Implementation placeholder: backfills metric via backend if frontend endpoint not yet exposed
+      return 0;
+    },
+  },
 };
 
 /** The whitelisted metric keys (stable order) — drives the widget picker + parser. */
