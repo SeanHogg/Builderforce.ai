@@ -1,55 +1,95 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #225
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# PRD: Immediately Actionable Tasks View
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+Team members and project managers lose time triaging backlogs to find work they can start right now. Tasks blocked by dependencies, unresolved decisions, or missing assignments are mixed in with genuinely ready work, forcing repeated manual filtering. The goal is to surface a single, always-current list of tasks that are **ready to start and unassigned**, so any contributor can claim and begin work without further coordination.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+---
 
-## Target users / ICP roles
+## Target Users
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+| Role | Need |
+|---|---|
+| **Individual Contributor (IC)** | Quickly find available work to self-assign without asking a manager |
+| **Team Lead / Engineering Manager** | Identify unassigned ready work to delegate or prioritize |
+| **Scrum Master / Project Coordinator** | Spot bottlenecks where ready work sits unclaimed too long |
+
+---
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This PRD covers the **query logic, display, and interaction model** for the "Immediately Actionable Tasks" view within an existing project/task management system. It assumes tasks, assignments, dependencies, and statuses already exist as data entities in the system.
+
+---
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### FR-1 — Task Eligibility Criteria
+A task appears in the list if and only if **all** of the following are true:
+
+- `status` is one of: `open`, `to-do`, `backlog-ready`, or equivalent "not started" states (configurable per workspace)
+- `assignee` is **null / unassigned**
+- All blocking dependencies have `status = done/closed`
+- The task is not archived or deleted
+- The task is not marked as `on-hold` or `blocked`
+
+### FR-2 — List Display
+- Show task title, project/epic label, priority level, creation date, and estimated effort (if set)
+- Default sort: **priority descending**, then **creation date ascending** (oldest high-priority first)
+- User may re-sort by: priority, creation date, estimated effort, due date
+- Paginate or virtually scroll; show count of total results (e.g., "47 tasks")
+
+### FR-3 — Filtering
+- Filter by: project, team, label/tag, priority, estimated effort range
+- Filters persist per user session; optionally saveable as named views
+
+### FR-4 — Real-Time / Near-Real-Time Updates
+- List refreshes automatically when any task's eligibility status changes (dependency resolved, assignee removed, status changed)
+- Refresh latency ≤ 30 seconds; optimistic UI update acceptable for same-session changes
+
+### FR-5 — Self-Assign Action
+- Each task row exposes a one-click **"Assign to me"** action
+- On click: sets `assignee = current user`, `status = in-progress` (or workspace equivalent), removes task from list immediately
+- Confirmation prompt is optional (workspace setting)
+
+### FR-6 — Task Detail Access
+- Clicking the task title opens the full task detail view without losing list context (slide-over panel or new tab — configurable)
+
+### FR-7 — Empty State
+- When no tasks match criteria, display a contextual empty state: "No unassigned ready tasks right now. Check back later or adjust your filters."
+
+### FR-8 — Notifications / Alerts (Optional Enhancement)
+- Users may subscribe to a digest (daily or real-time) notifying them when new tasks enter the actionable list matching their saved filters
+
+---
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+| # | Criterion |
+|---|---|
+| AC-1 | A task with all dependencies closed, no assignee, and a non-blocked open status appears in the list within 30 seconds of becoming eligible |
+| AC-2 | A task with one or more open blocking dependencies does **not** appear in the list |
+| AC-3 | A task with an assignee does **not** appear in the list |
+| AC-4 | Clicking "Assign to me" assigns the task to the current user, transitions its status, and removes it from the list in the same session without a page reload |
+| AC-5 | The list correctly reflects applied filters; removing all filters restores the full eligible set |
+| AC-6 | Default sort returns highest-priority, oldest tasks at the top |
+| AC-7 | The total task count displayed matches the actual number of records returned by the eligibility query |
+| AC-8 | The view loads initial results in ≤ 2 seconds for lists up to 500 tasks |
+| AC-9 | Empty state message is shown when zero tasks meet the criteria after filters are applied |
+| AC-10 | All eligibility logic is enforced server-side; client-side filtering is additive only |
 
-## Out of scope
+---
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## Out of Scope
+
+- Creating, editing, or deleting tasks from this view
+- Assigning tasks to **other** users (only self-assign)
+- Time tracking or effort logging
+- Capacity planning or workload balancing recommendations
+- Changes to how dependencies, statuses, or priorities are defined or managed
+- Mobile-native (iOS/Android) implementation — web responsive only in this iteration
+- AI-based task recommendation or ranking
+- Integration with external tools (Slack, email notifications beyond FR-8 digest) in this iteration
