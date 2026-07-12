@@ -100,6 +100,7 @@ export class TaskService {
      */
     private readonly recommendChildAssignee?: (
       projectId: number,
+      roleKey?: string,
     ) => Promise<{ memberKind: 'human' | 'cloud_agent' | 'host_agent'; memberRef: string } | null>,
   ) {}
 
@@ -255,7 +256,10 @@ export class TaskService {
       let agentRef = child.assignedAgentRef ?? null;
       let userId = child.assignedUserId ?? null;
       if (this.recommendChildAssignee && hostId == null && !agentRef && !userId) {
-        const pick = await this.recommendChildAssignee(task.projectId as number).catch(() => null);
+        // Role-aware fan-out: pass the child's best-fit producer role (from the
+        // decomposer) so a coding child lands on a developer-capable owner, not the
+        // most-available teammate regardless of role.
+        const pick = await this.recommendChildAssignee(task.projectId as number, child.roleKey ?? undefined).catch(() => null);
         if (pick?.memberKind === 'human') userId = pick.memberRef;
         else if (pick?.memberKind === 'host_agent') hostId = Number(pick.memberRef);
         else if (pick?.memberKind === 'cloud_agent') agentRef = pick.memberRef;

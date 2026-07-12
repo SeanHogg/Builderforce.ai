@@ -156,6 +156,30 @@ Move off a competitor tracker without fear, or just sync data in — a **staged*
 ### Consumption Metering (mig 0218)
 - **Meter on consumption, not visibility** — one framework (`/api/consumption`) reports month-to-date usage for `ai_tokens`, `ingestion` (bytes), and `error_events` against the plan allowance, using the **same accountants the gateway and ingestion gate enforce** — so the "% used" a member sees equals the cap that's enforced. Cached 60s, keyed per tenant + calendar month.
 
+### Coordinated Role Participation & Accountability (mig 0334)
+- **The right role does the work** — first-class agent↔role capability (`ide_agents.role_keys`) drives role-aware assignment: a producer stage resolves the role from the ticket's `action_type` and dispatches a role-capable agent/human, never a mis-assigned one. Stops the "a Product Manager was dispatched to write code" class of failure.
+- **A participation manifest per ticket** — `ticket_participants` derives the required roles from the board's swimlane requirements, resolves each slot by capability, and tracks per-participant state (pending / assigned / in_progress / completed / changes_requested / waived / unstaffed).
+- **An immutable Accountability Report** — an append-only `ticket_role_signoffs` ledger records Who / When / Verdict / Comments / Contribution per role; default-deny RBAC (only role-capable members may sign off as a role); every sign-off emits to the unified activity log. A **Resource Assessment** control adds a needed role beyond the template — an unresolved add surfaces as a blocking resource gap.
+- **Endpoints** — `GET /api/kanban/tasks/:id/accountability`, `/participants`, `POST /participants` (assess) / `/materialize`, plus MCP `kanban.participants` / `kanban.accountability` / `kanban.assess_resource`. Surface: the ticket-drawer **Accountability** tab + a board `X/Y` participants chip.
+
+### Pre-Sales RFP / RFQ Response (mig 0335)
+- **Turn a repo into a proposal** — CTO + Product Owner built-in agents generate a branded, costed proposal from a project's analyzed capabilities: cost / P&L, a phase Gantt, risks, dependencies, and a capability roster matched to the ask.
+- **Co-branded output** — the requester's palette + logo blend with the responder's for a branded, self-contained proposal document (print-to-PDF / download), with freshness-gated grounding (a >5-day-stale scan re-runs the deterministic system audits before answering).
+- **Surface** — a Projects **RFP tab** (list / create) + `/projects/rfp/[id]` detail; `/api/rfp` routes.
+
+### Incident Management & Active Monitoring (mig 0292)
+- **Incidents close the loop** — a Help-Desk / Incident-Manager agent, a Freshdesk connector, on-call rotations, timed escalation, Teams / Slack / email paging, and a per-incident war-room feed. On resolution the RCA is published to Knowledge **and** fed to the project's Evermind, so the workforce learns and stops repeating causes.
+- **A monitoring canvas** — pin heartbeat / HTTP / webhook / metric monitors onto an uploaded architecture diagram; a `*/5` sweep evaluates them and a breach **auto-starts the on-call investigation** (monitor → signal → incident → paging), with reporting on the timeline.
+
+### Meetings & Live Collaboration (mig 0292, 0330)
+- **Video / audio meetings with agents in the room** — mesh WebRTC over a `CeremonyRoomDO` relay; agent attendees speak live via a caption / transcript bridge; recording + transcription produce **AI minutes**. Google / Microsoft calendar sync. Surface: `/meetings`.
+
+### AI Managers — Types & Coaching (mig 0327)
+- **Typed managers tied to the role catalog** — Dev / QA / Service-Desk / DevOps manager types map to `roleCatalog` (custom roles become `role:<key>` types); a human → manager **Coaching Session** carries directive | task modes with expiry / done state, steering how a manager agent runs its reports.
+
+### Memory-First Answering — skip the paid LLM
+- **Answer from the project's own memory before spending a model call** — the web and VS Code webview Brain consult the project's `project_facts` fact tier + its Evermind SSM first and short-circuit the LLM on a confident hit (an exact-repeat Q&A cache + opt-in Evermind-first inference), single-sourced in `resolveMemoryAnswer`. Learning fans out to **every** Evermind under a project (its own head + its IDE builds' heads) via one shared `contributeTextToProjectEverminds`. Endpoints: `GET/POST /api/projects/:id/answer`, `GET /api/projects/:id/evermind/targets`.
+
 ---
 
 ## Authentication

@@ -21,7 +21,14 @@ export interface ChildTaskPlan {
   assignedUserId?: string | null;
   assignedAgentHostId?: number | null;
   assignedAgentRef?: string | null;
+  /** Best-fit producer role for this child (developer, qa-tester, …) — drives
+   *  role-aware auto-assignment of the fanned-out child. Undefined = no constraint. */
+  roleKey?: string | null;
 }
+
+/** The producer roles a decomposed child can be routed to. Aligns with roleCatalog
+ *  keys so role→capable-agent resolution is deterministic. 'unknown' ⇒ no constraint. */
+const CHILD_ROLE_KEYS = ['developer', 'qa-tester', 'architect', 'tech-writer', 'designer', 'devops', 'security', 'business-analyst', 'unknown'] as const;
 
 /** Verdict from assessing whether an agent-assigned task is really an Epic. */
 export interface DecompositionPlan {
@@ -67,6 +74,8 @@ const DECOMP_SYSTEM_PROMPT =
   'If it is a single, directly-executable task, reply isEpic=false with an empty children array. ' +
   'If it is genuinely an EPIC (multiple independently-shippable pieces), reply isEpic=true with 2-8 child tasks — ' +
   'each a concrete, independently-assignable unit of work with a clear title and a one-line description. ' +
+  'For each child also pick the best-fit producer ROLE (developer, qa-tester, architect, tech-writer, designer, ' +
+  'devops, security, business-analyst) — use "unknown" only if genuinely unclear. ' +
   'Prefer FEWER, larger children over micro-tasks. Reply with JSON only.';
 
 const DECOMP_SCHEMA = {
@@ -85,11 +94,12 @@ const DECOMP_SCHEMA = {
           items: {
             type: 'object',
             additionalProperties: false,
-            required: ['title', 'description', 'priority'],
+            required: ['title', 'description', 'priority', 'roleKey'],
             properties: {
               title: { type: 'string' },
               description: { type: 'string' },
               priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] },
+              roleKey: { type: 'string', enum: [...CHILD_ROLE_KEYS] },
             },
           },
         },
@@ -139,10 +149,13 @@ export function llmEpicDecomposer(env: Env): EpicDecomposer {
                 if (!title) return null;
                 const priority = typeof o.priority === 'string' && VALID_PRIORITIES.has(o.priority)
                   ? (o.priority as TaskPriority) : undefined;
+                const roleKey = typeof o.roleKey === 'string' && o.roleKey !== 'unknown' && (CHILD_ROLE_KEYS as readonly string[]).includes(o.roleKey)
+                  ? o.roleKey : undefined;
                 return {
                   title,
                   description: typeof o.description === 'string' ? o.description.slice(0, 2000) : null,
                   ...(priority ? { priority } : {}),
+                  ...(roleKey ? { roleKey } : {}),
                 } as ChildTaskPlan;
               })
               .filter((c): c is ChildTaskPlan => c != null)
