@@ -160,6 +160,10 @@ import { createAgentAssignmentRoutes } from './presentation/routes/agentAssignme
 import { createSecurityReviewRoutes } from './presentation/routes/securityReviewRoutes';
 import { createKnowledgeRoutes } from './presentation/routes/knowledgeRoutes';
 import { createKnowledgeMarketRoutes } from './presentation/routes/knowledgeMarketRoutes';
+import { createCapacityRoutes } from './routes/capacityRoutes';
+
+// Capacity estimation — velocity collection, utilization mapping, time-to-completion projections
+app.route('/api/capacity', createCapacityRoutes(db, env));
 
 import { API_VERSION } from './version';
 import {
@@ -209,6 +213,14 @@ import { addCorsToResponse, corsMiddleware } from './presentation/middleware/cor
 import { errorHandler }   from './presentation/middleware/errorHandler';
 import { rateLimitMiddleware } from './presentation/middleware/rateLimitMiddleware';
 import { emulationMiddleware } from './presentation/middleware/emulationMiddleware';
+
+/**
+ * Shared display-header/outcome-id generation. Returns a stable, traceable header.
+ * Can be used from index.ts or other route modules.
+ */
+const buildDisplayHeader = (packageId: string, outcomeName: string): string => {
+  return `${packageId}/${outcomeName}`;
+};
 
 // Durable Objects (must be re-exported so the Workers runtime can instantiate them)
 export { AgentHostRelayDO } from './infrastructure/relay/AgentHostRelayDO';
@@ -573,6 +585,8 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/monitoring',        createMonitoringRoutes(db));
   app.route('/api/knowledge',         createKnowledgeRoutes(db));
   app.route('/api/knowledge-market',  createKnowledgeMarketRoutes(db)); // PUBLIC browse (logged-out)
+  // Capacity estimation — velocity collection, utilization mapping, time-to-completion projections
+  app.route('/api/capacity',          createCapacityRoutes(db, env));
 
   app.onError(errorHandler);
   app.notFound((c) => addCorsToResponse(c, c.json({ error: 'Not found' }, 404)));
