@@ -1,0 +1,41 @@
+{
+  "id": "resource-gap-engine",
+  "name": "Resource Gap Analysis Engine",
+  "description": "Automated resource gap analysis with hiring, deployment, and upskill recommendations. Ingests headcount/skills data and project demand forecasts to produce actionable workforce decisions.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "hireVsContractThresholdMonths": {
+        "type": "number",
+        "default": 6,
+        "description": "Demand duration (months) below which contractor engagement is recommended over FTE hire (FR-3.3)."
+      },
+      "secondaryGapRiskThreshold": {
+        "type": "number",
+        "default": 0.75,
+        "description": "Minimum source-team coverage below which a redeployment is flagged as a secondary gap risk (FR-4.4, AC-5)."
+      },
+      "fullCoverageProficiencyRatio": {
+        "type": "number",
+        "default": 0.8,
+        "description": "Proficiency ratio threshold for full supply coverage when no explicit weighting entry matches (FR-2.2)."
+      },
+      "criticalGapThreshold": {
+        "type": "number",
+        "default": 0.5,
+        "description": "Uncovered demand ratio above which a gap is classified as Critical (FR-2.4)."
+      },
+      "moderateGapThreshold": {
+        "type": "number",
+        "default": 0.25,
+        "description": "Uncovered demand ratio above which a gap is classified as Moderate (FR-2.4)."
+      },
+      "compoundingProjectThreshold": {
+        "type": "number",
+        "default": 3,
+        "description": "Minimum number of concurrent projects sharing the same skill deficit to be flagged as compounding (FR-2.5)."
+      }
+    }
+  }
+}
