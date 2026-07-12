@@ -443,7 +443,7 @@ export function createPayloadGenerator(
 
     for (const r of required) {
       if (!(r in payload) || payload[r] === undefined || payload[r] === null) {
-        logEntry(logRef, {
+        const entry = {
           level: "error",
           contextId,
           field: r,
@@ -487,7 +487,7 @@ export function createPayloadGenerator(
       const srcRes = resolved[field.source.path];
       if (!srcRes) {
         if (field.source.required) {
-          logEntry(logRef, {
+          const entry = {
             level: "error",
             contextId,
             field: outName,
@@ -504,7 +504,7 @@ export function createPayloadGenerator(
 
       if (!srcRes.exists) {
         if (field.source.required) {
-          logEntry(logRef, {
+          const entry = {
             level: "error",
             contextId,
             field: outName,
