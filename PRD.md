@@ -1,55 +1,91 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Mike QA (Tester V2 (Durable) · task #354
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# PRD: Helcim Checkout — Recurring Billing Schedule Creation
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+The Helcim checkout integration processes payments successfully for one-time charges but **never creates a recurring billing schedule**. After a payment is approved, the system must call the Helcim recurring-billing API to enroll the customer in the appropriate billing cycle. Without this, subscription-based customers are charged once and then silently lapse, resulting in lost revenue and manual intervention.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+**Goal:** After a Helcim `APPROVED` webhook event is received, automatically create a recurring billing schedule via the Helcim recurring-billing API so that customers are billed on the correct cadence without manual steps.
 
-## Target users / ICP roles
+---
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## Target Users / ICP Roles
+
+| Role | Interest |
+|---|---|
+| **End customer** | Expects to be enrolled in a subscription and billed automatically on the agreed schedule |
+| **Finance / Billing admin** | Needs recurring revenue to be captured reliably without manual reconciliation |
+| **Engineering** | Implements and maintains the webhook handler and API integration |
+| **QA / Release** | Validates correct schedule creation across all billing cadences |
+
+---
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This work covers the server-side logic that runs **after** a Helcim `APPROVED` webhook is received. It does not cover the checkout UI, payment capture flow, or any other payment gateway.
+
+---
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### FR-1 — Webhook Handler Extension
+- The existing `APPROVED` webhook handler **must** be extended to trigger recurring-billing schedule creation immediately after a successful payment confirmation.
+- If the product/plan associated with the transaction is one-time only, the recurring-billing step **must** be skipped gracefully.
+
+### FR-2 — Recurring-Billing API Call
+- The system **must** call the Helcim recurring-billing API endpoint (`POST /recurring-billing`) with the following required fields derived from the approved transaction:
+  - `customerCode` — from the Helcim customer record created/matched during checkout
+  - `cardToken` — tokenised card returned in the approved transaction payload
+  - `planCode` (or equivalent) — mapped from the internal product/plan metadata
+  - `startDate` — set to the next billing date based on the plan cadence
+  - `frequency` — e.g., `monthly`, `weekly`, `yearly`, as defined by the plan
+  - `amount` — recurring charge amount (must match plan pricing)
+  - Any additional fields required by the Helcim API specification
+
+### FR-3 — Idempotency
+- The handler **must** check whether a recurring schedule already exists for the given `customerCode` + `planCode` combination before creating a new one, to prevent duplicate schedules on webhook retries.
+
+### FR-4 — Error Handling & Retries
+- If the Helcim recurring-billing API returns a non-success response (4xx or 5xx), the system **must** log the full error (status code, response body, transaction ID) and **must not** silently swallow the failure.
+- The system **must** implement an exponential-backoff retry mechanism (minimum 3 attempts) before marking the schedule creation as permanently failed.
+- On permanent failure, an alert **must** be raised to the operations/engineering team (e.g., via the existing alerting channel).
+
+### FR-5 — Persistence
+- A `recurring_billing_schedules` record (or equivalent) **must** be written to the database upon successful API response, storing:
+  - `helcim_schedule_id` (returned by the API)
+  - `customer_id` (internal)
+  - `plan_id` (internal)
+  - `status` (`active`)
+  - `created_at`, `next_billing_date`
+
+### FR-6 — Observability
+- Structured log entries **must** be emitted at the start and end of each recurring-billing API call, including `transaction_id`, `customer_id`, `plan_id`, and outcome.
+- A metric/counter **must** be incremented for both successful and failed schedule creation attempts.
+
+---
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+| # | Criterion |
+|---|---|
+| AC-1 | Given a Helcim `APPROVED` webhook for a subscription plan, when the handler processes the event, then a recurring billing schedule is created in Helcim and a corresponding record exists in the database within 5 seconds of webhook receipt. |
+| AC-2 | Given a Helcim `APPROVED` webhook for a one-time-charge product, when the handler processes the event, then no recurring billing schedule is created and no error is raised. |
+| AC-3 | Given a duplicate `APPROVED` webhook (retry), when the handler processes the event, then only one recurring billing schedule exists for the customer+plan — no duplicates. |
+| AC-4 | Given the Helcim recurring-billing API returns a 5xx error, when the handler processes the event, then the system retries at least 3 times with exponential backoff before marking the job as failed and firing an alert. |
+| AC-5 | Given a permanent API failure after retries, when the failure is recorded, then an alert is visible in the operations/engineering channel and the database record reflects `status = failed`. |
+| AC-6 | Given any outcome (success or failure), when the handler completes, then structured logs exist containing `transaction_id`, `customer_id`, `plan_id`, and the outcome. |
+| AC-7 | Given a successful schedule creation, when QA inspects the Helcim merchant portal, then the recurring billing schedule appears with the correct amount, frequency, and start date matching the plan definition. |
 
-## Out of scope
+---
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## Out of Scope
+
+- Changes to the Helcim checkout UI or payment capture flow
+- Support for any payment gateway other than Helcim
+- Customer-facing subscription management (pause, cancel, modify) — handled in a separate workstream
+- Prorated billing or mid-cycle plan changes
+- Refund or chargeback handling for recurring charges
+- Migration of historically lapsed subscriptions (to be handled as a separate data-remediation task)
+- Helcim webhook signature verification improvements (assumed already implemented)
