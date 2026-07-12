@@ -17,11 +17,29 @@ export type PList = ProgressItem[];
 /** SortBy options (FR-5). */
 export type SortBy = 'progress_desc' | 'progress_asc' | 'status' | 'label_asc';
 
+/** How the numeric value column renders (FR-1/FR-2: "7/10 or 70%"). */
+export type ValueFormat = 'fraction' | 'percent';
+
+/** Compute a progress percentage clamped to [0, 100], handling total=0 safely (FR-2). */
+export function toPercent(completed: number, total: number): number {
+  if (!Number.isFinite(total) || total <= 0) return 0;
+  const pct = (completed / total) * 100;
+  return Math.max(0, Math.min(100, pct));
+}
+
 /** Format percent for FR-2 "7/10 or 70%". */
 export function formatPct(completed: number, total: number): string {
-  if (total <= 0) return '0%';
-  const pct = (completed / total) * 100;
-  return Math.max(0, Math.min(100, pct)).toFixed(0) + '%';
+  return toPercent(completed, total).toFixed(0) + '%';
+}
+
+/** Format the numeric value column per the chosen ValueFormat (FR-1/FR-2). */
+export function formatValue(
+  completed: number,
+  total: number,
+  valueFormat: ValueFormat = 'fraction'
+): string {
+  if (valueFormat === 'percent') return formatPct(completed, total);
+  return `${completed}/${total}`;
 }
 
 /** Get color token by status (FR-4). */
