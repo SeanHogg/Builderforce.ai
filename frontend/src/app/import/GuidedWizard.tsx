@@ -206,10 +206,10 @@ export default function GuidedWizard({ userId, onCancel }: { userId: string | nu
           {/* Description */}
           <div style={{ marginBottom: '16px' }}>
             <label style={{ fontWeight: '600', marginBottom: '8px', display: 'block' }}>
-              {t('guided.fields.description.label')}
+              Description
             </label>
             <textarea
-              placeholder={t('guided.fields.description.placeholder')}
+              placeholder="Enter a brief description"
               value={record.description ?? ''}
               onChange={(e) => handleFieldChange('description', e.target.value)}
               onBlur={() => handleFieldBlur('description')}
@@ -226,24 +226,94 @@ export default function GuidedWizard({ userId, onCancel }: { userId: string | nu
               <div style={{ color: 'red', fontSize: '0.88rem', marginTop: '4px' }}>{errors.description}</div>
             )}
             {record.description && (
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>{t('guided.fields.description.hint')}</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                Think of 1–2 lines to summarize this record.
+              </div>
+            )}
+          </div>
+
+          {/* Reference ID */}
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ fontWeight: '600', marginBottom: '8px', display: 'block' }}>
+              Reference ID
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. GHI-2024-001"
+              value={record.referenceId ?? ''}
+              onChange={(e) => handleFieldChange('referenceId', e.target.value)}
+              onBlur={() => handleFieldBlur('referenceId')}
+              style={{
+                width: '100%',
+                padding: '10px',
+                border: errors.referenceId ? '1px solid red' : '1px solid var(--border-color)',
+                borderRadius: '4px',
+                fontSize: '0.95rem',
+              }}
+            />
+            {errors.referenceId && (
+              <div style={{ color: 'red', fontSize: '0.88rem', marginTop: '4px' }}>{errors.referenceId}</div>
             )}
           </div>
 
           {/* Enabled toggle */}
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ fontWeight: '600', display: 'block', marginBottom: '8px' }}>
-              {t('guided.fields.enabled.label')}
-            </label>
+            <label style={{ fontWeight: '600', display: 'block', marginBottom: '8px' }}>Enabled</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <input
                 type="checkbox"
                 checked={record.enabled === true}
-                onChange={(e) => handleFieldChange('enabled', e.target.checked)}
+                onChange={(e) => handleFieldChange('enabled', String(e.target.checked))}
                 style={{ fontSize: '1rem' }}
               />
-              <span style={{ color: 'var(--text-muted)' }}>{t('guided.fields.enabled.label')}</span>
+              <span style={{ color: 'var(--text-muted)' }}>Enable this record</span>
             </div>
+          </div>
+
+          {/* Priority */}
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ fontWeight: '600', display: 'block', marginBottom: '8px' }}>Priority</label>
+            <select
+              value={record.priority ?? ''}
+              onChange={(e) => handleFieldChange('priority', e.target.value)}
+              style={{
+                width: '100%',
+                padding: '10px',
+                border: errors.priority ? '1px solid red' : '1px solid var(--border-color)',
+                borderRadius: '4px',
+                fontSize: '0.95rem',
+              }}
+            >
+              <option value="">Select a priority</option>
+              <option value="Low">Low</option>
+              <option value="Medium">Medium</option>
+              <option value="High">High</option>
+            </select>
+            {errors.priority && (
+              <div style={{ color: 'red', fontSize: '0.88rem', marginTop: '4px' }}>{errors.priority}</div>
+            )}
+          </div>
+
+          {/* Notes */}
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ fontWeight: '600', display: 'block', marginBottom: '8px' }}>Notes</label>
+            <textarea
+              placeholder="Add any additional notes"
+              value={record.notes ?? ''}
+              onChange={(e) => handleFieldChange('notes', e.target.value)}
+              onBlur={() => handleFieldBlur('notes')}
+              rows={4}
+              style={{
+                width: '100%',
+                padding: '10px',
+                border: errors.notes ? '1px solid red' : '1px solid var(--border-color)',
+                borderRadius: '4px',
+                fontSize: '0.95rem',
+              }}
+            />
+            {errors.notes && (
+              <div style={{ color: 'red', fontSize: '0.88rem', marginTop: '4px' }}>{errors.notes}</div>
+            )}
           </div>
 
           <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'space-between' }}>
