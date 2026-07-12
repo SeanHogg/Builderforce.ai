@@ -96,12 +96,18 @@ export interface Recommendation {
   severity: RecSeverity;
   category: RecCategory;
   title: string;
-  /** Human-readable explanation grounded in the computed figure. */
+  /** Human-readable explanation grounded in the computed figure. Must be ≤300 chars. */
   detail: string;
   /** The headline figure the recommendation is built on (for the UI badge). */
   metric: string;
-  /** The prescriptive action to take. */
-  recommendation: string;
+  /** Primary CTA to take action (FR-3.1). */
+  action?: RecAction;
+  /** Link(s) to all source records that contributed to this recommendation (FR-4.1/4.2). */
+  links?: RecLink[];
+  /** Why this matters sentence (FR-3.4). */
+  whyItMatters?: string;
+  /** Data trace for auditability (FR-4.3). */
+  dataTrace?: RecDataTrace[];
   /** Sort weight (higher = more urgent). Derived from severity + magnitude. */
   rank: number;
 }
