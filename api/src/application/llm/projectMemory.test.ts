@@ -10,20 +10,26 @@ import type { Env } from '../../env';
 // No AUTH_CACHE_KV → getCacheVersion/getOrSetCached fall through to the loader.
 const env = {} as Env;
 
-/** db mock whose `.select().from().where().limit()` returns queued result sets in
- *  order (getProjectFactByKey first, then getProjectEvermindHead). Also supports the
- *  upsert chain for cacheProjectAnswer. */
+/** db mock whose `.select().from().where()[.limit()]` returns queued result sets in
+ *  order. Sequence for an Evermind-first resolve: 1) getProjectFactByKey (cache, limit),
+ *  2) resolveEvermindTargets → ide_projects children (awaited where, NO limit),
+ *  3) getProjectEvermindHead per candidate (limit). `where()` is awaitable AND chainable.
+ *  Also supports the upsert chain for cacheProjectAnswer. */
 function memoryDb(resultQueue: Array<Array<Record<string, unknown>>>) {
   let i = 0;
+  const next = () => resultQueue[i++] ?? [];
   const onConflictDoUpdate = vi.fn(async () => undefined);
   const values = vi.fn(() => ({ onConflictDoUpdate }));
   const insert = vi.fn(() => ({ values }));
   const db = {
     select: () => ({
       from: () => ({
-        where: () => ({
-          limit: async () => resultQueue[i++] ?? [],
-        }),
+        where: () => {
+          const rows = next();
+          const thenable = Promise.resolve(rows) as Promise<unknown> & { limit: () => Promise<unknown> };
+          thenable.limit = async () => rows;
+          return thenable;
+        },
       }),
     }),
     insert,
@@ -63,24 +69,26 @@ describe('resolveMemoryAnswer', () => {
     expect(runEvermind).not.toHaveBeenCalled();
   });
 
-  it('falls to Evermind on a cache miss when inference is enabled and the reply is substantive', async () => {
-    const { db } = memoryDb([[], [headRow()]]); // cache miss, then head row
+  it('falls to Evermind on a cache miss and names WHICH Evermind answered', async () => {
+    // cache miss, ide_projects children (none), head for proj 42.
+    const { db } = memoryDb([[], [], [headRow()]]);
     const runEvermind = vi.fn(async () => 'This is a sufficiently long Evermind reply about the project.');
     const ans = await resolveMemoryAnswer(env, db, 7, 42, 'How does auth work?', { runEvermind });
     expect(ans?.source).toBe('evermind');
     expect(ans?.evermindVersion).toBe(3);
+    expect(ans?.evermindProjectId).toBe(42); // triage: which Evermind
     expect(runEvermind).toHaveBeenCalledTimes(1);
   });
 
   it('returns null when Evermind is not opted in (inferenceEnabled false)', async () => {
-    const { db } = memoryDb([[], [headRow({ inferenceEnabled: false })]]);
+    const { db } = memoryDb([[], [], [headRow({ inferenceEnabled: false })]]);
     const runEvermind = vi.fn(async () => 'a substantive answer that would otherwise qualify');
     expect(await resolveMemoryAnswer(env, db, 7, 42, 'q?', { runEvermind })).toBeNull();
     expect(runEvermind).not.toHaveBeenCalled();
   });
 
   it('returns null when the Evermind reply is too short (below threshold)', async () => {
-    const { db } = memoryDb([[], [headRow()]]);
+    const { db } = memoryDb([[], [], [headRow()]]);
     const runEvermind = vi.fn(async () => 'nope'); // < EVERMIND_ANSWER_MIN_CHARS
     expect('nope'.length).toBeLessThan(EVERMIND_ANSWER_MIN_CHARS);
     expect(await resolveMemoryAnswer(env, db, 7, 42, 'q?', { runEvermind })).toBeNull();

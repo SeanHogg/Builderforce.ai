@@ -52,6 +52,7 @@ import { MoveToBoardControl } from './MoveToBoardControl';
 import { AgentTab } from './agent/AgentTab';
 import { TaskChangesPanel } from './agent/TaskChangesPanel';
 import { TaskPrdTab } from './task/TaskPrdTab';
+import { AccountabilityTab } from './task/AccountabilityTab';
 import { RunTaskButton } from './task/RunTaskButton';
 import { ApprovalResolveControl } from './humanRequests/ApprovalResolveControl';
 import { ChatMessageContent } from './ChatMessageContent';
@@ -189,6 +190,9 @@ export function TaskMgmtContent({
   // role or check was skipped). Fetched once per project (server-side cached) and
   // rendered as a flag chip on the card — no per-card round-trip.
   const [flaggedIds, setFlaggedIds] = useState<Set<number>>(new Set());
+  // Participation progress per ticket (X of Y required roles complete) — the
+  // Coordinated Role Participation %-complete chip. One cached project fetch.
+  const [participantProgress, setParticipantProgress] = useState<Map<number, { completed: number; required: number; percent: number }>>(new Map());
   const [projects, setProjects] = useState<Project[]>(projectsProp ?? globalScope?.projects ?? []);
   const [agentHostsList, setAgentHostsList] = useState<AgentHost[]>([]);
   const [cloudAgentsList, setCloudAgentsList] = useState<CloudAgentTarget[]>([]);
@@ -229,7 +233,7 @@ export function TaskMgmtContent({
   // Live ceremony overlay (standup/planning round-table) for the selected board.
   const [ceremony, setCeremony] = useState<CeremonyMode | null>(null);
   const [prdOpen, setPrdOpen] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<'details' | 'agent' | 'changes' | 'prd'>('details');
+  const [drawerTab, setDrawerTab] = useState<'details' | 'agent' | 'changes' | 'prd' | 'accountability'>('details');
   // Inline per-field editing in the task drawer. Only one field is editable at a
   // time; `fieldDraft` holds the in-progress value (string for text/date inputs).
   const [editingField, setEditingField] = useState<
@@ -426,6 +430,9 @@ export function TaskMgmtContent({
     kanbanApi.flaggedForProject(effectiveProjectId)
       .then((rows) => { if (alive) setFlaggedIds(new Set(rows.map((r) => r.taskId))); })
       .catch(() => { if (alive) setFlaggedIds(new Set()); });
+    kanbanApi.participantsSummary(effectiveProjectId)
+      .then((rows) => { if (alive) setParticipantProgress(new Map(rows.map((r) => [r.taskId, { completed: r.completed, required: r.required, percent: r.percent }]))); })
+      .catch(() => { if (alive) setParticipantProgress(new Map()); });
     return () => { alive = false; };
   }, [effectiveProjectId, tasks]);
 
@@ -953,6 +960,24 @@ export function TaskMgmtContent({
               ⚑ {tBoard('audit.flagged')}
             </span>
           )}
+          {(() => {
+            const prog = participantProgress.get(task.id);
+            if (!prog || prog.required === 0) return null;
+            const complete = prog.percent >= 100;
+            return (
+              <span
+                title={tBoard('audit.participantsTitle')}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10,
+                  padding: '2px 6px', borderRadius: 4, fontWeight: 700,
+                  background: complete ? 'var(--success-bg, #dcfce7)' : 'var(--bg-deep, #eef2ff)',
+                  color: complete ? 'var(--success-text, #166534)' : 'var(--text-secondary, #475569)',
+                }}
+              >
+                ✅ {prog.completed}/{prog.required}
+              </span>
+            );
+          })()}
           {task.businessValue != null && (
             <span
               title={task.businessValueRationale ?? tBoard('businessValue.badgeTitle')}
@@ -2048,7 +2073,7 @@ export function TaskMgmtContent({
                 notice replaces all tab content. */}
             {!drawerTask.restricted && (
             <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0, overflowX: 'auto' }}>
-              {([['details', tTask('details')], ['agent', tTask('tabAgent')], ['changes', tTask('tabChanges')], ['prd', tTask('tabPrd')]] as const).map(([id, label]) => (
+              {([['details', tTask('details')], ['agent', tTask('tabAgent')], ['changes', tTask('tabChanges')], ['prd', tTask('tabPrd')], ['accountability', tTask('tabAccountability')]] as const).map(([id, label]) => (
                 <button
                   key={id}
                   type="button"
@@ -2086,6 +2111,10 @@ export function TaskMgmtContent({
             ) : drawerTab === 'prd' ? (
               <div style={{ flex: 1, overflow: 'auto' }}>
                 <TaskPrdTab taskId={drawerTask.id} projectId={drawerTask.projectId} />
+              </div>
+            ) : drawerTab === 'accountability' ? (
+              <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
+                <AccountabilityTab taskId={drawerTask.id} />
               </div>
             ) : (
             <>

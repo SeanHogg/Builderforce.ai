@@ -143,3 +143,71 @@ export interface FlaggedTicket {
   coverage: number;
   missing: UnmetRequirement[];
 }
+
+// ── Coordinated Role Participation: manifest + accountability record ──────────
+export type ParticipantState =
+  | 'pending' | 'assigned' | 'in_progress' | 'completed' | 'changes_requested' | 'waived' | 'skipped' | 'unstaffed';
+
+export interface ManifestParticipant {
+  id: string;
+  stageKey: string | null;
+  roleKey: string;
+  roleName: string;
+  responsibility: Responsibility;
+  required: boolean;
+  source: string;
+  assigneeKind: string | null;
+  assigneeRef: string | null;
+  assigneeName: string | null;
+  state: ParticipantState;
+  signoffId: string | null;
+  childTaskId: number | null;
+  note: string | null;
+}
+
+export interface SignoffContribution {
+  executionId?: number;
+  prdRevision?: number;
+  prUrl?: string;
+  diffFiles?: string[];
+  reviewThreadRef?: string;
+  toolRunId?: string;
+}
+
+export interface AccountabilitySignoff {
+  roleKey: string;
+  roleName: string;
+  memberKind: string | null;
+  memberRef: string | null;
+  memberName: string | null;
+  verdict: string;
+  summary: string | null;
+  contribution: SignoffContribution | null;
+  waiveReason: string | null;
+  createdAt: string;
+}
+
+export type AccountabilityGapKind = 'unsigned' | 'unstaffed' | 'no_contribution' | 'waived' | 'changes_requested';
+export interface AccountabilityGap {
+  kind: AccountabilityGapKind;
+  roleKey: string;
+  roleName: string;
+  detail: string;
+}
+
+export interface AccountabilityReport {
+  taskId: number;
+  requiredCount: number;
+  completedCount: number;
+  percentComplete: number;
+  participants: ManifestParticipant[];
+  signoffs: AccountabilitySignoff[];
+  gaps: AccountabilityGap[];
+}
+
+export interface ParticipantsSummaryRow {
+  taskId: number;
+  completed: number;
+  required: number;
+  percent: number;
+}

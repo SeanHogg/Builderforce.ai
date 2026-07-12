@@ -56,7 +56,7 @@ import { getRoutingTable, MIN_SAMPLES, type RoutingScope } from '../llm/routingT
 import type { ActionModelRankStat } from '../llm/LlmProxyService';
 import { resolveTenantModel } from '../llm/tenantModelService';
 import { reasoningParamsForModel } from '../llm/reasoningCapability';
-import { dispatchProjectEvermindLearnText, buildEvermindLessonsBlock } from '../llm/projectEvermind';
+import { contributeTextToProjectEverminds, buildEvermindLessonsBlock } from '../llm/projectEvermind';
 import { buildProjectFactsBlock } from '../llm/projectFacts';
 import { scoreRunOutcome, finalizeLearnWeight } from './scoreRunOutcome';
 import { handleCloudRunCrash } from './cloudSelfHeal';
@@ -2201,7 +2201,10 @@ export async function finalizeCloudRun(
     const learnWeight = finalizeLearnWeight({
       merged, prOpened, autoMergeFailed, producedChanges: writtenPaths.size > 0,
     });
-    await dispatchProjectEvermindLearnText(env, tenantId, repoCtx.projectId, output, learnWeight, taskRow.title).catch(() => { /* best-effort */ });
+    // Fan out to EVERY live Evermind this project targets (its own head + the IDE builds
+    // grouped under it), not just the one projectId — the same resolver the chat learn
+    // gate uses, so a cloud run contributes to all the project's Everminds. Best-effort.
+    await contributeTextToProjectEverminds(env, db, tenantId, repoCtx.projectId, output, learnWeight, taskRow.title).catch(() => { /* best-effort */ });
   }
 
   return { ok: !autoMergeFailed, output: output + unverifiedNote };

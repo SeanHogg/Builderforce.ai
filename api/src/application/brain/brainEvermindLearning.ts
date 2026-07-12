@@ -17,7 +17,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { brainChats, brainChatMessages } from '../../infrastructure/database/schema';
-import { resolveEvermindTargets, dispatchProjectEvermindLearnText } from '../llm/projectEvermind';
+import { resolveEvermindTargets, isLiveLearnTarget, dispatchProjectEvermindLearnText } from '../llm/projectEvermind';
 
 /** A one-line assistant turn is not a teaching signal; require some substance. */
 const MIN_TEACH_CHARS = 40;
@@ -122,8 +122,9 @@ export async function evaluateBrainLearnGate(
   // Everminds — contribute to every seeded + connected one, and report the rest BY ID.
   const heads = await resolveEvermindTargets(env, db, tenantId, projectId);
   const targets: EvermindTargetOutcome[] = heads.map((h) => {
+    // `isLiveLearnTarget` is the shared predicate; `reason` is its explained negation.
     const reason: BrainLearnSkipReason | null = h.version < 1 ? 'not-seeded' : h.mode !== 'connected' ? 'frozen' : null;
-    return { projectId: h.projectId, ref: h.ref, version: h.version, name: h.name, learned: reason === null, reason };
+    return { projectId: h.projectId, ref: h.ref, version: h.version, name: h.name, learned: isLiveLearnTarget(h), reason };
   });
   const contributed = targets.filter((t) => t.learned);
   // Summary reason when NOTHING learned: 'frozen' only if every candidate that HAS an
