@@ -16,15 +16,6 @@ import type {
   SetStatusResponse,
 } from '../types/priority-status';
 
-/**
- * Mock implementation - replaces actual backend calls for demo purposes
- * 
- * In production, this would:
- * - POST /api/tasks/{taskId}/status/on-hold
- * - POST /api/tasks/{taskId}/status/deferred
- * - GET /api/tasks/{taskId}/status
- */
-
 interface MockTaskState {
     taskId: string;
     status: string;
