@@ -290,7 +290,8 @@
       "myWorkspace": "My Workspace",
       "marketplace": "Marketplace",
       "incidents": "Incidents",
-      "monitoring": "Monitoring"
+      "monitoring": "Monitoring",
+      "reliability": "Reliability"
     },
     "tab": {
       "projects": "Projects",
@@ -365,6 +366,7 @@
       "escalation": "Escalation",
       "contacts": "Contacts",
       "boards": "Boards",
+      "monitors": "Monitors",
       "reporting": "Reporting",
       "rfp": "RFP"
     }
@@ -9096,6 +9098,16 @@
       "oncall": "On-call",
       "escalation": "Escalation",
       "contacts": "Contacts"
+    },
+    "workflows": {
+      "title": "Runbooks & workflows",
+      "blurb": "Run a custom workflow against this incident, or review the workflows its events triggered.",
+      "pick": "Workflow",
+      "pickPlaceholder": "Choose a workflow…",
+      "run": "Run workflow",
+      "create": "Create a workflow",
+      "runs": "Runs for this incident",
+      "noRuns": "No workflow runs yet."
     },
     "severity": {
       "sev1": "SEV1",

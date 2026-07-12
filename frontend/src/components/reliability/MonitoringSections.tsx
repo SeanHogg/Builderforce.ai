@@ -1,19 +1,21 @@
 'use client';
 
 /**
- * MonitoringPageClient — the Active Monitoring surface. Two sub-views selected
- * via the shared <SectionTabs> (?tab=): the Boards canvas (an uploaded
- * architecture diagram with monitor pins overlaid — a breach opens an incident)
- * and a Reporting roll-up (incident + monitor metrics). Detail / create flows use
- * the canonical <SlideOutPanel> (never a modal) and destructive removals go through
- * useConfirm(). Writes are gated to manager+ (mirrors the API requireRole(MANAGER)).
- * Fully localized (monitoring namespace) + theme-driven (never one-theme hex).
+ * MonitoringSections — the Active Monitoring surface, extracted from the old
+ * standalone /monitoring page so it can live as tabs of the consolidated
+ * Reliability destination (/incidents?tab=monitors|reporting) AND be reused
+ * anywhere else. Two self-contained exports:
+ *   • <MonitorsSection/>     — the Boards canvas (uploaded diagram + monitor pins;
+ *                              a breach opens an incident).
+ *   • <MonitoringReporting/> — the incident + monitor metric roll-up.
+ * Detail / create flows use the canonical <SlideOutPanel> (never a modal) and
+ * destructive removals go through useConfirm(). Writes are gated to manager+
+ * (mirrors the API requireRole(MANAGER)). Fully localized (monitoring namespace) +
+ * theme-driven (never one-theme hex).
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useSearchParams } from 'next/navigation';
-import PageContainer from '@/components/PageContainer';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { Select } from '@/components/Select';
 import { useConfirm } from '@/components/ConfirmProvider';
@@ -93,34 +95,32 @@ function readImageDims(file: File): Promise<{ width: number; height: number }> {
   });
 }
 
-export default function MonitoringPageClient() {
+type T = ReturnType<typeof useTranslations>;
+
+/* ─────────────────────────── Public entry points ─────────────────────────── */
+
+/** The Boards canvas — the default Monitors tab of the Reliability destination. */
+export function MonitorsSection() {
   const t = useTranslations('monitoring');
   const tc = useTranslations('common');
-  const tab = useSearchParams().get('tab') ?? '';
   const role = useRole();
   const canManage = hasMinRole(role, 'manager');
-
-  const heading = tab === 'reporting'
-    ? { title: t('reportingTitle'), subtitle: t('reportingSubtitle') }
-    : { title: t('boardsTitle'), subtitle: t('boardsSubtitle') };
-
   return (
-    <PageContainer>
+    <>
       {/* Pulse animation for breached pins — defined once, theme-agnostic. */}
       <style>{`@keyframes bfMonitorPulse {0%{box-shadow:0 0 0 0 var(--error)}70%{box-shadow:0 0 0 8px rgba(0,0,0,0)}100%{box-shadow:0 0 0 0 rgba(0,0,0,0)}}`}</style>
-      <div style={{ marginBottom: 18 }}>
-        <h1 style={{ fontSize: 'clamp(22px,3vw,30px)', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 6px' }}>{heading.title}</h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: 14, margin: 0, maxWidth: 640 }}>{heading.subtitle}</p>
-      </div>
-
-      {tab === 'reporting'
-        ? <ReportingSection t={t} />
-        : <BoardsSection t={t} tc={tc} canManage={canManage} />}
-    </PageContainer>
+      <BoardsSection t={t} tc={tc} canManage={canManage} />
+    </>
   );
 }
 
-type T = ReturnType<typeof useTranslations>;
+/** The incident + monitor metric roll-up — the Reporting tab. */
+export function MonitoringReporting() {
+  const t = useTranslations('monitoring');
+  return <ReportingSection t={t} />;
+}
+
+/* ─────────────────────────── Shared bits ─────────────────────────── */
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
