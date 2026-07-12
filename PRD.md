@@ -1,55 +1,95 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #332
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# PRD: Last Sync Timestamp
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+Users and system operators have no reliable, visible indicator of when data was last successfully synchronized between the client and the backend (or between integrated services). This creates uncertainty about data freshness, makes debugging stale-data issues difficult, and erodes trust in the application's reliability.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+**Goal:** Record, persist, and surface the last successful sync timestamp throughout the product so that users can confirm data recency and engineers/support can diagnose sync failures quickly.
 
-## Target users / ICP roles
+---
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## Target Users / ICP Roles
+
+| Role | Need |
+|---|---|
+| **End user** | Glanceable confirmation that their data is current |
+| **Power user / admin** | Precise timestamp + sync status for auditing and troubleshooting |
+| **Support / ops engineer** | Queryable sync metadata to diagnose incidents |
+| **Frontend developer** | Stable API contract to render timestamp in UI |
+| **Backend / data engineer** | Clear storage and update requirements for sync events |
+
+---
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This PRD covers:
+
+- Capturing and persisting the timestamp of the last successful sync event
+- Exposing the timestamp via an internal API endpoint
+- Displaying the timestamp in the relevant UI surface(s)
+- Handling edge cases: never-synced state, sync in progress, sync failure
+
+---
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### 1. Timestamp Capture & Storage
+
+- **FR-1.1** The system **must** record an ISO 8601 UTC timestamp (`last_synced_at`) immediately after each successful sync operation completes.
+- **FR-1.2** The timestamp **must** be persisted in the primary datastore, scoped to the appropriate entity (user, account, workspace, or integration — whichever is the sync unit).
+- **FR-1.3** A sync failure **must not** overwrite the existing `last_synced_at` value.
+- **FR-1.4** The system **must** separately record a `last_sync_attempted_at` timestamp and a `last_sync_status` field (`success | failure | in_progress`) to distinguish recency from health.
+- **FR-1.5** Timestamps **must** be stored and transmitted in UTC; conversion to local time is the responsibility of the display layer.
+
+### 2. API
+
+- **FR-2.1** A GET endpoint **must** return `last_synced_at`, `last_sync_attempted_at`, and `last_sync_status` for the authenticated entity.
+- **FR-2.2** If no sync has ever occurred, the API **must** return `last_synced_at: null` (not a zero-value date).
+- **FR-2.3** The endpoint **must** respond within 200 ms at p95 under normal load.
+- **FR-2.4** The endpoint **must** be authenticated and scoped — users **must not** be able to query sync state for entities they do not own or administer.
+
+### 3. UI Display
+
+- **FR-3.1** The relevant UI surface (dashboard header, settings panel, or data table) **must** display a human-readable relative time string (e.g., *"Last synced 3 minutes ago"*) derived from `last_synced_at`.
+- **FR-3.2** Hovering or tapping the relative time **must** reveal the full absolute timestamp in the user's local timezone.
+- **FR-3.3** When `last_synced_at` is `null`, the UI **must** display *"Never synced"* or equivalent copy — never a blank or raw null.
+- **FR-3.4** When `last_sync_status` is `in_progress`, the UI **must** display a loading/syncing indicator instead of the stale timestamp.
+- **FR-3.5** When `last_sync_status` is `failure`, the UI **must** display a warning state (e.g., amber icon + *"Sync failed · Last successful sync X ago"*).
+- **FR-3.6** The displayed timestamp **must** auto-refresh at a maximum interval of 60 seconds without requiring a full page reload.
+
+### 4. Logging & Observability
+
+- **FR-4.1** Every sync completion and failure **must** emit a structured log event containing the entity ID, sync type, status, and timestamp.
+- **FR-4.2** A monitoring alert **must** fire if `last_synced_at` for any active entity exceeds the configured staleness threshold (default: 2× the expected sync interval).
+
+---
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+| ID | Criterion |
+|---|---|
+| **AC-1** | After a successful sync, `last_synced_at` in the datastore is updated within 2 seconds of sync completion. |
+| **AC-2** | After a failed sync, `last_synced_at` retains its previous value; `last_sync_status` is set to `failure`. |
+| **AC-3** | GET sync-status API returns HTTP 200 with correct fields in < 200 ms at p95. |
+| **AC-4** | Unauthenticated requests to the sync-status endpoint return HTTP 401. |
+| **AC-5** | UI shows *"Never synced"* for a brand-new entity that has never completed a sync. |
+| **AC-6** | UI shows the syncing indicator while a sync is actively `in_progress`. |
+| **AC-7** | UI shows the warning state within one auto-refresh cycle (≤ 60 s) after a sync failure is recorded. |
+| **AC-8** | Hovering the relative-time string reveals the correct absolute local-timezone timestamp. |
+| **AC-9** | Structured log events are emitted for every sync completion and every sync failure with required fields. |
+| **AC-10** | Staleness alert fires in the monitoring system when threshold is exceeded for an active entity. |
 
-## Out of scope
+---
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## Out of Scope
+
+- Triggering or scheduling sync operations (covered by the sync engine PRD)
+- Detailed sync error messages or error-code enumeration (covered by error-handling PRD)
+- Historical sync log UI / audit trail beyond the single last-sync record
+- Per-field or per-record granular sync status
+- Real-time push/WebSocket delivery of timestamp updates (polling interval satisfies v1)
+- Multi-region timestamp conflict resolution
+- User-configurable staleness thresholds (ops-configured only in v1)
