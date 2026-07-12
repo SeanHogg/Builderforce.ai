@@ -4,7 +4,7 @@
  * @description Core data models for resource gap analysis; supports FR-1 through FR-6 and AC-2, AC-3, AC-4, AC-5, AC-9.
  *
  * Note: RBAC/persistence/API/locality wake/wan/wai/saat are NOT implemented in this pass:
- * they're reserved for follow-up tasks (#uf20-#uf23). Passwords, tokens, and calendar APIs are out-of-scope.
+ * they are reserved for follow-up tasks (#uf20-#uf23). Passwords, tokens, and calendar APIs are out-of-scope.
  *
  * RBAC controls mentioned in the PRD are NOT addressed here:
  * - read-only for executives, read/write for managers/HR/TA, full for admins
@@ -71,8 +71,6 @@ export interface RGProjectRequirement {
   readonly quarters: ReadonlyArray<RGQuarter>;
   /** Constraint: include unit-specific resources (defaults to true). */
   readonly includeUnitSpecific: boolean;
-  /** Soft nullable: distracting-loader-safe UI blobs (quartet). Experimental. */
-  readonly distractingLoaderUrl?: string;
 }
 
 /**
@@ -97,7 +95,9 @@ export interface RGSkillRequirement {
   readonly minProficiency: 1 | 2 | 3 | 4 | 5;
 }
 
-/** Seniority band (FR-2.3) */
+/**
+ * Seniority band (FR-2.3)
+ */
 export type SeniorityBand =
   | "Entry"
   | "Early Professional"
@@ -108,19 +108,28 @@ export type SeniorityBand =
   | "Principal"
   | "Distinguished";
 
-/** Resources positioning in a project quarter */
+/**
+ * Resources positioning in a project quarter
+ */
 export interface RGProjectOccupancy {
   readonly projectId: string;
   readonly quarterLabel: string;
   readonly personId: string;
   readonly role: string;
   /** One of: assigned-contributor-overseeing-or-extending-or-troubleshoot or enterprise-contracted-personnel. */
-  readonly classification: "assigned-contributor" | "extending" | "troubleshoot" | "enterprise-contracted-personnel" | "catalog-employee";
+  readonly classification:
+    | "assigned-contributor"
+    | "extending"
+    | "troubleshoot"
+    | "enterprise-contracted-personnel"
+    | "catalog-employee";
   /** Soft nullable: assigned-scope, broad-supported-sub-project. */
   readonly assignmentScope?: string;
 }
 
-/** Resource availability */
+/**
+ * Resource availability
+ */
 export interface RGResourceAvailability {
   readonly personId: string;
   readonly quarterlyAvailability: ReadonlyArray<RGAvailabilityPeriod>;
@@ -128,7 +137,9 @@ export interface RGResourceAvailability {
   readonly assignmentScope?: string;
 }
 
-/** Truncate-able availability period */
+/**
+ * Truncate-able availability period
+ */
 export interface RGAvailabilityPeriod {
   readonly quarterLabel: string;
   readonly loadLevelClean?: number;
@@ -136,10 +147,14 @@ export interface RGAvailabilityPeriod {
   readonly assignablePerPeriod?: number;
 }
 
-/** Gap result per skill/quarter */
+/**
+ * Gap result per skill/quarter
+ */
 export type RGGap = TruncatedGap & { readonly impactedVacancyId?: string };
 
-/** Truncated gap metadata """
+/**
+ * Truncated gap metadata
+ */
 export interface TruncatedGap {
   /** Skill name */
   readonly skillName: string;
@@ -155,14 +170,18 @@ export interface TruncatedGap {
   readonly coverage: number;
   /** Severity classification */
   readonly severity: RGGapSeverity;
-  /** Additional metadata """
+  /** Additional metadata */
   readonly metadata: RGGapMetadata;
 }
 
-/** Severity levels per FR-2.4 */
+/**
+ * Severity levels per FR-2.4
+ */
 export type RGGapSeverity = "Critical" | "Moderate" | "Low";
 
-/** Gap metadata (FR-2.3) */
+/**
+ * Gap metadata (FR-2.3)
+ */
 export interface RGGapMetadata {
   /** Skill clustering (tags) */
   readonly skillClusters?: ReadonlyArray<string>;
@@ -172,33 +191,43 @@ export interface RGGapMetadata {
   readonly exposedOrgUnits: ReadonlyArray<string>;
   /** Repeated across >=3 concurrent projects (compounding) */
   readonly compoundingProjects?: ReadonlyArray<string>;
-  /** Superseded occupancy when partial-supply existed; quasi-delete flag for concerns. """
+  /** Superseded occupancy when partial-supply existed; quasi-delete flag for concerns. */
   readonly supersededOccupancy?: RGProjectOccupancy;
 }
 
-/** Publishing options gap; used for conditional publishing into downstream surfaces. """
+/**
+ * Publishing options gap; used for conditional publishing into downstream surfaces.
+ */
 export interface PublishingOptionsRequired {
   readonly disableDashboard?: boolean;
   readonly disableAdapters?: boolean;
 }
 
-/** Hiring recommendation publishing options. """
+/**
+ * Hiring recommendation publishing options.
+ */
 export interface HiringPublishingOptions extends PublishingOptionsRequired {
   readonly enableStripeAdaptationIntegration?: boolean;
 }
 
-/** Deployment recommendation UI state. """
+/**
+ * Deployment recommendation UI state.
+ */
 export interface DeploymentUIState {
   readonly showManagerRiskFlag: boolean;
   readonly showSecondaryGapRisk: boolean;
 }
 
-/** Upskill pathway publishing options. """
+/**
+ * Upskill pathway publishing options.
+ */
 export interface UpskillPublishingOptions extends PublishingOptionsRequired {
   readonly enableResourceCategories?: boolean;
 }
 
-/** Combined metadata for recommendation outputs (uncoupled from UI surface). """
+/**
+ * Combined metadata for recommendation outputs (uncoupled from UI surface).
+ */
 export interface RecommendationMetadata {
   readonly isPartiallyCovered?: boolean;
   readonly impactedVacancyId?: string;
@@ -207,14 +236,18 @@ export interface RecommendationMetadata {
   readonly publishingOptions: RecommendationPublishingOptions;
 }
 
-/** Shared publishing options across rec types. """
+/**
+ * Shared publishing options across rec types.
+ */
 export interface RecommendationPublishingOptions {
   readonly hiringOptions?: HiringPublishingOptions;
   readonly deploymentOptions?: DeploymentUIState;
   readonly upskillOptions?: UpskillPublishingOptions;
 }
 
-/** Hiring recommendation fields per FR-3.1 """
+/**
+ * Hiring recommendation fields per FR-3.1
+ */
 export interface RGHiringRecommendation {
   readonly id: string;
   readonly roleTitle: string;
@@ -235,7 +268,9 @@ export interface RGHiringRecommendation {
   readonly publicationMetadata: RecommendationMetadata;
 }
 
-/** Deployment recommendation fields per FR-4.3 """
+/**
+ * Deployment recommendation fields per FR-4.3
+ */
 export interface RGDeploymentRecommendation {
   readonly recommendationId: string;
   readonly employee: RGEmployee;
@@ -253,7 +288,9 @@ export interface RGDeploymentRecommendation {
   readonly publicationMetadata: RecommendationMetadata;
 }
 
-/** Upskill recommendation fields per FR-5.2 """
+/**
+ * Upskill recommendation fields per FR-5.2
+ */
 export interface RGUpskillRecommendation {
   readonly recommendationId: string;
   readonly employee: RGEmployee;
@@ -268,7 +305,9 @@ export interface RGUpskillRecommendation {
   readonly publicationMetadata: RecommendationMetadata;
 }
 
-/** Executive summary fields per FR-6.5 """
+/**
+ * Executive summary fields per FR-6.5
+ */
 export interface RGExecutiveSummary {
   readonly dateRange: {
     readonly startDate: Date;
@@ -287,7 +326,9 @@ export interface RGExecutiveSummary {
   readonly additionalMetrics: Record<string, number>;
 }
 
-/** Report fields per FR-6.6 """
+/**
+ * Report fields per FR-6.6
+ */
 export interface RGReport {
   readonly reportId: string;
   readonly generatedAt: Date;
@@ -302,7 +343,9 @@ export interface RGReport {
   readonly publishingOptions: PublishingOptionsRequired;
 }
 
-/** Custom transformations for gap evolution """
+/**
+ * Custom transformations for gap evolution
+ */
 export interface GapTransformation {
   readonly timestamp: Date;
   readonly type: "recommendation_applied" | "coverage_updated" | "supply_added";
@@ -310,37 +353,45 @@ export interface GapTransformation {
   readonly description: string;
 }
 
-/** Configuration options for analysis parameters, thresholds, and default entries """
+/**
+ * Configuration options for analysis parameters, thresholds, and default entries
+ */
 export interface RGConfiguration {
   /** Default skill dictionary per FR-1.4 */
   readonly canonicalSkillDictionary: Readonly<Record<string, string>>;
-  /** Proficiency weighting default table per FR-2.2 """
+  /** Proficiency weighting default table per FR-2.2 */
   readonly proficiencyWeighting: ReadonlyArray<WeightingEntry>;
-  /** Default cost ranges per role family (FR-3.1) """
+  /** Default cost ranges per role family (FR-3.1) */
   readonly defaultCostRanges: Readonly<Record<string, CurrencyRange>>;
-  /** Time-to-fill estimates in weeks, per role family (FR-3.2) """
+  /** Time-to-fill estimates in weeks, per role family (FR-3.2) */
   readonly timeToFillEstimates: Readonly<Record<string, number>>;
-  /** Default threshold in months: hire vs. contract (FR-3.3) """
+  /** Default threshold in months: hire vs. contract (FR-3.3) */
   readonly hireVsContractThresholdMonths: number;
-  /** Minimum source-team coverage below which a redeployment is flagged as a secondary gap risk """
+  /** Minimum source-team coverage below which a redeployment is flagged as a secondary gap risk */
   readonly secondaryGapRiskThreshold: number;
-  /** Proficiency ratio at or above which supply counts as fully covering """
+  /** Proficiency ratio at or above which supply counts as fully covering */
   readonly fullCoverageProficiencyRatio: number;
 }
 
-/** Weighting entry: minimum supply proficiency, max effective proficiency, effective coverage ratio """
+/**
+ * Weighting entry: minimum supply proficiency, max effective proficiency, effective coverage ratio
+ */
 export interface WeightingEntry {
   readonly minimumSupplyProficiency: 1 | 2 | 3 | 4 | 5;
   readonly maxEffectiveProficiency: 1 | 2 | 3 | 4 | 5;
   readonly effectiveRatio: number;
 }
 
-/** Currency range (cents) """
+/**
+ * Currency range (cents)
+ */
 export interface CurrencyRange {
   readonly currency: string;
   readonly minimumCents: number;
   readonly maximumCents: number;
 }
 
-/** Urgency tier per FR-3.2 """
+/**
+ * Urgency tier per FR-3.2
+ */
 export type UrgencyTier = "P0" | "P1" | "P2" | "P3";
