@@ -122,6 +122,20 @@ export class RuntimeService {
     private readonly resolveNextStatus?: (info: {
       projectId: number; fromStatus: string;
     }) => Promise<string | null>,
+    /**
+     * Optional run-milestone sink invoked when an execution STARTS (running), COMPLETES,
+     * or FAILS — so a cloud-agent run narrates its progress back into every Brain chat the
+     * ticket is linked to (the runtime's chat-awareness hook). Wired at the composition
+     * root to {@link ChatTicketService.postRunMilestone}, which fans out to the linked
+     * chats and is per-execution+phase idempotent. Best-effort by contract: it is called
+     * AFTER the lane sync + autonomous-chaining side-effects and must never block them.
+     */
+    private readonly onRunMilestone?: (info: {
+      tenantId: number; taskId: number; projectId: number; taskType: string;
+      agentRef: string | null; executionId: number;
+      phase: 'started' | 'completed' | 'failed';
+      toStatus?: string | null; resultText?: string | null; errorMessage?: string | null;
+    }) => Promise<void>,
   ) {}
 
   async submit(dto: SubmitTaskDto): Promise<Execution> {
@@ -385,6 +399,27 @@ export class RuntimeService {
             tenantId, taskId: Number(execution.taskId), projectId, status: toStatus,
             originLaneKey: parseLaneKey(execution.payload),
           });
+        }
+
+        // Narrate the run's progress back into the ticket's linked Brain chats (started ▸
+        // completed ▸ failed) so a dev agent's work is visible in the conversation that
+        // spawned it. Skipped for a Validator review run (internal). LAST side-effect so a
+        // milestone failure can't block the lane sync/chaining above; the hook is itself
+        // best-effort + per-execution+phase idempotent.
+        if (!isReviewRun) {
+          const taskType = (task.toPlain() as { taskType?: string }).taskType ?? 'task';
+          const phase = dto.status === ExecutionStatus.RUNNING
+            ? (toStatus === TaskStatus.IN_PROGRESS && fromStatus !== TaskStatus.IN_PROGRESS ? 'started' as const : null)
+            : dto.status === ExecutionStatus.COMPLETED ? 'completed' as const
+            : dto.status === ExecutionStatus.FAILED ? 'failed' as const : null;
+          if (phase) {
+            await this.onRunMilestone?.({
+              tenantId, taskId: Number(execution.taskId), projectId,
+              taskType: taskType === 'epic' || taskType === 'gap' ? taskType : 'task',
+              agentRef: execution.cloudAgentRef, executionId: Number(saved.id), phase,
+              toStatus, resultText: dto.result ?? null, errorMessage: dto.errorMessage ?? null,
+            });
+          }
         }
       }
     } catch {

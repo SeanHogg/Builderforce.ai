@@ -24,6 +24,7 @@ import { loadCloudRunForSelfHeal, selfHealCloudRun } from './application/runtime
 import { syncExecutionTaskLifecycle } from './application/task/taskLifecycle';
 import { maybeAutoRunOnLaneEntry } from './presentation/routes/taskRoutes';
 import { resolveNextTaskStatus } from './application/swimlane/nextLane';
+import { ChatTicketService } from './application/brain/ChatTicketService';
 
 export function buildRuntimeService(env: Env, db: Db): RuntimeService {
   // eslint-disable-next-line prefer-const -- the lane-auto callback closes over the
@@ -56,6 +57,17 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
     // swimlane by position (not a hardcoded in_review), so a custom lane sequence
     // flows correctly. Null → the default in_review applies (non-board task).
     (info) => resolveNextTaskStatus(db, info.projectId, info.fromStatus),
+    // Run milestones → linked Brain chats: narrate a cloud-agent run's progress
+    // (started ▸ completed ▸ failed) back into every chat the ticket is linked to, so
+    // "the devs provide updates as they work" is visible in the conversation that spawned
+    // the work. Runtime chat-awareness. Best-effort (postRunMilestone swallows its own
+    // errors + dedupes per execution+phase); the extra guard keeps a construction/throw
+    // from ever bubbling into RuntimeService.update.
+    (info) => new ChatTicketService(db, env).postRunMilestone(info.tenantId, {
+      kind: info.taskType, ref: String(info.taskId), agentRef: info.agentRef,
+      phase: info.phase, executionId: info.executionId,
+      toStatus: info.toStatus, resultText: info.resultText, errorMessage: info.errorMessage,
+    }).catch(() => {}),
   );
   return runtimeService;
 }

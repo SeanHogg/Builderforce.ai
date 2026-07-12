@@ -13,8 +13,9 @@ import {
   computeBrainDiagnostics,
   formatBrainDiagnostics,
   formatBrainProvenance,
+  formatChatDiagnostics,
 } from '@seanhogg/builderforce-brain-embedded';
-import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
+import type { BrainMessage, BrainTraceEvent, ChatDiagnosticsData } from '@seanhogg/builderforce-brain-embedded';
 
 export interface TranscriptInput {
   messages: BrainMessage[];
@@ -27,6 +28,10 @@ export interface TranscriptInput {
   /** The chat's title and server id, so a pasted transcript is traceable. */
   chatTitle?: string;
   chatId?: number | null;
+  /** Gathered chat identity + Evermind wiring state — rendered as a "Chat diagnostics"
+   *  block so a pasted report answers "what STATE was this chat in?" (project, tenant,
+   *  Evermind head, learn-gate outcome, agents, linked tickets), not just the turns. */
+  diagnostics?: ChatDiagnosticsData;
 }
 
 /** True when there is something worth copying (any turn, trace step, or error). */
@@ -68,6 +73,15 @@ export function buildTranscript(input: TranscriptInput): string {
     lines.push(`Chat: ${title}${input.chatId != null ? ` (#${input.chatId})` : ''}`);
   }
   lines.push(`Project: ${input.project ? `${input.project.name} (#${input.project.id})` : 'No project'}`);
+
+  // Chat diagnostics — the identity + Evermind wiring state (project the CHAT is bound
+  // to, tenant, head version/mode/learned/queued/last-learned, the last turn's learn-gate
+  // outcome, invited agents, linked tickets) plus a Signals section naming the likely
+  // cause of "connected yet nothing learns". Shared pure renderer (web parity later).
+  if (input.diagnostics) {
+    lines.push('');
+    lines.push(...formatChatDiagnostics(input.diagnostics));
+  }
 
   // Model + account provenance — surface, configured vs actual model, which account
   // served the turns, and any connected account the gateway could NOT use (e.g. an

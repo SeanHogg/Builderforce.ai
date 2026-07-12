@@ -1263,6 +1263,60 @@ function workItemLinkFromCreate(toolName, result) {
 function isTicketRecordingTool(name) {
   return TICKET_RECORDING_TOOLS.has(name);
 }
+var READ_ONLY_PLATFORM_SUFFIXES = [
+  "_list",
+  "_get",
+  "_search",
+  "_recall",
+  "_read",
+  "_assignees",
+  "_audit",
+  "_trace",
+  "_tree",
+  "_rollup",
+  "_runs",
+  "_graph",
+  "_triggers",
+  "_metrics",
+  "_usage",
+  "_query",
+  "_health",
+  "_models",
+  "_providers",
+  "_proposals",
+  "_ticket_lineage",
+  "_get_messages",
+  "_run_targets",
+  "_activity_calendar",
+  "_check_key",
+  "_browse_public",
+  "_tool_audit",
+  "_task_file_changes",
+  "_list_active",
+  "_list_agents",
+  "_list_all",
+  "_list_for_task",
+  "_list_mine",
+  "_list_recent",
+  "_list_tickets",
+  "_list_sessions",
+  "_list_users",
+  "_list_templates",
+  "_list_purchased",
+  "_list_directories",
+  "_list_error_groups",
+  "_list_pull_requests",
+  "_get_session",
+  "_get_stats",
+  "_get_user",
+  "_get_config",
+  "_get_access",
+  "_get_error_group"
+];
+function isReadOnlyPlatformTool(name) {
+  if (!name.startsWith("builtin_")) return false;
+  return READ_ONLY_PLATFORM_SUFFIXES.some((s) => name.endsWith(s));
+}
 var NOT_STARTED_TASK_STATUSES = /* @__PURE__ */ new Set(["backlog", "todo", "ready"]);
 var TASK_TIER_KINDS = /* @__PURE__ */ new Set(["task", "epic", "gap"]);
 function linkedTicketsToAdvance(listResult) {
@@ -1313,6 +1367,7 @@ function provenanceMetadata(result) {
 var MAX_TOOL_ITERATIONS = 25;
 var HISTORY_WINDOW = 80;
 var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files"]);
+var isDedupableRead = (name) => DEDUP_READ_TOOLS.has(name) || isReadOnlyPlatformTool(name);
 function accrueByoUnresolved(c, raw) {
   if (!raw) return;
   const before = c.byoUnresolved.length;
@@ -1911,7 +1966,7 @@ ${chatWorkLinkingDirective(chatId)}`;
             continue;
           }
         }
-        const isReadTool = DEDUP_READ_TOOLS.has(tc.name);
+        const isReadTool = isDedupableRead(tc.name);
         const dedupeKey = `${tc.name}:${tc.args ?? ""}`;
         if (isReadTool) {
           if (readDedupe.has(dedupeKey)) {
@@ -2360,6 +2415,84 @@ function takePendingPrompt() {
     return null;
   }
 }
+
+// src/chatDiagnostics.ts
+function fmtProject(id, name) {
+  if (id == null) return "none";
+  return name ? `${name} (#${id})` : `#${id}`;
+}
+function diagnosticsSignals(d) {
+  const out = [];
+  const ev = d.evermind;
+  if (d.projectId == null || d.lastLearn?.reason === "not-attached") {
+    out.push(
+      "\u26A0\uFE0F Chat is NOT attached to a project (chat.projectId is null). The learn gate keys on the CHAT's project, so this chat contributes NOTHING to any Evermind \u2014 even though the panel shows the selected project as connected. Attach the chat to a project (or re-open it so the self-heal adopts the active project)."
+    );
+  } else if (d.selectedProjectId != null && d.selectedProjectId !== d.projectId) {
+    out.push(
+      `\u26A0\uFE0F Chat's project (#${d.projectId}) differs from the panel's selected project (#${d.selectedProjectId}). The Evermind panel reflects the SELECTED project; this chat feeds project #${d.projectId}. They are different models \u2014 compare the versions below.`
+    );
+  }
+  if (ev && ev.version < 1) {
+    out.push(
+      `\u26A0\uFE0F The chat's project Evermind is UNSEEDED (v0). Until a base model is seeded (version \u2265 1) the gate returns "not-seeded" and no turn contributes. This is why a learn step can report v0.`
+    );
+  }
+  if (ev && ev.version >= 1 && ev.mode !== "connected") {
+    out.push(`\u26A0\uFE0F The chat's project Evermind is "${ev.mode}" (not connected) \u2014 read-only, so turns don't contribute.`);
+  }
+  if (d.lastLearn && d.lastLearn.learned && ev && ev.version >= 1 && d.lastLearn.version !== ev.version) {
+    out.push(
+      `\u26A0\uFE0F Last turn reported learn version v${d.lastLearn.version} but the chat's project head is v${ev.version}. A version mismatch means the learn step and the panel are resolving DIFFERENT projects/heads.`
+    );
+  }
+  if ((d.agents?.length ?? 0) === 0) {
+    out.push("\u2139\uFE0F No agents are invited into this chat (chats.list_agents is empty), so dispatched agents post nothing back here.");
+  }
+  return out;
+}
+function formatChatDiagnostics(d) {
+  const lines = ["## Chat diagnostics"];
+  if (d.surface) lines.push(`- Surface: ${d.surface}`);
+  lines.push(`- Chat: ${d.chatTitle?.trim() ? `"${d.chatTitle.trim()}"` : "Untitled"}${d.chatId != null ? ` (#${d.chatId})` : ""}${d.chatVisibility ? ` \xB7 ${d.chatVisibility}` : ""}`);
+  lines.push(`- Chat's project: ${fmtProject(d.projectId, d.projectName)}`);
+  if (d.selectedProjectId != null && d.selectedProjectId !== d.projectId) {
+    lines.push(`- Panel's selected project: #${d.selectedProjectId}`);
+  }
+  lines.push(`- Tenant: ${d.tenantId != null ? `#${d.tenantId}` : "unknown"} \xB7 User: ${d.userId ?? "unknown"}`);
+  const ev = d.evermind;
+  if (ev) {
+    lines.push(
+      `- Evermind (chat's project): v${ev.version} \xB7 ${ev.mode}${ev.inferenceEnabled != null ? ` \xB7 inference ${ev.inferenceEnabled ? "on" : "off"}` : ""} \xB7 teacher ${ev.teacherModel ? ev.teacherModel : "none"}${ev.contributions != null ? ` \xB7 Learned ${ev.contributions}` : ""}${ev.pending != null ? ` \xB7 Queued ${ev.pending}` : ""} \xB7 Last learned ${ev.lastLearnedAt ? ev.lastLearnedAt : "never"}`
+    );
+  } else {
+    lines.push(`- Evermind (chat's project): not resolved (no project, or head unavailable)`);
+  }
+  if (d.lastLearn) {
+    lines.push(
+      `- Last turn learn gate: learned=${d.lastLearn.learned} \xB7 reported v${d.lastLearn.version}${d.lastLearn.reason ? ` \xB7 reason=${d.lastLearn.reason}` : ""}`
+    );
+  } else {
+    lines.push("- Last turn learn gate: unknown (no assistant turn carried a learn outcome)");
+  }
+  const agents = d.agents ?? [];
+  lines.push(`- Agents in chat (${agents.length})${agents.length ? ": " + agents.map((a) => `${a.agentRef} (${a.role})`).join(", ") : ""}`);
+  const tickets = d.tickets ?? [];
+  if (tickets.length) {
+    lines.push(`- Linked tickets (${tickets.length}):`);
+    for (const tk of tickets) {
+      lines.push(`  - ${tk.kind} #${tk.ref}${tk.label ? ` "${tk.label}"` : ""}${tk.linkType || tk.status ? ` [${[tk.linkType, tk.status].filter(Boolean).join(", ")}]` : ""}`);
+    }
+  } else {
+    lines.push("- Linked tickets (0)");
+  }
+  const signals = diagnosticsSignals(d);
+  if (signals.length) {
+    lines.push("", "### Signals");
+    for (const s of signals) lines.push(`- ${s}`);
+  }
+  return lines;
+}
 export {
   ADDRESSED_TO_META_KEY,
   AUTHORED_BY_META_KEY,
@@ -2393,6 +2526,7 @@ export {
   filterMentionCandidates,
   formatBrainDiagnostics,
   formatBrainProvenance,
+  formatChatDiagnostics,
   formatEvermindMemoryBlock,
   getGlobalRunState,
   getRunSnapshot,

@@ -11,7 +11,7 @@
  *                    'chats.changed', 'platform.write'{name}, 'runs.local'{running,awaiting},
  *                    'open.artifact'{kind,ref,projectId}
  *   host → webview : 'init'{…}, 'token'{token}, 'response'{id,ok,result|error}, 'intent'{intent},
- *                    'editorContext'{editorContext}
+ *                    'editorContext'{editorContext}, 'refresh'
  */
 
 import type { EditorContext } from '../../src/idePersona';
@@ -110,6 +110,7 @@ let initData: InitData | null = null;
 const initWaiters: Array<(d: InitData) => void> = [];
 const tokenWaiters: Array<() => void> = [];
 const intentWaiters: Array<(i: BrainIntent) => void> = [];
+const refreshWaiters: Array<() => void> = [];
 
 // The latest editor context (active file / selection / open tabs), pushed live by the
 // host so the ambient system channel always reflects what the user is looking at.

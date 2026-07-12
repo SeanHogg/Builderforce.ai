@@ -656,14 +656,15 @@ export class ChatTicketService {
     return row?.name ?? agentRef;
   }
 
-  /** Append a system-authored assistant line to a chat (used for dispatch notices). */
+  /** Append a system-authored assistant line to a chat (dispatch notices + run milestones).
+   *  metadata is a JSON string column (matches BrainService's JSON.stringify convention). */
   private async postSystemMessage(chatId: number, content: string, metadata?: Record<string, unknown>): Promise<void> {
     const [maxRow] = await this.db
       .select({ maxSeq: sql<number>`COALESCE(MAX(${brainChatMessages.seq}), 0)` })
       .from(brainChatMessages).where(eq(brainChatMessages.chatId, chatId));
     const seq = Number(maxRow?.maxSeq ?? 0) + 1;
     await this.db.insert(brainChatMessages).values({
-      chatId, role: 'assistant', content, metadata: (metadata ?? null) as unknown as string, seq,
+      chatId, role: 'assistant', content, metadata: metadata ? JSON.stringify(metadata) : null, seq,
     });
   }
 
@@ -702,10 +703,81 @@ export class ChatTicketService {
       if (name === undefined) name = await this.agentDisplayName(tenantId, agentRef);
       await this.postSystemMessage(
         t.chatId,
-        `🤖 **${name}** has been assigned to ${kind} #${ref} and is starting work. Progress will appear on the ticket.`,
+        `🤖 **${name}** has been assigned to ${kind} #${ref}. Progress will appear here as it works.`,
         { agentDispatch: true, agentRef, ticketKind: kind, ticketRef: ref },
       );
     }
+  }
+
+  // ── run milestones → chat (the runtime's chat-awareness hook) ─────────────
+
+  /** First non-empty line of a run result/error, trimmed of control tokens + capped. */
+  private static firstLine(s?: string | null): string {
+    if (!s) return '';
+    const line = s.replace(/\[auto-approve\]/g, '').split('\n').map((x) => x.trim()).find(Boolean) ?? '';
+    return line.length > 240 ? `${line.slice(0, 240)}…` : line;
+  }
+
+  /** Human line for a run milestone. */
+  private static runMilestoneText(
+    name: string, kind: string, ref: string,
+    input: { phase: 'started' | 'completed' | 'failed'; toStatus?: string | null; resultText?: string | null; errorMessage?: string | null },
+  ): string {
+    if (input.phase === 'started') return `▶️ **${name}** started working on ${kind} #${ref}.`;
+    if (input.phase === 'completed') {
+      const lane = input.toStatus ? ` — moved to **${input.toStatus.replace(/_/g, ' ')}**` : '';
+      const note = ChatTicketService.firstLine(input.resultText);
+      return `✅ **${name}** finished ${kind} #${ref}${lane}.${note ? ` ${note}` : ''}`;
+    }
+    const why = ChatTicketService.firstLine(input.errorMessage);
+    return `⚠️ **${name}**'s run on ${kind} #${ref} failed.${why ? ` ${why}` : ''}`;
+  }
+
+  /** Has a milestone with this per-execution+phase key already been posted to the chat?
+   *  (metadata is a JSON string; `runMilestone` is written first so the LIKE is exact.) */
+  private async milestonePosted(chatId: number, key: string): Promise<boolean> {
+    const [hit] = await this.db
+      .select({ id: brainChatMessages.id })
+      .from(brainChatMessages)
+      .where(and(eq(brainChatMessages.chatId, chatId), sql`${brainChatMessages.metadata} LIKE ${`%"runMilestone":"${key}"%`}`))
+      .limit(1);
+    return !!hit;
+  }
+
+  /**
+   * Post a run MILESTONE for a ticket into every Brain chat it is linked to — the runtime's
+   * hook so a cloud-agent run narrates its progress back into the conversation that spawned
+   * the work (started ▸ completed ▸ failed). Tenant-scoped + system-driven, fanned out via
+   * {@link listChatsForTicket}. Per-execution + per-phase IDEMPOTENT (a retried lifecycle
+   * event never double-posts). Best-effort — never throws to the caller (a run's chat
+   * narration must not be able to break the run). This closes the "runtime has no chat
+   * awareness" gap: dev agents now report progress in the chat as they work.
+   */
+  async postRunMilestone(
+    tenantId: number,
+    input: {
+      kind: string; ref: string; agentRef?: string | null;
+      phase: 'started' | 'completed' | 'failed'; executionId: number;
+      toStatus?: string | null; resultText?: string | null; errorMessage?: string | null; agentName?: string;
+    },
+  ): Promise<void> {
+    try {
+      const { kind, ref, phase, executionId } = input;
+      if (!ref || !isTicketKind(kind)) return;
+      const chats = (await this.listChatsForTicket(tenantId, kind, ref))
+        .filter((c) => !c.isArchived && c.mergedIntoChatId == null);
+      if (chats.length === 0) return;
+      const name = input.agentName
+        ?? (input.agentRef ? await this.agentDisplayName(tenantId, input.agentRef) : 'The agent');
+      const key = `${executionId}:${phase}`;
+      const text = ChatTicketService.runMilestoneText(name, kind, ref, input);
+      for (const c of chats) {
+        if (await this.milestonePosted(c.chatId, key)) continue;
+        await this.postSystemMessage(c.chatId, text, {
+          runMilestone: key, ticketKind: kind, ticketRef: ref, phase, executionId, agentRef: input.agentRef ?? null,
+        });
+      }
+    } catch { /* best-effort: chat narration must never break a run */ }
   }
 }
 

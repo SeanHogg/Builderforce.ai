@@ -1482,4 +1482,75 @@ declare function parseMessageProvenance(msg: {
  */
 declare function withProvenanceMetadata(provenance: MessageProvenance | null | undefined, base?: Record<string, unknown>): string | undefined;
 
-export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatInputAttachment, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type EvermindLearnOutcome, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, type McpToolResultInfo, type MentionToken, type MessageProvenance, NOT_STARTED_TASK_STATUSES, PROVENANCE_META_KEY, type PreparedImage, type ProvenanceAccount, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, accountUsedInTrace, activeMentionToken, attachEvermindLearn, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, chatWorkLinkingDirective, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, filterMentionCandidates, formatBrainDiagnostics, formatBrainProvenance, formatEvermindMemoryBlock, getGlobalRunState, getRunSnapshot, getRunTrace, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, linkedTicketsToAdvance, mentionRecipient, modelsUsedInTrace, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, prepareImageDataUrl, resolveRecipient, resolveRunConfirm, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, startRun, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };
+/**
+ * chatDiagnostics — a pure serializer for the "Copy diagnostics" action.
+ *
+ * The plain transcript (turns + tool I/O) answers "what did the model say?"; this
+ * answers "what STATE was this chat in?" — the identity + wiring facts you otherwise
+ * have to guess at from screenshots: the chat's own project, the tenant, the project
+ * Evermind head (version / mode / learned / queued / last-learned), the learn-gate
+ * outcome for the last turn, the agents invited into the chat, and the linked tickets.
+ *
+ * It is the fix for a whole class of "even after N fixes I can't tell what's wrong"
+ * loops: the #1 real cause of "Learning · Connected yet nothing learns" is that the
+ * CHAT is bound to a different project (or none) than the panel shows — a fact invisible
+ * in the UI but dumped plainly here, with a Signals section that names the likely cause.
+ *
+ * Pure + host-agnostic (no fetch, no DOM): every surface gathers the data its own way
+ * and calls this ONE renderer, so the copied report is identical on web and in VS Code.
+ */
+/** The project Evermind head/activity snapshot, as the panel reads it. */
+interface ChatDiagnosticsEvermind {
+    version: number;
+    mode: string;
+    inferenceEnabled?: boolean;
+    teacherModel?: string | null;
+    /** Merged contributions to date — the panel's "Learned". */
+    contributions?: number;
+    /** Queued-but-not-yet-merged contributions — the panel's "Queued". */
+    pending?: number;
+    /** ISO timestamp of the last merge, or null if never — the panel's "Last learned". */
+    lastLearnedAt?: string | null;
+}
+/** Everything the diagnostics block needs — already gathered by the host (pure in). */
+interface ChatDiagnosticsData {
+    surface?: string;
+    chatId?: number | null;
+    chatTitle?: string | null;
+    /** 'shared' | 'locked' — who can see the chat. */
+    chatVisibility?: string | null;
+    /** The chat's OWN project (what the learn gate keys on), or null when unattached. */
+    projectId?: number | null;
+    projectName?: string | null;
+    /** The project the surrounding UI/panel is showing, when it differs from the chat's. */
+    selectedProjectId?: number | null;
+    tenantId?: number | string | null;
+    userId?: string | null;
+    /** The project Evermind head for the CHAT's project (not the selected one). */
+    evermind?: ChatDiagnosticsEvermind | null;
+    /** The server learn-gate outcome for the most recent assistant turn, if known. */
+    lastLearn?: {
+        learned: boolean;
+        version: number;
+        reason?: string | null;
+    } | null;
+    agents?: Array<{
+        agentRef: string;
+        role: string;
+    }>;
+    tickets?: Array<{
+        kind: string;
+        ref: string;
+        label?: string;
+        linkType?: string;
+        status?: string;
+    }>;
+}
+/**
+ * Render the diagnostics block as Markdown lines (no trailing blank line). Every field
+ * is best-effort: an absent value is shown as "unknown"/"none" rather than omitted, so
+ * the reader can tell "not gathered" from "genuinely empty".
+ */
+declare function formatChatDiagnostics(d: ChatDiagnosticsData): string[];
+
+export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatInputAttachment, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type EvermindLearnOutcome, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, type McpToolResultInfo, type MentionToken, type MessageProvenance, NOT_STARTED_TASK_STATUSES, PROVENANCE_META_KEY, type PreparedImage, type ProvenanceAccount, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, accountUsedInTrace, activeMentionToken, attachEvermindLearn, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, chatWorkLinkingDirective, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, filterMentionCandidates, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindMemoryBlock, getGlobalRunState, getRunSnapshot, getRunTrace, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, linkedTicketsToAdvance, mentionRecipient, modelsUsedInTrace, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, prepareImageDataUrl, resolveRecipient, resolveRunConfirm, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, startRun, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };

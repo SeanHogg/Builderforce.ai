@@ -4,6 +4,16 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-11 — Brain assignment→work→chat handoff + runtime chat-awareness (api 2026.7.82 · brain-embedded 2026.7.29 · frontend 2026.7.57 · VSIX 2026.7.70)
+
+Operator reported (VSIX transcript): the Brain didn't know its project, couldn't see the workforce and invented agent refs, looped/duplicated, and — after assigning dev agents to tickets — the agents never joined the chat, never started, and never reported progress. Fixed across four+one areas:
+
+1. **Project context is chat-first.** The system-prompt project directive was built from the SIDEBAR project (VS Code `App.tsx`) / VIEWED page (web `BrainPanel.tsx`), not the chat's own `projectId`. Both now resolve chat-first (hoisted `associatedProject`; `chats.activeChat?.projectId ?? viewing ?? pinned`).
+2. **Brain sees the real workforce.** `tasks.assignees` MCP tool (was humans-only despite its description) now composes humans + tenant `ide_agents` + `project_role_assignments` staffing with real refs; `cloud_agents.list_mine` advertised to the agent loops. Left `/api/tasks/assignees` route alone (the UI picker merges agents client-side).
+3. **Loop/duplication fixed.** brain-embedded read-dedupe covered only 3 local file tools and any `builtin_*` call wiped the cache; new `isReadOnlyPlatformTool` (read-verb suffixes, provably disjoint from mutating verbs — 0/286 misclassified, 114 read tools now dedupe) + `isDedupableRead`.
+4. **Assignment → work + chat-join.** MCP `tasks.update` fired auto-run only on status change (HTTP route had a reassignment branch; MCP didn't), and nothing synced "agent assigned to chat-linked ticket" → "agent joins chat". New `ChatTicketService.onTicketAgentAssigned` (invite scope='chat' + notice, idempotent) + `fireAgentAssignmentHandoff` (fires run + chat-join on reassignment), wired into `tasks.update`, the HTTP PATCH reassignment branch, and `linkTicket` (assign-then-link ordering).
+5. **Runtime is chat-aware (this pass).** `RuntimeService.update()` — the single canonical execution-transition every cloud surface funnels through — now fires a best-effort `onRunMilestone` hook (wired in `buildRuntimeService.ts` → `ChatTicketService.postRunMilestone`) that posts **started ▸ completed ▸ failed** lines into every chat the ticket is linked to, per-execution+phase idempotent, skipped for Validator review runs, placed after the lane-sync/chaining side-effects so it can't block them. Fixed a latent bug where `postSystemMessage` stored `[object Object]` instead of `JSON.stringify(metadata)`. Residual (PAUSED/CANCELLED phases + distinct message styling) tracked in ROADMAP.
+
 ## ✅ RESOLVED 2026-07-11 — Brain worked linked bug tickets but left them in backlog + ticket chip opened the board, not the ticket details (brain-embedded 2026.7.28 · VSIX 2026.7.69 · frontend next deploy)
 
 Operator (superadmin) reported from a VSIX Brain transcript: the chat correctly linked two bug tickets and the agent said it was fixing them, but (1) it never advanced their status — they sat in backlog while being worked; and (2) clicking a linked ticket's name opened the project board, not the ticket's detail view (assignee/status/PRD).
