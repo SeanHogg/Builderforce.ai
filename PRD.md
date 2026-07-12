@@ -1,55 +1,99 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Validator · task #503
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# PRD: Stakeholder Alignment Diagnostic — Category 6 (Epic #155)
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+**Problem:** Projects slip due to hidden stakeholder misalignment: priorities are not explicitly agreed, two stakeholders submit different P0s for the same team, required approvers are stale/missing, conflicts sit >48h without sign-off, and current plans drift from agreed priorities. There is no systematic diagnostic to detect this.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+**Goal:** Implement Category 6 (Stakeholder Alignment) of the Diagnostic Question Engine as a first-pass spec. This pass defines the canonical questions, branching logic, data models, and rules wiring required for downstream implementation. Outputs must be persisted to a structured health profile attached to the project and feed escalation and reporting.
 
-## Target users / ICP roles
+This PRD covers task creation and specification for sub-tasks **504-508**, to be implemented in the subsequent turn.
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## Target Users / ICP Roles
+
+*   **Primary - Diagnostic Runner:** Program / Delivery Lead, Product Manager running the health check.
+*   **Secondary - Stakeholders:** Eng Lead, Product Lead, Design Lead, GTM Lead who submit P0s and must sign-off.
+*   **Tertiary - Approvers / Leadership:** Directors/VPs in escalation chains.
+*   **System - Diagnostic Engine:** Service that evaluates rules, state machine, and generates digests.
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+**In Scope (First Pass Spec):**
+
+*   Task 504: Canonical Questions, Branching Logic, Health Profile Schema
+*   Task 505: Stakeholder Map & Required Approvers Registry
+*   Task 506: Conflict Detection Rules Engine
+*   Task 507: Sign-off Protocol State Machine & Escalation Path + Reminders
+*   Task 508: Reporting Dashboard (metrics) & Weekly Digests
+*   Wiring definitions only — data models, interfaces, state transitions, SLAs, and acceptance criteria for implementation in next turn.
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### FR1: Canonical Questions (Task 504)
+*   System MUST provide 5 canonical questions for Category 6:
+    1.  Are priorities clear and agreed across stakeholders?
+    2.  Are competing P0s reconciled?
+    3.  Are required approvers current and complete?
+    4.  Have any active conflicts exceeded 48hr without sign-off?
+    5.  Does the current plan / roadmap reflect the agreed priorities?
+*   Each question: `id`, `text`, `type` (boolean + evidence link), `weight`, `required_evidence`.
+*   All answers save to `project.health_profile.stakeholder_alignment`.
+
+### FR2: Branching Logic (Task 504)
+*   If Q1 == No OR Q4 == Yes (overdue >48h) -> require Q2 and trigger conflict scan.
+*   If conflict detection finds active conflict -> require Q4 evidence and force sign-off protocol to `Blocked`.
+*   If Q3 == No (approvers stale) -> branch to remediation: prompt to update stakeholder map before survey close.
+
+### FR3: Health Profile Persistence (Task 504)
+*   `HealthProfile` attached to `Project`: `project_id`, `category_scores.stakeholder_alignment`, `answers[]`, `last_run_at`, `active_conflicts[]`, `approver_coverage %`, `escalation_status`.
+*   Structured, versioned JSON with audit history.
+
+### FR4: Stakeholder Map (Task 505)
+*   Per project/team: list of stakeholders with `user_id`, `role`, `is_required_approver`, `team_scope`, `p0_submission {p0_id, text, submitted_at}`, `is_active`.
+*   Supports review window config, default 7 days.
+*   Required approvers registry must be current-checked: stale if >30 days since confirmation or user deactivated.
+
+### FR5: Conflict Detection Rules (Task 506)
+*   **Rule 1 - Competing P0s:** IF two distinct stakeholders with `is_active=true` submit different P0s for the same `team_scope` WHERE `submitted_at` within `review_window`, THEN create `Conflict{type: competing_p0, team, stakeholders[], p0s[], detected_at, status: active}`.
+*   Rule engine must be extensible, deterministic, and run on submission and on diagnostic run.
+*   Active conflicts block alignment score from being Green.
+
+### FR6: Sign-off Protocol State Machine (Task 507)
+*   States: `Draft -> PendingReview -> Approved | ApprovedWithComment | Blocked -> Escalated -> Resolved | Expired`.
+*   Transitions:
+    *   `Approve` -> `Approved`
+    *   `ApproveWithComment` -> `ApprovedWithComment` (requires comment)
+    *   `Block` -> `Blocked` -> auto-triggers Escalation
+*   Only `is_required_approver` can transition from PendingReview. Block requires reason.
+*   48hr rule: If >48h in PendingReview without transition, flag overdue and trigger reminder, Q4 becomes Yes.
+
+### FR7: Escalation Path and Reminders (Task 507)
+*   Escalation chains: configurable levels L1, L2, L3 per team/project with users/groups.
+*   SLA: 3 days per level. On Block or timeout, escalate to next level.
+*   Reminders: automated notifications at 24h and 4h before per-level deadline. Expiry after final level moves to `Expired` and notifies Diagnostic Runner.
+*   All events logged to health profile.
+
+### FR8: Reporting Dashboard & Weekly Digests (Task 508)
+*   Dashboard metrics: Alignment Score (0-100), # active conflicts, # overdue sign-offs >48h, Approver Coverage %, Escalation Rate, Avg Time to Sign-off.
+*   Filters by project, team, time window.
+*   Weekly Digest: scheduled job generates summary per project/team including new conflicts, overdue items, escalations, and alignment trend. Delivery via email and/or Slack webhook (configurable).
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+*   **AC-504:** 5 canonical questions defined with IDs, branching rules documented, and `HealthProfile` JSON schema defined and attached to project model spec.
+*   **AC-505:** Stakeholder Map schema supports P0 submissions, required approver flag, team scope, staleness detection (30-day rule), and review_window parameter.
+*   **AC-506:** Conflict rule correctly identifies case: Stakeholder A and B submit different P0s for same team within review_window -> active conflict created; same P0 or outside window -> no conflict. Unit cases specified.
+*   **AC-507:** State machine diagram and transition table for sign-off includes Approve / ApproveWithComment / Block -> Escalated. SLA of 3 days per level and reminder schedule at 24h/4h specified with example timeline.
+*   **AC-508:** Reporting spec defines 5+ metrics formulas and weekly digest template with fields. Digest includes at least: alignment score, active conflicts list, overdue >48h list, escalations.
+*   All tasks 504-508 created with clear dependencies and linked to this PRD.
 
-## Out of scope
+## Out of Scope
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+*   Actual code implementation of engine, UI components, or API endpoints (next turn).
+*   Auto-resolution of P0 conflicts or AI-based priority recommendation.
+*   Integration with external HRIS for org chart sync — manual stakeholder map only in v1.
+*   Real-time chat, in-app commenting threads beyond ApproveWithComment.
+*   Modification of categories 1-5 of Diagnostic Engine.
+*   Custom escalation SLAs beyond 3-day default (configurable later).
