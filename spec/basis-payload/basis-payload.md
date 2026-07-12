@@ -225,8 +225,8 @@ and performance). It demonstrates:
 - A multi-step reasoning chain
 - Uncertainty caveats (assumptions, known unknowns)
 - Full context with tool calls
-- An `extensions` block with two reverse-DNS namespaces
-  (`com.builderforce.review`, `com.acme.risk`) demonstrating FR-8
+- An `extensions` block with one reverse-DNS namespace
+  (`com.acme.risk`) demonstrating FR-8
 
 ---
 
