@@ -1,14 +1,9 @@
 /**
- * Question bank for the Diagnostic Interview system.
+ * Question bank for the Diagnostic Interview system (FR-2).
  *
- * Implements FR-2a, FR-2b, FR-2c: three pillars (Status, Risk, Priority).
- * Every question carries a `relevancy` predicate that adapts based on
- * prior answers, keeping the total ≤15 questions for a cold start (AC-1).
- *
- * The design prefers 2–6 questions per pillar, with adaptive follow-up
- * probes. Clarifying questions are tracked and bounded per FR-3.
+ * Implements the three pillars (Status, Risk, Priority) and clarifying follow-ups.
+ * Each question carries a relevance predicate that adapts based on prior answers.
  */
-
 import {
   type Question,
   type Pillar,
@@ -18,8 +13,8 @@ import {
 /**
  * Build the initial set of questions for an interview.
  *
- * Questions are ordered within each pillar. The interview engine consumes
- * them one at a time, using the `relevancy` predicate to decide whether to
+ * Questions are ordered within each pillar. The interview engine consumes them
+ * one at a time, using the `relevancy` predicate to decide whether to
  * skip ahead. Cold-start path issues questions from all 3 pillars and
  * completes in ≤15 questions (AC-1).
  */
@@ -44,7 +39,7 @@ export function buildQuestions(seed?: DiagnosticState['contextSeed']): Question[
       id: 'status_completion',
       pillar: 'status',
       type: 'open-ended',
-      text: `Approximately how complete is ${projectRef} (e.g. percentage, or another signal)?`,
+      text: `Approximately how complete is ${projectRef} (e.g. a percentage or another signal)?`,
       label: 'Completion Signal',
       required: true,
       maxClarifications: 1,
@@ -78,7 +73,7 @@ export function buildQuestions(seed?: DiagnosticState['contextSeed']): Question[
       id: 'risk_top3',
       pillar: 'risk',
       type: 'sequential',
-      text: `What are the top 3 risks currently facing ${projectRef}? Please describe each one briefly.`,
+      text: `What are the top 3 risks currently facing ${projectRef}? Please describe each in one line. (answers can continue on next line if needed)`,
       label: 'Top 3 Risks',
       required: true,
       maxClarifications: 1,
@@ -115,7 +110,7 @@ export function buildQuestions(seed?: DiagnosticState['contextSeed']): Question[
       label: 'Dependency Risks Probe',
       required: false,
       maxClarifications: 1,
-      relevancy: () => true, // Always probe at least one unvolunteered area (FR-2b)
+      relevancy: () => true,
     },
     {
       id: 'risk_followup_resourcing',
@@ -126,7 +121,6 @@ export function buildQuestions(seed?: DiagnosticState['contextSeed']): Question[
       required: false,
       maxClarifications: 1,
       relevancy: (state: DiagnosticState) => {
-        // Only ask this follow-up if the user already mentioned at least one risk
         const risks = state.pillars.risk;
         return !!risks && risks.length > 0;
       },
@@ -140,7 +134,6 @@ export function buildQuestions(seed?: DiagnosticState['contextSeed']): Question[
       required: false,
       maxClarifications: 1,
       relevancy: (state: DiagnosticState) => {
-        // Ask only if 1+ risk already stated
         const risks = state.pillars.risk;
         return !!risks && risks.length > 0;
       },
@@ -183,9 +176,10 @@ export function buildQuestions(seed?: DiagnosticState['contextSeed']): Question[
 }
 
 /**
- * Extract question IDs by pillar for quick lookup.
+ * Return a map from pillar to the set of question IDs that belong to that pillar.
  */
-export function questionIdsByPillar(questions: Question[]): Record<Pillar, string[]> {
+export function questionIdsByPillar(): Record<Pillar, string[]> {
+  const questions = buildQuestions();
   const map: Record<Pillar, string[]> = { status: [], risk: [], priority: [] };
   for (const q of questions) {
     map[q.pillar].push(q.id);
@@ -194,8 +188,8 @@ export function questionIdsByPillar(questions: Question[]): Record<Pillar, strin
 }
 
 /**
- * Find a question by ID.
+ * Find a question by its ID.
  */
-export function findQuestion(questions: Question[], id: string): Question | undefined {
-  return questions.find((q) => q.id === id);
+export function findQuestion(id: string): Question | undefined {
+  return buildQuestions().find(q => q.id === id);
 }
