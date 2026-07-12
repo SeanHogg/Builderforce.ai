@@ -1,53 +1,61 @@
 /**
- * Type definitions for the Step Validation extension.
+ * Step Validation Types
+ *
+ * Types used by the step validation framework.
  */
 
-/** Represents a contract type. */
-export type ContractType = 'input' | 'output';
+'use strict';
 
-/** Enforcement mode for a contract. */
+/** Enforcement behavior for validation. */
 export type EnforcementMode = 'enforced' | 'audit-only' | 'disabled';
 
-/** Result of a step validation action. */
-export interface ValidationResult {
-  /** Whether validation passed. */
-  passed: boolean;
-  /** Operation result (pass/fail). */
-  action: 'pass' | 'fail';
-  /** Errors that occurred, if any. */
-  errors: ValidationError[];
-}
+/** Type of contract being validated. */
+export type ContractType = 'input' | 'output';
 
-/** Validation failure details. */
-export interface ValidationError {
-  /** Path to the field that failed validation. */
+/** A single validation rule failure. */
+export type FailedRule = {
+  /** Dot-notation JSON pointer path to failing field. */
   fieldPath: string;
-  /** The rule that failed, e.g., 'nonNull', 'range(0,100)', 'regex(pattern)'. */
   rule: string;
-  /** The constraint that was violated. */
   constraint: string;
-  /** The actual value that caused failure. */
   value?: unknown;
-}
+};
 
-/** Validation failure event emitted on contract violations. */
-export interface ValidationErrorEvent {
-  type: 'validation.error';
-  run_id?: string;
+/** Validation event emitted on failure. */
+export type ValidationErrorEvent = {
+  /** Unique identifier for validation this event is tied to (e.g., step_id). */
+  validationId?: string;
+
+  /** Unique identifier of the step that failed. */
   step_id: string;
-  step_name: string;
-  contract_type: ContractType;
-  failed_rules: ValidationError[];
-  timestamp: string;
-  message?: string;
-}
 
-/** Configuration for the step validation plugin. */
-export interface ValidationPluginConfig {
-  /** Default contract enforcement mode. */
-  defaultContractMode: EnforcementMode;
-  /** Default failure handling mode. */
-  defaultFailureMode: 'halt' | 'warn-and-continue' | 'retry(3)' | 'branch-to-fallback';
-  /** Actor identity for override logging (e.g., 'api-gateway', 'script-runner'). */
-  source?: string;
-}
+  /** Name of the step that failed. */
+  step_name: string;
+
+  /** Type of contract being validated (input or output). */
+  contract_type: ContractType;
+
+  /** Detailed list of failed rules. */
+  failed_rules: FailedRule[];
+
+  /** Unique identifier of the pipeline run containing this step. */
+  pipeline_run_id: string;
+
+  /** ISO timestamp of the event. */
+  timestamp: string;
+
+  /** Enforcement mode that was in effect (diagnostic). */
+  enforcement_mode: EnforcementMode;
+
+  /** IDs of affected steps in a branching scenario (optional). */
+  failed_step_ids?: string[];
+};
+
+/** Result of payload validation. */
+export type ValidationResult = {
+  valid: boolean;
+  /** Failures encountered. */
+  errors?: FailedRule[];
+  /** In case of branching: IDs of other steps affected. */
+  failedStepIds?: string[];
+};
