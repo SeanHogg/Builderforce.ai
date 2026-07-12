@@ -130,14 +130,19 @@ export function CompactListProgress({
   // FR-6: loading state
   if (isLoading) {
     return (
-      <div role="list" aria-busy="true">
-        {Array.from({ length: 3 }, (_, i) => (
+      <div
+        role="list"
+        aria-busy="true"
+        className={className}
+        aria-label={ariaLabel ?? ''}
+      >
+        {Array.from({ length: skeletonRowCount }, (_, i) => (
           <div key={i} role="listitem" style={skeletonRow}>
             <span style={skeletonLabel} aria-hidden>
               ————————
             </span>
             <span style={skeletonBar} aria-hidden />
-            <span style={skeletonPerc} aria-hidden>
+            <span style={skeletonValue} aria-hidden>
               —
             </span>
           </div>
@@ -149,7 +154,7 @@ export function CompactListProgress({
   // FR-6: empty state
   if (!displayItems.length) {
     return (
-      <span role="status" style={emptyState}>
+      <span role="status" className={className} aria-label={ariaLabel ?? ''}>
         {emptyText ?? 'No items to display'}
       </span>
     );
