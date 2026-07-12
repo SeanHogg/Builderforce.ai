@@ -227,37 +227,26 @@ export function CompactListProgress({
   );
 }
 
-/* ── StatusBadge helper (FR-4/FR-8) ───────────────────────────────────────── */
-function StatusBadge({ status }: { status: string }) {
-  const base: CSSProperties = {
-    display: 'inline-block',
-    padding: '2px 10px',
-    borderRadius: '999px',
-    fontSize: '0.68rem',
-    fontWeight: 700,
-    color: '#fff',
-    whiteSpace: 'nowrap',
-    flex: '0 0 auto',
+/* ── StatusBadge helper (FR-4/FR-7/FR-8) ──────────────────────────────────── */
+/**
+ * StatusBadge — a pill carrying both an icon glyph AND a text label (never colour
+ * alone), plus a descriptive `aria-label`, satisfying FR-7.
+ */
+function StatusBadge({ status }: { status: ProgressItem['status'] }) {
+  const text = STATUS_LABELS[status] ?? status;
+  const icon = STATUS_ICONS[status] ?? '•';
+  const badgeStyle: CSSProperties = {
+    ...badgeBase,
+    backgroundColor: getColorByStatus(status),
   };
-  let wrapStyle: CSSProperties = { ...base };
-  switch (status) {
-    case 'completed':
-      wrapStyle = { ...wrapStyle, backgroundColor: 'var(--success)' };
-      break;
-    case 'in_progress':
-      wrapStyle = { ...wrapStyle, backgroundColor: 'var(--accent)' };
-      break;
-    case 'blocked':
-      wrapStyle = { ...wrapStyle, backgroundColor: 'var(--error)' };
-      break;
-    case 'not_started':
-    default:
-      wrapStyle = { ...wrapStyle, backgroundColor: 'var(--muted)' };
-      break;
-  }
-  return <span style={wrapStyle} aria-label={`Status: ${status}`}>
-    {status.replace(/_/g, ' ')}
-  </span>;
+  return (
+    <span style={badgeStyle} aria-label={`Status: ${text}`}>
+      <span aria-hidden style={badgeIcon}>
+        {icon}
+      </span>
+      {text}
+    </span>
+  );
 }
 
 /* ── Styles (FR-3) ───────────────────────────────────────────────────────── */
