@@ -1,55 +1,47 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #391
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# Product Requirements Document: Auto-Title Consolidated Chats
 
-## Problem & Goal
+## 1. Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+### 1.1 Problem
+Currently, after multiple chat sessions are consolidated into a single thread, the resulting consolidated chat lacks a clear, descriptive title. This makes it challenging for users to quickly identify, recall, and navigate to specific consolidated conversations, leading to a poor user experience and reduced efficiency.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+### 1.2 Goal
+Automatically generate and assign a meaningful, concise title to each newly consolidated chat. This will enhance user experience by improving chat discoverability, organization, and overall navigation, allowing users to quickly understand the context of a consolidated thread.
 
-## Target users / ICP roles
+## 2. Target Users / ICP Roles
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+*   **End-Users:** Individuals who interact with and rely on the chat application for their daily communication and information retrieval. They need easily identifiable conversations.
+*   **Support/Admin Staff:** Internal teams who might need to quickly locate and reference specific consolidated chats based on their content.
 
-## Scope
+## 3. Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This PRD covers the design and implementation of an automated process to generate and persist a title for *newly consolidated* chat threads. The generated title will be derived from the content of the consolidated messages and will be stored using the `brain.update` mechanism.
 
-## Functional Requirements
+## 4. Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+*   **FR1: Identify Consolidated Chats:** The system MUST detect when a chat consolidation event has successfully occurred and a new consolidated chat thread is created.
+*   **FR2: Content Analysis:** The system MUST analyze the textual content of the newly consolidated chat thread to extract key themes, topics, and entities.
+*   **FR3: Title Generation:** The system MUST generate a concise and descriptive title (e.g., 5-10 words) that accurately reflects the primary subject matter of the consolidated chat.
+*   **FR4: Title Persistence (`brain.update`):** The generated title MUST be persisted to the consolidated chat object using the `brain.update` function.
+*   **FR5: UI Display:** The generated title MUST be displayed prominently in the user interface wherever chat titles are typically shown (e.g., chat list, chat header).
+*   **FR6: Performance:** The title generation process MUST not introduce significant latency or negatively impact the performance of the chat consolidation workflow or overall application responsiveness.
 
-## Acceptance Criteria
+## 5. Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+*   **AC1: Title Presence:** For every newly consolidated chat, a meaningful title is present and visible in the UI within 5 seconds of the consolidation event completing.
+*   **AC2: Title Relevance:** At least 90% of generated titles accurately summarize the core topic(s) of the consolidated chat, as determined by manual review samples.
+*   **AC3: Title Conciseness:** The average length of generated titles is between 5 and 10 words, with a hard maximum of 15 words.
+*   **AC4: `brain.update` Usage:** Successful calls to `brain.update` with the new title are logged for every consolidated chat.
+*   **AC5: UI Consistency:** The new title is displayed consistently across all relevant UI components (e.g., chat list, chat view header) without requiring a manual page refresh.
+*   **AC6: Performance Impact:** The end-to-end consolidation and title generation process does not add more than 1 second of additional latency compared to consolidation without title generation.
 
-## Out of scope
+## 6. Out of Scope
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+*   **Manual Title Editing:** Users will not be able to manually edit or override the automatically generated titles in this iteration.
+*   **Re-titling Existing Chats:** This feature focuses only on *newly* consolidated chats; previously consolidated chats that lack titles will not be retroactively titled.
+*   **Multi-language Titles:** Initial scope is for the primary language of the application; multi-language title generation is out of scope.
+*   **Advanced AI/ML Models:** While content analysis is required, the initial solution will prioritize simpler, rule-based or statistical methods for title generation over complex, resource-intensive AI models.
+*   **User Feedback Loop:** There will be no explicit user feedback mechanism for title quality in this phase.
