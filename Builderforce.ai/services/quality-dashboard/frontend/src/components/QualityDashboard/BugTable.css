@@ -1,0 +1,35 @@
+/* BugTable-specific styles */
+.severity-badge {
+  display: inline-block;
+  padding: 0.125rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.badge-critical {
+  background-color: #ef4444;
+}
+
+.badge-high {
+  background-color: #f59e0b;
+}
+
+.badge-medium {
+  background-color: #10b981;
+}
+
+.badge-low {
+  background-color: #6b7280;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 0.125rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #374151;
+  background-color: #f3f4f6;
+}
