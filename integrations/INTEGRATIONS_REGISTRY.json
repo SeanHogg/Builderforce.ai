@@ -1,0 +1,468 @@
+{
+  "version": "1.0.0",
+  "canonicalIntegrationSet": {
+    "categories": [
+      {
+        "id": "PROJECT_TRACKING",
+        "description": "Manage issue state across Jira Cloud and Linear"
+      },
+      {
+        "id": "VERSION_CONTROL",
+        "description": "GitHub repository and PR event source"
+      },
+      {
+        "id": "COMMUNICATION",
+        "description": "Slack channel messaging and routing"
+      },
+      {
+        "id": "CI_CD",
+        "description": "GitHub Actions pipeline runs and status checks"
+      },
+      {
+        "id": "OBS_ERROR_TRACKING",
+        "description": "Sentry issue and error alerts"
+      },
+      {
+        "id": "OBS_METRICS",
+        "description": "Datadog monitors and metrics events"
+      }
+    ],
+    "integrations": [
+      {
+        "id": "JIRA",
+        "category": "PROJECT_TRACKING",
+        "displayName": "Jira Cloud",
+        "description": "Issue tracking with OAuth 2.0 (3-legged)",
+        "targetUsers": ["Software Engineer", "Engineering Manager", "Product Manager"],
+        "minimumScope": [
+          "read:jira-work",
+          "write:jira-work",
+          "read:jira-user",
+          "manage:jira-webhook",
+          "offline_access"
+        ],
+        "auth": {
+          "method": "OAUTH_2.0_THREE_LEGGED",
+          "tokens": {
+            "clientCredentials": {
+              "required": false,
+              "description": "Platform acquires access token from Jira Cloud site"
+            },
+            "userToken": {
+              "required": true,
+              "description": "Access token from end-user OAuth flow"
+            }
+          },
+          "expiry": {
+            "recommend": "Refresh token stored securely",
+            "maxRefreshInterval": 180
+          }
+        },
+        "endpoints": [
+          "POST /rest/api/3/issue",
+          "PUT /rest/api/3/issue/{issueKey}",
+          "POST /rest/api/3/issue/{issueKey}/comment",
+          "POST /rest/api/3/jql",
+          "GET /rest/api/3/project",
+          "GET /rest/api/3/board",
+          "GET /rest/gateway/1.0/migration/type"
+        ],
+        "webhooksToReceive": [
+          "issue.created",
+          "issue.updated",
+          "issue.deleted",
+          "issue.assigned",
+          "issue.statusChanged"
+        ],
+        "eventsToEmit": [
+          {
+            "name": "Issue",
+            "schema": "$SCHEMA_Issue",
+            "when": "On create, update, status change"
+          }
+        ],
+        "features": {
+          "issueLifecycle": "Normal,Jira-Workflow",
+          "statusEnum": "To Do,In Progress,Done,Cancelled,Blocked,Review",
+          "inheritance": "Platform-level Issue event schema (see $SCHEMA_Issue)"
+        },
+        "outOfScope": [
+          "Jira Data Center / Server",
+          "Custom field mirroring bi-directional"
+        ],
+        "canonicalBehavior": {
+          "logging": true,
+          "strictScopes": true,
+          "organicExternalTokenStorage": {
+            "note": "Tokens reside in integrations config store, not application logs or plain-file storage"
+          },
+          "crossSigning": {
+            "description": "SSO / identity federation not supported; only email-match identity resolution"
+          }
+        }
+      },
+      {
+        "id": "LINEAR",
+        "category": "PROJECT_TRACKING",
+        "displayName": "Linear",
+        "description": "Issue tracking with OAuth 2.0",
+        "targetUsers": ["Software Engineer", "Engineering Manager", "Product Manager"],
+        "minimumScope": [
+          "read",
+          "write",
+          "mentions"
+        ],
+        "auth": {
+          "method": "OAUTH_2.0",
+          "tokens": {
+            "clientCredentials": {
+              "required": false,
+              "description": "Platform acquires access token from Linear"
+            },
+            "userToken": {
+              "required": true,
+              "description": "Access token from end-user OAuth flow"
+            }
+          },
+          "expiry": {
+            "recommend": "Refresh token stored securely"
+          }
+        },
+        "endpoints": [
+          "POST /graphql",
+          "GET /graphql",
+          "GET /organizations/{organizationId}",
+          "GET /projects/{projectId}",
+          "GET /teams/{teamId}",
+          "GET /sprints/{sprintId}"
+        ],
+        "webhooksToReceive": [
+          "itemCreated",
+          "itemUpdated",
+          "itemDeleted",
+          "itemStateChanged",
+          "projectUpdated"
+        ],
+        "eventsToEmit": [
+          {
+            "name": "Issue",
+            "schema": "$SCHEMA_Issue",
+            "when": "On create, update, state change"
+          }
+        ],
+        "features": {
+          "issueLifecycle": "Linear States:CQL,Sprint,Cy",
+          "statusEnum": "Backlog,Todo,In Progress,InProgress,Done,Cancelled,Cancelled",
+          "inheritance": "Platform-level Issue event schema (see $SCHEMA_Issue)"
+        },
+        "outOfScope": [
+          "GitLab, Bitbucket, Azure DevOps version control alternatives",
+          "Bi-directional Jira/Linear custom field sync"
+        ],
+        "canonicalBehavior": {
+          "logging": true,
+          "strictScopes": true,
+          "organicExternalTokenStorage": {
+            "note": "Tokens reside in integrations config store, not application logs or plain-file storage"
+          }
+        }
+      },
+      {
+        "id": "GITHUB",
+        "category": "VERSION_CONTROL",
+        "displayName": "GitHub",
+        "description": "Repository and PR source",
+        "targetUsers": ["Software Engineer", "Engineering Manager", "DevOps"],
+        "auth": {
+          "method": "GITHUB_APP_INSTALLATION",
+          "preferred": true,
+          "alternative": "OAUTH_2.0",
+          "tokens": {
+            "appInstallationToken": {
+              "required": true,
+              "description": "HTTP X-Hub-Signature-256 verified install token for repo access"
+            },
+            "userToken": {
+              "required": false,
+              "description": "OAuth token from end-user for PR comments and status checks if App is not available"
+            }
+          }
+        },
+        "endpoints": [
+          "GET /repos/{owner}/{repo}",
+          "GET /repos/{owner}/{repo}/branches",
+          "GET /repos/{owner}/{repo}/commits",
+          "GET /repos/{owner}/{repo}/pulls",
+          "GET /repos/{owner}/{repo}/pulls/{pullNumber}/files",
+          "GET /repos/{owner}/{repo}/contents",
+          "POST /repos/{owner}/{repo}/pulls",
+          "POST /repos/{owner}/{repo}/issues/{issueNumber}/comments",
+          "POST /repos/{owner}/{repo}/statuses/{sha}",
+          "POST /repos/{owner}/{repo}/git/check-suites"
+        ],
+        "webhooksToReceive": [
+          "push",
+          "pull_request",
+          "pull_request_review",
+          "check_run",
+          "workflow_run",
+          "release"
+        ],
+        "eventsToEmit": [
+          {
+            "name": "ChangeSet",
+            "schema": "$SCHEMA_ChangeSet",
+            "when": "On push and pull_request webhooks"
+          }
+        ],
+        "features": {
+          "branchPattern": "<issue-id>-* for PR-to-issue linking",
+          "inheritance": "Platform-level ChangeSet event schema (see $SCHEMA_ChangeSet)"
+        },
+        "outOfScope": [
+          "GitLab, Bitbucket, Azure DevOps alternatives",
+          "Workflow trigger customization beyond repository-level"
+        ],
+        "canonicalBehavior": {
+          "logging": true,
+          "signatureValidation": "X-Hub-Signature-256 required for install tokens",
+          "organicExternalTokenStorage": {
+            "note": "Tokens reside in integrations config store, not application logs or plain-file storage"
+          },
+          "crossSigning": {
+            "description": "SSO / identity federation not supported; only email-match identity resolution"
+          }
+        }
+      },
+      {
+        "id": "SLACK",
+        "category": "COMMUNICATION",
+        "displayName": "Slack",
+        "description": "Channel messaging and routing",
+        "targetUsers": ["Software Engineer", "Engineering Manager", "Product Manager", "On-call"],
+        "minimumScope": [
+          "chat:write",
+          "channels:read",
+          "users:read"
+        ],
+        "auth": {
+          "method": "OAUTH_2.0",
+          "tokens": {
+            "botToken": {
+              "required": true,
+              "description": "Bot token with chat:write, channels:read, users:read scopes"
+            },
+            "appToken": {
+              "required": false,
+              "description": "User-specific token for interactive component handling"
+            }
+          }
+        },
+        "endpoints": [
+          "POST /api/chat.postMessage",
+          "POST /api/chat.update",
+          "POST /api/chat.postEphemeral",
+          "POST /api/channels.list",
+          "POST /api/conversations.list",
+          "GET /api/users.info",
+          "GET /api/users.list"
+        ],
+        "webhooksToReceive": [
+          "event_callback"
+        ],
+        "eventsToEmit": [
+          {
+            "name": "MessageDelivery",
+            "schema": "$SCHEMA_Message",
+            "when": "Bot sends messages, threaded replies, DMs, formatted Block Kit notifications"
+          }
+        ],
+        "features": {
+          "perWorkspaceRouting": "Configurable per-workspace channel routing rules",
+          "formatting": "Support Block Kit message formatting"
+        },
+        "outOfScope": [
+          "Microsoft Teams communications",
+          "Bi-directional field sync beyond Channel mapping"
+        ],
+        "canonicalBehavior": {
+          "logging": true,
+          "strictScopes": true,
+          "organicExternalTokenStorage": {
+            "note": "Tokens reside in integrations config store, not application logs or plain-file storage"
+          },
+          "crossSigning": {
+            "description": "CKIP leaf requirements not required for outbound bot posting"
+          }
+        }
+      },
+      {
+        "id": "GITHUB_ACTIONS",
+        "category": "CI_CD",
+        "displayName": "GitHub Actions",
+        "description": "Pipeline health and workflow status",
+        "requiresParent": "GitHub",
+        "inheritance": "No separate auth required; reuses GitHub App installation from GitHub",
+        "targetUsers": ["DevOps", "Engineering Manager"],
+        "endpoints": [
+          "GET /repos/{owner}/{repo}/actions/runs",
+          "GET /repos/{owner}/{repo}/actions/runs/{runId}",
+          "GET /repos/{owner}/{repo}/actions/runs/{runId}/jobs",
+          "POST /repos/{owner}/{repo}/actions/runs/{runId}/rerun"
+        ],
+        "webhooksToReceive": [
+          "workflow_run",
+          "check_run"
+        ],
+        "eventsToEmit": [
+          {
+            "name": "PipelineRun",
+            "schema": "$SCHEMA_PipelineRun",
+            "when": "On workflow_run and check_run webhook"
+          }
+        ],
+        "features": {
+          "buildFailureSurface": "Link to failing step's log URL",
+          "correlation": "Correlate via commit_sha during ingestion OR lookup in source ChangeSet",
+          "healthSummary": "Pass rate, mean duration, flake rate over configurable time window"
+        },
+        "outOfScope": [
+          "Alternative CI/CD systems (CircleCI, Jenkins, Buildkite, ArgoCD)"
+        ],
+        "canonicalBehavior": {
+          "logging": true,
+          "organicExternalTokenStorage": {
+            "note": "Tokens reside in GitHub integration config store, not application logs or plain-file storage"
+          }
+        }
+      },
+      {
+        "id": "SENTRY",
+        "category": "OBS_ERROR_TRACKING",
+        "displayName": "Sentry",
+        "description": "Error and issue alerts",
+        "targetUsers": ["DevOps", "Engineering Manager", "On-call"],
+        "auth": {
+          "method": "JWT_OR_CLIENT_CONFIG",
+          "approximate": "Internal Integration token at organization level (project-scoped API key)",
+          "tokens": {
+            "authToken": {
+              "required": true,
+              "description": "Internal Integration token or JWT to request access token via /auth/token"
+            },
+            "apiToken": {
+              "required": false,
+              "description": "Project-scoped API key (needs org-level auth token or tokenExchange)"
+            }
+          }
+        },
+        "endpoints": [
+          "POST /api/0/auth/token",
+          "GET /api/0/projects/{orgSlug}/{projectSlug}/events/",
+          "GET /api/0/issues/",
+          "GET /api/0/projects/{orgSlug}/{projectSlug}/issues/",
+          "POST /api/0/envelopes/"
+        ],
+        "webhooksToReceive": [
+          "issue.created",
+          "issue.resolved",
+          "issue.assigned",
+          "error-alert",
+          "release.created",
+          "notify"
+        ],
+        "eventsToEmit": [
+          {
+            "name": "ObservabilityAlert",
+            "schema": "$SCHEMA_ObservabilityAlert",
+            "when": "Sentry and Datadog alerts (unified source enum)"
+          }
+        ],
+        "features": {
+          "inheritance": "Platform-level ObservabilityAlert event schema (see $SCHEMA_ObservabilityAlert)",
+          "correlation": "Correlate release tag matches to PipelineRun via commit_sha"
+        },
+        "outOfScope": [
+          "Alternative observability tools (New Relic, Honeycomb, Grafana)",
+          "PagerDuty, Opsgenie, FireHydrant incident management"
+        ],
+        "canonicalBehavior": {
+          "logging": true,
+          "organicExternalTokenStorage": {
+            "note": "Tokens reside in integrations config store, not application logs or plain-file storage"
+          },
+          "crossSigning": {
+            "description": "SSO / identity federation not supported; only email-match identity resolution"
+          }
+        }
+      },
+      {
+        "id": "DATADOG",
+        "category": "OBS_METRICS",
+        "displayName": "Datadog",
+        "description": "Monitors and metrics events",
+        "targetUsers": ["DevOps", "Engineering Manager", "On-call"],
+        "auth": {
+          "method": "API_KEY_PAIR",
+          "tokens": {
+            "apiKey": {
+              "required": true,
+              "description": "Organization-scoped API key"
+            },
+            "appKey": {
+              "required": true,
+              "description": "Organization-scoped Application Key for events"
+            }
+          }
+        },
+        "endpoints": [
+          "POST https://api.datadoghq.com/api/v1/events",
+          "GET https://api.datadoghq.com/api/v1/monitors",
+          "GET https://api.datadoghq.com/api/v1/query?query=<metricsQuery>&from=<epoch>&to=<epoch>"
+        ],
+        "webhooksToReceive": [
+          "monitor_alert_jp",
+          "monitor_alert_sprint",
+          "monitor_alert_sml",
+          "monitor_alert_sslc"
+        ],
+        "eventsToEmit": [
+          {
+            "name": "ObservabilityAlert",
+            "schema": "$SCHEMA_ObservabilityAlert",
+            "when": "Datadog monitor state changes (unified source enum)"
+          }
+        ],
+        "features": {
+          "inheritance": "Platform-level ObservabilityAlert event schema (see $SCHEMA_ObservabilityAlert)",
+          "routing": "Route Alerts to Slack channels, auto-create project-tracker issues based on severity and team tag",
+          "deploymentCorrelation": "Ingest Deployment Events to correlate with metric regressions"
+        },
+        "outOfScope": [
+          "Alternative observability tools (New Relic, Honeycomb, Grafana)",
+          "Writing Datadog-based agents (platform consumes existing tooling)"
+        ],
+        "canonicalBehavior": {
+          "logging": true,
+          "organicExternalTokenStorage": {
+            "note": "Tokens reside in integrations config store, not application logs or plain-file storage"
+          },
+          "crossSigning": {
+            "description": "SSO / identity federation not supported; only email-match identity resolution"
+          }
+        }
+      }
+    ],
+    "canonicalEventSchemas": [
+      "$SCHEMA_Issue",
+      "$SCHEMA_ChangeSet",
+      "$SCHEMA_PipelineRun",
+      "$SCHEMA_ObservabilityAlert",
+      "$SCHEMA_Message"
+    ],
+    "canonicalCommandKeywords": {
+      "verbPhrase": "canonicalIntegrationSet",
+      "schemaRegistryKey": "$SCHEMA_"
+    }
+  }
+}
