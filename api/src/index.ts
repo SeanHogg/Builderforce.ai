@@ -162,6 +162,9 @@ import { createKnowledgeRoutes } from './presentation/routes/knowledgeRoutes';
 import { createKnowledgeMarketRoutes } from './presentation/routes/knowledgeMarketRoutes';
 import { createCapacityRoutes } from './routes/capacityRoutes';
 
+// Capacity estimation — velocity collection, utilization mapping, time-to-completion projections
+app.route('/api/capacity', createCapacityRoutes(db, env));
+
 import { API_VERSION } from './version';
 import {
   OPENAPI_VERSION,
