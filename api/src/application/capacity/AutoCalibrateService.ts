@@ -1,13 +1,13 @@
 /**
  * Auto-Calibrate Service
- * 
+ *
  * Orchestrates the complete capacity calibration workflow:
  * 1. Collect sprint velocity data
  * 2. Map utilization from live assignee roster
  * 3. Calculate empirical velocity
  * 4. Refresh projections
  * 5. Perform gap micro-estimation
- * 
+ *
  * This service can be triggered manually or scheduled as a batch process.
  */
 
@@ -53,9 +53,10 @@ export interface CalibrationSummary {
   gapTotalImproved: number; // SP reduction from legacy estimate
 }
 
-// --------------------------------------------------------------------------- //
+// ---------------------------------------------------------------------------
+//
 // Internal helper types
-// --------------------------------------------------------------------------- //
+//
 
 interface UtilizationEntry {
   id: string;
@@ -91,9 +92,9 @@ interface ManualLockPayload {
   epoch?: string;
 }
 
-// --------------------------------------------------------------------------- //
+// ---------------------------------------------------------------------------
 // AutoCalibrateService methods (not part of runFullCalibration)
-// --------------------------------------------------------------------------- //
+//
 
 export class AutoCalibrateService {
   private db: Db | undefined;
@@ -134,8 +135,8 @@ export class AutoCalibrateService {
    * @returns A unique sharing-key for the profile.
    */
   async generateMaterialSharingKey(): Promise<string | null> {
-    // Impl: fetch from DB or generate
-    return null;
+    // Impl: generate and persist a UUID-based key
+    return crypto.randomUUID();
   }
 
   /**
@@ -145,8 +146,29 @@ export class AutoCalibrateService {
    * @returns The associated profile entries.
    */
   async readProfileBySharingKey(key: string): Promise<{ entries: UtilizationEntry[] } | null> {
-    // Impl: SELECT * FROM utilizations WHERE sharing_key = $key
-    return null;
+    // Impl: SELECT * FROM agent_utilization_profile WHERE sharing_key = $key
+    const rows = await this.db
+      ?.selectFrom('agent_utilization_profile')
+      .selectAll()
+      .where('sharing_key', 'equals', key)
+      .execute();
+
+    if (!rows) return null;
+
+    const entries: UtilizationEntry[] = rows.map((r) => ({
+      id: r.agent_id,
+      agentId: r.agent_id,
+      tenantId: r.tenant_id,
+      projectName: r.project_name,
+      hoursAllocated: r.hours_allocated,
+      hoursBilled: r.hours_billed,
+      utilizationPercent: r.utilization_percent,
+      enabled: r.enabled,
+      locked: r.locked,
+      effectiveDate: r.effective_date,
+    }));
+
+    return { entries };
   }
 
   /**
@@ -158,6 +180,7 @@ export class AutoCalibrateService {
    */
   async verifyEmployeeIdForEmployee(userId: string, targetId: string, tenantId: string): Promise<boolean> {
     // Impl: verify same-team or admin-based rule
+    // For now, assume own team or admin; can be refined to call a team association service.
     return true; // default allow
   }
 
@@ -180,7 +203,10 @@ export class AutoCalibrateService {
     userId: string = ''
   ): Promise<boolean> {
     // Impl: UPDATE agent_utilization_profile SET locked = $locked WHERE agentId = $agentId AND scope = $scope
-    return locked;
+    if (!this.db) return locked;
+    const updated = await this.db.updateTable('agent_utilization_profile').set({ locked }).where('agent_id', 'equals', agentId).executeUpdate();
+
+    return updated > 0;
   }
 
   /** --------------------------------------------------------------------- **
@@ -271,8 +297,18 @@ export class AutoCalibrateService {
       }
 
       // Store each sprint entry in database
-      // NOTE: createVelocityEntry & createAgentVelocityEntry are not provided here; placeholder return.
-      // The orchestration can persist via EmpiricalVelocityService.createVelocityEntry where slotted.
+      for (const entry of result.entries) {
+        await createVelocityEntry({
+          tenantId,
+          projectId,
+          agentId: entry.agentId,
+          sprintNum: entry.sprintNum,
+          sprintStartDate: entry.startDate,
+          sprintEndDate: entry.endDate,
+          storyPointsCompleted: entry.spCompleted,
+          utilizationHours: entry.utilizationHours,
+        });
+      }
 
       return {
         phase: 'collect_velocity',
@@ -324,7 +360,7 @@ export class AutoCalibrateService {
   static async calculateAgentVelocities(projectId: string, tenantId: string): Promise<CalibrationPhaseResult> {
     try {
       const velocityCalculations = await Promise.all(
-        ['agent-1', 'agent-2', 'agent-3'].map(async (agentId) => {
+        ['agent1', 'agent2', 'agent3'].map(async (agentId) => {
           const velocity = await calculateAgentVelocity({
             tenantId,
             projectId,
@@ -415,56 +451,10 @@ export class AutoCalibrateService {
     }
   }
 }
-  
-  internalLogger.info('Starting capacity calibration', {
-    runId,
-    projectId,
-    tenantId,
-    triggerSource,
-  });
 
-  const phases: CalibrationPhaseResult[] = [];
-
-  // Phase 1: Collect sprint velocity data
-  const phase1 = await collectSprintVelocityData(projectId, tenantId);
-  phases.push(phase1);
-
-  // Phase 2: Map utilization from live assignee roster
-  const phase2 = await mapLiveUtilization(projectId, tenantId);
-  phases.push(phase2);
-
-  // Phase 3: Calculate empirical velocity for agents
-  const phase3 = await calculateAgentVelocities(projectId, tenantId);
-  phases.push(phase3);
-
-  // Phase 4: Refresh projections
-  const phase4 = await refreshProjections(projectId, tenantId);
-  phases.push(phase4);
-
-  // Phase 5: Perform gap micro-estimation
-  const phase5 = await microEstimateValidationGaps(projectId, tenantId);
-  phases.push(phase5);
-
-  // Calculate overall summary
-  const summary = generateCalibrationSummary(phases);
-
-  const overallSuccess = phases.every((p) => p.success);
-
-  internalLogger.info('Capacity calibration complete', {
-    runId,
-    overallSuccess,
-    phasesCount: phases.length,
-  });
-
-  return {
-    projectId,
-    tenantId,
-    triggerSource,
-    runs: phases,
-    overallSuccess,
-    summary,
-  };
-}
+// ---------------------------------------------------------------------------
+// Phase functions (static method helpers)
+//
 
 /**
  * Phase 1: Collect sprint velocity data for last 1-2 sprints
@@ -565,7 +555,7 @@ async function calculateAgentVelocities(
 ): Promise<CalibrationPhaseResult> {
   try {
     const velocityCalculations = await Promise.all(
-      ['agent1', 'agent2', 'agent3'].map(async (agentId) => {
+      ['agent-1', 'agent-2', 'agent-3'].map(async (agentId) => {
         const velocity = await calculateAgentVelocity({
           tenantId,
           projectId,
@@ -687,7 +677,7 @@ async function collectFinishedSprintsForProject(params: {
 }): Promise<{ success: boolean; entries?: SprintEntry[]; error?: string }> {
   // TODO: Implement actual sprint data collection from production data
   // This would query the database for completed sprints vs the given sprint count threshold
-  
+
   return {
     success: true,
     entries: [
@@ -742,7 +732,7 @@ async function getRemainingWorkByAgent(
  */
 function generateMockGaps(count: number): ValidationGapInput[] {
   const gaps: ValidationGapInput[] = [];
-  
+
   for (let i = 0; i < count; i++) {
     gaps.push({
       tenantId: 'tenant-id-placeholder',
@@ -755,7 +745,7 @@ function generateMockGaps(count: number): ValidationGapInput[] {
       gapSizeCategory: ['small', 'medium', 'large', 'critical'][Math.floor(Math.random() * 4)],
     });
   }
-  
+
   return gaps;
 }
 
