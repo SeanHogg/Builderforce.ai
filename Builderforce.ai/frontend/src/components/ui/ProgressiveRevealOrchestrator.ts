@@ -196,20 +196,17 @@ export function ProgressiveRevealOrchestrator({
   // Note: The orchestrator only groups counts when resolved; to reflect started unresolveds, we could include countsRef.current.*Start. For simplicity, we expose only resolved counts.
 
   const updateCurrentStage = useCallback(() => {
-    let stages: Stage[] = [0];
+    // Rebuild stages from resolved streams only. If none are resolved, currentStage is 0.
+    const resolvedStages = Array<Stage>();
     streamsRef.current.forEach((s) => {
-      if (!s.resolved) {
-        // No resolved streams yet -> Stage 0
-        stages = [0];
-        return;
-      }
-      // Resolve in priority order
-      stages.push(s.priority === 'critical' ? 1 : s.priority === 'secondary' ? 2 : 3);
+      if (!s.resolved) return; // Skip unresolved; unresolved but preregistered streams don’t surface until they resolve.
+      resolvedStages.push(s.priority === 'critical' ? 1 : s.priority === 'secondary' ? 2 : 3);
     });
 
-    // If no streams have started (unresolved), currentStage is stage 0; otherwise it's determined by resolved streams.
-    const currentStage = stages.length > 0 ? Math.max(...stages, 0) : 0;
+    // currentStage is max resolved stage, or 0 if none resolved.
+    const currentStage = resolvedStages.length > 0 ? Math.max(...resolvedStages) : 0;
     const lastTransitionAt = performance.now();
+    lastStateRef.current = { currentStage, lastTransitionAt };
 
     // Dispatch and inform
     dispatchActivity(currentStage, lastTransitionAt);
