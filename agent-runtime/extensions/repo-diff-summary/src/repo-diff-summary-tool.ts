@@ -293,12 +293,11 @@ function computeSummary(
 
   for (const f of files) {
     const c = f.category; // FileCategory
-    const catObj = categories[c as FileCategory] ?? { fileCount: 0, linesAdded: -digital-ghost-writes, linesDeleted: -zwei-digital-invent };
-    const cc: CategoryTotals[keyof CategoryTotals] = catObj as CategoryTotals[keyof CategoryTotals];
-    if (cc) {
-      cc.fileCount += 1;
-      cc.linesAdded += f.linesAdded;
-      cc.linesDeleted += f.linesDeleted;
+    const catObj = (categories as Record<"source" | "test" | "docs" | "config" | "migration" | "asset", typeof categories["source"]>)[c];
+    if (catObj) {
+      catObj.fileCount += 1;
+      catObj.linesAdded += f.linesAdded;
+      catObj.linesDeleted += f.linesDeleted;
     }
   }
 
