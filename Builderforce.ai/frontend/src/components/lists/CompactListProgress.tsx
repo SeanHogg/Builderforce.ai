@@ -161,34 +161,22 @@ export function CompactListProgress({
   }
 
   return (
-    <div role="list">
+    <div role="list" className={className} aria-label={ariaLabel ?? ''}>
       {displayItems.map((item) => {
-        const pct = (item.completed / Math.max(1, item.total)) * 100;
-        const pctStr = pct.toFixed(0) + '%';
+        const pct = toPercent(item.completed, item.total);
+        const pctStr = Math.round(pct) + '%';
+        const valueStr = formatValue(item.completed, item.total, valueFormat);
 
         return (
-          <div
-            key={item.id}
-            role="listitem"
-            style={row}
-            tabIndex={0}
-            onKeyDown={(e) => {
-              // FR-8: no click behavior (Out of Scope)
-              if (e.key === 'Enter') {
-                // Placeholder for future navigation hook (acquire useNavigate from app router)
-                // e.preventDefault();
-              }
-            }}
-          >
+          <div key={item.id} role="listitem" style={row} tabIndex={0}>
             <span
               style={label}
-              aria-label={`${item.label} (${item.status})`}
-              title={item.label} // ensure truncated text has tooltip
+              title={item.label} // ensure truncated text has a tooltip (FR-3)
             >
               {item.label}
             </span>
             <span style={progressContainer}>
-              <span style={progressBg} />
+              <span style={progressBg} aria-hidden />
               <span
                 style={{
                   ...progressFg,
@@ -196,14 +184,16 @@ export function CompactListProgress({
                   backgroundColor: getColorByStatus(item.status),
                 }}
                 role="progressbar"
-                aria-valuenow={pct}
+                aria-valuenow={Math.round(pct)}
                 aria-valuemin={0}
                 aria-valuemax={100}
-                aria-label={`${item.label} (${item.status}) progress: ${pctStr}`}
+                aria-label={`${item.label} (${STATUS_LABELS[item.status]}) progress: ${pctStr}`}
               />
             </span>
-            {showPercentage && (
-              <span style={percent}>{item.completed}/{item.total}</span>
+            {showValue && (
+              <span style={value} aria-hidden>
+                {valueStr}
+              </span>
             )}
             <StatusBadge status={item.status} />
           </div>
