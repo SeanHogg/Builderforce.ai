@@ -1,23 +1,42 @@
-# SECURITY.md
-# Automates FR-2.4 (no new high/critical CVEs) and CC1 (Control Environment).
+# Security Policy
 
-To report a security issue:
-1. DO NOT open a direct GitHub Issue/Merge Request. Use the internal security channel (e.g., Slack `#security` or an encrypted email alias).
+Supports the Code Review & Merge Pipeline: FR-2.4 (no new high/critical CVEs
+before merge) and the repo's SOC2 CC1/CC2 controls (Control Environment &
+Security Documentation). The repo audit engine
+(`api/src/application/tools/AuditRunner.ts`) credits this file toward those
+controls.
+
+## Reporting a vulnerability
+
+Please **do not** open a public GitHub issue for security problems. Instead:
+
+1. Report privately via GitHub Security Advisories:
+   https://github.com/SeanHogg/Builderforce.ai/security/advisories/new
+   (or the internal security channel defined in your organization policy).
 2. Include:
-   - Product context (affected service or endpoint — e.g., "Authentication token validation in `/tier1`")
-   - Steps to reproduce and evidence (stack traces, logs, or recordings)
-   - Potential impact (CVSS scores, PII exposure, DoS risk)
-   - Propose mitigations (workarounds, fixes), including whether you can contribute code (for reproducibility, run `pnpm security-audit` + `pnpm test -- --coverage` and attach reports or link to them in `gh issue` comments)
+   - **Context** — the affected service or endpoint (e.g. authentication token
+     validation in the API).
+   - **Reproduction** — steps, stack traces, logs, or recordings.
+   - **Impact** — CVSS score where known, PII exposure, DoS risk.
+   - **Mitigations** — any workaround or proposed fix; note if you can
+     contribute a patch.
 
-Process:
-- Security team reviews within X hours (configured via rollout policies) and may open an issue, assign CVE tracking, and potentially publish a CVSS severity.
-- Do **NOT** merge into `main` until:
-  - The vulnerability is patched and reviewed (PR includes fix with owner/approval).
-  - Merge commit must include the CVE reference as part of the merge message.
+## Handling & merge gating
 
-Vendor-Risk Notes:
-- If third-party components are used, maintain a file at `logs/vendor-risks.md` documenting known or suspected risks (CVEs, licensing compliance, supply-chain failures). A summary must be included in release notes.
+- A maintainer acknowledges the report and, where warranted, assigns CVE
+  tracking and a CVSS severity.
+- A fix must **not** be merged to `main` until it has an approving code-owner
+  review (see `.github/CODEOWNERS`) and the dependency/security scan reports **no
+  new high- or critical-severity findings** (FR-2.4, AC-6).
+- The merge commit message must reference the advisory/CVE identifier.
 
-## Contact
-- Internal security: see organization policy.
-- Public security: https://github.com/SeanHogg/Builderforce.ai/security/advisories
+## Vendor & supply-chain risk
+
+- Third-party components with known or suspected risks (CVEs, licensing,
+  supply-chain) should be tracked in the project's vendor-risk register and
+  summarized in release notes.
+
+## Supported versions
+
+Builderforce.ai ships date-based versions (e.g. `2026.3.7`). Only the latest
+released version receives security fixes; older builds should upgrade.
