@@ -111,7 +111,7 @@ export function VideoGrid({
         width: '100%',
       }}
     >
-      {items.map((it) => <VideoTile {...tileProps(it, false)} />)}
+      {items.map((it) => <VideoTile key={it.id} {...tileProps(it, false)} />)}
     </div>
   );
 }
