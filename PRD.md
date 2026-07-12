@@ -1,146 +1,161 @@
 > **PRD** — drafted by John Coder ((V2) (Durable)) · task #617
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Trustworthy & Explainable `progressPct` for MCP Tickets
+# PRD: Trustworthy & Explainable `progressPct` via MCP Breakdown Object
 
 ## Problem & Goal
 
 ### Problem
-`progressPct` returned by `chats.list_tickets`, `tasks.list`, and `tasks.get` is a single opaque integer that is demonstrably misleading. Observed failures (Brain chat #58):
+`progressPct` as returned by `chats.list_tickets`, `tasks.list`, and `tasks.get` is a single opaque integer that is demonstrably misleading. Observed defects (Chat #58):
 
-- **Task 157**: `progressPct=100`, `done=0/total=0` — derived from nothing real.
-- **Tasks 322 & 336**: `progressPct=100` while implementation status is `in_review` — no delivered code, no passing tests.
+- **Task 157** — `progressPct: 100`, `done: 0 / total: 0`. No subtasks exist; the system silently falls through to a truthy condition and emits 100.
+- **Tasks 322 & 336** — `progressPct: 100` while PR state is `in_review` and no code has been merged/delivered.
 
-An AI agent consuming this field cannot inspect *why* a percentage is what it is. The only safe response is to distrust it entirely, which defeats its purpose.
+Because agents receive only the bare number they cannot determine its derivation, cannot detect when it is spurious, and are forced to distrust the entire field. This makes automated reasoning about ticket readiness, release gating, and progress roll-ups unreliable.
 
 ### Goal
-Replace the bare `progressPct` integer with a **machine-readable `progress` breakdown object** that exposes the derivation basis and supporting signals, so agents and UIs can reason about, display, and trust the value — or know precisely when they cannot.
+Replace the bare `progressPct` integer with a structured `progress` object that exposes both the scalar percentage **and** the signals it was derived from, so that agents, boards, and downstream tooling can (a) verify the number is meaningful, (b) reason about real delivery state, and (c) display an honest explanation to human reviewers.
 
 ---
 
 ## Target Users / ICP Roles
 
-| Consumer | Need |
+| Consumer | Usage |
 |---|---|
-| **AI agents** (primary) | Must distinguish real delivery from accounting artifacts; needs structured data, not a number |
-| **Board / dashboard UIs** | Need to show *why* a ticket is at a given percentage, not just the number |
-| **Human engineers reviewing agent output** | Need to audit what the agent concluded and why |
-| **Downstream agents (#615, diff-summary tool)** | Need a canonical progress signal they can feed into or correct |
+| **AI agents** (primary) | Parse `progress.basis` to decide whether a ticket is truly done before marking it complete or triggering downstream work |
+| **Board / UI renderers** | Display a human-readable explanation alongside the percentage (e.g. "Based on subtasks: 3 / 5 done") |
+| **Release-gate automation** | Gate merges or deploys on `codeDelivered: true` and `testsPassing: true`, not on a possibly-spurious 100 % |
+| **Engineering leads** | Audit progress accuracy in retrospectives; trace why a ticket reported 100 % prematurely |
 
 ---
 
 ## Scope
 
-### In Scope
-- `tasks.get` (detail endpoint)
-- `tasks.list` (compact list)
-- `chats.list_tickets` (compact list)
-- The `progress` field schema and derivation logic
-- Guard-rails preventing false `100` emissions
-- `null`/`unknown` handling when no real signal exists
+Affects three MCP tool response surfaces:
 
-### Out of Scope
-- Changes to `progressPct` *storage* format in the database (read-layer transformation is sufficient for this ticket)
-- PR CI/test-result ingestion pipeline (signals consumed here, not defined here — see diff-summary tool ticket)
-- Front-end rendering beyond ensuring the payload is consumable
-- Historical backfill of stored `progressPct` values
+1. `tasks.get` (ticket detail)
+2. `tasks.list` (compact list)
+3. `chats.list_tickets` (compact list embedded in chat context)
+
+The computation logic lives in a shared internal `deriveProgress(task)` utility so the breakdown is consistent across all three surfaces.
 
 ---
 
 ## Functional Requirements
 
-### FR-1 — `progress` Breakdown Object
+### FR-1 — `progress` Object Shape
 
-Every response from `tasks.get`, `tasks.list`, and `chats.list_tickets` that currently returns `progressPct` **must** instead (or additionally, for backward compat) return a `progress` object with the following shape:
+Every task payload that currently emits `progressPct` must instead (or additionally, during a deprecation window) emit a `progress` object:
 
 ```jsonc
 "progress": {
-  "pct": 40,                    // integer 0–100 or null
-  "basis": "subtasks",          // enum — see FR-2
-  "subtasksDone": 2,            // integer or null
-  "subtasksTotal": 5,           // integer or null
-  "codeDelivered": false,       // bool: merged PR or equivalent signal
-  "testsPassing": null,         // bool or null (null = no signal available)
-  "prState": "in_review"        // enum: null | "open" | "in_review" | "merged" | "closed"
+  "pct": 60,                      // integer 0–100 or null
+  "basis": "subtasks",            // see FR-2 for allowed values
+  "subtasksDone": 3,              // integer | null
+  "subtasksTotal": 5,             // integer | null
+  "codeDelivered": false,         // bool — true only if PR merged OR diff confirms delivery
+  "testsPassing": null,           // bool | null — null = no signal available
+  "prState": "in_review"         // "none"|"open"|"in_review"|"approved"|"merged" | null
 }
 ```
 
-The top-level `progressPct` field **may** be retained for one release cycle as a deprecated alias equal to `progress.pct`, then removed.
+The legacy top-level `progressPct` field **may** be retained for one release cycle as a copy of `progress.pct` to allow client migration, but must be marked deprecated in the schema.
 
-### FR-2 — `basis` Enum and Derivation Rules
+### FR-2 — `basis` Enum & Derivation Rules
 
-| `basis` value | When used | `pct` derivation |
+The `basis` field declares what signal drove `pct`. Allowed values and their derivation logic:
+
+| `basis` value | Condition | `pct` formula |
 |---|---|---|
-| `"subtasks"` | `subtasksTotal ≥ 1` | `floor(subtasksDone / subtasksTotal * 100)` |
-| `"status"` | No subtasks; no PR; status maps to a milestone | Map: `todo→0`, `in_progress→25`, `in_review→60`, `done→100` |
-| `"pr"` | PR exists but `codeDelivered=false` | Max **60** (never 100) — see FR-3 |
-| `"delivered"` | `codeDelivered=true` AND (`testsPassing=true` OR `testsPassing=null`) | `90` (tests unknown) or `100` (tests confirmed passing) |
-| `"manual"` | Explicit override set by a human | Stored value, passed through; `basis` flags it as human-set |
-| `"unknown"` | None of the above apply | `pct: null` |
+| `"subtasks"` | `subtasksTotal >= 1` | `floor(subtasksDone / subtasksTotal * 100)` |
+| `"pr"` | No subtasks AND a PR exists | See FR-3 — constrained values only |
+| `"status"` | No subtasks, no PR | Mapped from task status field (see FR-4) |
+| `"manual"` | Explicit override set by user | Use stored override value verbatim |
+| `"unknown"` | None of the above signals available | `pct` must be `null` |
 
-### FR-3 — Hard Guard: No False `100`
+Priority order when multiple signals exist: `manual` → `subtasks` → `pr` → `status` → `unknown`.
 
-- `pct=100` **must not** be emitted unless **at least one** of:
-  - `subtasksDone === subtasksTotal AND subtasksTotal ≥ 1` **AND** `codeDelivered=true`, **OR**
-  - `basis="delivered"` with `testsPassing=true`, **OR**
-  - `basis="manual"` with an explicit human-set value of 100.
-- A PR in any state short of merged does **not** qualify as `codeDelivered=true`.
+### FR-3 — PR-Based Progress Must Not Emit 100
 
-### FR-4 — Zero-Subtask Guard
+When `basis = "pr"`, allowed `pct` values are constrained to prevent premature completion signals:
 
-- When `subtasksTotal=0` (or null/missing), the system **must not** derive `pct=100` from the subtask ratio.
-- Fall through to `basis="status"`, `basis="pr"`, `basis="delivered"`, or `basis="unknown"` per FR-2.
+| PR State | Max allowed `pct` |
+|---|---|
+| `"open"` | 40 |
+| `"in_review"` | 70 |
+| `"approved"` | 85 |
+| `"merged"` AND `codeDelivered: true` | 95 |
 
-### FR-5 — `codeDelivered` Signal Definition
+`pct: 100` via PR basis alone is **never permitted**. Reaching 100 requires either (a) `basis = "subtasks"` with all subtasks done, (b) `basis = "manual"` with explicit override, or (c) `basis = "status"` with status = `done`/`closed` **and** `codeDelivered: true`.
 
-`codeDelivered=true` requires **any one** of:
-- The ticket's linked PR has state `merged`.
-- A diff-summary tool signal (future integration, see related tickets) marks the feature branch as delivered to the target branch.
-- A human sets `codeDelivered` explicitly via the manual override.
+### FR-4 — Status-Based Fallback Mapping
 
-`prState="in_review"` or `prState="open"` → `codeDelivered=false`.
+When `basis = "status"`:
 
-### FR-6 — `testsPassing` Signal
+| Task status | `pct` |
+|---|---|
+| `backlog` / `todo` | 0 |
+| `in_progress` | 30 |
+| `in_review` | 60 |
+| `done` / `closed` with `codeDelivered: false` | 85 |
+| `done` / `closed` with `codeDelivered: true` | 100 |
 
-- `true`: CI result explicitly passed and linked to this ticket's PR/branch.
-- `false`: CI result explicitly failed.
-- `null`: no CI signal available (this is the default; must not be treated as `false`).
+### FR-5 — Zero-Subtask Guard (`total = 0`)
 
-### FR-7 — Backward Compatibility Window
+When `subtasksTotal = 0` (or subtasks field is absent/null):
 
-- For **one minor-version cycle**, emit both `progressPct` (deprecated integer) and `progress` (new object).
-- `progressPct` must equal `progress.pct` (or `null` cast to `0` for legacy consumers that cannot handle null).
-- Deprecation notice in response headers or metadata field: `"progressPctDeprecated": true`.
+- `basis` must NOT be `"subtasks"`.
+- `subtasksDone` and `subtasksTotal` are emitted as `null`.
+- System falls through to `"pr"` → `"status"` → `"unknown"` hierarchy (FR-2).
+- Under no circumstances may the system emit `pct: 100` via implicit subtask math on a 0/0 denominator.
+
+### FR-6 — `codeDelivered` Signal Source
+
+`codeDelivered: true` is set when **any** of the following are confirmed:
+
+- Associated PR state is `"merged"` into the target branch.
+- Diff-summary tool (ticket from related scope) returns a non-empty confirmed diff for the task.
+- An explicit delivery event has been recorded against the task.
+
+`codeDelivered: false` is the default when none of the above signals exist. It must never be inferred from PR existence alone.
+
+### FR-7 — `testsPassing` Signal
+
+- `true` — CI for the associated PR/commit reports all checks green.
+- `false` — CI reports one or more failures.
+- `null` — No CI signal available or CI has not run.
+
+The field must always be present; `null` is a valid and expected value.
+
+### FR-8 — Compact List Inclusion
+
+The `progress` object (full shape, not a subset) must be present in compact list responses (`tasks.list`, `chats.list_tickets`). Payload size is not a justification for omitting `basis` or the boolean delivery fields; these fields are the entire value of the feature.
 
 ---
 
 ## Acceptance Criteria
 
-| # | Criterion |
+| ID | Criterion |
 |---|---|
-| AC-1 | `tasks.get` response includes a `progress` object with all fields: `pct`, `basis`, `subtasksDone`, `subtasksTotal`, `codeDelivered`, `testsPassing`, `prState`. |
-| AC-2 | `tasks.list` and `chats.list_tickets` compact responses include the same `progress` object (may omit `null` fields in compact mode but must include `pct` and `basis`). |
-| AC-3 | Task 157 equivalent (done=0, total=0, no PR) returns `pct: null`, `basis: "unknown"` — never `pct: 100`. |
-| AC-4 | Tasks 322/336 equivalent (`prState: "in_review"`) return `codeDelivered: false` and `pct ≤ 60`. |
-| AC-5 | `pct: 100` is only returned in scenarios matching FR-3 criteria; automated test suite asserts all three disallowed-100 cases. |
-| AC-6 | `basis` field is always present and always one of the six defined enum values; response fails schema validation otherwise. |
-| AC-7 | A task with `subtasksTotal=0` and no other signals returns `basis: "unknown"`, `pct: null`. |
-| AC-8 | A task with a merged PR and `testsPassing: true` returns `basis: "delivered"`, `pct: 100`. |
-| AC-9 | Deprecated `progressPct` top-level field equals `progress.pct` (or `0` if null) for the backward-compat window. |
-| AC-10 | No regression in response-time SLA for list endpoints (breakdown computed in same DB round-trip or via in-process derivation, not extra calls). |
+| AC-1 | `tasks.get`, `tasks.list`, and `chats.list_tickets` all return a `progress` object matching the FR-1 schema; automated schema validation passes on all three endpoints. |
+| AC-2 | Task 157 (or any task with `subtasksDone=0, subtasksTotal=0`) returns `progress.pct: null` and `progress.basis: "unknown"` (or falls through to `"status"`/`"pr"` if those signals exist) — never `pct: 100`. |
+| AC-3 | Tasks 322 & 336 (or any task with `prState: "in_review"` and no merged code) return `progress.pct ≤ 70` and `progress.codeDelivered: false`; `pct: 100` is absent. |
+| AC-4 | A task with `prState: "merged"` but `codeDelivered: false` returns `progress.pct ≤ 85`, never 100. |
+| AC-5 | `pct: 100` is only emitted when at least one of these is true: all subtasks done (`basis="subtasks"`), explicit manual override, or status is terminal **and** `codeDelivered: true`. |
+| AC-6 | `progress.basis` is a string from the defined enum; no other values appear in production responses. |
+| AC-7 | `progress.testsPassing` is always present and is `true`, `false`, or `null` — never missing. |
+| AC-8 | Existing agent/board consumers that read only the legacy `progressPct` field continue to receive it (equal to `progress.pct`) for one deprecation cycle without breaking. |
+| AC-9 | A regression test fixture covers the 0/0 subtask case, the `in_review` PR case, and the merged-but-undelivered case, all asserting correct `basis` and bounded `pct`. |
+| AC-10 | Schema is documented in the MCP tool manifest/spec so agents can introspect field meanings without consulting external docs. |
 
 ---
 
 ## Out of Scope
 
-- **CI/CD pipeline integration** — `testsPassing` signal is consumed if present; ingesting CI webhooks is a separate workstream.
-- **Diff-summary tool** — referenced as a future source for `codeDelivered`; its own ticket governs its implementation.
-- **Database schema migration** — derivation logic lives in the read/serialization layer; no stored-column changes required by this ticket.
-- **Historical data correction** — previously stored or cached `progressPct` values are not backfilled.
-- **Front-end UI redesign** — payload is made consumable; visual rendering decisions belong to the board/UI team.
-- **`progressPct` removal** — deprecation only in this ticket; hard removal is a follow-on ticket after migration period.
-- **Ticket creation or editing flows** — read path only.
-
----
-
-*Related: #615 (accounting fix), #618, diff-summary tool ticket, Brain chat #58.*
+- **Backfilling historical `progressPct` values** in audit logs or event streams — only live API responses are in scope.
+- **Changing how subtasks are created or structured** — this PRD only changes how existing subtask data is surfaced.
+- **UI rendering implementation** — the board/UI is a consumer; this PRD defines only the API contract.
+- **Diff-summary tool implementation** — referenced as a signal source (`codeDelivered`) but its own build is tracked separately (related ticket). This PRD only specifies how `deriveProgress` consumes its output.
+- **Webhooks or push events** — progress breakdown is a pull/response-time concern only.
+- **Per-field access control or redaction** — all consumers of the task object receive the same `progress` shape.
+- **Non-MCP REST or GraphQL endpoints** — alignment of those surfaces is a follow-on task.
