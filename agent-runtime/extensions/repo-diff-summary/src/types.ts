@@ -1,66 +1,14 @@
-// core types for DiffSummaryResult and tool metadata
+// Core types for the repos.pull_request_diff_summary MCP tool.
+//
+// These mirror the response contract in the PRD (FR-4). They are the single
+// source of truth for the DiffSummaryResult shape used by the classifier,
+// the tool, and its tests.
 
-export interface DiffSummaryMeta {
-  readonly taskId?: string;
-  readonly prNumber?: number;
-  readonly branch?: string;
-  readonly baseBranch: string;
-  readonly repoFullName: string;
-  readonly resolvedAt: string; // ISO-8601 timestamp (date-time)
-  readonly totalFilesChanged: number;
-}
+/** The closed set of file categories (FR-3). */
+export type FileCategory = "source" | "test" | "docs" | "config" | "migration" | "asset";
 
-export interface FileChange {
-  readonly path: string;
-  readonly category: FileCategory;
-  readonly status: "added" | "modified" | "deleted" | "renamed";
-  readonly linesAdded: number;
-  readonly linesDeleted: number;
-  readonly previousPath?: string; // populated when status is renamed
-}
-
-export interface CategoryBreakdown {
-  readonly fileCount: number;
-  readonly linesAdded: number;
-  readonly linesDeleted: number;
-}
-
-export interface DiffSummaryResult {
-  readonly meta: DiffSummaryMeta;
-  readonly summary: {
-    readonly codeChanged: boolean; // true if at least one source file present
-    readonly hasTests: boolean; // true if at least one test file present
-    readonly docsOnly: boolean; // true iff all files are docs, else false
-    readonly testsOnly: boolean; // true iff all files are tests, else false
-    readonly categories: {
-      readonly source: CategoryBreakdown;
-      readonly test: CategoryBreakdown;
-      readonly docs: CategoryBreakdown;
-      readonly config: CategoryBreakdown;
-      readonly migration: CategoryBreakdown;
-      readonly asset: CategoryBreakdown;
-    };
-  };
-  readonly files: readonly FileChange[];
-}
-
-export enum FileCategory {
-  Source = "source",
-  Test = "test",
-  Docs = "docs",
-  Config = "config",
-  Migration = "migration",
-  Asset = "asset",
-}
-
-export enum ExecutionStatus {
-  Added = "added",
-  Modified = "modified",
-  Deleted = "deleted",
-  Renamed = "renamed",
-}
-
-const ALL_CATEGORIES: ReadonlyArray<KeyOf<typeof FileCategory>> = [
+/** All categories, in a stable order. Used to build zeroed breakdowns. */
+export const ALL_CATEGORIES: readonly FileCategory[] = [
   "source",
   "test",
   "docs",
@@ -69,34 +17,71 @@ const ALL_CATEGORIES: ReadonlyArray<KeyOf<typeof FileCategory>> = [
   "asset",
 ] as const;
 
-/** Helper to assert FileCategory is a valid enum value */
-export const isValidCategory = (category: string): category is FileCategory =>
-  Object.values(FileCategory).includes(category as FileCategory);
+/** The status of a file in a diff. */
+export type FileStatus = "added" | "modified" | "deleted" | "renamed";
 
-export function getAllCategories(): readonly string[] {
-  return ALL_CATEGORIES;
+export interface DiffSummaryMeta {
+  taskId?: string;
+  prNumber?: number;
+  branch?: string;
+  baseBranch: string;
+  repoFullName: string; // e.g. "org/repo"
+  resolvedAt: string; // ISO-8601
+  totalFilesChanged: number;
 }
 
-/** Ensure summary totals match the aggregated files array for each category. */
-export function assertCategoryTotals(
-  summaries: DiffSummaryResult["summary"]["categories"],
-  files: readonly FileChange[]
-): void {
-  for (const cat of ALL_CATEGORIES) {
-    const s = summaries[cat as FileCategory];
-    const count = files.filter((f) => f.category === cat as FileCategory).length;
-    const linesAdded = files
-      .filter((f) => f.category === cat as FileCategory)
-      .reduce((acc, f) => acc + f.linesAdded, 0);
-    const linesDeleted = files
-      .filter((f) => f.category === cat as FileCategory)
-      .reduce((acc, f) => acc + f.linesDeleted, 0);
-    if (count !== s.fileCount || linesAdded !== s.linesAdded || linesDeleted !== s.linesDeleted) {
-      throw new TypeError(
-        `Category total mismatch for ${cat}: expected ` +
-          `${{ fileCount: count, linesAdded, linesDeleted }}, got ` +
-          `${{ fileCount: s.fileCount, linesAdded: s.linesAdded, linesDeleted: s.linesDeleted }}`
-      );
-    }
+export interface CategoryBreakdown {
+  fileCount: number;
+  linesAdded: number;
+  linesDeleted: number;
+}
+
+export type CategoryTotals = Record<FileCategory, CategoryBreakdown>;
+
+export interface DiffSummaryFile {
+  path: string;
+  category: FileCategory;
+  status: FileStatus;
+  linesAdded: number;
+  linesDeleted: number;
+  previousPath?: string; // populated on rename
+}
+
+export interface DiffSummarySummary {
+  codeChanged: boolean; // at least one "source" file
+  hasTests: boolean; // at least one "test" file
+  docsOnly: boolean; // ALL files are "docs"
+  testsOnly: boolean; // ALL files are "test"
+  categories: CategoryTotals;
+}
+
+export interface DiffSummaryResult {
+  meta: DiffSummaryMeta;
+  summary: DiffSummarySummary;
+  files: DiffSummaryFile[];
+}
+
+/** A single changed file as returned by a git provider, before classification. */
+export interface RawFileChange {
+  path: string;
+  status: FileStatus;
+  linesAdded: number;
+  linesDeleted: number;
+  previousPath?: string;
+  /** true when the provider reports the blob as binary (no textual line counts). */
+  binary?: boolean;
+}
+
+/** Type guard: is the given string a valid FileCategory. */
+export function isValidCategory(category: string): category is FileCategory {
+  return (ALL_CATEGORIES as readonly string[]).includes(category);
+}
+
+/** Build a fresh, all-zero category totals record. */
+export function emptyCategoryTotals(): CategoryTotals {
+  const totals = {} as CategoryTotals;
+  for (const category of ALL_CATEGORIES) {
+    totals[category] = { fileCount: 0, linesAdded: 0, linesDeleted: 0 };
   }
+  return totals;
 }
