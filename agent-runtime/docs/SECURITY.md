@@ -103,6 +103,18 @@ docker run --read-only --cap-drop=ALL \
   builderforce/builderforce:latest
 ```
 
+## Cloud-Worker Isolation (GAP-CW)
+
+Compute-layer isolation for the cloud worker execution environment has been formally
+validated against PRD FR-5 (process, filesystem, and network namespace isolation plus
+teardown artifact elimination). See the structured validation report:
+
+- `docs/security/GAP-CW-Validation-Report.md`
+
+Status: **Cloud-Worker Isolation — Closed** (overall verdict: Isolated; no open isolation
+breaches). Two low-priority hardening recommendations are tracked in the report's
+remediation notes and owned by Platform Engineering.
+
 ## Security Scanning
 
 This project uses `detect-secrets` for automated secret detection in CI/CD.

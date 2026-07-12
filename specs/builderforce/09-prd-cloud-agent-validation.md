@@ -152,6 +152,14 @@ Each gap is phrased as a check that currently fails, is unverified, or is missin
 
 ### G. Security & isolation
 
+> **GAP-CW — Cloud-Worker compute-layer isolation (FR-5): VALIDATED / CLOSED.**
+> Process (PID/IPC/UTS), filesystem, and network namespace isolation between concurrent
+> workers, plus teardown artifact elimination, were formally validated by security-t1.
+> Overall verdict: **Isolated** (no open isolation breaches). Two low-priority hardening
+> recommendations remain, owned by Platform Engineering. This closes the compute-layer
+> slice of GAP-G1/GAP-W2. Full evidence + test-case verdicts:
+> `agent-runtime/docs/security/GAP-CW-Validation-Report.md`.
+
 47. **GAP-G1 (P0, E:V2,fallback)** — Cloud V2 with `bypassPermissions` + Bash runs tenant-authored prompts against a cloned repo on **shared infrastructure** with no documented sandbox/network egress boundary. This is the single biggest GA blocker. *Acceptance:* documented isolation model (container/network egress allowlist) + a red-team check.
 48. **GAP-G2 (P0, E:all)** — Decrypted provider tokens live in the runtime process during a run; no assertion they're scrubbed from memory/logs on completion. *Acceptance:* secret-lifecycle audit + log-redaction test.
 49. **GAP-G3 (P1, E:all)** — Cross-tenant isolation of the task workspace dir (`.builderforce/tasks/<taskId>`) on a shared runtime is unverified — taskId collision or path traversal could expose another tenant's checkout. *Acceptance:* tenant-namespaced paths + traversal test.

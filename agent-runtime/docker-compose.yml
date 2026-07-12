@@ -1,3 +1,8 @@
+# Cloud-Worker Isolation note (GAP-CW / FR-5): the shared config + workspace volumes
+# below (BUILDERFORCE_AGENTS_CONFIG_DIR, BUILDERFORCE_AGENTS_WORKSPACE_DIR) exist for
+# gateway identity and workspace state only. They MUST NOT be repurposed as ephemeral
+# compute scratch paths shared between concurrent worker slots — doing so would break
+# the compute-layer isolation validated in docs/security/GAP-CW-Validation-Report.md.
 services:
   builderforce-gateway:
     image: ${BUILDERFORCE_AGENTS_IMAGE:-builderforce:local}
