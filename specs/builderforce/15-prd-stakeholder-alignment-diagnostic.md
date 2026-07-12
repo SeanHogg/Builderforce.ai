@@ -321,10 +321,10 @@ Define calculated metrics per project/team, computed from `health_profile` field
 - Formula: Count of conflicts in proposal where `status = "active"` under `stakeholder_alignment.active_conflicts`.
 
 **3. # Overdue Sign-offs (>48h)**
-- Formula: Boolean under `stakeholder_alignment.overdue_conflicts`                                                                                 (count returned as 0 or 1 for per-project view; rollup over team for aggregates).
+- Formula: Boolean under `stakeholder_alignment.overdue_conflicts` (count returned as 0 or 1 for a per-project view; rolled up over the team for aggregate views).
 
-**4. Approver Coverage %
-- Formula:** Count confirmed approvers (`last_confirmed_at` < `now - 30 days`) vs. required approvers (`is_required_approver = true`), capped at 100.
+**4. Approver Coverage %**
+- Formula: Count of confirmed approvers (`last_confirmed_at` within the last 30 days) divided by the count of required approvers (`is_required_approver = true`), as a percentage, capped at 100.
 
 **5. Escalation Rate (All-Time per project)**
 - Formula: `sum_escalated / total_sign_off_protocols`.
