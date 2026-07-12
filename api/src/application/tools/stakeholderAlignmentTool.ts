@@ -12,7 +12,7 @@ export function scoreStakeholderAlignment(
   return scoreQuestionnaire(tool, answers);
 }
 
-export const stakeholderAlignmentToolDefinition: import('./toolTypes').QuestionnaireTool = {
+export const stakeholderAlignmentToolDefinition: QuestionnaireTool = {
   id: TOOL_STAKEHOLDER_ALIGNMENT,
   name: 'Stakeholder Alignment',
   tagline: 'Are priorities clear and agreed across key stakeholders?',
