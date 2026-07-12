@@ -14,10 +14,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { completeTaskOnMerge, recordStatusTransition, type RecordTransitionInput } from './taskLifecycle';
 import { TaskStatus } from '../../domain/shared/types';
-import { tasks, pullRequests, swimlanes, boards } from '../../infrastructure/database/schema';
+import { tasks, swimlanes, boards } from '../../infrastructure/database/schema';
 import { __clearL1CacheForTests } from '../../infrastructure/cache/readThroughCache';
 
-type TableRef = typeof tasks | typeof pullRequests | typeof swimlanes | typeof boards;
+type TableRef = typeof tasks | typeof swimlanes | typeof boards;
 
 /**
  * Collects the set()-call so assertions can verify WHAT gets written
