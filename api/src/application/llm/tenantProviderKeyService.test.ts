@@ -37,11 +37,20 @@ vi.mock('./anthropicOAuth', async (orig) => {
 import {
   resolveAnthropicResolution,
   formatByoUnresolvedHeader,
+  PROVIDER_VENDOR_MAP,
   type TenantLlmCredentials,
 } from './tenantProviderKeyService';
 import { OAUTH_SAFETY_MARGIN_MS } from './anthropicOAuth';
 
 const env = { NEON_DATABASE_URL: 'x', JWT_SECRET: 's' } as never;
+
+describe('BYO provider routing map', () => {
+  it('maps Kimi, Qwen, and MiniMax to their direct gateway vendors', () => {
+    expect(PROVIDER_VENDOR_MAP.kimi).toMatchObject({ vendorId: 'moonshot', envKey: 'MOONSHOT_API_KEY' });
+    expect(PROVIDER_VENDOR_MAP.qwen).toMatchObject({ vendorId: 'qwen', envKey: 'QWEN_API_KEY' });
+    expect(PROVIDER_VENDOR_MAP.minimax).toMatchObject({ vendorId: 'minimax', envKey: 'MINIMAX_API_KEY' });
+  });
+});
 
 /** Stage an oauth row whose decrypted token blob has the given absolute `expires`. */
 function stageOAuth(expires: number, access = 'A1') {

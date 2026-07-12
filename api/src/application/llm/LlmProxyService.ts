@@ -231,6 +231,9 @@ const BYO_FRONTIER_FLAGSHIPS: Readonly<Record<string, { agentic: string; chat: s
   openai:    { agentic: 'direct/openai/gpt-4.1', chat: 'direct/openai/gpt-4.1' },
   googleai:  { agentic: 'googleai/gemini-2.5-pro', chat: 'googleai/gemini-2.5-pro' },
   meta:      { agentic: 'direct/meta/muse-spark-1.1', chat: 'direct/meta/muse-spark-1.1' },
+  moonshot:  { agentic: 'direct/moonshot/kimi-k2-0711-preview', chat: 'direct/moonshot/kimi-k2-0711-preview' },
+  qwen:      { agentic: 'direct/qwen/qwen3-coder-plus', chat: 'direct/qwen/qwen3-max' },
+  minimax:   { agentic: 'direct/minimax/MiniMax-M1', chat: 'direct/minimax/MiniMax-Text-01' },
 };
 
 function providerFrontierFlagship(vendor: string, agentic: boolean): string | null {
