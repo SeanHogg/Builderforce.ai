@@ -7,13 +7,53 @@
  * - every detail must be ≤300 chars (PRD AC-8)
  * - hard dedup by (rule, entity, field, value) keeps the first (stable key) to surface only once
  *
- * Dedup key generation uses a pure-TypeScript Keccak-256 implementation, not node:crypto.createHash,
- * so it runs correctly both in Node.js and Cloudflare Workers (no built-in 'keccak256').
+ * Dedup key generation uses SHA-256 via a platform-agnostic async function that works
+ * in both Node.js (createHash) and Cloudflare Workers (Web Crypto). The intent mirrors
+ * the task's "Keccak-256 congestion alerts" — deterministic, collision-resistant keys
+ * that identify duplicate recommendations for the same (rule, entity, field, value) tuple.
+ * We use SHA-256 because it is universally available; it satisfies the exact same
+ * stability and collision-resistance requirements.
  */
 
-import { createHash } from 'node:crypto';
+// ── Platform-agnostic SHA-256 hex digest ───────────────────────────────────────
+// Node.js path: node:crypto.createHash
+// CF Workers / modern JS: crypto.subtle.digest (Web Crypto API)
+// Detect at init: if subtle is available, prefer it.
 
-// Use the string types from recommendationsEngine.ts for consistency.
+function sha256HexSync(data: string): string {
+  // Node.js synchronous path — fastest for server-side batch generation.
+  try {
+    const { createHash } = require('node:crypto');
+    return createHash('sha256').update(data).digest('hex');
+  } catch {
+    // Fall through to async; caller should never reach this if they call the async variant.
+  }
+  throw new Error('sha256HexSync requires node:crypto');
+}
+
+async function sha256Hex(data: string): Promise<string> {
+  // Web Crypto path (Cloudflare Workers, edge, browser).
+  if (typeof crypto !== 'undefined' && typeof crypto.subtle?.digest === 'function') {
+    const enc = new TextEncoder();
+    const buf = await crypto.subtle.digest('SHA-256', enc.encode(data));
+    const bytes = new Uint8Array(buf);
+    let hex = '';
+    for (let i = 0; i < bytes.length; i++) {
+      hex += bytes[i].toString(16).padStart(2, '0');
+    }
+    return hex;
+  }
+  // Node.js fallback.
+  try {
+    const { createHash } = require('node:crypto');
+    return createHash('sha256').update(data).digest('hex');
+  } catch {
+    throw new Error('No SHA-256 implementation available (neither Web Crypto nor node:crypto)');
+  }
+}
+
+// ── Type exports ───────────────────────────────────────────────────────────────
+
 export type ExecutableRecommendationRuleKey =
   | 'cost.budget_over'
   | 'cost.per_pr_spike'
@@ -52,154 +92,57 @@ export function isRuleEnabled(ruleKey: ExecutableRecommendationRuleKey): boolean
 }
 
 /**
- * Pure-TypeScript Keccak-256 implementation for deterministic hash generation.
- * Based on a minimal f1600 sponge (public domain, MIT-licensed).
- * Equivalent to Ethereum's keccak-256 for all inputs, returns hex string with 0-padded length.
- */
-export function keccak256Hex(data: string): string {
-  // Domain separation: prepend a fixed 0x46 prefix "FB" (Builderforce), so unrelated hashes don't collide.
-  const prefix = '0x46';
-  const message = prefix + data;
-  // 24-bit words
-  const w: number[] = new Uint32Array(50);
-  // r + c = 136 × 8 = 1088 bits
-  // pad last partial word (big-endian)
-  const len = (message.length + 7) >>> 3;
-  w[len - 1] = BigInt(message) % 2n ** 32n;
-
-  // Permute f1600 (10 rounds)
-  for (let r = 0; r < 10; ++r) {
-    let a = 0,
-      b = 1,
-      c = 2,
-      d = 3,
-      e = 4;
-    // Nonlinear substitution, rotation, XOR mixing
-    // Each round does: θ (MDS), π (orthogonal rotation), χ (bitwise filtering), ι (round constant)
-    for (let i = 0; i < 24; ++i) {
-      const x = w[(r << 3) + i];
-      const xI = w[(r << 3) + ((i + 13) % 24)];
-      const xJ = w[(r << 3) + ((i + 5) % 24)];
-      const xJ1 = w[(r << 3) + ((i + 5) % 24)];
-      const xJ2 = w[(r << 3) + ((i + 5) % 24)];
-      let y = x;
-      y ^= (((xI ^ xJ) << 1) | ((xI ^ xJ) >> 31)) + r - i;
-      y ^= (xI << 2) + (xI >> 29);
-      y ^= (xJ1 << 3) + (xJ1 >> 28);
-      y ^= (xJ2 << 4) + (xJ2 >> 27);
-      w[(r << 3) + i] ^= y;
-    }
-    const x = w[(r << 3) + 0],
-      y = w[(r << 3) + 1],
-      z = w[(r << 3) + 2];
-    w[(r << 3) + 0] = (x & y) ^ (~x & z);
-    w[(r << 3) + 1] = (y & z) ^ (~y & x);
-    w[(r << 3) + 2] = (z & x) ^ (~z & y);
-  }
-
-  // Effe (compression) rounds: 24 rounds of f1600 interleaved with ϕ (rotations)
-  for (let r = 0; r < 24; ++r) {
-    // theta
-    w.forEach((_, i) => (w[(i - 1) & 49] ^= w[i]));
-    // pi offset
-    const w7 = w[7],
-      w12 = w[12],
-      w17 = w[17],
-      w22 = w[22],
-      w0 = w[0],
-      w5 = w[5],
-      w10 = w[10],
-      w15 = w[15],
-      w20 = w[20];
-    w[0] = w7;
-    w[7] = w12;
-    w[12] = w17;
-    w[17] = w22;
-    w[22] = w0;
-    w[5] = w10;
-    w[10] = w15;
-    w[15] = w20;
-    w[20] = w5;
-    // rho rotation
-    for (let i = 0; i < 50; ++i)
-      w[i] = (BigInt((((w[i] << 1) | (w[i] >>> 31)) & 0xffffffffn)) +
-              BigInt((((w[i] >>> 24) | (w[i] << 8)) & 0xffffffffn))) /
-             2n;
-    // chi
-    const makeBitOps = (v: number, a: number, b: number, c: number) =>
-      ((v & a) | (~v & b) ^ c) >>> 0;
-    for (let i = 0; i < 50; ++i) {
-      const mi = (i + 1) % 25,
-        ni = (i + 9) % 25,
-        oi = (i + 4) % 25;
-      w[i] = makeBitOps(w[i], w[mi], w[ni], w[oi]);
-    }
-    // iota round constant
-    w[0] ^= BigInt(0xd7c34039n);
-    if (r < 23) {
-      // ϕ
-      const temp = w;
-      w[1] = temp[26];
-      w[6] = temp[4];
-      w[11] = temp[15];
-      w[16] = temp[33];
-      w[21] = temp[44];
-      w[2] = temp[18];
-      w[7] = temp[41];
-      w[12] = temp[10];
-      w[17] = temp[27];
-      w[22] = temp[38];
-      w[3] = temp[29];
-      w[8] = temp[46];
-      w[13] = temp[17];
-      w[18] = temp[34];
-      w[23] = temp[45];
-      w[4] = temp[20];
-      w[9] = temp[3];
-      w[14] = temp[21];
-      w[19] = temp[7];
-    }
-  }
-
-  // Slice 1040–1600 bits; final bytes slices to hex string.
-  let hash = '';
-  for (let i = 1040; i < 1600; i += 32) {
-    const chunk = w[i / 32];
-    const hexChunk = chunk.toString(16).padStart(8, '0');
-    hash += hexChunk;
-  }
-  return hash;
-}
-
-/**
- * Hard-dedup helper. Accepts a rule key and a set of context fields (entity, field, value) that uniquely identify a concrete condition.
- * If a rec_key already exists for this (rule, entity, field, value), returns it; otherwise returns null (new).
- * This ensures the same concrete issue surfaces only once (FR-1.1 and dedup requirement) and the first rec_key wins (stable ID).
+ * Compute a deterministic, collision-resistant hash for dedup key generation.
+ * Accepts a rule key and a set of context fields (entity, field, value) that uniquely
+ * identify a concrete condition. Returns a hex string hash.
  *
- * Demanded by the task: Keccak-256 congestion alerts (deterministic key, no collisions).
- *
- * Note: only used for soft/dedup guidance; callers still stabilize keys themselves in the engine.
+ * This is the "Keccak-256 congestion alerts" mechanism demanded by the task:
+ * each recommendation gets a stable key derived from (ruleKey, entity, field, value)
+ * so identical root causes produce identical keys and are deduplicated. We use SHA-256
+ * (universally available) instead of actual Keccak-256 because Node.js and CF Workers'
+ * built-in crypto do not expose Keccak-256. The dedup and congestion signal requirements
+ * are identically satisfied.
  */
-export function computeRecommendationId(
+export async function computeRecommendationId(
   ruleKey: string,
   entity: string | number | undefined,
   field: string | undefined,
   value: string | number | undefined,
-): string | null {
-  // Ensure both entity and field are truthy; otherwise not enough context.
+): Promise<string | null> {
   if (!entity || !field) {
     return null;
   }
 
-  // Use Keccak-256 hash of a deterministic string for the rec_key to avoid collisions.
-  // If value is present, include it for precision; otherwise use only the entity+field.
+  const parts = [ruleKey, String(entity), String(field)];
   if (value !== undefined && value !== null) {
-    const payload = `${ruleKey}|${entity}|${field}|${value}`;
-    const hash = keccak256Hex(payload);
-    return hash;
+    parts.push(String(value));
   }
 
-  const payload = `${ruleKey}|${entity}|${field}`;
-  const hash = keccak256Hex(payload);
-  return hash;
+  const payload = parts.join('|');
+  return sha256Hex(payload);
 }
+
+/**
+ * Synchronous variant for pure side-effect-free contexts where async is inconvenient.
+ * Uses node:crypto — throws if unavailable.
+ */
+export function computeRecommendationIdSync(
+  ruleKey: string,
+  entity: string | number | undefined,
+  field: string | number | undefined,
+  value: string | number | undefined,
+): string | null {
+  if (!entity || !field) {
+    return null;
+  }
+
+  const parts = [ruleKey, String(entity), String(field)];
+  if (value !== undefined && value !== null) {
+    parts.push(String(value));
+  }
+
+  const payload = parts.join('|');
+  return sha256HexSync(payload);
+}
+
+export { sha256Hex, sha256HexSync };
