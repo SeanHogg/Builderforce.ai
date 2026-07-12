@@ -194,6 +194,49 @@ export function createKanbanRoutes(db: Db): Hono<HonoEnv> {
   router.get('/flagged', async (c) =>
     c.json({ flagged: await auditService.listFlagged(env(c), c.get('tenantId') as number) }));
 
+  // ── Unassigned Task Identification (pickable tasks) ──────────────────────────
+  // Surfaces unassigned tasks that are immediately pickable by an agent. Reads are
+  // open to any member; the informational claim is manager-gated. See PRD:
+  // "Unassigned Task Identification System".
+  router.get('/pickable', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const projectIdQ = c.req.query('projectId');
+    const projectId = projectIdQ != null && projectIdQ !== '' ? Number(projectIdQ) : null;
+    const crossProject = c.req.query('crossProject') === 'true';
+    const markdown = c.req.query('format') === 'markdown';
+
+    try {
+      const result = await listPickableTasks(env(c), tenantId, projectId, crossProject, markdown);
+      return c.json(result as unknown as Record<string, unknown>);
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 500);
+    }
+  });
+
+  router.post('/pickable/claim', async (c) => {
+    if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
+    const tenantId = c.get('tenantId') as number;
+    const body = await c.req.json<{ taskId: number; projectId?: number; agentKind: string; agentRef: string; ttlMs?: number }>();
+    if (!body.taskId || !body.agentKind || !body.agentRef) {
+      return c.json({ error: 'taskId, agentKind, and agentRef are required' }, 400);
+    }
+
+    try {
+      const claim = await claimTask(
+        env(c),
+        body.taskId,
+        tenantId,
+        body.projectId ?? 0,
+        body.agentKind,
+        body.agentRef,
+        body.ttlMs,
+      );
+      return c.json(claim as unknown as Record<string, unknown>, claim.ok ? 200 : 409);
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 500);
+    }
+  });
+
   // ── Per-ticket audit ─────────────────────────────────────────────────────────
   router.get('/tasks/:taskId/audit', async (c) => {
     const audit = await auditService.getAudit(env(c), c.get('tenantId') as number, Number(c.req.param('taskId')));
