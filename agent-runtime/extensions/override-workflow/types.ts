@@ -1,91 +1,162 @@
 /**
- * Override Workflow System
- * Handles approval-mode routing, escalation timeouts, and unblock-on-approval
+ * Override Workflow Types
  */
 
-export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+export enum ApprovalStatus {
+  PENDING = 'pending',
+  APPROVED = 'approved',
+  REJECTED = 'rejected',
+  CANCELLED = 'cancelled',
+}
 
-export type ApprovalStrategy = 'sequential' | 'parallel';
+export enum ApprovalDecision {
+  APPROVE = 'approve',
+  REJECT = 'reject',
+}
 
-export interface OverrideRequest {
+export enum EscalationStatus {
+  PENDING = 'pending',
+  ESCALATED = 'escalated',
+  RESOLVED = 'resolved',
+}
+
+export enum ApprovalStepNotifyMethod {
+  EMAIL = 'email',
+  WEBHOOK = 'webhook',
+  SLACK = 'slack',
+}
+
+export interface ApprovalStep {
   id: string;
-  title: string;
-  description: string;
-  requesterId: string;
-  requesterName: string;
-  entityType: 'alert' | 'rule' | 'config';
-  entityId: string;
-  reason: string;
-  enabled: boolean; // True if override should be applied automatically
-  requiresApproval: boolean;
-  approvalStatus: ApprovalStatus;
+  notifyMethod: ApprovalStepNotifyMethod;
+  email: string | null;
+  approverId: string;
+  required: boolean;
+  status: ApprovalStatus;
+  decision: ApprovalDecision | null;
+  comments: string | null;
   createdAt: Date;
-  approvedAt?: Date;
-  rejectedAt?: Date;
-  cancelledAt?: Date;
-  expiryAt?: Date;
-  expired: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+  evaluatedAt: Date | null;
+  timeout?: number;
 }
 
 export interface ApprovalChain {
   id: string;
-  overrideRequestId: string;
-  approverId: string;
-  approverName: string;
-  order: number;
-  status: ApprovalStatus;
-  result?: 'approved' | 'rejected';
-  comment?: string;
-  approvedAt?: Date;
-  rejectedAt?: Date;
+  steps: ApprovalStep[];
+  createdAt: Date;
+  resolvedAt: Date | null;
 }
 
-export interface ApprovalEscalation {
+export type AuthorizationType = 'owner' | 'approver' | 'admin' | 'anyone';
+
+export type WorkflowMode = 'auto-approve' | 'approval-required' | 'escalation-enabled';
+
+export interface EscalationRule {
   id: string;
-  overrideRequestId: string;
-  escalationLevel: number;
-  previousApproverId?: string;
-  currentApproverId: string;
-  escalationTriggeredAt: Date;
-  responseDeadlineAt: Date;
-  respondedAt?: Date;
-  response?: 'approved' | 'rejected';
-  responseNote?: string;
+  workflowId: string;
+  stepId: string;
+  condition: string;
+  action: string;
+  targetApproverId: string;
+  enabled: boolean;
+  cooldownMs?: number;
+  createdAt: Date;
 }
 
-export interface ApprovalConfig {
-  defaultStrategy: ApprovalStrategy;
+export type NotificationScope = 'requester' | 'approver' | 'escalation' | 'all';
+
+export interface NotificationConfig {
+  type: NotificationScope;
+  enabled: boolean;
+  channel: 'email' | 'slack' | 'webhook';
+  template: string;
+  encoding?: 'url' | 'html' | 'json';
+}
+
+export interface OverrideMetadata {
+  entityType: string;
+  entityId: string;
+  originalValues: Record<string, any>;
+  changedValues: Record<string, any>;
+  changeReason: string;
+  relatedAlerts?: string[];
+  auditTrail: AuditEntry[];
+  reqMetKeys: string[];
+  endDate?: Date;
+  recallDate?: Date;
+}
+
+export interface AuditEntry {
+  id: string;
+  action: 'create' | 'approve' | 'reject' | 'cancel' | 'escalate' | 'recall' | 'unblock';
+  actor: string;
+  actorType: 'user' | 'system' | 'workflow';
+  timestamp: Date;
+  details: Record<string, any>;
+}
+
+export interface OverrideWorkflowConfig {
   defaultTimeoutMinutes: number;
-  minimumRequiredApprovals: number;
-  thirdPartyApproved?: boolean; // Configuration flag to allow overrides without approval
+  escalationCooldownMinutes: number;
+  requireApprovalForSeverity: Array<'critical' | 'high'>;
+  maxApprovalsPerOverride: number;
+  enableUnblockOnApproval: boolean;
 }
 
-/**
- * Escalation rules for override requests
- */
-export interface EscalationRules {
-  version: 1;
-  primaryApproverTimeout: number; // Minutes before escalation
-  secondaryApproverTimeout: number; // Minutes before further escalation
-  maxLevels: number;
-  notifyOriginalOnEscalation: boolean;
-  notifyOriginalOnApprove: boolean;
+export interface ApprovalEvaluationRequest {
+  approvalId: string;
+  overrideId: string;
+  approverId: string;
+  decision: 'approve' | 'reject';
+  comments?: string;
+  riskScore?: number;
+  riskFactors?: string[];
 }
 
-export const DEFAULT_APPROVAL_CONFIG: ApprovalConfig = {
-  defaultStrategy: 'sequential',
-  defaultTimeoutMinutes: 30,
-  minimumRequiredApprovals: 1,
-  thirdPartyApproved: false,
-};
+export interface ApprovalEvaluationResult {
+  approved: boolean;
+  latencyMs: number;
+  riskAssessment: RiskAssessment;
+  feedback?: string;
+}
 
-export const DEFAULT_ESCALATION_RULES: EscalationRules = {
-  version: 1,
-  primaryApproverTimeout: 30,
-  secondaryApproverTimeout: 15,
-  maxLevels: 3,
-  notifyOriginalOnEscalation: true,
-  notifyOriginalOnApprove: true,
-};
+export interface RiskAssessment {
+  overallRisk: 'low' | 'medium' | 'high';
+  factors: string[];
+  impactScore: number;
+  likelihoodScore: number;
+  severityOverride?: string;
+  timeSensitive?: boolean;
+  autoApproval?: boolean;
+}
+
+export interface EscalationTrigger {
+  overrideId: string;
+  approverId: string;
+  reason: string;
+  originalApproverEmail: string;
+  escalationTargetId: string;
+  escalationTargetEmail: string;
+  timestamp: Date;
+}
+
+export interface WorkflowAggregates {
+  total: number;
+  pending: number;
+  approved: number;
+  rejected: number;
+  cancelled: number;
+  requiresApproval: number;
+  overdue: number;
+  escalationCount: number;
+}
+
+export interface WorkflowSummary {
+  workflowId: string;
+  mode: WorkflowMode;
+  totalRequests: number;
+  approvalRate: number;
+  averageApprovalTimeMs: number;
+  expiredCount: number;
+  recallCount: number;
+}
