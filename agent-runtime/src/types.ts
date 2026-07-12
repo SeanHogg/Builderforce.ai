@@ -276,24 +276,26 @@ export interface GapTransformation {
 
 /** Configuration options for analysis parameters, thresholds, and default entries (FR-1.4, FR-2.2, FR-3.2, FR-3.3, FR-4.4). */
 export interface RGConfiguration {
-  /** Default skill dictionary per FR-1.4 */
-  readonly canonicalSkillDictionary: ReadonlyRecord<string, string>;
+  /** Default skill dictionary per FR-1.4 (canonical name keyed by lower-cased alias) */
+  readonly canonicalSkillDictionary: Readonly<Record<string, string>>;
   /** Proficiency weighting default table per FR-2.2 */
   readonly proficiencyWeighting: ReadonlyArray<WeightingEntry>;
   /** Default cost ranges per role family (FR-3.1) */
-  readonly defaultCostRanges: ReadonlyRecord<string, CurrencyRange>;
-  /** Time-to-fill estimates per role family (FR-3.2) */
-  readonly timeToFillEstimates: ReadonlyRecord<string, number /* weeks */>;
-  /** Default threshold: hire vs. build vs. buy (FR-3.3) */
+  readonly defaultCostRanges: Readonly<Record<string, CurrencyRange>>;
+  /** Time-to-fill estimates in weeks, per role family (FR-3.2) */
+  readonly timeToFillEstimates: Readonly<Record<string, number>>;
+  /** Default threshold in months: hire vs. contract (FR-3.3), default 6 */
   readonly hireVsContractThresholdMonths: number;
-  /** Default threshold: secondary gap risk (FR-4.4) */
+  /**
+   * Minimum source-team coverage below which a redeployment is flagged as a secondary
+   * gap risk (FR-4.4). Default 0.75 (AC-5).
+   */
   readonly secondaryGapRiskThreshold: number;
-  /** Default threshold: dangerous occupancy - kept at 0.75 pending post-cycle correction (FR-7). */
-  readonly dangerousOccupancyThreshold: number;
-  /** Default threshold: dangerous oversight - kept at 0.75 as per FR-7 pending CLI stub. */
-  readonly dangerousOversightThreshold: number;
-  /** Default threshold: dangerExpiration - kept at 30 days under FR-7 pending follow-up. */
-  readonly dangerExpirationDays: number;
+  /**
+   * Proficiency ratio (level_supply / level_required) at or above which supply counts as
+   * fully covering. Used as a fallback when no explicit weighting entry matches (FR-2.2).
+   */
+  readonly fullCoverageProficiencyRatio: number;
 }
 
 export interface WeightingEntry {
