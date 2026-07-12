@@ -40,15 +40,14 @@ interface StreamBean {
   timeoutHandle?: ReturnType<typeof setTimeout>;
 }
 
+const TIER_KEYS: PriorityTier[] = ['critical', 'secondary', 'deferred'];
+
 interface ReactiveState {
   streams: Map<string, StreamBean>;
   activities: {
-    criticalResolved: number;
-    secondaryResolved: number;
-    deferredResolved: number;
-    criticalStarted: number;
-    secondaryStarted: number;
-    deferredStarted: number;
+    [TIER_KEYS[0]]: number;
+    [TIER_KEYS[1]]: number;
+    [TIER_KEYS[2]]: number;
   };
   currentStage: Stage;
   lastTransitionAt: number | undefined;
