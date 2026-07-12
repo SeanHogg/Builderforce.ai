@@ -39,6 +39,37 @@ import { computeDora } from '../metrics/workforceMetrics';
 import type { DoraRollup } from '../metrics/workforceMetrics';
 
 /**
+ * Structured reference to a source record that contributed to a recommendation.
+ * Provides an explicit, navigable link to the record (FR-4.1/4.2).
+ */
+export type RecLinkKind = 'budget' | 'model' | 'allocation_category' | 'dora' | 'project' | 'initiative';
+export interface RecLink {
+  kind: RecLinkKind;
+  id?: string | number;           // stable entity ID (budget.id, model, label matching) — omitted when nullable
+  label: string;                  // human-readable name (FR-2: name the specific item)
+  href?: string;                  // deep-link URL for this record (side panel or new tab)
+  field?: string;                 // which field value triggered the link (for audit)
+}
+
+/**
+ * Primary action CTA for a recommendation (FR-3).
+ */
+export type RecActionKind = 'navigate' | 'reassign' | 'update_status' | 'add_due_date' | 'hide';
+export interface RecAction {
+  label: string;                  // button text
+  kind: RecActionKind;            // workflow type
+  href?: string;                  // URL to initiate the action (≤2 clicks per FR-3.2)
+}
+
+/**
+ * Data trace for auditability (FR-4.3): which fields and values triggered a recommendation.
+ */
+export interface RecDataTrace {
+  field: string;
+  value: string;
+  source: string;                 // e.g. 'budget.forecast_overspend'
+
+/**
  * Persisted dismissals only (recommendations themselves are computed live).
  * Defined here — not in the shared schema.ts — because this feature owns the
  * table; mirrors migration 0232 exactly.
