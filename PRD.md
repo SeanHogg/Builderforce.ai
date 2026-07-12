@@ -1,55 +1,69 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Bob Developer (V2 (Container)) · task #372
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+## Product Requirements Document (PRD): Recurring Subscription Billing
 
-## Problem & Goal
+### Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+**Problem:**
+The current system, specifically `HelcimProvider.ts:78`, is limited to processing one-time charges. This prevents us from offering recurring billing schedules and comprehensive subscription management for our Teams and Enterprise plans. As a result, we cannot effectively monetize these higher-tier offerings through automated, recurring payments.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+**Goal:**
+Implement a robust recurring subscription billing system for Teams and Enterprise plans. This includes supporting subscription schedules, comprehensive plan management, and automated dunning processes to ensure continuous revenue generation and a smooth customer experience.
 
-## Target users / ICP roles
+### Target Users / ICP Roles
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+*   **Teams/Enterprise Account Administrators:** Users responsible for managing their organization's subscription to our service.
+*   **Internal Customer Success/Support Teams:** Internal stakeholders who will manage and troubleshoot customer subscriptions and billing issues.
 
-## Scope
+### Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This initiative focuses on enabling recurring billing functionality, subscription lifecycle management, and automated dunning specifically for Teams and Enterprise plans. It will integrate with our existing Helcim payment gateway.
 
-## Functional Requirements
+### Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+1.  **Subscription Creation:**
+    *   An API endpoint and internal administrative interface for creating new subscriptions, linking a Teams/Enterprise account to a specific plan (e.g., "Teams Monthly," "Enterprise Annually").
+    *   During subscription creation, establish the recurring billing schedule and initial charge via Helcim.
+2.  **Recurring Billing & Payment Processing:**
+    *   Automated system for processing recurring charges on scheduled intervals (e.g., monthly, annually) using the Helcim payment gateway.
+    *   Robust handling of successful and failed payment notifications from Helcim, updating subscription status accordingly.
+3.  **Subscription Lifecycle Management:**
+    *   **Renewal:** Automatic subscription renewal at the end of each billing cycle, triggering a new recurring charge.
+    *   **Cancellation:**
+        *   Ability to cancel an active subscription via an administrative interface.
+        *   Support for immediate cancellation or cancellation at the end of the current billing period.
+    *   **Modification:**
+        *   Ability to change a subscription's plan (e.g., upgrade/downgrade) via an administrative interface.
+        *   Ability to modify the billing frequency (e.g., monthly to annually).
+4.  **Dunning Management:**
+    *   Configurable, automated retry schedule for failed recurring payments (e.g., 3 retries over 7 days).
+    *   Automated email notifications to the subscribed account administrators regarding payment failures and the dunning process status.
+    *   Mechanism for users to update their payment method during a dunning period.
+    *   Automatic transition of subscription status (e.g., `past_due`, then `canceled`) based on dunning outcome.
+5.  **Subscription State & History:**
+    *   Persistent storage of subscription details: plan, status (e.g., `active`, `canceled`, `past_due`), current billing period, next billing date, and associated payment history.
+    *   An administrative interface to view all active, past due, and canceled subscriptions, including their detailed history.
+6.  **Internal Notifications & Logging:**
+    *   Generate internal system events/logs for key subscription lifecycle events: `subscription_created`, `subscription_renewed`, `subscription_payment_succeeded`, `subscription_payment_failed`, `subscription_canceled`.
 
-## Acceptance Criteria
+### Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+*   A Teams/Enterprise account can be successfully subscribed to a recurring plan.
+*   The initial subscription charge is processed correctly through Helcim.
+*   Subsequent recurring charges are processed automatically on their scheduled billing dates.
+*   In the event of a failed recurring payment, the system initiates the defined dunning process, including automated retries and customer notifications.
+*   The system accurately updates subscription status through its lifecycle (e.g., `active`, `past_due`, `canceled`) and after dunning outcomes.
+*   An administrator can view the current status and historical events of any subscription.
+*   An administrator can successfully cancel an active subscription, with options for immediate or end-of-cycle termination.
+*   Internal system logs reflect all key subscription lifecycle events: `created`, `renewed`, `failed`, `canceled`, `payment_succeeded`, `payment_failed`.
 
-## Out of scope
+### Out of Scope
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+*   Public-facing self-service portal for end-users to manage their own subscriptions (initially, management will be via an internal admin interface).
+*   Detailed prorated billing logic for mid-cycle plan changes (focus on full cycle changes first).
+*   Complex promotional codes, coupons, or discounting systems.
+*   Integration with external CRM or accounting systems beyond basic transaction data required by Helcim.
+*   Free trial management.
+*   One-time charge processing (existing functionality).
+*   Detailed tax calculation beyond what Helcim natively supports for recurring charges.
