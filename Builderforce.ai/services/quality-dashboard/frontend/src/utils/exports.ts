@@ -1,61 +1,65 @@
 /**
- * Export utilities for PDF and CSV downloads
+ * Export utilities for Quality Dashboard
+ * Supports CSV and PDF report generation
  */
-import jsPDF from "jspdf";
-import { Bug, Severity } from "../types/quality";
-import { formatDate } from "date-fns";
+
+import type { BugFilter, Bug } from "../types/quality";
 
 /**
- * Color mappings for severity badges
+ * Export bugs to CSV
  */
-export const SEVERITY_COLORS: Record<Severity, string> = {
-  Critical: "#EF4444", // Red
-  High: "#F59E0B", // Amber
-  Medium: "#10B981", // Emerald
-  Low: "#6B7280", // Gray
-};
-
-/**
- * Format date to readable string
- */
-export function formatDateDisplay(dateStr: string): string {
-  if (!dateStr) return "-";
+export async function exportBugsToCSV(bugs: Bug[], filename: string = "quality-bugs.csv"): Promise<void> {
   try {
-    return formatDate(new Date(dateStr), "MMM d, yyyy");
-  } catch {
-    return dateStr;
+    const headers = ["Bug ID", "Title", "Severity", "Status", "Assignee", "Created Date", "Resolved Date"];
+    const rows = bugs.map(bug => [
+      bug.id,
+      bug.title,
+      bug.severity,
+      bug.status,
+      bug.assignee,
+      bug.created_at || "",
+      bug.resolved_date || ""
+    ]);
+
+    const csvContent = [headers.join(","), ...rows.map(r => r.map(c => `"${c || ""}"`).join(","))].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error("CSV export failed:", error);
+    alert("Failed to export CSV. Please try again.");
+    throw error;
   }
 }
 
 /**
- * Map severity to color and badge text
+ * Export bug summary report to JSON (placeholder for future PDF generation)
+ * Note: PDF generation requires full chart rendering and reportlab support;
+ * currently returns JSON export as per PRD/README.
  */
-export function getSeverityConfig(severity: Severity): { color: string; label: string } {
-  return {
-    color: SEVERITY_COLORS[severity] || SEVERITY_COLORS.Low,
-    label: severity,
+export async function exportBugSummary(filter: BugFilter, summary: any, trendData: any): Promise<void> {
+  const report = {
+    generated_at: new Date().toISOString(),
+    filters: filter,
+    summary: summary,
+    trend: trendData,
   };
-}
 
-/**
- * Small helper to draw a pie slice in PDF
- */
-function drawSlice(
-  pdf: jsPDF,
-  cx: number,
-  cy: number,
-  r: number,
-  startRad: number,
-  endRad: number,
-  color: string
-) {
-  const path = new jsPDF.Path2D();
-  const x = cx + r * Math.cos(startRad);
-  const y = cy + r * Math.sin(startRad);
-  const xEnd = cx + r * Math.cos(endRad);
-  const yEnd = cy + r * Math.sin(endRad);
-  path.moveTo(cx, cy);
-  path.arc(cx, cy, r, startRad, endRad, false);
-  path.closePath();
-  pdf.fill(path, color);
+  const filename = `quality-bug-report-${Date.now()}.json`;
+  const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json; charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
