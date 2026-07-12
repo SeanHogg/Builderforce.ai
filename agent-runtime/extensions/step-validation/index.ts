@@ -1,17 +1,14 @@
-import type { BuilderForceAgentsPluginApi } from "@seanhogg/builderforce-agents/plugin-sdk";
-import { emptyPluginConfigSchema } from "@seanhogg/builderforce-agents/plugin-sdk";
-import { stepValidationPlugin } from "./src/plugin.js";
+/**
+ * Step Validation Plugin Entry Point
+ *
+ * Registers the step-validation plugin service.
+ */
+'use strict';
 
-const plugin = {
-  id: "step-validation",
-  name: "Step Validation",
-  description: "Step-level integration validation framework: pre/post input/output contracts, structured diagnostics, failure modes, CLI tooling, LLM tool-call instrumentation",
-  configSchema: emptyPluginConfigSchema(),
-  register(api: BuilderForceAgentsPluginApi) {
-    // Delegates to stepValidationPlugin.start/stop, which registers the service.
-    // The service itself (BuilderForceAgentsPluginService) is returned in plugin.ts.
-    stepValidationPlugin.start({ api });
-  },
-};
+import type { BuilderForceAgentsPluginApi } from '../../src/plugins/types.js';
+import { stepValidationService } from './src/plugin.js';
 
-export default plugin;
+export default function register(api: BuilderForceAgentsPluginApi) {
+  const sv = stepValidationService(api);
+  api.registerService(sv.service);
+}
