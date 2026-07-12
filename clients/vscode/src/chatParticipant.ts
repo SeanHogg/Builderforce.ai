@@ -1,7 +1,8 @@
 import * as vscode from "vscode";
 import { runAgent } from "./agent";
 import { ChatMessage, SECRET_KEY, fetchLimbicBlock } from "./gateway";
-import { getCurrentUserId, createBrainChat, appendBrainMessages } from "./bfApi";
+import { getCurrentUserId, createBrainChat, appendBrainMessages, updateBrainChatProject } from "./bfApi";
+import { formatEvermindLearnStep } from "@seanhogg/builderforce-brain-embedded";
 import { getGroundingSummary } from "./grounding";
 import { getEditorContext } from "./editorContext";
 import { editorContextDirective } from "./idePersona";
@@ -134,7 +135,18 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
     if (brainChatId != null) {
       const turns: Array<{ role: string; content: string }> = [{ role: "user", content: request.prompt }];
       if (assistantText.trim()) turns.push({ role: "assistant", content: assistantText });
-      void appendBrainMessages(ctx.secrets, brainChatId, turns);
+      const outcome = await appendBrainMessages(ctx.secrets, brainChatId, turns);
+      // Self-heal: if the server says this chat isn't bound to a project but the IDE has
+      // an active one, adopt it so the NEXT turn trains that project's Evermind (parity
+      // with the webview's adopt-on-open — the native participant otherwise leaves a chat
+      // created before a project was selected permanently project-less).
+      if (outcome?.reason === "not-attached" && activeProject) {
+        await updateBrainChatProject(ctx.secrets, brainChatId, activeProject.id);
+      }
+      // Surface the learn/skip outcome as a trailing status line, so learning is VISIBLE
+      // on the native participant too (it streams Markdown, not the <BrainTimeline>).
+      const learnLine = formatEvermindLearnStep(outcome);
+      if (learnLine) stream.markdown(`\n\n_${learnLine}_\n`);
     }
 
     // Return the chat id in the result metadata so the NEXT turn of this session

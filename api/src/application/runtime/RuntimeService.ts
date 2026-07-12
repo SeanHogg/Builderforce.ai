@@ -12,6 +12,7 @@ import {
 import { NotFoundError, ForbiddenError } from '../../domain/shared/errors';
 import { cloudOrphanReason, cloudSilenceCeilingMs, HOST_ORPHAN_REASON } from './orphanReasons';
 import { parseExecutor } from './cloudDispatch';
+import type { RunMilestonePhase } from '../brain/ChatTicketService';
 
 export interface SubmitTaskDto {
   taskId:      number;
@@ -133,10 +134,31 @@ export class RuntimeService {
     private readonly onRunMilestone?: (info: {
       tenantId: number; taskId: number; projectId: number; taskType: string;
       agentRef: string | null; executionId: number;
-      phase: 'started' | 'completed' | 'failed';
+      phase: RunMilestonePhase;
       toStatus?: string | null; resultText?: string | null; errorMessage?: string | null;
     }) => Promise<void>,
   ) {}
+
+  /**
+   * Post a `paused` | `cancelled` lifecycle milestone for an execution whose row is
+   * written DIRECTLY (the ask_human pause in `cloudAgentEngine` and {@link cancel}),
+   * bypassing {@link update}'s milestone emission. Resolves the ticket + project the
+   * same way `update` does, then fans out via {@link onRunMilestone}. Best-effort —
+   * never throws (chat narration must never break the run's terminal write).
+   */
+  async postLifecycleMilestone(execution: Execution, phase: 'paused' | 'cancelled'): Promise<void> {
+    try {
+      const task = await this.tasks.findById(asTaskId(execution.taskId));
+      if (!task) return;
+      const plain = task.toPlain() as { projectId?: number; taskType?: string };
+      const taskType = plain.taskType === 'epic' || plain.taskType === 'gap' ? plain.taskType : 'task';
+      await this.onRunMilestone?.({
+        tenantId: execution.tenantId, taskId: Number(execution.taskId),
+        projectId: plain.projectId ?? 0, taskType,
+        agentRef: execution.cloudAgentRef, executionId: Number(execution.id), phase,
+      });
+    } catch { /* best-effort: never block the direct write */ }
+  }
 
   async submit(dto: SubmitTaskDto): Promise<Execution> {
     const task = await this.tasks.findById(asTaskId(dto.taskId));
@@ -318,6 +340,9 @@ export class RuntimeService {
       resourceId:   String(saved.id),
       metadata:     null,
     }));
+
+    // Narrate the cancellation into the ticket's linked chats (bypasses update()).
+    await this.postLifecycleMilestone(saved, 'cancelled');
 
     return saved;
   }
