@@ -34,10 +34,13 @@ import { resolveRoleCapableAgents } from '../kanban/roleCapability';
 import { TicketParticipantsService } from '../kanban/ticketParticipants';
 
 export interface LaneGateOutcome {
-  /** Suppress the lane's normal auto-run this hop (a reviewer round-trip is owed). */
+  /** Suppress the lane's normal auto-run this hop (a reviewer round-trip or producer
+   *  dispatch is owed, or a hard gate is unmet). */
   blocked: boolean;
   flagged: boolean;
   dispatchedReviewers: string[];
+  /** Role-capable producers dispatched AS their role on a hard producer stage. */
+  dispatchedProducers: string[];
 }
 
 const roleName = (key: string): string => BUILTIN_ROLES.find((r) => r.key === key)?.name ?? key;
@@ -71,7 +74,7 @@ export async function enforceLaneRequirements(
   auditService: TicketAuditService,
   args: { tenantId: number; projectId: number; taskId: number; status: string; submittedBy: string },
 ): Promise<LaneGateOutcome> {
-  const none: LaneGateOutcome = { blocked: false, flagged: false, dispatchedReviewers: [] };
+  const none: LaneGateOutcome = { blocked: false, flagged: false, dispatchedReviewers: [], dispatchedProducers: [] };
   const participants = new TicketParticipantsService(db);
   try {
     const [board] = await db.select({ id: boards.id }).from(boards).where(eq(boards.projectId, args.projectId)).limit(1);
@@ -97,9 +100,14 @@ export async function enforceLaneRequirements(
     const requiredReviewers = reqRows.filter(
       (r) => r.isRequired && (r.kind === 'review' || (r.kind === 'role' && r.responsibility === 'reviewer')),
     );
-    if (requiredReviewers.length === 0) return none;
+    // Producers = required role requirements a role must PRODUCE (owner/contributor,
+    // or a bare role which we treat as owner). Now first-class gating (past reviewers).
+    const requiredProducers = reqRows.filter(
+      (r) => r.isRequired && r.kind === 'role' && (r.responsibility == null || r.responsibility === 'owner' || r.responsibility === 'contributor'),
+    );
+    if (requiredReviewers.length === 0 && requiredProducers.length === 0) return none;
 
-    // Which reviewer roles have an approving sign-off already?
+    // Reviewer sign-off state (latest verdict per role).
     const signoffs = await db
       .select({ roleKey: ticketRoleSignoffs.roleKey, verdict: ticketRoleSignoffs.verdict, createdAt: ticketRoleSignoffs.createdAt })
       .from(ticketRoleSignoffs)
@@ -107,25 +115,23 @@ export async function enforceLaneRequirements(
       .orderBy(asc(ticketRoleSignoffs.createdAt));
     const latest = new Map<string, string>();
     for (const s of signoffs) latest.set(s.roleKey, s.verdict);
-    // Unmet = any required reviewer without an APPROVED sign-off (drives the flag +
-    // hard block). To-dispatch = reviewers NEVER engaged (no sign-off row at all) —
-    // once a reviewer records ANY verdict we stop re-dispatching, so repeated lane
-    // entries can't spawn an endless reviewer loop. A 'changes_requested' verdict
-    // therefore keeps the ticket flagged for the Developer to resolve without
-    // re-summoning the reviewer every hop.
-    const unmet = requiredReviewers.filter((r) => latest.get(r.ref) !== 'approved');
-    if (unmet.length === 0) return none;
-    const toDispatch = requiredReviewers.filter((r) => !latest.has(r.ref));
 
-    // Dispatch the un-engaged reviewer role agents (round-trip). Guard against piling
-    // up runs: if a live run already exists on the ticket, only flag this hop.
+    // Live-run guard: never pile up runs — if one is in flight, only flag this hop.
     const execs = await runtimeService.listByTask(args.taskId).catch(() => []);
     const hasLive = execs
       .map((e) => e.toPlain())
       .some((e) => ['pending', 'submitted', 'running', 'paused'].includes(e.status));
 
     const dispatchedReviewers: string[] = [];
-    if (!hasLive) {
+    const dispatchedProducers: string[] = [];
+
+    // ── Reviewers (round-trip) ──────────────────────────────────────────────
+    // Unmet = required reviewer without an APPROVED sign-off. To-dispatch = reviewers
+    // NEVER engaged (no verdict row) — once a reviewer records any verdict we stop
+    // re-dispatching, so repeated lane entries can't spawn an endless reviewer loop.
+    const reviewerUnmet = requiredReviewers.filter((r) => latest.get(r.ref) !== 'approved');
+    if (reviewerUnmet.length > 0 && !hasLive) {
+      const toDispatch = requiredReviewers.filter((r) => !latest.has(r.ref));
       for (const req of toDispatch) {
         const agentRef = await resolveRoleAgent(env, db, args.tenantId, args.projectId, board.id, req.ref);
         if (!agentRef) continue;
@@ -147,19 +153,59 @@ export async function enforceLaneRequirements(
           submittedBy: `${args.submittedBy}:reviewer:${req.ref}`,
         }).catch(() => null);
         await Promise.allSettled(deferred);
-        // Attribution (§5.6): record that this role is now participating, linked to the
-        // execution it ran as — so the accountability manifest shows the reviewer engaged
-        // even before its sign-off lands. Best-effort (no-op if the manifest isn't derived).
+        // Attribution (§5.6): record the reviewer is now engaged (execution-linked).
         if (execId != null) await participants.markRoleInProgress(env, args.tenantId, args.taskId, req.ref, args.status, execId).catch(() => {});
         dispatchedReviewers.push(req.ref);
         break; // one reviewer per hop — keeps the round-trip serial and loop-safe
       }
     }
 
-    // Block the lane's normal agent when a reviewer round-trip is owed: a reviewer
-    // was dispatched this hop, OR the gate is 'hard' and the requirement is unmet.
-    const blocked = dispatchedReviewers.length > 0 || lane.requirementGate === 'hard';
-    return { blocked, flagged: true, dispatchedReviewers };
+    // ── Producers (hard stages only — opt-in strictness, FR-3) ──────────────
+    // Dispatch the ROLE-CAPABLE producer AS the role when the producer stage isn't
+    // engaged yet, so the correct role produces the work (not a wrong-role owner or
+    // nothing). Loop-safe: an in_progress/completed producer slot is never re-dispatched.
+    let producerUnmet = false;
+    if (lane.requirementGate === 'hard' && requiredProducers.length > 0) {
+      const manifest = await participants.listParticipants(env, args.tenantId, args.taskId).catch(() => []);
+      const stateByRole = new Map(manifest.filter((p) => p.stageKey === args.status).map((p) => [p.roleKey, p.state]));
+      const done = new Set(['completed', 'waived', 'skipped']);
+      for (const req of requiredProducers) {
+        const st = stateByRole.get(req.ref);
+        if (st && done.has(st)) continue;
+        producerUnmet = true;
+        const canDispatch = !hasLive && dispatchedReviewers.length === 0 && dispatchedProducers.length === 0 && st !== 'in_progress';
+        if (!canDispatch) continue;
+        const agentRef = await resolveRoleAgent(env, db, args.tenantId, args.projectId, board.id, req.ref);
+        if (!agentRef) continue;
+        const payload = JSON.stringify({
+          cloudAgentRef: agentRef,
+          laneKey: args.status,
+          actAsRole: req.ref,
+          reviewInstruction:
+            `You are the ${roleName(req.ref)} assigned to PRODUCE the work for ticket #${args.taskId} at lane '${args.status}'. ` +
+            `Implement/author the required deliverable (open a PR for code, or write the PRD section for a spec role). ` +
+            `Your run is recorded as this role's participation on the accountability manifest.`,
+        });
+        const deferred: Promise<unknown>[] = [];
+        const execId = await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
+          taskId: args.taskId,
+          tenantId: args.tenantId,
+          payload,
+          submittedBy: `${args.submittedBy}:producer:${req.ref}`,
+        }).catch(() => null);
+        await Promise.allSettled(deferred);
+        if (execId != null) await participants.markRoleInProgress(env, args.tenantId, args.taskId, req.ref, args.status, execId).catch(() => {});
+        dispatchedProducers.push(req.ref);
+      }
+    }
+
+    if (dispatchedReviewers.length === 0 && dispatchedProducers.length === 0 && reviewerUnmet.length === 0 && !producerUnmet) return none;
+
+    // Block the lane's normal agent when a role round-trip is owed (dispatched this hop)
+    // OR a hard gate is unmet (reviewer without approval / producer not completed).
+    const blocked = dispatchedReviewers.length > 0 || dispatchedProducers.length > 0
+      || (lane.requirementGate === 'hard' && (reviewerUnmet.length > 0 || producerUnmet));
+    return { blocked, flagged: reviewerUnmet.length > 0 || producerUnmet, dispatchedReviewers, dispatchedProducers };
   } catch {
     return none;
   }

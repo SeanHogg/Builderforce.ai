@@ -4883,6 +4883,18 @@ export interface CreateIncidentBody {
   page?: boolean;
 }
 
+/** A workflow run spawned by an incident — via an event trigger or a manual runbook. */
+export interface IncidentWorkflowRun {
+  id: string;
+  description: string | null;
+  status: string;
+  runtime: string;
+  createdAt: string;
+  completedAt: string | null;
+  definitionId: string | null;
+  definitionName: string | null;
+}
+
 export interface OnCallRotationMember {
   id: string;
   memberRef: string;
@@ -4967,6 +4979,13 @@ export const incidentsApi = {
 
   publishPostmortem: (id: string, body: PublishPostmortemBody): Promise<PublishPostmortemResult> =>
     request(`/api/incidents/${id}/postmortem`, { method: 'POST', body: JSON.stringify(body) }),
+
+  // Custom workflows (runbooks) attached to an incident
+  listWorkflowRuns: (id: string): Promise<IncidentWorkflowRun[]> =>
+    request<{ runs: IncidentWorkflowRun[] }>(`/api/incidents/${id}/workflow-runs`).then((r) => r.runs ?? []),
+
+  runWorkflow: (id: string, body: { definitionId: string; runtime?: string; agentHostId?: number; cloudAgentRef?: string }): Promise<{ workflowId: string; taskCount: number }> =>
+    request(`/api/incidents/${id}/run-workflow`, { method: 'POST', body: JSON.stringify(body) }),
 
   // On-call rotations
   listRotations: (): Promise<OnCallRotation[]> =>
