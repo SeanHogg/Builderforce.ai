@@ -352,8 +352,8 @@ describe('TaskService.updateTask side-effect behavior (FR-2)', () => {
       projectId: PROJECT_ID,
       title: 'Parent Task',
       description: null,
-      status: TaskStatus.TODO as any,
-      priority: TaskPriority.MEDIUM,
+      status: undefined as never,
+      priority: undefined as never,
       assignedAgentType: AgentType.CLAUDE,
       assignedAgentHostId: null,
       assignedAgentRef: null,
@@ -365,13 +365,13 @@ describe('TaskService.updateTask side-effect behavior (FR-2)', () => {
     });
     await repo.save(parent);
 
-    // Already assigned (wired parentTaskId already OK)
+    // Already assigned to agentA, linked to parent
     const child = Task.create({
       projectId: PROJECT_ID,
       title: 'Child Task',
       description: null,
-      status: TaskStatus.TODO as any,
-      priority: TaskPriority.MEDIUM,
+      status: undefined as never,
+      priority: undefined as never,
       assignedAgentType: AgentType.CLAUDE,
       assignedAgentHostId: null,
       assignedAgentRef: 'agentA',
@@ -380,9 +380,8 @@ describe('TaskService.updateTask side-effect behavior (FR-2)', () => {
       persona: null,
       projectKey: 'CHILD',
       lastKeySeq: 0,
+      parentTaskId: parent.id,
     });
-    child.parentTaskId = parent.id;
-    child.taskType = TaskType.TASK;
     await repo.save(child);
 
     // Reassign to same agent — assess should NOT fire (no transition)
