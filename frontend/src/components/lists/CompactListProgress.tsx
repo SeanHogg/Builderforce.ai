@@ -178,10 +178,6 @@ export function CompactListProgress({
   );
 }
 
-/* ── Export public API ───────────────────────────────────────────────────── */
-export { getStatusColor, formatPct, getColorByStatus };
-export type { ProgressItem, PList, SortBy };
-
 /* ── StatusBadge helper (FR-4/FR-8) ───────────────────────────────────────── */
 function StatusBadge({ status }: { status: string }) {
   const base: CSSProperties = {
