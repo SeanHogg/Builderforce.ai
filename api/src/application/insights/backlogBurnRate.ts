@@ -192,9 +192,11 @@ export interface EstimateResult {
 const MILLIS_PER_DAY = 86_400_000;
 const DEFAULT_CONFIDENCE_BAND = 0.20; // ±20 % when only a single velocity value
 const WIP_WARNING_THRESHOLD = 0.30;   // 30 %
-const MIN_PERIODS_FOR_MEDIUM_CONFIDENCE = 1;
+// AC-2/AC-6: at least 3 periods are required before the estimate can be labelled
+// Medium or High; anything below that is Low confidence by definition.
+const MIN_PERIODS_FOR_MEDIUM_CONFIDENCE = 3;
 const MIN_PERIODS_FOR_HIGH_CONFIDENCE = 3;
-const BLOCKED_VIEWPOINT = 0.10;       // 10 % blocked triggers a flag
+const BLOCKED_RATIO_FLAG = 0.10;      // 10 % blocked triggers a flag
 
 /** Multipliers for the sensitivity table (FR-5). */
 const SENSITIVITY_MULTIPLIERS: Array<{ label: string; multiplier: number }> = [
