@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import type { EvermindLearnOutcome } from "@seanhogg/builderforce-brain-embedded";
 import { getApiKey, getBaseUrl } from "./gateway";
 import { ttlCache } from "./ttlCache";
 
@@ -690,21 +691,47 @@ export async function createBrainChat(
  * Append turns to a Brain conversation (POST /api/brain/chats/:id/messages) so the
  * native chat's transcript is persisted into the SAME store the webview + web app
  * read — the linked chat then carries the actual conversation, not just ticket
- * lineage. Best-effort: swallows errors so it never breaks the chat turn.
+ * lineage. Returns the server's TRUTHFUL learn-gate outcome for the persisted turn
+ * (the same `evermindLearn` the webview/web adapters attach) so the caller can surface
+ * a learn/skip line + self-heal a project-less chat. Best-effort: returns null on any
+ * failure so it never breaks the chat turn.
  */
 export async function appendBrainMessages(
   secrets: vscode.SecretStorage,
   chatId: number,
   messages: Array<{ role: string; content: string }>,
-): Promise<void> {
-  if (messages.length === 0) return;
+): Promise<EvermindLearnOutcome | null> {
+  if (messages.length === 0) return null;
   try {
-    await authed(secrets, `/api/brain/chats/${chatId}/messages`, {
+    const r = await authed<{ evermindLearn?: EvermindLearnOutcome }>(secrets, `/api/brain/chats/${chatId}/messages`, {
       method: "POST",
       body: JSON.stringify({ messages }),
     });
+    return r?.evermindLearn ?? null;
   } catch {
     /* best-effort persistence — never blocks the chat turn */
+    return null;
+  }
+}
+
+/**
+ * Adopt a project onto a Brain chat (PATCH /api/brain/chats/:id) — used by the native
+ * participant's self-heal: when the server reports the chat is `not-attached` but the
+ * IDE has an active project, bind it so the NEXT turn trains that project's Evermind
+ * (parity with the webview App's adopt-on-open). Best-effort; swallows errors.
+ */
+export async function updateBrainChatProject(
+  secrets: vscode.SecretStorage,
+  chatId: number,
+  projectId: number,
+): Promise<void> {
+  try {
+    await authed(secrets, `/api/brain/chats/${chatId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ projectId }),
+    });
+  } catch {
+    /* best-effort — a failed adopt just leaves the chat unscoped until next time */
   }
 }
 
