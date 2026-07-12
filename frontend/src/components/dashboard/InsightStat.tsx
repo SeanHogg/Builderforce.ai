@@ -72,6 +72,7 @@ export function InsightStat({
   sub,
   series,
   delta,
+  trendClassification,
   recencyLabel,
   nudge,
   href,
