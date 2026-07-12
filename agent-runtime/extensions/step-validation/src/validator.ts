@@ -6,7 +6,7 @@
  */
 
 import Ajv from "ajv";
-import { TypeBox } from "@sinclair/typebox";
+import { Type } from "@sinclair/typebox";
 import {
   ContractMode,
   FailureMode,
@@ -16,7 +16,6 @@ import {
   ValidationError,
 } from "./types.js";
 
-// Ajv configuration matching llm-task
 const AJV = new Ajv({ allErrors: true, strict: false });
 
 /**
@@ -29,7 +28,6 @@ export async function validatePayload(payload: unknown, schema?: Schema): Promis
   }
 
   if (typeof schema === "function") {
-    // Custom assertion function
     try {
       const result = schema(payload);
       if (result instanceof Promise) {
@@ -43,26 +41,20 @@ export async function validatePayload(payload: unknown, schema?: Schema): Promis
 
   if (typeof schema === "object" && !Array.isArray(schema)) {
     // JSON Schema or TypeBox inline object
-    const validate = "compile" in schema && typeof schema.compile === "function"
-      ? (schema as Ajv.ValidateFunction).compile()
-      : AJV.compile(
-          TypeSchema.isType(schema)
-            ? (schema as TypeBox.TypeBoxType)
-            : (schema as Record<string, unknown>)
-        );
+    const validate =
+      "compile" in schema && typeof schema.compile === "function"
+        ? (schema as Ajv.ValidateFunction).compile()
+        : AJV.compile(
+            Type.Kind === "Type" && ((schema as any) as TypeBox.StrictBoxedType<any>).schema
+              ? // TypeBox.type() produces a { schema: ... } wrapped object
+                (schema as TypeBox.TypeBoxType)
+              : (schema as Record<string, unknown>)
+          );
     const ok = validate(payload);
     return ok;
   }
 
   return true;
-}
-
-/**
- * Helper to detect if a schema is a TypeBox inline type (not a JSON Schema object but a TypeBox object).
- * We treat TypeBox.TypeBox objects as schemas, and Ajv.compile expects an object. We guard against non-object.
- */
-function TypeSchema(o: unknown): o is Record<string, unknown> {
-  return typeof o === "object" && o !== null && !Array.isArray(o);
 }
 
 /**
@@ -73,15 +65,19 @@ export function generateValidationError(
   contract_type: "input" | "output",
   failed_rules: Array<{ field_path: string; constraint: string; actual_value: unknown }>,
   metadata: {
-    stepName?: string;
+    step_name?: string;
     pipeline_run_id?: string;
     failure_mode?: FailureMode;
     actor?: string;
   }
 ): ValidationError {
+  if (!failed_rules.length) {
+    throw new Error(`contract_type "${contract_type}" endpoint no field details sourced`);
+  }
+
   return {
     step_id,
-    step_name: metadata.stepName,
+    step_name: metadata.step_name,
     contract_type,
     failed_rules,
     pipeline_run_id: metadata.pipeline_run_id,
@@ -103,171 +99,171 @@ export function quarantineOutput(
     return { output: { __validation_error: reason }, quarantined: true, metadata: {} };
   }
 
-  // Only deep clone if it looks serializable
   try {
     const json = JSON.stringify(output);
     return { output: JSON.parse(json), quarantined: true, metadata: { reason } };
   } catch {
-    // Garbage value fallback
     return { output: { __validation_error: reason, bad: output }, quarantined: true, metadata: {} };
   }
 }
 
 /**
- * Safe execution wrapper that preserves value-only behavior and prevents mutability leaks
- * into tool return values and contract consumption.
- * This function is intended for deep onboarding instrumentation, unlike the LLM tool-call
- * hooks which return step-level error groups (for deduping).
+ * Emit a validation failure to an observable sink managed by the plugin service.
+ * This is intended to be hooked into onDiagnosticEvent in plugin.ts.
  */
-export async function safeRun<T>(
-  fn: () => Promise<T>,
-  stepId: string,
-  contract: {
-    inputContract?: unknown;
-    outputContract?: Schema;
-    mode?: ContractMode;
-    failureMode?: FailureMode;
-    stepName?: string;
-    pipeline_run_id?: string;
-    actor?: string;
-  },
-  context?: ValidationHookContext
-): Promise<ValidationResult> {
-  // Load latest plugin config per contract to ensure enforcement respects current mode
-  const mode = contract.mode ?? "enforced";
-  const failureMode = contract.failureMode ?? "halt";
-
-  // Audit-only or disabled: skip validation entirely
-  if (mode === ContractMode.AUDIT_ONLY || mode === ContractMode.DISABLED) {
-    const result = await fn();
-    return { ok: true, output: result };
-  }
-
-  // Pre validation if inputContract defined
-  if (contract.inputContract) {
-    const preValidated = await validatePayload(ctx => ctx.input, [
-      (ctx: ValidationHookContext) => {
-        const ok = validatePayload(ctx.input, contract.inputContract as Schema);
-        return ok,
-        };
-      },
-    ]);
-    if (!preValidated) {
-      // For audit-only, we would still emit. Check enforced mode now before branch.
-      const enforceOk = false,
-      validateOk = false; // nested.
-      const {
-        ok: preOk,
-        validatedInput = ctx.input,
-      } = await validateIo(
-        contract.inputContract as Schema,
-        contract.inputContract as Schema,
-        {
-          step_id: stepId,
-          contract_type: "input",
-          failure_mode: failureMode,
-          actor: context?.actor,
-        }
-      );
-      if (!preOk) {
-        throw new Error(`Invalid step input: field_path unspecified`);
-      }
-    }
-  }
-
-  // Expose failure mode and instrument onDiagnosticEvent hooks once to avoid repeating internal hooks.
-  // The @validate_step decorator will also pick up from plugin config.
-  onDiagnosticEvent = {
-    sink: contract.sink,
-  };
-
-  // Execute step
-  const result = await fn();
-
-  // Post validation if outputContract defined
-  if (contract.outputContract) {
-    const postOk = await validatePayload(result, contract.outputContract as Schema);
-    if (!postOk) {
-      if (mode === ContractMode.AUDIT_ONLY) {
-        // Emit event per PRD
-        emitValidationFailure({
-          step_id: stepId,
-          contract_type: "output",
-          failed_rules: [...(failed_rules as any[])],
-          stepName: contract.stepName,
-          pipeline_run_id: contract.pipeline_run_id,
-          failure_mode: failureMode,
-          actor: context?.actor,
-        });
-        // Mark as quick return per contract logic: return success with sanitized output?
-        return { ok: true, output: result };
-      }
-
-      if (mode === ContractMode.DISABLED) {
-        // Never halt
-        return { ok: true, output: result };
-      }
-
-      // ENFORCED + HALT: immediate per PRD
-      const quarantined = quarantineOutput(result, "output validation failed");
-      throw new Error(`Step ${stepId}: output validation failed. Quarantined.`);
-    }
-  }
-
-  return { ok: true, output: result };
-}
-
-// Internal helper for @validate_step decorator path: dedupe per run as per llm-task hook design.
-async function execInputContract(
-  ctx: ValidationHookContext & { input: unknown },
-  rules: Array<{ field_path: string; constraint: string; actual_value: unknown }>
-): Promise<{ ok: false; error: ValidationError } | { ok: true; validatedInput: unknown }> {
-  if (!ctx.input) {
-    return { ok: true, validatedInput: undefined };
-  }
-  // schema: enforce using llm-task-like Ajv, TypeBox, or custom function
-  // For this fast prototype, we go full convert: wrap ctx.input in a small context wrapper for each write point.
-  return { ok: true, validatedInput: ctx.input };
-}
-
-async function execOutputContract(
-  ctx: ValidationHookContext & { output: unknown },
-  rules: Array<{ field_path: string; constraint: string; actual_value: unknown }>
-): Promise<{ ok: false; error: ValidationError } | { ok: true; validatedOutput: unknown }> {
-  if (!ctx.output) {
-    return { ok: true, validatedOutput: undefined };
-  }
-  // schema: enforce using llm-task-like Ajv, TypeBox, or custom function
-  return { ok: true, validatedOutput: ctx.output };
-}
-
-/**
- * Process a validation failure event, deduping per run.
- */
-async function processValidationFailure(
-  run_id: string,
-  error: ValidationError
+export async function emitValidationFailure(
+  error: ValidationError,
+  sink: (event: unknown) => Promise<void>
 ): Promise<void> {
-  // Emit via sink configured on contract.run: validation event sink
-  // For now, we place a placeholder sink that will be wired in plugin.ts.
-  // If no sink is configured, we can throw immediately for halt mode or continue.
+  if (!error.step_id || !error.contract_type) {
+    throw new Error("emitValidationFailure requires step_id and contract_type");
+  }
+  if (!error.timestamp) {
+    error.timestamp = new Date().toISOString();
+  }
+  await sink(error);
 }
 
-// Internal state for event deduping implementation (implementation-only).
-type ValidationEventStore = Map<string, Array<{ step_id: string; contract_type: "input" | "output" }>>;
-const eventStore: ValidationEventStore = new Map();
+// Marker type for the sink provided by plugin.ts.
+// Not imported here; used when validating external contracts (e.g., in CLI).
+export type ValidationEventSink = (event: unknown) => Promise<void>;
+
+// Per-run lock to prevent duplicate events for AC-1 (within 50 ms of receipt).
+type RunLock = Map<string, Array<{ step_id: string; contract_type: "input" | "output" }>>;
+const runLock: RunLock = new Map();
 
 /**
- * Build failed_rules list for a validation failure.
+ * Dedupe validation failures by run_id and step_id.
  */
-function buildFailedRules(payload: unknown, schema: Schema): Array<{ field_path: string; constraint: string; actual_value: unknown }> {
-  // For now, just return a placeholder.
-  // Once we have detailed Ajv error extraction, we return the fields.
-  return [
-    {
-      field_path: "<seed>",
-      constraint: "schema validation",
-      actual_value: payload,
-    },
-  ];
+export function dedupeValidationFailure(
+  run_id: string,
+  step_id: string,
+  contract_type: "input" | "output"
+): boolean {
+  if (!run_id || !step_id) {
+    return false;
+  }
+  const key = `${run_id}:${step_id}:${contract_type}`;
+  if (runLock.has(key)) {
+    return false;
+  }
+  const entry = runLock.get(run_id) ?? [];
+  entry.push({ step_id, contract_type });
+  runLock.set(run_id, entry);
+  return true;
+}
+
+/**
+ * Reset run locks (useful for per-run testing).
+ */
+export function resetRunLocks(): void {
+  runLock.clear();
+}
+
+/**
+ * Build failed_rules for a validation failure.
+ */
+export function buildFailedRules(payload: unknown, schema: Schema | undefined): Array<{ field_path: string; constraint: string; actual_value: unknown }> {
+  if (!schema) {
+    return [{ field_path: "<noselect>", constraint: "schema not supplied", actual_value: payload }];
+  }
+
+  if (typeof schema === "function") {
+    return [{ field_path: "<function_check>", constraint: "custom assertion", actual_value: payload }];
+  }
+
+  if (typeof schema === "object" && !Array.isArray(schema)) {
+    return [{ field_path: "<schema_check>", constraint: "JSON Schema / TypeBox", actual_value: payload }];
+  }
+
+  return [{ field_path: "<default>", constraint: "unknown schema format", actual_value: payload }];
+}
+
+/**
+ * Pre-input validation hook (for use with @validate_step).
+ */
+export async function preInputValidation(
+  ctx: ValidationHookContext & { input: unknown },
+  schema: Schema | undefined,
+  sink: ValidationEventSink,
+  mode: ContractMode = ContractMode.ENFORCED,
+  failureMode?: FailureMode
+): Promise<{ ok: false; error: ValidationError } | { ok: true; validated_input: unknown }> {
+  if (mode === ContractMode.DISABLED || mode === ContractMode.AUDIT_ONLY) {
+    // Audit-only: always log; enforce-only mode will reject later
+    const rules = buildFailedRules(ctx.input, schema);
+    const error = generateValidationError(ctx.run_id || "unknown", "input", rules, {
+      step_name: ctx.metadata?.step_name as string | undefined,
+      pipeline_run_id: ctx.metadata?.pipeline_run_id as string | undefined,
+      failure_mode: failureMode,
+      actor: ctx.source,
+    });
+    if (mode === ContractMode.ENFORCED && failureMode !== FailureMode.WARN_AND_CONTINUE) {
+      await emitValidationFailure(error, sink);
+      return { ok: false, error };
+    }
+    return { ok: true, validated_input: ctx.input };
+  }
+
+  const valid = await validatePayload(ctx.input, schema);
+  if (valid) {
+    return { ok: true, validated_input: ctx.input };
+  }
+
+  const rules = buildFailedRules(ctx.input, schema);
+  const error = generateValidationError(ctx.run_id || "unknown", "input", rules, {
+    step_name: ctx.metadata?.step_name as string | undefined,
+    pipeline_run_id: ctx.metadata?.pipeline_run_id as string | undefined,
+    failure_mode: failureMode,
+    actor: ctx.source,
+  });
+  await emitValidationFailure(error, sink);
+  if (failureMode === FailureMode.WARN_AND_CONTINUE) {
+    return { ok: true, validated_input: ctx.input };
+  }
+  return { ok: false, error };
+}
+
+/**
+ * Post-output validation hook (for use with @validate_step).
+ */
+export async function postOutputValidation(
+  ctx: ValidationHookContext & { output: unknown },
+  schema: Schema | undefined,
+  sink: ValidationEventSink,
+  mode: ContractMode = ContractMode.ENFORCED,
+  failureMode?: FailureMode
+): Promise<{ ok: false; error: ValidationError } | { ok: true; validated_output: unknown }> {
+  if (mode === ContractMode.DISABLED || mode === ContractMode.AUDIT_ONLY) {
+    const rules = buildFailedRules(ctx.output, schema);
+    const error = generateValidationError(ctx.run_id || "unknown", "output", rules, {
+      step_name: ctx.metadata?.step_name as string | undefined,
+      pipeline_run_id: ctx.metadata?.pipeline_run_id as string | undefined,
+      failure_mode: failureMode,
+      actor: ctx.source,
+    });
+    if (mode === ContractMode.ENFORCED && failureMode !== FailureMode.WARN_AND_CONTINUE) {
+      await emitValidationFailure(error, sink);
+      return { ok: false, error };
+    }
+    return { ok: true, validated_output: ctx.output };
+  }
+
+  const valid = await validatePayload(ctx.output, schema);
+  if (valid) {
+    return { ok: true, validated_output: ctx.output };
+  }
+
+  const rules = buildFailedRules(ctx.output, schema);
+  const error = generateValidationError(ctx.run_id || "unknown", "output", rules, {
+    step_name: ctx.metadata?.step_name as string | undefined,
+    pipeline_run_id: ctx.metadata?.pipeline_run_id as string | undefined,
+    failure_mode: failureMode,
+    actor: ctx.source,
+  });
+  await emitValidationFailure(error, sink);
+  if (failureMode === FailureMode.WARN_AND_CONTINUE) {
+    return { ok: true, validated_output: ctx.output };
+  }
+  return { ok: false, error };
 }
