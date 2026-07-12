@@ -473,8 +473,8 @@ describe('TaskService.updateTask (FR-3)', () => {
       projectId: PROJECT_ID,
       title: 'Parent Task',
       description: null,
-      status: TaskStatus.TODO as any,
-      priority: TaskPriority.MEDIUM,
+      status: undefined as never,
+      priority: undefined as never,
       assignedAgentType: AgentType.CLAUDE,
       assignedAgentHostId: null,
       assignedAgentRef: null,
@@ -486,13 +486,13 @@ describe('TaskService.updateTask (FR-3)', () => {
     });
     await repo.save(parent);
 
-    // Unassigned child
+    // Unassigned child linked to parent
     const child = Task.create({
       projectId: PROJECT_ID,
       title: 'Child Task',
       description: null,
-      status: TaskStatus.TODO as any,
-      priority: TaskPriority.MEDIUM,
+      status: undefined as never,
+      priority: undefined as never,
       assignedAgentType: AgentType.CLAUDE,
       assignedAgentHostId: null,
       assignedAgentRef: null,
@@ -501,9 +501,8 @@ describe('TaskService.updateTask (FR-3)', () => {
       persona: null,
       projectKey: 'CHILD',
       lastKeySeq: 0,
+      parentTaskId: parent.id,
     });
-    child.parentTaskId = parent.id;
-    child.taskType = TaskType.TASK;
     await repo.save(child);
 
     // Update metadata only; no agent reassign/deassign, no decomposition
