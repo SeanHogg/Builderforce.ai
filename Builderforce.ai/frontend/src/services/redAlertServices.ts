@@ -12,12 +12,16 @@
 
 import { MetricResult, classifyMetric, MetricSeverity } from '../utils/redAlertUtils';
 
+// Re-export MetricSeverity so consumers (and tests) can import it from the
+// service module alongside the notification API.
+export type { MetricSeverity };
+
 /**
  * Alert notification channel type
  */
 export type NotificationChannel = 'in-app' | 'email' | 'webhook';
 
-interface NotificationPayload {
+export interface NotificationPayload {
   metricName: string;
   currentValue: number | null;
   previousSeverity: MetricSeverity;
