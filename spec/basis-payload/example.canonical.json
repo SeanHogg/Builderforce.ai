@@ -104,29 +104,43 @@
     {
       "step": 1,
       "description": "Ran health check endpoint to verify operational status.",
-      "evidence_ids": ["e1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5e"],
-      "claim_ids": ["c1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5d"],
+      "evidence_ids": [
+        "e1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5e"
+      ],
+      "claim_ids": [
+        "c1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5d"
+      ],
       "inference_type": "inductive"
     },
     {
       "step": 2,
       "description": "Verified error response codes against documentation guidelines.",
-      "evidence_ids": ["e2a3b4c5-d6e7-4f8a-9b0c-1d2e3f4a5b6d"],
-      "claim_ids": ["c2a3b4c5-d6e7-4f8a-9b0c-1d2e3f4a5b6c"],
+      "evidence_ids": [
+        "e2a3b4c5-d6e7-4f8a-9b0c-1d2e3f4a5b6d"
+      ],
+      "claim_ids": [
+        "c2a3b4c5-d6e7-4f8a-9b0c-1d2e3f4a5b6c"
+      ],
       "inference_type": "deductive"
     },
     {
       "step": 3,
       "description": "Analyzed connection pool metrics to assess steady state timing.",
-      "evidence_ids": ["e3a4b5c6-d7e8-4f9b-0c1d-2e3f4a5b6c8e"],
-      "claim_ids": ["c3a4b5c6-d7e8-4f9b-0c1d-2e3f4a5b6c7d"],
+      "evidence_ids": [
+        "e3a4b5c6-d7e8-4f9b-0c1d-2e3f4a5b6c8e"
+      ],
+      "claim_ids": [
+        "c3a4b5c6-d7e8-4f9b-0c1d-2e3f4a5b6c7d"
+      ],
       "inference_type": "inductive"
     },
     {
       "step": 4,
       "description": "Archived prior claim on test coverage to avoid duplication.",
       "evidence_ids": [],
-      "claim_ids": ["c4a5b6c7-d8e9-4fa0-1d2e-3f4a5b6c7d8e"],
+      "claim_ids": [
+        "c4a5b6c7-d8e9-4fa0-1d2e-3f4a5b6c7d8e"
+      ],
       "inference_type": "deductive"
     }
   ],
@@ -169,11 +183,6 @@
     "environment": "production"
   },
   "extensions": {
-    "com.builderforce.review": {
-      "reviewer_agent_id": "agent-code-reviewer-v1",
-      "verdict": "approved",
-      "severity_max": "low"
-    },
     "com.acme.risk": {
       "risk_score": 0.12,
       "risk_band": "low"
