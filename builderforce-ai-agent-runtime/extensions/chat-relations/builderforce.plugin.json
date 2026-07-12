@@ -1,0 +1,10 @@
+{
+  "id": "chat-relations",
+  "name": "Chat Relations",
+  "description": "Identify similar and subset relationships between a user's chat conversations using semantic embeddings and token-based subset analysis.",
+  "kind": "chat-relations",
+  "version": "2026.3.21",
+  "builderforce": {
+    "extensions": ["./index.js"]
+  }
+}
