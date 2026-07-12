@@ -28,7 +28,14 @@
       "type": "number",
       "description": "Optional progress percentage: 0 to 100. 100 indicates the final state (terminal event). At most once per job/task, emitted only after all processing steps complete.",
       "minimum": 0,
-      "maximum": 100
+      "maximum": 100,
+      "examples": [
+        0,
+        25,
+        50,
+        75,
+        100
+      ]
     },
     "created": {
       "type": "string",
