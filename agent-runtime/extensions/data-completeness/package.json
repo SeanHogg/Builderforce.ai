@@ -1,0 +1,18 @@
+{
+  "name": "@builderforce/data-completeness",
+  "version": "2026.3.21",
+  "private": true,
+  "description": "Data completeness scoring engine (0-100%) for records and datasets",
+  "type": "module",
+  "devDependencies": {
+    "@seanhogg/builderforce-agents": "workspace:*"
+  },
+  "peerDependencies": {
+    "@seanhogg/builderforce-agents": ">=2026.1.26"
+  },
+  "builderforce": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
