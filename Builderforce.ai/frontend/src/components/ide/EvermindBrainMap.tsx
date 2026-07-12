@@ -36,6 +36,7 @@ import {
   type ProjectEvermindContributions,
   type ProjectEvermindRecentEntry,
 } from '@/lib/projectEvermindApi';
+import { CompactListProgress, type ProgressItem } from '@/components/lists';
 
 /* ── Geometry (SVG user units; the viewBox scales to the container) ──────────── */
 const VB_W = 860;
