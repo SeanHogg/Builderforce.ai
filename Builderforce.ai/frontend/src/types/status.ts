@@ -14,7 +14,7 @@ export const STATUS = {
    * Green status — score is on track.
    * Score must satisfy: 75 ≤ score ≤ 100
    */
-  GREEN: "green."
+  GREEN: "green"
 } as const;
 
 /**
