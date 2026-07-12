@@ -1,0 +1,6 @@
+/* TrendLineChart-specific styles are defined in index.css */
+.no-data {
+  padding: 3rem;
+  text-align: center;
+  color: #6b7280;
+}
