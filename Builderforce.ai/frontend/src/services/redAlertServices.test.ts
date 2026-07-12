@@ -8,7 +8,6 @@
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import {
   RedAlertNotificationCenter,
-  MetricSeverity,
 } from './redAlertServices';
 
 describe('Red Alert Notification Service', () => {
