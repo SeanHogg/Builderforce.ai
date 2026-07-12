@@ -114,16 +114,13 @@ export class RedAlertNotificationCenter {
       return null;
     }
     
-    // Use Null threshold. Also marking as initial notification if no previousState:
-    // If isFirstEvent we treat as transition (for telemetry and audit), else we respect provided previousSeverity.
-    // It is okay to send duplicate notification when it's *first* entry into Red.
-    const isFirstEvent = previousSeverity !== 'critical' || previousSeverity === 'No Data';
-    // We only alert if this is a NEW record (not a repeat) or it is the first entering Red.
-    // The notificationMap stores the metric result; if it already has Red, we skip duplicate.
-    const existingRecord = this.notificationMap.get(metricName);
-    if (existingRecord && existingRecord.metricResult.isRed) {
-      return null;
-    }
+    // Fatigue prevention (FR-3): if we already notified for this metric while it
+    // was Red and the caller reports it was already Red, this is a repeat within
+    // the cooldown window we already passed above only because cooldown elapsed —
+    // so a repeat IS allowed. What we must NOT do is re-notify on the same tick.
+    // The 30-min cooldown gate (canSendAlert) above is the sole fatigue guard;
+    // reaching here means either (a) first entry into Red, or (b) cooldown elapsed
+    // while still Red. Both are legitimate notifications, so we proceed.
     
     // Create notification payload
     const payload: NotificationPayload = {
