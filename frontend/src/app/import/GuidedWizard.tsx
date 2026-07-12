@@ -343,36 +343,37 @@ export default function GuidedWizard({ userId, onCancel }: { userId: string | nu
       {/* Step 2: Review (step-review) */}
       {step === 'review' && (
         <div style={{ padding: '24px', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '16px' }}>{t('guided.steps.review.title')}</h2>
-          <p style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>{t('guided.steps.review.subtitle')}</p>
+          <h2 style={{ fontSize: '1.5rem', marginBottom: '16px' }}>Review Your Record</h2>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>Please confirm the details below before submitting.</p>
 
           <div style={{ padding: '16px', backgroundColor: 'var(--bg-deep)', borderRadius: '8px', marginBottom: '24px' }}>
-            <h3 style={{ fontSize: '1.1rem', marginBottom: '16px' }}>{t('guided.steps.review.recordDetails')}</h3>
+            <h3 style={{ fontSize: '1.1rem', marginBottom: '16px' }}>Record Details</h3>
             <div style={{ fontSize: '0.95rem' }}>
               <div style={{ marginBottom: '8px' }}>
-                <strong>{t('guided.fields.name.label')}:</strong> {record.name}
+                {/* Inline edit link per section */}
+                <strong>Name:</strong> <span>{record.name} <a href="#" style={{ color: 'var(--primary-color)', marginLeft: '12px' }}></a></span>
               </div>
               {record.description && (
                 <div style={{ marginBottom: '8px' }}>
-                  <strong>{t('guided.fields.description.label')}:</strong> {record.description}
+                  <strong>Description:</strong> <span>{record.description}</span>
                 </div>
               )}
               {record.referenceId && (
                 <div style={{ marginBottom: '8px' }}>
-                  <strong>{t('guided.fields.referenceId.label')}:</strong> {record.referenceId}
+                  <strong>Reference ID:</strong> <span>{record.referenceId}</span>
                 </div>
               )}
               <div style={{ marginBottom: '8px' }}>
-                <strong>{t('guided.fields.enabled.label')}:</strong> {record.enabled ? 'Yes' : 'No'}
+                <strong>Enabled:</strong> <span>{record.enabled ? 'Yes' : 'No'}</span>
               </div>
               {record.priority && (
                 <div style={{ marginBottom: '8px' }}>
-                  <strong>{t('guided.fields.priority.label')}:</strong> {record.priority}
+                  <strong>Priority:</strong> <span>{record.priority}</span>
                 </div>
               )}
               {record.notes && (
                 <div style={{ marginBottom: '8px' }}>
-                  <strong>{t('guided.fields.notes.label')}:</strong> {record.notes}
+                  <strong>Notes:</strong> <span>{record.notes}</span>
                 </div>
               )}
             </div>
@@ -383,7 +384,7 @@ export default function GuidedWizard({ userId, onCancel }: { userId: string | nu
               onClick={handlePreviousStep}
               style={{ padding: '8px 16px', border: '1px solid var(--border-color)', borderRadius: '4px', cursor: 'pointer' }}
             >
-              {t('guided.buttons.edit')}
+              Edit
             </button>
             <button
               onClick={handleNextStep}
@@ -396,7 +397,7 @@ export default function GuidedWizard({ userId, onCancel }: { userId: string | nu
                 cursor: 'pointer',
               }}
             >
-              {t('guided.buttons.submit')}
+              Submit
             </button>
           </div>
         </div>
