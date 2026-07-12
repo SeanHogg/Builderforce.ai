@@ -1,0 +1,15 @@
+{
+  "id": "health-snapshots",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "scheduleIntervalMs": { "type": "integer", "description": "Snapshot interval in milliseconds (default 300000 = 5 min)", "minimum": 600000, "maximum": 86400000 },
+      "retentionDays": { "type": "integer", "description": "Days to retain snapshots before archival/deletion (default 90)", "minimum": 1, "maximum": 730 },
+      "trackComponents": { "type": "boolean", "description": "Track per-component metrics (enabled by default)" },
+      "trackResourceUsage": { "type": "boolean", "description": "Track resource utilization (enabled by default)" },
+      "trackVersion": { "type": "boolean", "description": "Capture software version/build (enabled by default)" },
+      "incidentThreshold": { "type": "number", "description": "Alert count threshold for promoting status to unhealthy (default 1)" }
+    }
+  }
+}
