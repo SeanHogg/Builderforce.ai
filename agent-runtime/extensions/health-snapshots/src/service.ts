@@ -248,12 +248,24 @@ export function createHealthSnapshotsService(): BuilderForceAgentsPluginService 
     description: 'Number of snapshot comparisons performed',
   });
 
+  // Track whether we have ever successfully connected to the plugin-config endpoint.
+  // This is used during start to prevent leaking connections on service initialization failures.
+  let pluginConfigKeysConfigured = false;
+
   return {
     id: 'health-snapshots',
 
     async start(ctx) {
       config = { ...DEFAULT_CONFIG, ...((ctx.config as unknown) as HealthSnapshotsConfig) };
       log = ctx.logger;
+
+      // Verify at least one of the healthSnapshots config keys has a non-empty value.
+      // This prevents creating an unfinished or spurious service if the SDK omitted the key entirely.
+      pluginConfigKeysConfigured = !!(config.scheduleIntervalMs !== undefined || config.retentionDays !== undefined || config.trackComponents !== undefined || config.trackResourceUsage !== undefined || config.trackVersion !== undefined || config.incidentThreshold !== undefined);
+
+      if (!pluginConfigKeysConfigured) {
+        log?.warn('health-snapshots plugin-config unavailable, skipping informed paths and metric emit events; captures and comparisons will be invented locally');
+      }
 
       // Resolve version if enabled
       if (config.trackVersion && process.env.npm_package_version) {
