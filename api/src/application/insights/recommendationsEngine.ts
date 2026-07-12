@@ -475,8 +475,18 @@ export function deriveRecommendations(inp: RuleInputs): Recommendation[] {
     }
   }
 
+  // Hard dedup by stable key (rule + entity + field/value are all folded into the
+  // key, so identical root causes collide here) — keep the FIRST (highest-rank)
+  // occurrence so a concrete issue surfaces exactly once (FR-1.4 / dedup req).
+  const seen = new Set<string>();
+  const deduped: Recommendation[] = [];
+  for (const r of out.sort((a, b) => b.rank - a.rank || a.key.localeCompare(b.key))) {
+    if (seen.has(r.key)) continue;
+    seen.add(r.key);
+    deduped.push(r);
+  }
   // Most urgent first; stable key tiebreak.
-  return out.sort((a, b) => b.rank - a.rank || a.key.localeCompare(b.key));
+  return deduped;
 }
 
 /**
