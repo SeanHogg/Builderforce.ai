@@ -24,6 +24,24 @@ import {
 // In-memory fakes (no DB) — isolate the update side-effect and parentTaskId behavior.
 // -------------------------------------------------------------------
 
+/**
+ * A simple decomposer plan used by tests to avoid triggering full decomposition.
+ */
+export const simplePlan: ComposeReturnValue = {
+  isEpic: false,
+  children: [],
+};
+
+/**
+ * Factory to create a spy for the EpicDecomposer.assess method.
+ * Resets between each test, providing isolation per FR-5.
+ */
+export const createDecomposerSpy = (): { assess: ReturnType<typeof vi.fn> } => {
+  const spy: { assess: ReturnType<typeof vi.fn> } = { assess: vi.fn() };
+  spy.assess.mockResolvedValue(simplePlan);
+  return spy;
+};
+
 class InMemoryTaskRepo implements ITaskRepository {
   private seq = 1;
   readonly store = new Map<number, Task>();
