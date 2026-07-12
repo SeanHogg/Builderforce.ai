@@ -1,0 +1,10 @@
+{
+  "id": "diagnostic-category-mapping",
+  "name": "Diagnostic Category Mapping",
+  "description": "Maps ingested data fields/metrics to canonical diagnostic question categories.",
+  "version": "2026.3.21",
+  "type": "extension",
+  "entry": "./index.ts",
+  "capabilities": ["ingestion"],
+  "order": 3000
+}
