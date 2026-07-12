@@ -24,12 +24,12 @@ import {
     FontAwesomeIcon, 
     FontAwesomeIconProps 
 } from '@fortawesome/react-fontawesome';
-import { 
-    faPause, 
-    faSchedule, 
-    faDotCircle, 
+import {
+    faPause,
+    faSchedule,
     faCircle,
     faCheck,
+    faDotCircle,
 } from '@fortawesome/free-solid-svg-icons';
 import type { LowPriorityStatus } from '@/types/priority-status';
 
