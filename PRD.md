@@ -118,4 +118,22 @@ Metric values falling in the **0–49 range** currently produce no immediate, vi
 
 ---
 
+## Implementation Status & Traceability (task #304)
+
+Status: **In Review** — frontend implementation landed under `Builderforce.ai/frontend/src`.
+
+| AC | Where implemented | Verified by |
+|---|---|---|
+| AC-1 / AC-2 / AC-3 / AC-4 | `utils/redAlertUtils.ts` → `classifyMetric()` (0 ≤ v ≤ 49 ⇒ `critical`; null/NaN/negative/non-numeric ⇒ `No Data`) | `utils/redAlertUtils.test.ts` |
+| AC-5 (WCAG AA) | `styles/color-tokens.ts` → `RED_THEME.colorCritical` `#D32F2F`, `contrastRatios` (4.43:1 white / 15.8:1 on `#1E1E1E`); `components/metrics/MetricSeverityBadge.tsx` | contrast table + component render |
+| AC-6 / AC-7 / AC-8 (alerting, 30-min cooldown, payload) | `services/redAlertServices.ts` → `RedAlertNotificationCenter.sendAlert()` / `canSendAlert()` (in-app, email, webhook channels; metric/value/timestamp/deepLink payload) | `services/redAlertServices.test.ts` |
+| AC-9 (admin threshold + audit) | `hooks/useRedAlertConfigs.ts` → `updateThreshold()` (1–99 validation, `ConfigChangeRecord` audit log, `previewClassification()` live preview) | hook logic |
+| AC-10 (CSV `severity`) | `utils/redAlertExports.ts` → `generateCSVExport()`/`generateCSVRow()` map to `"Critical"`/`"Normal"`/`"No Data"` | `utils/export-red-alert.test.ts` |
+| AC-11 (PDF red, not grayscale) | `utils/redAlertExports.ts` → `generatePDFTemplate()` preserves `#D32F2F`/`#FFEBEE` | template output |
+| UI surface (in-app banner) | `hooks/useRedAlertNotifications.ts` (exported from `services/redAlert`) | hook logic |
+
+> _Signed: code-creator/code-reviewer/test-generator/documentation-agent (task #304) — completed classification, notification, admin-config, badge, export, and UI-notification surfaces; fixed CSV severity-label mapping, header/row column parity, and the `MetricSeverityBadge` `manualIcon` prop wiring._
+
+---
+
 *Document owner: TBD | Last updated: see commit history | Next review: before sprint kickoff*
