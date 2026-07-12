@@ -169,9 +169,7 @@ export function CompactListProgress({
             {showPercentage && (
               <span style={percent}>{item.completed}/{item.total}</span>
             )}
-            <span aria-label={`Status: ${item.status}`}>
-              <StatusBadge status={item.status} />
-            </span>
+            <StatusBadge status={item.status} />
           </div>
         );
       })}
