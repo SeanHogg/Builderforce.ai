@@ -42,6 +42,12 @@ export class EvermindViewProvider implements vscode.WebviewViewProvider {
     void this.sendInit();
   }
 
+  /** Ask the live view to reload its data in place — driven by the view's title-bar
+   *  refresh action (the relocated inline `↻`). No-op when the view isn't resolved. */
+  triggerRefresh(): void {
+    void this.view?.webview.postMessage({ type: "refresh" });
+  }
+
   private async onMessage(msg: { type?: string; id?: string }): Promise<void> {
     switch (msg.type) {
       case "ready":

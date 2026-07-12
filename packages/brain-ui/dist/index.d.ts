@@ -42,6 +42,17 @@ interface BrainTimelineLabels {
     learnTitle: string;
     /** Tooltip on the learn step. */
     learnHint: string;
+    /** Evermind SKIPPED-learn step — the turn did NOT contribute, and why. Must contain
+     *  `{reason}` (filled from {@link learnSkipReason}). */
+    learnSkippedTitle: string;
+    /** Tooltip on the skipped-learn step. */
+    learnSkippedHint: string;
+    /** Human phrase per skip reason, substituted into {@link learnSkippedTitle}. */
+    learnSkipReason: {
+        'not-attached': string;
+        'not-seeded': string;
+        frozen: string;
+    };
     /** Evermind reconcile step — the turn updated learned memories. Must contain
      *  `{count}` and `{version}`. */
     reconcileTitle: string;
@@ -557,6 +568,8 @@ interface TimelineImage {
     url: string;
     name?: string;
 }
+/** Why a turn did not feed the project Evermind (mirrors the api's `BrainLearnSkipReason`). */
+type BrainLearnSkipReason = 'not-attached' | 'not-seeded' | 'frozen';
 type TimelineNode = {
     key: string;
     kind: 'user';
@@ -610,6 +623,7 @@ type TimelineNode = {
     ts: number;
     order: number;
     version: number;
+    skipped?: BrainLearnSkipReason;
 } | {
     key: string;
     kind: 'reconcile';
@@ -872,12 +886,21 @@ interface EvermindConsoleProps {
     /** Show the "Recently learned" list. Default true; a host that renders its own
      *  learnings surface (e.g. the web Studio's region-filterable panel) passes false. */
     showRecent?: boolean;
+    /** Show the inline `↻` refresh button in the header. Default true. A host that
+     *  drives refresh from its OWN chrome (e.g. the VS Code sidebar view's title bar)
+     *  passes false and bumps {@link refreshSignal} instead, so the control lives in
+     *  the one place that host expects it rather than duplicated inside the card. */
+    showHeaderRefresh?: boolean;
+    /** A monotonic counter a host bumps to trigger an in-place reload from OUTSIDE the
+     *  console (e.g. a title-bar refresh action). Each new value re-fetches without the
+     *  loading flash — the same reload the inline `↻` runs. Undefined/0 = no external refresh. */
+    refreshSignal?: number;
     /** Called whenever a Validate runs (or is cleared, with null) — lets a host lift
      *  the recall result to a companion surface (e.g. highlight the matched memories
      *  on the web Studio's Knowledge Map). The console also renders the result inline. */
     onValidate?: (result: EvermindValidateResult | null) => void;
 }
-declare function EvermindConsole({ adapter, canManage, labels, refreshMs, projectName, showRecent, onValidate }: EvermindConsoleProps): React__default.JSX.Element;
+declare function EvermindConsole({ adapter, canManage, labels, refreshMs, projectName, showRecent, showHeaderRefresh, refreshSignal, onValidate }: EvermindConsoleProps): React__default.JSX.Element;
 
 /**
  * Project 360 model — the shape returned by `GET /api/projects/:id/360` and

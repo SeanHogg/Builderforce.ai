@@ -171,6 +171,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerWebviewViewProvider(EvermindViewProvider.viewType, evermindView, {
       webviewOptions: { retainContextWhenHidden: true },
     }),
+    vscode.commands.registerCommand("builderforce.refreshEvermind", () => evermindView?.triggerRefresh()),
   );
 
   // Security & compliance Diagnostics — SOC 2, Architecture, Quality, and Privacy

@@ -21,7 +21,7 @@ import {
   type EvermindConsoleLabels,
 } from '@seanhogg/builderforce-brain-ui';
 import { authedFetch } from './authedFetch';
-import { getToken, refreshToken, type InitData, type LabelBundle } from './vscodeBridge';
+import { getToken, onRefresh, refreshToken, type InitData, type LabelBundle } from './vscodeBridge';
 
 interface TenantModelRow { slug?: string; name?: string; baseModel?: string | null }
 interface LlmModelsResponse { codingModels?: string[]; premium?: boolean; effectivePlan?: string }
@@ -72,6 +72,11 @@ export function EvermindScreen({ init }: { init: InitData }) {
   const [builds, setBuilds] = useState<IdeProjectRow[] | null>(null);
   // The selected build's BACKING storage project id — the Evermind scope.
   const [storageId, setStorageId] = useState<number | null>(null);
+  // Bumped by the view's title-bar refresh action (host → 'refresh' message). Re-runs
+  // the build-list fetch below AND is forwarded to the console so it reloads in place —
+  // this is where the header's old inline `↻` moved to (the VS Code view title bar).
+  const [refreshSignal, setRefreshSignal] = useState(0);
+  useEffect(() => onRefresh(() => setRefreshSignal((n) => n + 1)), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -93,7 +98,7 @@ export function EvermindScreen({ init }: { init: InitData }) {
       })
       .catch(() => { if (!cancelled) setBuilds([]); });
     return () => { cancelled = true; };
-  }, [init.baseUrl, init.project?.id]);
+  }, [init.baseUrl, init.project?.id, refreshSignal]);
 
   const adapter = useMemo<EvermindConsoleAdapter>(() => {
     const req = authedFetch(init.baseUrl, getToken, () => refreshToken());
@@ -171,6 +176,9 @@ export function EvermindScreen({ init }: { init: InitData }) {
           canManage={!!init.canManage}
           projectName={selected?.name}
           labels={labels}
+          // The inline `↻` moved to the VS Code view title bar; drive reloads from there.
+          showHeaderRefresh={false}
+          refreshSignal={refreshSignal}
         />
       )}
     </div>
