@@ -7650,7 +7650,10 @@
       },
       "meta": {
         "blurb": "Collez une clé d'API Meta AI pour exécuter des modèles MUSE (muse-spark-1.1) sur votre propre compte Meta AI."
-      }
+      },
+      "kimi": { "blurb": "Collez une clé d’abonnement Kimi Code ou une clé API Moonshot." },
+      "qwen": { "blurb": "Collez une clé API Alibaba DashScope pour utiliser les modèles Qwen." },
+      "minimax": { "blurb": "Collez une clé API MiniMax pour utiliser les modèles MiniMax." }
     }
   },
   "modelSelect": {
