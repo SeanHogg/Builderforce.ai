@@ -577,19 +577,29 @@ function normaliseUnitsPerHour(units: number, timeUnit: TimeUnit): number {
   return units / timeUnitToHours(timeUnit);
 }
 
+/**
+ * Grade the estimate's confidence (AC-2 / AC-6).
+ *
+ * - Fewer than 3 velocity periods → always **Low** (insufficient data).
+ * - ≥ 3 periods with clean data (low WIP, low blocked ratio) → **High**.
+ * - ≥ 3 periods but with WIP or blocked risk → **Medium**.
+ */
 function computeConfidence(
   periods: number,
-  source: string,
   inProgressPct: number,
   blockedRatio: number,
 ): 'Low' | 'Medium' | 'High' {
-  if (periods >= MIN_PERIODS_FOR_HIGH_CONFIDENCE && inProgressPct <= 30 && blockedRatio <= BLOCKED_VIEWPOINT) {
+  if (periods < MIN_PERIODS_FOR_MEDIUM_CONFIDENCE) {
+    return 'Low';
+  }
+  if (
+    periods >= MIN_PERIODS_FOR_HIGH_CONFIDENCE &&
+    inProgressPct <= WIP_WARNING_THRESHOLD * 100 &&
+    blockedRatio <= BLOCKED_RATIO_FLAG
+  ) {
     return 'High';
   }
-  if (periods >= MIN_PERIODS_FOR_MEDIUM_CONFIDENCE) {
-    return 'Medium';
-  }
-  return 'Low';
+  return 'Medium';
 }
 
 function effectiveHoursPerDay(calendar: CalendarContext, isHumanTrack: boolean): number {
