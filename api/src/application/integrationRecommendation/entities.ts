@@ -123,7 +123,6 @@ export async function recordClick(
   event: RecommendationEvent
 ): Promise<void> {
   await db.insert(recommendations).values({
-    tenant_id: null,
     provider: event.provider,
     surface: event.surface,
     event_type: "click",
