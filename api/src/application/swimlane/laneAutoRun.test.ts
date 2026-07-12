@@ -242,4 +242,3 @@ describe('AC-style: auto-run fires exactly once per assignment', () => {
     expect(decision1.agentRef).toBe(decision2.agentRef);
   });
 });
-});
