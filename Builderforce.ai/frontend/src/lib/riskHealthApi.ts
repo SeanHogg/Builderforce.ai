@@ -19,8 +19,6 @@ import type {
 
 const API_BASE_PATH = '/api/v2';
 
-const API_BASE_PATH = '/api/v2';
-
 export interface RiskHealthApiResponse {
   summary: RiskHealthSummary;
   items: RiskHealthItemsResponse;
