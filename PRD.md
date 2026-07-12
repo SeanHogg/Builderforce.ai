@@ -189,16 +189,16 @@ A complete, valid example payload MUST be included in the documentation and kept
 
 ## Acceptance Criteria
 
-| # | Criterion |
-|---|---|
-| AC-1 | A published JSON Schema file validates all required fields and rejects payloads missing `schema_version`, `basis_id`, `agent_id`, `claims`, or `evidence`. |
-| AC-2 | At least one agent integration emits a payload that passes validation without manual patching. |
-| AC-3 | At least one board integration renders `claims`, `evidence`, `reasoning_chain`, and `uncertainty` from a valid payload without code changes. |
-| AC-4 | `confidence` and `weight` values outside `[0.0, 1.0]` are rejected by the schema. |
-| AC-5 | A payload with `parent_basis_id` set correctly chains to a prior payload retrievable by `basis_id`. |
-| AC-6 | Unknown fields outside `extensions` cause a validation warning (not a hard error) in consumer logs. |
-| AC-7 | The full canonical example payload is present in the documentation and passes schema validation. |
-| AC-8 | Schema version `1.0.0` is tagged in version control with a changelog entry. |
+| # | Criterion | Verified by |
+|---|-----------|-------------|
+| AC-1 | A published JSON Schema file validates all required fields and rejects payloads missing `schema_version`, `basis_id`, `agent_id`, `claims`, or `evidence`. | Review (required-fields check) |
+| AC-2 | At least one agent integration emits a payload that passes validation without manual patching. | Not verified in ratification; future PR |
+| AC-3 | At least one board integration renders `claims`, `evidence`, `reasoning_chain`, and `uncertainty` from a valid payload without code changes. | Not verified in ratification; future PR |
+| AC-4 | `confidence` and `weight` values outside `[0.0, 1.0]` are rejected by the schema. | Review; Test Evidence (test cases 5–8) |
+| AC-5 | A payload with `parent_basis_id` set correctly chains to a prior payload retrievable by `basis_id`. | Review (optional chaining semantics) |
+| AC-6 | Unknown fields outside `extensions` cause a validation warning (not a hard error) in consumer logs. | Review (additionalProperties: true) |
+| AC-7 | The full canonical example payload is present in the documentation and passes schema validation. | Review; Test Evidence (positive/negative tests) |
+| AC-8 | Schema version `1.0.0` is tagged in version control with a changelog entry. | Review; CHANGELOG.md |
 
 ---
 
