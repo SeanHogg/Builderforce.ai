@@ -32,6 +32,7 @@ import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepo
 import { TaskType, TaskPriority } from '../../domain/shared/types';
 import { publishKnowledgeDoc } from '../knowledge/publishKnowledgeDoc';
 import { recordIncidentLearning } from './incidentLearning';
+import { fireEventTriggers } from '../workflow/eventTriggers';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -259,6 +260,18 @@ export class IncidentService {
     let warRoomChatId: number | null = null;
     if (input.openWarRoom) warRoomChatId = await this.ensureWarRoom(tenantId, incidentId, title, projectId);
 
+    // Fire any custom workflows listening for a new incident (best-effort — a
+    // workflow can automate the response: notify stakeholders, run a runbook, etc.).
+    try {
+      await fireEventTriggers(this.db, {
+        tenantId,
+        eventType: 'incident-created',
+        payload: { incidentId, title, severity, source, affectedSystem: affectedSystem ?? null, projectId },
+        sourceIncidentId: incidentId,
+        match: { severity, affectedSystem: affectedSystem ?? null, incidentSource: source },
+      });
+    } catch { /* event-trigger dispatch is best-effort */ }
+
     return { incidentId, boardTaskId, warRoomChatId, created: true };
   }
 
@@ -315,7 +328,7 @@ export class IncidentService {
     }
     const [inc] = await this.db.update(prodIncidents).set(set)
       .where(and(eq(prodIncidents.id, incidentId), eq(prodIncidents.tenantId, tenantId)))
-      .returning({ boardTaskId: prodIncidents.boardTaskId });
+      .returning({ boardTaskId: prodIncidents.boardTaskId, severity: prodIncidents.severity, affectedSystem: prodIncidents.affectedSystem, source: prodIncidents.source });
     if (!inc) throw new Error('Incident not found in workspace');
 
     if (inc.boardTaskId != null && (patch.status || patch.severity)) {
@@ -331,6 +344,17 @@ export class IncidentService {
         actorRef: patch.actorRef ?? 'system',
         message: `Status → ${patch.status}`,
       });
+
+      // Fire custom workflows listening for a status transition (and, on resolve, the
+      // dedicated incident-resolved event — e.g. auto-draft a post-mortem). Best-effort.
+      const payload = { incidentId, status: patch.status, severity: inc.severity, affectedSystem: inc.affectedSystem, source: inc.source };
+      const match = { severity: inc.severity, affectedSystem: inc.affectedSystem };
+      try {
+        await fireEventTriggers(this.db, { tenantId, eventType: 'incident-status-change', payload, sourceIncidentId: incidentId, match: { ...match, status: patch.status } });
+        if (patch.status === 'resolved') {
+          await fireEventTriggers(this.db, { tenantId, eventType: 'incident-resolved', payload, sourceIncidentId: incidentId, match });
+        }
+      } catch { /* event-trigger dispatch is best-effort */ }
     }
   }
 

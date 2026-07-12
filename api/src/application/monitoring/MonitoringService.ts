@@ -22,6 +22,7 @@ import { EscalationService } from '../incident/EscalationService';
 import { findTenantIncidentManagerRef, dispatchIncidentTriage } from '../incident/incidentDispatch';
 import { comparatorMatches } from '../alerts/runAlertSweep';
 import { evaluateMetric } from '../alerts/metricEvaluators';
+import { fireEventTriggers } from '../workflow/eventTriggers';
 import type { EvaluateMetricArgs } from '../alerts/metricEvaluators';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -241,6 +242,24 @@ export class MonitoringService {
       status: 'breached', currentIncidentId: opened.incidentId, lastStatusChangeAt: new Date(), updatedAt: new Date(),
     }).where(eq(monitors.id, monitor.id));
     await this.addEvent(tenantId, monitor.id, { kind: 'breach', status: 'breached', message, incidentId: opened.incidentId });
+
+    // Fire any custom workflows listening for a monitor breach (best-effort — the
+    // opened incident already fired incident-created; this is the monitor-scoped event
+    // so a workflow can react to the alert itself, e.g. auto-remediate the system).
+    try {
+      await fireEventTriggers(this.db, {
+        tenantId,
+        eventType: 'monitor-breach',
+        payload: {
+          monitorId: monitor.id, label: monitor.label, monitorType: monitor.monitorType,
+          severity: monitor.severity, affectedSystem: monitor.affectedSystem ?? null,
+          incidentId: opened.incidentId, message,
+        },
+        sourceMonitorId: monitor.id,
+        sourceIncidentId: opened.incidentId,
+        match: { severity: monitor.severity, affectedSystem: monitor.affectedSystem ?? null, monitorType: monitor.monitorType },
+      });
+    } catch { /* event-trigger dispatch is best-effort */ }
 
     // Page on-call + dispatch the Incident Manager to triage (best-effort).
     if (opened.created) {
