@@ -1,19 +1,28 @@
 /** Validation Engine
 
 Core validation logic: contract evaluation, error generation, output quarantine,
-and a safeRun wrapper. Works both inside the plugin and offline (CLI).
+and hooks usable by both the plugin and CLI (FR-2/3). Does not import plugin SDK stubs.
+
+type-exact export signatures for the core validators; any non-exported field or stub
+should be marked optional/guarded in the implementation so that bundlers don’t crash
+on missing exports.
 */
 
 import Ajv, { ValidateFunction } from "ajv";
-import { buildFailedRules, applyConstraint, type ValidatedRule } from "./rules.js";
-import type { ContractMode, FailureMode, Schema } from "./types.js";
 
 const AJV = new Ajv({ allErrors: true, strict: false });
 
 /** Evaluate a schema against a payload. Supports JSON Schema or assertion function. */
-export async function validatePayload(payload: unknown, schema?: Schema): Promise<{
+export async function validatePayload(
+  payload: unknown,
+  schema?: Schema,
+): Promise<{
   ok: boolean;
-  errors?: Array<{ field_path: string; constraint: string; actual_value: unknown }>;
+  errors?: Array<{
+    field_path: string;
+    constraint: string;
+    actual_value: unknown;
+  }>;
 }> {
   if (!schema) {
     return { ok: true };
@@ -23,9 +32,15 @@ export async function validatePayload(payload: unknown, schema?: Schema): Promis
       const result = schema(payload);
       return result instanceof Promise
         ? { ok: await result, errors: result instanceof Promise ? [{ field_path: "<function_check>", constraint: "custom assertion", actual_value: payload }] : [] }
-        : { ok: Boolean(result), errors: !result ? [{ field_path: "<function_check>", constraint: "custom assertion", actual_value: payload }] : [] };
+        : {
+            ok: Boolean(result),
+            errors: !result ? [{ field_path: "<function_check>", constraint: "custom assertion", actual_value: payload }] : [],
+          };
     } catch (e) {
-      return { ok: false, errors: [{ field_path: "<function_check>", constraint: e instanceof Error ? e.message : "custom assertion failed", actual_value: payload }] };
+      return {
+        ok: false,
+        errors: [{ field_path: "<function_check>", constraint: e instanceof Error ? e.message : "custom assertion failed", actual_value: payload }],
+      };
     }
   }
   let validate: ValidateFunction;
@@ -84,15 +99,32 @@ export function setValidationEmit(run_id: string, step_id: string, contract_type
 export function generateValidationError(
   step_id: string,
   contract_type: "input" | "output",
-  failed_rules: Array<{ field_path: string; constraint: string; actual_value: unknown }>,
+  failed_rules: ReadonlyArray<{
+    readonly field_path: string;
+    readonly constraint: string;
+    readonly actual_value: unknown;
+  }>,
   metadata: {
     step_name?: string;
     pipeline_run_id?: string;
-    failure_mode?: FailureMode;
+    failure_mode?: string;
     actor?: string;
     timestamp?: string;
   } = {},
-): { step_id: string; step_name?: string; contract_type: "input" | "output"; failed_rules: Array<{ field_path: string; constraint: string; actual_value: unknown }>; pipeline_run_id?: string; timestamp?: string; failure_mode?: FailureMode; actor?: string } {
+): {
+  step_id: string;
+  step_name?: string;
+  contract_type: "input" | "output";
+  failed_rules: ReadonlyArray<{
+    readonly field_path: string;
+    readonly constraint: string;
+    readonly actual_value: unknown;
+  }>;
+  pipeline_run_id?: string;
+  timestamp?: string;
+  failure_mode?: string;
+  actor?: string;
+} {
   return {
     step_id,
     step_name: metadata.step_name,
@@ -106,7 +138,11 @@ export function generateValidationError(
 }
 
 /** Quarantine invalid output. */
-export function quarantineOutput(output: unknown, reason: string): { output: unknown; quarantined: boolean; metadata?: Record<string, unknown> } {
+export function quarantineOutput(output: unknown, reason: string): {
+  output: unknown;
+  quarantined: boolean;
+  metadata?: Record<string, unknown>;
+} {
   if (typeof output !== "object" || output === null) {
     return { output: { __validation_error: reason }, quarantined: true };
   }
@@ -121,16 +157,52 @@ export function quarantineOutput(output: unknown, reason: string): { output: unk
 
 /** Pre-input validation hook. Works outside the plugin too. */
 export async function preInputValidation(
-  ctx: { run_id?: string; source?: string; metadata?: { step_name?: string; pipeline_run_id?: string } },
+  ctx: {
+    run_id?: string;
+    source?: string;
+    metadata?: Record<string, unknown>;
+  },
   payload: unknown,
   schema?: Schema,
 ): Promise<{
   ok: boolean;
-  error?: { step_id: string; contract_type: "input"; failed_rules: Array<{ field_path: string; constraint: string; actual_value: unknown }>; actor?: string; run_id?: string };
+  error?:
+    | {
+        step_id: string;
+        contract_type: "input";
+        failed_rules: ReadonlyArray<{
+          readonly field_path: string;
+          readonly constraint: string;
+          readonly actual_value: unknown;
+        }>;
+        actor?: string;
+        run_id?: string;
+      }
+    | {
+        step_id: string;
+        contract_type: "input";
+        failed_rules: ReadonlyArray<{
+          readonly field_path: string;
+          readonly constraint: string;
+          readonly actual_value: unknown;
+        }>;
+        actor?: string;
+        run_id?: string;
+      };
   validated_input?: unknown;
 } | {
   ok: false;
-  error: { step_id: string; contract_type: "input"; failed_rules: Array<{ field_path: string; constraint: string; actual_value: unknown }>; actor?: string; run_id?: string };
+  error: {
+    step_id: string;
+    contract_type: "input";
+    failed_rules: ReadonlyArray<{
+      readonly field_path: string;
+      readonly constraint: string;
+      readonly actual_value: unknown;
+    }>;
+    actor?: string;
+    run_id?: string;
+  };
 }> {
   const result = await validatePayload(payload, schema);
   if (result.ok) {
@@ -150,16 +222,52 @@ export async function preInputValidation(
 
 /** Post-output validation hook. Works outside the plugin too. */
 export async function postOutputValidation(
-  ctx: { run_id?: string; source?: string; metadata?: { step_name?: string; pipeline_run_id?: string } },
+  ctx: {
+    run_id?: string;
+    source?: string;
+    metadata?: Record<string, unknown>;
+  },
   output: unknown,
   schema?: Schema,
 ): Promise<{
   ok: boolean;
-  error?: { step_id: string; contract_type: "output"; failed_rules: Array<{ field_path: string; constraint: string; actual_value: unknown }>; actor?: string; run_id?: string };
+  error?:
+    | {
+        step_id: string;
+        contract_type: "output";
+        failed_rules: ReadonlyArray<{
+          readonly field_path: string;
+          readonly constraint: string;
+          readonly actual_value: unknown;
+        }>;
+        actor?: string;
+        run_id?: string;
+      }
+    | {
+        step_id: string;
+        contract_type: "output";
+        failed_rules: ReadonlyArray<{
+          readonly field_path: string;
+          readonly constraint: string;
+          readonly actual_value: unknown;
+        }>;
+        actor?: string;
+        run_id?: string;
+      };
   validated_output?: unknown;
 } | {
   ok: false;
-  error: { step_id: string; contract_type: "output"; failed_rules: Array<{ field_path: string; constraint: string; actual_value: unknown }>; actor?: string; run_id?: string };
+  error: {
+    step_id: string;
+    contract_type: "output";
+    failed_rules: ReadonlyArray<{
+      readonly field_path: string;
+      readonly constraint: string;
+      readonly actual_value: unknown;
+    }>;
+    actor?: string;
+    run_id?: string;
+  };
 }> {
   const result = await validatePayload(output, schema);
   if (result.ok) {
@@ -176,3 +284,8 @@ export async function postOutputValidation(
     },
   };
 }
+
+/** Optional alias for backward compatibility; actual implementation may not include it. */
+export type Schema =
+  | Record<string, unknown>
+  | ((payload: unknown) => boolean | Promise<boolean>);
