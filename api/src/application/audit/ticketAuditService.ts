@@ -32,34 +32,58 @@ export interface TicketAuditResult extends CoverageResult {
   boardId: string | null;
 }
 
+/** The verdict a role can record. `waived`/`delegated` require a reason and are
+ *  role-capability gated at the route (they weaken the standard, so must be audited). */
+export type SignoffVerdict = 'approved' | 'changes_requested' | 'waived' | 'delegated';
+
+/** The verifiable work backing a sign-off — what makes it more than a rubber stamp. */
+export interface SignoffContribution {
+  executionId?: number;
+  prdRevision?: number;
+  prUrl?: string;
+  diffFiles?: string[];
+  reviewThreadRef?: string;
+  toolRunId?: string;
+}
+
 export interface SignoffInput {
   taskId: number;
   roleKey: string;
   laneKey?: string | null;
   memberKind?: string | null;
   memberRef?: string | null;
-  verdict?: 'approved' | 'changes_requested';
+  memberName?: string | null;
+  verdict?: SignoffVerdict;
   summary?: string | null;
+  contribution?: SignoffContribution | null;
+  waiveReason?: string | null;
 }
 
 export class TicketAuditService {
   constructor(private readonly db: Db) {}
 
-  /** Record a role sign-off, then recompute the ticket's audit. */
-  async recordSignoff(env: Env, tenantId: number, input: SignoffInput): Promise<TicketAuditResult> {
+  /** Record a role sign-off (append-only accountability record), then recompute the
+   *  ticket's audit. Returns the audit AND the new sign-off id so callers can link it
+   *  to a manifest participant. */
+  async recordSignoff(env: Env, tenantId: number, input: SignoffInput): Promise<TicketAuditResult & { signoffId: string }> {
+    const signoffId = crypto.randomUUID();
     await this.db.insert(ticketRoleSignoffs).values({
-      id: crypto.randomUUID(),
+      id: signoffId,
       tenantId,
       taskId: input.taskId,
       laneKey: input.laneKey ?? null,
       roleKey: input.roleKey,
       memberKind: input.memberKind ?? null,
       memberRef: input.memberRef ?? null,
+      memberName: input.memberName ?? null,
       verdict: input.verdict ?? 'approved',
       summary: input.summary ?? null,
+      contribution: input.contribution ?? null,
+      waiveReason: input.waiveReason ?? null,
       createdAt: new Date(),
     });
-    return this.computeAudit(env, tenantId, input.taskId);
+    const audit = await this.computeAudit(env, tenantId, input.taskId);
+    return { ...audit, signoffId };
   }
 
   /**
@@ -232,6 +256,9 @@ export class TicketAuditService {
     const changesRequestedRoles = new Set<string>();
     for (const [role, verdict] of latest) {
       if (verdict === 'changes_requested') changesRequestedRoles.add(role);
+      // 'delegated' = handed to another actor, not yet satisfied → leave unmet.
+      else if (verdict === 'delegated') { /* still outstanding */ }
+      // 'approved' and 'waived' (an audited, reasoned exception) both satisfy coverage.
       else approvedRoles.add(role);
     }
 

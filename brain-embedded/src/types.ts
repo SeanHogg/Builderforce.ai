@@ -23,6 +23,20 @@ export interface BrainChat {
  * it to render a TRUTHFUL `learn` step, replacing the old client-side heuristic guess
  * (which both false-positived and, for a connected-but-empty Evermind, false-negatived).
  */
+/** Per-Evermind learn result — mirrors the api `EvermindTargetOutcome`. A surface's
+ *  project can fan out to MANY Everminds (its own head + the IDE builds grouped under
+ *  it); each is named BY ID so the operator can triage which one did/didn't learn. */
+export interface EvermindLearnTarget {
+  /** The Evermind-bearing project id (the build's storage project, or the surface project). */
+  projectId: number;
+  /** Immutable version ref `evermind/project/<t>/<p>/v<version>`; null when unseeded. */
+  ref: string | null;
+  version: number;
+  name: string;
+  learned: boolean;
+  reason: 'not-attached' | 'not-seeded' | 'frozen' | 'too-short' | null;
+}
+
 export interface EvermindLearnOutcome {
   learned: boolean;
   version: number;
@@ -34,6 +48,12 @@ export interface EvermindLearnOutcome {
    *   `frozen` Evermind is read-only · `too-short` no teachable assistant text.
    */
   reason?: 'not-attached' | 'not-seeded' | 'frozen' | 'too-short' | null;
+  /**
+   * Per-Evermind breakdown WITH IDs — present when the chat is project-attached. A
+   * project can target 0, 1, or many Everminds; this names each so "which Evermind
+   * (didn't) learn" is triageable instead of a single ambiguous "this project".
+   */
+  targets?: EvermindLearnTarget[];
 }
 
 /** A single message within a chat. */
@@ -102,6 +122,25 @@ export function attachEvermindLearn<M extends { role: string }>(
  */
 export function formatEvermindLearnStep(outcome: EvermindLearnOutcome | null | undefined): string | null {
   if (!outcome) return null;
+
+  // Multi-target: name EACH Evermind by id + version so a fan-out is triageable — the
+  // operator can't act on a bare "this project has no Evermind" when a project targets
+  // many builds' Everminds. Falls through to the single-line legacy phrasing below when
+  // the server didn't send a per-target breakdown.
+  const targets = outcome.targets;
+  if (targets && targets.length > 0) {
+    const label = (t: EvermindLearnTarget): string => `${t.name} (proj #${t.projectId}${t.version ? ` v${t.version}` : ''})`;
+    const learned = targets.filter((t) => t.learned);
+    const skipped = targets.filter((t) => !t.learned && t.reason && t.reason !== 'too-short');
+    const parts: string[] = [];
+    if (learned.length > 0) parts.push(`Contributed this turn to ${learned.map(label).join(', ')}`);
+    for (const t of skipped) {
+      const why = t.reason === 'not-seeded' ? 'not set up yet' : t.reason === 'frozen' ? 'frozen (read-only)' : String(t.reason);
+      parts.push(`skipped ${label(t)} — ${why}`);
+    }
+    return parts.length > 0 ? `🧠 ${parts.join('; ')}.` : null;
+  }
+
   if (outcome.learned) return `🧠 Contributed this turn to the project Evermind (v${outcome.version}).`;
   switch (outcome.reason) {
     case 'not-attached':
