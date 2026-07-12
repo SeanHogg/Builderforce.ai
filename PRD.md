@@ -1,55 +1,105 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #287
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# PRD: Budget vs. Actual Spend Visibility Feature
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+Finance stakeholders and project managers currently lack a fast, reliable way to compare approved budgets against actual expenditures in real time. This forces manual reconciliation across spreadsheets, ERP exports, and accounting systems, leading to delayed decisions, cost overruns going undetected, and inconsistent reporting across teams.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+**Goal:** Deliver a single, authoritative view that surfaces current budget vs. actual spend — by period, department, project, or cost category — so decision-makers can act before variances become critical.
 
-## Target users / ICP roles
+---
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## Target Users / ICP Roles
+
+| Role | Primary Need |
+|---|---|
+| CFO / VP Finance | Executive summary of total budget health; variance alerts |
+| Finance Analysts | Drill-down into line-item variances; export for audits |
+| Project / Program Managers | Real-time spend against project budgets |
+| Department Heads | Self-service view of their own budget utilization |
+| Procurement Officers | PO commitments vs. remaining budget |
+
+---
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+### In Scope
+- Ingestion of approved budget data (annual, quarterly, project-level)
+- Integration with actuals from connected financial systems (ERP, GL, expense platforms)
+- Real-time or near-real-time (≤ 24 hr refresh) variance calculation
+- Dashboard and tabular views with filtering and drill-down
+- Variance alerting (threshold-based notifications)
+- CSV/Excel export of any view
+
+### Out of Scope
+- Budget *creation* or *approval* workflows
+- Forecasting / predictive spend modeling
+- Payroll or headcount planning
+- Multi-currency conversion (Phase 1)
+- Third-party vendor billing reconciliation
+
+---
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### FR-1 Data Ingestion & Sync
+- **FR-1.1** Connect to at least one ERP/GL source (e.g., NetSuite, SAP, QuickBooks) via API or scheduled file import.
+- **FR-1.2** Accept budget uploads via structured CSV/Excel template.
+- **FR-1.3** Sync actuals on a configurable schedule (minimum daily; real-time webhook support optional).
+- **FR-1.4** Flag and surface data ingestion errors with actionable error messages.
+
+### FR-2 Budget vs. Actual Calculation Engine
+- **FR-2.1** Calculate variance in absolute ($) and percentage (%) terms: `Variance = Budget − Actual`.
+- **FR-2.2** Support aggregation by: fiscal period (month/quarter/year), department, cost center, project, and GL account.
+- **FR-2.3** Support committed spend (open POs/encumbrances) as a distinct line alongside actuals.
+- **FR-2.4** Handle mid-year budget amendments with full audit trail.
+
+### FR-3 Dashboard & Reporting UI
+- **FR-3.1** Summary dashboard showing total budget, total actuals, variance, and % utilized.
+- **FR-3.2** Filterable table view: filter by date range, department, project, cost category.
+- **FR-3.3** Drill-down from summary → department → cost center → individual transaction.
+- **FR-3.4** Visual indicators (RAG status): Green < 90% utilized, Amber 90–100%, Red > 100%.
+- **FR-3.5** Trend chart: monthly budget vs. actuals over the selected fiscal period.
+
+### FR-4 Alerting & Notifications
+- **FR-4.1** User-configurable thresholds (e.g., alert at 80%, 90%, 100% of budget consumed).
+- **FR-4.2** Notifications delivered via in-app alert and email.
+- **FR-4.3** Alerts scoped per department/project so managers only receive relevant notifications.
+
+### FR-5 Access Control
+- **FR-5.1** Role-based access: Executive (all departments), Manager (own department/projects only), Analyst (assigned scope + export).
+- **FR-5.2** All data access logged for audit purposes.
+
+### FR-6 Export
+- **FR-6.1** Export any filtered view to CSV and Excel (.xlsx).
+- **FR-6.2** Export includes all visible columns plus metadata (export timestamp, filters applied, data-as-of timestamp).
+
+---
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+| ID | Criterion |
+|---|---|
+| AC-1 | Given a connected ERP, actuals data refreshes within 24 hours of a transaction posting; timestamp of last sync is visible on the dashboard. |
+| AC-2 | Budget vs. actual variance matches hand-calculated figures from source data to within $0.01 (rounding tolerance). |
+| AC-3 | A department head filtered to their department sees zero data from other departments. |
+| AC-4 | When actual spend crosses a configured threshold, the responsible manager receives an in-app and email notification within 15 minutes. |
+| AC-5 | Drill-down from summary to individual transaction completes in ≤ 3 seconds on a dataset of 500k transactions. |
+| AC-6 | CSV/Excel export of a 10,000-row result set completes in ≤ 30 seconds. |
+| AC-7 | A mid-year budget amendment is reflected in the dashboard within one sync cycle and the prior budget value is preserved in the audit trail. |
+| AC-8 | RAG indicators display correctly: Green when utilization < 90%, Amber 90–100%, Red > 100%. |
+| AC-9 | All ingestion errors surface a human-readable message identifying the affected record and the reason for failure. |
 
-## Out of scope
+---
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## Out of Scope
+
+- Budget request, approval, and versioning workflows
+- Forecasting, predictive analytics, or "spend to complete" projections
+- Payroll, headcount, or workforce cost planning
+- Multi-currency and foreign exchange conversion (deferred to Phase 2)
+- Accounts payable / invoice matching
+- Integration with procurement marketplaces or vendor portals
+- Mobile native application (web-responsive only in Phase 1)
