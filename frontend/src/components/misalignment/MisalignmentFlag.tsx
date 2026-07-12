@@ -1,9 +1,7 @@
 import { Badge, Tooltip, type TooltipContentProps } from '@repo/ui';
 import { AlertTriangle, Info } from 'lucide-react';
-import {
-  priorityLabels,
-  type TaskMisalignmentCheck,
-} from '@/lib/misalignment';
+import { formatExplanation, getExplanationHint, type TaskMisalignmentCheck } from '@/lib/misalignment';
+import { severityColors } from '@/lib/misalignment';
 
 interface MisalignmentFlagProps {
   checks: TaskMisalignmentCheck[];
