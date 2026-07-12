@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS health_profiles (
 
 CREATE INDEX IF NOT EXISTS idx_health_profiles_project ON health_profiles (tenant_id, project_id);
 CREATE INDEX IF NOT EXISTS idx_health_profiles_tenant ON health_profiles (tenant_id);
-CREATE INDEX IF NOT EXISTS idx_health_profiles_actor ON health_profiles (actor_id);
+CREATE INDEX IF NOT EXISTS idx_health_profiles_actor ON health_profiles (actor_ref);
 
 CREATE TABLE IF NOT EXISTS health_profile_versions (
   version_id   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
