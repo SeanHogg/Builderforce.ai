@@ -148,3 +148,5 @@ This audit covers:
 ---
 
 > **PRD updated** — revised on 2025-06-20: replaced/added Root Cause, Fix Implementation, and Review sections with accurate diagnostic checks and sign-offs. Removed placeholders for Requirements/Design/Implementation Notes/Test Evidence, documented that the bug is fixed as of provider-run build ./a while documenting that the current PLATFORM board task status updates via builtin_tasks_update still strip parentTaskId/assignedAgentRef; you must re-pass those fields.
+
+> **PRD changed** — updated on 2025-06-20 by agent-688 (code-creator). Changes: replaced/added Root Cause, Fix Implementation, Review sections with accurate diagnostics and sign-offs; removed outdated placeholders for Requirements/Design/Implementation Notes/Test Evidence.
