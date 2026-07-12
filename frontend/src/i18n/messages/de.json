@@ -7650,7 +7650,10 @@
       },
       "meta": {
         "blurb": "Fügen Sie einen Meta-AI-API-Schlüssel ein, um MUSE-Modelle (muse-spark-1.1) mit Ihrem eigenen Meta-AI-Konto auszuführen."
-      }
+      },
+      "kimi": { "blurb": "Fügen Sie einen Kimi-Code-Aboschlüssel oder Moonshot-API-Schlüssel ein." },
+      "qwen": { "blurb": "Fügen Sie einen Alibaba-DashScope-API-Schlüssel für Qwen-Modelle ein." },
+      "minimax": { "blurb": "Fügen Sie einen MiniMax-API-Schlüssel für MiniMax-Modelle ein." }
     }
   },
   "modelSelect": {

@@ -93,6 +93,11 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     models: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k', 'kimi-k2-0711-preview'],
   },
   {
+    id: 'qwen', brand: 'Qwen', apiKeyEnv: 'QWEN_API_KEY',
+    baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
+    models: ['qwen3-coder-plus', 'qwen3-max', 'qwen-plus', 'qwen-turbo'],
+  },
+  {
     id: 'hyperbolic', brand: 'Hyperbolic', apiKeyEnv: 'HYPERBOLIC_API_KEY',
     baseUrl: 'https://api.hyperbolic.xyz/v1/chat/completions',
     models: ['meta-llama/Llama-3.3-70B-Instruct', 'Qwen/Qwen2.5-72B-Instruct', 'deepseek-ai/DeepSeek-V3'],
