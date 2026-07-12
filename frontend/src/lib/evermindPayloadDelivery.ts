@@ -64,8 +64,10 @@ function validateContributions(contribs: ProjectEvermindContributions): string[]
   if (typeof contribs.teacherModel !== 'string' && contribs.teacherModel !== null) {
     errs.push('teacherModel must be a string or null');
   }
-  if (!(contribs.lastLearnedAt instanceof Date) && (contribs.lastLearnedAt !== null)) {
-    errs.push('lastLearnedAt must be Date or null');
+  if (typeof contribs.lastLearnedAt !== 'string' && contribs.lastLearnedAt !== null) {
+    errs.push('lastLearnedAt must be an ISO string or null');
+  } else if (typeof contribs.lastLearnedAt === 'string' && Number.isNaN(Date.parse(contribs.lastLearnedAt))) {
+    errs.push('lastLearnedAt must be a valid ISO timestamp');
   }
   if (typeof contribs.pending !== 'number' || contribs.pending < 0) {
     errs.push('pending must be a non-negative integer');
