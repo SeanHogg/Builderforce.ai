@@ -1,55 +1,114 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #323
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# PRD: Estimated Impact Metric for Tasks
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+Teams and stakeholders currently have no standardized way to express or surface the business value of individual tasks. Without a consistent impact signal attached to each task, prioritization decisions rely on gut feel, verbal negotiation, or ad-hoc annotations scattered across comments and documents.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+**Goal:** Enable users to attach a structured, human-readable *Estimated Impact* statement to any task — expressing measurable outcomes such as risk reduction, time savings, cost avoidance, or revenue gain — so that individuals and teams can make faster, data-informed prioritization decisions.
 
-## Target users / ICP roles
+---
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## Target Users / ICP Roles
+
+| Role | Primary Need |
+|---|---|
+| **Engineering Manager / Tech Lead** | Justify sprint priorities to stakeholders using quantified value |
+| **Product Manager** | Score and rank backlog items by business impact |
+| **Individual Contributor (IC)** | Understand why a task matters before starting work |
+| **Executive / Director** | Scan portfolio-level impact without reading every ticket |
+
+---
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This document covers the **creation, display, editing, and querying** of an Estimated Impact field on tasks. It does not cover automated impact calculation or ML-based suggestions (see Out of Scope).
+
+---
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### FR-1 — Impact Field on Task
+
+- Every task MUST expose an optional **Estimated Impact** text field.
+- The field accepts a free-text string up to **160 characters**.
+- The field supports a structured micro-format: `[metric] [direction] [magnitude] [timeframe?]`
+  - Examples: `"reduces risk by 15%"`, `"accelerates delivery by 3 days"`, `"saves ~$4 k/month"`
+- The field is nullable; tasks without an entry display a muted placeholder: *"No impact estimate added."*
+
+### FR-2 — Impact Category Tag (Optional Companion)
+
+- Users MAY select one **Impact Category** from a fixed enum to aid filtering:
+  - `risk_reduction` | `time_savings` | `cost_avoidance` | `revenue_gain` | `quality_improvement` | `other`
+- Category defaults to `other` when free-text is entered but no category is chosen.
+
+### FR-3 — Inline Editing
+
+- The field MUST be editable inline on the task detail view without navigating to a separate settings page.
+- Changes are auto-saved with optimistic UI update; a confirmation toast appears on successful save.
+- Edit history (last 10 versions) is accessible via an *"Impact history"* tooltip/drawer.
+
+### FR-4 — Display in Task Lists & Boards
+
+- When populated, the Estimated Impact value MUST appear as a secondary line or chip beneath the task title in:
+  - List view
+  - Board card (truncated to 60 chars with ellipsis; full value on hover)
+  - Task detail header
+
+### FR-5 — Filtering & Sorting
+
+- Users MUST be able to **filter** the task list by Impact Category.
+- Users MUST be able to **sort** tasks by whether an impact estimate is present (populated first / populated last).
+- Full-text search across impact statements MUST be supported within the existing search surface.
+
+### FR-6 — Bulk Edit
+
+- Users with edit permissions MUST be able to bulk-assign Impact Category to multiple selected tasks.
+- Bulk edit does NOT overwrite existing free-text; it only sets/changes the category tag.
+
+### FR-7 — API & Data Model
+
+- The `task` resource in the REST API MUST expose:
+  - `estimated_impact` (string | null, max 160 chars)
+  - `impact_category` (enum | null)
+  - `impact_updated_at` (ISO-8601 timestamp | null)
+  - `impact_updated_by` (user ID | null)
+- Both fields MUST be writable via `PATCH /tasks/{id}`.
+- Both fields MUST be included in task export (CSV, JSON).
+
+### FR-8 — Permissions
+
+- **View** impact field: all users with task read access.
+- **Edit** impact field: task assignee, task creator, project members with `contributor` role or above.
+- **Delete / clear** impact field: same as edit; also project `admin`.
+
+---
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+| ID | Criterion |
+|---|---|
+| AC-1 | A user can open any task and type an Estimated Impact string; the value persists after page reload. |
+| AC-2 | Strings exceeding 160 characters are rejected with an inline validation error before save. |
+| AC-3 | The impact value is visible on the task card in Board view, truncated at 60 characters with full value shown on hover. |
+| AC-4 | Filtering the task list by `impact_category = risk_reduction` returns only tasks tagged with that category. |
+| AC-5 | Sorting by "Impact populated" places all tasks with a non-null impact field at the top. |
+| AC-6 | `PATCH /tasks/{id}` with `{ "estimated_impact": "reduces risk by 15%" }` returns `200` and the updated value is reflected immediately in the UI. |
+| AC-7 | A user without `contributor` role sees the impact field as read-only; the edit control is hidden. |
+| AC-8 | Exported CSV contains `estimated_impact` and `impact_category` columns with correct values. |
+| AC-9 | Impact edit history shows the last 10 changes with author and timestamp. |
+| AC-10 | Bulk-assigning a category to 50 tasks completes without error and updates all 50 records. |
 
-## Out of scope
+---
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## Out of Scope
+
+- **Automated / AI-generated impact estimates** — system will not suggest or auto-populate impact values based on task content, code diffs, or historical data.
+- **Quantitative validation** — the system does not validate that numbers or percentages in the free-text are realistic or consistent.
+- **Impact aggregation / roll-up** — summing or averaging impact across epics, milestones, or projects is not included in this release.
+- **Impact vs. actual outcome tracking** — comparing estimated impact to post-completion measured outcomes is a future capability.
+- **Notifications / reminders** — alerting users to tasks missing an impact estimate is out of scope.
+- **Localization of the enum labels** — Impact Category labels will be English-only in v1.
+- **Mobile native apps** — impact field is web-only in this release; mobile app support to follow.
