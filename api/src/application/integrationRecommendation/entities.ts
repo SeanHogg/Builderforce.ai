@@ -110,7 +110,6 @@ export async function recordImpression(
   event: RecommendationEvent
 ): Promise<void> {
   await db.insert(recommendations).values({
-    tenant_id: null, // Placeholder enum fallback if not used; event is non-tombstone type.
     provider: event.provider,
     surface: event.surface,
     event_type: "impression",
