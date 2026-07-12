@@ -19,7 +19,7 @@ interface RenderedItemProps {
   isLoading: boolean;
 }
 
-function RenderedItem({ item, isFirst, isLoading }: RenderedItemProps) {
+function RenderedItem({ item, isLoading }: RenderedItemProps) {
   const t = useTranslations('attentionItems');
   
   // Truncate title to max length per FR2
