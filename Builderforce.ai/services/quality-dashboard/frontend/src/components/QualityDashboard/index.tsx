@@ -35,22 +35,9 @@ export function QualityDashboardView({ initialFilter }: QualityDashboardViewProp
     clearSyncError,
   } = useQualityData(filter);
 
-  // Auto-enable auto-refresh only after first successful data load
-  React.useEffect(() => {
-    if (!loading && bugCountSummary) {
-      setAutoRefresh(true);
-    }
-  }, [loading, bugCountSummary]);
-
-  // Apply initial filter from URL without updating URL yet
-  React.useEffect(() => {
-    setFilter(initialFilter);
-  }, [initialFilter]);
-
   const handleSyncClick = () => {
     clearSyncError();
-    handleSync(); // Refresh using whatever source hooks are configured
-    setAutoRefresh(true);
+    handleSync();
   };
 
   const isStale = useMemo(() => {
