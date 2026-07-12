@@ -135,11 +135,12 @@ export async function loadEvermindPayload(projectId: number): Promise<EvermindPa
     throw toError(issues, clientTs);
   }
   const lastWinningTsMs = Number(lastWinningTs);
+  const learnedMs = serverContribs.lastLearnedAt
+    ? Date.parse(serverContribs.lastLearnedAt)
+    : lastWinningTsMs;
   const snapshot: EvermindPayloadSnapshot = {
     version: serverContribs.version,
-    lastWinningAt: serverContribs.lastLearnedAt instanceof Date
-      ? serverContribs.lastLearnedAt.getTime()
-      : lastWinningTsMs,
+    lastWinningAt: Number.isNaN(learnedMs) ? lastWinningTsMs : learnedMs,
     data: serverContribs,
     capturedAt: clientTs,
   };
