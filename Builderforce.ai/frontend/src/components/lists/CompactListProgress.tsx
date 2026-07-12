@@ -319,7 +319,6 @@ const skeletonPerc: CSSProperties = {
   borderRadius: '4px',
   fontSize: '0.72rem',
   fontWeight: 500,
-  color: 'var(--text-muted)',
   width: '50px',
   textAlign: 'right',
   flex: '0 0 auto',
