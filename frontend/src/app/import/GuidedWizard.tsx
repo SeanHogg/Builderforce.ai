@@ -179,16 +179,16 @@ export default function GuidedWizard({ userId, onCancel }: { userId: string | nu
       {/* Step 1: Fields entry (step-fields) */}
       {step === 'fields' && (
         <div style={{ padding: '24px', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '16px' }}>{t('guided.steps.fields.title')}</h2>
+          <h2 style={{ fontSize: '1.5rem', marginBottom: '16px' }}>Enter Record Details</h2>
 
           {/* Name (required) */}
           <div style={{ marginBottom: '16px' }}>
             <label style={{ fontWeight: '600', marginBottom: '8px', display: 'block' }}>
-              {t('guided.fields.name.label')} <span style={{ color: 'red' }}>*</span>
+              Name <span style={{ color: 'red' }}>*</span>
             </label>
             <input
               type="text"
-              placeholder={t('guided.fields.name.placeholder')}
+              placeholder="Enter the record name"
               value={record.name ?? ''}
               onChange={(e) => handleFieldChange('name', e.target.value)}
               onBlur={() => handleFieldBlur('name')}
