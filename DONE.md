@@ -28,6 +28,22 @@ The operator's headline token-reduction goal: every agent surface should consult
 
 Verification: api + brain-embedded + brain-ui + vscode typecheck 0 errors; 21 memory/learn tests + brain-embedded 112 + brain-ui 5 green; VSIX repackaged. Remaining residuals (Phase E native-loop collapse — needs a live extension host; Evermind panel "list Everminds under this project" view; one live-data chat-scope check) tracked in ROADMAP.
 
+## ✅ RESOLVED 2026-07-12 — Coordinated Role Participation Phases 3–5 COMPLETE (producer gating, Coordinator, evidence, ticket-type templates, incident RCA, Done gate) — mig 0336
+
+Completes the entire `PRD-coordinated-role-participation.md` (all phases) on top of the Phases 1–2 base. mig 0336 (ticket_type/quorum/condition on `swimlane_requirements` + `kanban_template_lane_requirements`, `boards.lifecycle_managed`, `prod_incident_implicated_tasks`).
+
+- **Epic fan-out role hint** — `ChildTaskPlan.roleKey` (LLM decomposer emits a best-fit producer role per child) threads through `TaskService.recommendChildAssignee(projectId, roleKey)` → role-aware `recommendTopAssignee`, closing the last Phase-1 role-blind path.
+- **Finalize-time role attribution + producer PR evidence (§5.6)** — `RuntimeService.update` (the one canonical transition) gained an `onRunFinalized` sink → `attributeRunToManifest`: a terminal run records that the role it ran AS (from `parseActAsRole`, consolidated in `cloudDispatch.ts`) participated, linked to the execution; a PRODUCER with a non-draft PR completes its manifest slot (`recordRunAttribution`). Wired for every surface via `buildRuntimeService`.
+- **Producer hard-gating (FR-3)** — `enforceLaneRequirements` now dispatches the role-capable PRODUCER AS its role on `hard` stages (loop-safe: in_progress/completed never re-dispatched), superseding the fuzzy resolver with `resolveRoleCapableAgents`, and emits `ticket.role.dispatched` hand-off verbs.
+- **Coordinator (§5.5)** — `coordinateTicket` + `POST /api/kanban/tasks/:id/coordinate` (derive manifest + sequence the next required role); `boards.lifecycle_managed` flips the board into Coordinator mode where `evaluateTaskAutoRun` suppresses the assignee→executor owner-fallback entirely (assignee = Coordinator, never executor).
+- **Ticket-type + quorum + condition** — shared `requirementApplies` (ticket-type + `is_security`/`has_ui_change`/`is_data_change`) applied across audit + manifest + gate; quorum-aware `computeCoverage` + gate (2-of-3 reviewers advance on the 2nd approval — AC-4); wired through template read/write/apply. New **`STANDARD_SWE_V2`** lifecycle template (BA→Design→Implement→Review-quorum→Test→Business-Validation, security review scoped to security tickets — AC-8).
+- **approvals↔sign-off bridge (§5.8)** — a `task.execution` gate approval carries the run's `roleKey`; resolving it approved/rejected records the corresponding `ticket_role_signoffs` row (human as the role) + syncs the manifest + emits activity.
+- **Structured PRD sections + 3-copy reconcile (§5.7)** — `scaffoldPrdSections` gives every task PRD anchored per-role sections; a failed repo `PRD.md` commit now emits `ticket.prd.reconcile_needed` instead of silently diverging.
+- **Incident RCA linkage (§5.10)** — `prod_incident_implicated_tasks` + `IncidentService.link/unlink/listImplicatedTasks` (each implicated ticket WITH its Accountability Report) + `GET/POST/DELETE /api/incidents/:id/implicated` + an **Implicated tickets & accountability** section on the incident detail panel (localized 5 catalogs, %-complete + gaps).
+- **Done gate (AC-2)** — `TicketParticipantsService.doneGate`: on a lifecycle-managed board, a `PATCH` moving a ticket to a terminal lane with outstanding required participants returns **409** naming the outstanding roles.
+
+Verification: api `tsgo` clean, frontend `tsc` clean, schema-drift + migrations + tracks pass, `vitest` **321 green** across swimlane/audit/kanban/task/runtime/incident (incl. new quorum + #467 + diagnostic-threshold cases).
+
 ## ✅ RESOLVED 2026-07-12 — Coordinated Role Participation Phase 3/4 foundation (capability-resolver upgrade + reviewer attribution + diagnostic pass-gating)
 
 Three safe, fully-wired follow-ups to Phases 1–2 (no migration — all read-time/logic):

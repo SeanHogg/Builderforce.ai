@@ -9273,7 +9273,18 @@
     "deleteContactConfirm": "Kontakt „{name}“ löschen?",
     "oncallSubtitle": "Bereitschaftsrotationen legen fest, wer bei einem Vorfall zuerst alarmiert wird.",
     "escalationSubtitle": "Eskalationsrichtlinien durchlaufen Ziele und Kanäle, bis jemand reagiert.",
-    "contactsSubtitle": "Geschäftskontakte, die Sie während eines Vorfalls alarmieren oder eskalieren können."
+    "contactsSubtitle": "Geschäftskontakte, die Sie während eines Vorfalls alarmieren oder eskalieren können.",
+    "implicated": {
+      "title": "Betroffene Liefertickets",
+      "help": "Das/die Lieferticket(s), deren Änderung diesen Vorfall verursacht hat — je mit Verantwortlichkeit, damit die RCA sieht, wo der Prozess übersprungen oder erlassen wurde.",
+      "loading": "Wird geladen…",
+      "empty": "Noch keine betroffenen Tickets verknüpft.",
+      "signed": "{done}/{total} freigegeben",
+      "gaps": "{count} Lücke(n)",
+      "remove": "Entfernen",
+      "add": "Ticket verknüpfen",
+      "addPlaceholder": "Ticket-Nr."
+    }
   },
   "monitoring": {
     "boardsTitle": "Aktive Überwachung",
