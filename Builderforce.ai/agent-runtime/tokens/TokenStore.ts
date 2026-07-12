@@ -22,7 +22,7 @@ export interface TokenProvider {
 
 /**
  * AuthError: thrown when token refresh fails and execution cannot continue.
- * Clear, structure; differentiable from legitimate null fields.
+ * Clear, structured, distinguishable from legitimate null fields.
  */
 export class AuthError extends Error {
   constructor(
@@ -113,7 +113,7 @@ export class TokenStore {
     }
 
     // Schedule proactive refresh for next time, if not already scheduled.
-    if (isFinite(this.current.exp) && this.current.exp > epochSecs) {
+    if (this.current.exp > epochSecs && isFinite(this.current.exp)) {
       const timeUntilExpiry = this.current.exp - epochSecs;
       const proactiveDelay = Math.max(
         1000,
@@ -126,9 +126,13 @@ export class TokenStore {
 
       this.proactiveTimer = setTimeout(
         () => {
-          triggerProactiveRefresh(this.current?.value ?? "").catch((e) => {
-            console.error("[TokenStore] proactive refresh failed:", e);
-          });
+          (async () => {
+            try {
+              await this.triggerProactiveRefresh();
+            } catch (e) {
+              console.error("[TokenStore] proactive refresh failed:", e);
+            }
+          })();
         },
         proactiveDelay
       );
@@ -175,7 +179,7 @@ export class TokenStore {
    * Proactive refresh helper (async callable).
    */
   private async triggerProactiveRefresh(): Promise<void> {
-    if (!this.current || !isFinite(this.current.exp)) {
+    if (!this.current || !this.current.exp || this.current.exp <= 0) {
       return;
     }
 
@@ -186,7 +190,55 @@ export class TokenStore {
     }
 
     const token = this.current.value.slice(7); // Strip "Bearer "
-    return triggerProactiveRefresh(token);
+
+    try {
+      await this.provideProactiveRefresh(token);
+    } catch (e) {
+      console.error("[TokenStore] proactive refresh failed:", e);
+      throw e;
+    }
+  }
+
+  async provideProactiveRefresh(prefixedToken: string): Promise<void> {
+    const epochSecs = Math.floor(Date.now() / 1000);
+    const freshTokenData = await this.provider.acquire();
+
+    // Update state (guarded; token values are validated by provider).
+    const freshRaw = freshTokenData.startsWith("Bearer ")
+      ? freshTokenData.slice(7)
+      : freshTokenData;
+
+    this.current = {
+      value: `Bearer ${freshRaw.trim()}`,
+      exp: this.extractExpiry(freshTokenData),
+      issuedAt: epochSecs,
+    };
+
+    // Schedule next refresh for the new token.
+    if (this.current.exp > epochSecs && isFinite(this.current.exp)) {
+      const timeUntilExpiry = this.current.exp - epochSecs;
+      const proactiveDelay = Math.max(
+        1000,
+        (timeUntilExpiry - this.options.refreshBufferSeconds) * 1000
+      );
+
+      if (this.proactiveTimer) {
+        clearTimeout(this.proactiveTimer);
+      }
+
+      this.proactiveTimer = setTimeout(
+        () => {
+          (async () => {
+            try {
+              await this.triggerProactiveRefresh();
+            } catch (e) {
+              console.error("[TokenStore] proactive refresh failed:", e);
+            }
+          })();
+        },
+        proactiveDelay
+      );
+    }
   }
 
   async getToken(): Promise<string | null> {
@@ -202,8 +254,10 @@ export class TokenStore {
     }
 
     // Token is expired or theoretical expired. Fail fast if a current refresh is in progress.
-    if (this.currentPromise) {
-      return null; // Not back in sync; wait for underlying refresh.
+    const currentPromise = this.currentPromise;
+    if (currentPromise) {
+      const refreshResult = await currentPromise;
+      return refreshResult.success ? refreshResult.token ?? null : null;
     }
 
     // Trigger fresh token acquisition.
@@ -224,14 +278,11 @@ export class TokenStore {
     const epochSecs = Math.floor(Date.now() / 1000);
     const freshTokenData = await this.provider.acquire();
 
-    // Update our internal state.
     const result = await this.acquireInMemory(freshTokenData);
 
-    // Reset retry counter on success.
     if (result.success && this.refreshAttemptCount > 0) {
       this.refreshAttemptCount = 0;
-    }
-    if (!result.success) {
+    } else if (!result.success) {
       this.refreshAttemptCount++;
       const logMsg = `[TokenStore] refresh attempt ${this.refreshAttemptCount} failed: ${result.error}`;
       console.warn(logMsg);
@@ -250,18 +301,17 @@ export class TokenStore {
       return false;
     }
     const epochSecs = Math.floor(Date.now() / 1000);
-    return epochSecs < info.exp && isFinite(info.exp);
+    return epochSecs < info.exp;
   }
 
   /**
    * Supervised fallback expiry if JWT exp cannot be parsed.
-   * Cap at maxTtl to prevent infinite construed expiry.
+   * Cap at maxTtl to prevent indefinite expiry.
    */
   private defaultTtlCap(): number {
-    // Approximate token server TTL (gap to expiry). Use 90s minimum, 120s typical.
     const baseTtl = 90;
     const maxTtl = 120;
-    return Math.min(baseTtl * 2, maxTtl); // 180s max even if JWT fails.
+    return Math.min(baseTtl * 2, maxTtl); // 180s max
   }
 
   getDebugInfo(): {
@@ -276,12 +326,13 @@ export class TokenStore {
     const earliest = info?.exp ?? 0;
     return {
       current: info,
-      expired: epochSecs >= earliest && isFinite(earliest),
+      expired: epochSecs >= earliest,
       processing: !!this.currentPromise,
-      expiresAt: (isFinite(earliest) && earliest > epochSecs) ? new Date(earliest * 1000) : undefined,
-      nextRefreshMs: this.proactiveTimer
-        ? Math.max(0, ((earliest - this.options.refreshBufferSeconds - epochSecs) * 1000))
-        : undefined,
+      expiresAt: earliest > epochSecs ? new Date(earliest * 1000) : undefined,
+      nextRefreshMs:
+        this.proactiveTimer != null && isFinite(earliest)
+          ? Math.max(0, ((earliest - this.options.refreshBufferSeconds - epochSecs) * 1000))
+          : undefined,
     };
   }
 
@@ -296,11 +347,12 @@ export class TokenStore {
   /**
    * Clears internal state (used for testing or explicit logout).
    */
-  clear(): void {
-    if (this.proactiveTimer) {
+  async clear(): Promise<void> {
+    if (this.proactiveTimer != null) {
       clearTimeout(this.proactiveTimer);
       this.proactiveTimer = null;
     }
+
     this.currentPromise = null;
     this.current = null;
     this.pendingRequest = null;
@@ -309,21 +361,36 @@ export class TokenStore {
 }
 
 /**
- * Proactive refresh (parallel-safe).
- * Call as a top-level outside method to avoid lockups.
+ * TokenStoreManager: Singleton that provides proactive refresh for tests and other callers.
  */
-async function triggerProactiveRefresh(tokenPrefixed: string): Promise<void> {
-  // Pass empty shim provider to avoid cycles.
-  const provider: TokenProvider = {
-    async acquire(): Promise<string> {
-      throw new Error("triggerProactiveRefresh is an async-only entry point; you must pass an actual provider.");
-    },
-  };
+export class TokenStoreManager {
+  private static instance: TokenStore | null = null;
 
-  const store = new TokenStore(provider);
-  try {
-    await store.performAcquire(); // run logic in parallel
-  } catch (err) {
-    console.error("[TokenStore] proactive refresh failure:", err);
+  static getInstance(provider: TokenProvider, refreshOptions?: Partial<RefreshOptions>): TokenStore {
+    if (!this.instance) {
+      this.instance = new TokenStore(provider, refreshOptions);
+    }
+    return this.instance;
   }
+
+  static reset(): void {
+    if (this.instance) {
+      this.instance.clear().catch(console.error);
+      this.instance = null;
+    }
+  }
+}
+
+/**
+ * AuthError serializers.
+ */
+export function toAuthError(err: unknown, executionId: string, operation: string, status?: number): never {
+  if (err instanceof AuthError) {
+    return err;
+  }
+  let message = "Authentication failed";
+  if (err instanceof Error) {
+    message = err.message;
+  }
+  throw new AuthError(message, executionId, operation, status);
 }
