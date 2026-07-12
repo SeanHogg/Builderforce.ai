@@ -354,27 +354,37 @@ const skeletonLabel: CSSProperties = {
   whiteSpace: 'nowrap',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
-  minWidth: '120px',
-  maxWidth: '300px',
-  flex: '0 0 auto',
+  flex: '1 1 40%',
+  minWidth: 0,
+  maxWidth: 300,
 };
 
 const skeletonBar: CSSProperties = {
   flex: '1 1 auto',
   height: BAR_HEIGHT,
-  minWidth: '80px',
+  minWidth: '64px',
   borderRadius: '999px',
+  opacity: 0.5,
   background: 'var(--surface-muted, rgba(148, 163, 184, 0.25))',
 };
 
-const skeletonPerc: CSSProperties = {
+const skeletonValue: CSSProperties = {
   color: 'transparent',
   background: 'var(--surface-muted, rgba(148, 163, 184, 0.25))',
   borderRadius: '4px',
   fontSize: '0.72rem',
   fontWeight: 500,
-  width: '50px',
+  width: '44px',
   textAlign: 'right',
   flex: '0 0 auto',
-  minWidth: '60px',
+  whiteSpace: 'nowrap',
+  fontVariantNumeric: 'tabular-nums',
+};
+
+const emptyState: CSSProperties = {
+  fontSize: '0.9rem',
+  color: 'var(--text-muted)',
+  textAlign: 'center',
+  padding: '24px 0',
+  fontStyle: 'italic',
 };
