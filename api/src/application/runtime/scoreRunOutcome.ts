@@ -21,6 +21,7 @@ import { normalizeActionType } from '../llm/actionTypes';
 import { applyOutcomeToRoutingTable } from '../llm/routingTable';
 import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
 import { lexicalEval } from '../eval/semanticEval';
+import { saveDimensionEvidence } from '../eval/evaluationEvidence';
 
 // ── D3 score weights + efficiency normalization (named so they're tunable without a
 //    schema change — see the Gap Register note on score calibration). ────────────
