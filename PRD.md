@@ -1,55 +1,51 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #344
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# Product Requirements Document: Bug Debt Overview
 
-## Problem & Goal
+## 1. Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+### Problem
+Development teams lack a clear, actionable understanding of their open bug backlog. It's difficult to quickly grasp the severity distribution, age profile, and overall trend (growing or shrinking) of existing bugs, leading to challenges in prioritization, resource allocation, and maintaining product quality.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+### Goal
+To provide a consolidated, intuitive view of bug debt, presenting open bugs categorized by severity and age, along with an overarching trend analysis. This enables engineering and product leadership to make data-driven decisions regarding bug resolution and improve product health.
 
-## Target users / ICP roles
+## 2. Target Users / ICP Roles
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+*   **Engineering Managers:** To monitor team health, allocate resources for bug fixes, and track quality initiatives.
+*   **Product Managers:** To understand the impact of technical debt on product roadmap and prioritization.
+*   **Tech Leads / Team Leads:** To guide daily development efforts and triage high-priority issues.
+*   **Release Managers:** To assess release readiness from a bug stability perspective.
 
-## Scope
+## 3. Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This feature will deliver a dashboard or dedicated report page displaying key metrics and visualizations related to open bugs from integrated bug tracking systems.
 
-## Functional Requirements
+## 4. Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+*   **FR1: Total Open Bugs:** Display the current total number of open bugs.
+*   **FR2: Bugs by Severity:** Visualize the distribution of open bugs across defined severity levels (e.g., Critical, High, Medium, Low) using a suitable chart (e.g., pie chart or bar chart).
+*   **FR3: Bugs by Age:** Visualize the distribution of open bugs across defined age buckets (e.g., < 7 days, 7-30 days, 30-90 days, > 90 days) using a suitable chart (e.g., bar chart).
+*   **FR4: Overall Trend:** Display a clear indicator showing whether the total number of open bugs is growing or shrinking compared to a configurable previous period (e.g., last week vs. previous week, last month vs. previous month).
+*   **FR5: Severity Trend:** For each severity level, display an indicator showing whether the number of bugs in that category is growing or shrinking compared to the previous period.
+*   **FR6: Data Source Integration:** Integrate with the primary bug tracking system (e.g., Jira, GitHub Issues) to pull real-time or near real-time bug data.
+*   **FR7: Data Refresh:** Automatically refresh data on a regular interval (e.g., hourly, daily).
 
-## Acceptance Criteria
+## 5. Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+*   **AC1:** All currently open bugs from the integrated bug tracking system are accurately reflected in the total count and distributions.
+*   **AC2:** The "Bugs by Severity" chart correctly categorizes and displays counts for each severity level as defined in the bug tracking system.
+*   **AC3:** The "Bugs by Age" chart correctly categorizes and displays counts for each age bucket based on bug creation date.
+*   **AC4:** The "Overall Trend" indicator accurately calculates the percentage change in total open bugs between the current and previous periods and displays an intuitive visual cue (e.g., up/down arrow, color coding).
+*   **AC5:** The "Severity Trend" indicators accurately calculate percentage change for each severity level and display corresponding visual cues.
+*   **AC6:** All charts and metrics are easily understandable and provide quick insights at a glance.
+*   **AC7:** Data displayed is no more than 24 hours old.
 
-## Out of scope
+## 6. Out of Scope
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+*   **Individual Bug Details:** Direct navigation to individual bug tickets or detailed bug views beyond summary counts.
+*   **Bug Management Actions:** Functionality to edit, assign, prioritize, or resolve bugs directly from this view.
+*   **Forecasting/Prediction:** Predictive analytics for future bug trends.
+*   **Custom Filtering:** Advanced filtering options beyond what's specified for core metrics (e.g., filtering by assignee, component).
+*   **Historical Archiving:** Long-term historical data storage and retrieval beyond the trend analysis period.
