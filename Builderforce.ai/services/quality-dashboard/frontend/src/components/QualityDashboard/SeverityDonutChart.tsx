@@ -5,7 +5,7 @@
  */
 
 import React from "react";
-import { SeverityBreakdown } from "../../../types/quality";
+import { SeverityBreakdown } from "../../types/quality";
 import "./SeverityDonutChart.css";
 
 type Severity = "Critical" | "High" | "Medium" | "Low";
