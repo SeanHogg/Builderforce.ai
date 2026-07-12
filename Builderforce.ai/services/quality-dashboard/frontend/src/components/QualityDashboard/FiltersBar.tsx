@@ -5,7 +5,7 @@
  */
 
 import React from "react";
-import { BugFilter } from "../../../types/quality";
+import { BugFilter } from "../../types/quality";
 import "./FiltersBar.css";
 
 interface FiltersBarProps {
