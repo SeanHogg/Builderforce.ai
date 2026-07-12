@@ -12,7 +12,7 @@
  * strings come from an injected {@link ChatTicketsLabels} bundle. Native <select>s
  * keep it dependency-free so both hosts render it identically.
  */
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HealthRing } from '../HealthRing';
 import {
   RUNNABLE_KINDS, TICKET_KINDS,
@@ -49,6 +49,11 @@ export interface ChatTicketsPanelProps {
 
 const RUNNABLE = new Set<TicketKind>(RUNNABLE_KINDS);
 
+/** A chat can accumulate hundreds of linked tickets — auto-collapse the health-ring
+ *  grid past this many so it doesn't push the composer off-screen. The user can still
+ *  expand/collapse manually; once they do, we stop auto-deciding for this chat. */
+const COLLAPSE_THRESHOLD = 8;
+
 function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket }: ChatTicketsPanelProps) {
   const [tickets, setTickets] = useState<TicketLinkVM[]>([]);
   const [agents, setAgents] = useState<ChatAgentVM[]>([]);
@@ -60,6 +65,10 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   const [runKey, setRunKey] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Collapse the ticket grid. `null` = "haven't decided yet" → auto-collapse a long
+  // list on first load; a bool = the user chose, and we respect it from then on.
+  const [collapsed, setCollapsed] = useState<boolean | null>(null);
+  const userCollapsed = useRef(false);
 
   const load = useCallback(async () => {
     const [tk, ag, mem] = await Promise.all([
@@ -70,6 +79,8 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     setTickets(tk);
     setAgents(ag);
     setMembers(mem);
+    // Auto-collapse a long list on first load; never override a user's own choice.
+    if (!userCollapsed.current) setCollapsed(tk.length > COLLAPSE_THRESHOLD);
   }, [adapter, chatId]);
 
   useEffect(() => { void load(); }, [load, refreshSignal]);
@@ -102,9 +113,41 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     } finally { setBusy(false); }
   };
 
+  // Roll the linked tickets up into one overall % for the collapsed header ring:
+  // work-weighted (Σdone / Σtotal) when any ticket has sub-items, else the mean of
+  // the per-ticket rings so a flat list of leaf tasks still reads a sensible number.
+  const agg = useMemo(() => {
+    let done = 0, total = 0, sumPct = 0;
+    for (const tk of tickets) { done += tk.done; total += tk.total; sumPct += tk.progressPct; }
+    const pct = total > 0 ? Math.round((done / total) * 100)
+      : tickets.length ? Math.round(sumPct / tickets.length) : 0;
+    return { pct, done, total };
+  }, [tickets]);
+
+  const isCollapsed = tickets.length > 0 && (collapsed ?? tickets.length > COLLAPSE_THRESHOLD);
+  const toggleCollapsed = () => { userCollapsed.current = true; setCollapsed(!isCollapsed); };
+
   return (
     <div style={S.root}>
+      {/* Collapsible header — one row summarising the linked tickets so a chat with
+          hundreds of them stays compact. Click to expand/collapse the ring grid. */}
+      {tickets.length > 0 && (
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          aria-expanded={!isCollapsed}
+          title={isCollapsed ? labels.showTickets : labels.hideTickets}
+          style={S.ticketsHeader}
+        >
+          <span aria-hidden style={{ ...S.caret, transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)' }}>▸</span>
+          <HealthRing percent={agg.pct} size={22} muted={false} ariaLabel={labels.overallAria(agg.pct)} />
+          <span style={S.ticketsCount}>{labels.ticketCount(tickets.length)}</span>
+          <span style={S.ticketsAgg}>{agg.pct}%{agg.total > 0 ? ` · ${agg.done}/${agg.total}` : ''}</span>
+        </button>
+      )}
+
       {/* Health rings for linked tickets */}
+      {!isCollapsed && (
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         {tickets.length === 0 ? (
           <span style={S.muted}>{labels.none}</span>
@@ -142,6 +185,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
           );
         })}
       </div>
+      )}
 
       {/* Lineage drawer */}
       {lineageKey && (
@@ -411,6 +455,12 @@ const V = {
 const S = {
   root: { margin: '4px 0 0', padding: '8px 10px', border: `1px solid ${V.border}`, borderRadius: 10, background: V.surface, display: 'flex', flexDirection: 'column', gap: 8 } as React.CSSProperties,
   muted: { fontSize: 12, color: V.muted } as React.CSSProperties,
+  // Collapsible ticket-summary header — full-width, button-reset, subtle hover-less
+  // affordance that carries a caret, an overall health ring and the linked count.
+  ticketsHeader: { display: 'flex', alignItems: 'center', gap: 8, padding: '2px 4px', width: '100%', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', color: V.text } as React.CSSProperties,
+  caret: { display: 'inline-block', fontSize: 11, color: V.muted, transition: 'transform 120ms ease' } as React.CSSProperties,
+  ticketsCount: { fontSize: 12, fontWeight: 600, color: V.text } as React.CSSProperties,
+  ticketsAgg: { fontSize: 11, color: V.muted } as React.CSSProperties,
   chip: { display: 'flex', alignItems: 'center', gap: 6, padding: '2px 6px', border: `1px solid ${V.border}`, borderRadius: 8 } as React.CSSProperties,
   ticketLabel: { fontSize: 12, fontWeight: 600, color: V.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as React.CSSProperties,
   // Clickable variant of the label — opens the artifact. Underlined-on-hover link

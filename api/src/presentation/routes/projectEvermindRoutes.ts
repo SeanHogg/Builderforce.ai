@@ -30,6 +30,7 @@ import { seedProjectEvermindFromPublished } from '../../application/llm/evermind
 import {
   getProjectEvermindHead,
   resolveEvermindTargets,
+  contributeTextToProjectEverminds,
   seedProjectEvermind,
   setProjectEvermindMode,
   setProjectEvermindInference,
@@ -158,13 +159,26 @@ async function learnCore(env: Env, db: Db, tenantId: number, projectId: number, 
  * raw run text; the coordinator adapts+diffs it IN ITS ALARM, so no caller pays
  * training CPU. `{ text, weight? }`.
  */
-async function learnTextCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context): Promise<Response> {
+/**
+ * Contribute run/teach text to a project's Evermind. `fanOut` distinguishes the two
+ * callers of this door: the on-prem RUN contribution (agent front door) targets the
+ * project's WHOLE Evermind set (self + IDE builds) via {@link contributeTextToProjectEverminds};
+ * the explicit "Teach a task" UI (JWT front door) targets the ONE Evermind in the URL.
+ */
+async function learnTextCore(env: Env, db: Db, tenantId: number, projectId: number, c: Context, fanOut = false): Promise<Response> {
   if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
   const body = (await c.req.json<{ text?: unknown; weight?: unknown; prompt?: unknown }>().catch(() => ({}))) as { text?: unknown; weight?: unknown; prompt?: unknown };
   const text = typeof body.text === 'string' ? body.text : '';
   if (!text.trim()) return json({ error: 'text is required' }, 400);
   const prompt = typeof body.prompt === 'string' ? body.prompt : undefined;
-  const result = await dispatchProjectEvermindLearnText(env, tenantId, projectId, text, typeof body.weight === 'number' ? body.weight : undefined, prompt);
+  const weight = typeof body.weight === 'number' ? body.weight : undefined;
+  if (fanOut) {
+    const contributed = await contributeTextToProjectEverminds(env, db, tenantId, projectId, text, weight, prompt);
+    // `baseVersion` kept for on-prem back-compat (it reads a single version); `contributed`
+    // names every Evermind that received the text.
+    return json({ ok: true, contributed, ...(contributed[0] ? { baseVersion: contributed[0].version } : {}) });
+  }
+  const result = await dispatchProjectEvermindLearnText(env, tenantId, projectId, text, weight, prompt);
   return json(result.body, result.status);
 }
 
@@ -365,7 +379,8 @@ export function createProjectEvermindAgentRoutes(db: Db): Hono<HonoEnv> {
   router.post('/:projectId/evermind/learn-text', async (c) => {
     const tenantId = await auth(c);
     if (tenantId == null) return json({ error: 'unauthorized' }, 401);
-    return learnTextCore(c.env as Env, db, tenantId, pid(c), c);
+    // On-prem RUN contribution → fan out to the project's whole Evermind set.
+    return learnTextCore(c.env as Env, db, tenantId, pid(c), c, true);
   });
 
   return router;

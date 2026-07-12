@@ -115,6 +115,8 @@ function timelineLabels(labels: LabelBundle): Partial<BrainTimelineLabels> {
     recallHint: t('tl.recallHint', "This project's self-learning Evermind recalled these prior learnings and grounded the answer on them."),
     learnTitle: t('tl.learnTitle', 'Contributed this turn to Evermind v{version}'),
     learnHint: t('tl.learnHint', 'This turn was contributed back to the project Evermind — it will be merged into the learned model.'),
+    learnTargetContributed: t('tl.learnTargetContributed', 'Contributed to {name} (project #{projectId} v{version})'),
+    learnTargetSkipped: t('tl.learnTargetSkipped', 'Skipped {name} (project #{projectId}) — {reason}'),
     reconcileTitle: t('tl.reconcileTitle', 'Reconciled {count} learned memories in Evermind v{version}'),
     reconcileHint: t('tl.reconcileHint', 'The answer restated these recalled learnings, so it updates them (write-through cognition).'),
   };

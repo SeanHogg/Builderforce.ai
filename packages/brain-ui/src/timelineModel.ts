@@ -9,7 +9,7 @@
  * verbatim across surfaces.
  */
 
-import { isStepMessage, type BrainMessage, type BrainTraceEvent, type ChatInputAttachment, type EvermindRecallItem } from '@seanhogg/builderforce-brain-embedded';
+import { isStepMessage, type BrainMessage, type BrainTraceEvent, type ChatInputAttachment, type EvermindRecallItem, type EvermindLearnTarget } from '@seanhogg/builderforce-brain-embedded';
 
 export interface TimelineImage {
   url: string;
@@ -33,7 +33,7 @@ export type TimelineNode =
   | { key: string; kind: 'error'; ts: number; order: number; label: string; message: string }
   // Project-Evermind memory steps — recall (before answering), learn + reconcile (after).
   | { key: string; kind: 'recall'; ts: number; order: number; version: number; count: number; items: EvermindRecallItem[] }
-  | { key: string; kind: 'learn'; ts: number; order: number; version: number; skipped?: BrainLearnSkipReason }
+  | { key: string; kind: 'learn'; ts: number; order: number; version: number; skipped?: BrainLearnSkipReason; targets?: EvermindLearnTarget[] }
   | { key: string; kind: 'reconcile'; ts: number; order: number; version: number; count: number }
   | { key: string; kind: 'streaming'; ts: number; order: number; text: string };
 
@@ -137,9 +137,10 @@ function stepNode(step: StepLike, ts: number, key: string): TimelineNode | null 
       return { key, kind: 'recall', ts, order: ORDER.recall, version: typeof r.version === 'number' ? r.version : 0, count: typeof r.count === 'number' ? r.count : (Array.isArray(r.items) ? r.items.length : 0), items: Array.isArray(r.items) ? r.items : [] };
     }
     case 'learn': {
-      const r = (step.result ?? {}) as { version?: number; skipped?: boolean; reason?: string };
+      const r = (step.result ?? {}) as { version?: number; skipped?: boolean; reason?: string; targets?: EvermindLearnTarget[] };
       const skipped = r.skipped && isLearnSkipReason(r.reason) ? r.reason : undefined;
-      return { key, kind: 'learn', ts, order: ORDER.learn, version: typeof r.version === 'number' ? r.version : 0, ...(skipped ? { skipped } : {}) };
+      const targets = Array.isArray(r.targets) ? r.targets : undefined;
+      return { key, kind: 'learn', ts, order: ORDER.learn, version: typeof r.version === 'number' ? r.version : 0, ...(skipped ? { skipped } : {}), ...(targets ? { targets } : {}) };
     }
     case 'reconcile': {
       const r = (step.result ?? {}) as { count?: number; version?: number };

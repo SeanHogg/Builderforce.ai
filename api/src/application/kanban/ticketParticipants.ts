@@ -137,6 +137,31 @@ export class TicketParticipantsService {
   }
 
   /**
+   * Attribution (§5.6): mark a role's manifest participant as `in_progress`, linked to
+   * the execution it ran as, when that role is dispatched to work the ticket. Best-effort
+   * and non-destructive — only advances a not-yet-active slot (pending/assigned/unstaffed)
+   * so it never overwrites a completed/changes_requested state. No-op if the manifest
+   * isn't derived yet (accountability derives + syncs on read). Bumps the cache.
+   */
+  async markRoleInProgress(env: Env, tenantId: number, taskId: number, roleKey: string, stageKey: string | null, executionId: number): Promise<void> {
+    const all = await this.db
+      .select({ id: ticketParticipants.id, stageKey: ticketParticipants.stageKey, state: ticketParticipants.state, evidence: ticketParticipants.evidence })
+      .from(ticketParticipants)
+      .where(and(eq(ticketParticipants.tenantId, tenantId), eq(ticketParticipants.taskId, taskId), eq(ticketParticipants.roleKey, roleKey)));
+    if (!all.length) return;
+    const advanceable = new Set<ParticipantState>(['pending', 'assigned', 'unstaffed']);
+    // Prefer the slot for this exact stage; fall back to any advanceable slot for the role.
+    const exact = all.filter((r) => r.stageKey === stageKey && advanceable.has(r.state as ParticipantState));
+    const targets = exact.length ? exact : all.filter((r) => advanceable.has(r.state as ParticipantState));
+    if (!targets.length) return;
+    for (const r of targets) {
+      const evidence = { ...(r.evidence && typeof r.evidence === 'object' ? r.evidence : {}), executionId };
+      await this.db.update(ticketParticipants).set({ state: 'in_progress', evidence, updatedAt: new Date() }).where(eq(ticketParticipants.id, r.id));
+    }
+    await this.bump(env, taskId);
+  }
+
+  /**
    * Per-ticket participation progress for a whole project's board — the %-complete
    * chip. Cached on the project version token (bumped on any participant write).
    * Only tickets with a materialized manifest appear.

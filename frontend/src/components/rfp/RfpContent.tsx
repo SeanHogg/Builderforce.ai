@@ -11,11 +11,11 @@ import { fetchProjects } from '@/lib/api';
 import type { Project } from '@/lib/types';
 
 /**
- * RfpPageClient — the RFP/RFQ Response surface. Lists incoming requests with their
- * latest generated proposal summary, and creates a new request (co-brand colours,
- * requirements, greenfield-or-existing grounding, P&L knobs) via the canonical
- * SlideOutPanel. Writes are gated to developer+ (mirrors the server requireRole).
- * Fully localized + themed for light/dark + mobile.
+ * RfpContent — the RFP/RFQ Response surface, rendered as a tab UNDER Projects
+ * (not a top-level menu item). Lists incoming requests with their latest generated
+ * proposal summary, and creates a new request (co-brand colours, requirements,
+ * greenfield-or-existing grounding, P&L knobs) via the canonical SlideOutPanel.
+ * Writes are gated to developer+ (mirrors the server requireRole). Localized + themed.
  */
 
 const card: React.CSSProperties = {
@@ -40,7 +40,7 @@ function money(cents: number | null | undefined): string {
   return `$${Math.round(cents / 100).toLocaleString('en-US')}`;
 }
 
-export default function RfpPageClient() {
+export default function RfpContent() {
   const t = useTranslations('rfpPage');
   const router = useRouter();
   const role = useRole();
@@ -79,7 +79,7 @@ export default function RfpPageClient() {
     try {
       const created = await rfpApi.createRequest(draft);
       setPanelOpen(false);
-      router.push(`/rfp/${created.id}`);
+      router.push(`/projects/rfp/${created.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed');
     } finally {
@@ -90,10 +90,10 @@ export default function RfpPageClient() {
   const statusLabel = (s: string) => t(`status.${s}`);
 
   return (
-    <div className="page-inner">
+    <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         <div>
-          <h1 style={{ fontSize: 'clamp(22px,3vw,30px)', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 6px' }}>{t('title')}</h1>
+          <h1 style={{ fontSize: 'clamp(20px,3vw,26px)', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 6px' }}>{t('title')}</h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: 14, margin: 0, maxWidth: 640 }}>{t('subtitle')}</p>
         </div>
         <button type="button" className="btn btn-primary" onClick={openCreate} disabled={!canManage} title={canManage ? undefined : t('needDeveloper')}>
@@ -113,7 +113,7 @@ export default function RfpPageClient() {
               <button
                 key={r.id}
                 type="button"
-                onClick={() => router.push(`/rfp/${r.id}`)}
+                onClick={() => router.push(`/projects/rfp/${r.id}`)}
                 style={{ ...card, textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 8 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>

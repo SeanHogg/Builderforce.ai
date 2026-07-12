@@ -239,9 +239,10 @@ export class TicketAuditService {
         .where(eq(ticketRoleSignoffs.taskId, taskId))
         .orderBy(asc(ticketRoleSignoffs.createdAt)),
       this.db
-        .select({ toolId: toolRuns.toolId })
+        .select({ toolId: toolRuns.toolId, result: toolRuns.result, createdAt: toolRuns.createdAt })
         .from(toolRuns)
-        .where(eq(toolRuns.taskId, taskId)),
+        .where(eq(toolRuns.taskId, taskId))
+        .orderBy(asc(toolRuns.createdAt)),
     ]);
 
     // Latest verdict per role wins (append-only ledger; a later approval clears an
@@ -262,14 +263,34 @@ export class TicketAuditService {
       else approvedRoles.add(role);
     }
 
+    // Diagnostic pass/fail: a tool's ToolResult carries an optional 0..5 `score`. The
+    // LATEST run per tool decides — score present & below threshold ⇒ failed (does not
+    // satisfy); score absent ⇒ satisfied-by-existence (legacy, backward-compatible).
+    const ranDiagnostics = new Set<string>();
+    const failedDiagnostics = new Set<string>();
+    const latestScore = new Map<string, number | null>();
+    for (const d of diagnostics) {
+      ranDiagnostics.add(d.toolId);
+      const score = d.result && typeof d.result === 'object' && 'score' in d.result ? (d.result as { score?: number | null }).score ?? null : null;
+      latestScore.set(d.toolId, score); // ordered asc by createdAt ⇒ last write is latest
+    }
+    for (const [toolId, score] of latestScore) {
+      if (score != null && score < DIAGNOSTIC_PASS_THRESHOLD) failedDiagnostics.add(toolId);
+    }
+
     return {
       approvedRoles,
       changesRequestedRoles,
-      ranDiagnostics: new Set(diagnostics.map((d) => d.toolId)),
+      ranDiagnostics,
+      failedDiagnostics,
       performedRoles: performed,
     };
   }
 }
+
+/** Pass mark for a scored diagnostic requirement (ToolResult.score is 0..5). A run at
+ *  or above this satisfies; below it, the requirement stays unmet. */
+const DIAGNOSTIC_PASS_THRESHOLD = 3;
 
 function safeParseMissing(raw: string | null): UnmetRequirement[] {
   if (!raw) return [];

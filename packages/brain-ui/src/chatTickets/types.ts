@@ -150,8 +150,16 @@ export interface ChatTicketsLabels {
   lockHint: string;
   mergeHint: string;
   mergeNoOthers: string;
+  /** Title on the collapsed ticket header — click to reveal the ring grid. */
+  showTickets: string;
+  /** Title on the expanded ticket header — click to collapse the ring grid. */
+  hideTickets: string;
   kind: Record<TicketKind, string>;
   ringAria: (label: string, pct: number) => string;
+  /** N-linked-tickets count shown in the collapsible header. */
+  ticketCount: (n: number) => string;
+  /** Aria label for the collapsed header's overall-progress ring. */
+  overallAria: (pct: number) => string;
   runStarted: (agent: string) => string;
   mergeAction: (n: number) => string;
   mergedN: (n: number) => string;
@@ -201,8 +209,12 @@ export const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels = {
   lockHint: 'Shared chats are visible to the whole team; lock to keep this chat to its members only.',
   mergeHint: 'Merge other chats into this one. Their messages, tickets and agents move here; the sources are archived.',
   mergeNoOthers: 'No other chats to merge.',
+  showTickets: 'Show linked tickets',
+  hideTickets: 'Hide linked tickets',
   kind: { task: 'Task', epic: 'Epic', gap: 'Gap', objective: 'Objective', initiative: 'Initiative', portfolio: 'Portfolio', roadmap: 'Roadmap', spec: 'Spec' },
   ringAria: (label, pct) => `${label}: ${pct}% done`,
+  ticketCount: (n) => `${n} ticket${n === 1 ? '' : 's'}`,
+  overallAria: (pct) => `Overall progress: ${pct}% done`,
   runStarted: (agent) => `Started ${agent} on the ticket.`,
   mergeAction: (n) => `Merge ${n} here`,
   mergedN: (n) => `Merged ${n} chat(s).`,

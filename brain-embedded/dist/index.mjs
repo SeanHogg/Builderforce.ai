@@ -2106,7 +2106,9 @@ ${chatWorkLinkingDirective(chatId)}`;
         ts: nowIso(),
         category: "learn",
         label: "evermind.learn",
-        result: { version: learn.version, queued: true }
+        // `targets` carries the per-Evermind breakdown (a project can fan out to many)
+        // so the timeline can name each by id; the renderer falls back to `version` alone.
+        result: { version: learn.version, queued: true, ...learn.targets ? { targets: learn.targets } : {} }
       });
       const reconciled = recalled?.items ? countReconciledMemories(recalled.items, finalText) : 0;
       if (reconciled > 0) {
@@ -2122,7 +2124,7 @@ ${chatWorkLinkingDirective(chatId)}`;
         ts: nowIso(),
         category: "learn",
         label: "evermind.learn",
-        result: { version: learn.version, skipped: true, reason: learn.reason }
+        result: { version: learn.version, skipped: true, reason: learn.reason, ...learn.targets ? { targets: learn.targets } : {} }
       });
     }
     if (evermind?.cacheAnswer) {

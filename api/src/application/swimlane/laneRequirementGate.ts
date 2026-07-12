@@ -18,7 +18,6 @@
 import { and, asc, eq } from 'drizzle-orm';
 import {
   boards,
-  ideAgents,
   swimlaneAgentAssignments,
   swimlaneRequirements,
   swimlanes,
@@ -29,8 +28,10 @@ import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import type { TicketAuditService } from '../audit/ticketAuditService';
 import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';
-import { agentMatchesRole, normalizeRoleText } from '../kanban/roleMatch';
+import { normalizeRoleText } from '../kanban/roleMatch';
 import { BUILTIN_ROLES } from '../kanban/roleCatalog';
+import { resolveRoleCapableAgents } from '../kanban/roleCapability';
+import { TicketParticipantsService } from '../kanban/ticketParticipants';
 
 export interface LaneGateOutcome {
   /** Suppress the lane's normal auto-run this hop (a reviewer round-trip is owed). */
@@ -41,9 +42,11 @@ export interface LaneGateOutcome {
 
 const roleName = (key: string): string => BUILTIN_ROLES.find((r) => r.key === key)?.name ?? key;
 
-/** Resolve a runnable agent for a role: a staffed lane agent first, else a tenant
- *  agent whose title/skills match. Null when no agent can fill the role. */
-async function resolveRoleAgent(db: Db, tenantId: number, boardId: string, roleKey: string): Promise<string | null> {
+/** Resolve a runnable agent for a role: a staffed lane agent first, else the
+ *  first ROLE-CAPABLE agent (explicit pin → role_keys → builtin_kind → fuzzy —
+ *  the first-class capability resolver, superseding the old fuzzy-only match).
+ *  Null when no agent can fill the role. */
+async function resolveRoleAgent(env: Env, db: Db, tenantId: number, projectId: number, boardId: string, roleKey: string): Promise<string | null> {
   const nk = normalizeRoleText(roleKey);
   const staffed = await db
     .select({ agentRef: swimlaneAgentAssignments.agentRef, role: swimlaneAgentAssignments.role })
@@ -52,12 +55,8 @@ async function resolveRoleAgent(db: Db, tenantId: number, boardId: string, roleK
     .where(eq(swimlanes.boardId, boardId));
   for (const s of staffed) if (s.agentRef && normalizeRoleText(s.role) === nk) return s.agentRef;
 
-  const agents = await db
-    .select({ id: ideAgents.id, name: ideAgents.name, title: ideAgents.title, skills: ideAgents.skills })
-    .from(ideAgents)
-    .where(eq(ideAgents.tenantId, tenantId));
-  for (const a of agents) if (agentMatchesRole(a, roleKey, roleName(roleKey))) return a.id;
-  return null;
+  const [capable] = await resolveRoleCapableAgents(env, db, tenantId, projectId, roleKey);
+  return capable?.ref ?? null;
 }
 
 /**
@@ -73,6 +72,7 @@ export async function enforceLaneRequirements(
   args: { tenantId: number; projectId: number; taskId: number; status: string; submittedBy: string },
 ): Promise<LaneGateOutcome> {
   const none: LaneGateOutcome = { blocked: false, flagged: false, dispatchedReviewers: [] };
+  const participants = new TicketParticipantsService(db);
   try {
     const [board] = await db.select({ id: boards.id }).from(boards).where(eq(boards.projectId, args.projectId)).limit(1);
     if (!board) return none;
@@ -127,7 +127,7 @@ export async function enforceLaneRequirements(
     const dispatchedReviewers: string[] = [];
     if (!hasLive) {
       for (const req of toDispatch) {
-        const agentRef = await resolveRoleAgent(db, args.tenantId, board.id, req.ref);
+        const agentRef = await resolveRoleAgent(env, db, args.tenantId, args.projectId, board.id, req.ref);
         if (!agentRef) continue;
         const payload = JSON.stringify({
           cloudAgentRef: agentRef,
@@ -140,13 +140,17 @@ export async function enforceLaneRequirements(
             `If you request changes, describe the fixes for the Developer to resolve.`,
         });
         const deferred: Promise<unknown>[] = [];
-        await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
+        const execId = await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
           taskId: args.taskId,
           tenantId: args.tenantId,
           payload,
           submittedBy: `${args.submittedBy}:reviewer:${req.ref}`,
-        }).catch(() => {});
+        }).catch(() => null);
         await Promise.allSettled(deferred);
+        // Attribution (§5.6): record that this role is now participating, linked to the
+        // execution it ran as — so the accountability manifest shows the reviewer engaged
+        // even before its sign-off lands. Best-effort (no-op if the manifest isn't derived).
+        if (execId != null) await participants.markRoleInProgress(env, args.tenantId, args.taskId, req.ref, args.status, execId).catch(() => {});
         dispatchedReviewers.push(req.ref);
         break; // one reviewer per hop — keeps the round-trip serial and loop-safe
       }
