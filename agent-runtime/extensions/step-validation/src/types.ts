@@ -7,7 +7,7 @@
 
 import { Type } from "@sinclair/typebox";
 
-/** Schema representation: either a TypeBox inline schema, JSON Schema, or assertion function */
+/** Schema representation: either a TypeBox inline schema, JSON Schema, or assertion function (FR-1) */
 export type Schema =
   | Type.Any
   | Record<string, unknown>
