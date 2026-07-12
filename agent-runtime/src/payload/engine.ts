@@ -264,7 +264,7 @@ function validateProperty(
   value: unknown,
   errors: ValidationError[],
   log: LogEntry[],
-  contextId: string,
+  options: { logSink?: (entry: LogEntry) => void; contextId: string },
 ): void {
   const type = def.type as string | undefined;
   if (type) {
@@ -289,13 +289,21 @@ function validateProperty(
       }
     })();
     if (!isValidType) {
-      logEntry(log, {
+      const entry = {
         level: "error",
-        contextId,
+        contextId: options.contextId,
         field: propName,
         reason: `schema validation failed: expected ${type}, got ${typeof value}`,
         inputState: { value },
-      });
+      };
+      log.push(entry);
+      if (options.logSink) {
+        try {
+          options.logSink(entry);
+        } catch {
+          // Log sink must not break validation.
+        }
+      }
       errors.push({
         field: propName,
         schemaPath: `properties/${propName}/type`,
@@ -308,13 +316,21 @@ function validateProperty(
   }
   if (def.enum && Array.isArray(def.enum)) {
     if (!def.enum.some((entry) => entry === value)) {
-      logEntry(log, {
+      const entry = {
         level: "error",
-        contextId,
+        contextId: options.contextId,
         field: propName,
         reason: `enum validation failed`,
         inputState: { value, enum: def.enum },
-      });
+      };
+      log.push(entry);
+      if (options.logSink) {
+        try {
+          options.logSink(entry);
+        } catch {
+          // Log sink must not break validation.
+        }
+      }
       errors.push({
         field: propName,
         schemaPath: `properties/${propName}/enum`,
