@@ -1,55 +1,103 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Security · task #588
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# PRD: GAP-G3 Cross-Tenant Workspace Isolation Validation
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+Multi-tenant SaaS infrastructure carries an inherent risk that data plane boundaries between tenant workspaces are insufficiently enforced, enabling one tenant's compute, storage, or IAM context to access or enumerate another tenant's assets. GAP-G3 was raised to formally validate that these boundaries hold under adversarial probe conditions.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+**Goal:** Execute a structured validation campaign against the cross-tenant isolation controls, produce an authoritative evidence-backed report, and close GAP-G3 in the workstream tracker (task #144) with a definitive security conclusion.
 
-## Target users / ICP roles
+---
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## Target Users / ICP Roles
+
+| Role | Responsibility |
+|---|---|
+| **security-t1** (Infrastructure/Cloud Security Validator) | Owns execution of all isolation probes and authoring the validation report |
+| **Security Engineering Lead** | Reviews findings, approves closure or escalates remediations |
+| **Platform/Cloud Infrastructure Team** | Remediates any identified failures; provides config snapshots and log access |
+| **Compliance & Audit** | Consumes the closed-gap evidence package for audit trail |
+
+---
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+- **In scope:** Two or more distinct tenant contexts provisioned in the target environment; data plane read/write/enumerate probes; IAM/RBAC policy inspection at the infrastructure layer; evidence collection for all test cases; remediation notes for failures.
+- **Environment:** Staging/pre-production environment mirroring production tenant topology (or production with isolated probe tenants if staging is not representative).
+- **Frameworks referenced:** PRD section FR-4 (workspace isolation), FR-2 through FR-6 (structured validation report schema).
+
+---
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### FR-1 — Tenant Probe Identity Setup
+- Provision or identify at minimum **two isolated tenant identities** (Tenant-A, Tenant-B) with documented workspace boundaries (namespace, account ID, resource tag, or equivalent).
+- Each probe identity must hold only legitimate same-tenant permissions; no cross-tenant grants shall be present at test start.
+- Record tenant IDs, IAM principal ARNs/identifiers, and workspace resource scopes as baseline evidence.
+
+### FR-2 — Data Plane Read Isolation Probe
+- From Tenant-A's identity, attempt to **read** storage objects, database records, secrets, and configuration assets owned by Tenant-B.
+- All read attempts outside tenant scope must return `403 / AccessDenied` (or equivalent platform rejection); any `200 OK` or partial-data response constitutes a **FAIL**.
+- Capture raw API responses and access-log entries as evidence artifacts.
+
+### FR-3 — Data Plane Write Isolation Probe
+- From Tenant-A's identity, attempt to **write or modify** resources (objects, records, queue messages, infrastructure configs) owned by Tenant-B.
+- All write attempts outside tenant scope must be rejected at the API/policy enforcement layer; any successful write constitutes a **FAIL**.
+- Capture request payloads, rejection responses, and audit log entries.
+
+### FR-4 — Enumeration Isolation Probe
+- From Tenant-A's identity, attempt to **list or discover** Tenant-B's workspace resources (buckets, namespaces, service endpoints, user lists, metadata).
+- Results must return empty sets or `403`; any response disclosing Tenant-B resource identifiers constitutes a **FAIL**.
+- Capture list-API responses verbatim.
+
+### FR-5 — IAM/RBAC Policy Validation
+- Inspect the IAM/RBAC policies, role bindings, and resource-based policies governing each tenant workspace.
+- Confirm tenant-scoping conditions (e.g., `aws:ResourceAccount`, namespace labels, attribute-based conditions) are present and correctly bounded.
+- Confirm no wildcard or overly-broad cross-tenant grants exist at any policy layer (inline, managed, org-level SCP, etc.).
+- Produce a config snapshot diff showing expected vs. actual policy state.
+
+### FR-6 — Structured Validation Report
+Produce a report containing all of the following sections:
+
+| Section | Required Content |
+|---|---|
+| **GAP ID & Description** | GAP-G3, summary of isolation risk and PRD reference |
+| **Test Cases Executed** | Unique TC ID, probe type, tenant contexts used, execution timestamp |
+| **Verdict per Test Case** | Pass / Fail / Blocked with explicit rationale |
+| **Evidence References** | Log artifact IDs, config snapshot hashes, probe result files |
+| **Remediation Notes** | For every Fail or Blocked: root cause, recommended fix, owning team, target resolution date |
+| **Overall Conclusion** | Aggregated security verdict: Closed (all Pass) or Open (any Fail/Blocked) |
+
+### FR-7 — Tracker & Dashboard Update
+- On all-Pass conclusion: update task #144 status to **Closed** with evidence package link.
+- On any Fail/Blocked: update task #144 status to **Remediation Required**, attach open issues, and notify Security Engineering Lead.
+- Reflect final GAP-G3 status on the Security Provisioning dashboard within one business day of report completion.
+
+---
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+| # | Criterion |
+|---|---|
+| AC-1 | Minimum two distinct tenant probe identities documented with workspace boundary definitions before probes execute. |
+| AC-2 | All read probes (FR-2) across both tenant directions return access-denied; evidence artifacts captured for each. |
+| AC-3 | All write probes (FR-3) across both tenant directions return access-denied; evidence artifacts captured for each. |
+| AC-4 | All enumeration probes (FR-4) across both tenant directions return no cross-tenant resource disclosure; evidence artifacts captured. |
+| AC-5 | IAM/RBAC inspection (FR-5) confirms no wildcard or unscoped cross-tenant grants; config snapshots attached. |
+| AC-6 | Validation report (FR-6) is complete, contains all required sections, and is reviewed and signed off by Security Engineering Lead. |
+| AC-7 | Task #144 reflects **Closed** status if AC-1 through AC-6 are fully satisfied; **Remediation Required** with itemized open issues otherwise. |
+| AC-8 | Security Provisioning dashboard shows updated GAP-G3 state within one business day of report sign-off. |
+| AC-9 | Zero unresolved Fail verdicts remain at gap closure; any Blocked item has a documented owner and due date. |
 
-## Out of scope
+---
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## Out of Scope
+
+- **Application-layer multi-tenancy** (row-level security, ORM-level tenant filters) — covered under separate application security validation.
+- **Network-layer segmentation testing** (VPC peering, firewall rules, East-West traffic inspection) — addressed in a dedicated network isolation gap.
+- **Performance or load characteristics** of tenant isolation mechanisms.
+- **New control implementation or remediation execution** — this PRD covers validation only; remediation is owned by the Platform/Cloud Infrastructure Team under separate work items.
+- **Tenant onboarding workflow validation** — scoped to existing provisioned tenants only.
+- **Production tenant data exposure** — probes must use designated probe tenants or staging equivalents; live production customer data must not be accessed.
