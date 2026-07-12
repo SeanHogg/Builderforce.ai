@@ -12,7 +12,7 @@ import type {
   DigestWindow,
   DigestTemplate,
   DistributionMethod
-} from '@/types/dashboard';
+} from '../../types/dashboard';
 
 /**
  * Default weekly digest configuration (FR3.4)
