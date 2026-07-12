@@ -13,7 +13,7 @@
 
 import type { Db } from "../infrastructure/database/connection";
 import { recommendations, recommendationImpressions, recommendationClicks, recommendationDismissals, integrationInstallEvents } from "../infrastructure/database/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
 /** Integration identity to use consistently across API surfaces. */
 export interface IntegrationId {
