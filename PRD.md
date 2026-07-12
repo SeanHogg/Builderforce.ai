@@ -1,55 +1,50 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #514
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# FR3: Priority Alignment Dashboard + Routes (API COMPLETE, UI COMPLETE)
 
-## Problem & Goal
+**Task:** Complete the **Priority Alignment Dashboard + Routes** feature, including the integration of the FR1 API, user interface, route management, and quick assign workflow.
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+**Problem & Goal**
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+* The team is tasked with creating a dashboard that enables team members to quickly and efficiently prioritize tasks and assign resources, with a clear focus on user experience and API accessibility.
+* Key users include team leads, project managers, and regular employees.
 
-## Target users / ICP roles
+**Target Users / ICP Roles**
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+* **Team Lead**: Views the dashboard to track progress, assign priorities, and monitor resource allocation.
+* **Project Manager**: Uses the dashboard to manage workflows, assign priorities, and monitor resource effectiveness.
+* **Regular Employee**: Uses the dashboard to access priority information, quickly assign tasks, and monitor workflow.
 
-## Scope
+**Scope**
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+* Create a user-friendly dashboard with clear navigation and a consistent layout.
+* Integrate the FR1 API for real-time data and communication between dashboard and backend components.
+* Implement a functional workflow to assign priorities and resources with user-friendly shortcuts and progress updates.
+* Design and implement a schedule page to display upcoming tasks or milestones and enable users to schedule meetings or appointments.
 
-## Functional Requirements
+**Functional Requirements**
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+| Feature | Description | Acceptance Criteria |
+| --- | --- | --- |
+| Route `/dashboard/priority-alignment` (Roadmap item) | The primary dashboard page for prioritizing tasks and assigning resources. | AC1: User can access the **Priority Alignment Dashboard** page. |
+| PriorityAlignmentDashboard component (FR1 API integration) | A reusable, context-aware component for displaying priority alignment data and workflows. | AC2: Displays priority alignment data as configured by the FR1 API. |
+| Resource allocation breakdown, filters, metrics Displayed as charts, tables, and gauges. Filters should be customizable | AC3: Filters and sorting options are available for the resource allocation data. |
+| Quick assign workflow (3 clicks or less) A straightforward process for assigning priorities and resources with just a few clicks or taps | AC4: Assigns priorities successfully within 3 clicks or taps. |
 
-## Acceptance Criteria
+**Acceptance Criteria**
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+<details>
+<summary>Acceptance Criteria for FR1 API Integration</summary>
 
-## Out of scope
+| Link Test | Description | Expected Result | Passing Action |
+| --- | --- | --- | --- |
+| GET: `/api/v1/priority-alignment` | Test if the FR1 API returns current priority alignment data. | Success message, data fields are as expected, and returned data matches the database. | Consume the API response and display it on the dashboard. |
+| POST: `/api/v1/priority-alignment/assign` | Test if the API can be used to assign priorities and resources. | Success message with updated priority alignment data and assigned resources. | Update the priority alignment data and resource allocation fields in the dashboard. |
+| PUT: `/api/v1/priority-alignment/:priorityId` | Test if the API can be used to update the status or priority of a task. | Success message with updated priority alignment data, or a message explaining why the update was not successful. | Update the priority alignment data in the database to reflect the new priority or status. |
+</details>
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+**Out of Scope**
+
+* Additional API routes not specifically defined in this RFP.
+* Implementation of other moving components, such as a message queue or broader monitoring systems, outside of this DPR.
