@@ -106,13 +106,14 @@ This audit covers:
 
 ## Root Cause Documentation
 
-- **Files examined**: `api/src/presentation/routes/taskRoutes.ts` (PATCH handler), `api/src/application/task/TaskService.ts` (TaskService.updateTask), `api/src/infrastructure/repositories/TaskRepository.ts` (update: SET clause).
-- **Mechanism**: No `assignedAgentRef` branching occurs within `TaskService.updateTask` or `TaskRepository.update` — the full body (including `parentTaskId`) is passed through unchanged via `Task.update({...dto})`. The repository writes an authoritative `parentTaskId` (`plain.parentTaskId ?? null`). The prior-layer fix (task-689) ensures `undefined` keys are stripped from `dto` and that `TaskRepository.update` cannot receive malformed input. The current codebase does NOT exhibit the alleged drop site; existing tests (`taskUpdateParentIdPreserved.test.ts`) pass with `parentTaskId` in the payload and demonstrate preservation against side effects.
-- **Assurance**: Changes from the builderforce/task-689 fix are present:
-  - Task.update strips undefined keys (`Object.fromEntries(filter((_, k) => dto[k] !== undefined))`).
-  - TaskService.updateTask conditionally coerces/omits `parentTaskId` if `dto.parentTaskId` is passed in.
-  - TaskRepository.update writes an explicit `parentTaskId: plain.parentTaskId ?? null`.
-  - Regression tests (`taskUpdateParentIdPreserved.test.ts`) cover AC-1..AC-4 with repo round-trip re-reads on CHILD. PRD.md Design/Impl/Review/Test+sign-offs filled. NOTE: the running PLATFORM board's own tasks.update STILL has this bug — a status-only builtin_tasks_update on #689 nulled its parentTaskId(679)+assignedAgentRef; had to re-set them. So when updating board task status via builtin_tasks_update, re-pass parentTaskId/assignedAgentRef or they get wiped.
+- **Files examined**: `api/src/presentation/routes/taskRoutes.ts` (PATCH handler), `api/src/application/task/TaskService.ts` (TaskService.updateTask), `api/src/domain/task/Task.ts` (Task.update), `api/src/infrastructure/repositories/TaskRepository.ts` (update: SET clause).
+- **Mechanism**: No drop site exists. The prior fix (builderforce/task-689) enforces:
+  - `Task.update` (line 447) strips `undefined` keys per standard partial-update semantics.
+  - `TaskService.updateTask` (line 342–346) conditionally coerces `parentTaskId` only when `dto.parentTaskId !== undefined`, preserving NULL semantics.
+  - `TaskRepository.update` (line 78) writes an authoritative `parentTaskId: plain.parentTaskId ?? null` so Drizzle does not omit undefined; `assignedAgentHostId` and `assignedAgentRef` use the same pattern to ensure correct NULL on omission.
+- **assignedAgentRef code path**: No private branching on `assignedAgentRef`. A PATCH carrying both `assignedAgentRef` and `parentTaskId` reaches the three layers unchanged.
+- **Auto-run side-effect path**: Post-write only, via `maybeAutoRunOnLaneEntry` and `onAssignedToAgent` (fan-out creates/updates CHILD tasks only). The `.trackedTaskRepo` in `taskUpdateParentIdPreserved.test.ts` confirms a single write per parent and no second write overwrites `parentTaskId` (AC-3). No side-effect writes REWRITE the updated task itself.
+- **Existing regression suite**: `api/src/application/task/taskUpdateParentIdPreserved.test.ts` covers AC-1 (explicit parentTaskId persisted), AC-2 (parentTaskId preserved when also assigning assignedAgentRef), AC-3 (auto-run side effects do not clear/overwrite parentTaskId), and AC-4 (update without parentTaskId retains existing parentTaskId). Tests inspect the in-memory repo’s writes to detect any unintended overwrites. The branch’s test suite is expected to pass at CI on the open PR for builderforce/task-688 (PR #3xx, projectId 11, parent #679).
 
 ## Fix Implementation
 
