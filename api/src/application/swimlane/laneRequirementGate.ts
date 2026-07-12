@@ -21,8 +21,10 @@ import {
   swimlaneAgentAssignments,
   swimlaneRequirements,
   swimlanes,
+  tasks,
   ticketRoleSignoffs,
 } from '../../infrastructure/database/schema';
+import { requirementApplies } from '../kanban/types';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
@@ -104,15 +106,22 @@ export async function enforceLaneRequirements(
 
     if (lane.requirementGate === 'off') return none;
 
-    // Required reviewer requirements on THIS lane.
-    const reqRows = await db
-      .select({ kind: swimlaneRequirements.kind, ref: swimlaneRequirements.ref, responsibility: swimlaneRequirements.responsibility, isRequired: swimlaneRequirements.isRequired })
+    // Requirements on THIS lane, scoped to the ticket's type/condition (a Security
+    // ticket requires the security role; a docs ticket doesn't require QA).
+    const [taskRow] = await db.select({ taskType: tasks.taskType, actionType: tasks.actionType }).from(tasks).where(eq(tasks.id, args.taskId)).limit(1);
+    const allReqRows = await db
+      .select({ kind: swimlaneRequirements.kind, ref: swimlaneRequirements.ref, responsibility: swimlaneRequirements.responsibility, isRequired: swimlaneRequirements.isRequired, ticketType: swimlaneRequirements.ticketType, condition: swimlaneRequirements.condition, quorum: swimlaneRequirements.quorum })
       .from(swimlaneRequirements)
       .where(eq(swimlaneRequirements.swimlaneId, lane.id))
       .orderBy(asc(swimlaneRequirements.position));
+    const reqRows = allReqRows.filter((r) => requirementApplies({ ticketType: r.ticketType, condition: r.condition }, { taskType: taskRow?.taskType ?? null, actionType: taskRow?.actionType ?? null }));
     const requiredReviewers = reqRows.filter(
       (r) => r.isRequired && (r.kind === 'review' || (r.kind === 'role' && r.responsibility === 'reviewer')),
     );
+    // Reviewer quorum for this lane: smallest declared quorum, capped at the set size;
+    // default = the set size (all reviewers must approve — the legacy rule).
+    const declaredQuorums = requiredReviewers.map((r) => r.quorum).filter((q): q is number => typeof q === 'number' && q > 0);
+    const reviewerQuorum = Math.min(requiredReviewers.length || 1, declaredQuorums.length ? Math.min(...declaredQuorums) : (requiredReviewers.length || 1));
     // Producers = required role requirements a role must PRODUCE (owner/contributor,
     // or a bare role which we treat as owner). Now first-class gating (past reviewers).
     const requiredProducers = reqRows.filter(
@@ -138,12 +147,14 @@ export async function enforceLaneRequirements(
     const dispatchedReviewers: string[] = [];
     const dispatchedProducers: string[] = [];
 
-    // ── Reviewers (round-trip) ──────────────────────────────────────────────
-    // Unmet = required reviewer without an APPROVED sign-off. To-dispatch = reviewers
-    // NEVER engaged (no verdict row) — once a reviewer records any verdict we stop
-    // re-dispatching, so repeated lane entries can't spawn an endless reviewer loop.
-    const reviewerUnmet = requiredReviewers.filter((r) => latest.get(r.ref) !== 'approved');
-    if (reviewerUnmet.length > 0 && !hasLive) {
+    // ── Reviewers (quorum-aware round-trip) ─────────────────────────────────
+    // The reviewer SET is met once `reviewerQuorum` approvals land (2-of-3 advances on
+    // the 2nd approval, not the 1st). To-dispatch = reviewers NEVER engaged (no verdict
+    // row) — once a reviewer records any verdict we stop re-dispatching it, so repeated
+    // lane entries can't spawn an endless reviewer loop.
+    const approvedReviewers = requiredReviewers.filter((r) => latest.get(r.ref) === 'approved').length;
+    const reviewerSetUnmet = requiredReviewers.length > 0 && approvedReviewers < reviewerQuorum;
+    if (reviewerSetUnmet && !hasLive) {
       const toDispatch = requiredReviewers.filter((r) => !latest.has(r.ref));
       for (const req of toDispatch) {
         const agentRef = await resolveRoleAgent(env, db, args.tenantId, args.projectId, board.id, req.ref);
@@ -214,13 +225,13 @@ export async function enforceLaneRequirements(
       }
     }
 
-    if (dispatchedReviewers.length === 0 && dispatchedProducers.length === 0 && reviewerUnmet.length === 0 && !producerUnmet) return none;
+    if (dispatchedReviewers.length === 0 && dispatchedProducers.length === 0 && !reviewerSetUnmet && !producerUnmet) return none;
 
     // Block the lane's normal agent when a role round-trip is owed (dispatched this hop)
-    // OR a hard gate is unmet (reviewer without approval / producer not completed).
+    // OR a hard gate is unmet (reviewer quorum short / producer not completed).
     const blocked = dispatchedReviewers.length > 0 || dispatchedProducers.length > 0
-      || (lane.requirementGate === 'hard' && (reviewerUnmet.length > 0 || producerUnmet));
-    return { blocked, flagged: reviewerUnmet.length > 0 || producerUnmet, dispatchedReviewers, dispatchedProducers };
+      || (lane.requirementGate === 'hard' && (reviewerSetUnmet || producerUnmet));
+    return { blocked, flagged: reviewerSetUnmet || producerUnmet, dispatchedReviewers, dispatchedProducers };
   } catch {
     return none;
   }

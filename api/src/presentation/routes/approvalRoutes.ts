@@ -19,10 +19,26 @@ import { normalizeRequestKind, isAnswerableKind } from '../../domain/approval/re
 import { sendSlackNotification, notifyApprovalRequested } from '../../application/approval/approvalNotifier';
 import { resumePausedExecution } from '../../application/runtime/executionResume';
 import { dispatchCloudRunForTask, parseApprovalReplay } from './runtimeRoutes';
+import { TicketAuditService } from '../../application/audit/ticketAuditService';
+import { TicketParticipantsService } from '../../application/kanban/ticketParticipants';
+import { resolveMemberDisplayName } from '../../application/kanban/roleCapability';
+import { recordActivity, resolveHumanActor } from '../../application/activity/activityLog';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
+
+/** The role a `task.execution` approval was created for (set on the metadata when
+ *  the gated run is role-attributed), or null. Drives the §5.8 approvals→sign-off bridge. */
+function parseApprovalRoleKey(metadata: string | null): string | null {
+  if (!metadata) return null;
+  try {
+    const m = JSON.parse(metadata) as { roleKey?: unknown };
+    return typeof m.roleKey === 'string' && m.roleKey.trim() ? m.roleKey.trim() : null;
+  } catch {
+    return null;
+  }
+}
 
 type ApprovalHonoEnv = HonoEnv & {
   Bindings: HonoEnv['Bindings'] & {
@@ -308,6 +324,43 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
             submittedBy: existing.requestedBy ?? userId,
           },
         ).catch(() => null);
+      }
+    }
+
+    // §5.8 — Approvals ↔ sign-offs bridge: a human DECIDING a role-attributed execution
+    // gate records that role's sign-off on the accountability ledger, so a human approval
+    // satisfies the role/review requirement (and clears the audit) exactly like an agent
+    // reviewer's sign-off. Only when the approval carries an explicit roleKey (set at
+    // creation for a role-attributed run) — never inferred, so it can't forge a record.
+    if (body.status === 'approved' || body.status === 'rejected') {
+      const roleKey = parseApprovalRoleKey(existing.metadata);
+      const bridgeTaskId = parseApprovalReplay(existing.metadata)?.taskId;
+      if (roleKey && bridgeTaskId != null) {
+        try {
+          const auditSvc = new TicketAuditService(db);
+          const memberName = await resolveMemberDisplayName(db, tenantId, 'human', userId);
+          await auditSvc.recordSignoff(env, tenantId, {
+            taskId: bridgeTaskId,
+            roleKey,
+            verdict: body.status === 'approved' ? 'approved' : 'changes_requested',
+            memberKind: 'human',
+            memberRef: userId,
+            memberName,
+            summary: body.reviewNote ?? (body.status === 'approved' ? 'Approved via human gate' : 'Changes requested via human gate'),
+            contribution: existing.executionId ? { executionId: existing.executionId } : undefined,
+          });
+          const participants = new TicketParticipantsService(db);
+          await participants.syncStates(env, tenantId, bridgeTaskId).catch(() => {});
+          await participants.invalidate(env, bridgeTaskId).catch(() => {});
+          await recordActivity(env, db, {
+            tenantId, projectId: null,
+            actor: await resolveHumanActor(env, db, tenantId, userId),
+            verb: body.status === 'approved' ? 'ticket.role.completed' : 'ticket.signed_off',
+            targetType: 'task', targetId: String(bridgeTaskId), targetLabel: `#${bridgeTaskId}`,
+            summary: `${roleKey} ${body.status === 'approved' ? 'approved' : 'changes requested'} via human approval`.slice(0, 300),
+            metadata: { roleKey, via: 'approval', verdict: body.status },
+          }).catch(() => {});
+        } catch { /* best-effort bridge — never block the approval resolve */ }
       }
     }
 

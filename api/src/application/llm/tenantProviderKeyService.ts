@@ -55,6 +55,9 @@ export type AnthropicAuth =
 export interface ProviderKeySummary {
   provider: LlmProvider;
   authType: ProviderAuthType;
+  /** Tenant-set BYO precedence — LOWER = tried FIRST by the auto-select cloud pin.
+   *  `null` = unset → the provider falls back to catalog-tier ordering. */
+  priority: number | null;
 }
 
 export function isSupportedProvider(p: string): p is LlmProvider {
@@ -291,6 +294,10 @@ export interface TenantLlmCredentials {
    *  ("token revoked — reconnect" vs "transient — retry") instead of a bare provider id.
    *  Only populated for a provider that has a row but produced no usable credential. */
   unresolvedReasons: Partial<Record<LlmProvider, ByoUnresolvedReason>>;
+  /** Tenant-set BYO precedence as ordered gateway vendor ids (most-preferred first) —
+   *  the order the auto-select cloud pin leads its connected flagships by (empty when
+   *  no precedence is set → catalog-tier ordering). See {@link byoVendorPriorityOrder}. */
+  vendorPriority: string[];
 }
 
 /**
@@ -311,8 +318,11 @@ export async function resolveTenantLlmCredentials(env: Env, tenantId: number): P
   const creds: TenantLlmCredentials = {
     anthropicOAuthToken,
     vendorKeys,
+    // `configured` is already ordered by tenant-set precedence (listTenantProviderKeys),
+    // so both the provider list and the vendor-priority order read straight off it.
     configuredProviders: configured.map((p) => p.provider),
     unresolvedReasons: {},
+    vendorPriority: byoVendorPriorityOrder(configured),
   };
   // Attach a reason to each configured-but-unusable provider: Anthropic gets the precise
   // reason from its resolver; an api-key provider that's configured but decrypted to
@@ -387,21 +397,69 @@ export async function providersConnectedInOtherWorkspaces(
   }
 }
 
-/** List which providers a tenant has configured + how each authenticates (no secrets). */
+/** List which providers a tenant has configured + how each authenticates (no secrets).
+ *  Ordered by tenant-set BYO precedence (`priority` ascending; unset rows last), then
+ *  provider id — so the caller can read the precedence straight off the array order. */
 export async function listTenantProviderKeys(
   env: Env,
   tenantId: number,
 ): Promise<ProviderKeySummary[]> {
   const sql = neon(env.NEON_DATABASE_URL);
   const rows = (await sql`
-    SELECT provider, auth_type FROM tenant_llm_provider_keys WHERE tenant_id = ${tenantId}
-  `) as Array<{ provider: string; auth_type?: string }>;
+    SELECT provider, auth_type, priority FROM tenant_llm_provider_keys
+    WHERE tenant_id = ${tenantId}
+    ORDER BY priority ASC NULLS LAST, provider ASC
+  `) as Array<{ provider: string; auth_type?: string; priority?: number | null }>;
   return rows
     .filter((r) => isSupportedProvider(r.provider))
     .map((r) => ({
       provider: r.provider as LlmProvider,
       authType: ((r.auth_type ?? 'api_key') === 'oauth' ? 'oauth' : 'api_key') as ProviderAuthType,
+      priority: typeof r.priority === 'number' ? r.priority : null,
     }));
+}
+
+/**
+ * Set the tenant's BYO provider PRECEDENCE from an ordered provider list (most-
+ * preferred first). Each provider's `priority` is stamped with its index, so the
+ * auto-select cloud pin ({@link byoAutoSeedModels}) leads with the owner's chosen
+ * account (e.g. Meta first) before failing over across the rest in that order.
+ * Only rows that already exist (a connected provider) are updated — ordering an
+ * un-connected provider is a no-op. Providers absent from `order` are reset to
+ * unset (NULL → catalog-tier fallback), so the list is the single source.
+ */
+export async function setTenantProviderPriority(
+  env: Env,
+  tenantId: number,
+  order: readonly LlmProvider[],
+): Promise<void> {
+  const sql = neon(env.NEON_DATABASE_URL);
+  const ranked = order.filter(isSupportedProvider);
+  // Clear any provider NOT in the new order back to unset, then stamp the ranked ones.
+  await sql`
+    UPDATE tenant_llm_provider_keys SET priority = NULL, updated_at = NOW()
+    WHERE tenant_id = ${tenantId}
+      AND NOT (provider = ANY(${ranked as unknown as string[]}))
+  `;
+  for (let i = 0; i < ranked.length; i++) {
+    await sql`
+      UPDATE tenant_llm_provider_keys SET priority = ${i}, updated_at = NOW()
+      WHERE tenant_id = ${tenantId} AND provider = ${ranked[i]}
+    `;
+  }
+}
+
+/**
+ * The tenant's connected providers as ordered GATEWAY VENDOR IDS (most-preferred
+ * first) — the precedence {@link byoAutoSeedModels} sorts its flagship seeds by.
+ * Only providers with a set `priority` are included (unset providers fall back to
+ * catalog-tier ordering inside the seed). Maps each provider → its gateway vendor
+ * id ('google' → 'googleai') so the ids line up with `vendorForModel(flagship)`.
+ */
+export function byoVendorPriorityOrder(summaries: readonly ProviderKeySummary[]): string[] {
+  return summaries
+    .filter((s) => s.priority !== null)
+    .map((s) => PROVIDER_VENDOR_MAP[s.provider].vendorId);
 }
 
 /** Remove a tenant's provider credential (API key or OAuth subscription). */
