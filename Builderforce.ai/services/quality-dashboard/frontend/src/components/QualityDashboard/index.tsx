@@ -6,10 +6,21 @@ import { TrendLineChart } from "./TrendLineChart";
 import { FiltersBar } from "./FiltersBar";
 import { BugTable } from "./BugTable";
 import { useQualityData } from "../../hooks/useQualityData";
+import { updateUrlFilters } from "../../utils/filters";
 import "./index.css";
 
-export function QualityDashboardView(initialFilter: BugFilter) {
-  const [filter, setFilter] = React.useState<BugFilter>(initialFilter);
+interface QualityDashboardViewProps {
+  initialFilter: BugFilter;
+}
+
+export function QualityDashboardView({ initialFilter }: QualityDashboardViewProps) {
+  const [filter, setFilterState] = React.useState<BugFilter>(initialFilter);
+
+  // Wrap setFilter so every filter change is reflected in the URL (AC-04 / AC-05).
+  const setFilter = React.useCallback((next: BugFilter) => {
+    setFilterState(next);
+    updateUrlFilters(next);
+  }, []);
   const [autoRefresh, setAutoRefresh] = React.useState(false); // Start auto-refresh only after initial load
 
   const {
