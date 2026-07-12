@@ -1,7 +1,12 @@
 export const TOOL_STAKEHOLDER_ALIGNMENT = 'stakeholder-alignment';
 
-/** Score a stakeholder alignment questionnaire following the shared scorer conventions. */
-export function scoreStakeholderAlignment(tool: import('./toolTypes').QuestionnaireTool, answers: Record<string, number>): import('./toolTypes').ToolResult {
+/**
+ * Score a stakeholder alignment questionnaire following the shared scorer conventions.
+ */
+export function scoreStakeholderAlignment(
+  tool: import('./toolTypes').QuestionnaireTool,
+  answers: Record<string, number>
+): import('./toolTypes').ToolResult {
   return import('./toolTypes').scoreQuestionnaire(tool, answers);
 }
 
@@ -28,7 +33,10 @@ export const stakeholderAlignmentToolDefinition: import('./toolTypes').Questionn
       description: 'Do we maintain a single, versioned source of truth for agreed priorities?',
       questions: [
         { id: 'clarity_documented', text: 'Are priorities clearly documented and agreed across key stakeholders?' },
-        { id: 'clarity_competing_reconciled', text: 'Have competing P0 requests been explicitly reconciled or escalated?' },
+        {
+          id: 'clarity_competing_reconciled',
+          text: 'Have competing P0 requests been explicitly reconciled or escalated?',
+        },
       ],
       recommendations: {
         4: 'Your alignment record is robust — keep it fresh as work evolves.',
@@ -42,7 +50,10 @@ export const stakeholderAlignmentToolDefinition: import('./toolTypes').Questionn
       name: 'Documentation & Access',
       description: 'How accessible and current are our documented stakeholders and sign-off rules?',
       questions: [
-        { id: 'doc_stakeholder_map', text: 'Is the list of Required Approvers for key initiatives current and accessible?' },
+        {
+          id: 'doc_stakeholder_map',
+          text: 'Is the list of Required Approvers for key initiatives current and accessible?',
+        },
         { id: 'doc_review_timing', text: 'Are sign-off windows (default 48 hours) enforced and acknowledged?' },
       ],
       recommendations: {
@@ -75,7 +86,10 @@ export const stakeholderAlignmentToolDefinition: import('./toolTypes').Questionn
       description: 'Is the sign-off protocol enforced and adhered to?',
       questions: [
         { id: 'signoff_all_required', text: 'Is a version blocked until all Required Approvers have responded?' },
-        { id: 'signoff_blocker_triggers', text: 'Does a single Block response halt approval and open an escalation thread?' },
+        {
+          id: 'signoff_blocker_triggers',
+          text: 'Does a single Block response halt approval and open an escalation thread?',
+        },
       ],
       recommendations: {
         4: 'Your gate enforces coverage and blockers correctly — maintain it.',
@@ -102,10 +116,9 @@ export const stakeholderAlignmentToolDefinition: import('./toolTypes').Questionn
       },
     },
   ],
-  score: scoreStakeholderAlignment,
+  score(answers) {
+    return scoreQuestionnaire(this, answers);
+  },
 };
-
-/** Public compute endpoint (stub) matching agentic-maturity; real scoring is via the score() method. */
-export const stakeholderAlignmentComputeEndpoint = '/api/tools/stakeholder-alignment/compute';
 
 export default stakeholderAlignmentToolDefinition;
