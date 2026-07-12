@@ -77,6 +77,7 @@ import {
   type TenantVendorKeys,
   type LlmProvider,
 } from '../../application/llm/tenantProviderKeyService';
+import { CAPACITY_LIMIT_MARKER } from '../../application/llm/vendors/types';
 import {
   generatePkce,
   generateState,
@@ -1540,6 +1541,29 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     }
     const byoUnresolvedHeader = formatByoUnresolvedHeader(tenantCreds, otherWorkspace);
     if (byoUnresolvedHeader) upstreamHeaders.set('x-builderforce-byo-unresolved', byoUnresolvedHeader);
+
+    // Detect which BYO providers hit a usage/capacity cap this request — i.e. the
+    // tenant's key was resolved and used, but the upstream rejected it with a billing
+    // limit (Anthropic "reached your API usage limits", OpenAI "exceeded your quota",
+    // etc.). The CAPACITY_LIMIT_MARKER is embedded in the attempt error by throwClassified4xx,
+    // so we scan attempts for it, but only flag vendors the tenant is BYO-funding
+    // (no point alarming about a cap on the operator's shared keys).
+    const providerCapHeader = (() => {
+      const attempts = result.attempts ?? [];
+      if (byoVendors.size === 0) return null; // tenant has no BYO keys — nothing to manage
+      const cappedProviders = new Set<string>();
+      // Map vendor id → the provider name the UI (and settings page) uses
+      const vendorToProvider: Record<string, string> = {
+        anthropic: 'anthropic', openai: 'openai', googleai: 'google', meta: 'meta',
+      };
+      for (const attempt of attempts) {
+        if (attempt.error && attempt.error.includes(CAPACITY_LIMIT_MARKER) && byoVendors.has(attempt.vendor)) {
+          cappedProviders.add(vendorToProvider[attempt.vendor] ?? attempt.vendor);
+        }
+      }
+      return cappedProviders.size > 0 ? [...cappedProviders].join(',') : null;
+    })();
+    if (providerCapHeader) upstreamHeaders.set('x-builderforce-provider-cap', providerCapHeader);
     upstreamHeaders.set('x-builderforce-retries', String(result.retries));
     upstreamHeaders.set('x-builderforce-product', llmProduct);
     upstreamHeaders.set('x-builderforce-effective-plan', access.effectivePlan);
