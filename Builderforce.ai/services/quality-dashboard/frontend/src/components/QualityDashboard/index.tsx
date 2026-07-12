@@ -135,7 +135,7 @@ export function QualityDashboardView({ initialFilter }: QualityDashboardViewProp
           <div className="table-row">
             <h2>Bug List</h2>
             <div className="table-actions">
-              <button onClick={async () => exportBugSummary(filter, bugCountSummary, trendData)}>
+              <button onClick={handleExportPDF} disabled={!bugCountSummary}>
                 Export PDF
               </button>
             </div>
