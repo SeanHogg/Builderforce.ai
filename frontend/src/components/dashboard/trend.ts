@@ -12,6 +12,18 @@ export type MetricPolarity = 'higher-is-better' | 'lower-is-better' | null;
 /** Trend state after classifying by threshold and polarity. */
 export type TrendState = 'improving' | 'declining' | 'stable';
 
+/** Component props for TrendArrow. */
+export interface TrendArrowProps {
+  /** Classification result. */
+  classification: TrendClassification;
+  /** Size variant — scales the SVG stroke width and height. */
+  size?: 'small' | 'medium' | 'large';
+  /** Optional custom color override. */
+  color?: string;
+  /** Optional className slot. */
+  className?: string;
+}
+
 /** Detail-level tooltip payload. */
 export interface TrendTooltip {
   /** Prior period value (raw or formatted). */
