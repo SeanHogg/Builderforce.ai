@@ -90,7 +90,7 @@ export function calculateRecordScore(
 
   return {
     score,
-    tier: getTier(score, { critical: 50, warning: 50, passing: 80 }),
+    tier: getTier(score, thresholds),
     missingFields,
     topFieldGaps,
     rawData: record,
