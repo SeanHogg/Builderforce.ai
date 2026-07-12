@@ -34,5 +34,3 @@ app.post('/api/budget-constraints/enrollment/register', (req, res) => {
 });
 
 export { app };
-
-// Integration note: In production, this router would be mounted in the main application (see comment).
