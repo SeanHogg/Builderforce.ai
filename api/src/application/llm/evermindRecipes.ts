@@ -17,6 +17,7 @@ import { EvermindModelPackage } from '@seanhogg/builderforce-memory-engine';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { resolveTenantModel, TENANT_MODEL_REF_PREFIX } from './tenantModelService';
+import { assessEvermindCoherence, type ArtifactStore } from './evermindRuntime';
 import {
   provisionDefaultProjectEvermind,
   seedProjectEvermind,
@@ -133,8 +134,13 @@ export async function applyEvermindRecipe(
       const seeded = await seedProjectEvermindFromPublished(env, db, tenantId, projectId, input.seedModelSlug, input.name);
       if (seeded.ok) {
         // A published model is already trained → running the project's agents on it
-        // is meaningful, so turn on inference (mode defaults to 'connected' on seed).
-        await setProjectEvermindInference(env, db, tenantId, projectId, true);
+        // is meaningful, so turn on inference (mode defaults to 'connected' on seed) —
+        // BUT still benchmark-gate it (same bar as the manual toggle), so a published
+        // model that can't actually hold coherent chat isn't auto-promoted to serve.
+        // If it fails the probe, inference just stays OFF (the seeded model is still
+        // there; a manager can force-enable later). Store-less env → enable ungated.
+        const store = env.UPLOADS as ArtifactStore | undefined;
+        await setProjectEvermindInference(env, db, tenantId, projectId, true, store ? { assessReadiness: (ref) => assessEvermindCoherence(store, ref) } : undefined);
         return;
       }
       // Slug unresolvable — degrade to a starter base rather than a dead project.
