@@ -104,7 +104,60 @@ _Owned by the business-analyst — to be authored._
 
 ## Design
 
-_Owned by the architect — to be authored._
+**Decision (Architect, Task #672):** All documentation updates will target the canonical schema definitions and reference pages from task #674 (basis-payload.schema.json) and integration guide skeleton documented in docs/guides/progress-handling.md (also created in this spread). The design enforces FR-1 (clear K-V glossary entry), FR-2 (scalar constraints in schema), FR-3 (event-coded examples), consistency controls (Fr-5), and sign-offs per AC-7.
+
+### Fr-1: Canonical Rule Statement (Prototype)
+
+- **Emitter:** The task/job progress event schema (event-payload.schema.json draft 2020-12) includes a `progressPct` scalar constrained to 0–100. Constraint definition:
+  - `progressPct: number (optional)`
+  - `minimum: 0`, `maximum: 100`
+  - When `progressPct` is present:
+    - `100` SHALL only be emitted after all processing steps are complete (terminal condition).
+    - `100` SHALL be emitted at most once per resource (job/task).
+    - Must not be emitted before finishing all steps.
+    - Must align with `status: "completed"` (if present).
+- **Design rationale to minimize confusion:** A universally true rule entry in the API reference plus companion editorial text in docs/guides/progress-handling.md.
+
+### Fr-2: API Reference Update (Prototype)
+
+- Update docs/api/event-payload.schema.json:
+  - Add a JSDoc/TSDoc comment inline with `progressPct` schema:
+    - "Terminal signal when 100. At most once per job/task."
+    - Must follow completion of all upstream pipeline steps."
+  - Provide example JSON payload (see README progress-tracker.md usage examples).
+
+### Fr-3: Developer Guide Update (Prototype)
+
+- docs/guides/progress-handling.md:
+  - Show a listener registration that calls `analyzeProgress(payload)`: handles intermediate, warns against 99 vs 100, and on `payload.progressPct === 100` calls cleanup: `removeListener()` and terminates the listener cycle.
+  - Add footnotes clarifying max-once semantics and termination context.
+
+### Fr-4: Changelog Entry (Prototype)
+
+- docs/CHANGELOG.md:
+  - 2025-XX-XX: Clarify that `progressPct: 100` is emitted at most once and only after task/job completion (terminal condition). Document integration impact.
+
+### Fr-5: Consistency (Prototype)
+
+- All scripts run: grep -i progressPct docs/**/*.md docs/**/*.json (`grep -i progressPct` across docs) to surface contradictions. K-V glossaries in schema docs and integration guide agree on emittance semantics.
+
+### Sign-offs & Peer Review Requirements (AC-7)
+
+- PRD.md (this spec document) — designer/PM review.
+- docs/api/event-payload.schema.json — technical writer + backend lead sign-off.
+- docs/guides/progress-handling.md — technical writer + frontend lead sign-off.
+- docs/CHANGELOG.md — technical writer + product manager sign-off.
+- README.md contributions (progress-tracker + vs 99) — integration lead sign-off.
+
+### Impact Assessment
+
+- Correctness impact: Reduces integration risk; integrators can safely rely on 100 as terminal condition.
+- Migration impact: Pre-existing code that treats intermediate 99s as “complete” or reloads after progressPct==100 will need guard logic.
+- Testability: AC-6 full-text grep + explicit examples enable regression testing.
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
 
 ## Implementation Notes
 
