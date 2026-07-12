@@ -23,6 +23,19 @@ interface BrainChat {
  * it to render a TRUTHFUL `learn` step, replacing the old client-side heuristic guess
  * (which both false-positived and, for a connected-but-empty Evermind, false-negatived).
  */
+/** Per-Evermind learn result — mirrors the api `EvermindTargetOutcome`. A surface's
+ *  project can fan out to MANY Everminds (its own head + the IDE builds grouped under
+ *  it); each is named BY ID so the operator can triage which one did/didn't learn. */
+interface EvermindLearnTarget {
+    /** The Evermind-bearing project id (the build's storage project, or the surface project). */
+    projectId: number;
+    /** Immutable version ref `evermind/project/<t>/<p>/v<version>`; null when unseeded. */
+    ref: string | null;
+    version: number;
+    name: string;
+    learned: boolean;
+    reason: 'not-attached' | 'not-seeded' | 'frozen' | 'too-short' | null;
+}
 interface EvermindLearnOutcome {
     learned: boolean;
     version: number;
@@ -34,6 +47,12 @@ interface EvermindLearnOutcome {
      *   `frozen` Evermind is read-only · `too-short` no teachable assistant text.
      */
     reason?: 'not-attached' | 'not-seeded' | 'frozen' | 'too-short' | null;
+    /**
+     * Per-Evermind breakdown WITH IDs — present when the chat is project-attached. A
+     * project can target 0, 1, or many Everminds; this names each so "which Evermind
+     * (didn't) learn" is triageable instead of a single ambiguous "this project".
+     */
+    targets?: EvermindLearnTarget[];
 }
 /** A single message within a chat. */
 interface BrainMessage {
