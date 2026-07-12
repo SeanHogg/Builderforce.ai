@@ -514,6 +514,25 @@ describe('completeTaskOnMerge — negative / edge cases (FR-3)', () => {
     const selected = (await (db.select() as any).from(tasks)) as unknown[];
     expect((selected[0] as any).status).toBe(TaskStatus.IN_PROGRESS);
   });
+
+  it('FR-3.2 (idempotent): completing an in-progress task twice does not increase the completion record count', async () => {
+    // Third-party idempotency verification described in PRD Implementation Notes (page 4):
+    // This test ensures transition inserts do not increase on a second completion call.
+    const rows = new Map<TableRef, unknown[]>([
+      [tasks, [inflightTask({ id: 600, projectId: 10 })]],
+      [swimlanes, [doneSwimlane]],
+      [boards, [{ id: 1, projectId: 10 }]],
+    ]);
+    const { db, inserts } = makeFakeDb(rows);
+
+    await completeTaskOnMerge(env, db as never, { tenantId: 5, taskId: 600 });
+    const firstCount = inserts.filter((i) => (i.values as any)?.fromStatus !== undefined).length;
+
+    await completeTaskOnMerge(env, db as never, { tenantId: 5, taskId: 600 });
+    const secondCount = inserts.filter((i) => (i.values as any)?.fromStatus !== undefined).length;
+
+    assert.strictEqual(firstCount, secondCount, 'transition inserts count must not increase on re-completion');
+  });
 });
 
 // ===========================================================================
