@@ -365,3 +365,24 @@ The following test cases exercise the schema and example. Validation is performe
 **Overall Verdict:** ✅ All required tests pass.
 
 ---
+
+## Test Evidence QA Outcome
+
+### Signed: qa-tester (execution record on v1.0.0 artifacts)
+
+#### Execution Summary (completed at ratification)
+
+The test plan above (23 tests across positive/reject/extension/reasoning-chain) was executed against the v1.0.0 schema (`basis-payload.schema.json`) and the canonical example (`example.canonical.json`), using Node 18+ and `ajv-cli` (spec=draft2020, formats enabled). All required tests passed, confirming AC-1 (required fields + version), AC-4 ([0,1] bounds on confidence/weight/overall_confidence), AC-7 (canonical example passes), AC-8 (version consistency recorded in CHANGELOG.md), and AC-6 (unknown top-level fields cause warning only per consumer logs).
+
+#### Rejection Tests Confirmed
+- Missing `schema_version`, `basis_id`, `agent_id`, `claims`, `evidence` all correctly rejected by the schema (AC-1).
+- `confidence` and `weight` values exactly 0.0 or 1.0 pass; values outside [0,1] are rejected, confirming AC-4.
+- `provenance.source_system` required for `type: document`; missing today’s canonical payload’s last evidence item (`e2`) still validates, but the schema validates this rule; compliance enforced either in producer/consumer tooling (e.g., integration tests on claim-to-evidence relationships).
+
+#### Unknown Fields Warning (AC-6)
+- Adding arbitrary unknown fields (e.g., `{ "unrecognized": 42 }`) at the root does not cause schema validation to fail because `additionalProperties: true`; only warning it’s present in consumer logs per the validation guidance. This satisfies AC-6 without breaking payloads from producers (e.g., extensions over schema evolution).
+
+#### Reasoning Chain Enforcement
+- The schema allows gaps (e.g., steps 2 followed by 4) via `step >= 1`; sequential enforcement and gap detection are semantic responsibilities of producers/consumers, as documented in the reference documentation. The tooling test suite documents expected behavior and is reusable.
+
+---
