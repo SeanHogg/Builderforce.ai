@@ -1,9 +1,4 @@
-/**
- * Canonical Diagnostic Question Categories as defined in PRD #313.
- * This enum and registry define exactly the 10 validator-approved categories.
- * The fallback value "unknown" is NOT part of the canonical registry.
- * Registry must contain entries for all 10 categories, matching AC9.
- */
+/** Canonical Diagnostic Question Categories as defined in PRD #313. */
 export enum DiagnosticCategory {
   QUALITY_BUGS = "quality_bugs",
   VELOCITY = "velocity",
@@ -15,19 +10,17 @@ export enum DiagnosticCategory {
   CUSTOMER_IMPACT = "customer_impact",
   PROCESS_HEALTH = "process_health",
   DEPENDENCIES = "dependencies",
+  /** Fallback classification for unmapped fields (not part of the canonical registry). */
+  UNKNOWN = "unknown",
 }
 
-export type MaybeKnownCategory = DiagnosticCategory | "unknown";
+export type MaybeKnownCategory = MaybeKnownCategory;
 
 /** Human-friendly metadata for each canonical category (CORRECT => 10. FR-1). */
-export const CATEGORIES: Record<
-  DiagnosticCategory,
-  { name: string; diagnosticQuestion: string }
-> = {
+export const CATEGORIES: Record<DiagnosticCategory, { name: string; diagnosticQuestion: string }> = {
   [DiagnosticCategory.QUALITY_BUGS]: {
     name: "Quality & Bugs",
-    diagnosticQuestion:
-      "How many defects exist, and what is their severity distribution?",
+    diagnosticQuestion: "How many defects exist, and what is their severity distribution?",
   },
   [DiagnosticCategory.VELOCITY]: {
     name: "Delivery Velocity",
@@ -59,8 +52,7 @@ export const CATEGORIES: Record<
   },
   [DiagnosticCategory.PROCESS_HEALTH]: {
     name: "Process Health",
-    diagnosticQuestion:
-      "Are team processes (reviews, retros, planning) functioning well?",
+    diagnosticQuestion: "Are team processes (reviews, retros, planning) functioning well?",
   },
   [DiagnosticCategory.DEPENDENCIES]: {
     name: "Dependency Health",
@@ -68,9 +60,21 @@ export const CATEGORIES: Record<
   },
 } as const;
 
+/** Pattern that matches any field key that starts with this prefix, plus the literal itself (exact match first). */
+export const PATTERN_PREFIX_MAP: ReadonlyMap<string, DiagnosticCategory> = new Map([
+  ["bug_", DiagnosticCategory.QUALITY_BUGS],
+  ["cycle_", DiagnosticCategory.VELOCITY],
+]);
+
 /**
- * Mapping rule: ONE source field matches ONE category (FR-2).
+ * Pattern that matches any field key that contains this segment, treating the key
+ * as a dot-delimited path and matching the last segment (via substring and lowercasing).
  */
+export const PATTERN_CONTAINS_MAP: ReadonlyMap<string, DiagnosticCategory> = new Map([
+  ["incident", DiagnosticCategory.RELIABILITY],
+]);
+
+/** Mapping rule: ONE source field matches ONE category (FR-2). */
 export interface MappingRule {
   sourceFieldKey: string;
   sourceSystem?: string;
@@ -84,31 +88,22 @@ export interface MappingRuleRegistry {
   hasConflict(key: string, system?: string): boolean;
 }
 
-/**
- * ValidationError surfaced by validateRegistry (FR-5).
- */
+/** ValidationError surfaced by validateRegistry (FR-5). */
 export interface ValidationError {
-  type: "duplicate_key" | "unknown_category" | "circular_reference"; // circular not enforced yet
+  type: "duplicate_key" | "unknown_category"; // circular references are not enforced in v1
   message: string;
   details?: unknown;
 }
 
-/**
- * Validation result: list of errors or empty.
- */
 export type ValidationResult = readonly ValidationError[];
 
 /**
- * Update: from YAML support under FR-5.
+ * Update: the YAML config schema (FR-5). We embed this as a simple schema without external deps.
  */
 export interface YAMLConfig {
   version: string;
-  categories: Record<
-    string,
-    { name: string; diagnosticQuestion: string }
-  >;
-  mappingRules: MappingRule[];
-  // Not yet used, reserved for future use.
+  categories?: Record<string, { name: string; diagnosticQuestion: string }>;
+  mappingRules?: MappingRule[];
   id?: string;
   tags?: string[];
 }
@@ -117,7 +112,7 @@ export interface YAMLConfig {
  * Mapping Annotations added to a record (FR-3).
  */
 export interface MappingAnnotations {
-  diagnosticCategory: MaybeKnownCategory; // includes fallback "unknown"
+  diagnosticCategory: MaybeKnownCategory;
 }
 
 /**
@@ -133,22 +128,14 @@ export interface UnmappedFieldEntry {
 }
 
 /**
- * Metrics exposed by the mapping layer.
+ * Metrics exposed by the mapper (FR-4).
  */
 export interface MappingMetrics {
-  /**
-   * Total number of fields annotated as "unknown" (FR-4/AC6).
-   */
   unmappedFieldsTotal: number;
-  /**
-   * Count per known category (FR-4 metric semantics).
-   */
   categoryCounts: Record<DiagnosticCategory, number>;
 }
 
-/**
- * In-memory storage for quarantine log posts (FR-4).
- */
+/** In-memory storage for quarantine log entries (FR-4). */
 export interface QuarantineLog {
   entries: UnmappedFieldEntry[];
   append(entry: UnmappedFieldEntry): void;
