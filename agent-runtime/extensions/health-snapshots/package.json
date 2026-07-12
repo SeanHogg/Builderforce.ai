@@ -1,0 +1,15 @@
+{
+  "name": "@builderforce/health-snapshots",
+  "version": "2026.3.21",
+  "description": "BuilderForce Agents historical health snapshots capture, storage, and comparison",
+  "type": "module",
+  "dependencies": {},
+  "devDependencies": {
+    "@seanhogg/builderforce-agents": "workspace:*"
+  },
+  "builderforce": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
