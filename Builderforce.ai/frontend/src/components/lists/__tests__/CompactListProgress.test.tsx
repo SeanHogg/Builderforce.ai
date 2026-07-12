@@ -121,6 +121,11 @@ describe('CompactListProgress (AC-1..AC-11, FR-1..FR-8, FR-3, FR-6, FR-7, FR-8)'
       render(<CompactListProgress items={zeroItems} emptyText="No items" />);
       const rows = screen.getAllByRole('listitem');
       expect(rows.length).toBe(zeroItems.length);
+      // No division-by-zero: bar is present and clamped to 0.
+      const bar = rows[0]!.querySelector('div[role="progressbar"]');
+      expect(bar?.getAttribute('aria-valuenow')).toBe('0');
+      // Raw fraction still renders as 0/0.
+      expect(within(rows[0]!).getByText('0/0')).toBeInTheDocument();
     });
   });
 
