@@ -235,6 +235,7 @@ const BYO_FRONTIER_FLAGSHIPS: Readonly<Record<string, { agentic: string; chat: s
   moonshot:  { agentic: 'direct/moonshot/kimi-k2-0711-preview', chat: 'direct/moonshot/kimi-k2-0711-preview' },
   qwen:      { agentic: 'direct/qwen/qwen3-coder-plus', chat: 'direct/qwen/qwen3-max' },
   minimax:   { agentic: 'direct/minimax/MiniMax-M1', chat: 'direct/minimax/MiniMax-Text-01' },
+  xai:       { agentic: 'direct/xai/grok-4.5', chat: 'direct/xai/grok-4.5' },
 };
 
 function providerFrontierFlagship(vendor: string, agentic: boolean): string | null {
@@ -1447,6 +1448,7 @@ export class LlmProxyService {
       ...(this.tenantVendorKeys.kimi ? { MOONSHOT_API_KEY: this.tenantVendorKeys.kimi } : {}),
       ...(this.tenantVendorKeys.qwen ? { QWEN_API_KEY: this.tenantVendorKeys.qwen } : {}),
       ...(this.tenantVendorKeys.minimax ? { MINIMAX_API_KEY: this.tenantVendorKeys.minimax } : {}),
+      ...(this.tenantVendorKeys.xai ? { XAI_API_KEY: this.tenantVendorKeys.xai } : {}),
       // A tenant BYO Meta AI key powers the `meta` vendor (MUSE models). There is
       // NO operator-level Meta key — this is the ONLY source. When absent the meta
       // vendor no-key-skips at dispatch, same as any other unbound vendor.

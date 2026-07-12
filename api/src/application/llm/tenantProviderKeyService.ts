@@ -22,11 +22,12 @@ import type { HonoEnv } from '../../env';
 import { encryptSecretForStorage, decryptSecretFromStorage } from '../../infrastructure/auth/MfaService';
 import { refreshAnthropicToken, OAUTH_SAFETY_MARGIN_MS, type AnthropicOAuthTokens } from './anthropicOAuth';
 import { refreshOpenAICodexToken, type OpenAICodexOAuthTokens } from './openaiCodexOAuth';
+import { refreshXaiToken, type XaiOAuthTokens } from './xaiOAuth';
 
 type Env = HonoEnv['Bindings'];
 
-export type LlmProvider = 'anthropic' | 'openai' | 'google' | 'meta' | 'kimi' | 'qwen' | 'minimax';
-export const SUPPORTED_PROVIDERS: readonly LlmProvider[] = ['anthropic', 'openai', 'google', 'meta', 'kimi', 'qwen', 'minimax'];
+export type LlmProvider = 'anthropic' | 'openai' | 'google' | 'meta' | 'kimi' | 'qwen' | 'minimax' | 'xai';
+export const SUPPORTED_PROVIDERS: readonly LlmProvider[] = ['anthropic', 'openai', 'google', 'meta', 'kimi', 'qwen', 'minimax', 'xai'];
 
 export type ProviderAuthType = 'api_key' | 'oauth';
 
@@ -34,7 +35,7 @@ export type ProviderAuthType = 'api_key' | 'oauth';
  *  overrides. `oauth` marks the provider that ALSO supports a connected
  *  subscription (Anthropic today) — the OAuth path is resolved separately via
  *  {@link resolveAnthropicOAuthToken}, so it isn't part of the api-key overlay. */
-export const PROVIDER_VENDOR_MAP: Record<LlmProvider, { vendorId: string; envKey: 'CLAUDE_API_KEY' | 'OPENAI_API_KEY' | 'GOOGLE_API_KEY' | 'META_API_KEY' | 'MOONSHOT_API_KEY' | 'QWEN_API_KEY' | 'MINIMAX_API_KEY'; oauth: boolean }> = {
+export const PROVIDER_VENDOR_MAP: Record<LlmProvider, { vendorId: string; envKey: 'CLAUDE_API_KEY' | 'OPENAI_API_KEY' | 'GOOGLE_API_KEY' | 'META_API_KEY' | 'MOONSHOT_API_KEY' | 'QWEN_API_KEY' | 'MINIMAX_API_KEY' | 'XAI_API_KEY'; oauth: boolean }> = {
   anthropic: { vendorId: 'anthropic', envKey: 'CLAUDE_API_KEY', oauth: true },
   openai:    { vendorId: 'openai',    envKey: 'OPENAI_API_KEY', oauth: true },
   google:    { vendorId: 'googleai',  envKey: 'GOOGLE_API_KEY', oauth: false },
@@ -42,6 +43,7 @@ export const PROVIDER_VENDOR_MAP: Record<LlmProvider, { vendorId: string; envKey
   kimi:      { vendorId: 'moonshot',  envKey: 'MOONSHOT_API_KEY', oauth: false },
   qwen:      { vendorId: 'qwen',      envKey: 'QWEN_API_KEY', oauth: false },
   minimax:   { vendorId: 'minimax',   envKey: 'MINIMAX_API_KEY', oauth: false },
+  xai:       { vendorId: 'xai',       envKey: 'XAI_API_KEY', oauth: true },
 };
 
 /** A tenant's resolved BYO API keys keyed by provider (decrypted, api_key mode
@@ -109,7 +111,7 @@ export async function setTenantProviderOAuth(
   env: Env,
   tenantId: number,
   provider: LlmProvider,
-  tokens: AnthropicOAuthTokens | OpenAICodexOAuthTokens,
+  tokens: AnthropicOAuthTokens | OpenAICodexOAuthTokens | XaiOAuthTokens,
   userId: string | null,
 ): Promise<void> {
   const keyEnc = await encryptSecretForStorage(JSON.stringify(tokens), env.JWT_SECRET);
@@ -146,6 +148,28 @@ export async function resolveOpenAICodexResolution(env: Env, tenantId: number): 
     if (status === 401 || status === 403) return { auth: null, reason: 'revoked' };
     if (Date.now() < tokens.expires + OAUTH_SAFETY_MARGIN_MS) return { auth: { accessToken: tokens.access, accountId: tokens.accountId } };
     return { auth: null, reason: 'expired' };
+  }
+}
+
+export interface XaiOAuthResolution { token: string | null; reason?: ByoUnresolvedReason }
+
+export async function resolveXaiOAuthResolution(env: Env, tenantId: number): Promise<XaiOAuthResolution> {
+  const row = await loadProviderRow(env, tenantId, 'xai');
+  if (!row?.key_enc || (row.auth_type ?? 'api_key') !== 'oauth') return { token: null };
+  let tokens: XaiOAuthTokens;
+  try { tokens = JSON.parse(await decryptSecretFromStorage(row.key_enc, env.JWT_SECRET)) as XaiOAuthTokens; }
+  catch { return { token: null, reason: 'undecryptable' }; }
+  if (!tokens.access || !tokens.refresh) return { token: null, reason: 'undecryptable' };
+  if (Date.now() < tokens.expires) return { token: tokens.access };
+  try {
+    const refreshed = await refreshXaiToken(tokens.refresh);
+    await setTenantProviderOAuth(env, tenantId, 'xai', refreshed, null);
+    return { token: refreshed.access };
+  } catch (e) {
+    const status = (e as { status?: number }).status;
+    if (status === 400 || status === 401 || status === 403) return { token: null, reason: 'revoked' };
+    if (Date.now() < tokens.expires + OAUTH_SAFETY_MARGIN_MS) return { token: tokens.access };
+    return { token: null, reason: 'expired' };
   }
 }
 
@@ -342,13 +366,15 @@ export interface TenantLlmCredentials {
  * WHY in `unresolvedReasons`) so the degrade to the shared pool is never silent.
  */
 export async function resolveTenantLlmCredentials(env: Env, tenantId: number): Promise<TenantLlmCredentials> {
-  const [anthropicRes, openaiRes, vendorKeys, configured] = await Promise.all([
+  const [anthropicRes, openaiRes, xaiRes, vendorKeys, configured] = await Promise.all([
     resolveAnthropicResolution(env, tenantId).catch(() => ({ auth: null }) as AnthropicResolution),
     resolveOpenAICodexResolution(env, tenantId).catch(() => ({ auth: null }) as OpenAICodexResolution),
+    resolveXaiOAuthResolution(env, tenantId).catch(() => ({ token: null }) as XaiOAuthResolution),
     resolveTenantVendorKeys(env, tenantId),
     listTenantProviderKeys(env, tenantId).catch(() => [] as ProviderKeySummary[]),
   ]);
   const anthropicOAuthToken = anthropicRes.auth?.mode === 'oauth' ? anthropicRes.auth.accessToken : null;
+  if (xaiRes.token) vendorKeys.xai = xaiRes.token;
   const creds: TenantLlmCredentials = {
     anthropicOAuthToken,
     openaiCodexAuth: openaiRes.auth,
@@ -368,7 +394,8 @@ export async function resolveTenantLlmCredentials(env: Env, tenantId: number): P
     if (usable.has(p)) continue;
     creds.unresolvedReasons[p] = p === 'anthropic'
       ? (anthropicRes.reason ?? 'undecryptable')
-      : p === 'openai' ? (openaiRes.reason ?? 'undecryptable') : 'undecryptable';
+      : p === 'openai' ? (openaiRes.reason ?? 'undecryptable')
+      : p === 'xai' ? (xaiRes.reason ?? 'undecryptable') : 'undecryptable';
   }
   return creds;
 }
