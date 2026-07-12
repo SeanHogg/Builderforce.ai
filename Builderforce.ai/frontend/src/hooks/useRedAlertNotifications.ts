@@ -6,8 +6,13 @@
  */
 
 import { useState, useCallback, useRef } from 'react';
-import { redAlertNotificationCenter } from '../services/redAlert';
-import { AlertNotification, NotificationChannel } from '../services/redAlert';
+// Import directly from the concrete module (not the barrel) to avoid a
+// circular dependency: services/redAlert/index.ts re-exports this hook.
+import {
+  redAlertNotificationCenter,
+  type AlertNotification,
+  type NotificationChannel,
+} from '../services/redAlertServices';
 
 export interface UseRedAlertNotificationsOptions {
   /** Minimum channels that must be processed to count as 'delivered' per alert dispatch call */
