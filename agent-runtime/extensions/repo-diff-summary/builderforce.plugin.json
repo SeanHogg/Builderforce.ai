@@ -1,0 +1,15 @@
+{
+  "id": "repo-diff-summary",
+  "name": "Repo Diff Summary",
+  "description": "Returns a categorized file-change summary (source/test/docs/config/migration/asset) for a task's PR or branch, with line counts and codeChanged/docsOnly flags.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "githubToken": {
+        "type": "string",
+        "description": "Optional GitHub personal access token for repository access. If omitted, runs in read-only mode with lower rate limits."
+      }
+    }
+  }
+}
