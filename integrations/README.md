@@ -99,6 +99,6 @@ The following tools are excluded from v1 to focus on a minimal yet complete comm
 
 ## References
 
-- PRD: [PRD.md](../../PRD.md) (task #310 contains full spec).
+- PRD: [PRD.md](../PRD.md) (task #310 contains full spec).
 - Architecture: [Agent Runtime Architecture](../agent-runtime/docs/ARCHITECTURE.md).
 - Schema Registry Key: `$SCHEMA_*` in TypeScript files in `/integrations/Schemas`.
