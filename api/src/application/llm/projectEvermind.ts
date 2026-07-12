@@ -32,7 +32,7 @@ import {
   type LimbicSetpoints,
   type LimbicPsychProfile,
 } from '@builderforce/agent-tools';
-import { projectEvermind, ideAgents } from '../../infrastructure/database/schema';
+import { projectEvermind, ideAgents, ideProjects } from '../../infrastructure/database/schema';
 import { aggregateProjectPsychometric } from '../persona/psychometricCatalog';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -132,6 +132,42 @@ export async function getProjectEvermindHead(
     },
     { kvTtlSeconds: 60 },
   );
+}
+
+/**
+ * Resolve ALL Evermind heads a surface bound to `projectId` should target — the ONE
+ * place "which Evermind(s)" is decided, so every surface (learn, inference, panel)
+ * agrees instead of each assuming a single head. Structural model (there is no
+ * assignment table): a container project groups many IDE builds
+ * (`ide_projects.container_project_id`); each build's `storage_project_id` is its own
+ * `projects` row carrying its own `project_evermind`. So the target set = the project
+ * ITSELF plus the storage projects of the IDE builds grouped under it. Returns EVERY
+ * candidate head — including unseeded (`version:0`) — so callers can both contribute to
+ * the live ones AND report the skipped ones BY ID for triage. Deduped by projectId.
+ * The child-grouping lookup is briefly cached; each head read is version-token cached
+ * (always fresh). Empty for an invalid project.
+ */
+export async function resolveEvermindTargets(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+): Promise<ProjectEvermindHead[]> {
+  if (!Number.isInteger(projectId) || projectId <= 0) return [];
+  const childIds = await getOrSetCached(
+    env,
+    `evermind:targets:children:${tenantId}:${projectId}`,
+    async () => {
+      const rows = await db
+        .select({ sid: ideProjects.storageProjectId })
+        .from(ideProjects)
+        .where(and(eq(ideProjects.tenantId, tenantId), eq(ideProjects.containerProjectId, projectId)));
+      return rows.map((r) => r.sid).filter((n): n is number => Number.isInteger(n) && n > 0);
+    },
+    { kvTtlSeconds: 60 },
+  );
+  const ids = [...new Set<number>([projectId, ...childIds])];
+  return Promise.all(ids.map((pid) => getProjectEvermindHead(env, db, tenantId, pid)));
 }
 
 /** Minimal R2 slice we use for writing model versions (keeps this mockable). */

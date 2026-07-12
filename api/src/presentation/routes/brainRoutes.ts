@@ -20,7 +20,7 @@ import { sendChatInviteEmail } from '../../infrastructure/email/EmailService';
 import { isKeyOwnedByTenant } from '../../domain/shared/r2Keys';
 import type { Env, HonoEnv } from '../../env';
 import type { BrainService, BrainTraceEventInput } from '../../application/brain/BrainService';
-import { evaluateBrainLearnGate, dispatchBrainLearn } from '../../application/brain/brainEvermindLearning';
+import { learnFromPersistedTurns } from '../../application/brain/brainEvermindLearning';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 
@@ -194,20 +194,17 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       })());
     }
 
-    // Train the project's Evermind FROM this conversation (not just agent runs):
-    // a persisted assistant turn in a project chat whose Evermind is seeded +
-    // connected is contributed to learning. The GATE is evaluated synchronously (a
-    // cached head read) so the response reports the TRUTHFUL outcome — the client
-    // renders its `learn` step off this instead of guessing from its pre-turn recall;
-    // the slow coordinator contribution is dispatched in the background.
-    const learnGate = await evaluateBrainLearnGate(c.env as Env, db, id, tenantId, result).catch(
-      () => ({ outcome: { learned: false, version: 0 }, projectId: null, assistant: null }),
-    );
-    c.executionCtx.waitUntil(
-      dispatchBrainLearn(c.env as Env, db, id, tenantId, result, learnGate).catch(() => { /* never fail the write */ }),
+    // Train the project's Evermind FROM this conversation (not just agent runs): a
+    // persisted assistant turn in a project chat whose Evermind is seeded + connected
+    // is contributed to learning. ONE learn-on-persist entry point (shared with the
+    // `@agent` reply path) evaluates the gate synchronously (a cached head read) so the
+    // response reports the TRUTHFUL outcome — the client renders its `learn` step off
+    // this — and dispatches the slow coordinator contribution in the background.
+    const evermindLearn = await learnFromPersistedTurns(
+      c.env as Env, db, id, tenantId, result, (p) => c.executionCtx.waitUntil(p),
     );
 
-    return c.json({ messages: result, evermindLearn: learnGate.outcome }, 201);
+    return c.json({ messages: result, evermindLearn }, 201);
   });
 
   // GET /chats/:id/trace — the persisted tool/LLM-turn timeline (survives reload).

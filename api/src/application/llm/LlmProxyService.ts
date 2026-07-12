@@ -212,17 +212,55 @@ export const CODING_DEFAULT_MODEL: string =
  * `direct/openai/…` is the only route to the tenant's OWN OpenAI key. `googleai/` is
  * a bespoke prefix already bound to the tenant Google key.
  */
+/**
+ * The BYO frontier flagship each connected provider leads auto-select with — ONE per
+ * vendor (Anthropic splits by turn shape: Opus drives agentic tool-loops, Sonnet plain
+ * chat; every other vendor uses one model for both shapes). EVERY id here is a real,
+ * tool- and structured-output-capable CODER served on the tenant's OWN key (the
+ * `direct/<vendor>/` and bespoke `googleai/` prefixes route to that key, NOT the operator
+ * OpenRouter pool — a bare `openai/…` id is OpenRouter's namespace).
+ *
+ * This map is the SINGLE SOURCE for both {@link providerFrontierFlagship} and the coder-
+ * recognition superset {@link RECOGNIZED_CODER_MODELS}: adding a BYO vendor here makes its
+ * flagship recognised as a coder automatically. That closes the drift that mislabelled
+ * `direct/meta/muse-spark-1.1` (Meta MUSE, a coder) as a "degraded onto a non-coder
+ * backstop" — only Anthropic's direct floor had been hand-added to CODING_MODEL_POOL.
+ */
+const BYO_FRONTIER_FLAGSHIPS: Readonly<Record<string, { agentic: string; chat: string }>> = {
+  anthropic: { agentic: 'claude-opus-4-8', chat: 'claude-sonnet-4-6' },
+  openai:    { agentic: 'direct/openai/gpt-4.1', chat: 'direct/openai/gpt-4.1' },
+  googleai:  { agentic: 'googleai/gemini-2.5-pro', chat: 'googleai/gemini-2.5-pro' },
+  meta:      { agentic: 'direct/meta/muse-spark-1.1', chat: 'direct/meta/muse-spark-1.1' },
+};
+
 function providerFrontierFlagship(vendor: string, agentic: boolean): string | null {
-  switch (vendor) {
-    case 'anthropic': return agentic ? 'claude-opus-4-8' : 'claude-sonnet-4-6';
-    case 'openai':    return 'direct/openai/gpt-4.1';
-    case 'googleai':  return 'googleai/gemini-2.5-pro';
-    // Meta MUSE — tenant's own Meta AI account. `direct/meta/` prefix routes to
-    // the `meta` vendor module on the tenant's key (not the operator pool).
-    case 'meta':      return 'direct/meta/muse-spark-1.1';
-    default:          return null;
-  }
+  const f = BYO_FRONTIER_FLAGSHIPS[vendor];
+  return f ? (agentic ? f.agentic : f.chat) : null;
 }
+
+/**
+ * Every BYO frontier coder id (both turn shapes, de-duped) — the connected-account
+ * flagships that route only on a tenant's own key and so are (correctly) ABSENT from the
+ * auto-routable {@link CODING_MODEL_POOL}. Folded into {@link RECOGNIZED_CODER_MODELS}.
+ */
+export const BYO_FRONTIER_CODERS: readonly string[] = [
+  ...new Set(Object.values(BYO_FRONTIER_FLAGSHIPS).flatMap((f) => [f.agentic, f.chat])),
+];
+
+/**
+ * The ONE set of models the runtime recognises as real CODERS (tool- + structured-
+ * output-capable): the auto-routable {@link CODING_MODEL_POOL} PLUS the BYO frontier
+ * flagships ({@link BYO_FRONTIER_CODERS}) that only route on a tenant's own key. The
+ * degradation check (`isCodingModelDegraded`), the seed "is this a coder" trace, and the
+ * tool/structured-output capability sets all derive from THIS — so a connected-account
+ * coding run (e.g. `direct/meta/muse-spark-1.1`) is never mislabelled a non-coder
+ * backstop. DISTINCT from CODING_MODEL_POOL, which stays the AUTO-ROUTE/selection pool
+ * (plan ordering + `codingModelsForPlan` are unchanged; recognition simply widens).
+ */
+export const RECOGNIZED_CODER_MODELS: ReadonlySet<string> = new Set<string>([
+  ...CODING_MODEL_POOL,
+  ...BYO_FRONTIER_CODERS,
+]);
 
 /** Best-first rank of a model's catalog tier (ULTRA → PREMIUM → STANDARD → FREE),
  *  used to order the connected providers' flagships by frontier strength from catalog
@@ -2350,13 +2388,14 @@ const TOOL_ONLY_EXTRA_MODELS: readonly string[] = [
   'x-ai/grok-3-mini',
 ];
 const TOOL_CAPABLE_MODELS: ReadonlySet<string> = new Set([
-  ...CODING_MODEL_POOL,
+  ...RECOGNIZED_CODER_MODELS,
   ...TOOL_ONLY_EXTRA_MODELS,
 ]);
 
-/** Models that reliably emit valid JSON / honour json_schema. The coding pool
- *  doubles as the structured-output set — all of these honour json_schema. */
-const STRUCTURED_OUTPUT_MODELS: ReadonlySet<string> = new Set(CODING_MODEL_POOL);
+/** Models that reliably emit valid JSON / honour json_schema. The recognised-coder set
+ *  doubles as the structured-output set — all of these honour json_schema (including the
+ *  BYO frontier flagships that route on a tenant's own key). */
+const STRUCTURED_OUTPUT_MODELS: ReadonlySet<string> = RECOGNIZED_CODER_MODELS;
 
 /** Models with image-input (vision) capability. */
 const VISION_MODELS: ReadonlySet<string> = new Set([
@@ -2546,8 +2585,10 @@ export function reorderPoolForQuality(
 
 /** Membership set for {@link reorderPoolForCoding} — real coding drivers, distinct
  *  from the broader {@link TOOL_CAPABLE_MODELS} (which also admits generalists that
- *  merely advertise `tools`). Derived from CODING_MODEL_POOL so it never drifts. */
-const CODING_MODEL_SET: ReadonlySet<string> = new Set(CODING_MODEL_POOL);
+ *  merely advertise `tools`). The recognised-coder superset (auto-route pool + BYO
+ *  frontier flagships); reorder only ever sees plan-pool ids, so the BYO additions are
+ *  inert here — they just keep "is a real coder" consistent across the module. */
+const CODING_MODEL_SET: ReadonlySet<string> = RECOGNIZED_CODER_MODELS;
 
 /**
  * Cheap "flash"-class coders that must NOT LEAD an agentic tool-loop when a stronger

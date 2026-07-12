@@ -19,6 +19,7 @@ import { ideProxy, explicitModelPreemptsByo, readProxyChoice, type LlmProxyServi
 import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
 import { classifyReplyAccount, buildReplyProvenance } from '../llm/replyProvenance';
 import { getProjectEvermindHead } from '../llm/projectEvermind';
+import { learnFromPersistedTurns } from './brainEvermindLearning';
 import { tenantProxyForPlan } from '../llm/tenantProxy';
 import { vendorForModel } from '../llm/vendors';
 import { recordProxyUsage } from '../llm/usageLedger';
@@ -1100,6 +1101,17 @@ export class BrainService {
       provenance,
     });
     const [posted] = await this.appendRaw(chatId, [{ role: 'assistant', content: text, metadata }]);
+
+    // Contribute this @agent reply to the project's Evermind through the SAME
+    // learn-on-persist path the Brain message route uses. Previously the addressed-reply
+    // loop persisted via appendRaw DIRECTLY and silently skipped training, so @agent
+    // turns never fed the project Evermind (GAP-488). Best-effort; dispatched in the
+    // background via the route's executionCtx when present.
+    await learnFromPersistedTurns(
+      env, this.db, chatId, tenantId, [{ role: 'assistant', content: text }],
+      (p) => { if (opts?.executionCtx) opts.executionCtx.waitUntil(p); },
+    ).catch(() => { /* never fail the reply */ });
+
     return posted ?? { error: 'Failed to post reply' as const };
   }
 

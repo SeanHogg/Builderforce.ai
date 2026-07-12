@@ -1414,6 +1414,9 @@ export const ideAgents = pgTable('ide_agents', {
    *  so `name` can be renamed freely (to feel like a teammate) while dispatch and the
    *  card's type indicator key off this instead. See migration 0289. */
   builtinKind:      varchar('builtin_kind', { length: 32 }),
+  /** Explicit role keys this agent may act as (JSON string[]). NULL falls back to
+   *  builtin_kind-derived + fuzzy title/skill matching — see roleCapability.ts. */
+  roleKeys:         jsonb('role_keys'),
   title:            varchar('title', { length: 255 }),
   bio:              text('bio'),
   skills:           text('skills'),              // JSON string[] as text
@@ -4312,10 +4315,50 @@ export const ticketRoleSignoffs = pgTable('ticket_role_signoffs', {
   roleKey:    varchar('role_key', { length: 60 }).notNull(),
   memberKind: varchar('member_kind', { length: 16 }),
   memberRef:  varchar('member_ref', { length: 64 }),
-  verdict:    varchar('verdict', { length: 20 }).notNull().default('approved'), // approved | changes_requested
+  /** Denormalized signer display name — the accountability record must never be an
+   *  anonymous "system"; captured at write time so history survives a rename/delete. */
+  memberName: varchar('member_name', { length: 255 }),
+  verdict:    varchar('verdict', { length: 20 }).notNull().default('approved'), // approved | changes_requested | waived | delegated
   summary:    text('summary'),
+  /** Verifiable link to the actual work backing this sign-off — the interaction that
+   *  makes it more than a rubber stamp: { executionId?, prdRevision?, prUrl?, diffFiles?, reviewThreadRef?, toolRunId? }. */
+  contribution: jsonb('contribution'),
+  waiveReason:  text('waive_reason'), // required for waived/delegated
   createdAt:  timestamp('created_at').notNull().defaultNow(),
 });
+
+/** The per-ticket Participation Manifest — the forward-looking, stateful roster of
+ *  who MUST participate on a ticket, who has, and with what evidence. Derived from
+ *  the applicable process template and kept live; a Resource Assessment step ADDS
+ *  rows (source='assessment') so the manifest is dynamic. Each row may materialize
+ *  as a child task (childTaskId) so the parent ticket's %-complete rolls up. */
+export const ticketParticipants = pgTable('ticket_participants', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  taskId:         integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  stageKey:       varchar('stage_key', { length: 120 }),
+  roleKey:        varchar('role_key', { length: 120 }).notNull(),
+  responsibility: varchar('responsibility', { length: 16 }).notNull().default('owner'), // owner | reviewer | contributor
+  required:       boolean('required').notNull().default(true),
+  source:         varchar('source', { length: 16 }).notNull().default('template'), // template | assessment | manual
+  assigneeKind:   varchar('assignee_kind', { length: 16 }), // agent | human | hire | null (unresolved)
+  assigneeRef:    varchar('assignee_ref', { length: 128 }),
+  assigneeName:   varchar('assignee_name', { length: 255 }),
+  // pending|assigned|in_progress|completed|changes_requested|waived|skipped|unstaffed
+  state:          varchar('state', { length: 24 }).notNull().default('pending'),
+  signoffId:      varchar('signoff_id', { length: 36 }).references(() => ticketRoleSignoffs.id, { onDelete: 'set null' }),
+  childTaskId:    integer('child_task_id').references((): AnyPgColumn => tasks.id, { onDelete: 'set null' }),
+  evidence:       jsonb('evidence'),
+  quorumGroup:    varchar('quorum_group', { length: 160 }),
+  note:           text('note'),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uidx_ticket_participants_slot').on(t.taskId, t.stageKey, t.roleKey, t.responsibility, t.source),
+  index('idx_ticket_participants_task').on(t.taskId),
+  index('idx_ticket_participants_tenant').on(t.tenantId),
+  index('idx_ticket_participants_child').on(t.childTaskId),
+]);
 
 /** Computed per-ticket audit result (upserted; one row per task). */
 export const ticketAudits = pgTable('ticket_audits', {
