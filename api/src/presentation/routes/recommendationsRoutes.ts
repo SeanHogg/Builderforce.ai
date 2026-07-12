@@ -3,9 +3,10 @@
  *
  * Two prescriptive surfaces that sit ON TOP of the existing read-only lenses:
  *
- *   GET  /recommendations         ranked prescriptive actions + anomalies [manager]
- *   POST /recommendations/dismiss { recKey } — hide an acknowledged rec      [manager]
- *   GET  /space                   SPACE five-dimension productivity scores  [developer]
+ *   GET  /recommendations          ranked prescriptive actions + anomalies [manager]
+ *   POST /recommendations/dismiss  { recKey } — hide an acknowledged rec     [manager]
+ *   POST /recommendations/feedback { recKey, vote, reason? } — 👍/👎 + text  [manager]
+ *   GET  /space                    SPACE five-dimension productivity scores [developer]
  *
  * Mounted at '/api/insights' alongside createInsightsRoutes (Hono merges the two
  * routers under the same base). Recommendations/SPACE are recomputed live from the
