@@ -1,55 +1,116 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Security · task #541
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# SOC 2 Security Audit — Product Requirements Document
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+Enterprise customers and prospects increasingly require SOC 2 Type II attestation before procuring or renewing software. The engineering and security teams lack a systematic, evidence-backed map of where the codebase currently stands against all five AICPA Trust Service Criteria (TSC). Without this baseline, remediation work cannot be prioritised, and the organisation cannot scope the gap between current state and audit-ready state.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+**Goal:** Perform a full SOC 2 readiness audit of the codebase, record every finding through the `security.record_finding` tool, and produce a structured, actionable gap register that downstream agents (and human engineers) can use to drive remediation.
 
-## Target users / ICP roles
+---
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## Target Users / ICP Roles
+
+| Role | Interest |
+|---|---|
+| CISO / Security Lead | Owns overall compliance posture; needs a prioritised risk register |
+| Engineering Lead / Staff Engineers | Accountable for remediating code-level findings |
+| DevOps / Platform Engineers | Responsible for infrastructure, pipeline, and availability controls |
+| Compliance / GRC Analyst | Maps findings to AICPA criteria; prepares auditor evidence packages |
+| Auditor (external) | Consumes the final evidence package as pre-audit artefact |
+
+---
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+### In Scope
+
+- **All five Trust Service Criteria**
+  - **CC** – Common Criteria (Security)
+  - **A** – Availability
+  - **PI** – Processing Integrity
+  - **C** – Confidentiality
+  - **P** – Privacy
+- Every file, directory, and configuration committed to the repository at the time of audit
+- CI/CD pipeline configuration files (GitHub Actions, Dockerfiles, Makefiles, etc.)
+- Infrastructure-as-Code (Terraform, Helm charts, Kubernetes manifests, etc.)
+- Dependency manifests and lock files (`package.json`, `requirements.txt`, `go.mod`, etc.)
+- Application source code (all languages present in the repo)
+- Secret / credential management patterns
+- Logging, monitoring, and alerting configuration
+- Data-handling logic (PII detection, encryption at rest/in transit, retention)
+
+### Audit Boundaries
+
+- Static analysis of the codebase only; no live penetration testing or dynamic scanning
+- Findings represent design- and code-level observations; runtime behaviour is out of scope unless inferable from config
+
+---
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### FR-1 — TSC Coverage
+The audit agent MUST evaluate the codebase against every applicable control within all five Trust Service Criteria and produce at least one finding (pass or fail) per TSC category.
+
+### FR-2 — Finding Structure
+Every finding recorded via `security.record_finding` MUST include:
+- `id` — unique finding identifier (e.g., `CC6.1-001`)
+- `tsc_category` — one of `Security`, `Availability`, `Processing Integrity`, `Confidentiality`, `Privacy`
+- `tsc_ref` — specific AICPA control reference (e.g., `CC6.1`, `PI1.2`)
+- `severity` — `Critical`, `High`, `Medium`, `Low`, or `Informational`
+- `title` — one-line summary
+- `description` — what was observed in the code and why it is a finding
+- `evidence` — file path(s), line numbers, or code snippets substantiating the finding
+- `recommendation` — concrete, actionable remediation step(s)
+- `status` — `Open` for all new findings at time of filing
+
+### FR-3 — Severity Classification
+Severity MUST be assigned using the following criteria:
+
+| Severity | Criteria |
+|---|---|
+| Critical | Exploitable with no authentication; direct data exfiltration or system compromise possible |
+| High | Significant control gap; exploitable with low privilege or chained with one other issue |
+| Medium | Control weakness that increases risk but requires additional factors to exploit |
+| Low | Best-practice deviation; minimal direct exploitability |
+| Informational | Observation or improvement opportunity with negligible risk |
+
+### FR-4 — Exhaustive File Traversal
+The audit agent MUST traverse all directories and file types; no directory or file extension is excluded without explicit justification recorded as an `Informational` finding.
+
+### FR-5 — Duplicate Suppression
+If the same root-cause issue appears in multiple locations, a single finding MUST be filed with all affected locations enumerated in the `evidence` field rather than filing one finding per occurrence.
+
+### FR-6 — Tool Invocation
+Every finding MUST be filed using the `security.record_finding` tool. Findings MUST NOT be surfaced only in free-form prose output.
+
+### FR-7 — Summary Report
+After all findings are filed, the audit agent MUST emit a summary table (markdown) containing: total finding count, breakdown by severity, breakdown by TSC category, and a top-5 prioritised remediation backlog.
+
+---
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+| # | Criterion | Verification |
+|---|---|---|
+| AC-1 | At least one finding filed per TSC category | Query `security.record_finding` log grouped by `tsc_category` |
+| AC-2 | Every finding contains all required fields defined in FR-2 | Schema validation of each filed record |
+| AC-3 | No finding references a file path that does not exist in the repository | Automated path existence check |
+| AC-4 | Severity distribution is consistent with FR-3 definitions | Manual spot-check by Security Lead on ≥ 20% of findings |
+| AC-5 | No duplicate root-cause findings; multi-location issues consolidated | Duplicate-hash check on `tsc_ref` + `title` pair |
+| AC-6 | Summary report emitted with correct counts matching filed records | Count reconciliation between summary and tool log |
+| AC-7 | Audit completes without unhandled errors or skipped directories | Execution log reviewed by DevOps |
 
-## Out of scope
+---
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## Out of Scope
+
+- **Dynamic / runtime testing** — DAST, fuzzing, or live exploit attempts
+- **Social engineering and physical security controls** — not inferable from codebase
+- **Third-party vendor SOC 2 reports** — vendor attestation review is a separate workstream
+- **Formal audit opinion** — this PRD governs a readiness assessment, not an AICPA-certified audit
+- **Remediation implementation** — fixing findings is a downstream engineering task; this audit only identifies and records them
+- **Business continuity plan (BCP) documentation review** — treated as a separate policy-and-process audit
+- **Network-layer controls** (firewall rules, WAF configs) unless expressed as IaC in the repository
