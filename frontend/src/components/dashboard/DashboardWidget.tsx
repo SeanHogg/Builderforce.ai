@@ -50,14 +50,16 @@ export function DashboardWidget({ v }: { v: WidgetValue }) {
   const color = colorAt(0);
 
   if (v.error) {
-    return <InsightStat label={title} value="—" sub={t('unavailable')} />;
+    return <InsightStat label={title} value="—" sub={t('unavailable')} nuance={trendAnchorPoints(values)} />;
   }
 
-  // Trend delta chip (shared derivation) — coloured by the metric's polarity.
-  const d = seriesDelta(values);
-  const delta: InsightDelta | null = d
-    ? { label: `${d.pct > 0 ? '+' : ''}${d.pct}%`, direction: d.direction, tone: deltaTone(d.direction, v.goodWhenUp) }
-    : null;
+  // Trend classification (SVG arrow) — built from the daily series, optionally overrides delta.
+  const trend = buildTrendClassification(values, v.goodWhenUp === false ? 'lower-is-better' : v.goodWhenUp === true ? 'higher-is-better' : null);
+  const delta: InsightDelta | null = trend
+    ? null // Prioritize TrendArrow over text chip when classification exists
+    : seriesDelta(values)
+      ? { label: `${seriesDelta(values)?.pct > 0 ? '+' : ''}${seriesDelta(values)?.pct}%`, direction: seriesDelta(values)!.direction, tone: deltaTone(seriesDelta(values)!.direction, v.goodWhenUp) }
+      : null;
 
   switch (v.viz) {
     case 'line':
