@@ -1,55 +1,54 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #471
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# Product Requirements Document: Unified Analytics Dashboard
 
-## Problem & Goal
+## 1. Problem
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+Our current analytics data is fragmented across multiple disparate tools (e.g., Amplitude, Google Analytics, Salesforce, internal databases). This makes it challenging for product, marketing, and leadership teams to obtain a holistic, real-time-enough view of product performance, user engagement, and business health. The manual aggregation of data leads to inefficiencies, delayed insights, and hinders data-driven decision-making, potentially causing missed opportunities and an inability to quickly respond to market changes.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+## 2. Goal
 
-## Target users / ICP roles
+To deliver a centralized, intuitive, web-based analytics dashboard that consolidates key product, user, and business performance metrics. This platform will enable internal stakeholders to quickly access actionable insights, understand trends, identify problem areas, and facilitate data-driven strategic and tactical decisions.
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## 3. Target Users / ICP Roles
 
-## Scope
+*   **Product Managers:** To monitor feature adoption, user engagement, and product health.
+*   **Data Analysts:** To validate existing data, identify deeper trends, and support ad-hoc requests.
+*   **Marketing Managers:** To track campaign performance, user acquisition funnels, and retention rates.
+*   **Executive Leadership:** To gain a high-level overview of business performance and key operational metrics.
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+## 4. Scope
 
-## Functional Requirements
+This project involves the development of a secure, web-based analytics dashboard application. It will integrate with specified existing data sources to aggregate, visualize, and present key metrics. The initial focus will be on core metrics related to user acquisition, engagement, retention, and revenue.
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+## 5. Functional Requirements
 
-## Acceptance Criteria
+*   **FR.1: User Authentication & Authorization:** Implement secure user login via Single Sign-On (SSO) and role-based access control (RBAC) to restrict data visibility based on user roles.
+*   **FR.2: Dashboard Overview:** Provide a customizable landing page displaying summary cards for essential, high-level metrics (e.g., Monthly Active Users, Daily Active Users, New Sign-ups, Customer Acquisition Cost, Churn Rate, Average Revenue Per User).
+*   **FR.3: Detailed Metric Views:** Allow users to click on summary cards or navigate through a menu to access detailed views for each metric, including historical trends (line charts), comparative analyses, and segmentation options.
+*   **FR.4: Data Filtering & Segmentation:** Enable users to filter data by date range, user segments (e.g., plan type, geography), and other relevant dimensions.
+*   **FR.5: Interactive Data Visualizations:** Support various chart types (line, bar, pie, scatter) with tooltips and interactive elements for data exploration.
+*   **FR.6: Data Export Functionality:** Provide options to export visualized data (e.g., as PNG, PDF) and underlying raw data tables (as CSV, Excel).
+*   **FR.7: Data Refresh Mechanism:** Implement a daily automated data refresh from all integrated sources, with a clear indicator of the "Last Updated" timestamp on the dashboard.
+*   **FR.8: Performance:** The dashboard and individual reports must load data and visualizations efficiently, minimizing user wait times.
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+## 6. Acceptance Criteria
 
-## Out of scope
+*   **AC.1: Secure SSO Login:** All authorized users can successfully log in using their SSO credentials, and unauthorized users are denied access.
+*   **AC.2: Metric Accuracy:** All displayed metrics (summary cards, detailed views) align with the underlying data sources within a 1% margin of error across all filters and segments.
+*   **AC.3: Dashboard Load Time:** The main dashboard overview page loads and fully renders within 3 seconds for 95% of users under typical network conditions.
+*   **AC.4: Filter & Segment Application:** All date range, user segment, and dimension filters correctly apply and update the displayed data and visualizations within 2 seconds of selection.
+*   **AC.5: Export Integrity:** Exported CSV/Excel files contain the exact raw data corresponding to the applied filters and visible timeframe, and exported images (PNG/PDF) accurately reflect the displayed visualizations.
+*   **AC.6: Data Freshness Indicator:** The "Last Updated" timestamp is accurately displayed on the dashboard and reflects the time of the most recent successful data refresh, which occurs daily between 00:00-02:00 UTC.
+*   **AC.7: Role-Based Access:** Users with "Marketing" roles can only view marketing-related metrics, "Product" roles can view product metrics, and "Leadership" roles have full access as defined by the RBAC matrix.
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## 7. Out of Scope
+
+*   Real-time data streaming (beyond the daily automated refresh).
+*   Advanced predictive analytics or machine learning capabilities.
+*   Custom report building functionality for end-users (beyond pre-defined views and filters).
+*   Public-facing dashboards or embeddable widgets.
+*   Mobile application development for the dashboard.
+*   Integration with new data sources not explicitly identified and approved during the planning phase.
+*   User-generated alerts or notifications based on metric thresholds.
