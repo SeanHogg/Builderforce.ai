@@ -3,7 +3,12 @@
  * Shared definitions for frontend components and API client
  */
 
-import { MisalignmentRuleType, PriorityLevel, RuleSeverity, type TaskMisalignmentCheck } from '@seanhogg/builderforce-brain-ui';
+import type { TaskMisalignmentCheck } from './priorityMisalignmentApi';
+import {
+  MisalignmentRuleType,
+  PriorityLevel,
+  RuleSeverity,
+} from '@seanhogg/builderforce-brain-ui';
 
 /**
  * Helper: Map priority level to user-friendly label
