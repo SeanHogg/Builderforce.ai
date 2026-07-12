@@ -247,7 +247,8 @@ describe('completeTaskOnMerge — negative / edge cases (FR-3)', () => {
       [tasks, [inflightTask({ id: 300, projectId: 10 })]],
     ]);
     const { db } = makeFakeDb(rows);
-    const [t] = await db.select().from(tasks).where({}).limit(1) as unknown[][];
+    const selected = (await (db.select() as any).from(tasks).where({}).limit(1)) as unknown[];
+    const t = selected[0];
     expect((t as any).status).not.toBe(TaskStatus.DONE);
   });
 
