@@ -12,6 +12,8 @@ name: CI
 # (which DOES need a provisioned throwaway Postgres) remains a separate follow-up.
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
 
