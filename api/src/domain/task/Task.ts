@@ -216,16 +216,16 @@ export class Task {
       >
     >,
   ): Task {
-    // Partial-update semantics: only fields present in incoming updates (missing values are omitted)
-    const { updatedAt, ...effectiveUpdates } = updates;
-    // Strip any undefined own-prop values that would silently overwrite existing props during spread
-    const filtered: Partial<TaskProps> = {};
-    for (const key in effectiveUpdates) {
-      if (Object.prototype.hasOwnProperty.call(effectiveUpdates, key) && effectiveUpdates[key] !== undefined) {
-        filtered[key] = effectiveUpdates[key];
-      }
-    }
-    return new Task({ ...this.props, ...filtered, updatedAt: new Date() });
+    // Partial-update semantics: a key set to `undefined` in `updates` (e.g. a field
+    // OMITTED from a tasks.update payload) must NOT overwrite the stored value —
+    // a naive `{ ...this.props, ...updates }` spread would clobber it with
+    // undefined, which the persistence layer then writes as null (the parentTaskId
+    // preservation bug). Strip undefined-valued keys so only fields the caller
+    // explicitly provided are merged; an explicit `null` is preserved and clears.
+    const defined = Object.fromEntries(
+      Object.entries(updates).filter(([, value]) => value !== undefined),
+    ) as Partial<TaskProps>;
+    return new Task({ ...this.props, ...defined, updatedAt: new Date() });
   }
 
   /**
