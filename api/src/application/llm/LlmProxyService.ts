@@ -229,6 +229,7 @@ export const CODING_DEFAULT_MODEL: string =
 const BYO_FRONTIER_FLAGSHIPS: Readonly<Record<string, { agentic: string; chat: string }>> = {
   anthropic: { agentic: 'claude-opus-4-8', chat: 'claude-sonnet-4-6' },
   openai:    { agentic: 'direct/openai/gpt-4.1', chat: 'direct/openai/gpt-4.1' },
+  'openai-codex': { agentic: 'openai-codex/gpt-5.3-codex', chat: 'openai-codex/gpt-5.3-codex' },
   googleai:  { agentic: 'googleai/gemini-2.5-pro', chat: 'googleai/gemini-2.5-pro' },
   meta:      { agentic: 'direct/meta/muse-spark-1.1', chat: 'direct/meta/muse-spark-1.1' },
   moonshot:  { agentic: 'direct/moonshot/kimi-k2-0711-preview', chat: 'direct/moonshot/kimi-k2-0711-preview' },
@@ -944,6 +945,7 @@ export interface LlmProxyOptions {
    *  tenant's own subscription — and is NOT metered as paid-overflow (it's $0 to
    *  us). Resolved per request from `resolveAnthropicOAuthToken`. */
   anthropicOAuthToken?: string | null;
+  openaiCodexAuth?: { accessToken: string; accountId: string } | null;
   /** A tenant's BYO api-key credentials (OpenAI / Google / Anthropic) keyed by
    *  provider. When set, vendorEnv overrides the matching operator env key with
    *  the tenant's key for that vendor and marks the vendor tenant-funded (byo) —
@@ -969,6 +971,7 @@ export class LlmProxyService {
   private readonly codingOnly: boolean;
   private readonly freeBudget: number;
   private readonly anthropicOAuthToken: string | null;
+  private readonly openaiCodexAuth: { accessToken: string; accountId: string } | null;
   private readonly tenantVendorKeys: TenantVendorKeys;
   private readonly byoVendorPriority: readonly string[];
 
@@ -984,6 +987,7 @@ export class LlmProxyService {
     this.codingOnly = options?.codingOnly ?? false;
     this.freeBudget = options?.freeBudget && options.freeBudget > 0 ? options.freeBudget : FREE_ATTEMPT_BUDGET;
     this.anthropicOAuthToken = options?.anthropicOAuthToken ?? null;
+    this.openaiCodexAuth = options?.openaiCodexAuth ?? null;
     this.tenantVendorKeys = options?.tenantVendorKeys ?? {};
     this.byoVendorPriority = options?.byoVendorPriority ?? [];
     // Mark every vendor a BYO key overrides as tenant-funded up front, so any
@@ -999,7 +1003,8 @@ export class LlmProxyService {
    *  must NOT be metered as paid-overflow. The vendor only ever uses OAuth when the
    *  token is present, so vendor=anthropic + token bound ⇒ subscription-funded. */
   private isSubscriptionFunded(result: ProxyResult): boolean {
-    return this.anthropicOAuthToken != null && result.resolvedVendor === 'anthropic';
+    return (this.anthropicOAuthToken != null && result.resolvedVendor === 'anthropic')
+      || (this.openaiCodexAuth != null && result.resolvedVendor === 'openai-codex');
   }
 
   /** Gateway vendor ids the tenant can serve from their OWN connected account this
@@ -1009,6 +1014,7 @@ export class LlmProxyService {
   private get connectedByoVendors(): Set<string> {
     const set = new Set<string>(this.tenantFundedVendors);
     if (this.anthropicOAuthToken) set.add('anthropic');
+    if (this.openaiCodexAuth) set.add('openai-codex');
     return set;
   }
 
@@ -1409,6 +1415,7 @@ export class LlmProxyService {
       OPENROUTER_API_KEY: this.isPro
         ? (this.env.OPENROUTER_API_KEY_PRO ?? this.env.OPENROUTER_API_KEY ?? null)
         : (this.env.OPENROUTER_API_KEY ?? null),
+      OPENAI_CODEX_AUTH: this.openaiCodexAuth ? JSON.stringify(this.openaiCodexAuth) : null,
       CEREBRAS_API_KEY:         this.env.CEREBRAS_API_KEY         ?? null,
       NVIDIA_API_KEY:           this.env.NVIDIA_API_KEY           ?? null,
       OLLAMA_API_KEY:           this.env.OLLAMA_API_KEY           ?? null,
@@ -2037,7 +2044,7 @@ export function llmProxyForPlan(
   env: ProxyEnv,
   effectivePlan: EffectivePlan,
   premiumOverride = false,
-  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; vendorCallTimeoutMs?: number; byoVendorPriority?: readonly string[] },
+  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; tenantVendorKeys?: TenantVendorKeys | null; vendorCallTimeoutMs?: number; byoVendorPriority?: readonly string[] },
 ): LlmProxyService {
   const routing = resolveRouting(effectivePlan, premiumOverride);
   const { productName, modelPool } = routing;
@@ -2067,6 +2074,7 @@ export function llmProxyForPlan(
       : { freeBudget: freeAttemptBudgetForPlan(effectivePlan) }),
     // A connected tenant subscription token powers any direct-Claude resolution.
     ...(opts?.anthropicOAuthToken ? { anthropicOAuthToken: opts.anthropicOAuthToken } : {}),
+    ...(opts?.openaiCodexAuth ? { openaiCodexAuth: opts.openaiCodexAuth } : {}),
     // BYO api-keys (OpenAI/Google/Anthropic) override the operator keys for their
     // vendors and mark those calls tenant-funded (byo).
     ...(opts?.tenantVendorKeys ? { tenantVendorKeys: opts.tenantVendorKeys } : {}),

@@ -38,6 +38,7 @@ import {
   resolveAnthropicResolution,
   formatByoUnresolvedHeader,
   PROVIDER_VENDOR_MAP,
+  byoVendorPriorityOrder,
   type TenantLlmCredentials,
 } from './tenantProviderKeyService';
 import { OAUTH_SAFETY_MARGIN_MS } from './anthropicOAuth';
@@ -49,6 +50,11 @@ describe('BYO provider routing map', () => {
     expect(PROVIDER_VENDOR_MAP.kimi).toMatchObject({ vendorId: 'moonshot', envKey: 'MOONSHOT_API_KEY' });
     expect(PROVIDER_VENDOR_MAP.qwen).toMatchObject({ vendorId: 'qwen', envKey: 'QWEN_API_KEY' });
     expect(PROVIDER_VENDOR_MAP.minimax).toMatchObject({ vendorId: 'minimax', envKey: 'MINIMAX_API_KEY' });
+  });
+
+  it('maps OpenAI OAuth priority to the Codex subscription vendor', () => {
+    expect(byoVendorPriorityOrder([{ provider: 'openai', authType: 'oauth', priority: 0 }])).toEqual(['openai-codex']);
+    expect(byoVendorPriorityOrder([{ provider: 'openai', authType: 'api_key', priority: 0 }])).toEqual(['openai']);
   });
 });
 

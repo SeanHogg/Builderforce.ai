@@ -16,7 +16,7 @@ import { parseSseDataLine } from '../sseFrames';
 
 export type VendorId =
   // ── Bespoke wire-format vendors (hand-rolled modules)
-  | 'openrouter' | 'cerebras' | 'ollama' | 'nvidia' | 'googleai' | 'cloudflare' | 'anthropic'
+  | 'openrouter' | 'cerebras' | 'ollama' | 'nvidia' | 'googleai' | 'cloudflare' | 'anthropic' | 'openai-codex'
   // ── Our OWN model: serves a published `.evermind` artifact from R2 via the
   //    builderforce-memory runtime (on-CPU, in-Worker). Reached only via an
   //    explicit `evermind/<ref>` pin (autoRoute:false). See vendors/evermind.ts.
@@ -51,6 +51,7 @@ export type AiModelTier = 'FREE' | 'STANDARD' | 'PREMIUM' | 'ULTRA';
  * and synthesizing this env per call — vendors don't know about plans.
  */
 export interface VendorEnv {
+  OPENAI_CODEX_AUTH?: string | null;
   OPENROUTER_API_KEY?: string | null;
   CEREBRAS_API_KEY?: string | null;
   OLLAMA_API_KEY?: string | null;
