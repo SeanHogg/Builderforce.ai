@@ -134,10 +134,10 @@ export async function recordDismissal(
   event: DismissalEvent
 ): Promise<void> {
   await db.insert(recommendations).values({
-    tenant_id: null,
     provider: event.provider,
     surface: event.surface,
     event_type: "dismissed",
+    reason: event.reason ?? null,
     created_at: event.timestamp,
   });
 }
