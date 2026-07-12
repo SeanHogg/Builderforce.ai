@@ -65,7 +65,6 @@ export function VideoGrid({
   const captionFor = (it: Item) => (it.ref ? captions?.[it.ref] : undefined) ?? null;
   const speakingFor = (it: Item) => (it.ref ? speaking?.has(it.ref) ?? false : false);
   const tileProps = (it: Item, expanded: boolean) => ({
-    key: it.id,
     name: it.name,
     stream: it.stream,
     camOn: it.camOn,
