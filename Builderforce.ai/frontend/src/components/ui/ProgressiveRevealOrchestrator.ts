@@ -26,6 +26,11 @@ export const ProgressiveRevealContext = createContext<ProgressiveRevealContextVa
   deferredCount: 0,
 });
 
+/**
+ * Minimal ref to hold the last known state for event helpers; currentStage is computed in useMemo.
+ */
+const lastStateRef = useRef<ProgressiveRevealState>({ currentStage: 0, lastTransitionAt: undefined });
+
 const STAGE_THRESHOLDS: Record<Stage, PriorityTier> = {
   0: 'critical', // Stage 0 has no data, but streams that are critical are prioritized in order
   1: 'critical',
