@@ -8,7 +8,7 @@ import { GaugeChart } from '@/components/charts/GaugeChart';
 import { colorAt } from '@/components/charts/chartColors';
 import type { WidgetValue } from '@/lib/dashboardsApi';
 import { InsightStat, type InsightDelta } from './InsightStat';
-import { formatMetricValue, seriesDelta, deltaTone } from './metricFormat';
+import { formatMetricValue, seriesDelta, deltaTone, buildTrendClassification, trendAnchorPoints, type MetricPolarity } from './metricFormat';
 
 /**
  * DashboardWidget — renders ONE resolved {@link WidgetValue} as its chosen
