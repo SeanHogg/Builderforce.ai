@@ -233,5 +233,74 @@ export function getTaskHistory(taskId: string): StatusTransition[] {
     return current?.history || [];
 }
 
+/**
+ * Set a task's status to a new low-priority status.
+ * 
+ * Unified entry point for all status transitions. Routes to the specific
+ * method based on the target status.
+ * 
+ * @param taskId - The task identifier
+ * @param newStatus - The new status to set the task to
+ * @param note - Optional audit note explaining the status change
+ * @returns Object with previous status, new status, and audit information
+ * @throws Error if the transition is not valid
+ * 
+ * @example
+ * await PriorityStatusService.setTaskStatus('task-1', 'on_hold', 'Waiting for API docs');
+ * await PriorityStatusService.setTaskStatus('task-2', 'deferred', 'Postponed for sprint');
+ */
+export async function setTaskStatus(taskId: string, newStatus: LowPriorityStatus, note?: string): Promise<SetStatusResponse> {
+    // Validate input
+    if (!taskId) {
+        throw new Error('Task ID is required');
+    }
+
+    if (!newStatus) {
+        throw new Error('New status is required');
+    }
+
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    // Get current state or initialize
+    const current = mockTaskStatuses.get(taskId) || {
+        status: 'todo',
+        isLowPriority: false,
+        history: []
+    };
+
+    // Validate transition
+    if (!isValidTransition(current.status, newStatus)) {
+        throw new Error(`Invalid transition: cannot change from ${current.status} to ${newStatus}`);
+    }
+
+    // Create status transition record
+    const transition: StatusTransition = {
+        taskId,
+        previousStatus: current.status,
+        newStatus,
+        timestamp: new Date().toISOString(),
+        user: mockUser,
+        note
+    };
+
+    // Update state
+    current.status = newStatus;
+    current.isLowPriority = isLowPriorityStatus(newStatus);
+    current.priorityStatus = newStatus;
+    current.history.push(transition);
+    mockTaskStatuses.set(taskId, current);
+
+    // Return response
+    return {
+        taskId,
+        previousStatus: current.status,
+        newStatus,
+        timestamp: transition.timestamp,
+        user: mockUser,
+        note
+    };
+}
+
 // Export the full type
 export type LowPriorityStatus = 'on_hold' | 'deferred' | 'backlog' | 'todo' | 'ready' | 'in_progress' | 'in_review' | 'done' | 'blocked';
