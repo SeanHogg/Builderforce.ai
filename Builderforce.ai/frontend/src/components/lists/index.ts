@@ -5,4 +5,11 @@
  */
 
 export { CompactListProgress } from './CompactListProgress';
-export type { ProgressItem, PList, SortBy } from './CompactListProgress';
+export type { ProgressItem, PList, SortBy, ValueFormat } from './CompactListProgress';
+export { formatPct, formatValue, toPercent } from './CompactListProgress';
+export {
+  STATUS_VALUES,
+  STATUS_LABELS,
+  STATUS_ICONS,
+  getColorByStatus,
+} from './CompactListProgress';
