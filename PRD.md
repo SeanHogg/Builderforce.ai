@@ -1,55 +1,58 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #394
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# Product Requirements Document: Group by Topic
 
-## Problem & Goal
+## Problem
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+Users with a high volume of chat conversations struggle to efficiently navigate and locate specific discussions. Chats often become cluttered with generic or short-lived conversations, making it difficult to identify active workstreams or retrieve past information related to a particular project or subject. This leads to increased cognitive load and reduced productivity.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+## Goal
 
-## Target users / ICP roles
+To enhance chat organization and navigability by automatically identifying and grouping related conversations under common topics. This will reduce visual clutter, enable quicker information retrieval, and provide users with a clearer overview of their ongoing workstreams.
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## Target Users / ICP Roles
+
+*   **Project Managers**: To quickly see all conversations related to a specific project.
+*   **Product Managers/Architects**: To group discussions around specific features (e.g., PRD, Agent Creation, PWA).
+*   **Developers/Engineers**: To organize discussions by module, bug, or feature implementation.
+*   **Power Users**: Any user with a high volume of daily chats who requires efficient organization.
+*   **All Users**: To simplify the chat list and make it easier to find relevant conversations.
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This release focuses on implementing an intelligent system to automatically group chats based on their thematic content. The system will provide a user interface to display these groups and allow for basic user-initiated modifications (renaming, merging, moving chats) to refine the automatic groupings.
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+*   **FR1.1: Automatic Topic Identification**: The system MUST automatically analyze the content of chat messages, chat titles, and potentially participants to infer a dominant topic for each chat.
+*   **FR1.2: Chat Grouping**: The system MUST group chats identified as pertaining to the same topic into a single, collapsible group.
+*   **FR1.3: Group Display**: The system MUST provide a user interface element in the chat list to display these topic groups (e.g., as collapsible sections or labeled containers).
+*   **FR1.4: Dynamic Re-evaluation**: When new messages are added to an existing chat, or a new chat is created, the system MUST re-evaluate its topic and assign it to an existing group or create a new one as appropriate.
+*   **FR1.5: Group Renaming**: Users MUST be able to rename an automatically generated topic group.
+*   **FR1.6: Group Merging**: Users MUST be able to select two or more topic groups and merge them into a single, user-named group.
+*   **FR1.7: Chat Reassignment**: Users MUST be able to move a chat from one topic group to another via drag-and-drop or a context menu option.
+*   **FR1.8: Chat Ungrouping**: Users MUST be able to ungroup a chat, making it appear as a standalone item in the main chat list (ungrouped chats should appear prominently, perhaps in a default "Ungrouped" section or at the top level).
+*   **FR1.9: Default/Generic Topic**: The system SHOULD provide a mechanism to categorize generic, empty, or low-activity chats into a default group (e.g., "General", "Uncategorized").
+*   **FR1.10: Persistence**: User-modified group names and chat assignments MUST persist across user sessions.
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+*   **AC1.1**: Given a set of chats clearly discussing "PRD work" (e.g., using terms like 'requirements', 'specifications', 'user stories'), these chats are automatically grouped under a single topic named "PRD Work" or similar.
+*   **AC1.2**: Given chats focused on "Agent Creation" (e.g., 'new agent', 'persona', 'tool integration'), these chats are grouped under an "Agent Creation" topic.
+*   **AC1.3**: Given chats about "PWA" (e.g., 'Progressive Web App', 'install to homescreen', 'offline mode'), these chats are grouped under a "PWA" topic.
+*   **AC1.4**: Generic or empty chats are automatically assigned to a default "General" or "Uncategorized" group.
+*   **AC1.5**: A user can successfully rename a group from "PWA" to "Mobile App Initiative", and the new name is displayed consistently and persists.
+*   **AC1.6**: A user can successfully merge "PRD Work" and "Requirements Gathering" groups into a new group named "Product Definition", and all chats from both original groups appear within the new group.
+*   **AC1.7**: A user can move a chat from "PRD Work" to "Development Sprints", and the chat is correctly displayed in the new group.
+*   **AC1.8**: A user can ungroup a chat from any group, and it appears as a top-level chat in the main list.
+*   **AC1.9**: The grouping algorithm achieves a minimum of 80% accuracy in correctly assigning distinct topic-related chats to their respective groups across a diverse test dataset.
+*   **AC1.10**: The chat list view, including grouped chats, loads within 2 seconds for a user with 50+ chats and 10+ groups.
 
-## Out of scope
+## Out of Scope
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+*   **Manual Tagging**: Users will not be able to manually apply arbitrary tags to chats from scratch (beyond modifying auto-generated groups).
+*   **Cross-User Group Sharing**: The sharing of custom topic groupings or classifications between different users.
+*   **Advanced Analytics**: No reporting or analytics features related to chat topics (e.g., trends, most discussed topics).
+*   **Complex Group Management**: Features beyond basic renaming, merging, moving, and ungrouping (e.g., hierarchical grouping, group access controls).
+*   **Natural Language Generation (NLG)**: The system will not generate sophisticated summaries of chat topics using NLG.
