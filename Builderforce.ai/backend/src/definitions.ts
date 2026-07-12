@@ -135,6 +135,12 @@ export interface DigestTemplate {
 /** Distribution method type */
 export type DistributionMethod = 'email' | 'slack' | 'both';
 
+/** Type aliases for backward compatibility */
+export type PriorityMetricsType = PriorityMetrics;
+export type SignOffMetricsType = SignOffMetrics;
+export type ConflictMetricsType = ConflictMetrics;
+export type EscalationMetricsType = EscalationMetrics;
+
 /** Priority metrics type for query results */
 export interface PriorityMetrics {
   totalApproved: number;
