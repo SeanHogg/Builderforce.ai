@@ -148,11 +148,11 @@ export const deadlineAudit = pgTable('deadline_audit', {
   deadlineId: bigint('deadline_id', { mode: 'number' }).notNull(),
   tenantId: bigint('tenant_id', { mode: 'number' }).notNull(),
   runId: bigint('run_id', { mode: 'number' }),
-  field changed text NOT NULL; // dueDate, healthOverride, title, owner, etc.
-  previousValue text, // JSON representation of old value
-  newValue text, // JSON representation of new value
-  slipReason varchar('slip_reason', { length: 800 }), // enumerated; null for non-slip changes
-  actor varchar('actor', { length: 800 }), // owner or admin name
+  fieldChanged: text().notNull(),
+  previousValue: text(),
+  newValue: text(),
+  slipReason: varchar('slip_reason', { length: 800 }),
+  actor: varchar('actor', { length: 800 }),
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 });
 
