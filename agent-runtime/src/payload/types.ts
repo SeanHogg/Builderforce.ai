@@ -74,7 +74,7 @@ export type OutputField = {
     arrayTransform?: {
       /** Field to apply transform to each element */
       field: string;
-      /** Transform to apply (fn:fnName) */}
+      /** Transform to apply (fn:fnName) */
       transform: string;
     };
   };
