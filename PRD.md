@@ -1,55 +1,51 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #399
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# builtin\_chats\_consolidate (Task PRD)
 
 ## Problem & Goal
+*The chats consolidation feature allows team members to merge multiple chats into one for better organization and visibility, enhancing communication and coordination within the team.*
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
-
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
-
-## Target users / ICP roles
-
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+## Target Users / ICP Roles (If Relevant)
+* Chater [ICP]: Chat organizer, who requires a tool to consolidate chats and manage their conversations effectively.
+* Chated [ICP]: Team members participating in chat threads, who benefit from a single consolidated view for improved visibility and understanding of discussions.
 
 ## Scope
-
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+* The builtin\_chats\_consolidate feature should support the following:
+	+ Merging multiple chats from the same source (e.g., multiple team members, or multiple instances of a group chat) into a single chat.
+	+ Allowing the target chat to be the recipient of new messages from all source chats.
+	+ Providing an option for the target chat owner to manage the source chats as sub-threads.
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### Target Chat Creation and Organization
+1. [ ] Create a new target chat with a unique identifier.
+2. [ ] Organize source chats into sub-threads based on the target chat owner's rules.
+3. [ ] Allow target chat owner to add source chats or remove them from sub-threads.
+
+### Message Consolidation
+1. [ ] Consolidate messages from all source chats into the target chat.
+2. [ ] Ensure that timestamps, usernames, and other metadata are preserved and correctly aligned.
+3. [ ] Optimize message display by removing duplicates and preserving original order.
+
+### Maintaining Sub-threads
+1. [ ] Display source chats as sub-threads within the target chat.
+2. [ ] Maintain separate timestamps, usernames, and other metadata for each sub-thread.
+
+### Permissions and Permissions Management¶
+1. [ ] Assign appropriate permissions for each role (users, administrators, owners) and ensure they are enforced correctly.
+2. [ ] Allow role management by target chat owner and source chat managers.
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+1. **Requires all necessary permissions**: The builtin\_chats\_consolidate feature should work correctly when provided with the correct set of permissions required for each role.
+2. **Uses source IDs to consolidate messages**: The builtin\_chats\_consolidate feature should reference original source IDs when consolidating messages, preserving history and metadata.
+3. **Consolidates messages without loss**: The consolidated messages should be identical to the original source messages with all details correctly preserved.
 
-## Out of scope
+## Out of Scope
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+The following are out of scope for this task:
+
+1. **Non-consolidation features**: Do not implement features that allow users to consolidate messages within a single source chat.
+2. **Other chat management features**: Do not implement features that allow users to perform actions on source chats (e.g., delete, rename, move) other than consolidating them into the target chat.
+3. **Consolidating private messages**: Do not consolidate private messages (e.g., messages with restricted access) within target chat threads.
