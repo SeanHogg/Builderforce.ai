@@ -1,203 +1,166 @@
 /**
- * Project Health Baseline Types
- *
- * Core domain models for baseline creation, versioning, comparison,
- * and lifecycle management. Framework-agnostic TypeScript interfaces.
- *
- * @see PRD #294 — Responses Saved as Project Health Baseline
+ * Baseline entity model for PRD #294: Project Health Baselines
  */
 
-/** Baseline lifecycle status */
-export type BaselineStatus = 'active' | 'archived';
+/**
+ * Baseline version identifier (finite set of inferred strings matching version numbers)
+ * Each string corresponds to an integer count: v1=0, v2=1, v3=2, v4=3+
+ * The service returns the correct inferred string to avoid unbounded type exports.
+ */
+export type BaselineVersion = "v1" | "v2" | "v3" | "v4";
 
-/** Baseline status metadata */
-export const BASELINE_STATUS_LABELS: Record<BaselineStatus, string> = {
-  active: 'Active',
-  archived: 'Archived',
+/**
+ * Baseline status: immutable lifecycle states
+ */
+export type BaselineStatus = "active" | "archived";
+
+/**
+ * Binary delta block types
+ */
+export type DeltaBlockType = "added" | "removed" | "unchanged";
+
+/**
+ * The health delta summary narrative type based on directionality
+ */
+export type HealthDeltaSummaryType = "positive" | "negative" | "neutral";
+
+/**
+ * Denormalized reply metadata as stored on creation for core immutability fields
+ */
+export type ResponseMetadataCore = {
+  model: string;
+  timestamp: string;
+  contextMode?: string;
 };
 
-/** Version number — monotonically incrementing integer scoped to (projectId, streamName) */
-export type VersionNumber = number;
-
-/** Lifecycle actions recorded in the audit trail */
-export type AuditAction = 'CREATE' | 'PROMOTE' | 'ARCHIVE' | 'VIEW' | 'COMPARE';
-
-/** Metadata attached to the original AI response that was saved */
-export interface ResponseMetadata {
-  /** LLM model that generated the response (e.g. 'builderforce-llm-gpt-4') */
-  model: string;
-  /** ISO 8601 timestamp when the response was generated */
-  timestamp?: string;
-  /** Context mode (e.g. 'code-review', 'test-coverage-analysis') */
-  contextMode?: string;
-  /** Free-form project context at time of capture */
-  projectContext?: string;
-  /** Extensible metadata */
-  [key: string]: unknown;
-}
-
-/** User-visible metadata describing a baseline */
-export interface BaselineMetadata {
-  /** Project ID (integer key per platform convention) */
+/**
+ * Full metadata attached to a baseline at creation
+ */
+export type BaselineMetadata = {
   projectId: number;
-  /** Stream name (e.g. 'performance-baseline', 'security-baseline') */
+  streamName: string;                 // e.g., "performance-baseline"
   baselineName: string;
-  /** Optional human-readable description */
   description?: string;
-  /** Tags for filtering (e.g. ['security', 'refactor', 'v2-migration']) */
-  tags: string[];
-}
+  tags?: string[];
+  responseMetadata: ResponseMetadataCore;
+  author: BaselineAuthor;
+};
 
-/** The AI response content that was captured */
-export interface BaselineContent {
-  /** Full response text (UTF-8, preserved as-is) */
+/**
+ * Full response content (text response only)
+ */
+export type BaselineContent = {
   responseText: string;
-  /** Original response metadata */
-  responseMetadata: ResponseMetadata;
-}
+  responseMetadata: ResponseMetadataCore;
+};
 
-/** Author who created this baseline */
-export interface BaselineAuthor {
-  /** Platform user identifier */
+/**
+ * Author identity at creation
+ */
+export type BaselineAuthor = {
   userId: string;
-  /** Display name */
-  name: string;
-}
+  userName?: string;
+  role: "owner" | "admin" | "editor" | "viewer";
+};
 
-/** A single audit log entry for a baseline lifecycle event */
-export interface BaselineAuditEntry {
-  /** Unique audit entry ID (UUID v4) */
+/**
+ * Tamper-evident audit entry (immutable append-only)
+ */
+export type BaselineAuditEntry = {
   id: string;
-  /** Lifecycle action */
-  action: AuditAction;
-  /** Who performed the action (userId) */
-  performedBy: string;
-  /** ISO 8601 timestamp of the action */
+  action: "CREATE" | "PROMOTE" | "ARCHIVE" | "VIEW" | "COMPARE";
   timestamp: string;
-  /** Optional additional details (diff stats, old status, etc.) */
-  details?: unknown;
-}
+  userId: string;
+  details: Record<string, unknown>;
+};
 
-/** Immutable baseline entity. Once created, `content` and `author` never change. */
-export interface Baseline {
-  /** Primary key (integer per platform convention) */
+/**
+ * Full immutable baseline entity
+ *
+ * @invariants:
+ * - `id`, `version`, `status`, `metadata.projectId`, `metadata.streamName`, `baselineName`, `content.responseText`, `content.responseMetadata.model`, `content.responseMetadata.timestamp`, `content.responseMetadata.contextMode` are immutable
+ * - `auditTrail` is append-only
+ * - Deleted baselines are soft-deleted (status "archived") at project boundary
+ * - Unique constraint (projectId, streamName, version) enforced at persistence layer
+ */
+export type Baseline = {
   id: number;
-  /** Stream version — monotonically incrementing per (projectId, streamName) */
-  version: VersionNumber;
-  /** Lifecycle status */
+  version: BaselineVersion;
   status: BaselineStatus;
-  /** User-visible metadata */
   metadata: BaselineMetadata;
-  /** Immutable captured response content */
   content: BaselineContent;
-  /** Immutable author info */
   author: BaselineAuthor;
-  /** ISO 8601 creation timestamp */
-  createdAt: string;
-  /** ISO 8601 last-updated timestamp (status changes only) */
+  createdAt: string;               // ISO 8601
   updatedAt: string;
-  /** Append-only audit trail */
-  auditTrail: BaselineAuditEntry[];
-}
+  auditTrail: BaselineAuditEntry [];
+};
 
-/** Input for creating a new baseline */
-export interface CreateBaselineInput {
-  /** Project ID */
+/**
+ * Filter options for listing baselines
+ */
+export type BaselineListFilters = {
   projectId: number;
-  /** Stream name (e.g. 'performance-baseline') */
-  baselineName: string;
-  /** Optional description */
-  description?: string;
-  /** Tags for filtering */
-  tags?: string[];
-  /** Full response text to capture */
-  responseText: string;
-  /** Response metadata */
-  responseMetadata: ResponseMetadata;
-  /** Author info */
-  author: BaselineAuthor;
-}
-
-/** Input for updating baseline metadata (status changes only via promote/archive) */
-export interface UpdateBaselineInput {
-  status?: BaselineStatus;
-  description?: string;
-  tags?: string[];
-}
-
-/** Filter parameters for listing baselines */
-export interface BaselineFilter {
-  projectId: number;
-  status?: BaselineStatus;
-  tags?: string[];
+  streamName?: string;
+  status?: BaselineStatus | "all";
+  tags?: string [];
   name?: string;
-  dateFrom?: string;
-  dateTo?: string;
   author?: string;
+  fromDate?: Date;
+  toDate?: Date;
   limit?: number;
   offset?: number;
-}
+};
 
-/** Paginated baseline list response */
-export interface BaselineListResponse {
-  baselines: Baseline[];
-  total: number;
-  returned: number;
-  truncated: boolean;
-}
+/**
+ * Diff result (paragraph-level)
+ */
+export type DiffResult = {
+  added: DeltaDiffBlock [];
+  removed: DeltaDiffBlock [];
+  unchanged: DeltaDiffBlock [];
+  summary: {
+    additions: number;
+    deletions: number;
+    unchanged: number;
+  };
+};
 
-/** A single diff block between two baseline response texts */
-export interface DiffBlock {
-  type: 'added' | 'removed' | 'unchanged';
+/**
+ * Paragraph-level diff block
+ */
+export type DeltaDiffBlock = {
+  type: DeltaBlockType;
   content: string;
-  position: {
-    startLine: number;
-    endLine: number;
-  };
-}
+  context?: string;
+  startLine: number;
+  endLine: number;
+};
 
-/** Result of a baseline comparison */
-export interface BaselineDiffResult {
-  baseline1: {
-    id: number;
-    baselineName: string;
-    version: VersionNumber;
-    content: BaselineContent;
-  };
-  baseline2: {
-    id: number;
-    baselineName: string;
-    version: VersionNumber;
-    content: BaselineContent;
-  };
-  diff: DiffBlock[];
-  healthDeltaSummary: {
-    summary: string;
-    summaryType: 'positive' | 'neutral' | 'negative';
-  };
-}
+/**
+ * Health delta summary (AI-assisted)
+ */
+export type HealthDeltaSummary = {
+  summary: string;
+  summary_type: HealthDeltaSummaryType;
+};
 
-/** Result of a promote action */
-export interface PromoteResult {
-  message: string;
-  newBaseline: Baseline;
-  previouslyActive: {
-    id: number;
-    version: VersionNumber;
-    status: BaselineStatus;
-  } | null;
-}
+/**
+ * Diff request: two baselines for side-by-side comparison
+ */
+export type DiffRequest = {
+  baselineId1: number;
+  baselineId2: number;
+  host: string;                     // telemetry: tool invocation host
+  traceId?: string;                 // telemetry: correlation ID
+};
 
-/** Standard API error shape */
-export interface ApiError {
-  error: string;
-  code: string;
-  status: number;
-  details?: unknown;
-}
-
-/** Role-based access control levels */
-export type BaselineRole = 'owner' | 'admin' | 'editor' | 'viewer';
-
-/** Actions that can be performed on baselines */
-export type BaselineAction = 'create' | 'view' | 'compare' | 'promote' | 'archive' | 'delete' | 'list';
+/**
+ * File-backed audit log line
+ */
+export type AuditLogLine = {
+  entity: Baseline;
+  timestamp: string;
+  action: BaselineAuditEntry["action"];
+  host: string;
+  traceId?: string;
+};
