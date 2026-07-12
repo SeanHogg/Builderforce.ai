@@ -1,5 +1,5 @@
 import React from "react";
-import { BugFilter } from "../../types/quality";
+import { BugFilter } from "../types/quality";
 import { BugCountWidget } from "./BugCountWidget";
 import { SeverityDonutChart } from "./SeverityDonutChart";
 import { TrendLineChart } from "./TrendLineChart";
