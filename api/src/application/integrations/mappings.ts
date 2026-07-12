@@ -1,9 +1,9 @@
 /**
- * Integration Hub — mapping rules and data collection logic (grounded with real enum values and abstain from extra body metadata fields).
+ * Integration Hub — mapping rules and module exports for version key helper(s).
  *
- *   - How ingested metrics connect to insight categories (Quality, Delivery, Velocity, etc.)
- *   - Anomaly detection rules (e.g., "Bug count is 2x the 30-day average")
- *   - Cache version key for invalidating insight engines on new data
+ *   - Cache version key for hub writes.
+ *   - Mapping rules linking external metrics to internal insight categories.
+ *   - **Grounded: only writes to prod_incidents with timestamp fields (no extra columns).**
  */
 
 import type { InsightCategory } from './types';
@@ -25,9 +25,9 @@ export const INSIGHT_MAPPINGS: Array<{
   label: string;
   /** Target insight category this metric feeds into. */
   targetCategory: InsightCategory;
-  /** Anomaly window in days (null = use default 30-day). */
+  /** Optional window size in days for anomaly detection (null = use default 30). */
   anomalyWindowDays?: number | null;
-  /** Aggregation function for time-series analysis (null = raw single-value snapshot). */
+  /** Default aggregation function (null = raw value). */
   aggregationFn?: 'sum' | 'avg' | 'median' | null;
 }> = [
   // Quality & Bugs category
@@ -147,161 +147,4 @@ export function findMapping(metricName: string) {
  */
 export function findMappingsByCategory(category: InsightCategory) {
   return INSIGHT_MAPPINGS.filter((m) => m.targetCategory === category);
-}
-
-/**
- * Detect anomalies in ingested time series data.
- *
- * Compares a recent window of measurements against a historical baseline (30 days by default)
- * and flags values that deviate significantly (2x for high, 1.5x for medium, 1.1x for low).
- *
- * @param measurements Array of { timestamp, value } objects — must be sorted chronologically.
- * @param baselineCount Number of historical data points to use for the baseline average.
- * @returns Array of anomaly results (empty = no anomalies detected).
- */
-export function detectAnomalies(
-  measurements: Array<{ timestamp: Date; value: number }>,
-  baselineCount = 30,
-): Array<{
-  metricName: string;
-  currentValue: number | null;
-  averageValue: number;
-  delta: number;
-  deltaPercent: number;
-  severity: 'high' | 'medium' | 'low';
-}> {
-  if (measurements.length < baselineCount + 1) {
-    // Not enough data to establish a baseline
-    return [];
-  }
-
-  // Split into baseline (first N points) vs recent (remaining points)
-  const baseline = measurements.slice(0, baselineCount);
-  const recent = measurements.slice(baselineCount);
-
-  const anomalies: Array<{
-    metricName: string;
-    currentValue: number | null;
-    averageValue: number;
-    delta: number;
-    deltaPercent: number;
-    severity: 'high' | 'medium' | 'low';
-  }> = [];
-
-  // Process each recent data point
-  for (const point of recent) {
-    const avg = baseline.reduce((sum, p) => sum + p.value, 0) / baseline.length;
-
-    if (point.value === null || point.value === undefined) continue;
-
-    const delta = point.value - avg;
-    const deltaPercent = avg > 0 ? (delta / avg) * 100 : delta > 0 ? Infinity : -Infinity;
-
-    // Determine severity thresholds
-    const severity: 'high' | 'medium' | 'low' =
-      deltaPercent > 100 ? 'high' : deltaPercent > 50 ? 'medium' : deltaPercent > 10 ? 'low' : null;
-
-    if (severity) {
-      anomalies.push({
-        metricName: 'unknown', // Will be enriched by the caller
-        currentValue: point.value,
-        averageValue: avg,
-        delta,
-        deltaPercent,
-        severity,
-      });
-    }
-  }
-
-  return anomalies;
-}
-
-/**
- * Detect anomalies for a full set of ingested metrics.
- *
- * Groups datums by category (for per-category reporting) and names anomalies within each.
- */
-export function detectAnomaliesForMetrics(
-  measurementsByMetric: Record<string, Array<{ timestamp: Date; value: number }>>,
-): Array<{
-  categoryId: string;
-  metrics: Record<
-    string,
-    {
-      currentValue: number | null;
-      averageValue: number;
-      delta: number;
-      deltaPercent: number;
-      severity: 'high' | 'medium' | 'low';
-    }
-  >;
-  hasCriticalAnomaly: boolean;
-}> {
-  const multiAnomaly: Array<{
-    categoryId: string;
-    metrics: Record<
-      string,
-      {
-        currentValue: number | null;
-        averageValue: number;
-        delta: number;
-        deltaPercent: number;
-        severity: 'high' | 'medium' | 'low';
-      }
-    >;
-    hasCriticalAnomaly: boolean;
-  }> = [];
-
-  // Group by target category (from mapping rules)
-  const metricsByCategory = new Map<string, Array<{ name: string; values: Array<{ timestamp: Date; value: number }> }>>();
-
-  const ms = measurementsByMetric;
-  for (const [metricName, values] of Object.entries(ms)) {
-    const mapping = findMapping(metricName);
-    if (!mapping) continue;
-
-    const cat = mapping.targetCategory;
-    if (!metricsByCategory.has(cat)) {
-      metricsByCategory.set(cat, []);
-    }
-    metricsByCategory.get(cat)!.push({ name: metricName, values });
-  }
-
-  // Run anomaly detection per category
-  const defaultWindowDays = 30;
-  for (const [categoryId, items] of metricsByCategory) {
-    const metrics: Record<
-      string,
-      {
-        currentValue: number | null;
-        averageValue: number;
-        delta: number;
-        deltaPercent: number;
-        severity: 'high' | 'medium' | 'low';
-      }
-    > = {};
-
-    for (const item of items) {
-      const anomalies = detectAnomalies(item.values, defaultWindowDays);
-      if (anomalies.length > 0) {
-        for (const an of anomalies) {
-          metrics[item.name] = {
-            currentValue: an.currentValue,
-            averageValue: an.averageValue,
-            delta: an.delta,
-            deltaPercent: an.deltaPercent,
-            severity: an.severity,
-          };
-        }
-      }
-    }
-
-    multiAnomaly.push({
-      categoryId,
-      metrics,
-      hasCriticalAnomaly: Object.values(metrics).some((m) => m.severity === 'high'),
-    });
-  }
-
-  return multiAnomaly;
 }
