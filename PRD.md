@@ -1,55 +1,47 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #393
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# Product Requirements Document: Chat Message Retrieval
 
 ## Problem & Goal
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+### Problem
+We lack a systematic and programmatic way to inspect the message content of individual chats, given a `chatId`. This hinders debugging, data analysis, and validation processes where understanding the specific messages within a chat is crucial.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+### Goal
+Enable the efficient and programmatic retrieval of all messages for any specified `chatId` to facilitate deeper inspection and subsequent processing.
 
-## Target users / ICP roles
+## Target Users / ICP Roles
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+*   **Developers**: For debugging chat-related issues, developing new features based on chat content, or data migration.
+*   **Data Scientists / Analysts**: For understanding user interactions, building models, or performing content analysis.
+*   **Support Engineers**: For investigating user reports related to specific chat conversations.
+*   **Product Managers**: For validating new features or understanding user behavior patterns within chats.
 
 ## Scope
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+This PRD focuses on the process of iterating through a collection of `chatId`s and, for each `chatId`, successfully calling the `builtin_chats_get_messages` function to retrieve its associated messages.
 
 ## Functional Requirements
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+1.  **FR1: Iterate through Chat IDs**: The system **MUST** be able to process a given list or stream of `chatId`s sequentially or in parallel.
+2.  **FR2: Call Message Retrieval Function**: For each `chatId` identified in FR1, the system **MUST** invoke the `builtin_chats_get_messages({ chatId })` function.
+3.  **FR3: Successful Message Retrieval**: Upon successful execution of FR2, the system **MUST** retrieve and make available the messages associated with the `chatId`.
+4.  **FR4: Error Handling**: The system **MUST** gracefully handle cases where `builtin_chats_get_messages` fails (e.g., invalid `chatId`, API errors, network issues) by logging the error and continuing processing other `chatId`s.
 
 ## Acceptance Criteria
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+*   **AC1: Message Data for Valid ID**: When `builtin_chats_get_messages` is called with a valid `chatId` containing messages, it returns a non-empty list of message objects.
+*   **AC2: Empty Data for Empty Chat**: When `builtin_chats_get_messages` is called with a valid `chatId` containing no messages, it returns an empty list of message objects.
+*   **AC3: Error for Invalid ID**: When `builtin_chats_get_messages` is called with an invalid or non-existent `chatId`, it returns an appropriate error or null response, and the error is logged.
+*   **AC4: Iteration Completion**: The process successfully attempts to retrieve messages for all `chatId`s provided in the input list/stream.
+*   **AC5: Performance**: Message retrieval for a single `chatId` completes within an acceptable time frame (e.g., < 500ms for 95% of requests). (Specific benchmark to be defined during implementation).
 
-## Out of scope
+## Out of Scope
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+*   Generation or management of the list of `chatId`s to be processed.
+*   Any form of user interface (UI) for displaying the retrieved messages.
+*   Storage or persistence of the retrieved messages beyond the immediate execution context.
+*   Analysis, aggregation, transformation, or further processing of the message content (e.g., sentiment analysis, summarization).
+*   Modification or deletion of chat messages.
+*   Authentication or authorization mechanisms for accessing `builtin_chats_get_messages`.
