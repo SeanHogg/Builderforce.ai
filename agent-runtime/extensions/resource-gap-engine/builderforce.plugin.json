@@ -1,5 +1,5 @@
 {
   "id": "resource-gap-engine",
   "name": "Resource Gap Engine",
-  "description": "Core engine for resource gap analysis with hiring, deployment, and upskill recommendations. Provides canonical skill dictionary, proficiency weighting, gap computation, and recommendation generators. RBAC/persistence/API/locality wake/wan/wai/saat in this pass are reserved for follow-up tasks (#uf20-#uf23)."
+  "description": "Core engine for resource gap analysis with hiring, deployment, and upskill recommendations."
 }
