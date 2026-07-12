@@ -66,7 +66,6 @@ thresholds:
     warningThreshold: 1.5
     criticalThreshold: 2.0
 
----
 # Example: Project-specific overrides (e.g., in PROJECT.md settings)
 #
 # To leverage this file in your project, include a link and path from your project's
@@ -77,7 +76,7 @@ thresholds:
 # Your own metrics are serialized by `dumpConfig()` to this format and committed under
 # `api/features/diagnostic/PROJECT-anomaly-config.yaml`. Per-metric configuration overrides
 # apply at REPORT-GI TIME: the highest explicit value wins (project override > global template).
-
+#
 # Sample for a maintenance-heavy product with high churn:
 #
 # bug_count:
@@ -85,4 +84,4 @@ thresholds:
 #   warningThreshold: 1.8
 #   criticalThreshold: 2.5
 #
-# fallback defaults apply to any metrics not listed above.
+# Fallback defaults apply to any metrics not listed above.
