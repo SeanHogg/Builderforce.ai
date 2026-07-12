@@ -20,6 +20,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
+import { assert as assertFromChai } from 'chai';
 import {
   completeTaskOnMerge,
   recordStatusTransition,
