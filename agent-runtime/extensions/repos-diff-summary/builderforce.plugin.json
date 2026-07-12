@@ -1,0 +1,27 @@
+{
+  "id": "repos-diff-summary",
+  "name": "PR/Branch Diff Summary",
+  "description": "MCP tool: repos.pull_request_diff_summary — returns a categorized summary of file changes in a PR or branch for a task, with per-category counts and derived booleans (codeChanged/docsOnly/testsChanged/configOnly).",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "githubBaseUrl": {
+        "type": "string",
+        "description": "Base URL for GitHub API (default: 'https://api.github.com')"
+      },
+      "githubToken": {
+        "type": "string",
+        "description": "GitHub token to authenticate PR/branch lookups (optional). If not set, falls back to HTTP basic auth via personal access URL or repo URL."
+      },
+      "cacheTtlMs": {
+        "type": "number",
+        "description": "Cache TTL in milliseconds (default: 60000)"
+      },
+      "taskResolution": {
+        "type": "object",
+        "description": "Custom taskId->PR mapping (regex pattern to URL). Useful when tasks are linked via other PR services."
+      }
+    }
+  }
+}
