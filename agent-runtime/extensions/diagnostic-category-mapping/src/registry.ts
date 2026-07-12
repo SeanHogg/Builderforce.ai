@@ -1,8 +1,8 @@
 import fs from "node:fs/promises";
-import path from "node:path";
 import type { MappingRule, MappingRuleRegistry, ValidationError } from "./types";
-import { CATEGORIES, DiagnosticCategory, type YAMLConfig } from "./types";
+import { DiagnosticCategory, type YAMLConfig } from "./types";
 import { InMemoryQuarantineLog, MappingMetrics } from "./types";
+import { Mapper } from "./mapper";
 
 /**
  * MappingRuleRegistryImpl implements FR-1: single source of truth registry that defines all valid
