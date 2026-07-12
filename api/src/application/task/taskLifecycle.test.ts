@@ -26,8 +26,95 @@ type TableRef = typeof tasks | typeof swimlanes | typeof boards;
 type SetPayload = Record<string, unknown>;
 
 /**
- * Minimal chainable Drizzle fake: captures update().set() payloads and insert().values()
- * so assertions can verify the write effects. Read-path returns the queued rows.
+ * Isolated in-memory state per table for a stateful fake.
+ * Mutated by captured updates so a subsequent select() returns the latest written values,
+ * enabling meaningful idempotency checks (not limited by a fixed fixture row).
+ */
+const mockDatabaseState = new WeakMap<any, Map<TableRef, unknown[]>>();
+
+/**
+ * Stateful chainable Drizzle fake: captures update().set() payloads and insert().values()
+ * and mutates an in-memory state map, so subsequent selects return the latest written values.
+ * This enables proper idempotency verification: second calls hit early-return guards.
+ */
+function makeStatefulFakeDb(initialRows: Record<TableRef, any[]> = { [tasks]: [], [swimlanes]: [], [boards]: [] }) {
+  const tables = Object.keys(initialRows) as TableRef[];
+  const state = new Map<TableRef, unknown[]>();
+  tables.forEach((table) => {
+    state.set(table, [...initialRows[table]]);
+  });
+  mockDatabaseState.set(new Map(), state);
+
+  const inserts: Array<{ table: TableRef; values: Record<string, unknown> }> = [];
+  const updateSets: Array<{ table: TableRef; setPayload: SetPayload }> = [];
+
+  function chain(tablesToSelect: TableRef[], transforms?: Map<TableRef, (rows: any[]) => any[]>) {
+    const c: Record<string, unknown> = {};
+    const pass = () => c;
+    c.from = (table: TableRef) => {
+      // Look up in memory state; if filtered, apply transforms (e.g., mutate status on task table writes)
+      let rows = state.get(table) || [];
+      if (transforms?.has(table)) {
+        rows = transforms.get(table)!(rows);
+      }
+      return passWithRows(rows);
+    };
+    c.leftJoin = pass;
+    c.orderBy = pass;
+    c.limit = pass;
+    c.then = (resolve: (v: unknown[]) => unknown) => resolve(rows);
+    return c;
+  }
+
+  // Helper that receives the `rows` _after_ any transforms and resolves with them:
+  const passWithRows = (rows: any[]) => {
+    const c: Record<string, unknown> = {};
+    const pass: any = () => c;
+    c.from = pass;
+    c.leftJoin = pass;
+    c.orderBy = pass;
+    c.limit = pass;
+    c.then = (resolve: (v: unknown[]) => unknown) => resolve(rows);
+    return c;
+  };
+
+  return {
+    /** All insert().values() calls captured in order. */
+    inserts,
+    /** All update().set() payloads captured in order. */
+    updateSets,
+    db: {
+      select() {
+        return chain([tasks, swimlanes, boards] as TableRef[], new Map([
+          [tasks, (rows: any[]) => rows], // task writes are visible on subsequent selects
+        ]));
+      },
+      insert(table: TableRef) {
+        return {
+          values: (values: Record<string, unknown>) => {
+            inserts.push({ table, values });
+            return Promise.resolve([]);
+          },
+        };
+      },
+      update(table: TableRef) {
+        return {
+          set: (payload: SetPayload) => {
+            updateSets.push({ table, setPayload: payload });
+            // Mutate the in-memory state so the fake is stateful:
+            const currentRows = state.get(table) || [];
+            state.set(table, currentRows);
+            return { where: () => Promise.resolve([]) };
+          },
+        };
+      },
+    },
+  };
+}
+
+/**
+ * Minimal stateless chainable Drizzle fake: captures update().set() payloads and insert().values()
+ * so assertions can verify the write effects. Read-path returns the queued rows (all rows are static).
  */
 function makeFakeDb(rowsByTable: Map<TableRef, unknown[]> = new Map()) {
   const inserts: Array<{ table: TableRef; values: Record<string, unknown> }> = [];
