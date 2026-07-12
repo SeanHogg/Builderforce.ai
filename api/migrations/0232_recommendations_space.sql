@@ -30,12 +30,12 @@ CREATE TABLE IF NOT EXISTS recommendation_feedback (
   id            SERIAL PRIMARY KEY,
   tenant_id     INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   rec_key       VARCHAR(120) NOT NULL,
-  tenant_key    VARCHAR(120) NOT NULL,  -- stable rec_key for the tenant's dismissed set (used on refresh)
   user_id       VARCHAR(36) NOT NULL,   -- feedback contributor
-  acted_upon    BOOLEAN DEFAULT FALSE, -- thumbs up/down signal
-  acted_down    BOOLEAN DEFAULT FALSE,
-  reason        TEXT,                   -- optional free-text reason
-  created_at    TIMESTAMP NOT NULL DEFAULT now()
+  acted_up      INTEGER NOT NULL DEFAULT 0, -- 1 = thumbs up, 0 = ratings started/skipped
+  acted_down    INTEGER NOT NULL DEFAULT 0, -- 1 = thumbs down
+  reason        TEXT,                     -- optional free-text reason (up to 500 chars)
+  created_at    TIMESTAMP NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id, user_id, rec_key)  -- hard-dedup per user+recKey
 );
 
 CREATE INDEX IF NOT EXISTS idx_recommendation_feedback_tenant
@@ -43,3 +43,17 @@ CREATE INDEX IF NOT EXISTS idx_recommendation_feedback_tenant
 
 CREATE INDEX IF NOT EXISTS idx_recommendation_feedback_user_rec_key
   ON recommendation_feedback (tenant_id, rec_key);
+
+-- Enable upsert semantics for feedback (INSERT with ON CONFLICT ... DO UPDATE):
+CREATE OR REPLACE FUNCTION recommendation_feedback_on_conflict()
+RETURNS TRIGGER AS $
+BEGIN
+  NEW.created_at = now();
+  RETURN NEW;
+END;
+$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS recommendation_feedback_ai on recommendation_feedback;
+CREATE TRIGGER recommendation_feedback_ai
+  AFTER INSERT OR UPDATE ON recommendation_feedback
+  FOR EACH ROW EXECUTE FUNCTION recommendation_feedback_on_conflict();
