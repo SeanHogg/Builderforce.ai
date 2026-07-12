@@ -78,8 +78,9 @@ export type BaselineAuditEntry = {
  * Full immutable baseline entity
  *
  * @invariants:
- * - `id`, `version`, `status`, `metadata.projectId`, `metadata.streamName`, `baselineName`, `content.responseText`, `content.responseMetadata.model`, `content.responseMetadata.timestamp`, `content.responseMetadata.contextMode` are immutable
- * - `auditTrail` is append-only
+ * - `id`, `version`, `status`, `metadata.projectId`, `metadata.streamName`, `baselineName`,
+ *   `content.responseText`, `content.responseMetadata.model`, `content.responseMetadata.timestamp`,
+ *   `content.responseMetadata.contextMode`, `author`, `createdAt`, `updatedAt`, `auditTrail` are immutable
  * - Deleted baselines are soft-deleted (status "archived") at project boundary
  * - Unique constraint (projectId, streamName, version) enforced at persistence layer
  */
@@ -92,7 +93,7 @@ export type Baseline = {
   author: BaselineAuthor;
   createdAt: string;               // ISO 8601
   updatedAt: string;
-  auditTrail: BaselineAuditEntry [];
+  auditTrail: BaselineAuditEntry[];
 };
 
 /**
@@ -102,7 +103,7 @@ export type BaselineListFilters = {
   projectId: number;
   streamName?: string;
   status?: BaselineStatus | "all";
-  tags?: string [];
+  tags?: string[];
   name?: string;
   author?: string;
   fromDate?: Date;
@@ -115,9 +116,9 @@ export type BaselineListFilters = {
  * Diff result (paragraph-level)
  */
 export type DiffResult = {
-  added: DeltaDiffBlock [];
-  removed: DeltaDiffBlock [];
-  unchanged: DeltaDiffBlock [];
+  added: DeltaDiffBlock[];
+  removed: DeltaDiffBlock[];
+  unchanged: DeltaDiffBlock[];
   summary: {
     additions: number;
     deletions: number;
@@ -163,4 +164,35 @@ export type AuditLogLine = {
   action: BaselineAuditEntry["action"];
   host: string;
   traceId?: string;
+};
+
+/**
+ * Permission roles for RBAC
+ */
+export type ProjectRole = "owner" | "admin" | "editor" | "viewer";
+
+/**
+ * Role permission map for baseline operations (per PRD FR-7)
+ */
+export type RolePermissions = Partial<Record<ProjectRole, Permission[]>>;
+
+/**
+ * Allowed operations
+ */
+export type Permission =
+  | "create"
+  | "list"
+  | "get"
+  | "diff"
+  | "promote"
+  | "archive"
+  | "active";
+
+/**
+ * Valid configuration options (per builderforce.plugin.json schema)
+ */
+export type PluginConfig = {
+  maxBaselinesPerProject: number;
+  auditLogPath: string;
+  diffTokenBudget: number;
 };
