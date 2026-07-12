@@ -120,7 +120,35 @@ The combination guarantees:
 
 ## Implementation Notes
 
-_Owned by the developer — to be authored._
+### Code Pattern Consistency
+
+The fix is consistent across all nullable DTO fields in `UpdateTaskDto` (`parentTaskId`, `sprintId`, `releaseId`, `storyPoints`, `businessValue`, `assignedAgentType`, `assignedAgentHostId`, `assignedAgentRef`, `assignedUserId`, `startDate`, `dueDate`, `persona`, description):
+
+```ts
+// TaskService.updateTask example for parentTaskId
+parentTaskId: dto.parentTaskId !== undefined
+  ? (dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null)
+  : undefined,
+```
+
+This pattern guarantees that:
+- When `dto.parentTaskId` is absent, `undefined` propagates to `Task.update`.
+- When `dto.parentTaskId === null` is explicitly passed, `null` propagates.
+- When `dto.parentTaskId` has a value, the coerced value propagates.
+
+### Atomic Update Guarantees
+
+`TaskRepository.update` performs a single `db.update(...).where(...).returning()` statement, which in Postgres is atomic. The entire payload (all merged fields) is written in one statement, preventing an intermediate state where `parentTaskId` is reset but `assignedAgentRef` remains set. No other service code mutates the task between `Task.update()` and `TaskRepository.update()`.
+
+### Branch Consistency
+
+The partial-update pattern enforced in `Task.update` also covers manual setters (`start()`, `complete()`, `linkPullPRBr weburl`, etc.), so other update paths (not part of this ticket) inherit the same semantics without regressions.
+
+---
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
 
 ## Review
 
