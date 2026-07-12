@@ -1,38 +1,48 @@
----
-title: Code Review & Merge Pipeline PR Template
+<!--
+Pull Request template for the Code Review & Merge Pipeline.
+Satisfies FR-1.2 (complete PR description) and AC-1. Fill in every section and
+tick the checklist before requesting review.
+-->
 
-## Summary:
-Short, clear description of what changed and why.
+## Summary
+<!-- What changed and why, in a few sentences. -->
 
-## Motivation:
-Why this change is necessary. Reference existing issues/tickets if applicable.
+## Motivation / Context
+<!-- Why this change is necessary. Link the driving problem. -->
 
-## Type of Change:
-- [ ] Feature implementation (additions, enhancements)
-- [ ] Bug fix (addresses an issue)
-- [ ] Refactoring (code structure improvement without behavior change)
-- [ ] Security/Compliance update
+## Type of change
+- [ ] Feature (new behaviour)
+- [ ] Fix (repairs a defect)
+- [ ] Refactor (no behaviour change)
+- [ ] Docs / chore
+- [ ] Security / compliance
 
-## Testing Instructions:
-- [ ] Tests pass (`pnpm test` at the root, or `package.json`-scoped test command)
-- [ ] Coverage did not decrease compared to main (`sonarqube` diff report)
-- [ ] NPE/Segfault-free: tested interactively on `wrangler dev` (`/test/` POST story for Smoke / Smoke-level stability check from a human UX in dev)
-- [ ] Styles pass (`pnpm lint`)
-- [ ] Security scan (`pnpm security-audit`) shows no new CRITICAL/HIGH CVES
-- [ ] Migration file created and validated locally if schema changed
-- [ ] External integration smoke check via `curl`/Postman against `localhost:8787` (port as specified in docs) returns 2xx from a tone-parsed handshake path (e.g. `/tier1`)
+## Testing steps
+<!-- How a reviewer can verify this. See CONTRIBUTING.md for command details. -->
+- [ ] Tests pass (`pnpm test` at the root, or the relevant package script)
+- [ ] Worker builds cleanly (`pnpm --filter worker build` / `wrangler dev` does not throw)
+- [ ] Frontend builds (`cd frontend && npx next build`) when the frontend changed
+- [ ] Migration created and run locally if the schema changed
+- [ ] Manual smoke check against `localhost:8787` for touched endpoints
 
-## Checklist:
-- [ ] Description includes motivation and all tests documented
-- [ ] CI checks are all green on main (PR status checks)
-- [ ] Branch is rebased/merged with main (no merge conflicts)
-- [ ] All review comments resolved or explicitly dismissed with justification
-- [ ] At least one non-author approval recorded on the PR
-- [ ] Source branch will be deleted post-merge
+## Review readiness (FR-1)
+- [ ] Branch is up to date with `main` (rebased or merged, no conflicts)
+- [ ] All CI status checks are green
+- [ ] No new lint violations (AC-4)
+- [ ] Test coverage is >= the `main` baseline (AC-5)
+- [ ] Dependency/security scan shows no new high/critical CVEs (AC-6)
 
-## Related Issues/Tickets:
-- If a GitHub issue: Link it here.
-- If a board task: Link ticket ID here.
+## Related issues / tickets
+<!-- Link the GitHub issue or the board ticket this PR closes. Required by FR-5.3 / AC-12. -->
+- Closes #
 
-## Additional Notes:
-(Any extra context for reviewers)
+## Reviewer checklist (FR-3.2)
+- [ ] Logic correctness and edge-case handling
+- [ ] Error handling and logging
+- [ ] Security implications
+- [ ] Performance impact
+- [ ] Readability / maintainability
+- [ ] Test adequacy and documentation completeness
+
+## Additional notes
+<!-- Anything else reviewers should know. -->
