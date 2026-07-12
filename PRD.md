@@ -1,55 +1,88 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #516
 > _Each agent that updates this PRD signs its change below._
 
-# Product Requirements Document: Diagnostic Report
+# Product Requirements Document: Low-Priority Task Status Management
+
+## Overview
+FR6: Enhance visibility and management of low-priority tasks through dedicated status controls in the task list/detail views.
+
+---
 
 ## Problem & Goal
+**Problem:**
+Current task management lacks explicit visibility for low-priority tasks (`on_hold`, `deferred`). Users manually triage these tasks, leading to inefficiency and misalignment.
 
-**Problem:** Project Managers and Leaders lack a consolidated, real-time view of project health, making it difficult to quickly identify risks, track trends, and understand the overall state of a project. This leads to reactive decision-making and potential project failures.
+**Goal:**
+- Provide explicit, intuitive controls for setting/modifying low-priority task statuses.
+- Ensure status transitions are auditable, reversible, and surfaced contextually.
 
-**Goal:** To enable PMs and Leaders to quickly understand a project's health and potential risks by providing a comprehensive, structured diagnostic report, generated through user input and ingested data, thereby facilitating proactive management and better project outcomes.
+---
 
-## Target users / ICP roles
+## Target Users / ICP Roles
+| Role               | Use Case Example                                      |
+|--------------------|-------------------------------------------------------|
+| Project Managers   | Adjust backlog priority while sprint planning.        |
+| Team Leads         | Defer non-blocking tasks during high-priority spikes. |
+| Individual Devs    | Flag tasks as `on_hold` pending external dependencies.|
+| Product Owners     | Pause feature development awaiting requirements.      |
 
-*   **Project Managers (PMs):** Need a holistic view to manage their projects effectively.
-*   **Team Leaders:** Require insights into team performance and project bottlenecks.
-*   **Portfolio Managers / Senior Leadership:** Need high-level health snapshots across multiple projects to make strategic decisions.
+---
 
 ## Scope
+### In Scope
+1. **Backend API**
+   - New `PriorityStatusService` methods (`setStatusOnHold`, `setStatusDeferred`, `getTaskStatus`).
+   - `LowPriorityStatus` enum (`on_hold` | `deferred` | existing values).
 
-This feature encompasses the generation of a comprehensive diagnostic report, integrating user-provided answers and ingested project data. It includes the structured presentation of project health across predefined categories, visualization of trends and anomalies, highlighting of top risks, and identification of overdue items. The report will be accessible via a shareable link and exportable in PDF format, incorporating appropriate data visualizations.
+2. **UI Controls**
+   - Popover/quick-action menu in:
+     - Task list rows (`TaskPriorityListItem`).
+     - Task detail view.
+   - Visual affordances to reflect current status and available transitions.
+
+---
 
 ## Functional Requirements
+### Backend
+| Requirement                                      | Details                                                                 |
+|--------------------------------------------------|-------------------------------------------------------------------------|
+| **API Endpoints**                                | `POST /tasks/{taskId}/status/on-hold` (optional `note`)                 |
+|                                                  | `POST /tasks/{taskId}/status/deferred` (optional `note`)                |
+|                                                  | `GET /tasks/{taskId}/status` (returns `{ status, flags }`)             |
+| **Status Enum**                                  | `LowPriorityStatus`: `"on_hold"` \| `"deferred"` \| existing values).   |
+| **Auditability**                                 | Capture user, timestamp, and optional `note` for each status change.   |
+| **Flags**                                        | `isLowPriority`: `true` if status is `on_hold` or `deferred`.           |
 
-*   The system shall provide an interface for users to answer diagnostic questions related to project health.
-*   The system shall ingest relevant project data from integrated sources (e.g., task trackers, bug databases, budget systems).
-*   The system shall generate a structured diagnostic report based on user answers and ingested data.
-*   The system shall categorize the report into predefined sections: Timeline, Budget, Quality, Risk, Team, and Alignment.
-*   For each section, the system shall determine and display the "current state" (Red/Yellow/Green).
-*   For each section, the system shall determine and display the "trend" (Improving/Worsening/Stable).
-*   For each section, the system shall identify and display "anomalies" or significant deviations.
-*   For each section, the system shall display "supporting data" (ingested or manually entered).
-*   The system shall identify and prominently highlight the "top 3 risks" based on severity and likelihood scores.
-*   The system shall calculate and display a composite "Project Health Score" (0-100) and its historical trend.
-*   The system shall include a dedicated "What's Overdue?" section, listing tasks, bugs, or deadlines that are past their due dates.
-*   The system shall allow users to export the generated report as a PDF document.
-*   The system shall generate a shareable link for the diagnostic report, allowing read-only access.
-*   The system shall utilize appropriate data visualizations (e.g., charts, tables, trend lines) to clearly present information within the report.
+### Frontend
+| Requirement                                      | Details                                                                 |
+|--------------------------------------------------|-------------------------------------------------------------------------|
+| **Trigger Points**                               | (a) Task list `TaskPriorityListItem` right-click/ellipsis menu.         |
+|                                                  | (b) Task detail view top-right action button.                           |
+| **UI Controls**                                  | Popover with `Apply Priority` actions:                                 |
+|                                                  | - Move to `On Hold` (trigger `setStatusOnHold`).                        |
+|                                                  | - Move to `Deferred` (trigger `setStatusDeferred`).                     |
+|                                                  | **Visibility Rules:** Only show actions valid for current state.        |
+| **Feedback**                                     | Post-action toast confirmation (`Task marked as On Hold`).             |
+| **Visual Indicators**                            | Badge / muted styling for `on_hold`/`deferred` tasks in list/detail.    |
+
+---
 
 ## Acceptance Criteria
+### Must-Have ✅
+- [ ] All `PriorityStatusService` APIs implemented, unit-tested, documented.
+- [ ] Status transitions logged in task history (user + timestamp).
+- [ ] UI popover appears on trigger points; actions disable for invalid states.
+- [ ] `LowPriorityStatus` enum enforced at API/DB layers; frontend dropdowns auto-filter invalid options.
+- [ ] Inbound task status respected (e.g., `getTaskStatus` drives UI state).
 
-*   Generate a structured report with sections mirroring the diagnostic categories: Timeline, Budget, Quality, Risk, Team, Alignment
-*   Each section shows: current state (red/yellow/green), trend (improving/worsening/stable), anomalies, and supporting data (ingested or manual)
-*   Highlight the top 3 risks (severity + likelihood)
-*   Show a composite "Project Health Score" (0–100) and trend
-*   Include a "What's Overdue?" section listing tasks, bugs, or deadlines past due
-*   Allow exporting the report as PDF or sharing as a link
+### Should-Have 🔶
+- [ ] Optional `note` rendered in task history.
+- [ ] Drag-and-drop support for status changes in Kanban view.
+- [ ] Bulk actions for status batch-updates.
 
-## Out of scope
+---
 
-*   Real-time continuous monitoring or alerting beyond the generation of the snapshot report.
-*   Automated generation of prescriptive recommendations or action items (the report provides insights, not solutions).
-*   Custom report template creation or extensive customization options for report structure.
-*   Direct task assignment or project management capabilities within the report view.
-*   Integration with all possible third-party project management tools beyond initial defined set.
-*   Predictive analytics for future project states beyond current trends.
+## Out of Scope
+- **Workflow Automation:** Triggers/automations for status changes.
+- **Overlapping Priorities:** Conflict resolution for status + explicit priority fields.
+- **Hierarchical Statuses:** Sub-statuses under `on_hold`/`deferred` (e.g., `waiting_for_pr`).
