@@ -1,63 +1,46 @@
 # Merge Process Checklist
 
-This checklist enforces the Code Review & Merge Pipeline (FR-4 & FR-5) before merging into `main`.
+This checklist operationalizes the Code Review & Merge Pipeline PRD (FR-4 & FR-5)
+for merging a pull request into `main`. Work top-to-bottom; do not merge until
+every applicable box is ticked.
 
-## Pre-Merge (PR #<num>)
+## 1. Merge conditions (FR-4.1)
 
-- [ ] **FR-4.1 — Merge conditions**
-  - All CI status checks are green (lint, unit tests, integration tests, build, security scan).
-  - Branch is up-to-date with `main` (no merge conflicts; if conflicts, rebase or update base).
-  - At least one non-author approval exists in PR history (AC-7).
-  - All review comments are resolved (checkbox) or dismissed with an agreed justification (AC-8).
+- [ ] All CI status checks are green (lint, unit tests, integration tests, build, security scan) — AC-3, AC-11.
+- [ ] Branch is up to date with `main` (rebased or merged; no conflicts) — AC-2.
+- [ ] At least one non-author approval from a code owner is recorded (see `.github/CODEOWNERS`) — AC-7.
+- [ ] Every review comment is resolved with a code change **or** dismissed with a written, agreed justification — AC-8.
 
-- [ ] **FR-3.2 — Review completeness checklist**
-  Reviewer verifies:
-  - [ ] Logical correctness
-  - [ ] Edge cases — full test harness coverage + manual smoke interaction
-  - [ ] Error handling & logging (review logs on failure)
-  - [ ] Security implications (no new CRITICAL/HIGH CVEs per AC-6)
-  - [ ] Performance impact; benchmarks or observed slowdown if significant
-  - [ ] Readability and maintainability
-  - [ ] Test adequacy (unit, integration, edge cases) and documentation completeness
+## 2. Review completeness (FR-3.2)
 
-- [ ] **FR-2.2 — Linting** — No new violations introduced (AC-4). Verify via CI lint report or `pnpm lint`.
+Reviewer confirms:
 
-- [ ] **FR-2.3 — Coverage** — Test coverage is greater than or equal to `main` baseline (No regression). Verify via coverage diff (e.g., `sonarqube` diff report).
+- [ ] Logical correctness
+- [ ] Edge-case handling (covered by tests and/or a manual smoke check)
+- [ ] Error handling and logging
+- [ ] Security implications — no new high/critical CVEs (AC-6)
+- [ ] Performance impact
+- [ ] Readability and maintainability
+- [ ] Test adequacy and documentation completeness
 
-## On Merge
+## 3. Quality gates
 
-- [ ] **FR-4.2 — Merge strategy**
-  - Confirm merge strategy as configured in repository settings (squash-and-merge, merge commit, or rebase-and-merge).
-  - In GitHub, select "Squash and merge" unless strategy is otherwise defined.
+- [ ] No new lint violations (AC-4).
+- [ ] Test coverage is greater than or equal to the `main` baseline; a decrease blocks the PR (FR-2.3, AC-5).
 
-- [ ] **FR-4.3 — Merge commit message**
-  - MUST reference PR number: `Merge PR #<num>: <short description>`
-  - Include concise description (same as summary in PR description).
+## 4. Merge execution (FR-4.2 - FR-4.4)
 
-- [ ] **FR-4.4 — Source branch cleanup**
-  - Source branch is deleted immediately after successful merge.
-  - Verified on repository branch list.
+- [ ] Use the repository's configured merge strategy (squash-and-merge, merge commit, or rebase-and-merge).
+- [ ] Merge commit message references the PR number and includes a brief description, e.g. `Merge PR #<num>: <short description>` — AC-9.
+- [ ] Delete the source branch immediately after the merge — AC-10.
 
-## Post-Merge Verification
+## 5. Post-merge verification (FR-5)
 
-- [ ] **FR-5.1 — CI on main**
-  - CI pipeline runs against `main` after merge.
-  - All checks pass (no tail-end regressions).
+- [ ] CI pipeline runs on `main` after the merge and passes (FR-5.1, AC-11).
+- [ ] If `main` fails post-merge, trigger the rollback/hotfix process and notify the team (FR-5.2; see the operational runbook).
+- [ ] Link the merged PR to its originating issue/ticket and mark it closed (FR-5.3, AC-12).
 
-- [ ] **FR-5.2 — Rollback plan**
-  - If `main` fails post-merge, an immediate hotfix/shoot-to-kill process is initiated (reference operational runbook).
+## Out of scope
 
-- [ ] **FR-5.3 — Link/Close**
-  - Originating issue/ticket is linked to PR in GitHub/Board.
-  - Ticket is marked as closed.
-
-- [ ] **FR-5.4 — Documentation & communication**
-  - UT:
-    - This PR title and description are reflected in the `main` CHANGELOG entry (generated at release prep).
-    - The merge commit (pattern: Merge PR #<num>: <title>) is spooled within `logs/releases/YYYY.M.D.md`.
-  - Post-merge:
-    - Author notifies board maintainers (e.g., via Slack/Board comment mentioning the branch is merged).
-
-## Audit Tracking
-
-- Final "Merge executed" confirmation entry added to `logs/audit/pr-closed-#<num>.md` to complete the lifecycle (adds to SOC2 change-management adherence).
+Deployment to staging/production, emergency merge procedures, and the detailed
+rollback runbook are governed separately (see the PRD's "Out of Scope").
