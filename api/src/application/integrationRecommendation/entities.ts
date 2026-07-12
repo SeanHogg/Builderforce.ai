@@ -1,16 +1,19 @@
 import type { Db } from '../infrastructure/database/connection';
-import {
-  recommendationImpressions,
-  recommendationClicks,
-  recommendationDismissals,
-  integrationInstallEvents
-} from '../infrastructure/database/schema';
-import { eq, desc, count, sql as sqlExpr } from 'drizzle-orm';
+import { recommendations, recommendationImpressions, recommendationClicks, recommendationDismissals, integrationInstallEvents } from '../infrastructure/database/schema';
+import { eq } from 'drizzle-orm';
+
+export interface Recommendation {
+  id: number;
+  integration_id: string;
+  label: string;
+  category: string;
+  description: string;
+}
 
 export interface RecommendationEvent {
-  integrationId: string;
+  integration_id: string;
   surface: 'marketplace' | 'onboarding' | 'incontext';
-  userId?: string;
+  user_id?: string;
   timestamp: Date;
 }
 
@@ -18,15 +21,24 @@ export interface DismissalEvent extends RecommendationEvent {
   reason: string;
 }
 
+export async function getRecommendations(db: Db, tenantId: number, limit = 10) {
+  const results = await db.query.recommendations.findMany({
+    where: eq(recommendations.tenant_id, tenantId),
+    limit
+  });
+
+  return results;
+}
+
 export async function recordImpression(
   db: Db,
   event: RecommendationEvent
 ): Promise<void> {
   await db.insert(recommendationImpressions).values({
-    integrationId: event.integrationId,
+    recommendations_id: event.integration_id,
     surface: event.surface,
-    userId: event.userId || null,
-    timestamp: event.timestamp,
+    user_id: event.user_id || null,
+    created_at: event.timestamp,
   });
 }
 
@@ -35,10 +47,10 @@ export async function recordClick(
   event: RecommendationEvent
 ): Promise<void> {
   await db.insert(recommendationClicks).values({
-    integrationId: event.integrationId,
+    recommendations_id: event.integration_id,
     surface: event.surface,
-    userId: event.userId || null,
-    timestamp: event.timestamp,
+    user_id: event.user_id || null,
+    created_at: event.timestamp,
   });
 }
 
@@ -47,55 +59,24 @@ export async function recordDismissal(
   event: DismissalEvent
 ): Promise<void> {
   await db.insert(recommendationDismissals).values({
-    integrationId: event.integrationId,
+    recommendations_id: event.integration_id,
     surface: event.surface,
     reason: event.reason,
-    userId: event.userId || null,
-    timestamp: event.timestamp,
+    user_id: event.user_id || null,
+    created_at: event.timestamp,
   });
 }
 
 export async function recordIntegrationInstall(
   db: Db,
-  integrationId: string,
+  integration_id: string,
   surface: 'marketplace' | 'onboarding' | 'incontext',
-  userId?: string
+  user_id?: string
 ): Promise<void> {
   await db.insert(integrationInstallEvents).values({
-    integrationId,
+    integration_id,
     surface,
-    userId: userId || null,
-    timestamp: new Date(),
+    user_id: user_id || null,
+    installed_at: new Date(),
   });
-}
-
-export async function getRecommendationMetrics(userId?: string) {
-  const where = userId ? eq(recommendationImpressions.userId, userId) : undefined;
-
-  const [impressionCount] = await db
-    .select({ count: sqlExpr<number>(count()) })
-    .from(recommendationImpressions)
-    .where(where);
-
-  const [clickCount] = await db
-    .select({ count: sqlExpr<number>(count()) })
-    .from(recommendationClicks)
-    .where(where);
-
-  const [dismissalCount] = await db
-    .select({ count: sqlExpr<number>(count()) })
-    .from(recommendationDismissals)
-    .where(where);
-
-  const [installCount] = await db
-    .select({ count: sqlExpr<number>(count()) })
-    .from(integrationInstallEvents)
-    .where(where);
-
-  return {
-    impressions: impressionCount?.count ?? 0,
-    clicks: clickCount?.count ?? 0,
-    dismissals: dismissalCount?.count ?? 0,
-    installs: installCount?.count ?? 0,
-  };
 }
