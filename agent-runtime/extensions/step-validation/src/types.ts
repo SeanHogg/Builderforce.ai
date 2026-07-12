@@ -1,109 +1,148 @@
 /**
- * Step Validation Types
- *
- * Core domain model for contract definitions, validation modes, failure handling
- * and error events.
+ * Type definitions for the Step Validation extension.
  */
-
-import { Type } from "@sinclair/typebox";
-
-/** Schema representation: either a TypeBox inline schema, JSON Schema, or assertion function (FR-1) */
-export type Schema =
-  | Type.Any
-  | Record<string, unknown>
-  | ((input: unknown) => boolean | Promise<boolean>);
-
-/** Contract modes: enforced (fail on violation), audit-only (log only), disabled (skip) */
-export enum ContractMode {
-  ENFORCED = "enforced",
-  AUDIT_ONLY = "audit-only",
-  DISABLED = "disabled",
-}
-
-/** Failure handling modes: halt, warn-and-continue, retry(n), branch-to-fallback */
-export enum FailureMode {
-  HALT = "halt",
-  WARN_AND_CONTINUE = "warn-and-continue",
-  RETRY = "retry",
-  BRANCH_TO_FALLBACK = "branch-to-fallback",
-}
-
-/** Validation contract attached to a pipeline step */
-export type StepContract = {
-  step_id: string;
-  step_name?: string;
-  input_contract?: Schema;
-  output_contract?: Schema;
-  mode?: ContractMode;
-  failure_mode?: FailureMode;
-  description?: string;
-  version?: string;
-};
-
-/** Validation result: success or error + structural details */
-export type ValidationResult =
-  | {
-      ok: true;
-      output: unknown;
-    }
-  | {
-      ok: false;
-      error: ValidationError;
-    };
-
-/** Validation error event emitted on failure (FR-4) */
-export type ValidationError = {
-  step_id: string;
-  step_name?: string;
-  contract_type: "input" | "output";
-  failed_rules: ReadonlyArray<{
-    readonly field_path: string;
-    readonly constraint: string;
-    readonly actual_value: unknown;
-  }>;
-  pipeline_run_id?: string;
-  timestamp: string;
-  failure_mode?: FailureMode;
-  actor?: string;
-};
-
-/** Validation hook context (LLM tool-call or equivalent) */
-export type ValidationHookContext = {
-  run_id?: string;
-  source?: string;
-  metadata?: Readonly<Record<string, unknown>>;
-};
 
 /**
- * LLM tool-call pre-hook signature:
- * Called BEFORE the tool executes (pre validation) if an input_contract is present.
- * Returns a step_id derived from metadata or uses a default, then returns a { ok: false, error: ValidationError } | { ok: true, validated_input: unknown } result, to be consumed by the caller.
- *
- * Hooks MUST consume latest plugin config each call to ensure enforce/enforced behavior respects mode.
+ * Represents a contract type.
  */
-export type PreInputValidationHook = (
-  ctx: ValidationHookContext & Readonly<{ input: unknown }>
-) => Promise<
-  | { ok: false; error: ValidationError }
-  | { ok: true; validated_input: unknown }
->;
+export type ContractType = 'input' | 'output';
 
 /**
- * LLM tool-call post-hook signature:
- * Called AFTER the tool returns (post validation) if an output_contract is present.
- * Returns a step_id derived from metadata or uses a default, then returns a { ok: false, error: ValidationError } | { ok: true, validated_output: unknown } result, to be consumed by the caller.
- *
- * Hooks MUST consume latest plugin config each call to ensure enforce/enforced behavior respects mode.
+ * Represents the enforcement mode for a contract.
  */
-export type PostOutputValidationHook = (
-  ctx: ValidationHookContext & Readonly<{ output: unknown }>
-) => Promise<
-  | { ok: false; error: ValidationError }
-  | { ok: true; validated_output: unknown }
->;
+export type EnforcementMode = 'enforced' | 'audit-only' | 'disabled';
 
-/** LLM tool-call pre/post hook pair for use with @validate_step or hybrid sync/async composition */
-export type ValidationHooks = {
-  pre?: PreInputValidationHook;
-  post?: PostOutputValidationHook;
-};
+/**
+ * Holds information about a single validation rule that failed.
+ */
+export interface FailedRule {
+  /**
+   * JSON path to the field that violated the rule.
+   */
+  fieldPath: string;
+
+  /**
+   * The rule that failed validation, e.g., 'nonNull', 'range(0,100)', 'regex(pattern)'.
+   */
+  rule: string;
+
+  /**
+   * The constraint that was violated.
+   */
+  constraint: string;
+
+  /**
+   * The actual value that caused the failure.
+   */
+  value?: unknown;
+}
+
+/**
+ * Diagnostics from a validation failure event.
+ */
+export interface ValidationResult {
+  /**
+   * The type of contract that failed validation.
+   */
+  contractType: ContractType;
+
+  /**
+   * The name of the step where the contract violation occurred.
+   */
+  stepName: string;
+
+  /**
+   * The ID of the step.
+   */
+  stepId: string;
+
+  /**
+   * The ID of the pipeline run. Optional for local validation.
+   */
+  pipelineRunId?: string;
+
+  /**
+   * Timestamp of the failure.
+   */
+  timestamp?: string;
+
+  /**
+   * The list of rules that failed.
+   */
+  failedRules: FailedRule[];
+}
+
+/**
+ * Represents validation progress for a specific contract file.
+ */
+export interface ContractValidationResult {
+  /**
+   * The validated contract.
+   */
+  contract: unknown;
+
+  /**
+   * The file path to the contract.
+   */
+  path: string;
+
+  /**
+   * All validation errors for this contract.
+   */
+  errors: ValidationResult[];
+}
+
+/**
+ * The result of a validateContracts call.
+ */
+export interface ValidateContractsResult {
+  status: 'success' | 'error';
+  successCount: number;
+  failureCount: number;
+  parsedCount?: number;
+  failures?: ContractValidationResult[];
+  errorMessage?: string;
+}
+
+/**
+ * Represents an arbitrary tool invocation payload.
+ */
+export type Payload = unknown;
+
+/**
+ * Function type for custom validation logic.
+ */
+export type ValidationFunction = (payload: Payload) => Promise<ValidationResult | null>;
+
+/**
+ * Mutable config state needed at runtime but not part of the public contract schema.
+ */
+export interface StepValidationConfigState {
+  /**
+   * Enforcement mode.
+   */
+  enforcement: EnforcementMode;
+
+  /**
+   * Flag whether pre-step input validation is enabled.
+   */
+  enforceInput: boolean;
+
+  /**
+   * Flag whether post-step output validation is enabled.
+   */
+  enforceOutput: boolean;
+
+  /**
+   * Optional actor identity to log when overrides happen.
+   */
+  actorId?: string;
+
+  /**
+   * Optional override configuration (e.g., environment).
+   */
+  override?: Record<string, unknown>;
+}
+
+// Note: node:console.error is typed as (message?: any, ...optionalParams: any[]) => void, and does NOT export a named `error`. Keeping a stub in sync with the CLI's error handling pattern.
+// export { error } from 'node:console'; // not exported as a named export
