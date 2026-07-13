@@ -1,12 +1,12 @@
 # Basis Payload v1.0.0 — Design Document
 
-> **Status:** Ratified
+> **Status:** Ratified (2025-10-14)
 >
 > **Related PRD:** [`PRD.md`](../../../PRD.md) (Task #674)
 >
 > **Schema Version:** 1.0.0
 >
-> **Last Updated:** 2025-06-18
+> **Last Updated:** 2025-10-14
 
 ---
 
