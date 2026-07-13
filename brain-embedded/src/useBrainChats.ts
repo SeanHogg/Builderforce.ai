@@ -169,7 +169,7 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
     setError('');
     try {
       const projectId = opts?.projectId !== undefined ? opts.projectId : defaultProjectId();
-      const chat = await persistence.createChat({ title: opts?.title ?? 'New chat', projectId });
+      const chat = await persistence.createChat({ title: opts?.title ?? DEFAULT_CHAT_TITLE, projectId });
       setChats((prev) => [chat, ...prev]);
       setActiveChatId(chat.id);
       return chat;
