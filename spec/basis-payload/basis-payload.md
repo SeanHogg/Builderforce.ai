@@ -242,7 +242,7 @@ A **Basis Payload** is a single JSON document containing:
 - Consumers MUST ignore unknown extension namespaces.
 - Extension namespaces MUST be reverse-DNS strings (e.g., `com.acme.risk`).
 - The `extensions` object uses `additionalProperties: false` — unknown keys outside reverse-DNS are rejected.
-- Unknown top-level fields outside `extensions` produce a warning (not error) in consumer logs (AC-6 behavior).
+- Unknown top-level fields outside `extensions` produce a warning (not error) in consumer logs (AC-6 behavior). See [`docs/.internal/basis-payload-integration-usage.md`](docs/.internal/basis-payload-integration-usage.md) for producer/consumer best practices.
 
 ---
 
