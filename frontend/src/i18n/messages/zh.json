@@ -6920,6 +6920,8 @@
     "taskCount": "{count, plural, other {# 个任务}}",
     "byStage": "按阶段",
     "byAssignee": "按负责人",
+    "expandAssigneeRow": "展开分配给{name}的任务",
+    "collapseAssigneeRow": "折叠分配给{name}的任务",
     "startStandup": "开始站会",
     "startPlanning": "开始规划",
     "viewPrdAria": "查看 PRD",
