@@ -33,7 +33,7 @@
       "claim_id": "claim-3",
       "text": "Unit test coverage exceeds 85% for critical business logic paths",
       "confidence": 0.98,
-      "confidence_method": "measured",
+      "confidence_method": "empirical",
       "tags": [
         "testing",
         "quality"
