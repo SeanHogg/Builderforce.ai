@@ -5,38 +5,49 @@ vi.stubGlobal("fetch", vi.fn());
 
 import { HenTaskCompletionNotifier, HenTaskCompletionNotifierSchema } from "./src/hen-task-completion-notifier.js";
 
-// oxlint-disable-next-line typescript/no-explicit-any
-function mockAccountEmailResolver(): any {
+// Mock cleanup before each test
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
+// Mock function to create account email resolver
+function mockAccountEmailResolver(): ReturnType<typeof mockAccountEmailResolver> {
   let accountEmails: Record<string, string | null> = {};
 
   return {
-    getPrimaryEmail: async (accountId: string): Promise<string | null> => {
+    async getPrimaryEmail(accountId: string): Promise<string | null> {
       return accountEmails[accountId] ?? null;
     },
-    setAccountEmail: async (accountId: string, email: string | null) => {
+    setAccountEmail(accountId: string, email: string | null) {
       accountEmails[accountId] = email;
     },
   };
 }
 
-// oxlint-disable-next-line typescript/no-explicit-any
-function mockEmailNotifier(): any {
-  let sentEmails: any[] = [];
+// Mock function to create email notifier
+function mockEmailNotifier() {
+  let sentEmails: { to: string; subject: string; html: string }[] = [];
   let sendWasCalled = false;
 
-  return {
+  const mock = {
     send: vi.fn(async (to: string, subject: string, html: string): Promise<boolean> => {
       sentEmails.push({ to, subject, html });
       sendWasCalled = true;
-      return true; // Simulate success
+      return true; // Simulate success by default
     }),
-    getSentEmails: () => sentEmails,
-    wasSent: () => sendWasCalled,
-    reset: () => {
+    getSentEmails() {
+      return sentEmails;
+    },
+    wasSent() {
+      return sendWasCalled;
+    },
+    reset() {
       sentEmails = [];
       sendWasCalled = false;
     },
   };
+
+  return mock;
 }
 
 describe("HenTaskCompletionNotifier", () => {
@@ -45,48 +56,100 @@ describe("HenTaskCompletionNotifier", () => {
   let notifier: HenTaskCompletionNotifier;
 
   beforeEach(() => {
-    // Reset mocks
-    vi.clearAllMocks();
-    vi.resetModules();
-
     accountEmailResolver = mockAccountEmailResolver();
     emailNotifier = mockEmailNotifier();
 
-    // Re-import after clearing mocks
-    // @ts-expect-error - ignoring import context reset during tests
+    // Import and create notifier instance
     const { HenTaskCompletionNotifier: Notifier } = await import("./src/hen-task-completion-notifier.js");
-    notifier = Notifier;
-
-    // Use the mock email notifier instead of Resend
-    // We need to create a notifier instance directly
-    notifier = new HenTaskCompletionNotifier(
+    notifier = new Notifier(
       emailNotifier as any,
       "TestPlatform",
       "https://testplatform.com",
       true,
-      accountEmailResolver as any
+      accountEmailResolver as any,
+      notificationStorage
     );
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+  describe("Schema Validation", () => {
+    it("should validate config schema with defaults", () => {
+      const validConfig = {
+        enabled: true,
+        platformName: "MyPlatform",
+        platformLoginUrl: "https://myplatform.com",
+      };
 
-  describe("CRUD", () => {
-    it("should create with default config", () => {
-      expect(notifier).toBeDefined();
-      expect(notifier[`enabled`]).toBe(true);
+      const result = HenTaskCompletionNotifierSchema.safeParse(validConfig);
+      expect(result.success).toBe(true);
     });
 
-    it("should create with custom config", () => {
-      const customNotifier = new HenTaskCompletionNotifier(
-        emailNotifier as any,
-        "CustomPlatform",
-        "https://custom.com",
-        false,
+    it("should provide defaults when config is empty", () => {
+      const defaultConfig = HenTaskCompletionNotifierSchema.parse({});
+
+      expect(defaultConfig).toEqual({
+        enabled: true,
+        platformName: "Builderforce",
+        platformLoginUrl: "https://builderforce.ai",
+        resendApiKey: undefined,
+      });
+    });
+
+    it("should reject invalid platform URL", () => {
+      const invalidConfig = {
+        enabled: true,
+        platformName: "MyPlatform",
+        platformLoginUrl: "not-a-valid-url",
+      };
+
+      const result = HenTaskCompletionNotifierSchema.safeParse(invalidConfig);
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe("Factory Method - createWithResend", () => {
+    it("should create notifier with Resend email notifier", () => {
+      const result = HenTaskCompletionNotifier.createWithResend(
+        {
+          enabled: true,
+          platformName: "Test Platform",
+          platformLoginUrl: "https://test.com",
+          resendApiKey: "test-api-key",
+        },
         accountEmailResolver as any
       );
-      expect(customNotifier[`platformName`]).toBe("CustomPlatform");
+
+      expect(result).toBeInstanceOf(HenTaskCompletionNotifier);
+      expect(result["enabled"]).toBe(true);
+      expect(result["platformName"]).toBe("Test Platform");
+    });
+
+    it("should create notifier without API key (graceful degradation)", () => {
+      const result = HenTaskCompletionNotifier.createWithResend(
+        {
+          enabled: true,
+          platformName: "Test Platform",
+          platformLoginUrl: "https://test.com",
+          resendApiKey: "",
+        },
+        accountEmailResolver as any
+      );
+
+      expect(result).toBeInstanceOf(HenTaskCompletionNotifier);
+      expect(result["enabled"]).toBe(true);
+    });
+
+    it("should disable notifier when enabled is false", () => {
+      const result = HenTaskCompletionNotifier.createWithResend(
+        {
+          enabled: false,
+          platformName: "Test Platform",
+          platformLoginUrl: "https://test.com",
+          resendApiKey: "test-api-key",
+        },
+        accountEmailResolver as any
+      );
+
+      expect(result["enabled"]).toBe(false);
     });
   });
 
@@ -151,8 +214,8 @@ describe("HenTaskCompletionNotifier", () => {
       });
 
       // Should not send another email due to duplicate prevention
-      expect(result2.success).toBe(true); // But marked as success because notification was attempted
-      expect(emailNotifier.wasSent()).toBe(false); // But email was not actually sent on duplicate
+      expect(result2.success).toBe(true);
+      expect(emailNotifier.wasSent()).toBe(false);
     });
   });
 
@@ -182,7 +245,7 @@ describe("HenTaskCompletionNotifier", () => {
     });
   });
 
-  describe("Notify Method - Backward Compatibility", () => {
+  describe("notify Method - Backward Compatibility", () => {
     it("should work as standalone notification method", async () => {
       const result = await notifier.notify("account-123", "test@example.com");
 
@@ -197,7 +260,8 @@ describe("HenTaskCompletionNotifier", () => {
         "TestPlatform",
         "https://testplatform.com",
         false,
-        accountEmailResolver as any
+        accountEmailResolver as any,
+        notificationStorage
       );
 
       const result = await disabledNotifier.notify("account-123", "test@example.com");
@@ -293,41 +357,6 @@ describe("HenTaskCompletionNotifier", () => {
 
       const sentEmail = emailNotifier.getSentEmails()[0];
       expect(sentEmail.html).toContain("https://testplatform.com");
-    });
-  });
-
-  describe("Schema Validation", () => {
-    it("should validate config schema", () => {
-      const validConfig = {
-        enabled: true,
-        platformName: "MyPlatform",
-        platformLoginUrl: "https://myplatform.com",
-      };
-
-      const result = HenTaskCompletionNotifierSchema.safeParse(validConfig);
-      expect(result.success).toBe(true);
-    });
-
-    it("should reject invalid platform URL", () => {
-      const invalidConfig = {
-        enabled: true,
-        platformName: "MyPlatform",
-        platformLoginUrl: "not-a-valid-url",
-      };
-
-      const result = HenTaskCompletionNotifierSchema.safeParse(invalidConfig);
-      expect(result.success).toBe(false);
-    });
-
-    it("should provide defaults", () => {
-      const defaultConfig = HenTaskCompletionNotifierSchema.parse({});
-
-      expect(defaultConfig).toEqual({
-        enabled: true,
-        platformName: "Builderforce",
-        platformLoginUrl: "https://builderforce.ai",
-        resendApiKey: undefined,
-      });
     });
   });
 });
