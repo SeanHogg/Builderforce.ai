@@ -10,6 +10,8 @@
   margin: 0 auto;
   background: var(--bg-deep);
   overflow-x: hidden;
+  /* Mobile bottom nav bottom spacing */
+  padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
 }
 
 .shell {
@@ -18,13 +20,73 @@
   flex: 1;
   min-height: 0;
   position: relative;
-}
-
-/* Mobile bottom nav bottom spacing */
-.app-frame {
+  /* Mobile bottom nav bottom spacing */
   padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
 }
 
-.shell {
-  padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+/* Slide-out overlay and drawer z-index rules */
+.slide-panel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;  /* Above normal content, below tasks/footer nav (10001 in some patterns) */
+}
+
+.slide-panel-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  /* Allow pointer-events when not dragging; set to auto in body-level portal */
+  pointer-events: auto;
+}
+
+.slide-panel-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;  /* Above overlay; position escapes .shell */
+}
+
+/* Ensure content is laid out above the panel so fallback taps can reach content if best-effort work is not available */
+.slide-panel-drawer + * {
+  position: relative;
+}
+
+/* Horizontal swimlane support (mobile friendly) */
+.horizontal-swimlane {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  gap: 12px;
+  padding: 12px 8px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  /* Hide scrollbar visually but keep functionality (common across browsers) */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.swimlane-item {
+  flex-shrink: 0;
+  width: 280px;
+  min-width: 280px;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  scroll-snap-align: start;
+}
+
+.swimlane-header {
+  flex-shrink: 0;
+  margin-bottom: 8px;
+}
+
+.swimlane-content {
+  flex: 1;
+  overflow: hidden;
 }
