@@ -64,8 +64,6 @@
 - AC-5: Changelog entry exists, dated accurately
 - AC-6: Full-text search for `progressPct` shows no contradictory descriptions of `=100` (before applying `case-insensitive` wildcard; formed via case-sensitive partial patterns + reasoning grounded in NLs)
 
-### Additional notes
 - No additional documentation files were found under `docs/**` that need updates. Files outside the task scope (implementation code) are intentionally out of scope per PRD Out-of-Scope section.
-- Inline JSDoc in `ChatTicketService.ts` and `packages/brain-ui/src/chatTickets/types.ts` document the `progressPct` rule for backend/frontend consumers; these do not conflict with guideline API docs.
-- Reviewer Note: Verify the guidance docs carry the canonical rule exactly as stated in the PRD:
-  - "EMISSION RULE — `progressPct === 100` is the authoritative completion signal: ... ONLY once the entire processing pipeline for the job or task has finished ... emitted at most once per resource ... never before completion."
+- Inline JSDoc in `api/src/application/brain/ChatTicketService.ts` and `packages/brain-ui/src/chatTickets/types.ts` faithfully implement the canonical rule for backend/frontend consumers; they are not duplicated here to preserve a single source of truth.
+- Reviewer Note: Verify the guidance docs (API schema field description and Developer Guide) carry the canonical rule consistently; the inline artifacts are the local implementation reference, not a spec duplicate.
