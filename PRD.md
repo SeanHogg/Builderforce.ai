@@ -86,7 +86,74 @@ _Owned by the architect — to be authored._
 
 ## Implementation Notes
 
-_Owned by the developer — to be authored._
+### Complete Implementation Summary
+
+**Created Components:**
+
+1. **AddCapabilityModal.tsx** (Builderforce.ai/frontend/src/components/capabilities/)
+   - Implements FR.1.1 through FR.1.4
+   - Form fields: Title (required), Description, Category (dropdown with 8 valid values: security, performance, usability, accessibility, compliance, scalability, reliability, scalable_score), Status (dropdown with 6 valid values: draft, proposed, in_progress, completed, deprecated, retired), Priority, Tags (chip input with up to 10 tags)
+   - Validation: FR.4.1 (title required), FR.4.2 (status must be valid)
+   - Success/Error feedback via showSuccess/setApiError
+   - Submit: POST /api/capabilities via createCapability()
+
+2. **DeleteConfirmation.tsx** (Builderforce.ai/frontend/src/components/capabilities/)
+   - Implements FR.3.1 through FR.3.3
+   - Confirmation dialog with entityName display
+   - Delete action: DELETE /api/capabilities/{id} via deleteCapability()
+
+3. **CapabilitiesList.tsx** (Builderforce.ai/frontend/src/pages/capabilities/)
+   - Implements FR.2 (inline editing) for title and status
+   - Inline editing on click with Enter or Esc or Blur confirmation
+   - Display: table with Title, Status, Category, Priority, Tags columns
+   - Status badges with distinct colors (draft=gray, proposed=yellow, in_progress=blue, completed=green, deprecated=red, retired=gray)
+   - Delete button (trash can icon, FR.3.1)
+   - Success/error feedback with toast-style messages (AC-8, FR.5.4)
+   - Stats bar showing count by status
+   - Delete via DELETE /api/capabilities/{id} via deleteCapability()
+   - Update via PATCH /api/capabilities/{id} via updateCapability()
+
+**API Client (capabilitiesApi.ts)**
+- Type-safe wrappers: listCapabilities(), createCapability(), updateCapability(), deleteCapability()
+- GET /api/capabilities via listCapabilities()
+- POST /api/capabilities via createCapability()
+- PATCH /api/capabilities/:id via updateCapability()
+- DELETE /api/capabilities/:id via deleteCapability()
+- Type definitions: Capability, CreateCapabilityDTO, UpdateCapabilityDTO, ApiResponse
+- Error handling with messages and 400/404/500 responses
+- Success feedback via ApiResponse.success/data.message
+
+**Backend Routes (capabilitiesRoutes.ts)**
+- POST /api/capabilities — Create capability with FR.4.1/FR.4.2 validation
+- GET /api/capabilities — List capabilities with optional filter params
+- PATCH /api/capabilities/:id — Update with specific validation for title/status only per PRD
+- DELETE /api/capabilities/:id — Delete with ownership verification
+- All endpoints send explicit success/error feedback per FR.5.4
+
+**Validation Compliance:**
+- FR.4.1: AddCapabilityModal checks title.trim() before submit, shows "Title is required" error
+- FR.4.2: AddCapabilityModal uses VALID_STATUSES array to validate status, shows error on invalid
+- Inline edit validation: CapabilitiesList validates trimmedValue before calling updateCapability()
+- Both Title and Status validations are client-side with user-friendly messages
+
+**User Experience (AC-8, FR.5.4):**
+- Add modal: loading state (submitting), success message toast, error message banner
+- Table view: loading spinner, empty state with call-to-action, hover effects on rows
+- Inline edit: focus on edit field, Enter saves, Esc cancels, validation errors inline, success toast after save, immediate state update
+- Delete: confirmation dialog, loading state during delete, success toast, row removed from table
+- All API calls provide feedback: capability added successfully, capability updated successfully, capability deleted successfully
+
+**Test Coverage Plan (for QA):**
+- Create capability with valid data — success, table row appears with stats updated
+- Create capability with empty title — validation error, cannot submit
+- Create capability with invalid status — validation error, cannot submit
+- Highlight valid status values display in dropdowns
+- Update title inline — Enter blur confirm, immediate update, success message
+- Update status inline — Enter blur confirm, datalist of valid statuses, validation on invalid values
+- Cancel edit — Esc clears edit mode without saving
+- Delete capability — open dialog, confirm, capability removed, success message
+- Delete button disabled during loading
+- Tags input: Enter adds tag, click X removes tag, limit to 10 tags
 
 ## Review
 
@@ -94,4 +161,4 @@ _Owned by the code-reviewer — to be authored._
 
 ## Test Evidence
 
-_Owned by the qa-tester — to be authored._
+_Owned by the qa-tester — to be authored.
