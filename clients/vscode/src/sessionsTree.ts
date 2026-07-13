@@ -3,7 +3,7 @@ import { BfBrainChat, listBrainChats, listAgentPool } from "./bfApi";
 import { SECRET_KEY } from "./gateway";
 import { getSelectedProject, onProjectChange } from "./projectState";
 import { getProjectNames, projectLabel } from "./projectNames";
-import { attentionFor, attentionIcon, attentionDescriptionPrefix, attentionApprovalId } from "./attention";
+import { attentionFor, attentionIcon, attentionDescriptionPrefix } from "./attention";
 
 /**
  * The sidebar history list (Activity Bar → BuilderForce → Sessions). Each item is a
@@ -90,14 +90,7 @@ export class SessionsTreeProvider implements vscode.TreeDataProvider<BfBrainChat
     }
     item.description = description;
     item.contextValue = "builderforceSession";
-    // Carry the exact pending request with the row. Opening an idle chat behaves as
-    // before; opening a question-blocked chat opens the transcript and immediately
-    // surfaces that question's answer box instead of leaving the user hunting for it.
-    item.command = {
-      command: "builderforce.openSession",
-      title: vscode.l10n.t("Open Chat"),
-      arguments: [chat.id, attentionApprovalId("chat", chat.id)],
-    };
+    item.command = { command: "builderforce.openSession", title: vscode.l10n.t("Open Chat"), arguments: [chat.id] };
     return item;
   }
 
