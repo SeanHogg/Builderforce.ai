@@ -2326,9 +2326,13 @@ export const brainChatMessages = pgTable('brain_chat_messages', {
   role:      varchar('role', { length: 16 }).notNull(),
   content:   text('content').notNull().default(''),
   metadata:  text('metadata'),
+  /** Optional producer idempotency key (for example executionId:phase). */
+  eventKey:  varchar('event_key', { length: 160 }),
   seq:       integer('seq').notNull().default(0),
   createdAt: timestamp('created_at').notNull().defaultNow(),
-});
+}, (t) => [
+  uniqueIndex('uq_brain_chat_messages_event').on(t.chatId, t.eventKey),
+]);
 
 // ---------------------------------------------------------------------------
 // Brain chat TRACE (0330) — the tool/LLM-turn timeline that survives a reload.

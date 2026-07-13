@@ -4,7 +4,7 @@
  * Uses tenant JWT from auth.
  */
 
-import { attachEvermindLearn } from '@seanhogg/builderforce-brain-embedded';
+import { attachEvermindLearn, subscribeToChatMessages } from '@seanhogg/builderforce-brain-embedded';
 import {
   AUTH_API_URL,
   checkUnauthorizedAndRedirect,
@@ -451,6 +451,9 @@ export const brain = {
     const q = limit != null ? `?limit=${limit}` : '';
     return request<{ messages: BrainMessage[] }>(`/api/brain/chats/${chatId}/messages${q}`).then((r) => r.messages);
   },
+
+  subscribeMessages: (chatId: number, onChanged: () => void) =>
+    subscribeToChatMessages(AUTH_API_URL, getStoredTenantToken, chatId, onChanged),
 
   sendMessages: (chatId: number, messages: Array<{ role: string; content: string; metadata?: string }>) =>
     request<{ messages: BrainMessage[]; evermindLearn?: { learned: boolean; version: number } }>(`/api/brain/chats/${chatId}/messages`, {

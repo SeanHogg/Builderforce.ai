@@ -6,7 +6,7 @@
  */
 
 import type { BrainPersistenceAdapter, BrainChat, BrainMessage, EvermindLearnOutcome } from '@seanhogg/builderforce-brain-embedded';
-import { attachEvermindLearn } from '@seanhogg/builderforce-brain-embedded';
+import { attachEvermindLearn, subscribeToChatMessages } from '@seanhogg/builderforce-brain-embedded';
 import { authedFetch } from './authedFetch';
 
 export function createPersistence(
@@ -32,6 +32,7 @@ export function createPersistence(
     summarizeChat: (id) => req(`/api/brain/chats/${id}/summarize`, { method: 'POST' }),
     getMessages: (id, limit) =>
       req<{ messages: BrainMessage[] }>(`/api/brain/chats/${id}/messages${limit != null ? `?limit=${limit}` : ''}`).then((r) => r.messages),
+    subscribeMessages: (id, onChanged) => subscribeToChatMessages(baseUrl, getToken, id, onChanged),
     sendMessages: (id, msgs) =>
       req<{ messages: BrainMessage[]; evermindLearn?: EvermindLearnOutcome }>(`/api/brain/chats/${id}/messages`, {
         method: 'POST',

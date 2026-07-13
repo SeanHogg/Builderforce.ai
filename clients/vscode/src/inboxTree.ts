@@ -80,7 +80,11 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxNode> {
     item.iconPath = new vscode.ThemeIcon(a.kind === "approval" ? "shield" : "comment-unresolved");
     item.tooltip = label;
     // Resolve through the SAME review flow the command palette uses (DRY).
-    item.command = { command: "builderforce.humanRequests", title: vscode.l10n.t("Review request") };
+    item.command = {
+      command: "builderforce.humanRequests",
+      title: vscode.l10n.t("Review request"),
+      arguments: [a.id],
+    };
     item.contextValue = "builderforceApproval";
     return item;
   }
