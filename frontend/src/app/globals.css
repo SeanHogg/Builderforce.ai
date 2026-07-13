@@ -1777,20 +1777,26 @@ html[data-theme='light'] .nebula {
   }
   .nav-backdrop.open { opacity: 1; pointer-events: auto; }
 
-  /* Persistent bottom bar */
+  /* Persistent bottom bar - fixed navigation on mobile to stay above all content */
   .mobile-bottom-nav {
     display: flex;
     position: fixed;
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: 900;
+    z-index: 9998; /* Above all scrollable content, below permission/debugger panels (10001), above normal content */
     height: calc(56px + env(safe-area-inset-bottom, 0px));
     padding-bottom: env(safe-area-inset-bottom, 0px);
-    background: color-mix(in srgb, var(--bg) 82%, transparent);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    padding-top: 1px; /* Ensure border is visible */
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
     border-top: 1px solid var(--border);
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.15);
+  }
+
+  .mobile-bottom-nav .mbn-item {
+    min-height: 48px;
   }
 
   /* Tighter content padding + clearance for the bottom bar */
