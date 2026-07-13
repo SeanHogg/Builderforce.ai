@@ -184,3 +184,36 @@ export enum AuditEventType {
   TASK_CREATED          = 'task_created',
   TASK_UPDATED          = 'task_updated',
 }
+
+/**
+ * PRD #615 task taxonomy (per-project detailed type).
+ * Used by ProgressGate and completion gate to distinguish code-driven vs
+ * analysis/provisioning/decision tasks that may legitimately complete via doc-only PRs.
+ */
+export enum PRDTaskType {
+  /** Implementation-driven work; must deliver code and tests before done. */
+  CODING = 'coding',
+  /** Research spikes, architectural investigation, decision docs — deliverable is analysis. */
+  ANALYSIS = 'analysis',
+  /** Infrastructure provisioning, environment setup, access grants. */
+  PROVISIONING = 'provisioning',
+  /** Formal written decision, architecture decision record, analysis docs. */
+  DECISION = 'decision',
+  /** Pure doc work scoped explicitly as such (e.g., writing build docs). */
+  DOCUMENTATION = 'documentation',
+}
+
+/**
+ * PRD #615 high-level deliverable classification used by the completion gate.
+ * Informs which tasks can legitimately complete via docs-only PRs.
+ */
+export enum DeliverableType {
+  /** Feature/bug-fix/refactor/test suite. Requires implementation and passing tests. */
+  CODE = 'code',
+  /** Written decision or analysis document. Doc PR is acceptable. */
+  DECISION = 'decision',
+  /** PRD/design spec. Doc PR is acceptable. */
+  SPEC = 'spec',
+  /** Infrastructure provisioning, CI/CD config, environment setup. May be done via config only. */
+  OPS = 'ops',
+}
