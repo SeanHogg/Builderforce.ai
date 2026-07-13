@@ -118,10 +118,10 @@
       "description": "Scanned TypeScript configuration files for strict mode and language targeting",
       "inference_type": "lookup",
       "evidence_ids": [
-        "e1"
+        "550e8400-e29b-41d4-a716-446655440010"
       ],
       "claim_ids": [
-        "claim-1"
+        "550e8400-e29b-41d4-a716-446655440001"
       ]
     },
     {
@@ -129,14 +129,14 @@
       "description": "Cross-referenced built examples and build reports for codebase characteristics",
       "inference_type": "inductive",
       "evidence_ids": [
-        "e2",
-        "e3",
-        "e4"
+        "550e8400-e29b-41d4-a716-446655440011",
+        "550e8400-e29b-41d4-a716-446655440012",
+        "550e8400-e29b-41d4-a716-446655440013"
       ],
       "claim_ids": [
-        "claim-1",
-        "claim-2",
-        "claim-3"
+        "550e8400-e29b-41d4-a716-446655440001",
+        "550e8400-e29b-41d4-a716-446655440002",
+        "550e8400-e29b-41d4-a716-446655440003"
       ]
     }
   ],
