@@ -173,7 +173,6 @@
     },
     "uncertainty": {
       "type": "object",
-      "required": ["overall_confidence"],
       "properties": {
         "overall_confidence": {
           "type": "number",
@@ -212,6 +211,9 @@
             }
           }
         }
+      },
+      "properties": {
+        "overall_confidence": { "type": "number", "minimum": 0, "maximum": 1 }
       }
     },
     "context": {
