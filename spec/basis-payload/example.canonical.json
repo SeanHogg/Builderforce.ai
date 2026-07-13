@@ -1,0 +1,125 @@
+{
+  "schema_version": "1.0.0",
+  "basis_id": "550e8400-e29b-41d4-a716-446655440000",
+  "created_at": "2025-10-14T12:00:00Z",
+  "agent_id": "coderclaw-mock-basis-gen",
+  "session_id": "sess-12345",
+  "parent_basis_id": null,
+  "sandbox": "development",
+  "claims": [
+    {
+      "claim_id": "550e8400-e29b-41d4-a716-446655440001",
+      "text": "The system processes 1,500 transactions per second on average.",
+      "confidence": 0.87,
+      "confidence_method": "empirical",
+      "tags": [
+        "performance",
+        "throughput"
+      ],
+      "status": "asserted"
+    },
+    {
+      "claim_id": "550e8400-e29b-41d4-a716-446655440002",
+      "text": "Throughput is measured in the development environment.",
+      "confidence": 0.92,
+      "confidence_method": "heuristic",
+      "tags": [
+        "environment",
+        "verification"
+      ],
+      "status": "asserted"
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "550e8400-e29b-41d4-a716-446655440010",
+      "claim_ids": [
+        "550e8400-e29b-41d4-a716-446655440001"
+      ],
+      "type": "document",
+      "uri": "https://example.com/reports/performance-2025-10.md",
+      "title": "Performance Testing Report Q3 2025",
+      "excerpt": "Average throughput measured at 1,513 TPS across 3 regions.",
+      "retrieved_at": "2025-10-14T11:55:00Z",
+      "weight": 0.92,
+      "provenance": {
+        "source_system": "testing-internal",
+        "source_version": "v3.2.0",
+        "checksum": "a1b2c3d4e5f6..."
+      }
+    },
+    {
+      "evidence_id": "550e8400-e29b-41d4-a716-446655440011",
+      "claim_ids": [
+        "550e8400-e29b-41d4-a716-446655440002"
+      ],
+      "type": "computed",
+      "weight": 0.75,
+      "provenance": {
+        "source_system": "runtime-metrics",
+        "checksum": "779988a..."
+      }
+    }
+  ],
+  "reasoning_chain": [
+    {
+      "step": 1,
+      "description": "Identified performance metrics from testing reports.",
+      "evidence_ids": [
+        "550e8400-e29b-41d4-a716-446655440010"
+      ],
+      "claim_ids": [
+        "550e8400-e29b-41d4-a716-446655440001"
+      ],
+      "inference_type": "deductive"
+    },
+    {
+      "step": 2,
+      "description": "Verified metrics belong to development environment testing runs.",
+      "claim_ids": [
+        "550e8400-e29b-41d4-a716-446655440002"
+      ],
+      "inference_type": "lookup"
+    }
+  ],
+  "uncertainty": {
+    "overall_confidence": 0.81,
+    "known_unknowns": [
+      "Batch job processing time not yet measured.",
+      "Production traffic patterns estimate unknown."
+    ],
+    "assumptions": [
+      "The test samples are representative of peak loads.",
+      "Network latency behaves similarly in staging."
+    ],
+    "contradictions": []
+  },
+  "context": {
+    "task_id": "TASK-674",
+    "task_description": "Define Basis Payload Structure v1.0.0 and validate canonical example.",
+    "model_id": "claude-3.5-sonnet",
+    "model_version": "2025-10-14",
+    "tool_calls": [
+      {
+        "tool_name": "jsonschema",
+        "input_summary": "Validate example.canonical.json against schema.",
+        "output_summary": "passes schema validation",
+        "called_at": "2025-10-14T12:00:00Z"
+      }
+    ],
+    "environment": "development"
+  },
+  "extensions": {
+    "com.builderforce.project-analysis": {
+      "project_risk_score": 0.24,
+      "dominant_risk_factors": [
+        "legacy-dependencies",
+        "testing-parity-with-runtime"
+      ]
+    },
+    "com.acme.security": {
+      "priority_vulns": 2,
+      "recommendation_rebuttal_threshold": 0.7
+    }
+  }
+}
