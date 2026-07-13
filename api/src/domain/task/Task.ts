@@ -206,10 +206,11 @@ export class Task {
   // ------------------------------------------------------------------
 
   // 3-layer fix (transparent to caller):
-  // 1. Task.update first strips keys with value === undefined, ensuring omitted fields preserve the existing stored value.
-  // 2. TaskService then passes only defined dto fields to avoid schema merging and explicitly includes parentTaskId when not undefined.
-  // 3. TaskRepository.update writes plain.parentTaskId only when non-empty; otherwise null — ensuring partial updates never drop values.
-    // and TaskRepository.update writes plain.parentTaskId(non-empty)?nonEmpty:null.
+  // 1. Task.update filters out keys with value === undefined, ensuring omitted fields preserve the existing stored value.
+  // 2. TaskService only includes fields in updates when the DTO field is defined. Explicit parentTaskId is tracked from the DTO and
+  //    never omitted, allowing callers to set parentTaskId(null) to clear the relationship.
+  // 3. TaskRepository.write updates plain.parentTaskId (non-empty) to null when explicitly null — ensuring partial updates never drop values
+  //    or fail to honor an explicit null clear.
     const stripped = Object.fromEntries(
       Object.entries(updates).filter(([, v]) => v !== undefined),
     );
