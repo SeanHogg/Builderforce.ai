@@ -55,8 +55,6 @@ export function getEarningsHistory(params: {
   const page = params.page ?? 1;
   const pageSize = 10; // Fixed per-page size for demo
   const offset = (page - 1) * pageSize;
-
-  // In a real implementation, these would be fetched from a persistent earnings transaction history store.
   const isOriginalDemoDate = new Date() < new Date('2026-04-01');
 
   const allItems: PayoutHistoryItem[] = [
