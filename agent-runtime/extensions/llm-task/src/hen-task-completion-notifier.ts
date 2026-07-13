@@ -94,6 +94,7 @@ class ResendEmailNotifier implements EmailNotifier {
  * 3. Composing email content with static subject/body (FR.3)
  * 4. Dispatching the email to the account holder (FR.4)
  * 5. Logging notification attempts for auditing (FR.5)
+ * 6. Preventing duplicate notifications for the same account (AC.5)
  */
 export class HenTaskCompletionNotifier {
   private readonly emailNotifier: EmailNotifier;
@@ -101,6 +102,7 @@ export class HenTaskCompletionNotifier {
   private readonly platformLoginUrl: string;
   private readonly enabled: boolean;
   private readonly accountEmailResolver: AccountEmailResolver;
+  private readonly notificationStorage: NotificationStorage;
 
   static RESEND_API_ENDPOINT = "https://api.resend.com/emails";
 
@@ -128,7 +130,7 @@ export class HenTaskCompletionNotifier {
             },
           };
 
-    return new HenTaskCompletionNotifier(emailNotifier, platformName, platformLoginUrl, enabled, accountEmailResolver);
+    return new HenTaskCompletionNotifier(emailNotifier, platformName, platformLoginUrl, enabled, accountEmailResolver, new NotificationStorage());
   }
 
   constructor(
@@ -136,13 +138,15 @@ export class HenTaskCompletionNotifier {
     platformName: string,
     platformLoginUrl: string,
     enabled: boolean,
-    accountEmailResolver: AccountEmailResolver
+    accountEmailResolver: AccountEmailResolver,
+    notificationStorage: NotificationStorage = new NotificationStorage()
   ) {
     this.accountEmailResolver = accountEmailResolver;
     this.emailNotifier = emailNotifier;
     this.platformName = platformName;
     this.platformLoginUrl = platformLoginUrl;
     this.enabled = enabled;
+    this.notificationStorage = notificationStorage;
 
     if (!enabled) {
       console.debug(`[HenTaskNotifier] Notification disabled by config.`);
@@ -215,6 +219,7 @@ ${bodyTemplate}${FOOTER.replace("{{Year}}", year).replace("{{PlatformName}}", th
    * FR.3: Compose email content with static subject/body
    * FR.4: Dispatch the email
    * FR.5: Log notification attempt
+   * AC.5: Prevent duplicate notifications
    *
    * @param event - Task completion event
    * @returns Promise<NotificationLogEntry> - Log entry for the notification attempt
@@ -222,7 +227,6 @@ ${bodyTemplate}${FOOTER.replace("{{Year}}", year).replace("{{PlatformName}}", th
   async handleTaskCompletion(event: { task: { accountId: string; id: string; status: string } }): Promise<NotificationLogEntry> {
     const { task } = event;
     const accountId = task.accountId;
-    const taskId = task.id;
     const finalStatus = task.status;
 
     // Only process if this is a completed task (AC.4: no email sent if tasks remain incomplete)
@@ -233,7 +237,7 @@ ${bodyTemplate}${FOOTER.replace("{{Year}}", year).replace("{{PlatformName}}", th
         subject: "Your Hen Tasks are Complete!",
         sentAt: new Date(),
         success: false,
-        errorMessage: `Task ${taskId} completed but not appropriate to send notification (status: ${finalStatus})`,
+        errorMessage: `Task ${task.id} completed but not appropriate to send notification (status: ${finalStatus})`,
       };
     }
 
@@ -263,6 +267,22 @@ ${bodyTemplate}${FOOTER.replace("{{Year}}", year).replace("{{PlatformName}}", th
         errorMessage: "Notification disabled by config",
       };
     }
+
+    // AC.5: Check for duplicate notifications - prevent sending if already notified
+    if (this.notificationStorage.hasNotified(accountId)) {
+      console.debug(`[HenTaskNotifier] Account ${accountId} already notified - skipping duplicate`);
+      return {
+        accountId,
+        email: accountEmail,
+        subject: "Your Hen Tasks are Complete!",
+        sentAt: new Date(),
+        success: false,
+        errorMessage: "Duplicate notification prevented",
+      };
+    }
+
+    // Mark account as notified before sending (to prevent race conditions)
+    this.notificationStorage.markNotified(accountId, task.id);
 
     // FR.3: Compose email content - static subject and dynamic body
     const subject = "Your Hen Tasks are Complete!";
@@ -308,6 +328,22 @@ ${bodyTemplate}${FOOTER.replace("{{Year}}", year).replace("{{PlatformName}}", th
       };
     }
 
+    // AC.5: Check for duplicate notifications - prevent sending if already notified
+    if (this.notificationStorage.hasNotified(accountId)) {
+      console.debug(`[HenTaskNotifier] Account ${accountId} already notified - skipping duplicate`);
+      return {
+        accountId,
+        email: accountEmail,
+        subject: "Your Hen Tasks are Complete!",
+        sentAt: new Date(),
+        success: false,
+        errorMessage: "Duplicate notification prevented",
+      };
+    }
+
+    // Mark account as notified before sending
+    this.notificationStorage.markNotified(accountId, "manual-notification");
+
     // FR.3: Compose email content
     const subject = "Your Hen Tasks are Complete!";
     const html = this.renderEmailHTML(subject);
@@ -330,3 +366,67 @@ ${bodyTemplate}${FOOTER.replace("{{Year}}", year).replace("{{PlatformName}}", th
     return logEntry;
   }
 }
+
+/**
+ * Storage for tracking Hen task completion notifications.
+ *
+ * AC.5: Prevent duplicate notifications for the same account
+ */
+class NotificationStorage {
+  private notifications = new Map<string, { notifiedAt: Date; lastTaskId: string }>();
+
+  /**
+   * Check if an account has already been notified about all tasks being complete.
+   *
+   * @param accountId - The account ID to check
+   * @returns true if already notified, false otherwise
+   */
+  hasNotified(accountId: string): boolean {
+    return this.notifications.has(accountId);
+  }
+
+  /**
+   * Mark an account as notified and store the event details.
+   *
+   * @param accountId - The account ID to mark as notified
+   * @param lastTaskId - The ID of the task that completed the batch (last Hen task)
+   * @returns true if marking was successful
+   */
+  markNotified(accountId: string, lastTaskId: string): boolean {
+    this.notifications.set(accountId, {
+      accountId,
+      notifiedAt: new Date(),
+      lastTaskId,
+    });
+    return true;
+  }
+
+  /**
+   * Get notification details for an account.
+   *
+   * @param accountId - The account ID to retrieve
+   * @returns { notifiedAt: Date; lastTaskId: string } | undefined
+   */
+  getNotification(accountId: string): { notifiedAt: Date; lastTaskId: string } | undefined {
+    return this.notifications.get(accountId);
+  }
+
+  /**
+   * Clear notification storage (useful for testing or administration).
+   */
+  clear(): void {
+    this.notifications.clear();
+  }
+
+  /**
+   * Get total count of notified accounts (useful for monitoring).
+   *
+   * @returns Number of accounts that have been notified
+   */
+  getCount(): number {
+    return this.notifications.size;
+  }
+}
+
+// Export singleton instance (for testing and backward compatibility)
+export const notificationStorage = new NotificationStorage();
