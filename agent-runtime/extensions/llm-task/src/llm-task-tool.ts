@@ -15,7 +15,7 @@ type LLMTaskExtensionConfig = z.infer<typeof HenTaskCompletionNotifierSchema>;
  */
 export class LLMTaskTool {
   private config: LLMTaskExtensionConfig;
-  private accountEmailResolver: any;
+  private accountEmailResolver: AccountEmailResolver;
   private henTaskCompletionNotifier?: HenTaskCompletionNotifier;
 
   constructor(config: LLMTaskExtensionConfig, accountEmailResolver?: any) {
