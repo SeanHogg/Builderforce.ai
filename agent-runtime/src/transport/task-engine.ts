@@ -4,6 +4,7 @@
  */
 
 import crypto from "node:crypto";
+
 // Assuming TaskState and TaskStatus are imported from './types.js'
 // and TaskSubmitRequest is also defined there or globally.
 // For this modification, we'll extend TaskState with new fields.
@@ -80,6 +81,7 @@ export interface TaskStorage {
 // --- End of Modified/Added Types ---
 
 
+
 /**
  * Validate if a status transition is allowed
  */
@@ -102,7 +104,7 @@ function isValidTransition(from: TaskStatus, to: TaskStatus): boolean {
  */
 export class MemoryTaskStorage implements TaskStorage {
   private tasks = new Map<string, TaskState>();
-  private events = new Map<string, TaskEvent[]>();
+  private events = new Map<string, TaskEvent[]>;
 
   async save(task: TaskState): Promise<void> {
     this.tasks.set(task.id, { ...task });
@@ -142,39 +144,6 @@ export class MemoryTaskStorage implements TaskStorage {
     return this.events.get(taskId) || [];
   }
 }
-
-/**
- * Helper to check if a task is a 'Hen' task
- */
-function isHenTask(task: TaskState | null): boolean {
-  return task?.taskType === 'Hen';
-}
-
-/**
- * Helper to check if all 'Hen' tasks for an account are completed.
- * Assumes task.accountId and task.taskType fields exist on TaskState.
- */
-async function areAllHenTasksCompleted(storage: TaskStorage, accountId: string): Promise<boolean> {
-  const henTasks = await storage.list({ status: undefined, sessionId: undefined }); // Get all tasks
-  const accountHenTasks = henTasks.filter(
-    (t) => t.accountId === accountId && isHenTask(t)
-  );
-
-  // If there are no Hen tasks for this account, consider it completed (or handle as per requirements)
-  if (accountHenTasks.length === 0) {
-    return true;
-  }
-
-  // Check if all found Hen tasks are completed
-  return accountHenTasks.every((t) => t.status === "completed");
-}
-
-/**
- * Import the notification service
- */
-// NOTE: Notification logic delegated to domain services (HenTaskCompletionNotifier).
-// No direct import needed here.
-
 
 /**
  * Enhanced task engine with distributed capabilities
@@ -221,7 +190,6 @@ export class DistributedTaskEngine {
 
   /**
    * Update task status with validation
-   * Modified to check for Hen task completion and trigger email notification.
    */
   async updateTaskStatus(taskId: string, newStatus: TaskStatus): Promise<TaskState | null> {
     const task = await this.storage.load(taskId);
@@ -232,7 +200,7 @@ export class DistributedTaskEngine {
     // Validate transition
     if (!isValidTransition(task.status, newStatus)) {
       throw new Error(
-        `Invalid status transition from ${task.status} to ${newStatus} for task ${taskId}`,
+        `Invalid status transition from ${task.status} to ${newStatus} for task ${taskId}`
       );
     }
 
@@ -359,14 +327,8 @@ export class DistributedTaskEngine {
 
   /**
    * List tasks with optional filter (existing method)
-   * This method is crucial for `areAllHenTasksCompleted` to work correctly.
-   * Ensure it correctly retrieves tasks from storage.
    */
   async listTasks(filter?: { status?: TaskStatus; sessionId?: string }): Promise<TaskState[]> {
-    // This method is assumed to be correctly implemented in TaskStorage.
-    // If the storage's list method doesn't return all tasks by default (without filter),
-    // `areAllHenTasksCompleted` will need to be adjusted.
-    // For now, assuming the storage.list() call inside `areAllHenTasksCompleted` works as intended.
     return this.storage.list(filter);
   }
 
