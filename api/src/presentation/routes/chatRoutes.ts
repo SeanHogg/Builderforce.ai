@@ -7,9 +7,8 @@
  * (which internally forwards to builtin_chats_consolidate tooling).
  */
 import { Hono } from 'hono';
-import { eq, and, desc, count } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import { chatTicketLinks, brainChats, brainChatMessages } from '../../infrastructure/database/schema';
-import { verifyAgentHostApiKey } from '../../infrastructure/auth/agentHostAuth';
 import authMiddleware from '../middleware/authMiddleware';
 import { ChatTicketService } from '../../application/brain/ChatTicketService';
 import type { HonoEnv } from '../../env';
