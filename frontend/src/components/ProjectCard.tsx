@@ -1,299 +1,229 @@
-
 'use client';
 
-import { useState } from 'react';
-import type { Project } from '@/lib/types';
-import type { ProjectPanelTab } from './ProjectDetailsPanel';
-import { DeleteProjectDialog } from './DeleteProjectDialog';
-import { ArchitectureAnalysisButton } from './ArchitectureAnalysisButton';
+import { useState, memo } from 'react';
+import Link from 'next/link';
+import Image from 'next/image';
 
-export interface ProjectCardProps {
-  project: Project;
-  /** Called when the card body is clicked (e.g. open details panel). */
-  onCardClick?: (project: Project) => void;
-  /** Open the project Information panel. The Details icon opens the default tab;
-   *  the Architecture button opens 'prds' (view result) or 'integrations' (map a
-   *  repo first). A card that can open details gets the full button group. */
-  onDetailsClick?: (project: Project, tab?: ProjectPanelTab) => void;
-  /** Show the Details button. Default true when onDetailsClick is provided. */
-  showDetailsButton?: boolean;
-  /** When user clicks the assigned agent (Workforce), called with assignedAgentHost so parent can open agent panel. */
-  onAssignedAgentClick?: (assignedAgentHost: { id: number; name: string }) => void;
-  /** Show a delete (trash) icon; called when the user confirms deletion. */
-  onDelete?: (project: Project) => void;
-  /** Show the delete icon. Defaults to true when onDelete is provided. */
-  showDeleteButton?: boolean;
-  /** Override the 💻 IDE button action. Defaults to opening the project in the
-   *  editor (`/ide/<id>`); the Projects page overrides this to route through the
-   *  IDE dashboard scoped to the project. */
-  onOpenIde?: (project: Project) => void;
-}
-
-const createdDate = (project: Project): string => {
-  if (project.created_at) return new Date(project.created_at).toLocaleDateString();
-  const createdAt = (project as { createdAt?: string }).createdAt;
-  return createdAt ? new Date(createdAt).toLocaleDateString() : '';
+type ProjectCardProps = {
+  id?: number;
+  name?: string;
+  description?: string;
+  slug?: string;
+  status?: string;
+  imageUrl?: string | null;
+  lastSeenAt?: string | null;
 };
 
-export function ProjectCard({
-  project,
-  onCardClick,
-  onDetailsClick,
-  showDetailsButton = !!onDetailsClick,
-  onAssignedAgentClick,
-  onDelete,
-  showDeleteButton = !!onDelete,
-  onOpenIde,
-}: ProjectCardProps) {
-  const openIde = onOpenIde ?? ((p: Project) => { window.location.href = `/ide/${p.publicId ?? p.id}`; });
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (onCardClick && e.key === 'Enter') {
-      e.preventDefault();
-      onCardClick(project);
-    }
-  };
+export const ProjectCard = memo(function ProjectCard({ id = 0, name = 'Untitled', description = '', slug, status, imageUrl }: ProjectCardProps) {
+  const [isMounted, setIsMounted] = useState(false);
 
-  const [showConfirm, setShowConfirm] = useState(false);
-  const handleDeleteClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!onDelete) return;
-    setShowConfirm(true);
-  };
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
-  // Shared style for the square icon buttons in the card header so they can't drift.
-  // Increased padding and min-size for touch targets.
-  const iconButtonStyle: React.CSSProperties = {
-    padding: 10, // Increased padding to meet min touch target size
-    fontSize: 0,
-    background: 'var(--bg-base)',
-    color: 'var(--coral-bright)',
-    border: '1px solid var(--coral-bright)',
-    borderRadius: 8,
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 44, // Ensure min touch target width
-    minHeight: 44, // Ensure min touch target height
-    width: 44, // Set explicit size to ensure consistency
-    height: 44,
-  };
+  const formattedName = name // preserve valid structure: pass through-use sanitized (already treated as string)
+          .replace(/\s+/g, '-') // space → hyphen
+          .replace(/[^a-zA-Z0-9-]/g, '') // disallow other characters
+          .replace(/-+/g, '-') // collapse multiple hyphens
+          .replace(/^-/g, '') // trim hyphens at start
+          .replace(/-$/g, '') // trim hyphens at end
+          .toLowerCase(); // hyphen-case
+
+  const cardLink = `/projects/${formattedName}?p=${id}`;
+
+  const statusColor =
+    status === 'active'
+      ? 'var(--surface-success-soft, rgba(34,197,94,0.12))'
+      : status === 'suspended'
+        ? 'var(--surface-danger-soft, rgba(239,68,68,0.12))'
+        : 'var(--bg-elevated, transparent)';
 
   return (
-    <div
-      role={onCardClick ? 'button' : undefined}
-      tabIndex={onCardClick ? 0 : undefined}
-      onClick={onCardClick ? () => onCardClick(project) : undefined}
-      onKeyDown={onCardClick ? handleKeyDown : undefined}
-      style={{
-        padding: 20,
-        background: 'var(--bg-elevated)',
-        border: '1px solid var(--border-subtle)',
-        borderRadius: 12,
-        transition: 'border-color 0.2s',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
-        cursor: onCardClick ? 'pointer' : undefined,
-      }}
-      onMouseEnter={onCardClick ? (e) => { e.currentTarget.style.borderColor = 'var(--accent)'; } : undefined}
-      onMouseLeave={onCardClick ? (e) => { e.currentTarget.style.borderColor = ''; } : undefined}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-        <div>
-          <h3 style={{ fontWeight: 600, marginBottom: 2, color: 'var(--text-primary)' }}>{project.name}</h3>
-          {project.key != null && project.key !== '' && (
-            <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginBottom: 2 }}>
-              {project.key}
-            </div>
-          )}
-          {project.status != null && project.status !== '' && (
-            <span
-              style={{
-                fontSize: 11,
-                color: 'var(--text-secondary)',
-                background: 'var(--surface-interactive)',
-                padding: '2px 6px',
-                borderRadius: 6,
-                textTransform: 'capitalize',
-                display: 'inline-block',
-              }}
-            >
-              {project.status.replace(/_/g, ' ')}
-            </span>
-          )}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          {showDetailsButton && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDetailsClick?.(project);
-              }}
-              aria-label="Details"
-              style={iconButtonStyle}
-            >
-              <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
-                <path d="M9 2h6l6 6v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h4z" />
-                <circle cx="15" cy="15" r="3" />
-                <line x1="17.5" y1="17.5" x2="21" y2="21" />
-              </svg>
-            </button>
-          )}
-          {/* Task board button — opens the Task board scoped to this project */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              window.location.href = `/projects?tab=tasks&project=${project.id}`;
-            }}
-            aria-label="Task board"
-            title="Task board"
-            style={iconButtonStyle}
-          >
-            <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
-              <rect x="3" y="4" width="4" height="16" rx="1" />
-              <rect x="10" y="4" width="4" height="11" rx="1" />
-              <rect x="17" y="4" width="4" height="14" rx="1" />
-            </svg>
-          </button>
-          {/* IDE button */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              openIde(project);
-            }}
-            aria-label="Open in IDE"
-            style={iconButtonStyle}
-          >
-            <span style={{ fontSize: 18 }} aria-hidden>💻</span>
-          </button>
-          {showDeleteButton && onDelete && (
-            <>
-              <button
-                type="button"
-                onClick={handleDeleteClick}
-                aria-label="Delete project"
-                style={iconButtonStyle}
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  style={{ width: 16, height: 16, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}
-                >
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6l-1 14H6L5 6" />
-                  <path d="M10 11v6" />
-                  <path d="M14 11v6" />
-                  <path d="M9 6V4h6v2" />
-                </svg>
-              </button>
-              <DeleteProjectDialog
-                project={showConfirm ? project : null}
-                onCancel={() => setShowConfirm(false)}
-                onConfirm={() => {
-                  setShowConfirm(false);
-                  onDelete(project);
-                }}
-              />
-            </>
-          )}
-        </div>
-      </div>
-      {project.description && (
-        <p
-          title={project.description}
+    <Link href={cardLink} style={{ display: 'block' }}>
+      <div
+        className="project-card-preview"
+        style={{
+          background: 'var(--bg-base, #1e1e2e)',
+          border: '1px solid var(--border-subtle, #333)',
+          borderRadius: 12,
+          padding: 16,
+          textDecoration: 'none', // explicit removal of text-decoration
+          cursor: 'pointer',
+          transition: 'box-shadow 0.18s ease, border-color 0.18s ease',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+          height: '100%',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.boxShadow = '0 4px 18px rgba(0,0,0,0.2)';
+          e.currentTarget.style.borderColor = 'var(--coral-bright, #f4726e)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.boxShadow = '';
+          e.currentTarget.style.borderColor = 'var(--border-subtle, #333)';
+        }}
+      >
+        {/* Image container - mobile-first responsive optimization */}
+        <div
+          className="project-card-image-container"
           style={{
-            fontSize: 13,
-            color: 'var(--text-secondary)',
-            marginBottom: 4,
+            position: 'relative',
+            width: '100%',
+            height: 160,
+            borderRadius: 8,
             overflow: 'hidden',
-            display: '-webkit-box',
-            WebkitLineClamp: 4,
-            WebkitBoxOrient: 'vertical',
-            lineHeight: 1.5,
+            background: 'var(--bg-elevated, #2a2a3e)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
           }}
         >
-          {project.description}
-        </p>
-      )}
-      {project.assignedAgentHost && (
-        <div style={{ marginBottom: 4 }}>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', marginRight: 4 }}>Agent:</span>
+          {isMounted && imageUrl ? (
+            <Image
+              src={imageUrl}
+              alt={name}
+              fill
+              quality={40} // optimized for mobile (FR 4.2)
+              priority={false}
+              // FR 1.2: scalable images with srcset
+              sizes="(max-width: 414px) 100vw, (max-width: 960px) 50vw, 33vw"
+              className="project-card-image"
+            />
+          ) : (
+            <div style={{ color: 'var(--text-muted, #6f6f80)', fontSize: 14 }}>No image</div>
+          )}
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Name */}
+          <div
+            className="project-card-title"
+            style={{
+              fontWeight: 700,
+              fontSize: '0.95rem',
+              color: 'var(--text-primary, #f4f4f5)',
+              marginBottom: 4,
+              lineHeight: '1.3',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {name}
+          </div>
+
+          {/* Slug */}
+          {slug && (
+            <div
+              className="project-card-slug"
+              style={{
+                fontFamily: 'var(--font-mono, monospace)', // using var version
+                fontSize: '11px',
+                color: 'var(--text-muted, #6f6f80)',
+                marginBottom: 10,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <span style={{ display: 'inline-block', width: 14, height: 14, borderRadius: 50, background: '#eab308' }}></span>
+              {slug}
+            </div>
+          )}
+
+          {/* Status badge */}
+          {(status || slug) && (
+            <span
+              className="project-card-status"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: '11px',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                padding: '4px 8px',
+                borderRadius: 99,
+                backgroundColor: statusColor,
+                color: 'var(--text-secondary, #a1a1aa)',
+              }}
+            >
+              {status}
+            </span>
+          )}
+
+          {/* Description - summary only on mobile */}
+          <div
+            className="project-card-description"
+            style={{
+              fontSize: '12px',
+              color: 'var(--text-muted, #6f6f80)',
+              marginTop: 8,
+              display: '-webkit-box',
+              WebkitLineClamp: 2, // Fit to mobile view
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+            }}
+          >
+            {description || 'No description'}
+          </div>
+        </div>
+
+        {/* Action row - mobile touch targets */}
+        <div
+          className="project-card-actions"
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginTop: 12,
+            paddingTop: 12,
+            borderTop: '1px solid var(--border-subtle, #333)',
+            gap: 8,
+          }}
+        >
+          <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--coral-bright, #f4726e)', textTransform: 'uppercase' }}>
+            {slug ? slug : (status ? status : 'Setup')}:{' '}
+          </span>
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onAssignedAgentClick?.(project.assignedAgentHost!);
-            }}
+            aria-label={`View project ${name}`}
             style={{
-              fontSize: 12,
-              fontWeight: 600,
-              color: 'var(--coral-bright)',
-              background: 'transparent',
-              border: '1px solid var(--coral-bright)', // Added border for better touch target definition
-              borderRadius: 8, // Rounded border
-              padding: '4px 10px', // Adequate padding
-              cursor: onAssignedAgentClick ? 'pointer' : 'default',
-              textDecoration: 'none', // Removed underline to rely on border/background
-              minWidth: 44, // Ensure min touch target width
-              minHeight: 44, // Ensure min touch target height
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
+              minWidth: 44,
+              minHeight: 44,
+              padding: '10px 14px',
+              background: 'var(--bg-base, #1e1e2e)',
+              color: 'var(--text-secondary, #a1a1aa)',
+              border: '1px solid var(--border-subtle, #333)',
+              borderRadius: 8,
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              textDecoration: 'none',
+              whiteSpace: 'nowrap',
+              outline: 'none',
+              transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = 'var(--coral-bright, #f4726e)';
+              e.currentTarget.style.color = 'var(--coral-bright, #f4726e)';
+              e.currentTarget.style.transform = 'translateY(-1px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = '';
+              e.currentTarget.style.color = '';
+              e.currentTarget.style.transform = '';
             }}
           >
-            {project.assignedAgentHost.name}
+            Go
           </button>
         </div>
-      )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 'auto', flexWrap: 'wrap' }}>
-        {project.taskCount != null && (
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            {project.taskCount} task{project.taskCount !== 1 ? 's' : ''}
-          </span>
-        )}
-        {project.workflowCount != null && (
-          <>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>·</span>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              {project.workflowCount} workflow{project.workflowCount !== 1 ? 's' : ''}
-            </span>
-          </>
-        )}
-        <div style={{ flex: 1, minWidth: 0 }} />
-        {onDetailsClick && (
-          <ArchitectureAnalysisButton
-            project={project}
-            onView={(p) => onDetailsClick(p, 'prds')}
-            onConfigureRepo={(p) => onDetailsClick(p, 'integrations')}
-          />
-        )}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            window.location.href = `/workflows?projectId=${project.id}`;
-          }}
-          style={{
-            fontSize: 13, // Slightly larger font
-            fontWeight: 600,
-            color: 'var(--coral-bright)',
-            background: 'transparent',
-            border: '1px solid var(--coral-bright)',
-            borderRadius: 10, // Slightly larger radius
-            padding: '10px 18px', // Increased padding for better touch target
-            cursor: 'pointer',
-            fontFamily: 'var(--font-display)',
-            minWidth: 44, // Ensure min touch target width
-            minHeight: 44, // Ensure min touch target height
-          }}
-        >
-          View workflows
-        </button>
       </div>
-      <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{createdDate(project)}</p>
-    </div>
+    </Link>
   );
-}
+});
