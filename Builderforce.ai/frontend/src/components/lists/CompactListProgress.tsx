@@ -2,6 +2,13 @@
 
 import type { CSSProperties } from 'react';
 
+/**
+ * Architecture note:
+ * - Design & acceptance criteria: ref PRD.md (Compact List Progress Breakdown, task #667).
+ * - Component spec: CompactListProgress handles FR-1 through FR-8 (all compact list, sorting, empty/loading/accessibility, reusability) and exemplifies Evidence sections implemented in this deliverable.
+ * - In-compliance observable: EvermindBrainMap.tsx (DemoRegionProgress) demonstrates scoped integration without data-layer mutation (FR-8).
+ */
+
 /** ProgressItem: Input shape for QList.Table -> CenPol stretch. */
 export type ProgressItem = {
   id: string;
