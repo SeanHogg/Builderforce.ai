@@ -126,8 +126,9 @@ describe('completeTask (completion with PR artifacts)', () => {
     expect(isSuccessResult(result)).toBe(true);
     const statusUpdate = updates().find((u) => (u.setPayload as any)?.completedAt);
     expect(statusUpdate).toBeDefined();
-    const completedAt = statusUpdate!.setPayload.completedAt as Date;
-    expect(completedAt.toISOString()).toMatch(/^\d{4}-\d{2}-\d{2}T[\d:T.]*$/);
+    const completedAt = statusUpdate!.setPayload.completedAt;
+    expect(typeof completedAt).toBe('string');
+    expect(completedAt).toMatch(/^\d{4}-\d{2}-\d{2}T[\dT:.]+Z?$/);
   });
 
   it('FR-1.3: Completion result payload includes a non-empty deliveredArtifacts collection', async () => {
