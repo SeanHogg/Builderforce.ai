@@ -118,9 +118,9 @@
  * ----------------
  * Since the generator remembers state between calls, you can accumulating
  * logs and optionally reset them with .resetLog(). To avoid state
- * accumulation across generations, create a new generator per call.
- * Alternatively, provide logSink to receive entries immediately without
- * retaining them in memory.
+ * accumulation across generations, create a new generator per call. However,
+ * engine.ts now returns an object with a generator that DOES accumulate logs; therefore,
+ * you can get them directly with .getLog(). For real-time logging, provide logSink.
  */
 
 /* Core exports from engine */
