@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -340,19 +339,21 @@ export function AgentHostSlideOutPanel({
               <div style={cardStyle}>
                 <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>Overview</div>
                 <div style={{ display: 'grid', gap: 10 }}>
-                  {[
-                    { label: 'Name', value: agentHost.name },
-                    { label: 'Slug', value: slug, mono: true },
-                    { label: 'Status', value: statusLabel },
-                    { label: 'Last seen', value: agentHost.lastSeenAt ? new Date(agentHost.lastSeenAt).toLocaleString() : '—' },
-                    { label: 'Connected at', value: agentHost.connectedAt ? new Date(agentHost.connectedAt).toLocaleString() : '—' },
-                    { label: 'Created', value: agentHost.createdAt ? new Date(agentHost.createdAt).toLocaleString() : '—' },
-                  ].filter(r => r.value).map(({ label, value, mono }) => (
-                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                      <span style={{ color: 'var(--text-muted)' }}>{label}</span>
-                      <span style={mono ? { fontFamily: 'var(--font-mono)' } : {}}>{value}</span>
-                    </div>
-                  ))}
+                  {
+                    [
+                      { label: 'Name', value: agentHost.name },
+                      { label: 'Slug', value: slug, mono: true },
+                      { label: 'Status', value: statusLabel },
+                      { label: 'Last seen', value: agentHost.lastSeenAt ? new Date(agentHost.lastSeenAt).toLocaleString() : '—' },
+                      { label: 'Connected at', value: agentHost.connectedAt ? new Date(agentHost.connectedAt).toLocaleString() : '—' },
+                      { label: 'Created', value: agentHost.createdAt ? new Date(agentHost.createdAt).toLocaleString() : '—' },
+                    ].filter(r => r.value).map(({ label, value, mono }) => (
+                      <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                        <span style={{ color: 'var(--text-muted)' }}>{label}</span>
+                        <span style={mono ? { fontFamily: 'var(--font-mono)' } : {}}>{value}</span>
+                      </div>
+                    ))
+                  }
                 </div>
               </div>
             </div>
@@ -428,7 +429,7 @@ export function AgentHostSlideOutPanel({
                   }}
                 >
                   Brainstorm / Brain
-                </button>
+                </Link>
                 <Link
                   href="/projects"
                   style={{
