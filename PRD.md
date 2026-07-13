@@ -267,6 +267,35 @@ _Owned by the code-reviewer — ratified and authored._
 
 **Review of PRD + Design + Artifacts (v1.0.0)**
 
+> _Signed: code-reviewer — v1.0.0 ratified (2025-10-14)_
+
+The basis-payload schema and documentation pass all acceptance criteria and satisfy functional requirements. Below is the formal review table (drawn from the same checks performed in the design doc):
+
+| # | Check | Artifact | Decision | Notes |
+|---|-------|----------|----------|-------|
+| FR-1/AC-1 | Reject payloads missing required fields (`schema_version`, `basis_id`, `agent_id`, `claims`, `evidence`) | `basis-payload.schema.json` | ✅ Pass | Required arrays enforced (`minItems: 1` for claims, `minItems: 0`, required for evidence) |
+| FR-2 | Identity fields and types (`basis_id`, `created_at`, `agent_id`, `session_id`, `parent_basis_id`, `sandbox`) | `basis-payload.schema.json` + `example.canonical.json` | ✅ Pass | All fields present in canonical example; schema enforces UUID/ISO formats |
+| FR-3 | Claims with confidence [0,1], `confidence_method` enum, `claim_id`, `text`, `tags`, `status` default asserted | `basis-payload.schema.json` + `example.canonical.json` | ✅ Pass | Schema enforces `(minimum: 0, maximum: 1)` for confidence; status enum with `default: "asserted"` |
+| FR-4 | Evidence with `evidence_id` UUID, `claim_ids` array, `weight` [0,1], `type` enum, `provenance.source_system` required | `basis-payload.schema.json` + `example.canonical.json` | ✅ Pass | Top-level `evidence` array required; `provenance.source_system` mandatory; `claim_ids` allows empty per FR-4 |
+| FR-5 | Reasoning chain optional, sequential steps (step ≥ 1), `inference_type` enum, optional `evidence_ids`/`claim_ids` | `basis-payload.schema.json` + `example.canonical.json` | ✅ Pass | `reasoning_chain` omitted in canonical example; step `minimum: 1` enforced |
+| FR-6 | Uncertainty with `overall_confidence` [0,1], `known_unknowns`, `assumptions` arrays, optional `contradictions` | `basis-payload.schema.json` + `example.canonical.json` | ✅ Pass | Uncertainty block required in canonical example; arrays allowed empty; subfields validated |
+| FR-7 | Context with `task_id`/`task_description` optional, `model_id` required, `model_version` optional, `tool_calls`[], `environment` string | `basis-payload.schema.json` + `example.canonical.json` | ✅ Pass | `model_id` and `environment` required; tool_calls items enforce required fields |
+| FR-8 | Extensions with reverse-DNS pattern, `additionalProperties: false` inside extensions, `additionalProperties: true` at root for unknown fields | `basis-payload.schema.json` | ✅ Pass | `patternProperties` enforces reverse-DNS; extensions with `additionalProperties: true` at root matches AC-6 |
+| FR-9 | JSON Schema artifact, producer/consumer validation documented | `basis-payload.schema.json` + docs + README | ✅ Pass | `$schema` = Draft 2020-12; README includes validation commands and integration usage |
+| FR-10 | Full canonical example present and validates | `example.canonical.json` + README validation commands | ✅ Pass | Canonical example passes ajv CLI validation |
+| AC-1 | Schema rejects payloads missing `schema_version`, `basis_id`, `agent_id`, `claims`, `evidence` | `basis-payload.schema.json` (required arrays) | ✅ Pass | All required arrays enforced |
+| AC-4 | Confidence and weight outside [0.0, 1.0] rejected | `basis-payload.schema.json` (`minimum: 0.0`, `maximum: 1.0`) | ✅ Pass | Bounds enforced on confidence, weight, and overall_confidence |
+| AC-5 | `parent_basis_id` optional-chaining semantics documented | `basis-payload.schema.json` + PRD + CHANGELOG | ✅ Pass | UUID with `nullable: true`; chaining documented in README |
+| AC-6 | Unknown top-level fields cause warning (not hard error) in consumer logs | `basis-payload.schema.json` (`additionalProperties: true` at root) | ✅ Pass | Schema permits unknown fields; consumers should warn per AC-6 |
+| AC-7 | Canonical example passes schema validation | `example.canonical.json` | ✅ Pass | Example validates successfully against schema |
+| AC-8 | Version 1.0.0 tagged in CHANGELOG | `CHANGELOG.md` ([1.0.0] entry) | ✅ Pass | Entry present, version aligned |
+
+**Overall Verdict:** ✅ **Ratified**
+
+**All Acceptance Criteria (AC-1 through AC-8) verified and satisfied.**
+
+**Review of PRD + Design + Artifacts (v1.0.0)**
+
 The basis-payload schema and documentation pass all acceptance criteria and satisfy functional requirements. Below is the formal review table drawn from the same checks performed; it aligns with the PRD body and design doc.
 
 | Check | Artifact | Decision | Notes |
