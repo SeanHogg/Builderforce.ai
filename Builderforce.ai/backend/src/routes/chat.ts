@@ -87,7 +87,7 @@ export async function GET_CHAT_ID(request: NextRequest) {
     const messages = await getMessagesByChatId(chatId);
     const chat = await getChatById(chatId);
 
-    // Check if this is a new chat without a title - auto-generate if so
+    // Check if this is a new chat without a title - auto-generate if so (FR1.1, FR1.2)
     if (chat && (!chat.title || chat.title.trim().length === 0)) {
       const autoTitle = await autoGenerateTitleFromMessages(messages, userId);
       if (autoTitle) {
