@@ -75,14 +75,10 @@ export function ChatDetail({
         content: input,
       });
 
-      setMessages(prev => [
-        ...prev,
-        result.message,
-        result.chat
-      ]);
+      setMessages(prev => [...prev, result.message]);
       setInput('');
 
-      // Wait a moment then refetch to get chat metadata updates
+      // Wait a moment then refetch to get chat metadata updates including auto-generated title
       setTimeout(async () => {
         await loadMessages();
       }, 100);
