@@ -9,6 +9,8 @@ import notificationStorage from "./notification-storage.js";
 
 const logger = getLogger();
 
+const logger = getLogger();
+
 type LLMTaskExtensionConfig = z.infer<typeof HenTaskCompletionNotifierSchema>;
 
 /**
