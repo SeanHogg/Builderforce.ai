@@ -520,6 +520,31 @@ describe('isSuccessResult', () => {
     const error = new InvalidStateError('Invalid state');
     expect(isSuccessResult(error)).toBe(false);
   });
+
+  it('returns false for plain objects that do not match CompletionResult shape', () => {
+    const plainObject = {
+      deliveredArtifacts: [{ id: 'test', type: 'pull_request', uri: 'http://example.com' }],
+      completedAt: '2024-01-01T00:00:00.000Z',
+    };
+    // Plain object without explicit name property returns false
+    expect(isSuccessResult(plainObject as any)).toBe(false);
+  });
+
+  it('returns false for objects that are missing required fields', () => {
+    const incompleteResult = {
+      deliveredArtifacts: [],
+      // Missing completedAt field
+    };
+    expect(isSuccessResult(incompleteResult as any)).toBe(false);
+  });
+
+  it('returns false for null value', () => {
+    expect(isSuccessResult(null as any)).toBe(false);
+  });
+
+  it('returns false for undefined value', () => {
+    expect(isSuccessResult(undefined as any)).toBe(false);
+  });
 });
 
 // ===========================================================================
