@@ -173,15 +173,21 @@ export function derive(
   plan: string,
   provisionedFunctions?: Record<string, import('./types.js').DerivedFunction>
 ): unknown {
-  // Pop out the function reference from the plan.
+  // Determine actual function name to look up—derivedKey itself or 'fn:name' plan.
+  let fnName: string;
   const s = plan.trim();
-  const trimmed = s.startsWith('fn:') ? s.slice(3) : s;
-  const fnName = trimmed.split('[')[0].trim(); // supports fn:name[argType?]
+  if (s.startsWith('fn:')) {
+    fnName = s.slice(3);
+  } else {
+    fnName = derivedKey;
+  }
 
-  const f = provisionedFunctions?.[fnName] ?? (derivedKey in provisionedFunctions && derivedKey !== fnName && typeof provisionedFunctions[derivedKey] === 'function' ? provisionedFunctions[derivedKey] : undefined);
+  fnName = fnName.trim();
 
+  // Look up function in provisioned functions map.
+  const f = provisionedFunctions?.[fnName];
   if (typeof f !== 'function') {
-    // Not provisioned and no mapping to fallback; skip derive.
+    // Not provisioned; return undefined (no transform).
     return undefined;
   }
 
