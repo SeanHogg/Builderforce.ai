@@ -15,8 +15,7 @@ import {
 } from '../../domain/shared/types';
 
 // ---------------------------------------------------------------------------
-// In-memory fakes (no DB) — exercise repository & domain paths.
-// ---------------------------------------------------------------------------
+// In-memory fakes (no DB) — exercise repository & domain paths. ---------------------------------------------------------------------------
 
 class InMemoryTaskRepo implements ITaskRepository {
   private seq = 1;
