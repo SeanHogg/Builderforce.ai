@@ -12,7 +12,7 @@ x-i18n:
   workflow: 15
 ---
 
-# BuilderForce Agents 🦞
+# BuilderForce Agents 🤖
 
 <p align="center">
     <img
@@ -29,7 +29,7 @@ x-i18n:
     />
 </p>
 
-> _「EXFOLIATE! EXFOLIATE!」_ — たぶん宇宙ロブスター
+> _「より速く構築。どこでもデプロイ。」_ — BuilderForce Agents
 
 <p align="center">
   <strong>WhatsApp、Telegram、Discord、iMessageなどに対応した、あらゆるOS向けのAIエージェントgateway。</strong><br />

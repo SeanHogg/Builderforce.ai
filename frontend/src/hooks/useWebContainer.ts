@@ -150,6 +150,49 @@ export function useWebContainer() {
     });
   }, [getOrBootWebContainer]);
 
+  /**
+   * Recursively read a directory out of the booted WebContainer's filesystem,
+   * returning every file as `{ path, data }` with paths relative to `root`.
+   * Used to capture a `dist/` build output for publishing to subdomain hosting.
+   */
+  const readDirRecursive = useCallback(async (
+    root: string,
+  ): Promise<Array<{ path: string; data: Uint8Array }>> => {
+    const instance = await getOrBootWebContainer();
+    const out: Array<{ path: string; data: Uint8Array }> = [];
+    const walk = async (dir: string, rel: string): Promise<void> => {
+      const entries = await instance.fs.readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const childAbs = `${dir}/${entry.name}`;
+        const childRel = rel ? `${rel}/${entry.name}` : entry.name;
+        if (entry.isDirectory()) {
+          await walk(childAbs, childRel);
+        } else {
+          const data = await instance.fs.readFile(childAbs);
+          out.push({ path: childRel, data });
+        }
+      }
+    };
+    await walk(root, '');
+    return out;
+  }, [getOrBootWebContainer]);
+
+  /**
+   * Write a single file into the booted container's filesystem (creating parent
+   * dirs as needed). Used for live-reload: when the dev server is running, pushing
+   * an edited file straight into the FS lets Vite HMR update the preview without a
+   * full re-mount + restart. No-op if the container isn't booted yet.
+   */
+  const writeFileToContainer = useCallback(async (path: string, contents: string): Promise<void> => {
+    const instance = webContainerInstance;
+    if (!instance) return;
+    const slash = path.lastIndexOf('/');
+    if (slash > 0) {
+      await instance.fs.mkdir(path.slice(0, slash), { recursive: true }).catch(() => { /* exists */ });
+    }
+    await instance.fs.writeFile(path, contents);
+  }, []);
+
   // Task 2: startShell now exposed so IDE can call it immediately on mount
   const startShell = useCallback(async (
     onOutput?: (data: string) => void,
@@ -167,5 +210,5 @@ export function useWebContainer() {
     return shellProcess.input.getWriter();
   }, [getOrBootWebContainer]);
 
-  return { state, mountFiles, runCommand, runCommandAndWait, startShell, startDevServer, getOrBootWebContainer };
+  return { state, mountFiles, runCommand, runCommandAndWait, readDirRecursive, writeFileToContainer, startShell, startDevServer, getOrBootWebContainer };
 }

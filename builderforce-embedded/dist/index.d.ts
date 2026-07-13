@@ -1,4 +1,4 @@
-import * as react_jsx_runtime from 'react/jsx-runtime';
+import * as react from 'react';
 import { CSSProperties } from 'react';
 
 /**
@@ -162,6 +162,24 @@ declare const EMBED_VIEWS: {
         readonly pillar: "product";
         readonly available: true;
     };
+    readonly 'dependency-graph': {
+        readonly key: "dependency-graph";
+        readonly label: "Dependency Graph";
+        readonly pillar: "product";
+        readonly available: true;
+    };
+    readonly 'rice-matrix': {
+        readonly key: "rice-matrix";
+        readonly label: "RICE Matrix";
+        readonly pillar: "product";
+        readonly available: true;
+    };
+    readonly 'roi-dashboard': {
+        readonly key: "roi-dashboard";
+        readonly label: "ROI Dashboard";
+        readonly pillar: "product";
+        readonly available: true;
+    };
     readonly kanban: {
         readonly key: "kanban";
         readonly label: "Kanban";
@@ -207,6 +225,12 @@ declare const EMBED_VIEWS: {
     readonly 'feature-scoring': {
         readonly key: "feature-scoring";
         readonly label: "Feature Scoring";
+        readonly pillar: "agile";
+        readonly available: true;
+    };
+    readonly workforce: {
+        readonly key: "workforce";
+        readonly label: "Workforce";
         readonly pillar: "agile";
         readonly available: true;
     };
@@ -315,7 +339,7 @@ interface BuilderForceEmbedProps {
  * JWT handoff, auto-resize, and deep-link sync. Hosts never build bespoke
  * per-view embeds; they render <BuilderForceEmbed view="…" />.
  */
-declare function BuilderForceEmbed({ view, token, baseUrl, accountId, companyId, path, theme, className, style, minHeight, onNavigate, onError, onReady, }: BuilderForceEmbedProps): react_jsx_runtime.JSX.Element;
+declare function BuilderForceEmbed({ view, token, baseUrl, accountId, companyId, path, theme, className, style, minHeight, onNavigate, onError, onReady, }: BuilderForceEmbedProps): react.JSX.Element;
 
 /**
  * Pure dispatch for inbound frame→host messages. Extracted from the component so

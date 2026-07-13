@@ -119,7 +119,7 @@ export async function generateVoiceResponse(
   const runId = `voice:${callId}:${Date.now()}`;
 
   try {
-    const result = await deps.runEmbeddedPiAgent({
+    const result = await deps.runEmbeddedAgent({
       sessionId,
       sessionKey,
       messageProvider: "voice",

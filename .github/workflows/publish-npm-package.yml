@@ -17,6 +17,12 @@
 
 name: Publish npm package (reusable)
 
+# Harden npm against transient registry network errors (ECONNRESET) in CI.
+env:
+  NPM_CONFIG_FETCH_RETRIES: "5"
+  NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "20000"
+  NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "120000"
+
 on:
   workflow_call:
     inputs:
@@ -54,10 +60,12 @@ jobs:
         with:
           node-version: 20
 
-      # Trusted Publishing requires npm >= 11.5.1 (Node 20 ships npm 10.x)
+      # Trusted Publishing requires npm >= 11.5.1 (Node 20 ships npm 10.x).
+      # Pin to npm@11 — npm@latest is now 12.x which requires Node >= 22 and
+      # fails on our Node 20 runner. npm@11 satisfies >= 11.5.1 and supports Node 20.
       - name: Upgrade npm
         run: |
-          npm install -g npm@latest
+          npm install -g npm@11
           echo "npm $(npm --version) — Trusted Publishing requires >= 11.5.1"
 
       # When this package file:-depends on a sibling, install the sibling first
@@ -98,5 +106,20 @@ jobs:
             echo "$PKG_NAME@$VERSION already on npm — skipping."
           else
             echo "$PKG_NAME@$VERSION is new — publishing."
-            npm publish --provenance --access public
+            if npm publish --provenance --access public; then
+              echo "Published $PKG_NAME@$VERSION."
+            else
+              # npm's fetch-retry hardening (NPM_CONFIG_FETCH_RETRIES) can re-PUT a
+              # version the first attempt already landed, yielding a 403 "cannot
+              # publish over previously published version". Re-check the registry:
+              # if the version is now present, the publish effectively succeeded and
+              # this is NOT a real failure (which would otherwise skip dependent
+              # deploy jobs via `needs:`).
+              if npm view "$PKG_NAME@$VERSION" version >/dev/null 2>&1; then
+                echo "Publish returned an error but $PKG_NAME@$VERSION is now on npm (retry race) — treating as success."
+              else
+                echo "Publish failed and $PKG_NAME@$VERSION is NOT on npm."
+                exit 1
+              fi
+            fi
           fi

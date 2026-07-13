@@ -4,51 +4,12 @@ declare module '*.md' {
   export default content;
 }
 
-// mambacode.js — WebGPU-accelerated Mamba SSM library (SeanHogg/Mamba)
-// The library ships as pure ESM without TypeScript declarations.
-declare module 'mambacode.js' {
-  export class MambaModel {
-    constructor(device: GPUDevice, config: {
-      vocabSize: number;
-      dModel?: number;
-      numLayers?: number;
-      dState?: number;
-      dConv?: number;
-      expand?: number;
-    });
-    generate(
-      promptIds: number[],
-      maxNewTokens: number,
-      options?: { temperature?: number }
-    ): Promise<number[]>;
-  }
+// Side-effect CSS imports (handled by the bundler at build time). TypeScript 6.0
+// errors (TS2882) on side-effect imports lacking a module declaration; TS 5.x did not.
+declare module '*.css';
 
-  export class MambaTrainer {
-    constructor(model: MambaModel, tokenizer: BPETokenizer);
-    train(
-      codeText: string,
-      options?: {
-        learningRate?: number;
-        epochs?: number;
-        wsla?: boolean;
-        onEpochEnd?: (epoch: number, loss: number) => void;
-      }
-    ): Promise<number[]>;
-  }
-
-  export class BPETokenizer {
-    readonly vocabSize: number;
-    load(vocabUrl: string, mergesUrl: string): Promise<void>;
-    encode(text: string): number[];
-    decode(ids: number[]): string;
-  }
-
-  export function initWebGPU(): Promise<{ device: GPUDevice; adapter: GPUAdapter }>;
-
-  export const VERSION: string;
-  export const DESCRIPTION: string;
-}
-
+// @seanhogg/builderforce-memory-engine ships its own TypeScript declarations,
+// so no `declare module` shim is needed here.
 
 // WebGPU global type declarations for TypeScript
 // These types are available in browsers supporting WebGPU

@@ -21,6 +21,7 @@ import {
   CASCADE_STATUSES,
   VendorFatalError,
   VendorRetryableError,
+  executeVendorPost,
   fetchWithVendorTimeout,
 } from '../vendors/types';
 
@@ -142,34 +143,21 @@ export async function executeImageGeneration(args: {
   parseResponse: (raw: unknown) => ImageGenResult;
 }): Promise<ImageGenResult> {
   const { vendorId, endpoint, apiKey, model, body, headers, timeoutMs, parseResponse } = args;
-  const resp = await fetchWithVendorTimeout(vendorId, model, endpoint, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      ...(headers ?? {}),
+  return executeVendorPost<ImageGenResult>({
+    vendorId,
+    endpoint,
+    apiKey,
+    model,
+    body,
+    ...(headers ? { headers } : {}),
+    timeoutMs: imageVendorTimeoutMs(timeoutMs),
+    logPrefix: 'imageVendors',
+    authFailoverNoun: 'model',
+    parseResponse,
+    // No `onEmbeddedError` — the image surface has never had a 200-embedded-error
+    // guard (image bodies aren't OpenAI `{ error }`-shaped); behavior preserved.
+    onFatal: (vId, _m, status, errText): never => {
+      throw new VendorFatalError(vId, status, errText);
     },
-    body: JSON.stringify(body),
-  }, imageVendorTimeoutMs(timeoutMs));
-
-  if (resp.ok) {
-    const raw = await resp.json();
-    return parseResponse(raw);
-  }
-
-  const errText = (await resp.text()).slice(0, 400);
-
-  if (CASCADE_STATUSES.has(resp.status)) {
-    throw new VendorRetryableError(vendorId, model, resp.status, errText.slice(0, 240));
-  }
-
-  if (AUTH_STATUSES.has(resp.status)) {
-    console.error(
-      `[imageVendors] ${vendorId}/${model} auth ${resp.status} — check ${vendorId.toUpperCase()}_API_KEY. Failing over to next model.`,
-      errText.slice(0, 200),
-    );
-    throw new VendorRetryableError(vendorId, model, resp.status, `auth ${resp.status}: ${errText.slice(0, 200)}`);
-  }
-
-  throw new VendorFatalError(vendorId, resp.status, errText);
+  });
 }

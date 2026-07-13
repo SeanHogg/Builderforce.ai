@@ -7,7 +7,7 @@ import * as builderforceApi from '@/lib/builderforceApi';
 
 vi.mock('@/lib/api');
 vi.mock('@/lib/builderforceApi');
-// A card with onDetailsClick renders the ArchitectureAnalysisButton, which uses the router.
+// Some card children navigate via next/navigation; stub the router.
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
@@ -33,8 +33,9 @@ describe('ProjectCard', () => {
       <ProjectCard project={sample} onDelete={onDelete} showDeleteButton />
     );
 
-    // delete button should be in document
-    const button = getByLabelText('Delete project');
+    // delete button should be in document (label resolves to the i18n key under the
+    // test's next-intl passthrough mock — see src/test/setup.ts)
+    const button = getByLabelText('projectCard.deleteProject');
     fireEvent.click(button);
 
     // confirm dialog should appear
@@ -55,7 +56,7 @@ describe('ProjectCard', () => {
     const { getByLabelText } = render(
       <ProjectCard project={sample} onDetailsClick={onDetails} showDetailsButton />
     );
-    const btn = getByLabelText('Details');
+    const btn = getByLabelText('projectCard.details');
     fireEvent.click(btn);
     expect(onDetails).toHaveBeenCalledWith(sample);
   });

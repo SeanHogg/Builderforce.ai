@@ -12,6 +12,11 @@ type GatewayChatRequest = {
   authToken: string;
   messages: GatewayChatMessage[];
   maxTokens?: number;
+  /** Caller-chosen model id passed straight through to the gateway. The gateway's
+   *  vendor registry routes it: a bare/`openrouter/...` id → OpenRouter, a
+   *  `<vendor>/<id>` pin → that vendor (groq/deepseek/mistral/openai/…). Omitted →
+   *  the gateway picks from the plan's default pool (unchanged behaviour). */
+  model?: string;
 };
 
 type ChatCompletionResponse = {
@@ -65,6 +70,7 @@ export async function requestGatewayCompletion(req: GatewayChatRequest): Promise
     body: JSON.stringify({
       messages: req.messages,
       stream: false,
+      ...(req.model ? { model: req.model } : {}),
       ...(typeof req.maxTokens === 'number' ? { max_tokens: req.maxTokens } : {}),
     }),
   });

@@ -23,7 +23,7 @@ export type WorkflowNodeKind =
   | 'mcp'        // invoke an MCP-server / SaaS integration tool
   | 'memory'     // read/write the SSM hippocampus memory
   | 'knowledge'  // ingest into / query a knowledge base
-  | 'train'      // kick a MambaKit/SSMjs training run → hippocampus model
+  | 'train'      // train an Evermind model (builderforce-memory engine) → hippocampus model
   | 'transform'  // ETL: map/shape the payload
   | 'filter'     // ETL: drop the payload unless a predicate holds
   | 'branch'     // ETL: conditional fan-out
@@ -151,7 +151,10 @@ export function roleForNode(node: WorkflowDefNode): string {
   if (node.kind === 'agent') {
     return String(node.config.role ?? node.config.agentRole ?? 'code-creator');
   }
-  return NODE_HANDLER_ROLES[node.kind];
+  // Client-side Evermind BUILD-step kinds (train-tokenizer, train-model, …) are a
+  // frontend-only superset run in-browser via the engine, never dispatched here.
+  // If one is ever server-run, fall back to a benign role rather than undefined.
+  return NODE_HANDLER_ROLES[node.kind] ?? `node:${node.kind}`;
 }
 
 /** Human/agent-readable task text for a node, derived from its config. */

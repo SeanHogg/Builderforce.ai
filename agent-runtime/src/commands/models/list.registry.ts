@@ -1,4 +1,4 @@
-import type { Api, Model } from "@mariozechner/pi-ai";
+import type { Api, Model } from "../../builderforce/model/types.js";
 import { resolveBuilderForceAgentsAgentDir } from "../../agents/agent-paths.js";
 import type { AuthProfileStore } from "../../agents/auth-profiles.js";
 import { listProfilesForProvider } from "../../agents/auth-profiles.js";
@@ -12,9 +12,9 @@ import {
   resolveForwardCompatModel,
 } from "../../agents/model-forward-compat.js";
 import { ensureBuilderForceAgentsModelsJson } from "../../agents/models-config.js";
-import { ensurePiAuthJsonFromAuthProfiles } from "../../agents/pi-auth-json.js";
-import type { ModelRegistry } from "../../agents/pi-model-discovery.js";
-import { discoverAuthStorage, discoverModels } from "../../agents/pi-model-discovery.js";
+import { ensureAuthJsonFromAuthProfiles } from "../../agents/auth-json.js";
+import type { ModelRegistry } from "../../agents/model-discovery.js";
+import { discoverAuthStorage, discoverModels } from "../../agents/model-discovery.js";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import {
   formatErrorWithStack,
@@ -102,7 +102,7 @@ function loadAvailableModels(registry: ModelRegistry): Model<Api>[] {
 export async function loadModelRegistry(cfg: BuilderForceAgentsConfig) {
   await ensureBuilderForceAgentsModelsJson(cfg);
   const agentDir = resolveBuilderForceAgentsAgentDir();
-  await ensurePiAuthJsonFromAuthProfiles(agentDir);
+  await ensureAuthJsonFromAuthProfiles(agentDir);
   const authStorage = discoverAuthStorage(agentDir);
   const registry = discoverModels(authStorage, agentDir);
   const appended = appendAntigravityForwardCompatModels(registry.getAll(), registry);

@@ -1,23 +1,20 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {
-  formatSkillsForPrompt,
-  loadSkillsFromDir,
-  type Skill,
-} from "@mariozechner/pi-coding-agent";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { CONFIG_DIR, resolveUserPath } from "../../utils.js";
 import { resolveSandboxPath } from "../sandbox-paths.js";
 import { resolveBundledSkillsDir } from "./bundled-dir.js";
 import { shouldIncludeSkill } from "./config.js";
+import { resolveSkillDependencies } from "./dependencies.js";
 import { normalizeSkillFilter } from "./filter.js";
 import {
   parseFrontmatter,
   resolveBuilderForceAgentsMetadata,
   resolveSkillInvocationPolicy,
 } from "./frontmatter.js";
+import { formatSkillsForPrompt, loadSkillsFromDir, type Skill } from "./native-loader.js";
 import { resolvePluginSkillDirs } from "./plugin-skills.js";
 import { serializeByKey } from "./serialize.js";
 import type {
@@ -70,21 +67,35 @@ function filterSkillEntries(
   skillFilter?: string[],
   eligibility?: SkillEligibilityContext,
 ): SkillEntry[] {
-  let filtered = entries.filter((entry) => shouldIncludeSkill({ entry, config, eligibility }));
-  // If skillFilter is provided, only include skills in the filter list.
+  // Self-contained eligibility (bins/anyBins/env/config/os) first.
+  const eligible = entries.filter((entry) => shouldIncludeSkill({ entry, config, eligibility }));
+
+  // If skillFilter is provided, only select skills in the filter list.
+  let selected = eligible;
   if (skillFilter !== undefined) {
     const normalized = normalizeSkillFilter(skillFilter) ?? [];
     const label = normalized.length > 0 ? normalized.join(", ") : "(none)";
     skillsLogger.debug(`Applying skill filter: ${label}`);
-    filtered =
+    selected =
       normalized.length > 0
-        ? filtered.filter((entry) => normalized.includes(entry.skill.name))
+        ? eligible.filter((entry) => normalized.includes(entry.skill.name))
         : [];
     skillsLogger.debug(
-      `After skill filter: ${filtered.map((entry) => entry.skill.name).join(", ") || "(none)"}`,
+      `After skill filter: ${selected.map((entry) => entry.skill.name).join(", ") || "(none)"}`,
     );
   }
-  return filtered;
+
+  // Resolve skill-to-skill dependencies: drop selected skills whose required
+  // skill is unavailable, and auto-include the eligible dependencies of the
+  // survivors (even ones the filter excluded). No-ops when no skill declares
+  // `requires.skills`, preserving the prior behavior exactly.
+  const { included, unmet } = resolveSkillDependencies({ all: entries, eligible, selected });
+  for (const { skill, missing } of unmet) {
+    skillsLogger.debug(
+      `Skill "${skill}" excluded: missing required skill(s): ${missing.join(", ")}`,
+    );
+  }
+  return included;
 }
 
 const SKILL_COMMAND_MAX_LENGTH = 32;

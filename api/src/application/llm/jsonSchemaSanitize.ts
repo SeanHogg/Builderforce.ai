@@ -24,44 +24,41 @@
  *   incompatible keywords on the OpenRouter path keeps Cerebras-backed free
  *   models in the cascade instead of immediately bouncing them.
  *
- *   For vendors whose stack we know accepts the full draft-07 set
- *   (`googleai`, NVIDIA NIM direct, Ollama Cloud, Anthropic direct via
- *   OpenRouter Pro pool), we still strip the *Cerebras-incompatible*
- *   keywords — the safest compatibility intersection is "strip everything
- *   that any upstream might reject." The cost is informational only: the
- *   model no longer sees `"a non-empty string up to 1000 chars"`, just
- *   `"a string"`. The gateway's `validateJsonSchema` still enforces the
- *   original constraints post-response, so the consumer's contract is
- *   preserved end-to-end.
+ * Metadata-driven (2026-06-21):
+ *   The per-vendor strip set is no longer a hardcoded `STRICT_VENDORS` literal
+ *   keyed by id. Each `VendorModule` may declare a `schemaDialect.stripKeywords`
+ *   set; the sanitizer composes the strip set at call time from the resolved
+ *   upstream's metadata (via `schemaStripKeywordsForVendor`). Adding a vendor
+ *   that's stricter than Cerebras = give its module a `schemaDialect` with its
+ *   own keyword list — NO edit to this helper. A vendor with no `schemaDialect`
+ *   is permissive (strip nothing). `CEREBRAS_STRICT_KEYWORDS` below is the
+ *   canonical set both `cerebrasModule` and `openRouterModule` attach (OpenRouter
+ *   inherits it because it routes `:free` ids to Cerebras as upstream).
  *
  * Why we don't strip selectively per backend route:
  *   OpenRouter's routing is opaque — they may switch a model from Cerebras
  *   to Groq to a self-hosted endpoint between requests. Branching on
  *   "current backend" would race against their internal failover. The
- *   intersection strategy is stable.
+ *   intersection strategy (strip the union of what any plausible upstream
+ *   rejects) is stable.
  *
  * Single source of truth:
- *   The stripped keyword set lives in `STRIPPED_KEYWORDS` below. Adding a
- *   vendor that's stricter than Cerebras = extend the set. Adding a vendor
- *   that's more permissive = no change (we still strip; the model just
- *   sees a slightly looser schema).
+ *   `CEREBRAS_STRICT_KEYWORDS` is the canonical strip set. The registry maps
+ *   a vendor id → its module's declared set; the sanitizer reads that map.
  */
-
-/** Vendor ids whose strict-mode JSON-Schema validators reject draft-07
- *  keywords like `maxLength`. `openrouter` is included because it routes
- *  many free-tier model ids to Cerebras as the upstream provider, and the
- *  same 400 fires under the OpenRouter wrapper. */
-const STRICT_VENDORS: ReadonlySet<string> = new Set(['cerebras', 'openrouter']);
 
 /**
- * Keywords stripped from the schema before forwarding to a strict vendor.
- * These are the draft-07 keywords Zod's `toJSONSchema()` emits that
- * Cerebras's validator rejects with 400 (per the 2026-05 production trace
- * `llm-2cc6ba1b-...`). Conservative list — add more only when a real
- * upstream rejection is observed; over-stripping silently weakens the
- * schema delivered to the model.
+ * Canonical Cerebras strict-mode strip set. These are the draft-07 keywords
+ * Zod's `toJSONSchema()` emits that Cerebras's validator rejects with 400 (per
+ * the 2026-05 production trace `llm-2cc6ba1b-...`). Conservative list — add
+ * more only when a real upstream rejection is observed; over-stripping silently
+ * weakens the schema delivered to the model.
+ *
+ * Attached to BOTH `cerebrasModule` and `openRouterModule` as their
+ * `schemaDialect.stripKeywords` (OpenRouter inherits it because it routes many
+ * `:free` ids to Cerebras as the upstream provider).
  */
-const STRIPPED_KEYWORDS: ReadonlySet<string> = new Set([
+export const CEREBRAS_STRICT_KEYWORDS: readonly string[] = [
   // String constraints
   'maxLength',
   'minLength',
@@ -81,36 +78,66 @@ const STRIPPED_KEYWORDS: ReadonlySet<string> = new Set([
   'default',
   'examples',
   'const',
-]);
+];
 
-/** True when the vendor's strict-mode JSON-Schema validator rejects the
- *  draft-07 keywords listed in `STRIPPED_KEYWORDS`. */
+/**
+ * Resolve the strip-keyword set for a vendor id from the registry's module
+ * metadata. Returns an empty set for permissive vendors (no `schemaDialect`).
+ *
+ * Lives here (not in the registry) but the registry injects the lookup at
+ * import time via `registerSchemaDialectResolver` to avoid a circular import
+ * (`vendors/registry` → `vendors/*` modules → `jsonSchemaSanitize`).
+ */
+type SchemaDialectResolver = (vendorId: string) => readonly string[];
+
+let dialectResolver: SchemaDialectResolver = () => [];
+
+/** Registry calls this once at module-init to wire the vendor → strip-set map.
+ *  Keeps the sanitizer metadata-driven without a circular import. */
+export function registerSchemaDialectResolver(resolver: SchemaDialectResolver): void {
+  dialectResolver = resolver;
+}
+
+/** The keywords a given vendor's strict-mode validator rejects, from its
+ *  module's declared `schemaDialect`. Empty for permissive vendors. */
+export function schemaStripKeywordsForVendor(vendorId: string): ReadonlySet<string> {
+  return new Set(dialectResolver(vendorId));
+}
+
+/** True when the vendor's strict-mode JSON-Schema validator rejects any
+ *  draft-07 keywords (i.e. its module declares a non-empty `schemaDialect`). */
 export function vendorNeedsSchemaStrip(vendorId: string): boolean {
-  return STRICT_VENDORS.has(vendorId);
+  return dialectResolver(vendorId).length > 0;
 }
 
 /**
- * Deep-strip `STRIPPED_KEYWORDS` from a JSON-Schema tree. Pure / non-mutating —
+ * Deep-strip the given keyword set from a JSON-Schema tree. Pure / non-mutating —
  * returns a new object even when nothing was stripped, so the caller can hand
  * the result back to the vendor body without worrying about shared references.
  *
  * Walks `properties`, `items`, `additionalProperties` (schema form), `oneOf`,
  * `anyOf`, `allOf`. Other keywords are passed through verbatim.
+ *
+ * `stripKeywords` defaults to {@link CEREBRAS_STRICT_KEYWORDS} so existing
+ * callers and tests that don't pass a set keep the historical behaviour.
  */
-export function stripUnsupportedSchemaKeywords(schema: unknown): unknown {
+export function stripUnsupportedSchemaKeywords(
+  schema: unknown,
+  stripKeywords: ReadonlySet<string> = new Set(CEREBRAS_STRICT_KEYWORDS),
+): unknown {
   if (Array.isArray(schema)) {
-    return schema.map((s) => stripUnsupportedSchemaKeywords(s));
+    return schema.map((s) => stripUnsupportedSchemaKeywords(s, stripKeywords));
   }
   if (schema === null || typeof schema !== 'object') {
     return schema;
   }
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(schema as Record<string, unknown>)) {
-    if (STRIPPED_KEYWORDS.has(k)) continue;
+    if (stripKeywords.has(k)) continue;
     if (k === 'properties' && v !== null && typeof v === 'object' && !Array.isArray(v)) {
       const subProps: Record<string, unknown> = {};
       for (const [pk, pv] of Object.entries(v as Record<string, unknown>)) {
-        subProps[pk] = stripUnsupportedSchemaKeywords(pv);
+        subProps[pk] = stripUnsupportedSchemaKeywords(pv, stripKeywords);
       }
       out[k] = subProps;
     } else if (
@@ -121,7 +148,7 @@ export function stripUnsupportedSchemaKeywords(schema: unknown): unknown {
       || k === 'allOf'
       || k === 'not'
     ) {
-      out[k] = stripUnsupportedSchemaKeywords(v);
+      out[k] = stripUnsupportedSchemaKeywords(v, stripKeywords);
     } else {
       out[k] = v;
     }
@@ -132,9 +159,9 @@ export function stripUnsupportedSchemaKeywords(schema: unknown): unknown {
 /**
  * Vendor-aware passthrough for the `extraBody` blob each vendor module hands
  * to its HTTP transport. When the body contains a `response_format` with a
- * `json_schema.schema` payload and the vendor is in `STRICT_VENDORS`, strips
- * the incompatible keywords. Everything else is returned verbatim (same
- * object reference) so the call site can do
+ * `json_schema.schema` payload and the vendor declares a non-empty
+ * `schemaDialect`, strips that vendor's incompatible keywords. Everything else
+ * is returned verbatim (same object reference) so the call site can do
  *
  *   const safeExtra = sanitizeExtraBodyForVendor('cerebras', extraBody);
  *
@@ -144,7 +171,9 @@ export function sanitizeExtraBodyForVendor(
   vendorId: string,
   extraBody: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
-  if (!extraBody || !vendorNeedsSchemaStrip(vendorId)) return extraBody;
+  if (!extraBody) return extraBody;
+  const stripKeywords = schemaStripKeywordsForVendor(vendorId);
+  if (stripKeywords.size === 0) return extraBody;
 
   const rf = extraBody['response_format'];
   if (!rf || typeof rf !== 'object') return extraBody;
@@ -163,7 +192,7 @@ export function sanitizeExtraBodyForVendor(
       ...rfObj,
       json_schema: {
         ...jsObj,
-        schema: stripUnsupportedSchemaKeywords(inner),
+        schema: stripUnsupportedSchemaKeywords(inner, stripKeywords),
       },
     },
   };

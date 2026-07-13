@@ -47,17 +47,17 @@ function isExternalProfileFresh(cred: AuthProfileCredential | undefined, now: nu
 }
 
 /** Sync external CLI credentials into the store for a given provider. */
-function syncExternalCliCredentialsForProvider(
+async function syncExternalCliCredentialsForProvider(
   store: AuthProfileStore,
   profileId: string,
   provider: string,
-  readCredentials: () => OAuthCredential | null,
+  readCredentials: () => Promise<OAuthCredential | null>,
   now: number,
-): boolean {
+): Promise<boolean> {
   const existing = store.profiles[profileId];
   const shouldSync =
     !existing || existing.provider !== provider || !isExternalProfileFresh(existing, now);
-  const creds = shouldSync ? readCredentials() : null;
+  const creds = shouldSync ? await readCredentials() : null;
   if (!creds) {
     return false;
   }
@@ -86,7 +86,7 @@ function syncExternalCliCredentialsForProvider(
  *
  * Returns true if any credentials were updated.
  */
-export function syncExternalCliCredentials(store: AuthProfileStore): boolean {
+export async function syncExternalCliCredentials(store: AuthProfileStore): Promise<boolean> {
   let mutated = false;
   const now = Date.now();
 
@@ -97,7 +97,7 @@ export function syncExternalCliCredentials(store: AuthProfileStore): boolean {
     existingQwen.provider !== "qwen-portal" ||
     !isExternalProfileFresh(existingQwen, now);
   const qwenCreds = shouldSyncQwen
-    ? readQwenCliCredentialsCached({ ttlMs: EXTERNAL_CLI_SYNC_TTL_MS })
+    ? await readQwenCliCredentialsCached({ ttlMs: EXTERNAL_CLI_SYNC_TTL_MS })
     : null;
   if (qwenCreds) {
     const existing = store.profiles[QWEN_CLI_PROFILE_ID];
@@ -120,7 +120,7 @@ export function syncExternalCliCredentials(store: AuthProfileStore): boolean {
 
   // Sync from MiniMax Portal CLI
   if (
-    syncExternalCliCredentialsForProvider(
+    await syncExternalCliCredentialsForProvider(
       store,
       MINIMAX_CLI_PROFILE_ID,
       "minimax-portal",

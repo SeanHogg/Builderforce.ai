@@ -330,7 +330,7 @@ export async function maybeHandleModelDirectiveInfo(params: {
   return { text: lines.join("\n") };
 }
 
-export function resolveModelSelectionFromDirective(params: {
+export async function resolveModelSelectionFromDirective(params: {
   directives: InlineDirectives;
   cfg: BuilderForceAgentsConfig;
   agentDir: string;
@@ -340,11 +340,11 @@ export function resolveModelSelectionFromDirective(params: {
   allowedModelKeys: Set<string>;
   allowedModelCatalog: Array<{ provider: string; id?: string; name?: string }>;
   provider: string;
-}): {
+}): Promise<{
   modelSelection?: ModelDirectiveSelection;
   profileOverride?: string;
   errorText?: string;
-} {
+}> {
   if (!params.directives.hasModelDirective || !params.directives.rawModelDirective) {
     if (params.directives.rawModelProfile) {
       return { errorText: "Auth profile override requires a model selection." };
@@ -405,7 +405,7 @@ export function resolveModelSelectionFromDirective(params: {
 
   let profileOverride: string | undefined;
   if (modelSelection && params.directives.rawModelProfile) {
-    const profileResolved = resolveProfileOverride({
+    const profileResolved = await resolveProfileOverride({
       rawProfile: params.directives.rawModelProfile,
       provider: modelSelection.provider,
       cfg: params.cfg,

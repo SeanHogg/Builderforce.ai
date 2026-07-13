@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("../../../src/agents/pi-embedded-runner.js", () => {
+vi.mock("../../../src/agents/embedded-runner.js", () => {
   return {
-    runEmbeddedPiAgent: vi.fn(async () => ({
+    runEmbeddedAgent: vi.fn(async () => ({
       meta: { startedAt: Date.now() },
       payloads: [{ text: "{}" }],
     })),
   };
 });
 
-import { runEmbeddedPiAgent } from "../../../src/agents/pi-embedded-runner.js";
+import { runEmbeddedAgent } from "../../../src/agents/embedded-runner.js";
 import { createLlmTaskTool } from "./llm-task-tool.js";
 
 // oxlint-disable-next-line typescript/no-explicit-any
@@ -34,7 +34,7 @@ describe("llm-task tool (json-only)", () => {
 
   it("returns parsed json", async () => {
     // oxlint-disable-next-line typescript/no-explicit-any
-    (runEmbeddedPiAgent as any).mockResolvedValueOnce({
+    (runEmbeddedAgent as any).mockResolvedValueOnce({
       meta: {},
       payloads: [{ text: JSON.stringify({ foo: "bar" }) }],
     });
@@ -46,7 +46,7 @@ describe("llm-task tool (json-only)", () => {
 
   it("strips fenced json", async () => {
     // oxlint-disable-next-line typescript/no-explicit-any
-    (runEmbeddedPiAgent as any).mockResolvedValueOnce({
+    (runEmbeddedAgent as any).mockResolvedValueOnce({
       meta: {},
       payloads: [{ text: '```json\n{"ok":true}\n```' }],
     });
@@ -58,7 +58,7 @@ describe("llm-task tool (json-only)", () => {
 
   it("validates schema", async () => {
     // oxlint-disable-next-line typescript/no-explicit-any
-    (runEmbeddedPiAgent as any).mockResolvedValueOnce({
+    (runEmbeddedAgent as any).mockResolvedValueOnce({
       meta: {},
       payloads: [{ text: JSON.stringify({ foo: "bar" }) }],
     });
@@ -76,7 +76,7 @@ describe("llm-task tool (json-only)", () => {
 
   it("throws on invalid json", async () => {
     // oxlint-disable-next-line typescript/no-explicit-any
-    (runEmbeddedPiAgent as any).mockResolvedValueOnce({
+    (runEmbeddedAgent as any).mockResolvedValueOnce({
       meta: {},
       payloads: [{ text: "not-json" }],
     });
@@ -86,7 +86,7 @@ describe("llm-task tool (json-only)", () => {
 
   it("throws on schema mismatch", async () => {
     // oxlint-disable-next-line typescript/no-explicit-any
-    (runEmbeddedPiAgent as any).mockResolvedValueOnce({
+    (runEmbeddedAgent as any).mockResolvedValueOnce({
       meta: {},
       payloads: [{ text: JSON.stringify({ foo: 1 }) }],
     });
@@ -97,21 +97,21 @@ describe("llm-task tool (json-only)", () => {
 
   it("passes provider/model overrides to embedded runner", async () => {
     // oxlint-disable-next-line typescript/no-explicit-any
-    (runEmbeddedPiAgent as any).mockResolvedValueOnce({
+    (runEmbeddedAgent as any).mockResolvedValueOnce({
       meta: {},
       payloads: [{ text: JSON.stringify({ ok: true }) }],
     });
     const tool = createLlmTaskTool(fakeApi());
     await tool.execute("id", { prompt: "x", provider: "anthropic", model: "claude-4-sonnet" });
     // oxlint-disable-next-line typescript/no-explicit-any
-    const call = (runEmbeddedPiAgent as any).mock.calls[0]?.[0];
+    const call = (runEmbeddedAgent as any).mock.calls[0]?.[0];
     expect(call.provider).toBe("anthropic");
     expect(call.model).toBe("claude-4-sonnet");
   });
 
   it("enforces allowedModels", async () => {
     // oxlint-disable-next-line typescript/no-explicit-any
-    (runEmbeddedPiAgent as any).mockResolvedValueOnce({
+    (runEmbeddedAgent as any).mockResolvedValueOnce({
       meta: {},
       payloads: [{ text: JSON.stringify({ ok: true }) }],
     });
@@ -125,14 +125,14 @@ describe("llm-task tool (json-only)", () => {
 
   it("disables tools for embedded run", async () => {
     // oxlint-disable-next-line typescript/no-explicit-any
-    (runEmbeddedPiAgent as any).mockResolvedValueOnce({
+    (runEmbeddedAgent as any).mockResolvedValueOnce({
       meta: {},
       payloads: [{ text: JSON.stringify({ ok: true }) }],
     });
     const tool = createLlmTaskTool(fakeApi());
     await tool.execute("id", { prompt: "x" });
     // oxlint-disable-next-line typescript/no-explicit-any
-    const call = (runEmbeddedPiAgent as any).mock.calls[0]?.[0];
+    const call = (runEmbeddedAgent as any).mock.calls[0]?.[0];
     expect(call.disableTools).toBe(true);
   });
 });

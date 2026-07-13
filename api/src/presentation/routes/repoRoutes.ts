@@ -18,7 +18,7 @@
  *   env.AGENT_HOST_RELAY.get(env.AGENT_HOST_RELAY.idFromName(String(agentHostId))).fetch(...)
  */
 import { Hono } from 'hono';
-import { and, eq, desc } from 'drizzle-orm';
+import { and, eq, desc, sql } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import {
   projectRepositories,
@@ -26,15 +26,25 @@ import {
   projects,
 } from '../../infrastructure/database/schema';
 import type { HonoEnv, Env } from '../../env';
-import type { Db } from '../../infrastructure/database/connection';
+import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
+import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { RepoService, type AgentHostDispatcher } from '../../application/repos/RepoService';
 import { resolveRepoCredential, isResolveError } from '../../application/repos/resolveRepoCredential';
+import { importRepoContents } from '../../application/repos/importRepoContents';
+import { enforceIngestionCap, recordIngestion } from '../../application/ingestion/ingestionLedger';
 import { githubStatusMessage } from '../../application/integrations/githubTestError';
-import { mergePullRequest, normalizeMergeMethod } from '../../application/repos/mergePullRequest';
-import { markPullRequestMergedById } from '../../application/repos/recordPullRequestRow';
-import { getPullRequestDetail, invalidatePullRequestDetail } from '../../application/repos/getPullRequestDetail';
+import { mergeRecordedPullRequest } from '../../application/repos/mergeRecordedPr';
+import { getPullRequestDetail } from '../../application/repos/getPullRequestDetail';
+import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { resolveHostAuth } from '../../infrastructure/auth/agentHostAuth';
 import type { CreatePrMessage } from '../../application/repos/prDispatch';
+
+/** Read-through cache key for a project's repo list (the picker + SourceControl read
+ *  this; it changes only on the CRUD routes below, which all invalidate it). */
+function reposCacheKey(tenantId: number, projectId: number): string {
+  return `project-repos:${tenantId}:${projectId}`;
+}
 
 type RepoHonoEnv = HonoEnv & {
   Bindings: HonoEnv['Bindings'] & {
@@ -109,6 +119,39 @@ async function probeRepoAccess(
 
 export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
   const router = new Hono<RepoHonoEnv>();
+
+  // POST /api/repos/pull-requests/:id/result — record the resulting PR number/url/status.
+  // DUAL-AUTH, registered BEFORE authMiddleware (mirrors specRoutes): the agentHost
+  // runtime that opened the PR calls back with its API key (Bearer + X-AgentHost-Id,
+  // or ?agentHostId=&key=); the portal can also record a result with a tenant JWT.
+  // Without the host-key branch a headless agent could not report its PR result.
+  router.post('/pull-requests/:id/result', async (c) => {
+    let tenantId: number;
+    const host = await resolveHostAuth(db, c);
+    if (host) {
+      tenantId = host.tenantId;
+    } else {
+      // Fall back to tenant JWT (portal). A bare Bearer JWT has no X-AgentHost-Id so
+      // resolveHostAuth returns null and we land here.
+      await authMiddleware(c, async () => {});
+      const tid = c.get('tenantId') as number | undefined;
+      if (!tid) return c.text('Unauthorized', 401);
+      tenantId = tid;
+    }
+
+    const id = c.req.param('id');
+    const body = await c.req.json<{
+      number?: number | null;
+      url?: string | null;
+      status?: string | null;
+    }>();
+
+    const service = new RepoService(db, makeAgentHostDispatcher(c.env));
+    const row = await service.recordPrResult(id, tenantId, body);
+    if (!row) return c.json({ error: 'Pull request not found' }, 404);
+    return c.json(row);
+  });
+
   router.use('*', authMiddleware);
 
   // ---- project_repositories CRUD --------------------------------------------
@@ -160,6 +203,12 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       tenantId,
     );
 
+    // null = the (project, provider, owner, repo) is already bound (0067 UNIQUE).
+    if (!row) {
+      return c.json({ error: 'This repository is already added to the project' }, 409);
+    }
+
+    await invalidateCached(c.env as Env, reposCacheKey(tenantId, projectId));
     return c.json(row, 201);
   });
 
@@ -170,7 +219,12 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     if (!Number.isFinite(projectId)) return c.json({ error: 'Invalid projectId' }, 400);
 
     const service = new RepoService(db, makeAgentHostDispatcher(c.env));
-    const repos = await service.listRepos(projectId, tenantId);
+    const repos = await getOrSetCached(
+      c.env as Env,
+      reposCacheKey(tenantId, projectId),
+      () => service.listRepos(projectId, tenantId),
+      { kvTtlSeconds: 300, l1TtlMs: 30_000 },
+    );
     return c.json({ repositories: repos });
   });
 
@@ -216,6 +270,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       .from(projectRepositories)
       .where(and(eq(projectRepositories.id, id), eq(projectRepositories.tenantId, tenantId)));
     if (!row) return c.json({ error: 'Repository not found' }, 404);
+    await invalidateCached(c.env as Env, reposCacheKey(tenantId, row.projectId));
     return c.json(row);
   });
 
@@ -250,6 +305,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       .select()
       .from(projectRepositories)
       .where(and(eq(projectRepositories.id, id), eq(projectRepositories.tenantId, tenantId)));
+    await invalidateCached(c.env as Env, reposCacheKey(tenantId, target.projectId));
     return c.json(row);
   });
 
@@ -282,26 +338,96 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     return c.json(result);
   });
 
+  // GET /api/repos/repositories/:id/contents?ref=<branch> — read the repo's
+  // files (server-side with the decrypted token) so the in-browser IDE can
+  // hydrate its editable workspace from the connected repo. The token never
+  // leaves the server; the client persists the returned manifest through its
+  // normal saveFile path (which targets the correct storage backend).
+  router.get('/repositories/:id/contents', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const env = c.env as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
+    const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
+
+    const resolved = await resolveRepoCredential(db, secret, tenantId, id);
+    if (isResolveError(resolved)) return c.json({ error: resolved.error }, resolved.status);
+
+    // Ingestion gate — pause NEW repo pulls once the tenant is over its monthly
+    // data-ingestion allowance (consumption meter). Graceful backpressure: repos
+    // already imported stay fully usable; only fresh pulls stop until the month
+    // resets or they upgrade. 402 carries the plan-limit body the client renders.
+    const ingestionDb = buildTransactionalDatabase(c.env as Env);
+    const gate = await enforceIngestionCap(db, tenantId, ingestionDb);
+    if (!gate.allowed) {
+      return c.json({
+        error: `Monthly data-ingestion allowance reached (${gate.limit.toLocaleString()} bytes). Already-imported repositories stay available; upgrade or wait for the monthly reset to import more.`,
+        code: 'ingestion_limit_exceeded',
+        upgradeRequired: true,
+        currentPlan: gate.effectivePlan,
+      }, 402);
+    }
+
+    const ref = (c.req.query('ref') || resolved.repo.defaultBranch || 'main').trim();
+    const result = await importRepoContents({
+      provider: resolved.repo.provider,
+      host: resolved.repo.host,
+      owner: resolved.repo.owner,
+      repo: resolved.repo.repo,
+      token: resolved.token,
+      ref,
+    });
+    if (!result.ok) return c.json({ error: result.error ?? 'Failed to read repository' }, 502);
+
+    // Meter the bytes actually pulled (post-cap), attributed to the repo's project.
+    const bytesIngested = result.files.reduce((sum, f) => sum + f.content.length, 0);
+    c.executionCtx.waitUntil(recordIngestion(ingestionDb, {
+      tenantId,
+      projectId: resolved.repo.projectId ?? null,
+      source: 'repo_import',
+      provider: resolved.repo.provider,
+      bytesIngested,
+      itemsIngested: result.files.length,
+      metadata: { repoId: id, ref, truncated: result.truncated },
+    }));
+
+    return c.json(result);
+  });
+
   // DELETE /api/repos/repositories/:id
   router.delete('/repositories/:id', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
+    // Capture the projectId before deleting so we can bust its repo-list cache.
+    const [row] = await db
+      .select({ projectId: projectRepositories.projectId })
+      .from(projectRepositories)
+      .where(and(eq(projectRepositories.id, id), eq(projectRepositories.tenantId, tenantId)));
     await db
       .delete(projectRepositories)
       .where(and(eq(projectRepositories.id, id), eq(projectRepositories.tenantId, tenantId)));
+    if (row) await invalidateCached(c.env as Env, reposCacheKey(tenantId, row.projectId));
     return c.body(null, 204);
   });
 
   // ---- PR / branch dispatch -------------------------------------------------
 
   // POST /api/repos/tasks/:taskId/pull-request — resolve repo + dispatch PR creation.
+  // Optional body { repoId?, labels? } pins a specific repo or supplies board labels
+  // for hint matching (the task row carries no labels of its own).
   router.post('/tasks/:taskId/pull-request', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const taskId = Number(c.req.param('taskId'));
     if (!Number.isFinite(taskId)) return c.json({ error: 'Invalid taskId' }, 400);
 
+    const body = await c.req
+      .json<{ repoId?: string | null; labels?: string[] | null }>()
+      .catch(() => ({} as { repoId?: string | null; labels?: string[] | null }));
+
     const service = new RepoService(db, makeAgentHostDispatcher(c.env));
-    const result = await service.dispatchPrCreation(taskId, tenantId);
+    const result = await service.dispatchPrCreation(taskId, tenantId, {
+      explicitRepoId: body.repoId ?? null,
+      labels: Array.isArray(body.labels) ? body.labels : null,
+    });
 
     if (!result.ok) {
       switch (result.code) {
@@ -326,23 +452,6 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       },
       201,
     );
-  });
-
-  // POST /api/repos/pull-requests/:id/result — agentHost callback to record PR result.
-  router.post('/pull-requests/:id/result', async (c) => {
-    const tenantId = c.get('tenantId') as number;
-    const id = c.req.param('id');
-
-    const body = await c.req.json<{
-      number?: number | null;
-      url?: string | null;
-      status?: string | null;
-    }>();
-
-    const service = new RepoService(db, makeAgentHostDispatcher(c.env));
-    const row = await service.recordPrResult(id, tenantId, body);
-    if (!row) return c.json({ error: 'Pull request not found' }, 404);
-    return c.json(row);
   });
 
   // GET /api/repos/projects/:projectId/pull-requests
@@ -370,8 +479,12 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     const [row] = await db
       .select()
       .from(pullRequests)
+      // Prefer a row with a real provider `number` over a numberless placeholder
+      // (a dispatch inserts an `open`/null-number row before the host calls back;
+      // a never-arriving callback must not let that stale placeholder surface over
+      // a real PR), then newest [1280].
       .where(and(eq(pullRequests.taskId, taskId), eq(pullRequests.tenantId, tenantId)))
-      .orderBy(desc(pullRequests.createdAt))
+      .orderBy(sql`${pullRequests.number} is not null desc`, desc(pullRequests.createdAt))
       .limit(1);
     // No PR yet for this task → 200 with nulls so the client renders "no PR"
     // without treating it as an error (exception-as-control-flow is avoided).
@@ -411,47 +524,34 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     const id = c.req.param('id');
     const body = await c.req.json<{ method?: string }>().catch(() => ({} as { method?: string }));
 
-    const [row] = await db
-      .select()
-      .from(pullRequests)
-      .where(and(eq(pullRequests.id, id), eq(pullRequests.tenantId, tenantId)))
-      .limit(1);
-    if (!row) return c.json({ error: 'Pull request not found' }, 404);
-    if (row.status === 'merged') return c.json({ ok: true, alreadyMerged: true, pullRequest: row });
-    if (!row.repoId) return c.json({ error: 'PR has no linked repo to merge against' }, 409);
-    if (row.number == null) return c.json({ error: 'PR has no provider number yet (still being opened)' }, 409);
-
-    const env = c.env as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
-    const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
-    const resolved = await resolveRepoCredential(db, secret, tenantId, row.repoId);
-    if (isResolveError(resolved)) return c.json({ error: resolved.error }, resolved.status);
-
-    const result = await mergePullRequest({
-      provider: resolved.repo.provider, host: resolved.repo.host,
-      owner: resolved.repo.owner, repo: resolved.repo.repo, token: resolved.token,
-      number: row.number, method: normalizeMergeMethod(body.method),
-      commitTitle: `Task #${row.taskId ?? ''}: merge ${row.branchName ?? ''}`.trim(),
+    // Shared with the AI Manager's autonomous PR coordination so the human "Approve
+    // & Merge" and the manager merge never drift (resolve credential → provider
+    // merge → mark merged → bust cache).
+    const result = await mergeRecordedPullRequest(db, c.env as Env, {
+      tenantId, prId: id, method: body.method, mergedBy: userId ?? null,
     });
-
     if (!result.ok) {
-      const httpStatus = result.code === 'unsupported' ? 501
-        : (result.code === 'conflict' || result.code === 'not_mergeable') ? 409
-        : 502;
-      return c.json({ error: result.reason, code: result.code }, httpStatus);
+      return c.json({ error: result.error, code: result.code }, result.httpStatus as 409);
     }
+    if (result.alreadyMerged) return c.json({ ok: true, alreadyMerged: true, pullRequest: result.pullRequest });
 
-    const updated = await markPullRequestMergedById(db, id, tenantId, {
-      mergeSha: result.sha ?? null,
-      mergedBy: userId ?? null,
-    });
-
-    // Bust the cached live detail keyed by the PRE-merge updatedAt token.
-    await invalidatePullRequestDetail(
-      c.env as Env, id,
-      row.updatedAt instanceof Date ? row.updatedAt.toISOString() : String(row.updatedAt),
-    ).catch(() => { /* cache miss is fine */ });
-
-    return c.json({ ok: true, merged: result.merged, sha: result.sha, pullRequest: updated ?? row });
+    // Unified audit stream: a merge, attributed to whoever approved it.
+    const pr = result.pullRequest as { id?: string; number?: number | null; taskId?: number | null; projectId?: number | null } | null;
+    c.executionCtx.waitUntil((async () => {
+      const actor = await resolveActorFromContext(c.env as Env, db, c);
+      await recordActivity(c.env as Env, db, {
+        tenantId,
+        projectId: pr?.projectId ?? null,
+        actor,
+        verb: 'pr.merged',
+        targetType: 'pull_request',
+        targetId: pr?.id ?? id,
+        targetLabel: pr?.number != null ? `PR #${pr.number}` : 'Pull request',
+        summary: `Merged ${pr?.number != null ? `PR #${pr.number}` : 'a pull request'}`,
+        metadata: { taskId: pr?.taskId ?? null, sha: result.sha ?? null },
+      });
+    })().catch(() => {}));
+    return c.json({ ok: true, merged: result.merged, sha: result.sha, pullRequest: result.pullRequest });
   });
 
   return router;

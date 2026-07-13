@@ -16,13 +16,8 @@ import {
 } from '../../infrastructure/database/schema';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-
-/** Push a `changed` frame to everyone watching a room, so clients re-fetch (no polling). */
-async function broadcastRoom(ns: DurableObjectNamespace | undefined, room: string): Promise<void> {
-  if (!ns) return;
-  try { await ns.get(ns.idFromName(room)).fetch('https://session-room/broadcast', { method: 'POST' }); }
-  catch { /* best-effort; the surface still works without live push */ }
-}
+import { broadcastRoom } from '../../infrastructure/relay/broadcastRoom';
+import { relayToRoom } from './realtimeRelay';
 
 /** Resolve a story's parent session (to know which room to broadcast to). */
 async function sessionIdForStory(db: Db, storyId: string, tenantId: number, segmentId: string): Promise<string | null> {
@@ -35,12 +30,7 @@ export function createPokerRoutes(db: Db): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
 
   // Live channel: clients hold this WebSocket and re-fetch on each `changed` push.
-  r.get('/sessions/:id/ws', (c) => {
-    if (c.req.header('Upgrade') !== 'websocket') return c.text('Expected WebSocket', 426);
-    const ns = c.env?.SESSION_ROOM;
-    if (!ns) return c.text('Realtime unavailable', 503);
-    return ns.get(ns.idFromName(`poker:${c.req.param('id')}`)).fetch(c.req.raw);
-  });
+  r.get('/sessions/:id/ws', (c) => relayToRoom(c, c.env?.SESSION_ROOM, `poker:${c.req.param('id')}`));
 
   r.get('/sessions', async (c) => {
     const { tenantId, segmentId } = scope(c);
@@ -148,12 +138,7 @@ export function createRetroRoutes(db: Db): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();
 
   // Live channel (see poker).
-  r.get('/:id/ws', (c) => {
-    if (c.req.header('Upgrade') !== 'websocket') return c.text('Expected WebSocket', 426);
-    const ns = c.env?.SESSION_ROOM;
-    if (!ns) return c.text('Realtime unavailable', 503);
-    return ns.get(ns.idFromName(`retro:${c.req.param('id')}`)).fetch(c.req.raw);
-  });
+  r.get('/:id/ws', (c) => relayToRoom(c, c.env?.SESSION_ROOM, `retro:${c.req.param('id')}`));
 
   r.get('/', async (c) => {
     const { tenantId, segmentId } = scope(c);

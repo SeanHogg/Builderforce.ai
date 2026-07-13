@@ -31,11 +31,13 @@ type PageContainerProps = {
 export default function PageContainer({ width = 'full', style, className, children }: PageContainerProps) {
   return (
     <div
-      className={className}
+      // `.page-container` owns the padding so it can shrink on mobile (a media
+      // query can't reach an inline `style`). A `style={{ padding }}` override
+      // passed by a page still wins — inline beats the class.
+      className={`page-container${className ? ` ${className}` : ''}`}
       style={{
         width: '100%',
         maxWidth: width === 'readable' ? READABLE_MAX : width === 'narrow' ? NARROW_MAX : undefined,
-        padding: '24px',
         color: 'var(--text-primary)',
         ...style,
       }}

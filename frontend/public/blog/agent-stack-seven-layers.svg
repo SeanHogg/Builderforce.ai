@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 620" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+  <defs>
+    <linearGradient id="coral" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FF6B5C"/>
+      <stop offset="1" stop-color="#E8472F"/>
+    </linearGradient>
+  </defs>
+  <rect width="860" height="620" fill="#0E1525"/>
+  <text x="430" y="44" fill="#FFFFFF" font-size="26" font-weight="700" text-anchor="middle">The AI Agent Stack — every layer, one platform</text>
+  <text x="430" y="72" fill="#8FA0BD" font-size="14" text-anchor="middle">Generic layer (left)  →  Builderforce.ai implementation (right)</text>
+
+  <!-- rows -->
+  <g font-size="15">
+    <!-- L1 -->
+    <rect x="40" y="96" width="780" height="62" rx="10" fill="#15203A" stroke="#26324f"/>
+    <rect x="40" y="96" width="270" height="62" rx="10" fill="url(#coral)"/>
+    <text x="60" y="124" fill="#fff" font-weight="700">1 · Foundation Model</text>
+    <text x="60" y="146" fill="#ffd9d2" font-size="12">the reasoning core</text>
+    <text x="330" y="123" fill="#DCE6F7" font-size="13">Multi-vendor gateway — 30+ providers, OpenAI-compatible,</text>
+    <text x="330" y="142" fill="#DCE6F7" font-size="13">learned routing + cascading fallback, BYO keys, effort control</text>
+
+    <!-- L2 -->
+    <rect x="40" y="166" width="780" height="62" rx="10" fill="#15203A" stroke="#26324f"/>
+    <rect x="40" y="166" width="270" height="62" rx="10" fill="url(#coral)"/>
+    <text x="60" y="194" fill="#fff" font-weight="700">2 · Orchestration</text>
+    <text x="60" y="216" fill="#ffd9d2" font-size="12">the control loop</text>
+    <text x="330" y="193" fill="#DCE6F7" font-size="13">Native ReAct loop + multi-agent orchestrator: roles,</text>
+    <text x="330" y="212" fill="#DCE6F7" font-size="13">dependency DAG, retries/self-healing, durable state</text>
+
+    <!-- L3 -->
+    <rect x="40" y="236" width="780" height="62" rx="10" fill="#15203A" stroke="#26324f"/>
+    <rect x="40" y="236" width="270" height="62" rx="10" fill="url(#coral)"/>
+    <text x="60" y="264" fill="#fff" font-weight="700">3 · Memory</text>
+    <text x="60" y="286" fill="#ffd9d2" font-size="12">working · episodic · semantic · procedural</text>
+    <text x="330" y="263" fill="#DCE6F7" font-size="13">All four, SSM-native: write-through cognition (Evermind),</text>
+    <text x="330" y="282" fill="#DCE6F7" font-size="13">online distillation, persistent cross-session store</text>
+
+    <!-- L4 -->
+    <rect x="40" y="306" width="780" height="62" rx="10" fill="#15203A" stroke="#3FE0A5"/>
+    <rect x="40" y="306" width="270" height="62" rx="10" fill="#1f8f63"/>
+    <text x="60" y="334" fill="#fff" font-weight="700">4 · Vector DB &amp; RAG</text>
+    <text x="60" y="356" fill="#bff3df" font-size="12">retrieval ✦ now hybrid</text>
+    <text x="330" y="333" fill="#DCE6F7" font-size="13">Chunking + hybrid dense+BM25 (RRF) + MMR rerank,</text>
+    <text x="330" y="352" fill="#DCE6F7" font-size="13">over LanceDB or the zero-API SSM embedding store</text>
+
+    <!-- L5 -->
+    <rect x="40" y="376" width="780" height="62" rx="10" fill="#15203A" stroke="#26324f"/>
+    <rect x="40" y="376" width="270" height="62" rx="10" fill="url(#coral)"/>
+    <text x="60" y="404" fill="#fff" font-weight="700">5 · Tools &amp; Integrations</text>
+    <text x="60" y="426" fill="#ffd9d2" font-size="12">act on the world</text>
+    <text x="330" y="403" fill="#DCE6F7" font-size="13">Capability-gated registry, MCP server, Playwright browser,</text>
+    <text x="330" y="422" fill="#DCE6F7" font-size="13">web/search/git/shell, 10+ channels, plugin SDK</text>
+
+    <!-- L6 -->
+    <rect x="40" y="446" width="780" height="62" rx="10" fill="#15203A" stroke="#3FE0A5"/>
+    <rect x="40" y="446" width="270" height="62" rx="10" fill="#1f8f63"/>
+    <text x="60" y="474" fill="#fff" font-weight="700">6 · Observability &amp; Eval</text>
+    <text x="60" y="496" fill="#bff3df" font-size="12">trace + score ✦ now semantic</text>
+    <text x="330" y="473" fill="#DCE6F7" font-size="13">Full tracing + cost metering PLUS faithfulness / relevance /</text>
+    <text x="330" y="492" fill="#DCE6F7" font-size="13">hallucination scoring + per-model quality-drift monitoring</text>
+
+    <!-- L7 -->
+    <rect x="40" y="516" width="780" height="62" rx="10" fill="#15203A" stroke="#26324f"/>
+    <rect x="40" y="516" width="270" height="62" rx="10" fill="url(#coral)"/>
+    <text x="60" y="544" fill="#fff" font-weight="700">7 · Deployment</text>
+    <text x="60" y="566" fill="#ffd9d2" font-size="12">run it in production</text>
+    <text x="330" y="543" fill="#DCE6F7" font-size="13">Cloudflare Workers + Durable Objects + Containers + Docker,</text>
+    <text x="330" y="562" fill="#DCE6F7" font-size="13">read-through + prompt + semantic caching, cost caps</text>
+  </g>
+  <text x="430" y="602" fill="#52617d" font-size="12" text-anchor="middle">✦ = layer hardened in this release · green = meets-and-exceeds the reference stack</text>
+</svg>

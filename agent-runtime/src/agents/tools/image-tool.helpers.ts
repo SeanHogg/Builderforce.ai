@@ -1,6 +1,6 @@
-import type { AssistantMessage } from "@mariozechner/pi-ai";
+import type { AssistantMessage } from "../../builderforce/model/types.js";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
-import { extractAssistantText } from "../pi-embedded-utils.js";
+import { extractAssistantText } from "../embedded-utils.js";
 
 export type ImageModelConfig = { primary?: string; fallbacks?: string[] };
 

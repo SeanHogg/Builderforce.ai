@@ -1,0 +1,17 @@
+-- 0140_task_pr_opening_claim.sql
+-- Race-free single-PR finalize for cloud tickets.
+--
+-- A cloud ticket can be finalized by TWO paths that may fire at the same instant:
+--   1. the inline run-end finalize in runCloudToolLoop (the agent finishes a run),
+--   2. the Done-transition finalize in taskRoutes (a human drags the card to Done).
+-- The old guard was a read-time `github_pr_url IS NULL` check, but the URL isn't
+-- known until AFTER the external PR-create returns — so both paths could read NULL,
+-- both call the provider, and a DUPLICATE PR is opened on the same branch.
+--
+-- `pr_opening_at` is an atomic claim taken BEFORE the external create:
+--   UPDATE tasks SET pr_opening_at = now()
+--     WHERE id = ? AND pr_opening_at IS NULL AND github_pr_url IS NULL
+-- Exactly one writer wins the claim (0-row update = lost the race → skip). The
+-- winner clears the claim back to NULL if the create FAILS, so a later retry can
+-- re-claim; on success `github_pr_url` is the permanent guard.
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS pr_opening_at timestamptz;

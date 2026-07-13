@@ -22,6 +22,15 @@ describe('ProjectDetailsPanel', () => {
     vi.useFakeTimers();
     vi.resetAllMocks();
     vi.spyOn(builderforceApi, 'checkProjectKeyAvailable').mockImplementation(async (key) => ({ available: true, key }));
+    // The panel embeds the PMO initiative picker, which loads the PMO tree on mount
+    // via pmoApi.tree(); give the automocked call a resolved (empty) tree so
+    // usePmData's loader resolves instead of crashing on `undefined.then`.
+    vi.spyOn(builderforceApi.pmoApi, 'tree').mockResolvedValue({ portfolios: [], initiatives: [], projects: [], dependencies: [] });
+    // The panel also embeds ProjectInspectionReport, which best-effort loads the
+    // saved diagnostic maturity via toolsApi.projectScore() on mount. Give the
+    // automocked call a resolved value so the effect's `.then` doesn't crash on
+    // `undefined.then`; null mirrors the "no runs yet / non-manager" path.
+    vi.spyOn(builderforceApi.toolsApi, 'projectScore').mockResolvedValue(null as never);
   });
 
   afterEach(() => {
@@ -46,15 +55,21 @@ describe('ProjectDetailsPanel', () => {
       />
     );
 
-    // click edit icon in overview card
-    const editBtn = getByLabelText('Edit project');
+    // The overview card lives on the Details tab (the panel opens on Analytics),
+    // so switch to it first. The panel is localized via next-intl; the test mock
+    // makes `t('key')` a passthrough returning `projectDetails.<key>`, so we query
+    // by those keys rather than translated English copy.
+    fireEvent.click(getByText('projectDetails.tabs.details'));
+
+    // click edit icon in overview card.
+    const editBtn = getByLabelText('projectDetails.editAria');
     fireEvent.click(editBtn);
 
     // inputs should appear
-    const nameInput = getByLabelText('Name');
-    const keyInput = getByLabelText('Project key');
-    const statusSelect = getByLabelText('Status');
-    const descArea = getByLabelText('Description');
+    const nameInput = getByLabelText('projectDetails.nameLabel');
+    const keyInput = getByLabelText('projectDetails.keyLabel');
+    const statusSelect = getByLabelText('projectDetails.statusLabel');
+    const descArea = getByLabelText('projectDetails.descriptionLabel');
 
     fireEvent.change(nameInput, { target: { value: 'New name' } });
     fireEvent.change(keyInput, { target: { value: 'newkey' } });
@@ -67,7 +82,7 @@ describe('ProjectDetailsPanel', () => {
     });
 
     // submit form
-    const saveBtn = getByText('Save');
+    const saveBtn = getByText('projectDetails.save');
     fireEvent.click(saveBtn);
 
     await act(async () => {
@@ -83,6 +98,6 @@ describe('ProjectDetailsPanel', () => {
     }));
 
     // after save editing mode should exit
-    expect(queryByText('Save')).toBeNull();
+    expect(queryByText('projectDetails.save')).toBeNull();
   });
 });

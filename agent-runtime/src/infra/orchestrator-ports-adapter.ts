@@ -8,11 +8,15 @@
 
 import type {
   IAgentMemoryService,
+  ILimbicSystem,
   ILocalResultBroker,
   ITelemetryService,
 } from "../builderforce/ports.js";
+import type { CompiledLimbic, LimbicEvent, LimbicState } from "../builderforce/limbic.js";
+import { neutralState } from "../builderforce/limbic.js";
 import { awaitLocalSubagentResult } from "./local-result-broker.js";
 import { getSsmMemoryService } from "./ssm-memory-service.js";
+import { getLimbicSystemService } from "./limbic-system-service.js";
 import {
   emitTaskEnd,
   emitTaskStart,
@@ -118,6 +122,40 @@ export class SsmMemoryAdapter implements IAgentMemoryService {
     const batch = Array.from({ length: epochs }, () => opts.dataset);
     await svc.distillAndSave(batch);
     return `[train] adapted "${opts.model}" over ${epochs} epoch(s) on the supplied dataset and saved a checkpoint`;
+  }
+}
+
+// ── Limbic system adapter ─────────────────────────────────────────────────────
+
+/**
+ * Bridges the orchestrator's {@link ILimbicSystem} port to the process-wide
+ * {@link LimbicSystemService}. No-ops gracefully (flat neutral affect) when the
+ * limbic system has not been initialised.
+ */
+export class LimbicSystemAdapter implements ILimbicSystem {
+  async appraise(event: LimbicEvent): Promise<LimbicState> {
+    const svc = getLimbicSystemService();
+    return svc ? svc.appraise(event) : neutralState();
+  }
+
+  snapshot(): LimbicState {
+    return getLimbicSystemService()?.snapshot() ?? neutralState();
+  }
+
+  tick(opts?: { fatigue?: number }): LimbicState {
+    return getLimbicSystemService()?.tick(opts) ?? neutralState();
+  }
+
+  attention(): number {
+    return getLimbicSystemService()?.attention() ?? 0.7;
+  }
+
+  compile(): CompiledLimbic {
+    return getLimbicSystemService()?.compile() ?? { directives: [], params: {} };
+  }
+
+  async train(): Promise<number[] | null> {
+    return (await getLimbicSystemService()?.train?.()) ?? null;
   }
 }
 

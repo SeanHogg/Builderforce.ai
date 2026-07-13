@@ -4,7 +4,7 @@
 import { loadConfig } from "../config/config.js";
 import { resolveBuilderForceAgentsAgentDir } from "./agent-paths.js";
 import { ensureBuilderForceAgentsModelsJson } from "./models-config.js";
-import { discoverAuthStorage, discoverModels } from "./pi-model-discovery.js";
+import { discoverAuthStorage, discoverModels } from "./model-discovery.js";
 
 type ModelEntry = { id: string; contextWindow?: number };
 type ModelRegistryLike = {

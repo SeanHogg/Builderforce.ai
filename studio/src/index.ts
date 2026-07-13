@@ -68,3 +68,42 @@ export {
   interpolateFrames,
 } from './engine/motion-interpolator';
 export type { MotionField, MotionOptions } from './engine/motion-interpolator';
+
+// ── Voice cloning (Phase 1: speaker encoder + neural codec; Phase 2: SSM
+//    acoustic model + clone engine). Same headless, weight-free, device-routed
+//    posture as the diffusion stack. See engine/voice/index.ts. ──
+export {
+  encodeSpeaker,
+  verifySpeaker,
+  NeuralCodec,
+  tokenizeText,
+  TEXT_VOCAB_SIZE,
+  SSMAcousticModel,
+  VoiceCloneEngine,
+  SSMVoiceProvider,
+  resolveVoiceProvider,
+  encodeWav,
+  encodeWavBlob,
+  melSpectrogram,
+  melToWaveform,
+  cosineSimilarity,
+} from './engine/voice';
+export type {
+  PcmAudio,
+  SpeakerEmbedding,
+  CodecTokens,
+  WordTimestamp,
+  VoiceProvider,
+  VoiceProviderId,
+  SpeakerEncoderOptions,
+  NeuralCodecOptions,
+  AcousticModelOptions,
+  SynthesizeOptions,
+  CloneSynthesisResult,
+  VoiceCloneEngineOptions,
+  ResolveProviderResult,
+  TokenizedText,
+  AcousticGenerateResult,
+  MelConfig,
+  MelSpectrogram,
+} from './engine/voice';

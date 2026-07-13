@@ -1,12 +1,16 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
+import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import { specsApi, type Spec } from '@/lib/builderforceApi';
 import { ChatMessageContent } from './ChatMessageContent';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { PrdCreateModal } from './prd/PrdCreateModal';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { tableWrapStyle, tableStyle } from './dataTableStyles';
 
 export interface PRDsContentProps {
   projectId: number;
@@ -21,6 +25,17 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
+  const t = useTranslations('prdsDrawer');
+  const tc = useTranslations('common');
+  const drawerStatusLabel = (status: string): string => {
+    const labels: Record<string, string> = {
+      draft: t('statusDraft'),
+      ready: t('statusReady'),
+      in_progress: t('statusInProgress'),
+      complete: t('statusComplete'),
+    };
+    return labels[status] ?? status;
+  };
   const [specs, setSpecs] = useState<Spec[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,6 +63,10 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
   useEffect(() => {
     loadSpecs();
   }, [loadSpecs]);
+
+  // Refetch when the Brain creates/updates/deletes a spec/PRD so this list stays
+  // live instead of going stale until a manual reload.
+  useBrainDataRefresh(['specs'], loadSpecs);
 
   const handleSaveEdit = async () => {
     if (!selectedSpec) return;
@@ -82,7 +101,10 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
     setEditPreview(true);
   };
 
-  const brainstormUrl = `/brainstorm?projectId=${projectId}`;
+  // `?project=` is the global scope param adopted by ProjectScopeProvider on
+  // navigation, so the Brain Storm filter (and new-chat default) lands on this
+  // project — one picker for the whole app.
+  const brainstormUrl = `/brainstorm?project=${projectId}`;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -230,8 +252,8 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
           ))}
         </div>
       ) : (
-        <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+        <div style={tableWrapStyle}>
+          <table style={tableStyle}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
                 <th style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-secondary)' }}>Goal</th>
@@ -303,144 +325,108 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
       )}
 
       {/* Edit / View PRD drawer */}
-      {selectedSpec && (
-        <div
-          className="modal-overlay"
-          role="presentation"
-          style={{ zIndex: 10004, display: 'flex', alignItems: 'stretch', justifyContent: 'flex-end', padding: 0 }}
-          onClick={(e) => e.target === e.currentTarget && setSelectedSpec(null)}
-        >
-          <div
-            style={{
-              background: 'var(--panel-drawer-bg)',
-              borderLeft: '1px solid var(--border-subtle)',
-              width: 'min(1100px, 92vw)',
-              maxHeight: '100vh',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottom: '1px solid var(--border-subtle)' }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 16 }}>{selectedSpec.goal}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{STATUS_LABELS[selectedSpec.status] ?? selectedSpec.status}</div>
+      <SlideOutPanel
+        open={!!selectedSpec}
+        onClose={() => setSelectedSpec(null)}
+        width="min(1100px, 92vw)"
+        title={selectedSpec && (
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>{selectedSpec.goal}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{drawerStatusLabel(selectedSpec.status)}</div>
+          </div>
+        )}
+        headerActions={selectedSpec && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => setEditPreview((p) => !p)}
+              style={{
+                padding: '6px 12px',
+                fontSize: 12,
+                fontWeight: 600,
+                background: 'var(--bg-elevated)',
+                color: 'var(--text-secondary)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 8,
+                cursor: 'pointer',
+              }}
+            >
+              {editPreview ? tc('edit') : t('preview')}
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveEdit}
+              disabled={isSaving}
+              style={{
+                padding: '6px 12px',
+                fontSize: 12,
+                fontWeight: 600,
+                background: 'var(--coral-bright)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 8,
+                cursor: isSaving ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {isSaving ? tc('saving') : tc('save')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setDeleteSpec(selectedSpec)}
+              style={{
+                padding: '6px 12px',
+                fontSize: 12,
+                fontWeight: 600,
+                color: 'var(--error-text)',
+                background: 'none',
+                border: '1px solid var(--error-border)',
+                borderRadius: 8,
+                cursor: 'pointer',
+              }}
+            >
+              {tc('delete')}
+            </button>
+          </div>
+        )}
+      >
+        <div style={{ padding: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: editPreview ? '1fr 1fr' : '1fr', gap: 16, minHeight: 300 }}>
+            <textarea
+              value={editPrd}
+              onChange={(e) => setEditPrd(e.target.value)}
+              style={{
+                width: '100%',
+                minHeight: 300,
+                padding: '10px 12px',
+                fontSize: 13,
+                fontFamily: 'var(--font-mono)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 8,
+                background: 'var(--bg-deep)',
+                color: 'var(--text-primary)',
+                resize: 'vertical',
+              }}
+            />
+            {editPreview && (
+              <div
+                style={{
+                  minHeight: 300,
+                  padding: 12,
+                  background: 'var(--bg-deep)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 8,
+                  overflow: 'auto',
+                  fontSize: 13,
+                }}
+              >
+                <div className="chat-message-markdown">
+                  {editPrd ? <ChatMessageContent content={editPrd} /> : <span style={{ color: 'var(--text-muted)' }}>{t('preview')}</span>}
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  type="button"
-                  onClick={() => setEditPreview((p) => !p)}
-                  style={{
-                    padding: '6px 12px',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    background: 'var(--bg-elevated)',
-                    color: 'var(--text-secondary)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {editPreview ? 'Edit' : 'Preview'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveEdit}
-                  disabled={isSaving}
-                  style={{
-                    padding: '6px 12px',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    background: 'var(--coral-bright)',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: 8,
-                    cursor: isSaving ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  {isSaving ? 'Saving…' : 'Save'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDeleteSpec(selectedSpec)}
-                  style={{
-                    padding: '6px 12px',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: 'var(--error-text)',
-                    background: 'none',
-                    border: '1px solid var(--error-border)',
-                    borderRadius: 8,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Delete
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedSpec(null)}
-                  aria-label="Close"
-                  style={{
-                    width: 36,
-                    height: 36,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
-                    background: 'var(--bg-base)',
-                    color: 'var(--text-secondary)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-            <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: editPreview ? '1fr 1fr' : '1fr', gap: 16, minHeight: 300 }}>
-                <textarea
-                  value={editPrd}
-                  onChange={(e) => setEditPrd(e.target.value)}
-                  style={{
-                    width: '100%',
-                    minHeight: 300,
-                    padding: '10px 12px',
-                    fontSize: 13,
-                    fontFamily: 'var(--font-mono)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 8,
-                    background: 'var(--bg-deep)',
-                    color: 'var(--text-primary)',
-                    resize: 'vertical',
-                  }}
-                />
-                {editPreview && (
-                  <div
-                    style={{
-                      minHeight: 300,
-                      padding: 12,
-                      background: 'var(--bg-deep)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 8,
-                      overflow: 'auto',
-                      fontSize: 13,
-                    }}
-                  >
-                    <div className="chat-message-markdown">
-                      {editPrd ? <ChatMessageContent content={editPrd} /> : <span style={{ color: 'var(--text-muted)' }}>Preview</span>}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+            )}
           </div>
         </div>
-      )}
+      </SlideOutPanel>
 
       <ConfirmDialog
         open={!!deleteSpec}

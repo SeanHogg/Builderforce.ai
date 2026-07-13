@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  getRunEmbeddedPiAgentMock,
+  getRunEmbeddedAgentMock,
   installTriggerHandlingE2eTestHooks,
   MAIN_SESSION_KEY,
   makeCfg,
@@ -16,15 +16,15 @@ beforeAll(async () => {
 installTriggerHandlingE2eTestHooks();
 
 function mockEmbeddedOk() {
-  const runEmbeddedPiAgentMock = getRunEmbeddedPiAgentMock();
-  runEmbeddedPiAgentMock.mockResolvedValue({
+  const runEmbeddedAgentMock = getRunEmbeddedAgentMock();
+  runEmbeddedAgentMock.mockResolvedValue({
     payloads: [{ text: "ok" }],
     meta: {
       durationMs: 1,
       agentMeta: { sessionId: "s", provider: "p", model: "m" },
     },
   });
-  return runEmbeddedPiAgentMock;
+  return runEmbeddedAgentMock;
 }
 
 function makeUnauthorizedWhatsAppCfg(home: string) {
@@ -71,7 +71,7 @@ async function runInlineUnauthorizedCommand(params: {
 describe("trigger handling", () => {
   it("keeps inline /status for unauthorized senders", async () => {
     await withTempHome(async (home) => {
-      const runEmbeddedPiAgentMock = mockEmbeddedOk();
+      const runEmbeddedAgentMock = mockEmbeddedOk();
       const { res } = await runInlineUnauthorizedCommand({
         home,
         command: "/status",
@@ -79,8 +79,8 @@ describe("trigger handling", () => {
       });
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
       expect(text).toBe("ok");
-      expect(runEmbeddedPiAgentMock).toHaveBeenCalled();
-      const prompt = runEmbeddedPiAgentMock.mock.calls[0]?.[0]?.prompt ?? "";
+      expect(runEmbeddedAgentMock).toHaveBeenCalled();
+      const prompt = runEmbeddedAgentMock.mock.calls[0]?.[0]?.prompt ?? "";
       // Not allowlisted: inline /status is treated as plain text and is not stripped.
       expect(prompt).toContain("/status");
     });
@@ -88,7 +88,7 @@ describe("trigger handling", () => {
 
   it("keeps inline /help for unauthorized senders", async () => {
     await withTempHome(async (home) => {
-      const runEmbeddedPiAgentMock = mockEmbeddedOk();
+      const runEmbeddedAgentMock = mockEmbeddedOk();
       const { res } = await runInlineUnauthorizedCommand({
         home,
         command: "/help",
@@ -96,15 +96,15 @@ describe("trigger handling", () => {
       });
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
       expect(text).toBe("ok");
-      expect(runEmbeddedPiAgentMock).toHaveBeenCalled();
-      const prompt = runEmbeddedPiAgentMock.mock.calls[0]?.[0]?.prompt ?? "";
+      expect(runEmbeddedAgentMock).toHaveBeenCalled();
+      const prompt = runEmbeddedAgentMock.mock.calls[0]?.[0]?.prompt ?? "";
       expect(prompt).toContain("/help");
     });
   });
 
   it("returns help without invoking the agent", async () => {
     await withTempHome(async (home) => {
-      const runEmbeddedPiAgentMock = getRunEmbeddedPiAgentMock();
+      const runEmbeddedAgentMock = getRunEmbeddedAgentMock();
       const res = await getReplyFromConfig(
         {
           Body: "/help",
@@ -119,7 +119,7 @@ describe("trigger handling", () => {
       expect(text).toContain("Help");
       expect(text).toContain("Session");
       expect(text).toContain("More: /commands for full list");
-      expect(runEmbeddedPiAgentMock).not.toHaveBeenCalled();
+      expect(runEmbeddedAgentMock).not.toHaveBeenCalled();
     });
   });
 

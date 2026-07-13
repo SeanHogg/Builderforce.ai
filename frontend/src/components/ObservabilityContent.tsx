@@ -8,9 +8,12 @@ import {
   agentHosts,
   cloudAgents as cloudAgentsApi,
   workflows,
+  vscodeConnections,
+  isVscodeConnectionOnline,
   type AgentHost,
   type ToolAuditEvent,
   type Workflow,
+  type VscodeConnection,
 } from '@/lib/builderforceApi';
 import { AgentHostGateway } from '@/lib/agentHostGateway';
 import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
@@ -49,13 +52,23 @@ export interface ObservabilityContentProps {
   /** When set, scope cloud telemetry to a single execution (precise per-run
    *  Logs/Timeline, robust to later agent re-assignment). */
   executionId?: number;
+  /** Optional leading prose injected into the copy-triage report by the embedding
+   *  panel — "Review Context" (PR URL, branch, outcome, the model(s) that actually
+   *  ran) followed by "Materials & Context" (task + PRD). Telemetry alone isn't
+   *  reviewable; this is what points a reviewer at the real code and the real model. */
+  reportMaterials?: string;
+  /** Optional async builder for the "Code Changes (transaction)" section — the
+   *  actual file diffs the run produced. Awaited when the user copies the report. */
+  reportTransaction?: () => Promise<string>;
 }
 
-/** Both self-hosted hosts and cloud agents are agents — one unified directory. */
-type AgentKind = 'host' | 'cloud';
+/** Self-hosted hosts, cloud agents, and connected VS Code editors — one unified
+ *  directory. VS Code connections are presence-only (no tool-audit telemetry, so no
+ *  timeline tracks); they appear as directory chips with a live/offline pill. */
+type AgentKind = 'host' | 'cloud' | 'vscode';
 
 interface UnifiedAgent {
-  /** Stable selection key: `host:<id>` or `cloud:<ref>`. */
+  /** Stable selection key: `host:<id>`, `cloud:<ref>`, or `vscode:<id>`. */
   key: string;
   kind: AgentKind;
   /** agent_hosts.id for kind 'host'. */
@@ -63,7 +76,7 @@ interface UnifiedAgent {
   /** ide_agents.id (cloud ref) for kind 'cloud'. */
   cloudRef?: string;
   name: string;
-  /** Live-connection status — hosts only. */
+  /** Live-connection status — hosts and vscode connections. */
   online?: boolean;
 }
 
@@ -106,14 +119,18 @@ function fmtDuration(ms: number): string {
 }
 
 /** A terminal-failure trace event (the `run.failed` events emitted on
- *  orphan-reap / FAILED transition), or a tool call that returned a gateway 4xx/5xx.
- *  These render as error-level logs and failed (red) timeline tracks. */
+ *  orphan-reap / FAILED transition), a tool call that returned a gateway 4xx/5xx,
+ *  or a tool whose result reported its own failure (`{"ok":false}` / an `error`
+ *  field — e.g. write_file with no repo bound). All three render as error-level
+ *  logs and failed (red) timeline tracks, and count toward the triage Errors. */
 function isErrorEvent(ev: ToolAuditEvent): boolean {
   const res = (ev.result ?? '').toLowerCase();
   return ev.toolName === 'run.failed'
     || ev.category === 'error'
     || res.includes('gateway 4')
-    || res.includes('gateway 5');
+    || res.includes('gateway 5')
+    || res.includes('"ok":false')
+    || /"error":\s*"[^"]/.test(res);
 }
 
 const AGENT_COLORS = [
@@ -133,6 +150,7 @@ function colorForKey(selectedKeys: string[], key: string): string {
 const KIND_PILL: Record<AgentKind, { label: string; bg: string; color: string }> = {
   host: { label: 'ON-PREM', bg: 'var(--bg-elevated)', color: 'var(--text-secondary)' },
   cloud: { label: 'CLOUD', bg: 'var(--surface-coral-soft)', color: 'var(--accent)' },
+  vscode: { label: 'VS CODE', bg: 'var(--bg-elevated)', color: 'var(--text-secondary)' },
 };
 
 function pillStyle(bg: string, color: string): React.CSSProperties {
@@ -157,6 +175,8 @@ export function ObservabilityContent({
   cloudAgentName: propCloudAgentName,
   embedded = false,
   executionId: propExecutionId,
+  reportMaterials,
+  reportTransaction,
 }: ObservabilityContentProps) {
   // Scoped mode pins the directory to a single agent (a host OR a cloud agent)
   // instead of showing the full, selectable directory.
@@ -169,6 +189,7 @@ export function ObservabilityContent({
   // Directory: self-hosted hosts + cloud agents, merged into one list.
   const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
   const [cloudAgentList, setCloudAgentList] = useState<{ ref: string; name: string }[]>([]);
+  const [vscodeConnList, setVscodeConnList] = useState<VscodeConnection[]>([]);
   const [dirLoading, setDirLoading] = useState(true);
   const [dirError, setDirError] = useState<string | null>(null);
 
@@ -206,6 +227,7 @@ export function ObservabilityContent({
     : [
         ...agentHostList.map((h) => ({ key: `host:${h.id}`, kind: 'host' as const, hostId: h.id, name: h.name, online: h.online })),
         ...cloudAgentList.map((a) => ({ key: `cloud:${a.ref}`, kind: 'cloud' as const, cloudRef: a.ref, name: a.name })),
+        ...vscodeConnList.map((c) => ({ key: `vscode:${c.id}`, kind: 'vscode' as const, name: c.machineName, online: isVscodeConnectionOnline(c) })),
       ];
   const agentByKey = new Map(unifiedAgents.map((a) => [a.key, a]));
 
@@ -235,14 +257,17 @@ export function ObservabilityContent({
       // …plus cloud agents that have ACTUALLY run (incl. the gateway-default
       // bucket) — so every cloud run is attributable to a chip, named or not.
       cloudAgentsApi.list().catch(() => [] as { ref: string; name: string }[]),
+      // Connected VS Code editors — presence chips (no telemetry / timeline).
+      vscodeConnections.list().catch(() => [] as VscodeConnection[]),
     ])
-      .then(([hosts, pool, ran]) => {
+      .then(([hosts, pool, ran, vscode]) => {
         setAgentHostList(hosts);
         // Merge by ref; a "ran" entry wins (its name reflects the actual run).
         const byRef = new Map<string, { ref: string; name: string }>();
         for (const a of pool) byRef.set(a.ref, { ref: a.ref, name: a.name });
         for (const a of ran) byRef.set(a.ref, { ref: a.ref, name: a.name });
         setCloudAgentList([...byRef.values()]);
+        setVscodeConnList(vscode);
       })
       .finally(() => setDirLoading(false));
   }, [scoped]);
@@ -458,7 +483,7 @@ export function ObservabilityContent({
   // run — selected agents, every telemetry event (full args/results), the derived
   // logs, and an errors-first summary — so it can be dropped straight into a bug
   // report. Built from the same data the Logs/Timeline render, so it stays in sync.
-  const buildTriageReport = (): string => {
+  const buildTriageReport = (extraSections: string[] = []): string => {
     const cap = (s: unknown, n = 2000): string => {
       const str = typeof s === 'string' ? s : JSON.stringify(s ?? '');
       return str.length > n ? str.slice(0, n) + `… (+${str.length - n} chars)` : str;
@@ -476,6 +501,59 @@ export function ObservabilityContent({
     lines.push(`Agents:    ${selectedKeys.map((k) => `${nameForKey(k)} [${agentByKey.get(k)?.kind ?? '?'}]`).join(', ') || '—'}`);
     if (hasHostSelection) lines.push(`Host link: ${connState}`);
     lines.push(`Events: ${flatEvents.length} · Errors: ${errors.length} · Log lines: ${mergedLogs.length}`);
+
+    // Agent Configuration — surface WHO ran and WITH WHAT config (resolved personas /
+    // skills / content + the model decision), parsed from the capabilities.load +
+    // model.select + runtime.dispatch telemetry. Without this a triage paste shows
+    // the events a run produced but not, say, that a docs/BA persona set was loaded
+    // for a coding task, or which model pool the gateway seeded — the exact context a
+    // reviewer needs to spot a mis-staffed or mis-routed run.
+    const parseArgs = (raw: string | null | undefined): Record<string, unknown> | null => {
+      if (!raw) return null;
+      try { const v: unknown = JSON.parse(raw); return v && typeof v === 'object' ? (v as Record<string, unknown>) : null; }
+      catch { return null; }
+    };
+    const list = (v: unknown): string => (Array.isArray(v) && v.length ? v.join(', ') : '—');
+    const evsByAgent = new Map<string, ToolAuditEvent[]>();
+    for (const { ev, agentName } of flatEvents) {
+      const arr = evsByAgent.get(agentName) ?? [];
+      arr.push(ev);
+      evsByAgent.set(agentName, arr);
+    }
+    const configLines: string[] = [];
+    for (const [agentName, evs] of evsByAgent) {
+      const argsFor = (tool: string) => parseArgs(evs.find((e) => e.toolName === tool)?.args);
+      const dispatch = argsFor('runtime.dispatch');
+      const caps = argsFor('capabilities.load');
+      const sel = argsFor('model.select');
+      if (!dispatch && !caps && !sel) continue;
+      configLines.push(`• ${agentName}`);
+      if (dispatch) {
+        const parts = [dispatch.agentType, dispatch.engine && `engine=${dispatch.engine}`,
+          dispatch.surface && `surface=${dispatch.surface}`, dispatch.executor && `executor=${dispatch.executor}`,
+          dispatch.model && `model=${dispatch.model}`].filter(Boolean);
+        if (parts.length) configLines.push(`    dispatch:   ${parts.join(' · ')}`);
+      }
+      if (caps) {
+        configLines.push(`    personas:   ${list(caps.personas)}`);
+        configLines.push(`    skills:     ${list(caps.skills)}`);
+        if (Array.isArray(caps.content) && caps.content.length) configLines.push(`    content:    ${list(caps.content)}`);
+        if (Array.isArray(caps.missing) && caps.missing.length) configLines.push(`    missing:    ${list(caps.missing)}`);
+      }
+      if (sel) {
+        configLines.push(`    model.seed: ${sel.seed ?? '—'}${sel.seedIsCoder != null ? ` (coder=${sel.seedIsCoder})` : ''}`
+          + ` · requested=${sel.requested ?? 'gateway-default'} · pin=${sel.pin ?? '—'} · plan=${sel.plan ?? '—'}${sel.premium ? ' · premium' : ''}`);
+        if (Array.isArray(sel.planCoders) && sel.planCoders.length) configLines.push(`    planCoders: ${sel.planCoders.join(', ')}`);
+      }
+    }
+    if (configLines.length) lines.push('', '--- Agent Configuration ---', ...configLines);
+
+    // Materials & Context + Code Changes (transaction) injected by the panel — put
+    // them up top so a reviewer reads the goal and the actual diffs before the
+    // raw telemetry that produced them.
+    for (const section of extraSections) {
+      if (section && section.trim()) lines.push('', section.trim());
+    }
 
     if (errors.length) {
       lines.push('', `--- Errors (${errors.length}) ---`);
@@ -499,7 +577,13 @@ export function ObservabilityContent({
 
   const copyTriage = async () => {
     try {
-      await navigator.clipboard.writeText(buildTriageReport());
+      const extras: string[] = [];
+      if (reportMaterials) extras.push(reportMaterials);
+      if (reportTransaction) {
+        try { const tx = await reportTransaction(); if (tx) extras.push(tx); }
+        catch { /* a diff fetch failed — copy the rest rather than nothing */ }
+      }
+      await navigator.clipboard.writeText(buildTriageReport(extras));
       setCopyState('copied');
     } catch {
       setCopyState('error');
@@ -572,7 +656,7 @@ export function ObservabilityContent({
                   )}
                   {a.name}
                   <span style={pillStyle(pill.bg, pill.color)}>{pill.label}</span>
-                  {a.kind === 'host' && (
+                  {(a.kind === 'host' || a.kind === 'vscode') && (
                     <span
                       style={pillStyle(
                         a.online ? 'rgba(34,197,94,0.15)' : 'var(--bg-elevated)',
@@ -642,10 +726,12 @@ export function ObservabilityContent({
               <button
                 type="button"
                 onClick={copyTriage}
-                title="Copy a full triage report (agents, telemetry, errors, logs) to the clipboard"
+                title={reportTransaction
+                  ? 'Copy a full report — materials/PRD, the code changes (diffs), telemetry, errors, and logs — to the clipboard'
+                  : 'Copy a full triage report (agents, telemetry, errors, logs) to the clipboard'}
                 style={copyState === 'error' ? { ...smallBtn, color: 'var(--red, #ef4444)', borderColor: 'var(--red, #ef4444)' } : smallBtn}
               >
-                {copyState === 'copied' ? 'Copied ✓' : copyState === 'error' ? 'Copy failed' : 'Copy triage info'}
+                {copyState === 'copied' ? 'Copied ✓' : copyState === 'error' ? 'Copy failed' : reportTransaction ? 'Copy report (+diffs)' : 'Copy triage info'}
               </button>
             </div>
           )}
@@ -727,7 +813,7 @@ export function ObservabilityContent({
                   {timelineViewMode === 'list' ? 'Gantt' : 'List'}
                 </button>
               </div>
-              <div style={{ background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 24, minHeight: 240, overflow: 'auto' }}>
+              <div style={{ background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 24, minHeight: 240, maxHeight: 480, overflow: 'auto' }}>
                 {diagError ? (
                   <div style={{ color: 'var(--red, #ef4444)', fontSize: 13 }}>{diagError}</div>
                 ) : diagLoading && tracks.length === 0 ? (
@@ -840,6 +926,7 @@ const logPaneStyle: React.CSSProperties = {
   borderRadius: 8,
   padding: 12,
   minHeight: 280,
+  maxHeight: 480,
   fontFamily: 'var(--font-mono)',
   fontSize: 12,
   color: 'var(--text-muted)',

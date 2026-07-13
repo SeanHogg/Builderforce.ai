@@ -1,6 +1,6 @@
 # Contributing to BuilderForce Agents
 
-Welcome to the lobster tank! 🦞
+Welcome aboard! 🤖
 
 ## Quick Links
 
@@ -19,7 +19,7 @@ Welcome to the lobster tank! 🦞
 - **Shadow** - Discord subsystem, Discord admin, Agenthub, all community moderation
   - GitHub: [@thewilloftheshadow](https://github.com/thewilloftheshadow) · X: [@4shad0wed](https://x.com/4shad0wed)
 
-- **Vignesh** - Memory (QMD), formal modeling, TUI, IRC, and Lobster
+- **Vignesh** - Memory (QMD), formal modeling, TUI, and IRC
   - GitHub: [@vignesh07](https://github.com/vignesh07) · X: [@\_vgnsh](https://x.com/_vgnsh)
 
 - **Jos** - Telegram, API, Nix mode

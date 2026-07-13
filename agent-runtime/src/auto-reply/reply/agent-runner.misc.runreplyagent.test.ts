@@ -10,7 +10,7 @@ import type { TemplateContext } from "../templating.js";
 import type { FollowupRun, QueueSettings } from "./queue.js";
 import { createMockTypingController } from "./test-helpers.js";
 
-const runEmbeddedPiAgentMock = vi.fn();
+const runEmbeddedAgentMock = vi.fn();
 const runCliAgentMock = vi.fn();
 const runWithModelFallbackMock = vi.fn();
 const runtimeErrorMock = vi.fn();
@@ -23,14 +23,14 @@ vi.mock("../../agents/model-fallback.js", () => ({
   }) => runWithModelFallbackMock(params),
 }));
 
-vi.mock("../../agents/pi-embedded.js", async () => {
-  const actual = await vi.importActual<typeof import("../../agents/pi-embedded.js")>(
-    "../../agents/pi-embedded.js",
+vi.mock("../../agents/embedded.js", async () => {
+  const actual = await vi.importActual<typeof import("../../agents/embedded.js")>(
+    "../../agents/embedded.js",
   );
   return {
     ...actual,
-    queueEmbeddedPiMessage: vi.fn().mockReturnValue(false),
-    runEmbeddedPiAgent: (params: unknown) => runEmbeddedPiAgentMock(params),
+    queueEmbeddedMessage: vi.fn().mockReturnValue(false),
+    runEmbeddedAgent: (params: unknown) => runEmbeddedAgentMock(params),
   };
 });
 
@@ -75,7 +75,7 @@ type RunWithModelFallbackParams = {
 };
 
 beforeEach(() => {
-  runEmbeddedPiAgentMock.mockReset();
+  runEmbeddedAgentMock.mockReset();
   runCliAgentMock.mockReset();
   runWithModelFallbackMock.mockReset();
   runtimeErrorMock.mockReset();
@@ -104,7 +104,7 @@ describe("runReplyAgent authProfileId fallback scoping", () => {
       }),
     );
 
-    runEmbeddedPiAgentMock.mockResolvedValue({ payloads: [{ text: "ok" }], meta: {} });
+    runEmbeddedAgentMock.mockResolvedValue({ payloads: [{ text: "ok" }], meta: {} });
 
     const typing = createMockTypingController();
     const sessionCtx = {
@@ -180,8 +180,8 @@ describe("runReplyAgent authProfileId fallback scoping", () => {
       typingMode: "instant",
     });
 
-    expect(runEmbeddedPiAgentMock).toHaveBeenCalledTimes(1);
-    const call = runEmbeddedPiAgentMock.mock.calls[0]?.[0] as {
+    expect(runEmbeddedAgentMock).toHaveBeenCalledTimes(1);
+    const call = runEmbeddedAgentMock.mock.calls[0]?.[0] as {
       authProfileId?: unknown;
       authProfileIdSource?: unknown;
       provider?: unknown;
@@ -269,7 +269,7 @@ describe("runReplyAgent auto-compaction token update", () => {
 
     await seedSessionStore({ storePath, sessionKey, entry: sessionEntry });
 
-    runEmbeddedPiAgentMock.mockImplementation(async (params: EmbeddedRunParams) => {
+    runEmbeddedAgentMock.mockImplementation(async (params: EmbeddedRunParams) => {
       // Simulate auto-compaction during agent run
       params.onAgentEvent?.({ stream: "compaction", data: { phase: "start" } });
       params.onAgentEvent?.({ stream: "compaction", data: { phase: "end", willRetry: false } });
@@ -342,7 +342,7 @@ describe("runReplyAgent auto-compaction token update", () => {
 
     await seedSessionStore({ storePath, sessionKey, entry: sessionEntry });
 
-    runEmbeddedPiAgentMock.mockResolvedValue({
+    runEmbeddedAgentMock.mockResolvedValue({
       payloads: [{ text: "ok" }],
       meta: {
         agentMeta: {
@@ -392,7 +392,7 @@ describe("runReplyAgent auto-compaction token update", () => {
 describe("runReplyAgent block streaming", () => {
   it("coalesces duplicate text_end block replies", async () => {
     const onBlockReply = vi.fn();
-    runEmbeddedPiAgentMock.mockImplementationOnce(async (params) => {
+    runEmbeddedAgentMock.mockImplementationOnce(async (params) => {
       const block = params.onBlockReply as ((payload: { text?: string }) => void) | undefined;
       block?.({ text: "Hello" });
       block?.({ text: "Hello" });
@@ -495,7 +495,7 @@ describe("runReplyAgent block streaming", () => {
       });
     });
 
-    runEmbeddedPiAgentMock.mockImplementationOnce(async (params) => {
+    runEmbeddedAgentMock.mockImplementationOnce(async (params) => {
       const block = params.onBlockReply as ((payload: { text?: string }) => void) | undefined;
       block?.({ text: "Chunk" });
       return {
@@ -672,7 +672,7 @@ describe("runReplyAgent claude-cli routing", () => {
     randomSpy.mockRestore();
 
     expect(runCliAgentMock).toHaveBeenCalledTimes(1);
-    expect(runEmbeddedPiAgentMock).not.toHaveBeenCalled();
+    expect(runEmbeddedAgentMock).not.toHaveBeenCalled();
     expect(lifecyclePhases).toEqual(["start", "end"]);
     expect(result).toMatchObject({ text: "ok" });
   });
@@ -743,7 +743,7 @@ describe("runReplyAgent messaging tool suppression", () => {
   }
 
   it("drops replies when a messaging tool sent via the same provider + target", async () => {
-    runEmbeddedPiAgentMock.mockResolvedValueOnce({
+    runEmbeddedAgentMock.mockResolvedValueOnce({
       payloads: [{ text: "hello world!" }],
       messagingToolSentTexts: ["different message"],
       messagingToolSentTargets: [{ tool: "slack", provider: "slack", to: "channel:C1" }],
@@ -756,7 +756,7 @@ describe("runReplyAgent messaging tool suppression", () => {
   });
 
   it("delivers replies when tool provider does not match", async () => {
-    runEmbeddedPiAgentMock.mockResolvedValueOnce({
+    runEmbeddedAgentMock.mockResolvedValueOnce({
       payloads: [{ text: "hello world!" }],
       messagingToolSentTexts: ["different message"],
       messagingToolSentTargets: [{ tool: "discord", provider: "discord", to: "channel:C1" }],
@@ -769,7 +769,7 @@ describe("runReplyAgent messaging tool suppression", () => {
   });
 
   it("delivers replies when account ids do not match", async () => {
-    runEmbeddedPiAgentMock.mockResolvedValueOnce({
+    runEmbeddedAgentMock.mockResolvedValueOnce({
       payloads: [{ text: "hello world!" }],
       messagingToolSentTexts: ["different message"],
       messagingToolSentTargets: [
@@ -797,7 +797,7 @@ describe("runReplyAgent messaging tool suppression", () => {
     const entry: SessionEntry = { sessionId: "session", updatedAt: Date.now() };
     await saveSessionStore(storePath, { [sessionKey]: entry });
 
-    runEmbeddedPiAgentMock.mockResolvedValueOnce({
+    runEmbeddedAgentMock.mockResolvedValueOnce({
       payloads: [{ text: "hello world!" }],
       messagingToolSentTexts: ["different message"],
       messagingToolSentTargets: [{ tool: "slack", provider: "slack", to: "channel:C1" }],
@@ -830,7 +830,7 @@ describe("runReplyAgent messaging tool suppression", () => {
     const entry: SessionEntry = { sessionId: "session", updatedAt: Date.now() };
     await saveSessionStore(storePath, { [sessionKey]: entry });
 
-    runEmbeddedPiAgentMock.mockResolvedValueOnce({
+    runEmbeddedAgentMock.mockResolvedValueOnce({
       payloads: [{ text: "hello world!" }],
       messagingToolSentTexts: ["different message"],
       messagingToolSentTargets: [{ tool: "slack", provider: "slack", to: "channel:C1" }],
@@ -915,7 +915,7 @@ describe("runReplyAgent reminder commitment guard", () => {
   }
 
   it("appends guard note when reminder commitment is not backed by cron.add", async () => {
-    runEmbeddedPiAgentMock.mockResolvedValueOnce({
+    runEmbeddedAgentMock.mockResolvedValueOnce({
       payloads: [{ text: "I'll remind you tomorrow morning." }],
       meta: {},
       successfulCronAdds: 0,
@@ -928,7 +928,7 @@ describe("runReplyAgent reminder commitment guard", () => {
   });
 
   it("keeps reminder commitment unchanged when cron.add succeeded", async () => {
-    runEmbeddedPiAgentMock.mockResolvedValueOnce({
+    runEmbeddedAgentMock.mockResolvedValueOnce({
       payloads: [{ text: "I'll remind you tomorrow morning." }],
       meta: {},
       successfulCronAdds: 1,
@@ -942,7 +942,7 @@ describe("runReplyAgent reminder commitment guard", () => {
 });
 
 describe("runReplyAgent fallback reasoning tags", () => {
-  type EmbeddedPiAgentParams = {
+  type EmbeddedAgentParams = {
     enforceFinalTag?: boolean;
     prompt?: string;
   };
@@ -1015,7 +1015,7 @@ describe("runReplyAgent fallback reasoning tags", () => {
   }
 
   it("enforces <final> when the fallback provider requires reasoning tags", async () => {
-    runEmbeddedPiAgentMock.mockResolvedValueOnce({
+    runEmbeddedAgentMock.mockResolvedValueOnce({
       payloads: [{ text: "ok" }],
       meta: {},
     });
@@ -1029,12 +1029,12 @@ describe("runReplyAgent fallback reasoning tags", () => {
 
     await createRun();
 
-    const call = runEmbeddedPiAgentMock.mock.calls[0]?.[0] as EmbeddedPiAgentParams | undefined;
+    const call = runEmbeddedAgentMock.mock.calls[0]?.[0] as EmbeddedAgentParams | undefined;
     expect(call?.enforceFinalTag).toBe(true);
   });
 
   it("enforces <final> during memory flush on fallback providers", async () => {
-    runEmbeddedPiAgentMock.mockImplementation(async (params: EmbeddedPiAgentParams) => {
+    runEmbeddedAgentMock.mockImplementation(async (params: EmbeddedAgentParams) => {
       if (params.prompt?.includes("Pre-compaction memory flush.")) {
         return { payloads: [], meta: {} };
       }
@@ -1055,11 +1055,11 @@ describe("runReplyAgent fallback reasoning tags", () => {
       },
     });
 
-    const flushCall = runEmbeddedPiAgentMock.mock.calls.find(([params]) =>
-      (params as EmbeddedPiAgentParams | undefined)?.prompt?.includes(
+    const flushCall = runEmbeddedAgentMock.mock.calls.find(([params]) =>
+      (params as EmbeddedAgentParams | undefined)?.prompt?.includes(
         "Pre-compaction memory flush.",
       ),
-    )?.[0] as EmbeddedPiAgentParams | undefined;
+    )?.[0] as EmbeddedAgentParams | undefined;
 
     expect(flushCall?.enforceFinalTag).toBe(true);
   });
@@ -1135,7 +1135,7 @@ describe("runReplyAgent response usage footer", () => {
   }
 
   it("appends session key when responseUsage=full", async () => {
-    runEmbeddedPiAgentMock.mockResolvedValueOnce({
+    runEmbeddedAgentMock.mockResolvedValueOnce({
       payloads: [{ text: "ok" }],
       meta: {
         agentMeta: {
@@ -1154,7 +1154,7 @@ describe("runReplyAgent response usage footer", () => {
   });
 
   it("does not append session key when responseUsage=tokens", async () => {
-    runEmbeddedPiAgentMock.mockResolvedValueOnce({
+    runEmbeddedAgentMock.mockResolvedValueOnce({
       payloads: [{ text: "ok" }],
       meta: {
         agentMeta: {
@@ -1176,7 +1176,7 @@ describe("runReplyAgent response usage footer", () => {
 describe("runReplyAgent transient HTTP retry", () => {
   it("retries once after transient 521 HTML failure and then succeeds", async () => {
     vi.useFakeTimers();
-    runEmbeddedPiAgentMock
+    runEmbeddedAgentMock
       .mockRejectedValueOnce(
         new Error(
           `521 <!DOCTYPE html><html lang="en-US"><head><title>Web server is down</title></head><body>Cloudflare</body></html>`,
@@ -1243,7 +1243,7 @@ describe("runReplyAgent transient HTTP retry", () => {
     await vi.advanceTimersByTimeAsync(2_500);
     const result = await runPromise;
 
-    expect(runEmbeddedPiAgentMock).toHaveBeenCalledTimes(2);
+    expect(runEmbeddedAgentMock).toHaveBeenCalledTimes(2);
     expect(runtimeErrorMock).toHaveBeenCalledWith(
       expect.stringContaining("Transient HTTP provider error before reply"),
     );

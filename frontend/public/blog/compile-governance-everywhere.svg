@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 420" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+  <defs>
+    <linearGradient id="gv-coral" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FF6B5C"/>
+      <stop offset="1" stop-color="#E8472F"/>
+    </linearGradient>
+    <marker id="gv-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#8FA0BD"/>
+    </marker>
+  </defs>
+  <rect width="880" height="420" fill="#0E1525"/>
+  <text x="440" y="44" fill="#FFFFFF" font-size="24" font-weight="700" text-anchor="middle">Persona, memory, and policy live on the spec</text>
+  <text x="440" y="70" fill="#8FA0BD" font-size="13.5" text-anchor="middle">Author once — it reaches every surface for free, because every surface lowers the same spec</text>
+
+  <!-- the spec with three properties -->
+  <rect x="310" y="104" width="260" height="150" rx="14" fill="#13233f" stroke="url(#gv-coral)" stroke-width="2"/>
+  <text x="440" y="132" fill="#fff" font-size="16" font-weight="700" text-anchor="middle">AgentSpec</text>
+  <g font-size="13">
+    <rect x="330" y="146" width="220" height="30" rx="7" fill="#1b2c4d"/>
+    <text x="345" y="166" fill="#DCE6F7">persona · temperature, traits</text>
+    <rect x="330" y="182" width="220" height="30" rx="7" fill="#1b2c4d"/>
+    <text x="345" y="202" fill="#DCE6F7">memory · your proprietary docs</text>
+    <rect x="330" y="218" width="220" height="30" rx="7" fill="url(#gv-coral)"/>
+    <text x="345" y="238" fill="#fff" font-weight="700">policy · gates that bind</text>
+  </g>
+
+  <!-- four surfaces below, all receiving identical governance -->
+  <g font-size="12.5">
+    <rect x="60" y="312" width="170" height="64" rx="10" fill="#15203A" stroke="#26324f"/>
+    <text x="145" y="338" fill="#fff" text-anchor="middle" font-weight="700">IDE</text>
+    <text x="145" y="360" fill="#8FA0BD" text-anchor="middle" font-size="11">gate applies here</text>
+
+    <rect x="262" y="312" width="170" height="64" rx="10" fill="#15203A" stroke="#26324f"/>
+    <text x="347" y="338" fill="#fff" text-anchor="middle" font-weight="700">Cloud tick</text>
+    <text x="347" y="360" fill="#8FA0BD" text-anchor="middle" font-size="11">…identically here</text>
+
+    <rect x="464" y="312" width="170" height="64" rx="10" fill="#15203A" stroke="#26324f"/>
+    <text x="549" y="338" fill="#fff" text-anchor="middle" font-weight="700">Workflow node</text>
+    <text x="549" y="360" fill="#8FA0BD" text-anchor="middle" font-size="11">…and here</text>
+
+    <rect x="666" y="312" width="170" height="64" rx="10" fill="#15203A" stroke="#26324f"/>
+    <text x="751" y="338" fill="#fff" text-anchor="middle" font-weight="700">Desktop</text>
+    <text x="751" y="360" fill="#8FA0BD" text-anchor="middle" font-size="11">…and here</text>
+  </g>
+
+  <g stroke="#8FA0BD" stroke-width="1.5" fill="none">
+    <path d="M360 254 Q300 285 160 312" marker-end="url(#gv-arrow)"/>
+    <path d="M410 254 Q390 285 347 312" marker-end="url(#gv-arrow)"/>
+    <path d="M470 254 Q500 285 549 312" marker-end="url(#gv-arrow)"/>
+    <path d="M520 254 Q610 285 751 312" marker-end="url(#gv-arrow)"/>
+  </g>
+
+  <text x="440" y="290" fill="#FFD9D2" font-size="12.5" text-anchor="middle">one shared evaluatePolicyGate() — enforced at every engine's tool seam: block / require-approval / allow</text>
+</svg>

@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/AuthContext';
-import { artifactAssignments, marketplaceStats, agentHosts } from '@/lib/builderforceApi';
+import { artifactAssignments, marketplaceStats, agentHosts, personasApi, type PublicPersona } from '@/lib/builderforceApi';
 import { BUILTIN_PERSONAS, type Persona } from '@/lib/marketplaceData';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
 import PageContainer from '@/components/PageContainer';
@@ -26,21 +26,45 @@ export default function PersonaDetailPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const p = BUILTIN_PERSONAS.find((x) => x.name === slug) ?? null;
-    setPersona(p);
-    if (!p) {
-      setLoading(false);
-      return;
-    }
     (async () => {
+      // Builtins resolve synchronously; otherwise fall back to the public registry
+      // (GET /api/personas/:slug). null on an older backend → "not found" view.
+      let p: Persona | null = BUILTIN_PERSONAS.find((x) => x.name === slug) ?? null;
+      if (!p) {
+        const pub: PublicPersona | null = await personasApi.getBySlug(slug).catch(() => null);
+        if (pub) {
+          // Behaviour fields are NESTED under `persona` (server contract), not flat.
+          const b = pub.persona ?? {};
+          p = {
+            name: pub.slug || pub.name,
+            description: pub.description ?? '',
+            voice: b.voice || '—',
+            perspective: b.perspective || '—',
+            decisionStyle: b.decisionStyle || '—',
+            outputPrefix: b.outputPrefix ?? '',
+            capabilities: b.capabilities ?? [],
+            source: 'user-global',
+            tags: pub.tags ?? [],
+            author: pub.authorName ?? 'Community',
+            image: b.image,
+            psychometric: pub.psychometric ?? undefined,
+          };
+        }
+      }
+      setPersona(p);
+      if (!p) {
+        setLoading(false);
+        return;
+      }
+      const slugKey = p.name;
       try {
         const [agentHostList, assignList, s] = await Promise.all([
           agentHosts.list().catch(() => []),
           tenantNum ? artifactAssignments.list('tenant', tenantNum, 'persona').catch(() => []) : [],
-          marketplaceStats.getStats('persona', [p.name]).then((r) => r[p.name] ?? { likes: 0, installs: 0, liked: false }),
+          marketplaceStats.getStats('persona', [slugKey]).then((r) => r[slugKey] ?? { likes: 0, installs: 0, liked: false }),
         ]);
         setHasAgentHosts(agentHostList.length > 0);
-        setInstalled(assignList.some((a) => a.artifactSlug === p.name));
+        setInstalled(assignList.some((a) => a.artifactSlug === slugKey));
         setStats(s);
       } catch {
         setStats({ likes: 0, installs: 0, liked: false });

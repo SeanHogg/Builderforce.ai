@@ -1,0 +1,105 @@
+// i18n patch: observability widgets (Alerts / Logs / Quality / Integrations / Content).
+const build = (g, t, o) => ({ widgets: { group: g, title: t, obs: o } });
+
+export const PATCHES = {
+  en: build(
+    { alerts: 'Alerts', logs: 'Logs', quality: 'Quality', integrations: 'Integrations', content: 'Content' },
+    {
+      obsAlertFires: 'Alert firings / day', obsAlertRuleHealth: 'Alert rule health',
+      obsLogVolume: 'Event volume', obsLogTypes: 'Event types',
+      obsQualityVolume: 'Error volume', obsQualityResolution: 'Error resolution',
+      obsIntegrationsConnected: 'Integrations connected', obsIntegrationsByProvider: 'Integrations by provider',
+      obsContentCoverage: 'Knowledge coverage', obsContentByKind: 'Documents by kind',
+    },
+    {
+      noFirings: 'No firings yet', firesPerDay: 'Firings / day', noRules: 'No alert rules',
+      firing: 'Firing', healthy: 'Healthy', paused: 'Paused', rules: 'rules',
+      noEvents: 'No events yet', eventsPerDay: 'Events / day', events: 'events',
+      noErrors: 'No errors yet', errorsPerDay: 'Errors / day', groups: 'groups',
+      status_unresolved: 'Unresolved', status_fixing: 'Fixing', status_resolved: 'Resolved', status_ignored: 'Ignored',
+      integrationsSub: '{healthy} healthy of {total}', noIntegrations: 'No integrations', connected: 'connected',
+      coverageSub: '{present} of {total} standards', staleNudge: '{count} docs stale > {days}d',
+      noDocs: 'No documents', sop: 'SOP', process: 'Process', doc: 'Doc', docs: 'docs',
+    },
+  ),
+  zh: build(
+    { alerts: '告警', logs: '日志', quality: '质量', integrations: '集成', content: '内容' },
+    {
+      obsAlertFires: '每日告警触发', obsAlertRuleHealth: '告警规则健康度',
+      obsLogVolume: '事件量', obsLogTypes: '事件类型',
+      obsQualityVolume: '错误量', obsQualityResolution: '错误处理',
+      obsIntegrationsConnected: '已连接集成', obsIntegrationsByProvider: '按提供商分布的集成',
+      obsContentCoverage: '知识库覆盖率', obsContentByKind: '按类型分布的文档',
+    },
+    {
+      noFirings: '暂无触发', firesPerDay: '触发 / 天', noRules: '暂无告警规则',
+      firing: '触发中', healthy: '健康', paused: '已暂停', rules: '条规则',
+      noEvents: '暂无事件', eventsPerDay: '事件 / 天', events: '个事件',
+      noErrors: '暂无错误', errorsPerDay: '错误 / 天', groups: '个分组',
+      status_unresolved: '未解决', status_fixing: '修复中', status_resolved: '已解决', status_ignored: '已忽略',
+      integrationsSub: '{total} 个中 {healthy} 个健康', noIntegrations: '暂无集成', connected: '已连接',
+      coverageSub: '{total} 项标准中的 {present} 项', staleNudge: '{count} 篇文档超过 {days} 天未更新',
+      noDocs: '暂无文档', sop: 'SOP', process: '流程', doc: '文档', docs: '篇文档',
+    },
+  ),
+  es: build(
+    { alerts: 'Alertas', logs: 'Registros', quality: 'Calidad', integrations: 'Integraciones', content: 'Contenido' },
+    {
+      obsAlertFires: 'Disparos de alerta / día', obsAlertRuleHealth: 'Salud de reglas de alerta',
+      obsLogVolume: 'Volumen de eventos', obsLogTypes: 'Tipos de eventos',
+      obsQualityVolume: 'Volumen de errores', obsQualityResolution: 'Resolución de errores',
+      obsIntegrationsConnected: 'Integraciones conectadas', obsIntegrationsByProvider: 'Integraciones por proveedor',
+      obsContentCoverage: 'Cobertura de conocimiento', obsContentByKind: 'Documentos por tipo',
+    },
+    {
+      noFirings: 'Sin disparos aún', firesPerDay: 'Disparos / día', noRules: 'Sin reglas de alerta',
+      firing: 'Disparando', healthy: 'Saludable', paused: 'Pausada', rules: 'reglas',
+      noEvents: 'Sin eventos aún', eventsPerDay: 'Eventos / día', events: 'eventos',
+      noErrors: 'Sin errores aún', errorsPerDay: 'Errores / día', groups: 'grupos',
+      status_unresolved: 'Sin resolver', status_fixing: 'Corrigiendo', status_resolved: 'Resuelto', status_ignored: 'Ignorado',
+      integrationsSub: '{healthy} saludables de {total}', noIntegrations: 'Sin integraciones', connected: 'conectadas',
+      coverageSub: '{present} de {total} estándares', staleNudge: '{count} docs obsoletos > {days} d',
+      noDocs: 'Sin documentos', sop: 'SOP', process: 'Proceso', doc: 'Doc', docs: 'docs',
+    },
+  ),
+  fr: build(
+    { alerts: 'Alertes', logs: 'Journaux', quality: 'Qualité', integrations: 'Intégrations', content: 'Contenu' },
+    {
+      obsAlertFires: "Déclenchements d'alerte / jour", obsAlertRuleHealth: "Santé des règles d'alerte",
+      obsLogVolume: "Volume d'événements", obsLogTypes: "Types d'événements",
+      obsQualityVolume: "Volume d'erreurs", obsQualityResolution: 'Résolution des erreurs',
+      obsIntegrationsConnected: 'Intégrations connectées', obsIntegrationsByProvider: 'Intégrations par fournisseur',
+      obsContentCoverage: 'Couverture des connaissances', obsContentByKind: 'Documents par type',
+    },
+    {
+      noFirings: 'Aucun déclenchement', firesPerDay: 'Déclenchements / jour', noRules: "Aucune règle d'alerte",
+      firing: 'Déclenchée', healthy: 'Saine', paused: 'En pause', rules: 'règles',
+      noEvents: 'Aucun événement', eventsPerDay: 'Événements / jour', events: 'événements',
+      noErrors: 'Aucune erreur', errorsPerDay: 'Erreurs / jour', groups: 'groupes',
+      status_unresolved: 'Non résolu', status_fixing: 'Correction', status_resolved: 'Résolu', status_ignored: 'Ignoré',
+      integrationsSub: '{healthy} saines sur {total}', noIntegrations: 'Aucune intégration', connected: 'connectées',
+      coverageSub: '{present} sur {total} standards', staleNudge: '{count} docs obsolètes > {days} j',
+      noDocs: 'Aucun document', sop: 'SOP', process: 'Processus', doc: 'Doc', docs: 'docs',
+    },
+  ),
+  de: build(
+    { alerts: 'Warnungen', logs: 'Protokolle', quality: 'Qualität', integrations: 'Integrationen', content: 'Inhalte' },
+    {
+      obsAlertFires: 'Warnungsauslösungen / Tag', obsAlertRuleHealth: 'Zustand der Warnregeln',
+      obsLogVolume: 'Ereignisvolumen', obsLogTypes: 'Ereignistypen',
+      obsQualityVolume: 'Fehlervolumen', obsQualityResolution: 'Fehlerbehebung',
+      obsIntegrationsConnected: 'Verbundene Integrationen', obsIntegrationsByProvider: 'Integrationen nach Anbieter',
+      obsContentCoverage: 'Wissensabdeckung', obsContentByKind: 'Dokumente nach Typ',
+    },
+    {
+      noFirings: 'Noch keine Auslösungen', firesPerDay: 'Auslösungen / Tag', noRules: 'Keine Warnregeln',
+      firing: 'Ausgelöst', healthy: 'Gesund', paused: 'Pausiert', rules: 'Regeln',
+      noEvents: 'Noch keine Ereignisse', eventsPerDay: 'Ereignisse / Tag', events: 'Ereignisse',
+      noErrors: 'Noch keine Fehler', errorsPerDay: 'Fehler / Tag', groups: 'Gruppen',
+      status_unresolved: 'Ungelöst', status_fixing: 'In Behebung', status_resolved: 'Gelöst', status_ignored: 'Ignoriert',
+      integrationsSub: '{healthy} von {total} gesund', noIntegrations: 'Keine Integrationen', connected: 'verbunden',
+      coverageSub: '{present} von {total} Standards', staleNudge: '{count} Dokumente veraltet > {days} T',
+      noDocs: 'Keine Dokumente', sop: 'SOP', process: 'Prozess', doc: 'Dok', docs: 'Dok.',
+    },
+  ),
+};

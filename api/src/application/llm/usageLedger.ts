@@ -17,12 +17,61 @@ import type { Env } from '../../env';
 import { llmUsageLog } from '../../infrastructure/database/schema';
 import type { LlmUsage } from './LlmProxyService';
 import { getCatalogCached } from './modelCatalog';
+import { buildTransactionalDatabase } from '../../infrastructure/database/connection';
 
 /** Cache-tier multipliers relative to the base input (prompt) price. cache_read
  *  is billed ~0.1x input, cache_creation ~1.25x — both are subsets of
  *  promptTokens (see schema). Mirrors the discount the usage columns record. */
-const CACHE_READ_MULTIPLIER = 0.1;
-const CACHE_CREATION_MULTIPLIER = 1.25;
+export const CACHE_READ_MULTIPLIER = 0.1;
+export const CACHE_CREATION_MULTIPLIER = 1.25;
+
+/** Default daily paid-overflow $ ceiling (millicents, 1/100000 USD) for a FREE
+ *  tenant with no explicit cap — $0.50/day. Paid plans (pro/teams) are treated
+ *  as effectively unlimited unless they set an explicit cap. See migration 0130
+ *  and the gateway overflow gate. */
+export const DEFAULT_PAID_OVERFLOW_CAP_MILLICENTS = 50_000; // $0.50
+
+/**
+ * Resolve a tenant's effective daily paid-overflow cap (millicents) from its
+ * per-tenant override + effective plan:
+ *   • override === -1            → -1 (unlimited; the caller skips the gate)
+ *   • override >= 0              → that explicit value
+ *   • override null, free plan   → {@link DEFAULT_PAID_OVERFLOW_CAP_MILLICENTS}
+ *   • override null, pro/teams   → -1 (unlimited)
+ * Single source of truth so the gate and any superadmin display agree.
+ */
+export function resolvePaidOverflowCapMillicents(
+  override: number | null | undefined,
+  effectivePlan: 'free' | 'pro' | 'teams',
+): number {
+  if (override === -1) return -1;
+  if (override != null && override >= 0) return override;
+  return effectivePlan === 'free' ? DEFAULT_PAID_OVERFLOW_CAP_MILLICENTS : -1;
+}
+
+/** Coerce one token count to a non-negative finite integer. Upstream usage SHOULD
+ *  be clean, but a vendor/stream edge (a failed turn, a malformed chunk, a synthetic
+ *  retry) can surface NaN, Infinity, a negative, or a fractional value — and those
+ *  must NEVER reach the billing ledger, where they poison the SUM()-based cost
+ *  rollups (a single NaN makes a whole tenant/project total NaN). Floors anything
+ *  non-finite or negative to 0; truncates fractions. Identity for a clean integer. */
+export function clampTokenCount(n: number | undefined | null): number {
+  return Number.isFinite(n) ? Math.max(0, Math.floor(n as number)) : 0;
+}
+
+/** Sanitize every token field on a usage record via {@link clampTokenCount}, so the
+ *  single ledger writer ({@link recordUsageRow}) and any direct snapshot writer share
+ *  ONE clamp. Preserves "cache field absent" (undefined) so an upstream with no cache
+ *  breakdown is not misrecorded as an explicit 0. */
+export function sanitizeUsage(usage: LlmUsage): LlmUsage {
+  return {
+    promptTokens:     clampTokenCount(usage.promptTokens),
+    completionTokens: clampTokenCount(usage.completionTokens),
+    totalTokens:      clampTokenCount(usage.totalTokens),
+    ...(usage.cacheReadTokens     != null ? { cacheReadTokens:     clampTokenCount(usage.cacheReadTokens) }     : {}),
+    ...(usage.cacheCreationTokens != null ? { cacheCreationTokens: clampTokenCount(usage.cacheCreationTokens) } : {}),
+  };
+}
 
 /** Authoritative per-call cost in millicents (1/100000 USD), priced from the
  *  resolved model's catalog price incl. the cache-read/creation discount split.
@@ -41,6 +90,29 @@ export function computeCostMillicents(
     cacheCreation * pricing.prompt * CACHE_CREATION_MULTIPLIER +
     usage.completionTokens * pricing.completion;
   return Math.round(usd * 100_000);
+}
+
+/**
+ * Which agent modality produced a usage row. Set on every row so metering can
+ * apply the BYO exemption (own-machine on-prem/VSIX BYO usage is free; cloud BYO
+ * is charged) — see tokenUsage.ts.
+ *   • web      → the web app (Brain chat, dashboards) or an unattributed call.
+ *   • vsix     → the VS Code extension (own machine).
+ *   • on_prem  → a self-hosted agent host (own machine).
+ *   • cloud    → a cloud agent run (Durable Object / container) on our infra.
+ *   • sdk      → a direct SDK/API caller.
+ */
+export type UsageSurface = 'web' | 'vsix' | 'on_prem' | 'cloud' | 'sdk';
+
+/** Map internal gateway vendor ids to the stable provider ids shown in the BYO
+ * integrations UI. */
+export function normalizeByoProvider(vendor: string): string {
+  const aliases: Record<string, string> = {
+    googleai: 'google',
+    'openai-codex': 'openai',
+    moonshot: 'kimi',
+  };
+  return aliases[vendor] ?? vendor;
 }
 
 /**
@@ -75,6 +147,23 @@ export interface RecordUsageRow {
   useCase?: string | null;
   tenantApiKeyId?: string | null;
   attribution?: UsageAttribution | null;
+  /** Links this usage row to its `llm_traces.trace_id` for billing→trace pivot [1299]. */
+  traceId?: string | null;
+  /** True when the call resolved via the funded paid-overflow path (premium
+   *  fallback / backstop on Builderforce's key, not a plan-pool model). Metered
+   *  against the per-tenant `paid_overflow_daily_cap`. See isPaidOverflowModel. */
+  paidOverflow?: boolean | null;
+  /** True when the tenant's OWN provider credential (BYO key / connected
+   *  subscription) served the call. Forces `cost_usd_millicents = 0` (the
+   *  platform paid nothing) and, combined with an on-prem/VSIX `surface`, exempts
+   *  the row from the plan token allowance. See tokenUsage.ts. */
+  byo?: boolean | null;
+  /** Stable connected-provider id when `byo` is true. This is deliberately
+   *  separate from `model`: one credential can serve many models. */
+  byoProvider?: string | null;
+  /** Which modality produced the row — drives the BYO metering exemption.
+   *  Defaults to 'web' when unset. */
+  surface?: UsageSurface | null;
 }
 
 /** Minimal shape of a ProxyResult this helper needs — avoids importing the full type. */
@@ -118,26 +207,36 @@ export async function recordProxyUsage(
  *  Best-effort — never throws (logging must not fail a run). */
 export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Promise<void> {
   try {
+    const usageDb = env.NEON_TRANSACTIONAL_DATABASE_URL ? buildTransactionalDatabase(env) : db;
+    // Clamp tokens ONCE at the canonical write boundary so neither the cost price
+    // nor the persisted columns can carry a NaN/negative/fractional from a bad
+    // upstream turn — every usage producer (gateway + cloud) funnels through here.
+    const usage = sanitizeUsage(row.usage);
+
     // Price the call at write time so the dashboard/billing sums a recorded
     // column instead of re-pricing tokens against a moving catalog. Catalog read
     // is L1+KV cached, so this is a cheap lookup on the hot logging path.
+    // BYO rows are served by the tenant's OWN provider account — the platform
+    // pays nothing — so their platform cost is always 0 (skip pricing entirely).
     let costUsdMillicents = 0;
-    try {
-      const catalog = await getCatalogCached(env);
-      const pricing = catalog.find((m) => m.id === row.model)?.pricing;
-      costUsdMillicents = computeCostMillicents(pricing, row.usage);
-    } catch { /* pricing unavailable — record tokens with cost 0 */ }
+    if (!row.byo) {
+      try {
+        const catalog = await getCatalogCached(env);
+        const pricing = catalog.find((m) => m.id === row.model)?.pricing;
+        costUsdMillicents = computeCostMillicents(pricing, usage);
+      } catch { /* pricing unavailable — record tokens with cost 0 */ }
+    }
 
-    await db.insert(llmUsageLog).values({
+    await usageDb.insert(llmUsageLog).values({
       tenantId:            row.tenantId,
       userId:              row.userId,
       llmProduct:          row.llmProduct,
       model:               row.model,
-      promptTokens:        row.usage.promptTokens,
-      completionTokens:    row.usage.completionTokens,
-      totalTokens:         row.usage.totalTokens,
-      cacheReadTokens:     row.usage.cacheReadTokens     ?? 0,
-      cacheCreationTokens: row.usage.cacheCreationTokens ?? 0,
+      promptTokens:        usage.promptTokens,
+      completionTokens:    usage.completionTokens,
+      totalTokens:         usage.totalTokens,
+      cacheReadTokens:     usage.cacheReadTokens     ?? 0,
+      cacheCreationTokens: usage.cacheCreationTokens ?? 0,
       retries:             row.retries ?? 0,
       streamed:            row.streamed ?? false,
       metadata:            row.metadata ? JSON.stringify(row.metadata) : null,
@@ -150,6 +249,11 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
       taskId:              row.attribution?.taskId ?? null,
       projectId:           row.attribution?.projectId ?? null,
       costUsdMillicents,
+      traceId:             row.traceId ?? null,
+      paidOverflow:        row.paidOverflow ?? false,
+      byo:                 row.byo ?? false,
+      byoProvider:         row.byo ? (row.byoProvider ?? null) : null,
+      surface:             row.surface ?? 'web',
     });
   } catch { /* never let usage logging fail the request */ }
 }

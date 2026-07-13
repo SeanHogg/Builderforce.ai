@@ -47,48 +47,86 @@ const PROBE_MESSAGES: Array<Record<string, unknown>> = [
   { role: 'user', content: 'ping' },
 ];
 
-/** One probe call against a single vendor+model. */
-async function probeModel(
-  env: VendorEnv,
-  vendor: VendorId,
-  modelId: string,
-): Promise<ModelProbeResult> {
-  const mod    = getModule(vendor);
-  const apiKey = mod.apiKeyFrom(env);
-  if (!apiKey) {
-    return { model: modelId, ok: false, status: 0, latencyMs: 0, error: 'no api key' };
-  }
+/**
+ * In-memory per-vendor cooldown for the MANUAL probe button. Each manual probe
+ * fans out N upstream calls (N = the vendor's catalog size), so a superadmin
+ * clicking repeatedly can burn meaningful free-tier quota. The scheduled() cron
+ * is naturally rate-limited by its schedule and does NOT use this. Pure +
+ * testable: the caller passes `nowMs`, and the min interval is configurable.
+ */
+const MANUAL_PROBE_MIN_INTERVAL_MS = 60_000; // at most one manual probe per vendor per minute
+const lastManualProbeAt = new Map<string, number>();
 
-  const t0 = Date.now();
-  try {
-    const result = await mod.call({
-      apiKey,
-      model: modelId,
-      messages: PROBE_MESSAGES,
-      maxTokens: 1,
-      temperature: 0,
-      title: 'Builderforce health probe',
-    });
-    const latencyMs = Date.now() - t0;
-    // Empty-but-200 (content === '' with no tool_calls) is *fine* for a probe —
-    // we don't need real content, we just need to know the upstream accepted
-    // the call. So success is "no throw + no fatal error".
-    void result;
-    return { model: modelId, ok: true, status: 200, latencyMs };
-  } catch (err) {
-    const latencyMs = Date.now() - t0;
-    if (err instanceof VendorRetryableError || err instanceof VendorFatalError) {
-      return {
-        model: modelId,
-        ok: false,
-        status: err.status,
-        latencyMs,
-        error: err.message.slice(0, 240),
-      };
-    }
-    const msg = err instanceof Error ? err.message : String(err);
-    return { model: modelId, ok: false, status: 0, latencyMs, error: msg.slice(0, 240) };
+export function tryAcquireProbeSlot(
+  vendor: string,
+  nowMs: number,
+  minIntervalMs: number = MANUAL_PROBE_MIN_INTERVAL_MS,
+): { ok: true } | { ok: false; retryAfterMs: number } {
+  const last = lastManualProbeAt.get(vendor);
+  if (last !== undefined && nowMs - last < minIntervalMs) {
+    return { ok: false, retryAfterMs: minIntervalMs - (nowMs - last) };
   }
+  lastManualProbeAt.set(vendor, nowMs);
+  return { ok: true };
+}
+
+/** Test-only: clear the manual-probe cooldown state between cases. */
+export function _resetProbeCooldowns(): void {
+  lastManualProbeAt.clear();
+}
+
+/** The per-item outcome a probe fn returns for one catalog model (before timing
+ *  + the exception classification `runCatalogProbe` layers on). */
+export interface ProbeOutcome {
+  ok: boolean;
+  status: number;
+  error?: string;
+}
+
+/** Aggregate a catalog probe: run `probeOne` for every model (in parallel),
+ *  timing + classifying each (a thrown `VendorRetryableError`/`VendorFatalError`
+ *  → its `.status`; any other throw → status 0), then roll the results up into
+ *  the ok/down/degraded/unconfigured status ladder. Shared verbatim by the chat
+ *  and image health probes — only `probeOne` (the per-model `mod.call` vs
+ *  `mod.generate` + the "usable result" test) differs per surface. */
+export async function runCatalogProbe<M extends { id: string }>(
+  catalog: ReadonlyArray<M>,
+  probeOne: (entry: M) => Promise<ProbeOutcome>,
+): Promise<{
+  models: ModelProbeResult[];
+  okCount: number;
+  failedCount: number;
+  latencyMs: number;
+  status: VendorHealthStatus;
+}> {
+  const models = await Promise.all(
+    catalog.map(async (entry): Promise<ModelProbeResult> => {
+      const t0 = Date.now();
+      try {
+        const r = await probeOne(entry);
+        return { model: entry.id, ok: r.ok, status: r.status, latencyMs: Date.now() - t0, ...(r.error ? { error: r.error } : {}) };
+      } catch (err) {
+        const latencyMs = Date.now() - t0;
+        if (err instanceof VendorRetryableError || err instanceof VendorFatalError) {
+          return { model: entry.id, ok: false, status: err.status, latencyMs, error: err.message.slice(0, 240) };
+        }
+        const msg = err instanceof Error ? err.message : String(err);
+        return { model: entry.id, ok: false, status: 0, latencyMs, error: msg.slice(0, 240) };
+      }
+    }),
+  );
+
+  const okCount     = models.filter((m) => m.ok).length;
+  const failedCount = models.length - okCount;
+  const latencyMs   = models.reduce((acc, m) => Math.max(acc, m.latencyMs), 0);
+
+  let status: VendorHealthStatus;
+  if (models.length === 0)        status = 'unconfigured';
+  else if (okCount === 0)         status = 'down';
+  else if (failedCount === 0)     status = 'ok';
+  else                            status = 'degraded';
+
+  return { models, okCount, failedCount, latencyMs, status };
 }
 
 /** Probe every model in a vendor's catalog in parallel. */
@@ -107,19 +145,26 @@ export async function probeVendor(env: VendorEnv, vendor: VendorId): Promise<Ven
     };
   }
 
-  const models = await Promise.all(
-    mod.catalog.map((entry) => probeModel(env, vendor, entry.id)),
+  const { models, okCount, failedCount, latencyMs, status } = await runCatalogProbe(
+    mod.catalog,
+    async (entry): Promise<ProbeOutcome> => {
+      const apiKey = mod.apiKeyFrom(env);
+      if (!apiKey) return { ok: false, status: 0, error: 'no api key' };
+      const result = await mod.call({
+        apiKey,
+        model: entry.id,
+        messages: PROBE_MESSAGES,
+        maxTokens: 1,
+        temperature: 0,
+        title: 'Builderforce health probe',
+      });
+      // Empty-but-200 (content === '' with no tool_calls) is *fine* for a probe —
+      // we don't need real content, we just need to know the upstream accepted
+      // the call. So success is "no throw + no fatal error".
+      void result;
+      return { ok: true, status: 200 };
+    },
   );
-
-  const okCount     = models.filter((m) => m.ok).length;
-  const failedCount = models.length - okCount;
-  const latencyMs   = models.reduce((acc, m) => Math.max(acc, m.latencyMs), 0);
-
-  let status: VendorHealthStatus;
-  if (models.length === 0)        status = 'unconfigured';
-  else if (okCount === 0)         status = 'down';
-  else if (failedCount === 0)     status = 'ok';
-  else                            status = 'degraded';
 
   return {
     vendor,

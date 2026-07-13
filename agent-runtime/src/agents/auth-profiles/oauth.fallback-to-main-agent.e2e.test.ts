@@ -87,7 +87,7 @@ describe("resolveApiKeyForProfile fallback to main agent", () => {
     vi.stubGlobal("fetch", fetchSpy);
 
     // Load the secondary agent's store (will merge with main agent's store)
-    const loadedSecondaryStore = ensureAuthProfileStore(secondaryAgentDir);
+    const loadedSecondaryStore = await ensureAuthProfileStore(secondaryAgentDir);
 
     // Call resolveApiKeyForProfile with the secondary agent's expired credentials
     // This should:
@@ -147,7 +147,7 @@ describe("resolveApiKeyForProfile fallback to main agent", () => {
     });
     vi.stubGlobal("fetch", fetchSpy);
 
-    const loadedSecondaryStore = ensureAuthProfileStore(secondaryAgentDir);
+    const loadedSecondaryStore = await ensureAuthProfileStore(secondaryAgentDir);
 
     // Should throw because both agents have expired credentials
     await expect(

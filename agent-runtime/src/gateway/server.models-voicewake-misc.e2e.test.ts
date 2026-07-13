@@ -19,7 +19,7 @@ import {
   installGatewayTestHooks,
   occupyPort,
   onceMessage,
-  piSdkMock,
+  modelSdkMock,
   rpcReq,
   startGatewayServer,
   startServerWithClient,
@@ -218,8 +218,8 @@ describe("gateway server models + voicewake", () => {
   });
 
   test("models.list returns model catalog", async () => {
-    piSdkMock.enabled = true;
-    piSdkMock.models = [
+    modelSdkMock.enabled = true;
+    modelSdkMock.models = [
       { id: "gpt-test-z", provider: "openai", contextWindow: 0 },
       {
         id: "gpt-test-a",
@@ -289,12 +289,12 @@ describe("gateway server models + voicewake", () => {
       },
     ]);
 
-    expect(piSdkMock.discoverCalls).toBe(1);
+    expect(modelSdkMock.discoverCalls).toBe(1);
   });
 
   test("models.list rejects unknown params", async () => {
-    piSdkMock.enabled = true;
-    piSdkMock.models = [{ id: "gpt-test-a", name: "A", provider: "openai" }];
+    modelSdkMock.enabled = true;
+    modelSdkMock.models = [{ id: "gpt-test-a", name: "A", provider: "openai" }];
 
     const res = await rpcReq(ws, "models.list", { extra: true });
     expect(res.ok).toBe(false);

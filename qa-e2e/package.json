@@ -1,6 +1,6 @@
 {
   "name": "@builderforce/qa-e2e",
-  "version": "0.1.0",
+  "version": "2026.6.29",
   "private": true,
   "description": "Agentic QA — Playwright harness that pulls AI-generated specs, runs them authenticated, and reports results back to the API.",
   "type": "module",
@@ -9,12 +9,15 @@
     "test": "playwright test",
     "report": "tsx src/report.ts",
     "ci": "tsx src/pull-tests.ts && (playwright test; true) && tsx src/report.ts",
-    "type-check": "tsc --noEmit"
+    "explore": "tsx src/explore.ts",
+    "type-check": "tsc --noEmit",
+    "typecheck:native": "tsgo --noEmit"
   },
   "devDependencies": {
     "@playwright/test": "1.58.2",
     "@types/node": "^22.0.0",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.3",
+    "@typescript/native-preview": "7.0.0-dev.20260627.2"
   }
 }

@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { IExecutionRepository } from '../../domain/execution/IExecutionRepository';
 import { Execution, ExecutionProps } from '../../domain/execution/Execution';
 import {
@@ -22,6 +22,18 @@ export class ExecutionRepository implements IExecutionRepository {
     const rows = await this.db
       .select().from(executionsTable)
       .where(eq(executionsTable.taskId, taskId))
+      .orderBy(desc(executionsTable.createdAt));
+    return rows.map(toDomain);
+  }
+
+  async findByTasksAndStatuses(taskIds: TaskId[], statuses: ExecutionStatus[]): Promise<Execution[]> {
+    if (taskIds.length === 0 || statuses.length === 0) return [];
+    const rows = await this.db
+      .select().from(executionsTable)
+      .where(and(
+        inArray(executionsTable.taskId, taskIds),
+        inArray(executionsTable.status, statuses),
+      ))
       .orderBy(desc(executionsTable.createdAt));
     return rows.map(toDomain);
   }
@@ -98,6 +110,7 @@ function toDomain(row: typeof executionsTable.$inferSelect): Execution {
     sessionId:    row.sessionId ?? null,
     status:       row.status as ExecutionStatus,
     payload:      row.payload ?? null,
+    cloudAgentRef: row.cloudAgentRef ?? null,
     result:       row.result ?? null,
     errorMessage: row.errorMessage ?? null,
     startedAt:    row.startedAt ?? null,

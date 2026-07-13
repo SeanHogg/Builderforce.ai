@@ -1,26 +1,41 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useTranslations } from 'next-intl';
+import { VANILLA_DEFAULTS } from '@/lib/vanillaDefaults';
 import { FileExplorer } from './FileExplorer';
 import { CodePane } from './CodePane';
 import { Terminal } from './Terminal';
 import { AITrainingPanel } from './AITrainingPanel';
 import { AgentPublishPanel } from './AgentPublishPanel';
+import { SitePublishPanel } from './SitePublishPanel';
 import { AgentStateViewer } from './AgentStateViewer';
-import { LlmStudioPanel } from './LlmStudioPanel';
+import { EvermindStudioPanel } from './EvermindStudioPanel';
+import { FinetuneStudioPanel } from './FinetuneStudioPanel';
 import { PreviewFrame } from './PreviewFrame';
-import { ProjectsSlideOutPanel } from './ProjectsSlideOutPanel';
+import { IdeProjectsSlideOutPanel } from './ide/IdeProjectsSlideOutPanel';
 import { BrainPanel } from './brain/BrainPanel';
+import { TeamChatButton } from './brain/TeamChatButton';
 import { IdeSettingsPanel } from './IdeSettingsPanel';
+import { useConfirm } from '@/components/ConfirmProvider';
+import { IdeAgentPanel } from './ide/IdeAgentPanel';
 import { useWebContainer } from '@/hooks/useWebContainer';
 import { useCollaboration } from '@/hooks/useCollaboration';
 import { useVideoVersions } from '@/hooks/useVideoVersions';
 import type { Project, FileEntry, TrainingJob } from '@/lib/types';
 import { saveFile, fetchFileContent, deleteFile, fetchFiles, updateProject } from '@/lib/api';
+import { validateFileContentForPath, coerceFileContent } from '@/lib/fileContentGuard';
+import { isBrainAutoApprove } from '@/lib/brain/autoApprove';
 import { useRegisterBrainActions, useBrainContext, savePrd, saveTasks, type BrainAction } from '@/lib/brain';
-import { MODALITIES, DEFAULT_MODALITY, getModality, RIGHT_TAB_LABELS, type ProjectModality, type RightTab } from '@/lib/modality';
+import { PrdReviewModal, TasksReviewModal } from './ArtifactReviewModals';
+import { getModality, RIGHT_TAB_LABELS, type ProjectModality, type RightTab } from '@/lib/modality';
+import { useModalityCopy } from '@/lib/useModalityCopy';
 import { getStoredTenantToken } from '@/lib/auth';
 import { getApiBaseUrl } from '@/lib/apiClient';
+import { useVoiceStudio } from '@/lib/voiceStudio';
+import { VoiceOutput } from './ide/VoiceOutput';
+import { VoiceConfigPanel } from './ide/VoiceConfigPanel';
+import { ProjectEvermindPanel } from './ide/ProjectEvermindPanel';
 import { StudioPanel } from '@seanhogg/builderforce-studio-embedded';
 import '@seanhogg/builderforce-studio-embedded/styles.css';
 
@@ -32,21 +47,48 @@ interface IDEProps {
   onOpenProjectDetails?: () => void;
   /** When opening from "Open in IDE" with a chat, select this project chat on load. */
   initialChatId?: number | null;
+  /** One-shot prompt auto-sent into the Brain panel on load (Project 360 seed). */
+  initialPrompt?: string;
+  /** One-shot work item to auto-link the opened chat to (`?ticket=<kind>:<ref>`). */
+  initialTicket?: { kind: string; ref: string };
 }
 
 type CenterView = 'preview' | 'code';
 
-export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId }: IDEProps) {
-  const [modality, setModality] = useState<ProjectModality>(
-    (project.modality as ProjectModality | undefined) ?? DEFAULT_MODALITY,
-  );
+/** Cheap, stable string hash (djb2) — used to skip npm install when package.json
+ *  is unchanged since the last install in this WebContainer session. */
+function hashString(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return String(h >>> 0);
+}
+
+/** A single in-WebContainer quality check (typecheck / lint / build). */
+interface CheckResult {
+  label: string;
+  status: 'pass' | 'fail' | 'skip';
+  detail?: string;
+}
+
+export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId, initialPrompt, initialTicket }: IDEProps) {
+  const t = useTranslations('ide');
+  const tc = useTranslations('common');
+  const confirm = useConfirm();
+  // The IDE is scoped to its project's type: modality is fixed at creation, not
+  // switchable in-session, so it's derived (and clamped) rather than state.
+  const modality: ProjectModality = getModality(project.modality).id;
+  // Localized modality copy (label / runLabel) for the header + run button.
+  const modalityCopy = useModalityCopy()(modality);
+  // Modalities that dock the Brain in the left panel (vs. the floating drawer):
+  // the coding Designer and the Voice studio both drive work from the chat.
+  const hasDockedBrain = modality === 'designer' || modality === 'voice';
   const [videoPrompt, setVideoPrompt] = useState('');
   const [files, setFiles] = useState<FileEntry[]>(initialFiles);
   const [openFiles, setOpenFiles] = useState<string[]>([]);
   const [activeFile, setActiveFile] = useState<string | undefined>();
   const [fileContents, setFileContents] = useState<Record<string, string>>({});
   const [centerView, setCenterView] = useState<CenterView>('preview');
-  const [rightTab, setRightTab] = useState<RightTab>('files');
+  const [rightTab, setRightTab] = useState<RightTab>(() => getModality(project.modality).rightTabs[0]);
   const [previewUrl, setPreviewUrl] = useState<string | undefined>();
   const [terminalWriter, setTerminalWriter] = useState<((data: string) => void) | undefined>();
   const [shellWriter, setShellWriter] = useState<WritableStreamDefaultWriter<string> | undefined>();
@@ -57,8 +99,25 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
   const [projectsPanelOpen, setProjectsPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [terminalExpanded, setTerminalExpanded] = useState(true);
+  const [isChecking, setIsChecking] = useState(false);
+  const [checkResults, setCheckResults] = useState<CheckResult[] | null>(null);
+  // When on, a Run is hard-gated on the last check pass — "code must be good
+  // before it runs". When off, failed checks only warn (confirm) before serving.
+  const [gateRunOnChecks, setGateRunOnChecks] = useState(true);
+  // Pending Brain-tool artifact reviews. The `generate_prd`/`generate_tasks`
+  // tools surface the generated artifact here and await the user's confirm/cancel
+  // (parity with the message-action button path), so nothing saves unreviewed.
+  const [prdReview, setPrdReview] = useState<{ prd: string; resolve: (saved: boolean) => void } | null>(null);
+  const [tasksReview, setTasksReview] = useState<
+    { titles: string[]; descriptions: string[]; resolve: (saved: boolean) => void } | null
+  >(null);
+  const [reviewSaving, setReviewSaving] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
   const shellStartedRef = useRef(false);
   const terminalWriteRef = useRef<((data: string) => void) | null>(null);
+  // package.json hash of the last successful npm install in this WC session, so
+  // Run/Check/Build can skip a redundant install when dependencies are unchanged.
+  const lastInstallHashRef = useRef<string | null>(null);
 
   // Keep title in sync when project prop changes (e.g. after save elsewhere)
   useEffect(() => {
@@ -74,11 +133,16 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modality]);
 
-  const { state: wcState, mountFiles, runCommand, runCommandAndWait, startShell, startDevServer, getOrBootWebContainer } = useWebContainer();
+  const { state: wcState, mountFiles, runCommand, runCommandAndWait, readDirRecursive, writeFileToContainer, startShell, startDevServer, getOrBootWebContainer } = useWebContainer();
   const { doc: ydoc, connected: collabConnected } = useCollaboration(project.id, 'user-local');
   // Video versions: hook owns the IDB-blob + project-file-sidecar persistence
   // triad, so this component just hands the three values straight to <StudioPanel>.
   const videoVersions = useVideoVersions(project.id, files);
+  const projectIdNum = typeof project.id === 'number' ? project.id : Number(project.id);
+  // Voice studio state (clones, selected voice, lines, generation). Always called
+  // for hook stability but only does work for Voice projects; the green Run button
+  // calls voice.synth() and the center/right panels render its state.
+  const voice = useVoiceStudio({ enabled: modality === 'voice', storageProjectId: projectIdNum });
 
   // Task 2: Boot WebContainer and spawn an interactive shell immediately on IDE load.
   // This makes the terminal live from the moment the IDE opens, not just after clicking Run.
@@ -158,13 +222,24 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
 
   const handleEditorChange = useCallback(async (value: string) => {
     if (!activeFile) return;
+    // Always reflect the keystroke locally (never lose typing).
     setFileContents(prev => ({ ...prev, [activeFile]: value }));
+    // But NEVER PERSIST structurally-invalid content to disk/container — the same
+    // guard apply_code_to_active_file uses. This is the editor onChange path that
+    // previously had no guard, so a cross-wired/agent write of the wrong file's
+    // content (e.g. HTML landing in the package.json model) was saved straight to
+    // disk and broke Run with "Invalid package.json" [1315]. A human mid-typing an
+    // invalid JSON state just defers the save until it parses again.
+    if (!validateFileContentForPath(activeFile, value).ok) return;
+    // Live reload: when a dev server is running, push the edit straight into the
+    // container FS so Vite HMR refreshes the preview without a full re-run.
+    if (previewUrl) writeFileToContainer(activeFile, value).catch(() => { /* best-effort */ });
     try {
       await saveFile(project.id, activeFile, value);
     } catch (e) {
       console.error('Failed to save:', e);
     }
-  }, [activeFile, project.id]);
+  }, [activeFile, project.id, previewUrl, writeFileToContainer]);
 
   const handleFileCreate = useCallback(async (path: string) => {
     try {
@@ -187,145 +262,123 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
     }
   }, [project.id, closeTab]);
 
+  /**
+   * Assemble the path→content map to mount into the WebContainer: the project's
+   * current contents (fetching any not yet loaded into state) plus run-only
+   * defaults for missing/empty required scaffold files. Returns null if a present
+   * package.json is invalid JSON. Shared by Run, Check and the publish build so
+   * the gather/defaults/validate logic lives in exactly one place.
+   */
+  const assembleMountContents = useCallback(async (
+    onLog?: (s: string) => void,
+  ): Promise<Record<string, string> | null> => {
+    const allContents: Record<string, string> = { ...fileContents };
+    const unfetched = files.filter(f => f.type === 'file' && !(f.path in allContents));
+    if (unfetched.length > 0) {
+      const fetched: Record<string, string> = {};
+      await Promise.all(unfetched.map(async (f) => {
+        try {
+          const content = await fetchFileContent(project.id, f.path);
+          allContents[f.path] = content;
+          fetched[f.path] = content;
+        } catch (error) {
+          onLog?.(`  \x1b[31m✗\x1b[0m ${f.path} - Failed to fetch\r\n`);
+          console.error(`Failed to fetch ${f.path}:`, error);
+        }
+      }));
+      // Persist only real project data (never the run-only defaults below).
+      if (Object.keys(fetched).length > 0) {
+        setFileContents(prev => ({ ...prev, ...fetched }));
+        setFiles(prev => {
+          const have = new Set(prev.map(f => f.path));
+          const add = Object.keys(fetched)
+            .filter(p => !have.has(p))
+            .map(path => ({ path, content: fetched[path], type: 'file' as const }));
+          return add.length > 0 ? [...prev, ...add] : prev;
+        });
+      }
+    }
+
+    const mount: Record<string, string> = { ...allContents };
+    for (const [path, content] of Object.entries(VANILLA_DEFAULTS)) {
+      if (!mount[path] || mount[path].trim() === '') {
+        onLog?.(`  \x1b[33m⚠\x1b[0m ${path} is empty, using default for this run only\r\n`);
+        mount[path] = content;
+      }
+    }
+    if (mount['package.json']) {
+      try {
+        JSON.parse(mount['package.json']);
+      } catch (e) {
+        onLog?.('\r\n\x1b[31m✗ Invalid package.json\x1b[0m\r\n');
+        return null;
+      }
+    }
+    return mount;
+  }, [fileContents, files, project.id]);
+
+  /**
+   * Run `npm install` only when package.json changed since the last install in
+   * this WebContainer session (the singleton container keeps node_modules across
+   * runs). Returns the install exit code (0 when skipped). Cuts the dominant cost
+   * of every Run/Check after the first.
+   */
+  const ensureInstalled = useCallback(async (
+    mount: Record<string, string>,
+    onOutput?: (data: string) => void,
+  ): Promise<number> => {
+    if (!mount['package.json']) return 0;
+    const hash = hashString(mount['package.json']);
+    if (lastInstallHashRef.current === hash) {
+      onOutput?.('  \x1b[32m✓\x1b[0m Dependencies unchanged — skipping npm install.\r\n');
+      return 0;
+    }
+    const code = await runCommandAndWait('npm', ['install'], onOutput);
+    if (code === 0) lastInstallHashRef.current = hash;
+    return code;
+  }, [runCommandAndWait]);
+
   const handleRun = useCallback(async () => {
     if (isRunning) return;
+    // Gate on the last check result so a known-broken build isn't served as a
+    // preview. Hard-gate when enabled; otherwise warn and let the user override.
+    const failedChecks = checkResults?.filter((r) => r.status === 'fail') ?? [];
+    if (failedChecks.length > 0) {
+      const summary = failedChecks.map((r) => r.label).join(', ');
+      if (gateRunOnChecks) {
+        terminalWriter?.('\r\n\x1b[31m✗ Run blocked — last checks failed: ' + summary + '\x1b[0m\r\n');
+        terminalWriter?.('\x1b[33m  Fix the issues and re-run Check, or turn off "Gate Run on checks" to override.\x1b[0m\r\n');
+        return;
+      }
+      if (typeof window !== 'undefined' &&
+        !(await confirm({ message: tc('servePreviewAnywayConfirm', { summary }), destructive: false }))) {
+        return;
+      }
+    }
     setIsRunning(true);
     try {
       terminalWriter?.('\r\n\x1b[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n');
       terminalWriter?.('\x1b[36m▶ Run started\x1b[0m\r\n');
       terminalWriter?.('\x1b[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n\r\n');
 
-      // Build project contents only (no overwriting user's files)
-      const allContents: Record<string, string> = { ...fileContents };
-      const unfetched = files.filter(f => f.type === 'file' && !(f.path in allContents));
-      const fetchedContents: Record<string, string> = {};
-
-      terminalWriter?.('\x1b[36m[1/4] Fetching file contents...\x1b[0m\r\n');
-      if (unfetched.length === 0) {
-        terminalWriter?.('  No files to fetch (using cached content).\r\n');
-      } else {
-        await Promise.all(
-          unfetched.map(async (f) => {
-            try {
-              const content = await fetchFileContent(project.id, f.path);
-              allContents[f.path] = content;
-              fetchedContents[f.path] = content;
-              terminalWriter?.(`  \x1b[32m✓\x1b[0m ${f.path}\r\n`);
-            } catch (error) {
-              terminalWriter?.(`  \x1b[31m✗\x1b[0m ${f.path} - Failed to fetch\r\n`);
-              console.error(`Failed to fetch ${f.path}:`, error);
-            }
-          })
-        );
-        terminalWriter?.(`  Fetched ${unfetched.length} file(s).\r\n`);
-      }
-      // Update state only with project data (newly fetched), never with Run defaults
-      if (Object.keys(fetchedContents).length > 0) {
-        setFileContents(prev => ({ ...prev, ...fetchedContents }));
-        setFiles(prev => {
-          const existingPaths = new Set(prev.map(f => f.path));
-          const added = Object.keys(fetchedContents)
-            .filter(p => !existingPaths.has(p))
-            .map(path => ({ path, content: fetchedContents[path], type: 'file' as const }));
-          return added.length > 0 ? [...prev, ...added] : prev;
-        });
-      }
-      terminalWriter?.('\r\n');
-
-      terminalWriter?.('\x1b[36m[2/4] Checking project files...\x1b[0m\r\n');
-      // For mount only: use a copy and fill defaults for missing/empty required files (do not overwrite project state)
-      const mountContents: Record<string, string> = { ...allContents };
-      const defaultPackageJson = JSON.stringify({
-        name: 'my-app',
-        version: '1.0.0',
-        type: 'module',
-        scripts: { dev: 'vite', build: 'vite build', preview: 'vite preview' },
-        dependencies: { react: '^18.2.0', 'react-dom': '^18.2.0' },
-        devDependencies: { '@vitejs/plugin-react': '^4.0.0', vite: '^4.3.9' }
-      }, null, 2);
-      const defaultIndexHtml = `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My App</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
-</html>`;
-      const defaultMainJsx = `import React from 'react';
-import ReactDOM from 'react-dom/client';
-import './index.css';
-
-function App() {
-  return (
-    <div style={{ padding: '2rem', fontFamily: 'system-ui' }}>
-      <h1>Hello World! 🚀</h1>
-      <p>Edit src/main.jsx to get started.</p>
-    </div>
-  );
-}
-
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);`;
-      const defaultIndexCss = `body {
-  margin: 0;
-  padding: 0;
-  font-family: system-ui, -apple-system, sans-serif;
-}`;
-      const defaultViteConfig = `import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-
-export default defineConfig({
-  plugins: [react()],
-});`;
-
-      if (!mountContents['package.json'] || mountContents['package.json'].trim() === '') {
-        terminalWriter?.('  \x1b[33m⚠\x1b[0m package.json is empty, using default for this run only\r\n');
-        mountContents['package.json'] = defaultPackageJson;
-      }
-      if (!mountContents['index.html'] || mountContents['index.html'].trim() === '') {
-        terminalWriter?.('  \x1b[33m⚠\x1b[0m index.html is empty, using default for this run only\r\n');
-        mountContents['index.html'] = defaultIndexHtml;
-      }
-      if (!mountContents['src/main.jsx'] || mountContents['src/main.jsx'].trim() === '') {
-        terminalWriter?.('  \x1b[33m⚠\x1b[0m src/main.jsx is empty, using default for this run only\r\n');
-        mountContents['src/main.jsx'] = defaultMainJsx;
-      }
-      if (!mountContents['src/index.css'] || mountContents['src/index.css'].trim() === '') {
-        terminalWriter?.('  \x1b[33m⚠\x1b[0m src/index.css is empty, using default for this run only\r\n');
-        mountContents['src/index.css'] = defaultIndexCss;
-      }
-      if (!mountContents['vite.config.js'] || mountContents['vite.config.js'].trim() === '') {
-        terminalWriter?.('  \x1b[33m⚠\x1b[0m vite.config.js is empty, using default for this run only\r\n');
-        mountContents['vite.config.js'] = defaultViteConfig;
-      }
-
-      if (mountContents['package.json']) {
-        try {
-          JSON.parse(mountContents['package.json']);
-        } catch (e) {
-          terminalWriter?.('\r\n\x1b[31m✗ Invalid package.json\x1b[0m\r\n');
-          throw new Error('Invalid package.json: ' + (e instanceof Error ? e.message : 'Parse error'));
-        }
+      terminalWriter?.('\x1b[36m[1/3] Preparing project files...\x1b[0m\r\n');
+      const mountContents = await assembleMountContents((s) => terminalWriter?.(s));
+      if (!mountContents) {
+        throw new Error('Invalid package.json: please fix it in the Files tab.');
       }
       terminalWriter?.('  \x1b[32m✓\x1b[0m Project files ready.\r\n\r\n');
 
-      terminalWriter?.('\x1b[36m[3/4] Mounting project files...\x1b[0m\r\n');
+      terminalWriter?.('\x1b[36m[2/3] Mounting project files...\x1b[0m\r\n');
       await mountFiles(mountContents);
-      const fileCount = Object.keys(mountContents).length;
-      terminalWriter?.(`  \x1b[32m✓\x1b[0m Mounted ${fileCount} file(s).\r\n\r\n`);
+      terminalWriter?.(`  \x1b[32m✓\x1b[0m Mounted ${Object.keys(mountContents).length} file(s).\r\n\r\n`);
 
-      if (mountContents['package.json']) {
-        terminalWriter?.('\x1b[36m[4/4] Running npm install...\x1b[0m\r\n');
-        const installCode = await runCommandAndWait('npm', ['install'], (data) => terminalWriter?.(data));
-        if (installCode !== 0) {
-          terminalWriter?.('\r\n\x1b[31m✗ npm install failed (exit code ' + installCode + '). Fix errors above and try again.\x1b[0m\r\n');
-          return;
-        }
-        terminalWriter?.('\r\n  \x1b[32m✓\x1b[0m npm install completed.\r\n\r\n');
+      terminalWriter?.('\x1b[36m[3/3] Installing dependencies...\x1b[0m\r\n');
+      const installCode = await ensureInstalled(mountContents, (data) => terminalWriter?.(data));
+      if (installCode !== 0) {
+        terminalWriter?.('\r\n\x1b[31m✗ npm install failed (exit code ' + installCode + '). Fix errors above and try again.\x1b[0m\r\n');
+        return;
       }
+      terminalWriter?.('\r\n  \x1b[32m✓\x1b[0m Dependencies ready.\r\n\r\n');
 
       terminalWriter?.('\x1b[36mStarting dev server...\x1b[0m\r\n');
       const url = await startDevServer((data) => terminalWriter?.(data));
@@ -367,7 +420,148 @@ export default defineConfig({
     } finally {
       setIsRunning(false);
     }
-  }, [isRunning, startDevServer, mountFiles, runCommandAndWait, terminalWriter, files, fileContents, project.id]);
+  }, [isRunning, startDevServer, mountFiles, assembleMountContents, ensureInstalled, terminalWriter, checkResults, gateRunOnChecks]);
+
+  /**
+   * Build the project in the WebContainer and capture its `dist/` output for
+   * publishing. Mirrors handleRun's mount + install, then runs `npm run build`
+   * (instead of the dev server) and reads the build directory back out. Shared
+   * singleton container, so this reuses any already-installed deps.
+   */
+  const handlePublishBuild = useCallback(async (): Promise<Array<{ path: string; data: Uint8Array }>> => {
+    terminalWriter?.('\r\n\x1b[36m━━━ Building for publish ━━━\x1b[0m\r\n');
+
+    const mount = await assembleMountContents((s) => terminalWriter?.(s));
+    if (!mount) throw new Error('Invalid package.json: please fix it in the Files tab.');
+
+    await mountFiles(mount);
+    terminalWriter?.('\x1b[36mnpm install…\x1b[0m\r\n');
+    const installCode = await ensureInstalled(mount, (d) => terminalWriter?.(d));
+    if (installCode !== 0) throw new Error(`npm install failed (exit ${installCode}).`);
+    // Force a RELATIVE asset base (`--base=./`). Vite defaults to `base: '/'`,
+    // which emits root-absolute asset URLs (`/assets/...`). Those only resolve
+    // when the site is served from the domain root, so they 404 under the path
+    // form `/api/sites/<sub>/` (the "preview" + pre-TLS fallback). Relative URLs
+    // resolve correctly BOTH at `<sub>.apps.builderforce.ai/` and under the path
+    // prefix. The flag overrides whatever the project's vite config sets.
+    terminalWriter?.('\r\n\x1b[36mnpm run build…\x1b[0m\r\n');
+    const buildCode = await runCommandAndWait('npm', ['run', 'build', '--', '--base=./'], (d) => terminalWriter?.(d));
+    if (buildCode !== 0) throw new Error(`Build failed (exit ${buildCode}). Check the build output above.`);
+
+    const assets = await readDirRecursive('dist');
+    if (assets.length === 0) {
+      throw new Error('Build produced no dist/ output. Ensure your build script outputs to "dist".');
+    }
+    terminalWriter?.(`\r\n  \x1b[32m✓\x1b[0m Captured ${assets.length} built file(s).\r\n`);
+    return assets;
+  }, [assembleMountContents, ensureInstalled, mountFiles, runCommandAndWait, readDirRecursive, terminalWriter]);
+
+  /**
+   * Run the project's quality checks inside the WebContainer — real, in-browser
+   * validation of the code the IDE/agent produced. Mounts + installs (reusing the
+   * install cache), then runs type-check, lint and build from the project's own
+   * package.json scripts (skipping any it doesn't define). Surfaces a pass/fail
+   * summary the Run button reads to warn before serving a broken preview.
+   */
+  const handleCheck = useCallback(async () => {
+    if (isChecking || isRunning) return;
+    setIsChecking(true);
+    setCheckResults(null);
+    try {
+      terminalWriter?.('\r\n\x1b[36m━━━ Running checks ━━━\x1b[0m\r\n');
+      const mount = await assembleMountContents((s) => terminalWriter?.(s));
+      if (!mount) {
+        setCheckResults([{ label: 'package.json', status: 'fail', detail: 'Invalid JSON' }]);
+        return;
+      }
+      let scripts: Record<string, string> = {};
+      let hasTypescript = false;
+      try {
+        const pkg = JSON.parse(mount['package.json'] ?? '{}') as {
+          scripts?: Record<string, string>;
+          dependencies?: Record<string, string>;
+          devDependencies?: Record<string, string>;
+        };
+        scripts = pkg.scripts ?? {};
+        hasTypescript = !!(pkg.dependencies?.typescript || pkg.devDependencies?.typescript);
+      } catch { /* validated above */ }
+
+      // When we'll fall back to `npx tsc --noEmit` (TS present, no project
+      // typecheck script) and the project ships no tsconfig.json, synthesize a
+      // minimal one into the WebContainer so tsc doesn't bail with "no inputs"/
+      // default-config noise. Mounted only in the WC — never persisted to the project.
+      const willUseTscFallback = hasTypescript && !scripts['typecheck'];
+      if (willUseTscFallback && !mount['tsconfig.json']) {
+        mount['tsconfig.json'] = JSON.stringify(
+          {
+            compilerOptions: {
+              target: 'ES2020',
+              module: 'ESNext',
+              moduleResolution: 'Bundler',
+              jsx: 'react-jsx',
+              strict: true,
+              noEmit: true,
+              esModuleInterop: true,
+              skipLibCheck: true,
+              allowJs: true,
+              resolveJsonModule: true,
+              isolatedModules: true,
+            },
+            include: ['**/*.ts', '**/*.tsx'],
+          },
+          null,
+          2,
+        );
+        terminalWriter?.('\x1b[2m  (synthesized a minimal tsconfig.json for the type-check fallback)\x1b[0m\r\n');
+      }
+
+      await mountFiles(mount);
+      const installCode = await ensureInstalled(mount, (d) => terminalWriter?.(d));
+      if (installCode !== 0) {
+        setCheckResults([{ label: 'npm install', status: 'fail', detail: `exit ${installCode}` }]);
+        return;
+      }
+
+      // Each check: prefer the project's own script; fall back to a sensible
+      // default only when the toolchain is clearly present.
+      const plan: Array<{ label: string; cmd: [string, string[]] | null }> = [
+        {
+          label: 'type-check',
+          cmd: scripts['typecheck']
+            ? ['npm', ['run', 'typecheck']]
+            : hasTypescript
+              ? ['npx', ['tsc', '--noEmit']]
+              : null,
+        },
+        { label: 'lint', cmd: scripts['lint'] ? ['npm', ['run', 'lint']] : null },
+        { label: 'build', cmd: scripts['build'] ? ['npm', ['run', 'build']] : null },
+      ];
+
+      const results: CheckResult[] = [];
+      for (const step of plan) {
+        if (!step.cmd) {
+          results.push({ label: step.label, status: 'skip', detail: 'no script' });
+          continue;
+        }
+        terminalWriter?.(`\r\n\x1b[36m▶ ${step.label}…\x1b[0m\r\n`);
+        const code = await runCommandAndWait(step.cmd[0], step.cmd[1], (d) => terminalWriter?.(d));
+        results.push({ label: step.label, status: code === 0 ? 'pass' : 'fail', detail: code === 0 ? undefined : `exit ${code}` });
+      }
+      setCheckResults(results);
+      const failed = results.filter(r => r.status === 'fail').length;
+      terminalWriter?.(
+        failed === 0
+          ? '\r\n\x1b[32m✓ All checks passed.\x1b[0m\r\n'
+          : `\r\n\x1b[31m✗ ${failed} check(s) failed.\x1b[0m\r\n`,
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      terminalWriter?.(`\r\n\x1b[31m✗ Check error: ${msg}\x1b[0m\r\n`);
+      setCheckResults([{ label: 'checks', status: 'fail', detail: msg }]);
+    } finally {
+      setIsChecking(false);
+    }
+  }, [isChecking, isRunning, assembleMountContents, ensureInstalled, mountFiles, runCommandAndWait, terminalWriter]);
 
   const handleTerminalInput = useCallback((data: string) => {
     shellWriter?.write(data);
@@ -381,34 +575,29 @@ export default defineConfig({
     } catch { /* silent */ }
   }, [project.id]);
 
-  const handleModalityChange = useCallback(
-    (next: ProjectModality) => {
-      if (next === modality) return;
-      setModality(next);
-      // Persist the choice so reopening the project restores the modality.
-      updateProject(project.id, { modality: next })
-        .then((updated) => onProjectUpdate?.({ ...project, ...updated }))
-        .catch(() => { /* non-fatal: switch still applies for this session */ });
-    },
-    [modality, project, onProjectUpdate],
-  );
-
   // --- Brain integration ----------------------------------------------------
   // The IDE's AI lives in the global Brain drawer. The IDE exposes its
   // capabilities as MCP-style actions the Brain can call via tool-calling, and
   // publishes ambient context (project, modality, open file) the Brain reads.
-  const projectIdNum = typeof project.id === 'number' ? project.id : Number(project.id);
   const brainCtx = useBrainContext();
 
-  const applyCodeToActiveFile = useCallback((code: string) => {
-    if (!activeFile) return false;
+  const applyCodeToActiveFile = useCallback((code: string): { ok: true } | { ok: false; reason: string } => {
+    if (!activeFile) return { ok: false, reason: 'No file is open in the editor.' };
+    // Block structurally-invalid writes (e.g. CSS into package.json) before they
+    // corrupt the file and break Run [1315].
+    const valid = validateFileContentForPath(activeFile, code);
+    if (!valid.ok) { console.error(valid.reason); return valid; }
     setFileContents(prev => ({ ...prev, [activeFile]: code }));
+    if (previewUrl) writeFileToContainer(activeFile, code).catch(() => { /* best-effort */ });
     saveFile(project.id, activeFile, code).catch(console.error);
-    return true;
-  }, [activeFile, project.id]);
+    return { ok: true };
+  }, [activeFile, project.id, previewUrl, writeFileToContainer]);
 
-  const createProjectFile = useCallback((path: string, content: string) => {
+  const createProjectFile = useCallback((path: string, content: string): { ok: true } | { ok: false; reason: string } => {
+    const valid = validateFileContentForPath(path, content);
+    if (!valid.ok) { console.error(valid.reason); return valid; }
     setFileContents(prev => ({ ...prev, [path]: content }));
+    if (previewUrl) writeFileToContainer(path, content).catch(() => { /* best-effort */ });
     saveFile(project.id, path, content)
       .then(() => {
         refreshFiles();
@@ -418,12 +607,13 @@ export default defineConfig({
         }
       })
       .catch(console.error);
-  }, [project.id, refreshFiles, openFiles]);
+    return { ok: true };
+  }, [project.id, refreshFiles, openFiles, previewUrl, writeFileToContainer]);
 
   // Latest IDE state for action handlers, so the registered action array stays
   // stable (no re-registration churn) while `run()` reads current values.
-  const liveRef = useRef({ activeFile, modality, applyCodeToActiveFile, createProjectFile });
-  liveRef.current = { activeFile, modality, applyCodeToActiveFile, createProjectFile };
+  const liveRef = useRef({ activeFile, modality, applyCodeToActiveFile, createProjectFile, projectIdNum, setVoiceText: voice.setText });
+  liveRef.current = { activeFile, modality, applyCodeToActiveFile, createProjectFile, projectIdNum, setVoiceText: voice.setText };
 
   const brainActions = useMemo<BrainAction[]>(() => [
     {
@@ -437,10 +627,12 @@ export default defineConfig({
         },
         required: ['path', 'content'],
       },
-      run: async ({ path, content }: { path: string; content: string }) => {
+      run: async ({ path, content }: { path: string; content: unknown }) => {
         if (!path) return { error: 'A file path is required.' };
-        liveRef.current.createProjectFile(path, content ?? '');
-        return { created: path };
+        // Models often emit a structured body (e.g. package.json) as an object —
+        // coerce to text so the write never crashes on `.trim()` of a non-string.
+        const res = liveRef.current.createProjectFile(path, coerceFileContent(content));
+        return res.ok ? { created: path } : { error: res.reason };
       },
     },
     {
@@ -451,9 +643,9 @@ export default defineConfig({
         properties: { code: { type: 'string', description: 'New full contents for the open file' } },
         required: ['code'],
       },
-      run: async ({ code }: { code: string }) => {
-        const applied = liveRef.current.applyCodeToActiveFile(code ?? '');
-        return applied ? { applied: liveRef.current.activeFile } : { error: 'No file is open in the editor.' };
+      run: async ({ code }: { code: unknown }) => {
+        const res = liveRef.current.applyCodeToActiveFile(coerceFileContent(code));
+        return res.ok ? { applied: liveRef.current.activeFile } : { error: res.reason };
       },
     },
     {
@@ -471,6 +663,20 @@ export default defineConfig({
       },
     },
     {
+      name: 'set_narration_text',
+      description: 'Load the lines to synthesize into the voice studio (voice modality only). The user presses Generate to render them.',
+      parameters: {
+        type: 'object',
+        properties: { text: { type: 'string', description: 'The lines to narrate in the selected voice' } },
+        required: ['text'],
+      },
+      run: async ({ text }: { text: string }) => {
+        if (liveRef.current.modality !== 'voice') return { error: 'The project is not in Voice modality.' };
+        liveRef.current.setVoiceText(text ?? '');
+        return { loaded: true };
+      },
+    },
+    {
       name: 'generate_prd',
       description: 'Save a Product Requirements Document (markdown) to the project specs.',
       parameters: {
@@ -480,8 +686,22 @@ export default defineConfig({
       },
       run: async ({ prd }: { prd: string }) => {
         if (!prd?.trim()) return { error: 'PRD content is empty.' };
-        await savePrd(projectIdNum, prd);
-        return { saved: true };
+        // Auto-approve skips the review modal — the user already opted out of
+        // per-action prompts, so save straight through.
+        if (isBrainAutoApprove()) {
+          try {
+            await savePrd(liveRef.current.projectIdNum, prd.trim());
+            return { saved: true };
+          } catch (e) {
+            return { error: e instanceof Error ? e.message : 'Failed to save PRD' };
+          }
+        }
+        // Surface for review; resolve once the user saves or cancels.
+        const saved = await new Promise<boolean>((resolve) => {
+          setReviewError(null);
+          setPrdReview({ prd: prd.trim(), resolve });
+        });
+        return saved ? { saved: true } : { saved: false, note: 'User declined to save the PRD.' };
       },
     },
     {
@@ -504,16 +724,76 @@ export default defineConfig({
       run: async ({ tasks }: { tasks: Array<{ title: string; description?: string }> }) => {
         const list = Array.isArray(tasks) ? tasks.filter(t => t?.title?.trim()) : [];
         if (list.length === 0) return { error: 'No tasks provided.' };
-        await saveTasks(projectIdNum, {
-          titles: list.map(t => t.title),
-          descriptions: list.map(t => t.description ?? ''),
+        const titles = list.map(t => t.title);
+        const descriptions = list.map(t => t.description ?? '');
+        // Auto-approve skips the review modal — the user already opted out of
+        // per-action prompts, so add the tasks straight through.
+        if (isBrainAutoApprove()) {
+          try {
+            await saveTasks(liveRef.current.projectIdNum, { titles, descriptions });
+            return { added: list.length };
+          } catch (e) {
+            return { error: e instanceof Error ? e.message : 'Failed to add tasks' };
+          }
+        }
+        // Surface for review; resolve once the user adds or cancels.
+        const saved = await new Promise<boolean>((resolve) => {
+          setReviewError(null);
+          setTasksReview({ titles, descriptions, resolve });
         });
-        return { added: list.length };
+        return saved ? { added: list.length } : { added: 0, note: 'User declined to add the tasks.' };
       },
     },
-  ], [projectIdNum]);
+    // Closures read only stable refs/setters + module imports; the actual save
+    // (which needs projectIdNum) happens in the review-confirm handlers below.
+  ], []);
 
   useRegisterBrainActions(brainActions);
+
+  // Review-modal handlers for the Brain `generate_prd`/`generate_tasks` tools.
+  const confirmPrdReview = useCallback(async () => {
+    if (!prdReview) return;
+    setReviewSaving(true);
+    setReviewError(null);
+    try {
+      await savePrd(projectIdNum, prdReview.prd);
+      prdReview.resolve(true);
+      setPrdReview(null);
+    } catch (e) {
+      setReviewError(e instanceof Error ? e.message : 'Failed to save PRD');
+    } finally {
+      setReviewSaving(false);
+    }
+  }, [prdReview, projectIdNum]);
+
+  const cancelPrdReview = useCallback(() => {
+    if (!prdReview) return;
+    prdReview.resolve(false);
+    setPrdReview(null);
+    setReviewError(null);
+  }, [prdReview]);
+
+  const confirmTasksReview = useCallback(async () => {
+    if (!tasksReview) return;
+    setReviewSaving(true);
+    setReviewError(null);
+    try {
+      await saveTasks(projectIdNum, { titles: tasksReview.titles, descriptions: tasksReview.descriptions });
+      tasksReview.resolve(true);
+      setTasksReview(null);
+    } catch (e) {
+      setReviewError(e instanceof Error ? e.message : 'Failed to add tasks');
+    } finally {
+      setReviewSaving(false);
+    }
+  }, [tasksReview, projectIdNum]);
+
+  const cancelTasksReview = useCallback(() => {
+    if (!tasksReview) return;
+    tasksReview.resolve(false);
+    setTasksReview(null);
+    setReviewError(null);
+  }, [tasksReview]);
 
   // Publish ambient context so the Brain knows the active project/modality and
   // can see the open file.
@@ -538,10 +818,20 @@ export default defineConfig({
   // left panel, so we pop the floating drawer instead.
   const setBrainOpen = brainCtx.setOpen;
   useEffect(() => {
-    if (initialChatId == null) return;
-    setBrainContext({ initialChatId });
-    if (modality !== 'designer') setBrainOpen(true);
-  }, [initialChatId, modality, setBrainContext, setBrainOpen]);
+    if (initialChatId == null && !initialPrompt && !initialTicket) return;
+    // Only the non-docked path needs the context publish + drawer pop; the docked
+    // Brain receives initialChatId/initialPrompt/initialTicket as direct props below.
+    if (hasDockedBrain) {
+      if (initialChatId != null) setBrainContext({ initialChatId });
+      return;
+    }
+    setBrainContext({
+      ...(initialChatId != null ? { initialChatId } : {}),
+      ...(initialPrompt ? { initialPrompt } : {}),
+      ...(initialTicket ? { initialTicket } : {}),
+    });
+    setBrainOpen(true);
+  }, [initialChatId, initialPrompt, initialTicket, hasDockedBrain, setBrainContext, setBrainOpen]);
 
   const statusLabel = wcState.status === 'booting'
     ? '⏳ Booting…'
@@ -563,7 +853,7 @@ export default defineConfig({
         <button
           type="button"
           onClick={() => setProjectsPanelOpen(true)}
-          aria-label="Open projects"
+          aria-label={t('openProjectsAria')}
           style={{
             background: 'var(--bg-elevated)',
             color: 'var(--text-secondary)',
@@ -578,7 +868,7 @@ export default defineConfig({
             justifyContent: 'center',
             gap: 3,
           }}
-          title="All projects"
+          title={t('yourIdeProjects')}
         >
           <span style={{ width: 18, height: 2, background: 'currentColor', borderRadius: 1 }} />
           <span style={{ width: 18, height: 2, background: 'currentColor', borderRadius: 1 }} />
@@ -612,7 +902,7 @@ export default defineConfig({
           }}
           onFocus={e => { e.currentTarget.style.borderColor = 'var(--coral-bright)'; }}
           disabled={isSavingTitle}
-          title="Edit project name (saves on blur or Enter)"
+          title={t('editNameHint')}
           style={{
             fontFamily: 'var(--font-display)',
             fontWeight: 700,
@@ -652,7 +942,7 @@ export default defineConfig({
               alignItems: 'center',
               gap: 4,
             }}
-            title="Project details"
+            title={t('projectDetailsTitle')}
           >
             <span style={{ fontSize: '1rem' }}>▦</span>
             Details
@@ -663,8 +953,8 @@ export default defineConfig({
         <button
           type="button"
           onClick={() => setSettingsOpen(true)}
-          aria-label="Project settings"
-          title="Settings & repository"
+          aria-label={t('projectSettingsAria')}
+          title={t('settingsRepoTitle')}
           style={{
             background: 'var(--bg-elevated)',
             color: 'var(--text-secondary)',
@@ -680,45 +970,23 @@ export default defineConfig({
           ⚙️
         </button>
 
-        {/* Modality switcher — same chrome across modalities; one project, many modes */}
-        <div
-          role="tablist"
-          aria-label="Project modality"
+        {/* Team Chat — the project's group conversation (humans + agents) */}
+        {Number.isFinite(projectIdNum) && <TeamChatButton projectId={projectIdNum} />}
+
+        {/* Modality label — the IDE is scoped to this project's type (set at
+            creation), so it's shown, not switchable. */}
+        <span
+          title={t('modalityProject', { label: modalityCopy.label })}
           style={{
-            display: 'flex', gap: 2, marginLeft: 8, padding: 2,
-            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
-            borderRadius: 8, flexShrink: 0,
+            display: 'flex', alignItems: 'center', gap: 5, marginLeft: 8, flexShrink: 0,
+            padding: '4px 10px', fontSize: '0.78rem', fontWeight: 600,
+            fontFamily: 'var(--font-display)', color: 'var(--text-secondary)',
+            background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 8,
           }}
         >
-          {MODALITIES.map((m) => {
-            const active = modality === m.id;
-            const disabled = !!m.comingSoon;
-            return (
-              <button
-                key={m.id}
-                role="tab"
-                aria-selected={active}
-                disabled={disabled}
-                onClick={() => handleModalityChange(m.id)}
-                title={disabled ? `${m.label} — coming soon` : `${m.label} modality`}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 5,
-                  padding: '4px 10px', fontSize: '0.78rem', fontWeight: 600,
-                  fontFamily: 'var(--font-display)',
-                  background: active ? 'var(--bg-deep)' : 'transparent',
-                  color: active ? 'var(--text-primary)' : 'var(--text-muted)',
-                  border: 'none', borderRadius: 6,
-                  cursor: disabled ? 'not-allowed' : 'pointer',
-                  opacity: disabled ? 0.5 : 1,
-                }}
-              >
-                <span>{m.icon}</span>
-                {m.label}
-                {disabled && <span style={{ fontSize: '0.55rem', marginLeft: 2, opacity: 0.8 }}>·soon</span>}
-              </button>
-            );
-          })}
-        </div>
+          <span>{modalityCopy.icon}</span>
+          {modalityCopy.label}
+        </span>
 
         {/* Spacer */}
         <div style={{ flex: 1 }} />
@@ -733,59 +1001,146 @@ export default defineConfig({
         {statusLabel && (
           <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{statusLabel}</span>
         )}
-        {getModality(modality).showRunButton && (
-          <button
-            onClick={handleRun}
-            disabled={isRunning}
+        {getModality(modality).showChecks && checkResults && (() => {
+          const failed = checkResults.filter(r => r.status === 'fail').length;
+          const passed = checkResults.filter(r => r.status === 'pass').length;
+          return (
+            <span
+              title={checkResults.map(r => `${r.label}: ${r.status}${r.detail ? ` (${r.detail})` : ''}`).join('\n')}
+              style={{
+                fontSize: '0.72rem', fontWeight: 600, flexShrink: 0,
+                color: failed > 0 ? '#f87171' : '#4ade80',
+              }}
+            >
+              {failed > 0 ? `✗ ${failed} check${failed > 1 ? 's' : ''} failed` : `✓ ${passed} check${passed > 1 ? 's' : ''} passed`}
+            </span>
+          );
+        })()}
+        {getModality(modality).showChecks && (
+          <label
+            title={t('blockOnFailHint')}
             style={{
-              background: isRunning ? 'var(--bg-elevated)' : 'linear-gradient(135deg, #22c55e, #16a34a)',
-              color: '#fff', border: 'none', borderRadius: 8,
-              padding: '5px 14px', fontSize: '0.82rem', fontWeight: 600,
-              cursor: isRunning ? 'wait' : 'pointer', fontFamily: 'var(--font-display)',
-              display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
-              opacity: isRunning ? 0.6 : 1,
+              display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
+              fontSize: '0.72rem', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none',
             }}
           >
-            {isRunning ? '⏳ Running…' : '▶ Run'}
+            <input
+              type="checkbox"
+              checked={gateRunOnChecks}
+              onChange={(e) => setGateRunOnChecks(e.target.checked)}
+              style={{ cursor: 'pointer' }}
+            />
+            Gate Run
+          </label>
+        )}
+        {getModality(modality).showChecks && (
+          <button
+            onClick={handleCheck}
+            disabled={isChecking || isRunning}
+            title={t('runChecksHint')}
+            style={{
+              background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
+              border: '1px solid var(--border-subtle)', borderRadius: 8,
+              padding: '5px 12px', fontSize: '0.82rem', fontWeight: 600,
+              cursor: (isChecking || isRunning) ? 'wait' : 'pointer', fontFamily: 'var(--font-display)',
+              display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
+              opacity: (isChecking || isRunning) ? 0.6 : 1,
+            }}
+          >
+            {isChecking ? '⏳ Checking…' : '✓ Check'}
           </button>
         )}
+        {getModality(modality).showRunButton && (() => {
+          // Voice generates speech (voice.synth); Designer runs the dev server.
+          const isVoice = modality === 'voice';
+          const label = modalityCopy.runLabel;
+          const active = isVoice ? voice.busy : isRunning;
+          const disabled = active || (isVoice && !voice.selectedCloneId);
+          return (
+            <button
+              onClick={isVoice ? () => void voice.synth() : handleRun}
+              disabled={disabled}
+              title={isVoice && !voice.selectedCloneId ? 'Create or select a voice first' : undefined}
+              style={{
+                background: active ? 'var(--bg-elevated)' : 'linear-gradient(135deg, #22c55e, #16a34a)',
+                color: '#fff', border: 'none', borderRadius: 8,
+                padding: '5px 14px', fontSize: '0.82rem', fontWeight: 600,
+                cursor: active ? 'wait' : (disabled ? 'not-allowed' : 'pointer'), fontFamily: 'var(--font-display)',
+                display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
+                opacity: disabled ? 0.6 : 1,
+              }}
+            >
+              {active ? `⏳ ${isVoice ? 'Generating' : 'Running'}…` : `▶ ${label}`}
+            </button>
+          );
+        })()}
       </div>
 
-      <ProjectsSlideOutPanel
+      <IdeProjectsSlideOutPanel
         open={projectsPanelOpen}
         onClose={() => setProjectsPanelOpen(false)}
-        currentProjectId={typeof project.id === 'number' ? project.id : Number(project.id)}
+        currentStorageProjectId={typeof project.id === 'number' ? project.id : Number(project.id)}
       />
 
       <IdeSettingsPanel
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         projectId={projectIdNum}
+        onImported={refreshFiles}
       />
 
-      {/* Main content. In Designer the coding agent lives in the left panel
+      {/* Brain-tool artifact reviews — the agent's generate_prd/generate_tasks
+          surface here for confirm-before-save, matching the button-action path. */}
+      {prdReview && (
+        <PrdReviewModal
+          prd={prdReview.prd}
+          onCancel={cancelPrdReview}
+          onConfirm={confirmPrdReview}
+          saving={reviewSaving}
+          error={reviewError}
+        />
+      )}
+      {tasksReview && (
+        <TasksReviewModal
+          titles={tasksReview.titles}
+          descriptions={tasksReview.descriptions}
+          onCancel={cancelTasksReview}
+          onConfirm={confirmTasksReview}
+          saving={reviewSaving}
+          error={reviewError}
+        />
+      )}
+
+      {/* Main content. In Designer and Voice the agent lives in the left panel
           (the shared <BrainPanel> wired to this project's brain actions); other
           modalities use the global floating Brain drawer. Either way the IDE
-          registers the same actions, so the agent can create/apply files. */}
+          registers the same actions, so the agent can create/apply files or set
+          the narration lines. */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Designer left panel — LLM context + agent chat (reused Brain UI) */}
-        {modality === 'designer' && (
+        {/* Docked left panel (Designer + Voice) — context strip + agent chat */}
+        {hasDockedBrain && (
           <div style={{
             width: 340, minWidth: 340, flexShrink: 0,
             borderRight: '1px solid var(--border-subtle)',
             display: 'flex', flexDirection: 'column', overflow: 'hidden',
             background: 'var(--bg-base)',
           }}>
-            {/* LLM context strip — what the agent currently "sees" */}
+            {/* Context strip — what the agent currently "sees" / drives */}
             <div style={{
               flexShrink: 0, padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 6,
               borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-surface)',
               fontSize: '0.72rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden',
             }}>
-              <span title="Coding agent" style={{ fontSize: '0.9rem' }}>🤖</span>
-              <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Context:</span>
+              <span title={modality === 'voice' ? 'Voice director' : 'Coding agent'} style={{ fontSize: '0.9rem' }}>
+                {modality === 'voice' ? '🎙' : '🤖'}
+              </span>
+              <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
+                {modality === 'voice' ? 'Voice:' : 'Context:'}
+              </span>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {activeFile ? activeFile : 'whole project'}
+                {modality === 'voice'
+                  ? (voice.clones.find((c) => c.id === voice.selectedCloneId)?.name ?? 'none selected')
+                  : (activeFile ? activeFile : 'whole project')}
               </span>
             </div>
             <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -795,6 +1150,8 @@ export default defineConfig({
                 modality={modality}
                 extraSystem={extraSystem}
                 initialChatId={initialChatId}
+                initialPrompt={initialPrompt}
+                initialTicket={initialTicket}
               />
             </div>
           </div>
@@ -813,8 +1170,22 @@ export default defineConfig({
                 onSaveVersion={videoVersions.onSaveVersion}
                 onLoadVersion={videoVersions.onLoadVersion}
               />
+              {/* The project's self-learning Evermind — parity with the other
+                  studios (self-gating, localized, theme-aware). */}
+              {projectIdNum != null && (
+                <div style={{ padding: '0 16px 16px' }}>
+                  <ProjectEvermindPanel projectId={projectIdNum} />
+                </div>
+              )}
             </div>
-          ) : modality === 'llm' ? (
+          ) : modality === 'voice' ? (
+            <VoiceOutput
+              result={voice.result}
+              audioUrl={voice.audioUrl}
+              busy={voice.busy}
+              unavailable={voice.unavailable}
+            />
+          ) : modality === 'evermind' || modality === 'finetune' ? (
             activeFile ? (
               <CodePane
                 openFiles={openFiles}
@@ -828,12 +1199,16 @@ export default defineConfig({
               />
             ) : (
               <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-                <LlmStudioPanel
-                  projectId={project.id}
-                  files={files}
-                  onGoToTab={setRightTab}
-                  onOpenFile={openFile}
-                />
+                {modality === 'evermind' ? (
+                  <EvermindStudioPanel projectId={project.id} />
+                ) : (
+                  <FinetuneStudioPanel
+                    projectId={project.id}
+                    files={files}
+                    onGoToTab={setRightTab}
+                    onOpenFile={openFile}
+                  />
+                )}
               </div>
             )
           ) : (
@@ -964,6 +1339,9 @@ export default defineConfig({
             ))}
           </div>
           <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+            <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'voice' ? 'visible' : 'hidden', pointerEvents: rightTab === 'voice' ? 'auto' : 'none' }}>
+              {modality === 'voice' && <VoiceConfigPanel voice={voice} projectId={projectIdNum} />}
+            </div>
             <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'files' ? 'visible' : 'hidden', pointerEvents: rightTab === 'files' ? 'auto' : 'none' }}>
               <FileExplorer
                 files={files}
@@ -973,6 +1351,9 @@ export default defineConfig({
                 onFileDelete={async (path) => { await handleFileDelete(path); refreshFiles(); }}
                 showHeader={false}
               />
+            </div>
+            <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'agent' ? 'visible' : 'hidden', pointerEvents: rightTab === 'agent' ? 'auto' : 'none' }}>
+              {rightTab === 'agent' && <IdeAgentPanel projectId={project.id} />}
             </div>
             <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'train' ? 'visible' : 'hidden', pointerEvents: rightTab === 'train' ? 'auto' : 'none' }}>
               <AITrainingPanel
@@ -984,8 +1365,10 @@ export default defineConfig({
                 })}
               />
             </div>
-            <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'publish' ? 'visible' : 'hidden', pointerEvents: rightTab === 'publish' ? 'auto' : 'none' }}>
-              <AgentPublishPanel projectId={project.id} completedJobs={completedJobs} />
+            <div style={{ position: 'absolute', inset: 0, overflow: 'auto', visibility: rightTab === 'publish' ? 'visible' : 'hidden', pointerEvents: rightTab === 'publish' ? 'auto' : 'none' }}>
+              {modality === 'designer'
+                ? <SitePublishPanel projectId={project.id} projectName={project.name} onBuild={handlePublishBuild} />
+                : <AgentPublishPanel projectId={project.id} completedJobs={completedJobs} />}
             </div>
             <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'state' ? 'visible' : 'hidden', pointerEvents: rightTab === 'state' ? 'auto' : 'none' }}>
               <AgentStateViewer projectId={project.id} />

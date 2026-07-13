@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -10,11 +11,14 @@ import { ThemeToggleButton } from '@/app/ThemeProvider';
 import JsonLd from '@/components/JsonLd';
 import OAuthButtons from '@/components/OAuthButtons';
 import PasswordInput from '@/components/PasswordInput';
+import EmailVerificationStep from '@/components/account/EmailVerificationStep';
+import MarketingVisual from '@/components/account/MarketingVisual';
 import { loginSchema } from '@/lib/structured-data';
-import { LOGIN_FAQ, STATS } from '@/lib/content';
+import { LOGIN_MARKETING } from '@/lib/content';
 
 export default function LoginPageClient() {
   const router = useRouter();
+  const t = useTranslations('login');
   const searchParams = useSearchParams();
   const { login, isAuthenticated, hasTenant } = useAuth();
 
@@ -24,6 +28,21 @@ export default function LoginPageClient() {
   const [error, setError] = useState<string | null>(null);
   const [magicLinkSent, setMagicLinkSent] = useState(false);
   const [magicLinkLoading, setMagicLinkLoading] = useState(false);
+  // Set when an unverified account tries to sign in — swaps the form for the
+  // email-OTP step (a fresh code is emailed by the login endpoint).
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+
+  const finishAndRedirect = async () => {
+    const next = searchParams.get('next') || '/dashboard';
+    const token = getStoredWebToken();
+    if (!token) { router.push('/tenants'); return; }
+    const selected = await resolveAndSelectTenant(token);
+    if (selected) {
+      window.location.href = next;
+    } else {
+      router.push('/tenants' + (next !== '/dashboard' ? `?next=${encodeURIComponent(next)}` : ''));
+    }
+  };
 
   // Redirect when already authenticated (e.g. landed on /login with valid session).
   // Do NOT redirect during form submission — handleSubmit does tenant resolution and redirect.
@@ -47,25 +66,21 @@ export default function LoginPageClient() {
     setError(null);
     setIsLoading(true);
     try {
-      await login(email, password);
-      const next = searchParams.get('next') || '/dashboard';
-      const token = getStoredWebToken();
-      if (!token) { router.push('/tenants'); return; }
-      const selected = await resolveAndSelectTenant(token);
-      if (selected) {
-        window.location.href = next;
-      } else {
-        router.push('/tenants' + (next !== '/dashboard' ? `?next=${encodeURIComponent(next)}` : ''));
+      const res = await login(email, password);
+      if (res.needsVerification) {
+        setPendingEmail(res.email);
+        return;
       }
+      await finishAndRedirect();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      setError(err instanceof Error ? err.message : t('loginFailed'));
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleMagicLink = async () => {
-    if (!email) { setError('Enter your email address above first.'); return; }
+    if (!email) { setError(t('enterEmailFirst')); return; }
     setError(null);
     setMagicLinkLoading(true);
     try {
@@ -73,7 +88,7 @@ export default function LoginPageClient() {
       await requestMagicLink(email, next);
       setMagicLinkSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send magic link');
+      setError(err instanceof Error ? err.message : t('magicLinkFailed'));
     } finally {
       setMagicLinkLoading(false);
     }
@@ -102,6 +117,17 @@ export default function LoginPageClient() {
     letterSpacing: '0.04em',
     textTransform: 'uppercase',
   };
+
+  const focusIn = (e: React.FocusEvent<HTMLInputElement>) => {
+    e.currentTarget.style.borderColor = 'var(--coral-bright)';
+    e.currentTarget.style.boxShadow = '0 0 0 3px var(--surface-coral-soft)';
+  };
+  const focusOut = (e: React.FocusEvent<HTMLInputElement>) => {
+    e.currentTarget.style.borderColor = 'var(--border-subtle)';
+    e.currentTarget.style.boxShadow = 'none';
+  };
+
+  const marketing = LOGIN_MARKETING;
 
   return (
     <>
@@ -132,7 +158,7 @@ export default function LoginPageClient() {
               color: '#fff', textDecoration: 'none',
               fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '0.875rem',
             }}>
-              Sign up free
+              {t('navSignUp')}
             </Link>
           </div>
         </div>
@@ -140,20 +166,42 @@ export default function LoginPageClient() {
 
       {/* Split-panel layout: form left, marketing right */}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr', minHeight: 'calc(100vh - 60px)' }} className="auth-split-grid">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', minHeight: 'calc(100vh - 60px)', alignItems: 'start' }} className="auth-split-grid">
         {/* LEFT PANEL — form */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 20px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 20px', minHeight: 'calc(100vh - 60px)' }}>
         <div style={{ width: '100%', maxWidth: 400 }}>
           {/* Heading */}
           <div style={{ textAlign: 'center', marginBottom: 32 }}>
             <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '1.75rem', fontWeight: 700, marginBottom: 6, color: 'var(--text-primary)' }}>
-              Welcome back
+              {t('heading')}
             </h1>
             <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-              Sign in to your Builderforce.ai account
+              {t('subtitle')}
             </p>
           </div>
 
+          {/* Feature pills */}
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 28 }}>
+            {[t('pillLora'), t('pillRegistry'), t('pillEval')].map(f => (
+              <span key={f} style={{
+                fontSize: '0.75rem', fontWeight: 600,
+                background: 'var(--surface-coral-soft)',
+                color: 'var(--coral-bright)',
+                border: '1px solid var(--border-accent)',
+                borderRadius: 999, padding: '4px 12px',
+                fontFamily: 'var(--font-display)',
+              }}>{f}</span>
+            ))}
+          </div>
+
+          {pendingEmail ? (
+            <EmailVerificationStep
+              email={pendingEmail}
+              onVerified={finishAndRedirect}
+              onChangeEmail={() => setPendingEmail(null)}
+            />
+          ) : (
+          <>
           {/* Glass card form */}
           <div style={{
             background: 'var(--surface-card)',
@@ -165,7 +213,7 @@ export default function LoginPageClient() {
           }}>
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               <div>
-                <label htmlFor="email" style={labelStyle}>Email</label>
+                <label htmlFor="email" style={labelStyle}>{t('emailLabel')}</label>
                 <input
                   id="email"
                   type="email"
@@ -176,12 +224,12 @@ export default function LoginPageClient() {
                   placeholder="you@example.com"
                   style={inputStyle}
                   required
-                  onFocus={e => { e.currentTarget.style.borderColor = 'var(--coral-bright)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--surface-coral-soft)'; }}
-                  onBlur={e => { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.boxShadow = 'none'; }}
+                  onFocus={focusIn}
+                  onBlur={focusOut}
                 />
               </div>
               <div>
-                <label htmlFor="password" style={labelStyle}>Password</label>
+                <label htmlFor="password" style={labelStyle}>{t('passwordLabel')}</label>
                 <PasswordInput
                   id="password"
                   autoComplete="current-password"
@@ -219,7 +267,7 @@ export default function LoginPageClient() {
                   letterSpacing: '0.02em',
                 }}
               >
-                {isLoading ? 'Signing in…' : 'Sign In →'}
+                {isLoading ? t('signingIn') : t('submit')}
               </button>
             </form>
 
@@ -229,7 +277,7 @@ export default function LoginPageClient() {
             <div style={{ marginTop: 16, textAlign: 'center' }}>
               {magicLinkSent ? (
                 <p style={{ fontSize: '0.875rem', color: 'var(--coral-bright)', fontWeight: 600 }}>
-                  Check your email — a sign-in link is on its way.
+                  {t('magicLinkSent')}
                 </p>
               ) : (
                 <button
@@ -247,16 +295,18 @@ export default function LoginPageClient() {
                     fontFamily: 'var(--font-body)',
                   }}
                 >
-                  {magicLinkLoading ? 'Sending…' : 'Email me a magic link instead'}
+                  {magicLinkLoading ? t('sending') : t('magicLinkButton')}
                 </button>
               )}
             </div>
           </div>
+          </>
+          )}
 
           <p style={{ textAlign: 'center', fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: 20 }}>
-            Don&apos;t have an account?{' '}
+            {t('noAccount')}{' '}
             <Link href="/register" style={{ color: 'var(--coral-bright)', textDecoration: 'none', fontWeight: 600 }}>
-              Sign up free
+              {t('signUpLink')}
             </Link>
           </p>
         </div>
@@ -271,48 +321,61 @@ export default function LoginPageClient() {
           background: 'var(--surface-card)',
           borderLeft: '1px solid var(--border-subtle)',
         }}>
-          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>
-            Build, Train & Deploy AI Agents
-          </h2>
-          <p style={{ fontSize: '0.92rem', color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 24 }}>
-            {STATS.quotable.browserNative} {STATS.quotable.zeroGpuBills} {STATS.quotable.freeForever}
-          </p>
+          <div className="auth-marketing-content">
+            <span style={{
+              display: 'inline-block', marginBottom: 12,
+              fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+              color: 'var(--coral-bright)', background: 'var(--surface-coral-soft)',
+              border: '1px solid var(--border-accent)', borderRadius: 999, padding: '4px 12px',
+              fontFamily: 'var(--font-display)',
+            }}>{marketing.eyebrow}</span>
 
-          {/* Stat cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
-            {[
-              { value: '$0', label: 'Free forever' },
-              { value: '<60s', label: 'Setup time' },
-              { value: '0%', label: 'Commission' },
-              { value: '2B+', label: 'Params in-browser' },
-            ].map(s => (
-              <div key={s.label} style={{ padding: '14px 12px', background: 'var(--bg-elevated)', borderRadius: 12, textAlign: 'center', border: '1px solid var(--border-subtle)' }}>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.3rem', fontWeight: 700, color: 'var(--coral-bright)' }}>{s.value}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>{s.label}</div>
-              </div>
-            ))}
-          </div>
+            <MarketingVisual variant="standard" />
 
-          {/* Feature bullets */}
-          <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 24px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {['WebGPU LoRA fine-tuning in-browser', 'Dataset generation from a single prompt', 'AI evaluation with structured quality metrics', 'Publish to the global Workforce Registry', 'OAuth sign-in (Google, GitHub, LinkedIn, Microsoft)', 'No credit card required — free forever'].map(f => (
-              <li key={f} style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                <span style={{ color: 'var(--coral-bright)', fontWeight: 700, flexShrink: 0 }}>✓</span> {f}
-              </li>
-            ))}
-          </ul>
+            <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>
+              {marketing.heading}
+            </h2>
+            <p style={{ fontSize: '0.92rem', color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 24 }}>
+              {marketing.intro}
+            </p>
 
-          {/* FAQ section for GEO citability */}
-          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 20 }}>
-            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              Common Questions
-            </h3>
-            {LOGIN_FAQ.map(faq => (
-              <details key={faq.question} style={{ marginBottom: 8 }}>
-                <summary style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>{faq.question}</summary>
-                <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.6, marginTop: 4, paddingLeft: 12 }}>{faq.answer}</p>
-              </details>
-            ))}
+            {/* Stat cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
+              {marketing.stats.map(s => (
+                <div key={s.label} style={{ padding: '14px 12px', background: 'var(--bg-elevated)', borderRadius: 12, textAlign: 'center', border: '1px solid var(--border-subtle)' }}>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.3rem', fontWeight: 700, color: 'var(--coral-bright)' }}>{s.value}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Value-prop bullets */}
+            <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 24px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {marketing.bullets.map(b => (
+                <li key={b.title} style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: '1rem', flexShrink: 0, lineHeight: 1.4 }} aria-hidden>{b.icon}</span>
+                  <span><strong style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{b.title}</strong> — {b.desc}</span>
+                </li>
+              ))}
+            </ul>
+
+            {/* Comparison quote */}
+            <blockquote style={{ margin: '0 0 24px', padding: '14px 18px', borderLeft: '3px solid var(--coral-bright)', background: 'var(--bg-elevated)', borderRadius: '0 10px 10px 0', fontSize: '0.85rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+              &ldquo;{marketing.quote}&rdquo;
+            </blockquote>
+
+            {/* FAQ section for GEO citability */}
+            <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 20 }}>
+              <h3 style={{ fontFamily: 'var(--font-display)', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                {t('commonQuestions')}
+              </h3>
+              {marketing.faq.map(faq => (
+                <details key={faq.question} style={{ marginBottom: 8 }}>
+                  <summary style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>{faq.question}</summary>
+                  <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.6, marginTop: 4, paddingLeft: 12 }}>{faq.answer}</p>
+                </details>
+              ))}
+            </div>
           </div>
         </aside>
 
@@ -324,6 +387,14 @@ export default function LoginPageClient() {
         @media (min-width: 900px) {
           .auth-split-grid { grid-template-columns: 1fr 1fr !important; }
           .auth-marketing-panel { display: flex !important; }
+        }
+        .auth-marketing-content { animation: authMarketingFade 0.35s ease; }
+        @keyframes authMarketingFade {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .auth-marketing-content { animation: none; }
         }
       `}</style>
     </div>

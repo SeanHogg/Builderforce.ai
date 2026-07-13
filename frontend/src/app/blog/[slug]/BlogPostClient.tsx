@@ -6,6 +6,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { getPostBySlug } from '@/lib/blogData';
 import JsonLd from '@/components/JsonLd';
+import RelatedArticles from '@/components/blog/RelatedArticles';
+import BlogCover from '@/components/blog/BlogCover';
 import { blogPostSchema } from '@/lib/structured-data';
 
 export default function BlogPostClient({ params }: { params: Promise<{ slug: string }> }) {
@@ -192,45 +194,6 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
           margin: 2em 0;
         }
 
-        /* ── FOOTER ── */
-        .bpost-footer {
-          border-top: 1px solid var(--border-subtle);
-          padding: 36px 24px;
-          text-align: center;
-        }
-        .bpost-footer-inner {
-          max-width: 1100px;
-          margin: 0 auto;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 16px;
-        }
-        .bpost-footer-links {
-          display: flex;
-          flex-wrap: wrap;
-          justify-content: center;
-          gap: 2px;
-          list-style: none;
-        }
-        .bpost-footer-links a {
-          font-size: 0.82rem;
-          color: var(--text-muted);
-          text-decoration: none;
-          padding: 4px 10px;
-          border-radius: 6px;
-          transition: color 0.2s;
-        }
-        .bpost-footer-links a:hover { color: var(--text-secondary); }
-        .bpost-footer-copy {
-          font-size: 0.78rem;
-          color: var(--text-muted);
-        }
-        .bpost-footer-copy a {
-          color: var(--coral-bright);
-          text-decoration: none;
-        }
-
         @media (max-width: 640px) {
           .bpost-main { padding: 32px 16px 56px; }
         }
@@ -275,6 +238,8 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
               <h1 className="bpost-title">{post.title}</h1>
               <p className="bpost-description">{post.description}</p>
 
+              <BlogCover title={post.title} tags={post.tags} slug={post.slug} />
+
               <div className="bpost-content">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {post.content}
@@ -293,26 +258,9 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
           )}
         </main>
 
-        {/* ── Footer ── */}
-        <footer className="bpost-footer">
-          <div className="bpost-footer-inner">
-            <ul className="bpost-footer-links">
-              <li><Link href="/">Home</Link></li>
-              <li><Link href="/workforce">Workforce Registry</Link></li>
-              <li><Link href="/blog">Blog</Link></li>
-              <li><Link href="/login">Sign In</Link></li>
-              <li><Link href="/register">Get Started</Link></li>
-              <li><a href="https://builderforce.ai" target="_blank" rel="noopener">BuilderForce Agents</a></li>
-            </ul>
-            <p className="bpost-footer-copy">
-              Built by{' '}
-              <a href="https://myvideoresu.me/resumes/seanhogg" target="_blank" rel="noopener">
-                Sean Hogg
-              </a>
-              {' '}· Builderforce.ai © 2026
-            </p>
-          </div>
-        </footer>
+        {post && <RelatedArticles relatedToSlug={post.slug} heading="Related articles" />}
+
+        {/* Footer is the canonical <AppFooter variant="full"> rendered by PublicShell. */}
       </div>
     </>
   );

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { SessionState } from "../logging/diagnostic-session-state.js";
 import {
   calculateBackoffMs,
-  getCommandPollSuggestion,
   pruneStaleCommandPolls,
   recordCommandPoll,
   resetCommandPollCount,
@@ -89,30 +88,6 @@ describe("command-poll-backoff", () => {
 
       expect(state.commandPollCounts?.get("cmd-1")?.count).toBe(1); // 2 polls = index 1
       expect(state.commandPollCounts?.get("cmd-2")?.count).toBe(0); // 1 poll = index 0
-    });
-  });
-
-  describe("getCommandPollSuggestion", () => {
-    it("returns undefined for untracked command", () => {
-      const state: SessionState = {
-        lastActivity: Date.now(),
-        state: "processing",
-        queueDepth: 0,
-      };
-      expect(getCommandPollSuggestion(state, "unknown")).toBeUndefined();
-    });
-
-    it("returns current backoff for tracked command", () => {
-      const state: SessionState = {
-        lastActivity: Date.now(),
-        state: "processing",
-        queueDepth: 0,
-      };
-
-      recordCommandPoll(state, "cmd-123", false);
-      recordCommandPoll(state, "cmd-123", false);
-
-      expect(getCommandPollSuggestion(state, "cmd-123")).toBe(10000);
     });
   });
 

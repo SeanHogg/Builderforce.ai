@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { StreamFn } from "@mariozechner/pi-agent-core";
+import type { StreamFn } from "../builderforce/agent-loop/index.js";
 import type {
   AssistantMessage,
   StopReason,
@@ -7,8 +7,8 @@ import type {
   ToolCall,
   Tool,
   Usage,
-} from "@mariozechner/pi-ai";
-import { createAssistantMessageEventStream } from "@mariozechner/pi-ai";
+} from "../builderforce/model/types.js";
+import { createAssistantMessageEventStream } from "../builderforce/agent-loop/index.js";
 
 export interface LlamaStreamOptions {
   modelPath: string;

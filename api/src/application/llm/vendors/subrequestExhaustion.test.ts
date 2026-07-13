@@ -160,3 +160,36 @@ describe('dispatchVendor short-circuits on subrequest exhaustion', () => {
     expect(result.attempts).toHaveLength(2); // first two retried
   });
 });
+
+describe('dispatchVendor advances the cascade on a request-error (400) [1488]', () => {
+  it('tries the next vendor when one 400s, instead of bubbling out fatally', async () => {
+    // First model (openrouter) returns 400 → VendorFatalError; a vendor-dialect
+    // mismatch another upstream may accept. The cascade must ADVANCE, not stop.
+    let n = 0;
+    const fetchSpy = vi.fn(async () => {
+      n++;
+      if (n === 1) {
+        return new Response(
+          JSON.stringify({ error: { message: 'messages[0].role invalid', type: 'invalid_request_error' } }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: 'ok' } }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    (globalThis as { fetch: typeof fetch }).fetch = fetchSpy as unknown as typeof fetch;
+
+    const result = await dispatchVendor({
+      env: { OPENROUTER_API_KEY: 'sk-test', CEREBRAS_API_KEY: 'sk-test' },
+      modelChain: ['qwen/qwen3-coder:free' /* openrouter → 400 */, 'llama3.1-8b' /* cerebras → 200 */],
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);   // advanced past the 400
+    expect(result.content).toBe('ok');
+    expect(result.attempts).toHaveLength(1);      // the 400 is recorded as an advanced-past attempt
+    expect(result.attempts[0]?.status).toBe(400);
+  });
+});

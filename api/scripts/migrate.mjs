@@ -36,10 +36,12 @@ function loadDotEnv(path) {
 
 loadDotEnv(join(here, '../.env'));
 
-const NEON_DATABASE_URL = process.env.NEON_DATABASE_URL;
+const transactional = process.argv.includes('--transactional');
+const connectionKey = transactional ? 'NEON_TRANSACTIONAL_DATABASE_URL' : 'NEON_DATABASE_URL';
+const NEON_DATABASE_URL = process.env[connectionKey];
 if (!NEON_DATABASE_URL) {
-  console.error('❌  NEON_DATABASE_URL not set.');
-  console.error('   Create api/.env with: NEON_DATABASE_URL=postgresql://...');
+  console.error(`❌  ${connectionKey} not set.`);
+  console.error(`   Create api/.env with: ${connectionKey}=postgresql://...`);
   process.exit(1);
 }
 
@@ -173,7 +175,7 @@ const applied = new Set(
 // Discover & apply pending migrations
 // ---------------------------------------------------------------------------
 
-const migrationsDir = join(here, '../migrations');
+const migrationsDir = join(here, transactional ? '../transactional-migrations' : '../migrations');
 
 let files;
 try {
@@ -196,11 +198,17 @@ for (const file of files) {
 
   const stmts = splitSqlStatements(sqlText);
 
-  for (const stmt of stmts) {
-    await sql(stmt);
-  }
-
-  await sql('INSERT INTO _migrations (name) VALUES ($1)', [file]);
+  // Apply the whole file + its ledger row in ONE transaction. neon's HTTP
+  // transport is non-interactive (all queries must be known up front) — which
+  // is exactly the case here — so `sql.transaction([...])` wraps the file in a
+  // single BEGIN/COMMIT. A failure midway rolls the WHOLE file back, so a
+  // migration can never leave the DB half-applied with the file un-recorded
+  // (the failure mode 0056 hit). The ledger INSERT rides the same transaction,
+  // so "DDL applied" and "migration recorded" are atomic.
+  await sql.transaction([
+    ...stmts.map((stmt) => sql(stmt)),
+    sql('INSERT INTO _migrations (name) VALUES ($1)', [file]),
+  ]);
   applied_count++;
   console.log(`  ✅ ${file}`);
 }

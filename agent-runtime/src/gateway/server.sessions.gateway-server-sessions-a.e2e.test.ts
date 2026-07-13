@@ -9,7 +9,7 @@ import {
   connectOk,
   embeddedRunMock,
   installGatewayTestHooks,
-  piSdkMock,
+  modelSdkMock,
   rpcReq,
   testState,
   writeSessionStore,
@@ -368,8 +368,8 @@ describe("gateway server sessions", () => {
     });
     expect(spawnedPatchedInvalidKey.ok).toBe(false);
 
-    piSdkMock.enabled = true;
-    piSdkMock.models = [{ id: "gpt-test-a", name: "A", provider: "openai" }];
+    modelSdkMock.enabled = true;
+    modelSdkMock.models = [{ id: "gpt-test-a", name: "A", provider: "openai" }];
     const modelPatched = await rpcReq<{
       ok: true;
       entry: { modelOverride?: string; providerOverride?: string };

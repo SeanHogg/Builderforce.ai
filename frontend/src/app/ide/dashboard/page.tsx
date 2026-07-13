@@ -1,164 +1,243 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { persistLastProjectId } from '@/lib/auth';
-import { fetchProjects, createProject, deleteProject } from '@/lib/api';
+import {
+  listIdeProjects,
+  createIdeProject,
+  deleteIdeProject,
+  listIdeContainers,
+} from '@/lib/api';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
-import { MODALITIES, getModality, DEFAULT_MODALITY, type ProjectModality } from '@/lib/modality';
-import type { Project } from '@/lib/types';
-import { ProjectCard } from '@/components/ProjectCard';
+import { type ProjectModality } from '@/lib/modality';
+import { useModalityCopy, useLocalizedModalities } from '@/lib/useModalityCopy';
+import { EVERMIND_RECIPES, DEFAULT_EVERMIND_RECIPE, getEvermindRecipe, type EvermindRecipeId } from '@/lib/evermindRecipes';
+import { useLlmModels } from '@/lib/useLlmModels';
+import { listEvermindModels, type PublishedEvermindModel } from '@/lib/studioModelsApi';
+import type { IdeProject, IdeContainerOption } from '@/lib/types';
+import { IdeProjectCard } from '@/components/IdeProjectCard';
+import { IdeProjectDetailsModal } from '@/components/IdeProjectDetailsModal';
+import { ViewToggle } from '@/components/ViewToggle';
 import { UpgradeModal } from '@/components/UpgradeModal';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { useConfirm } from '@/components/ConfirmProvider';
+
+type IdeView = 'grouped' | 'card' | 'table';
 
 /**
- * IDE Dashboard — the IDE's landing page and project launcher.
+ * IDE Dashboard — the IDE's landing page and IDE-project launcher.
  *
- * Shows every project grouped by its IDE type (modality: Designer / Video / LLM)
- * and lets the user start a new project of any type. A project IS an IDE project,
- * typed by its `modality`; "create a Video project" just creates a project with
- * `modality: 'video'`.
- *
- * Query params:
- *   ?project=<id> — scope the list to a single project (used by the Projects-page
- *                   IDE icon, which deep-links here filtered to that project).
- *   ?type=<modality> — scope the list to one IDE type.
- *
- * Opening a project card loads it into the editor at /ide/<id>.
+ * Lists every IDE project (the buildable artifact: Designer / Video / Evermind /
+ * Fine-tune / Voice), each a first-class child of a Project. Three views: Grouped (by the
+ * parent Project), Card, and List. Creating one optionally nests it under a
+ * Project; opening it launches the editor at its backing storage project.
  */
 export default function IDEDashboardPage() {
+  const t = useTranslations('ide');
+  const modalityCopy = useModalityCopy();
+  const localizedModalities = useLocalizedModalities();
+  const confirm = useConfirm();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, hasTenant } = useAuth();
+  const { currentProjectId, currentProject, setProject } = useProjectScope();
 
-  const projectParam = searchParams.get('project');
   const typeParam = searchParams.get('type') as ProjectModality | null;
 
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [ideProjects, setIdeProjects] = useState<IdeProject[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<IdeView>('grouped');
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  const toggleGroup = useCallback((key: number | 'none') => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      const k = String(key);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  }, []);
 
   // New-project modal state
   const [createType, setCreateType] = useState<ProjectModality | null>(null);
   const [newName, setNewName] = useState('');
+  const [newParent, setNewParent] = useState<number | null>(null);
+  // Evermind modality: the one-click Evermind recipe (+ optional published model to seed from).
+  const [recipe, setRecipe] = useState<EvermindRecipeId>(DEFAULT_EVERMIND_RECIPE);
+  const [seedModelSlug, setSeedModelSlug] = useState<string | null>(null);
+  const [publishedModels, setPublishedModels] = useState<PublishedEvermindModel[]>([]);
+  const [publishedLoaded, setPublishedLoaded] = useState(false);
+  const [containers, setContainers] = useState<IdeContainerOption[]>([]);
   const [creating, setCreating] = useState(false);
   const [planError, setPlanError] = useState<PlanLimitError | null>(null);
+  // Model list is used only to preset a coding recipe's teacher (free plans self-learn).
+  const { codingModels, canChooseModel } = useLlmModels();
+
+  // Details (rename + reassign) modal state
+  const [detailsFor, setDetailsFor] = useState<IdeProject | null>(null);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      setIdeProjects(await listIdeProjects());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load IDE projects');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated) {
       router.replace('/login?next=/ide/dashboard');
     } else if (!hasTenant) {
       router.replace('/tenants?next=/ide/dashboard');
+    } else {
+      void reload();
     }
-  }, [isAuthenticated, hasTenant, router]);
+  }, [isAuthenticated, hasTenant, router, reload]);
 
+  // Pre-load the parent-Project options when the create modal opens (default the
+  // parent to the currently-scoped Project, if any).
   useEffect(() => {
-    if (!isAuthenticated || !hasTenant) return;
-    let cancelled = false;
-    fetchProjects()
-      .then((list) => { if (!cancelled) setProjects(list); })
-      .catch(() => { if (!cancelled) setError('Failed to load projects. Check your connection and try again.'); })
-      .finally(() => { if (!cancelled) setIsLoading(false); });
-    return () => { cancelled = true; };
-  }, [isAuthenticated, hasTenant]);
+    if (!createType) return;
+    setNewParent(currentProjectId ?? null);
+    listIdeContainers().then(setContainers).catch(() => setContainers([]));
+    // Evermind projects pick an Evermind recipe. Reset to the default, and load the
+    // tenant's published models so the "seed from a published model" recipe can offer them.
+    if (createType === 'evermind') {
+      setRecipe(DEFAULT_EVERMIND_RECIPE);
+      setSeedModelSlug(null);
+      setPublishedLoaded(false);
+      listEvermindModels()
+        .then(setPublishedModels)
+        .catch(() => setPublishedModels([]))
+        .finally(() => setPublishedLoaded(true));
+    }
+  }, [createType, currentProjectId]);
 
-  const openProject = (p: Project) => {
-    persistLastProjectId(String(p.id));
-    router.push(`/ide/${p.publicId ?? p.id}`);
+  const openIde = (p: IdeProject) => {
+    persistLastProjectId(String(p.storageProjectId));
+    router.push(`/ide/${p.storageProjectPublicId}`);
   };
+
+  const handleDelete = async (p: IdeProject) => {
+    if (!(await confirm(t('deleteConfirm', { name: p.name })))) return;
+    try {
+      await deleteIdeProject(p.id);
+      setIdeProjects((prev) => prev.filter((x) => x.id !== p.id));
+    } catch {
+      alert(t('deleteFailed'));
+    }
+  };
+
+  const activeRecipe = getEvermindRecipe(recipe);
+  // The only Evermind blocker left: the "seed from a published model" recipe needs a model.
+  const evermindNeedsSeed = createType === 'evermind' && !!activeRecipe.needsSeedModel && !seedModelSlug;
 
   const submitCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!createType || !newName.trim() || creating) return;
+    if (!createType || !newName.trim() || creating || evermindNeedsSeed) return;
     setCreating(true);
     setError(null);
     try {
-      const project = await createProject({ name: newName.trim(), modality: createType });
-      persistLastProjectId(String(project.id));
-      router.push(`/ide/${project.publicId ?? project.id}`);
+      // Preset a coding recipe's teacher to the tenant's top coding model, but only
+      // when the plan may pick a model at all (free plans self-learn on raw text).
+      const teacherModel = activeRecipe.teacher === 'coding' && canChooseModel ? (codingModels[0] ?? null) : null;
+      const created = await createIdeProject({
+        name: newName.trim(),
+        modality: createType,
+        containerProjectId: newParent,
+        ...(createType === 'evermind'
+          ? {
+              evermindRecipe: recipe,
+              evermindTeacherModel: teacherModel,
+              evermindSeedModelSlug: activeRecipe.needsSeedModel ? seedModelSlug : null,
+            }
+          : {}),
+      });
+      persistLastProjectId(String(created.storageProjectId));
+      router.push(`/ide/${created.storageProjectPublicId}`);
     } catch (err) {
       if (isPlanLimitError(err)) {
         setCreateType(null);
         setPlanError(err);
       } else {
-        setError(err instanceof Error ? err.message : 'Failed to create project');
+        setError(err instanceof Error ? err.message : 'Failed to create IDE project');
       }
     } finally {
       setCreating(false);
     }
   };
 
-  // The single project this view is scoped to, if any (matches numeric id or publicId).
-  const scopedProject = useMemo(
-    () => (projectParam ? projects.find((p) => String(p.id) === projectParam || p.publicId === projectParam) ?? null : null),
-    [projectParam, projects],
-  );
-
-  // Apply the active filters (project scope wins, then type).
+  // Apply the active filters (parent-Project scope wins, then IDE type).
   const filtered = useMemo(() => {
-    let list = projects;
-    if (projectParam) list = list.filter((p) => String(p.id) === projectParam || p.publicId === projectParam);
-    if (typeParam) list = list.filter((p) => (p.modality ?? DEFAULT_MODALITY) === typeParam);
+    let list = ideProjects;
+    if (currentProjectId != null) list = list.filter((p) => p.containerProjectId === currentProjectId);
+    if (typeParam) list = list.filter((p) => p.modality === typeParam);
     return list;
-  }, [projects, projectParam, typeParam]);
+  }, [ideProjects, currentProjectId, typeParam]);
 
-  // Group the filtered set under each modality, in registry order.
-  const grouped = useMemo(
-    () => MODALITIES.map((m) => ({
-      modality: m,
-      items: filtered.filter((p) => (p.modality ?? DEFAULT_MODALITY) === m.id),
-    })).filter((g) => g.items.length > 0),
-    [filtered],
-  );
+  // Grouped view: bucket the IDE projects under each parent Project, with an
+  // "Ungrouped" bucket for those without one. Ordered by parent name.
+  const byContainer = useMemo(() => {
+    const buckets = new Map<number | 'none', { name: string | null; items: IdeProject[] }>();
+    for (const p of filtered) {
+      const k = p.containerProjectId ?? 'none';
+      if (!buckets.has(k)) buckets.set(k, { name: p.containerName, items: [] });
+      buckets.get(k)!.items.push(p);
+    }
+    return [...buckets.entries()]
+      .map(([key, v]) => ({ key, name: v.name, items: v.items }))
+      .sort((a, b) => {
+        if (a.key === 'none') return 1;
+        if (b.key === 'none') return -1;
+        return (a.name ?? '').localeCompare(b.name ?? '');
+      });
+  }, [filtered]);
 
-  const clearFilter = (key: 'project' | 'type') => {
+  const clearTypeFilter = () => {
     const next = new URLSearchParams(searchParams.toString());
-    next.delete(key);
+    next.delete('type');
     const qs = next.toString();
     router.replace(qs ? `/ide/dashboard?${qs}` : '/ide/dashboard');
   };
 
   if (!isAuthenticated || !hasTenant) return null;
 
+  const cardGrid = (items: IdeProject[]) => (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+      {items.map((p) => (
+        <IdeProjectCard key={p.id} ideProject={p} onOpen={openIde} onDetails={setDetailsFor} onDelete={handleDelete} />
+      ))}
+    </div>
+  );
+
   return (
     <div style={{ flex: 1, color: 'var(--text-primary)' }}>
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: '40px 24px' }}>
         <div style={{ marginBottom: 8 }}>
-          <h1 style={{ fontSize: '1.6rem', fontWeight: 700, margin: 0 }}>IDE</h1>
-          <p style={{ color: 'var(--text-secondary)', marginTop: 6, fontSize: 14 }}>
-            Start a new IDE project or open an existing one.
-          </p>
+          <h1 style={{ fontSize: '1.6rem', fontWeight: 700, margin: 0 }}>{t('title')}</h1>
+          <p style={{ color: 'var(--text-secondary)', marginTop: 6, fontSize: 14 }}>{t('subtitle')}</p>
         </div>
 
         {error && (
-          <div
-            style={{
-              borderRadius: 8,
-              padding: '12px 16px',
-              margin: '16px 0',
-              fontSize: 14,
-              background: 'var(--error-bg)',
-              border: '1px solid var(--error-border)',
-              color: 'var(--error-text)',
-            }}
-          >
+          <div style={{ borderRadius: 8, padding: '12px 16px', margin: '16px 0', fontSize: 14, background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)' }}>
             {error}
           </div>
         )}
 
         {/* New IDE project — type chooser */}
         <section style={{ marginTop: 24 }}>
-          <h2 style={{ fontSize: '1rem', fontWeight: 600, margin: '0 0 12px', color: 'var(--text-secondary)' }}>
-            New IDE project
-          </h2>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-              gap: 16,
-            }}
-          >
-            {MODALITIES.map((m) => {
+          <h2 style={{ fontSize: '1rem', fontWeight: 600, margin: '0 0 12px', color: 'var(--text-secondary)' }}>{t('newIdeProject')}</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16 }}>
+            {localizedModalities.map((m) => {
               const disabled = !!m.comingSoon;
               return (
                 <button
@@ -166,19 +245,10 @@ export default function IDEDashboardPage() {
                   type="button"
                   disabled={disabled}
                   onClick={() => { setNewName(''); setCreateType(m.id); }}
-                  title={disabled ? `${m.label} — coming soon` : `New ${m.label} project`}
+                  title={disabled ? `${m.label} — ${t('comingSoon')}` : t('newModalityProject', { label: m.label })}
                   style={{
-                    textAlign: 'left',
-                    padding: 20,
-                    background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 12,
-                    cursor: disabled ? 'not-allowed' : 'pointer',
-                    opacity: disabled ? 0.55 : 1,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 8,
-                    transition: 'border-color 0.2s',
+                    textAlign: 'left', padding: 20, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12,
+                    cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.55 : 1, display: 'flex', flexDirection: 'column', gap: 8, transition: 'border-color 0.2s',
                   }}
                   onMouseEnter={disabled ? undefined : (e) => { e.currentTarget.style.borderColor = 'var(--accent)'; }}
                   onMouseLeave={disabled ? undefined : (e) => { e.currentTarget.style.borderColor = ''; }}
@@ -187,9 +257,7 @@ export default function IDEDashboardPage() {
                     <span style={{ fontSize: 28 }} aria-hidden>{m.icon}</span>
                     <span style={{ fontSize: '1.05rem', fontWeight: 700 }}>{m.label}</span>
                     {disabled && (
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)', border: '1px solid var(--border-subtle)', borderRadius: 6, padding: '1px 6px' }}>
-                        soon
-                      </span>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', border: '1px solid var(--border-subtle)', borderRadius: 6, padding: '1px 6px' }}>{t('soon')}</span>
                     )}
                   </div>
                   <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>{m.tagline}</p>
@@ -199,182 +267,191 @@ export default function IDEDashboardPage() {
           </div>
         </section>
 
-        {/* Existing projects */}
+        {/* Existing IDE projects */}
         <section style={{ marginTop: 40 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
-            <h2 style={{ fontSize: '1rem', fontWeight: 600, margin: 0, color: 'var(--text-secondary)' }}>
-              Your IDE projects
-            </h2>
-            {/* Type filter */}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <FilterChip label="All" active={!typeParam} onClick={() => clearFilter('type')} />
-              {MODALITIES.map((m) => (
-                <FilterChip
-                  key={m.id}
-                  label={`${m.icon} ${m.label}`}
-                  active={typeParam === m.id}
-                  onClick={() => {
-                    const next = new URLSearchParams(searchParams.toString());
-                    next.set('type', m.id);
-                    router.replace(`/ide/dashboard?${next.toString()}`);
-                  }}
-                />
-              ))}
+            <h2 style={{ fontSize: '1rem', fontWeight: 600, margin: 0, color: 'var(--text-secondary)' }}>{t('yourIdeProjects')}</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <FilterChip label={t('all')} active={!typeParam} onClick={clearTypeFilter} />
+                {localizedModalities.map((m) => (
+                  <FilterChip
+                    key={m.id}
+                    label={`${m.icon} ${m.label}`}
+                    active={typeParam === m.id}
+                    onClick={() => {
+                      const next = new URLSearchParams(searchParams.toString());
+                      next.set('type', m.id);
+                      router.replace(`/ide/dashboard?${next.toString()}`);
+                    }}
+                  />
+                ))}
+              </div>
+              <ViewToggle<IdeView>
+                value={view}
+                onChange={setView}
+                options={[
+                  { value: 'grouped', label: t('groupedView') },
+                  { value: 'card', label: t('cardView') },
+                  { value: 'table', label: t('listView') },
+                ]}
+              />
             </div>
           </div>
 
-          {/* Active project-scope chip */}
-          {projectParam && (
+          {/* Active parent-Project scope chip */}
+          {currentProjectId != null && (
             <div style={{ marginBottom: 16 }}>
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  fontSize: 13,
-                  background: 'var(--surface-interactive)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 999,
-                  padding: '4px 12px',
-                  color: 'var(--text-secondary)',
-                }}
-              >
-                Filtered to {scopedProject ? scopedProject.name : `project ${projectParam}`}
-                <button
-                  type="button"
-                  onClick={() => clearFilter('project')}
-                  aria-label="Clear project filter"
-                  style={{ background: 'none', border: 'none', color: 'var(--coral-bright)', cursor: 'pointer', fontWeight: 700, fontSize: 14, lineHeight: 1, padding: 0 }}
-                >
-                  ✕
-                </button>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, background: 'var(--surface-interactive)', border: '1px solid var(--border-subtle)', borderRadius: 999, padding: '4px 12px', color: 'var(--text-secondary)' }}>
+                {t('filteredTo', { name: currentProject ? currentProject.name : `#${currentProjectId}` })}
+                <button type="button" onClick={() => setProject(null)} aria-label={t('clearProjectFilter')} style={{ background: 'none', border: 'none', color: 'var(--coral-bright)', cursor: 'pointer', fontWeight: 700, fontSize: 14, lineHeight: 1, padding: 0 }}>✕</button>
               </span>
             </div>
           )}
 
-          {isLoading ? (
-            <div style={{ color: 'var(--text-muted)', padding: 24 }}>Loading projects…</div>
-          ) : grouped.length === 0 ? (
-            <div
-              style={{
-                textAlign: 'center',
-                padding: 48,
-                background: 'var(--bg-elevated)',
-                borderRadius: 12,
-                border: '1px solid var(--border-subtle)',
-              }}
-            >
+          {loading ? (
+            <div style={{ color: 'var(--text-muted)', padding: 24 }}>{t('loadingProjects')}</div>
+          ) : filtered.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 48, background: 'var(--bg-elevated)', borderRadius: 12, border: '1px solid var(--border-subtle)' }}>
               <div style={{ fontSize: 56, marginBottom: 16 }}>🚀</div>
               <p style={{ color: 'var(--text-secondary)' }}>
-                {projectParam || typeParam
-                  ? 'No projects match this filter. Create a new one above.'
-                  : 'No projects yet. Pick a type above to create your first one.'}
+                {currentProjectId != null || typeParam ? t('noProjectsFilter') : t('noProjectsYet')}
               </p>
             </div>
+          ) : view === 'table' ? (
+            <IdeProjectTable items={filtered} onOpen={openIde} onDetails={setDetailsFor} onDelete={handleDelete} />
+          ) : view === 'card' ? (
+            cardGrid(filtered)
           ) : (
-            grouped.map(({ modality, items }) => (
-              <div key={modality.id} style={{ marginBottom: 32 }}>
-                <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 12px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span aria-hidden>{modality.icon}</span>
-                  {modality.label}
-                  <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>· {items.length}</span>
-                </h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-                  {items.map((p) => (
-                    <ProjectCard
-                      key={p.id}
-                      project={p}
-                      onCardClick={openProject}
-                      onOpenIde={openProject}
-                      onDelete={async (proj) => {
-                        try {
-                          await deleteProject(proj.id);
-                          setProjects((prev) => prev.filter((x) => x.id !== proj.id));
-                        } catch {
-                          alert('Failed to delete project');
-                        }
-                      }}
-                    />
-                  ))}
+            byContainer.map(({ key, name, items }) => {
+              const collapsed = collapsedGroups.has(String(key));
+              const groupName = key === 'none' ? t('ungrouped') : name;
+              return (
+                <div key={String(key)} style={{ marginBottom: 32 }}>
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(key)}
+                    aria-expanded={!collapsed}
+                    aria-label={collapsed ? t('expandGroup', { name: groupName ?? '' }) : t('collapseGroup', { name: groupName ?? '' })}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 12px', padding: 0, background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', textAlign: 'left' }}
+                  >
+                    <span aria-hidden style={{ display: 'inline-block', width: 12, fontSize: 11, color: 'var(--text-muted)', transition: 'transform 0.15s', transform: collapsed ? 'rotate(-90deg)' : 'none' }}>▼</span>
+                    <span aria-hidden>{key === 'none' ? '🗂' : '📁'}</span>
+                    {groupName}
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>· {items.length}</span>
+                  </button>
+                  {!collapsed && cardGrid(items)}
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </section>
       </main>
 
-      {/* New project modal */}
-      {createType && (
-        <div className="modal-overlay" style={{ zIndex: 50 }}>
-          <div className="rounded-xl p-6 w-full max-w-md border border-gray-700" style={{ background: 'var(--bg-elevated)' }}>
-            <h3 className="text-lg font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>
-              New {getModality(createType).label} project
-            </h3>
-            <p className="mb-4" style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-              {getModality(createType).tagline}
-            </p>
+      {/* New IDE project — slide-out create panel */}
+      <SlideOutPanel
+        open={createType != null}
+        onClose={() => setCreateType(null)}
+        title={createType ? t('newModalityProject', { label: modalityCopy(createType).label }) : ''}
+        width="min(480px, 96vw)"
+      >
+        {createType && (
+          <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: 0 }}>{modalityCopy(createType).tagline}</p>
             <form onSubmit={submitCreate} className="space-y-4">
-              {/* Type switcher inside the modal so the user can change their mind */}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {MODALITIES.filter((m) => !m.comingSoon).map((m) => (
-                  <FilterChip
-                    key={m.id}
-                    label={`${m.icon} ${m.label}`}
-                    active={createType === m.id}
-                    onClick={() => setCreateType(m.id)}
-                  />
+                {localizedModalities.filter((m) => !m.comingSoon).map((m) => (
+                  <FilterChip key={m.id} label={`${m.icon} ${m.label}`} active={createType === m.id} onClick={() => setCreateType(m.id)} />
                 ))}
               </div>
               <div>
-                <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>
-                  Project name *
-                </label>
-                <input
-                  autoFocus
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="My Awesome Project"
-                  required
-                  style={{
-                    width: '100%',
-                    background: 'var(--bg-deep)',
-                    color: 'var(--text-primary)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 10,
-                    padding: '10px 14px',
-                    outline: 'none',
-                  }}
-                />
+                <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>{t('nameLabel')}</label>
+                <input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('projectNamePlaceholder')} required style={inputStyle} />
               </div>
-              <div className="flex gap-3 justify-end">
-                <button
-                  type="button"
-                  onClick={() => setCreateType(null)}
-                  style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer' }}
-                >
-                  Cancel
-                </button>
+              <div>
+                <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>{t('parentOptional')}</label>
+                <select value={newParent ?? ''} onChange={(e) => setNewParent(e.target.value ? Number(e.target.value) : null)} style={inputStyle}>
+                  <option value="">{t('ungrouped')}</option>
+                  {containers.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+                </select>
+              </div>
+              {createType === 'evermind' && (
+                <div>
+                  <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>{t('recipeLabel')}</label>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>{t('recipeHint')}</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {EVERMIND_RECIPES.map((r) => {
+                      const selected = recipe === r.id;
+                      const noModels = !!r.needsSeedModel && publishedLoaded && publishedModels.length === 0;
+                      return (
+                        <button
+                          key={r.id}
+                          type="button"
+                          disabled={noModels}
+                          aria-pressed={selected}
+                          onClick={() => { setRecipe(r.id); if (!r.needsSeedModel) setSeedModelSlug(null); }}
+                          style={{
+                            display: 'flex', alignItems: 'flex-start', gap: 10, textAlign: 'left', width: '100%',
+                            padding: '10px 12px', borderRadius: 10, cursor: noModels ? 'not-allowed' : 'pointer',
+                            background: selected ? 'var(--surface-interactive)' : 'var(--bg-deep)',
+                            border: `1px solid ${selected ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
+                            opacity: noModels ? 0.55 : 1,
+                          }}
+                        >
+                          <span aria-hidden style={{ fontSize: 20, lineHeight: 1 }}>{r.icon}</span>
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{t(r.nameKey)}</span>
+                              {r.recommended && (
+                                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--coral-bright)', border: '1px solid var(--coral-bright)', borderRadius: 6, padding: '0 6px' }}>
+                                  {t('recipeRecommended')}
+                                </span>
+                              )}
+                            </span>
+                            <span style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.4 }}>
+                              {t(r.descKey)}{noModels ? ` — ${t('recipeSeedNoModels')}` : ''}
+                            </span>
+                          </span>
+                          <span aria-hidden style={{ fontSize: 14, color: selected ? 'var(--coral-bright)' : 'var(--text-muted)', flexShrink: 0 }}>
+                            {selected ? '●' : '○'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {activeRecipe.needsSeedModel && publishedModels.length > 0 && (
+                    <div style={{ marginTop: 10 }}>
+                      <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>{t('recipeSeedModelLabel')}</label>
+                      <select value={seedModelSlug ?? ''} onChange={(e) => setSeedModelSlug(e.target.value || null)} required style={inputStyle}>
+                        <option value="">{t('recipeSeedSelect')}</option>
+                        {publishedModels.map((m) => (<option key={m.slug} value={m.slug}>{m.name}</option>))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button type="button" onClick={() => setCreateType(null)} style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer' }}>{t('cancel')}</button>
                 <button
                   type="submit"
-                  disabled={creating || !newName.trim()}
-                  style={{
-                    padding: '8px 18px',
-                    fontSize: '0.875rem',
-                    fontWeight: 600,
-                    background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: 10,
-                    cursor: creating || !newName.trim() ? 'not-allowed' : 'pointer',
-                    opacity: creating || !newName.trim() ? 0.7 : 1,
-                  }}
+                  disabled={creating || !newName.trim() || evermindNeedsSeed}
+                  style={{ padding: '8px 18px', fontSize: '0.875rem', fontWeight: 600, background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: '#fff', border: 'none', borderRadius: 10, cursor: creating || !newName.trim() || evermindNeedsSeed ? 'not-allowed' : 'pointer', opacity: creating || !newName.trim() || evermindNeedsSeed ? 0.7 : 1 }}
                 >
-                  {creating ? 'Creating…' : 'Create & open'}
+                  {creating ? t('creating') : t('createOpen')}
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        )}
+      </SlideOutPanel>
+
+      {detailsFor && (
+        <IdeProjectDetailsModal
+          ideProject={detailsFor}
+          onClose={() => setDetailsFor(null)}
+          onSaved={(updated) => setIdeProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))}
+        />
       )}
 
       <UpgradeModal error={planError} onClose={() => setPlanError(null)} />
@@ -382,22 +459,67 @@ export default function IDEDashboardPage() {
   );
 }
 
+const inputStyle: React.CSSProperties = {
+  width: '100%', background: 'var(--bg-deep)', color: 'var(--text-primary)',
+  border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '10px 14px', outline: 'none',
+};
+
+/** Compact List view for IDE projects. */
+function IdeProjectTable({ items, onOpen, onDetails, onDelete }: {
+  items: IdeProject[];
+  onOpen: (p: IdeProject) => void;
+  onDetails: (p: IdeProject) => void;
+  onDelete: (p: IdeProject) => void;
+}) {
+  const t = useTranslations('ide');
+  const modalityCopy = useModalityCopy();
+  return (
+    <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <thead>
+          <tr style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)', textAlign: 'left' }}>
+            <th style={th}>{t('colName')}</th>
+            <th style={th}>{t('colType')}</th>
+            <th style={th}>{t('colParent')}</th>
+            <th style={{ ...th, textAlign: 'right' }}>{t('colActions')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((p) => {
+            const m = modalityCopy(p.modality);
+            return (
+              <tr key={p.id} style={{ borderTop: '1px solid var(--border-subtle)', cursor: 'pointer' }} onClick={() => onOpen(p)}>
+                <td style={td}>
+                  <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.name}</span>
+                  <span style={{ marginLeft: 8, fontFamily: 'monospace', fontSize: 11, color: 'var(--text-muted)' }}>{p.storageProjectKey}</span>
+                </td>
+                <td style={td}>{m.icon} {m.label}</td>
+                <td style={{ ...td, color: p.containerName ? 'var(--text-secondary)' : 'var(--text-muted)' }}>{p.containerName ?? t('ungrouped')}</td>
+                <td style={{ ...td, textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+                  <button type="button" onClick={() => onOpen(p)} style={linkBtn}>{t('open')}</button>
+                  <button type="button" onClick={() => onDetails(p)} style={linkBtn}>{t('details')}</button>
+                  <button type="button" onClick={() => onDelete(p)} style={{ ...linkBtn, color: 'var(--coral-bright)' }}>{t('deleteAction')}</button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+const th: React.CSSProperties = { padding: '10px 14px', fontWeight: 600 };
+const td: React.CSSProperties = { padding: '10px 14px', color: 'var(--text-secondary)' };
+const linkBtn: React.CSSProperties = { background: 'none', border: 'none', cursor: 'pointer', color: 'var(--coral-bright)', fontWeight: 600, fontSize: 12, marginLeft: 10, padding: 0 };
+
 /** Small pill toggle used for the type filter and the in-modal type switcher. */
 function FilterChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      style={{
-        fontSize: 13,
-        fontWeight: 600,
-        padding: '5px 12px',
-        borderRadius: 999,
-        cursor: 'pointer',
-        border: `1px solid ${active ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
-        background: active ? 'var(--coral-bright)' : 'transparent',
-        color: active ? '#fff' : 'var(--text-secondary)',
-      }}
+      style={{ fontSize: 13, fontWeight: 600, padding: '5px 12px', borderRadius: 999, cursor: 'pointer', border: `1px solid ${active ? 'var(--coral-bright)' : 'var(--border-subtle)'}`, background: active ? 'var(--coral-bright)' : 'transparent', color: active ? '#fff' : 'var(--text-secondary)' }}
     >
       {label}
     </button>

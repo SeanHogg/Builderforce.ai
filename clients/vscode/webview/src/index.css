@@ -1,0 +1,638 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Map the shared <BrainTimeline> theme variables onto VS Code's theme tokens, so
+ * the SAME component that renders on the web here inherits the editor's active
+ * colour theme (light AND dark) natively.
+ */
+:root {
+  --bf-text: var(--vscode-foreground);
+  --bf-text-muted: var(--vscode-descriptionForeground, var(--vscode-disabledForeground));
+  --bf-surface: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+  --bf-surface-2: var(--vscode-textBlockQuote-background, rgba(128, 128, 128, 0.1));
+  --bf-border: var(--vscode-panel-border, rgba(128, 128, 128, 0.25));
+  --bf-border-strong: var(--vscode-focusBorder, rgba(128, 128, 128, 0.5));
+  --bf-accent: var(--vscode-textLink-foreground, #4f80ff);
+  --bf-accent-soft: var(--vscode-textLink-activeForeground, rgba(79, 128, 255, 0.4));
+  --bf-link: var(--vscode-textLink-foreground, #6ea8ff);
+  --bf-error: var(--vscode-errorForeground, #e5534b);
+  --bf-error-text: var(--vscode-errorForeground, #f3a39d);
+  --bf-error-bg: var(--vscode-inputValidation-errorBackground, rgba(229, 83, 75, 0.12));
+  --bf-success: var(--vscode-charts-green, #3fb950);
+  --bf-success-bg: color-mix(in srgb, var(--vscode-charts-green, #3fb950) 14%, transparent);
+  --bf-warning: var(--vscode-charts-yellow, #b7791f);
+  --bf-warning-bg: color-mix(in srgb, var(--vscode-charts-yellow, #b7791f) 14%, transparent);
+  --bf-font-mono: var(--vscode-editor-font-family, ui-monospace, monospace);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size, 13px);
+  color: var(--vscode-foreground);
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+}
+
+.bf-center {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--vscode-descriptionForeground);
+  text-align: center;
+  padding: 24px;
+}
+
+.bf-app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.bf-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--bf-border);
+}
+
+.bf-header__title {
+  font-weight: 600;
+  font-size: 13px;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* When a project names the header, keep a subtle brand tag beside it. */
+.bf-header__brand {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--bf-text-muted);
+  letter-spacing: 0.02em;
+}
+
+.bf-header__beta {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--vscode-badge-background, #4b5563);
+  color: var(--vscode-badge-foreground, #fff);
+}
+
+.bf-header__spacer {
+  flex: 1 1 auto;
+}
+
+.bf-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.bf-select {
+  max-width: 45%;
+  font-size: 12px;
+  padding: 3px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--bf-border);
+  background: var(--vscode-dropdown-background, var(--bf-surface));
+  color: var(--vscode-dropdown-foreground, var(--bf-text));
+}
+
+/* Inline chat-title editor — same footprint as the select it replaces, but the
+   editor's input tokens + a focus ring so it reads as an editable field. */
+.bf-rename-input {
+  background: var(--vscode-input-background, var(--bf-surface));
+  color: var(--vscode-input-foreground, var(--bf-text));
+  outline: none;
+}
+.bf-rename-input:focus {
+  border-color: var(--vscode-focusBorder, var(--bf-border));
+}
+
+.bf-btn {
+  font-family: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 5px;
+  border: 1px solid var(--bf-border);
+  background: var(--vscode-button-secondaryBackground, transparent);
+  color: var(--vscode-button-secondaryForeground, var(--bf-text));
+  cursor: pointer;
+}
+
+.bf-btn:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.15));
+}
+
+.bf-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.bf-btn--icon {
+  padding: 4px 7px;
+  line-height: 1;
+}
+
+.bf-btn--primary {
+  border-color: transparent;
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.bf-btn--primary:hover {
+  background: var(--vscode-button-hoverBackground, var(--vscode-button-background));
+}
+
+/* Stop: replaces the primary Send button while a run is in flight. Uses the
+   editor's error color so it reads as an interrupt in both light and dark. */
+.bf-btn--stop {
+  border-color: transparent;
+  background: var(--vscode-inputValidation-errorBackground, var(--vscode-errorForeground, #c72e2e));
+  color: var(--vscode-button-foreground, #fff);
+}
+
+.bf-btn--stop:hover {
+  background: var(--vscode-errorForeground, #c72e2e);
+  opacity: 0.9;
+}
+
+.bf-stop-glyph {
+  font-size: 9px;
+  vertical-align: middle;
+}
+
+.bf-error,
+.bf-notice {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 10px 6px;
+  padding: 6px 9px;
+  font-size: 12px;
+  border-radius: 6px;
+  color: var(--bf-error-text);
+  background: var(--bf-error-bg);
+  border: 1px solid var(--bf-error);
+}
+
+/* A passive warning (not an error): a connected account the gateway couldn't use.
+   Drives off theme tokens so it reads in both light and dark. */
+.bf-notice {
+  color: var(--bf-text);
+  background: var(--bf-warning-bg);
+  border-color: var(--bf-warning);
+}
+
+.bf-error__msg {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  align-self: center;
+}
+
+.bf-error__actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bf-confirm {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 10px 6px;
+  padding: 7px 9px;
+  font-size: 12px;
+  border-radius: 6px;
+  background: var(--bf-surface-2);
+  border: 1px solid var(--bf-border);
+}
+
+.bf-confirm code {
+  font-family: var(--bf-font-mono);
+}
+
+.bf-confirm__cmd {
+  flex: 1 1 100%;
+  margin: 0;
+  padding: 6px 8px;
+  font-family: var(--bf-font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border-radius: 5px;
+  background: var(--vscode-textCodeBlock-background, var(--bf-surface));
+  border: 1px solid var(--bf-border);
+  color: var(--bf-text);
+}
+
+.bf-confirm__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.bf-confirm__auto {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--bf-text-muted);
+}
+
+.bf-composer {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--bf-border);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bf-composer--drag {
+  outline: 2px dashed var(--bf-accent);
+  outline-offset: -4px;
+}
+
+/* When the user is focused in / has typed into the composer, highlight the
+   whole section in BuilderForce blue. Clears back to the normal border when
+   the input is empty and unfocused. */
+.bf-composer--active {
+  border-top-color: var(--bf-accent);
+}
+
+.bf-composer--active .bf-input {
+  border-color: var(--bf-accent);
+  box-shadow: 0 0 0 1px var(--bf-accent);
+}
+
+.bf-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 6px;
+  font-size: 11px;
+  border-radius: 6px;
+  background: var(--bf-surface-2);
+  border: 1px solid var(--bf-border);
+  max-width: 180px;
+}
+
+.bf-chip__thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  object-fit: cover;
+}
+
+.bf-chip__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bf-chip__x {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+}
+
+.bf-queued {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.bf-queued__hint {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
+
+/* A queued follow-up: dashed outline + accent tint so it reads as "pending", not sent. */
+.bf-chip--queued {
+  max-width: 240px;
+  border-style: dashed;
+  border-color: var(--bf-accent, var(--vscode-focusBorder));
+  background: color-mix(in srgb, var(--bf-accent, var(--vscode-focusBorder)) 12%, transparent);
+}
+
+.bf-input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 38px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, var(--bf-border));
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.bf-input:focus {
+  outline: none;
+  border-color: var(--bf-accent);
+}
+
+.bf-composer__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bf-composer__actions {
+  flex-wrap: wrap;
+}
+
+.bf-model {
+  font-size: 11px;
+  color: var(--bf-text-muted);
+  font-family: var(--bf-font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 40%;
+}
+
+/* Model chip as a button (opens the model picker). Inherits .bf-model sizing. */
+.bf-model--btn {
+  border: 1px solid var(--bf-border);
+  background: transparent;
+  border-radius: 999px;
+  padding: 2px 9px;
+  cursor: pointer;
+}
+
+.bf-model--btn:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.15));
+  color: var(--bf-text);
+}
+
+/* Square icon button used across the composer toolbar (+, /, mic, send). */
+.bf-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--bf-text);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.bf-iconbtn:hover:not(:disabled) {
+  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.15));
+}
+
+.bf-iconbtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.bf-iconbtn.is-active {
+  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.18));
+  border-color: var(--bf-border);
+}
+
+/* Send: filled accent, matches the primary Send button it replaces. */
+.bf-iconbtn--send {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.bf-iconbtn--send:hover:not(:disabled) {
+  background: var(--vscode-button-hoverBackground, var(--vscode-button-background));
+}
+
+.bf-iconbtn--send:disabled {
+  background: var(--vscode-button-secondaryBackground, rgba(128, 128, 128, 0.2));
+  color: var(--bf-text-muted);
+}
+
+/* Mic actively listening — pulse in the editor's error colour so it reads as "recording". */
+.bf-iconbtn.is-listening {
+  color: var(--bf-error);
+  border-color: var(--bf-error);
+  animation: bf-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes bf-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* Recipient selector pill — "To: <avatar> <name> ▾" in the composer toolbar.
+   Reuses the PopoverMenu trigger slot; themed via the editor tokens so it reads
+   in light AND dark. */
+.bf-recipient {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--bf-border);
+  background: transparent;
+  color: var(--bf-text);
+  cursor: pointer;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 55%;
+}
+
+.bf-recipient:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.15));
+}
+
+.bf-recipient.is-active {
+  border-color: var(--bf-accent);
+}
+
+.bf-recipient__inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.bf-recipient__to {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--bf-text-muted);
+  flex: 0 0 auto;
+}
+
+.bf-recipient__name {
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* Auto-mode pill toggle. */
+.bf-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: inherit;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--bf-border);
+  background: transparent;
+  color: var(--bf-text-muted);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.bf-toggle:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.15));
+}
+
+.bf-toggle.is-on {
+  border-color: var(--bf-accent);
+  color: var(--bf-accent);
+  background: color-mix(in srgb, var(--bf-accent) 14%, transparent);
+}
+
+.bf-toggle:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.bf-toggle:disabled:hover {
+  background: transparent;
+}
+
+/* Popover menu (the + and / affordances). */
+.bf-menu {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.bf-menu__pop {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  min-width: 210px;
+  z-index: 20;
+  padding: 5px;
+  border-radius: 10px;
+  border: 1px solid var(--bf-border);
+  background: var(--vscode-menu-background, var(--bf-surface));
+  color: var(--vscode-menu-foreground, var(--bf-text));
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.32);
+}
+
+.bf-menu__pop--left { left: 0; }
+.bf-menu__pop--right { right: 0; }
+
+.bf-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 9px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bf-menu__item:hover {
+  background: var(--vscode-menu-selectionBackground, var(--bf-accent-soft));
+  color: var(--vscode-menu-selectionForeground, var(--bf-text));
+}
+
+.bf-menu__ico {
+  width: 18px;
+  text-align: center;
+  flex: 0 0 auto;
+  font-size: 13px;
+}
+
+.bf-menu__lbl {
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+
+.bf-menu__hint {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--bf-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.bf-menu__check {
+  flex: 0 0 auto;
+  width: 12px;
+  color: var(--bf-accent);
+  font-size: 11px;
+}
+
+.bf-menu__group {
+  padding: 6px 9px 3px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--bf-text-muted);
+}
+
+.bf-menu__sep {
+  height: 1px;
+  margin: 5px 6px;
+  background: var(--bf-border);
+}

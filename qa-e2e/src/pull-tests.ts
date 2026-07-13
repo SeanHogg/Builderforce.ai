@@ -23,6 +23,7 @@ import {
   fetchCredentialSecret,
   fetchRunnerBundle,
   login,
+  postRun,
   projectId,
   baseUrl,
   type BfSession,
@@ -31,6 +32,32 @@ import { loginPersona } from './persona-login';
 
 const OUT_DIR = join('tests', 'generated');
 const AUTH_DIR = '.auth';
+
+/**
+ * Defense-in-depth re-validation at the write-to-disk boundary [1067]. The API
+ * already validates model output before storing it (QaGeneratorService.
+ * validateSpec), but the runner is the last line before `playwright test`
+ * executes the file, so we re-check here against the same allowlist/denylist. A
+ * spec that fails is skipped (never written), not silently run.
+ */
+const FORBIDDEN_SPEC = [
+  /\brequire\s*\(/, /\bimport\s*\(/, /\beval\s*\(/, /\bnew\s+Function\b/,
+  /\bprocess\b/, /\bchild_process\b/, /\bnode:[a-z]/i, /\bfrom\s+['"]fs['"]/,
+  /\bglobalThis\b/, /\b(fetch|XMLHttpRequest|WebSocket|EventSource)\s*\(/,
+  /\bpage\.request\b/, /\brequest\.(get|post|put|delete|patch|fetch)\b/,
+  /\bpage\.evaluate\w*\s*\(/, /\baddInitScript\b/, /\bexposeFunction\b/,
+];
+const SPEC_IMPORT_RE = /\bimport\b[\s\S]*?\bfrom\s+['"]([^'"]+)['"]/g;
+
+export function specIsSafe(spec: string): boolean {
+  if (!spec || spec.length > 16_000 || !spec.includes('@playwright/test')) return false;
+  SPEC_IMPORT_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = SPEC_IMPORT_RE.exec(spec)) !== null) {
+    if (m[1] !== '@playwright/test') return false;
+  }
+  return !FORBIDDEN_SPEC.some((re) => re.test(spec));
+}
 
 function credStateFile(credentialId: string): string {
   return join(AUTH_DIR, `cred-${credentialId}.json`);
@@ -55,13 +82,19 @@ async function pullSelfTest(session: BfSession): Promise<void> {
   resetDirs();
   writeFileSync(join(AUTH_DIR, 'config.json'), JSON.stringify({ baseUrl: baseUrl() }));
   const manifest: Record<string, { credentialId: string | null; targetId: string | null }> = {};
+  let skipped = 0;
   for (const t of tests) {
+    if (!specIsSafe(t.spec)) {
+      console.warn(`[qa-e2e] rejected unsafe spec ${t.slug} (failed static validation); not writing.`);
+      skipped++;
+      continue;
+    }
     const safe = t.slug.replace(/[^a-z0-9-_]/gi, '-');
     writeFileSync(join(OUT_DIR, `${safe}.spec.ts`), t.spec, 'utf8');
     manifest[safe] = { credentialId: null, targetId: null };
   }
   writeFileSync(join(AUTH_DIR, 'tests.json'), JSON.stringify(manifest));
-  console.log(`[qa-e2e] self-test: wrote ${tests.length} spec(s).`);
+  console.log(`[qa-e2e] self-test: wrote ${tests.length - skipped} spec(s)${skipped ? `, rejected ${skipped} unsafe` : ''}.`);
 }
 
 async function pullProject(session: BfSession, project: number): Promise<void> {
@@ -75,6 +108,7 @@ async function pullProject(session: BfSession, project: number): Promise<void> {
   // Log in each persona referenced by an active test; cache success/failure.
   const neededCredIds = [...new Set(bundle.tests.map((t) => t.credentialId).filter((id): id is string => !!id))];
   const loggedIn = new Set<string>();
+  const loginErrors = new Map<string, string>();
   for (const credId of neededCredIds) {
     try {
       const secret = await fetchCredentialSecret(session, credId);
@@ -82,7 +116,30 @@ async function pullProject(session: BfSession, project: number): Promise<void> {
       writeFileSync(credStateFile(credId), JSON.stringify(state));
       loggedIn.add(credId);
     } catch (err) {
-      console.warn(`[qa-e2e] persona login failed for credential ${credId}; its tests are skipped:`, err);
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[qa-e2e] persona login failed for credential ${credId}; its tests are recorded as errors:`, message);
+      loginErrors.set(credId, message);
+    }
+  }
+
+  // Record an `error` run for every test whose persona could not log in, so the
+  // failure is visible in the QA dashboard instead of silently skipped [1079].
+  for (const t of bundle.tests) {
+    if (!t.credentialId || !loginErrors.has(t.credentialId)) continue;
+    try {
+      await postRun(session, {
+        testSlug: t.slug,
+        projectId: project,
+        credentialId: t.credentialId,
+        targetId: bundle.target.id,
+        status: 'error',
+        targetUrl: bundle.target.baseUrl,
+        commitSha: process.env.GITHUB_SHA,
+        runKey: process.env.GITHUB_RUN_ID,
+        errorMessage: `Persona login failed: ${loginErrors.get(t.credentialId)}`,
+      });
+    } catch (err) {
+      console.warn(`[qa-e2e] failed to record login-error run for ${t.slug}:`, err);
     }
   }
 
@@ -91,6 +148,10 @@ async function pullProject(session: BfSession, project: number): Promise<void> {
   for (const t of bundle.tests) {
     const safe = t.slug.replace(/[^a-z0-9-_]/gi, '-');
     if (t.credentialId && !loggedIn.has(t.credentialId)) continue; // persona login failed → skip
+    if (!specIsSafe(t.spec)) {
+      console.warn(`[qa-e2e] rejected unsafe spec ${t.slug} (failed static validation); not writing.`);
+      continue;
+    }
     const spec = t.credentialId ? injectStorageState(t.spec, credStateFile(t.credentialId)) : t.spec;
     writeFileSync(join(OUT_DIR, `${safe}.spec.ts`), spec, 'utf8');
     manifest[safe] = { credentialId: t.credentialId, targetId: bundle.target.id };

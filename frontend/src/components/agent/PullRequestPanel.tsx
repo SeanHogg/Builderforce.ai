@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { Select } from '@/components/Select';
 import {
   reposApi,
   type MergeMethod,
@@ -42,6 +43,47 @@ function Badge({ label, color }: { label: string; color: string }) {
   );
 }
 
+/**
+ * The persisted build outcome (status + REASON) for a PR, recorded from CI by the
+ * webhook. Used for BOTH the pre-merge PR-branch build (so the agent's failing build
+ * — and why — is visible on the ticket before merge) and the post-merge deploy build.
+ * Renders null when there's nothing to show, so callers mount it unconditionally.
+ */
+function BuildStatus({ status, error, phase, showValidating }: {
+  status: string | null;
+  error: string | null;
+  phase: 'pre-merge' | 'post-merge';
+  showValidating: boolean;
+}) {
+  const validating = status === 'pending' || (showValidating && status == null);
+  if (!status && !validating) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, flexWrap: 'wrap' }}>
+        <span style={{ color: 'var(--text-muted)' }}>{phase === 'pre-merge' ? 'PR build:' : 'Build:'}</span>
+        {status === 'success' && <Badge label="passing" color={CHECK_COLOR.success} />}
+        {status === 'failure' && <Badge label="failing" color={CHECK_COLOR.failure} />}
+        {validating && <span style={{ color: 'var(--text-muted)' }}>⏳ validating…</span>}
+        {status === 'failure' && (
+          <span style={{ color: 'var(--warning, #d97706)' }}>
+            {phase === 'pre-merge'
+              ? 'auto-fix dispatched — the agent will push a fix to this branch.'
+              : 'auto-fix dispatched — a new PR will open for review.'}
+          </span>
+        )}
+      </div>
+      {status === 'failure' && error && (
+        <pre style={{
+          margin: 0, fontSize: 11, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          color: 'var(--text-secondary)', background: 'var(--bg-subtle, rgba(127,127,127,0.08))',
+          border: '1px solid var(--border-subtle)', borderRadius: 6, padding: '8px 10px',
+          maxHeight: 220, overflow: 'auto', fontFamily: 'var(--font-mono)',
+        }}>{error}</pre>
+      )}
+    </div>
+  );
+}
+
 export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerged?: () => void }) {
   const [data, setData] = useState<TaskPullRequest | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,11 +103,12 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
 
   useEffect(() => load(), [load]);
 
-  // After a merge, the deploy-branch build runs async (validated via webhook). Poll
-  // quietly (bounded) while the build is still null/pending so the badge + auto-fix
-  // status update without a manual refresh.
+  // The build runs async (validated via webhook) both pre-merge (on the PR branch) and
+  // post-merge (on the deploy branch). Poll quietly (bounded) while the build is still
+  // pending so the badge + reason + auto-fix status update without a manual refresh.
   const pr0 = data?.pullRequest;
-  const buildPending = pr0?.status === 'merged' && (pr0.buildStatus == null || pr0.buildStatus === 'pending');
+  const buildPending = pr0?.buildStatus === 'pending'
+    || (pr0?.status === 'merged' && (pr0.buildStatus == null || pr0.buildStatus === 'pending'));
   useEffect(() => {
     if (!buildPending) return;
     let n = 0;
@@ -133,17 +176,25 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>Live status unavailable ({detail.error}).</div>
       )}
 
+      {/* Pre-merge PR-branch build outcome + REASON (recorded from CI) — so a red build
+          on the agent's branch, and WHY, is visible on the ticket before it's merged. */}
+      {!isMerged && (
+        <div style={{ marginBottom: 10 }}>
+          <BuildStatus status={pr.buildStatus} error={pr.buildError} phase="pre-merge" showValidating={false} />
+        </div>
+      )}
+
       {/* Approve & merge — enabled anytime (warns on red checks per product policy) */}
       {!isMerged && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <select
+          <Select
             value={method}
             onChange={(e) => setMethod(e.target.value as MergeMethod)}
             disabled={merging}
             style={{ fontSize: 12, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
           >
             {MERGE_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
+          </Select>
           <button
             type="button"
             onClick={merge}
@@ -164,18 +215,8 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
           <div style={{ fontSize: 13, color: 'var(--success, #16a34a)' }}>
             ✓ Merged{pr.mergedAt ? ` ${new Date(pr.mergedAt).toLocaleString()}` : ''}.
           </div>
-          {/* Post-merge deploy-branch build validation. */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-            <span style={{ color: 'var(--text-muted)' }}>Build:</span>
-            {pr.buildStatus === 'success' && <Badge label="passing" color={CHECK_COLOR.success} />}
-            {pr.buildStatus === 'failure' && <Badge label="failing" color={CHECK_COLOR.failure} />}
-            {(pr.buildStatus == null || pr.buildStatus === 'pending') && (
-              <span style={{ color: 'var(--text-muted)' }}>⏳ validating…</span>
-            )}
-            {pr.buildStatus === 'failure' && (
-              <span style={{ color: 'var(--warning, #d97706)' }}>auto-fix dispatched — a new PR will open for review.</span>
-            )}
-          </div>
+          {/* Post-merge deploy-branch build validation (status + reason + auto-fix). */}
+          <BuildStatus status={pr.buildStatus} error={pr.buildError} phase="post-merge" showValidating />
         </div>
       )}
 

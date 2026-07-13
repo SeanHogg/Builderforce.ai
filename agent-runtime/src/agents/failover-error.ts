@@ -1,4 +1,5 @@
-import { classifyFailoverReason, type FailoverReason } from "./pi-embedded-helpers.js";
+import { formatErrorMessage } from "../infra/errors.js";
+import { classifyFailoverReason, type FailoverReason } from "./embedded-helpers.js";
 
 const TIMEOUT_HINT_RE =
   /timeout|timed out|deadline exceeded|context deadline exceeded|stop reason:\s*abort|reason:\s*abort|unhandled stop reason:\s*abort/i;
@@ -91,28 +92,6 @@ function getErrorCode(err: unknown): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-function getErrorMessage(err: unknown): string {
-  if (err instanceof Error) {
-    return err.message;
-  }
-  if (typeof err === "string") {
-    return err;
-  }
-  if (typeof err === "number" || typeof err === "boolean" || typeof err === "bigint") {
-    return String(err);
-  }
-  if (typeof err === "symbol") {
-    return err.description ?? "";
-  }
-  if (err && typeof err === "object") {
-    const message = (err as { message?: unknown }).message;
-    if (typeof message === "string") {
-      return message;
-    }
-  }
-  return "";
-}
-
 function hasTimeoutHint(err: unknown): boolean {
   if (!err) {
     return false;
@@ -120,7 +99,7 @@ function hasTimeoutHint(err: unknown): boolean {
   if (getErrorName(err) === "TimeoutError") {
     return true;
   }
-  const message = getErrorMessage(err);
+  const message = formatErrorMessage(err);
   return Boolean(message && TIMEOUT_HINT_RE.test(message));
 }
 
@@ -134,7 +113,7 @@ export function isTimeoutError(err: unknown): boolean {
   if (getErrorName(err) !== "AbortError") {
     return false;
   }
-  const message = getErrorMessage(err);
+  const message = formatErrorMessage(err);
   if (message && ABORT_TIMEOUT_RE.test(message)) {
     return true;
   }
@@ -173,7 +152,7 @@ export function resolveFailoverReasonFromError(err: unknown): FailoverReason | n
     return "timeout";
   }
 
-  const message = getErrorMessage(err);
+  const message = formatErrorMessage(err);
   if (!message) {
     return null;
   }
@@ -194,7 +173,7 @@ export function describeFailoverError(err: unknown): {
       code: err.code,
     };
   }
-  const message = getErrorMessage(err) || String(err);
+  const message = formatErrorMessage(err) || String(err);
   return {
     message,
     reason: resolveFailoverReasonFromError(err) ?? undefined,
@@ -219,7 +198,7 @@ export function coerceToFailoverError(
     return null;
   }
 
-  const message = getErrorMessage(err) || String(err);
+  const message = formatErrorMessage(err) || String(err);
   const status = getStatusCode(err) ?? resolveFailoverStatus(reason);
   const code = getErrorCode(err);
 

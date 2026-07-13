@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 380" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+  <defs>
+    <marker id="arr2" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#8FA0BD"/>
+    </marker>
+  </defs>
+  <rect width="860" height="380" fill="#0E1525"/>
+  <text x="430" y="40" fill="#FFFFFF" font-size="22" font-weight="700" text-anchor="middle">Evaluation &amp; drift — quality is a metric, not a vibe</text>
+
+  <!-- inputs -->
+  <rect x="30" y="90" width="150" height="80" rx="10" fill="#1f8f63"/>
+  <text x="105" y="124" fill="#fff" font-size="13" font-weight="700" text-anchor="middle">Question · Context</text>
+  <text x="105" y="146" fill="#bff3df" font-size="13" text-anchor="middle">· Answer</text>
+
+  <!-- evaluator -->
+  <rect x="240" y="70" width="240" height="120" rx="12" fill="#15203A" stroke="#3FE0A5"/>
+  <text x="360" y="98" fill="#fff" font-size="15" font-weight="700" text-anchor="middle">Evaluator</text>
+  <text x="360" y="122" fill="#cfe9dd" font-size="12" text-anchor="middle">faithfulness</text>
+  <text x="360" y="142" fill="#cfe9dd" font-size="12" text-anchor="middle">answer / context relevance</text>
+  <text x="360" y="162" fill="#cfe9dd" font-size="12" text-anchor="middle">hallucination rate</text>
+  <text x="360" y="182" fill="#7fd6b3" font-size="11" text-anchor="middle">lexical (inline, $0) · LLM-judge (/api/eval)</text>
+
+  <!-- store -->
+  <rect x="545" y="90" width="130" height="80" rx="10" fill="#15203A" stroke="#26324f"/>
+  <text x="610" y="124" fill="#fff" font-size="13" font-weight="700" text-anchor="middle">Persist</text>
+  <text x="610" y="146" fill="#9fb0cd" font-size="11" text-anchor="middle">run_model_outcomes</text>
+
+  <!-- drift -->
+  <rect x="545" y="230" width="285" height="90" rx="12" fill="#15203A" stroke="#FF6B5C"/>
+  <text x="687" y="260" fill="#fff" font-size="15" font-weight="700" text-anchor="middle">Drift monitor (daily + on-demand)</text>
+  <text x="687" y="284" fill="#9fb0cd" font-size="12" text-anchor="middle">baseline vs recent · mean-shift z + PSI</text>
+  <text x="687" y="304" fill="#ffb3aa" font-size="12" text-anchor="middle">per (action-type × model) → alert</text>
+
+  <g stroke="#8FA0BD" stroke-width="2" fill="none">
+    <path d="M180,130 L238,130" marker-end="url(#arr2)"/>
+    <path d="M480,130 L543,130" marker-end="url(#arr2)"/>
+    <path d="M610,170 L610,228" marker-end="url(#arr2)"/>
+  </g>
+
+  <text x="430" y="356" fill="#52617d" font-size="12" text-anchor="middle">Every cloud run is scored automatically; a silent regression surfaces as an alert, not a green dashboard.</text>
+</svg>

@@ -1,20 +1,34 @@
 'use client';
 
 import { Select } from '@/components/Select';
+import { RoleGate } from '@/components/RoleGate';
+import { useConfirm } from '@/components/ConfirmProvider';
+import { useTranslations } from 'next-intl';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { SlideOutPanel } from '../SlideOutPanel';
 import { BoardConnectionsManager } from '../integrations/BoardConnectionsManager';
 import { useBoardConfig } from './useBoardConfig';
 import {
   boardsApi,
+  kanbanApi,
   workflowDefinitions,
   type Board,
   type Swimlane,
   type SwimlaneAgent,
+  type SwimlaneRequirement,
   type WorkflowDefinitionSummary,
 } from '@/lib/builderforceApi';
+import type { TemplateSummary } from '@/lib/kanban';
 import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
+import {
+  listTeams,
+  listTeamsByProject,
+  addTeamProject,
+  removeTeamProject,
+  type TeamSummary,
+  type AttachedTeam,
+} from '@/lib/teams';
 
 /**
  * Board-config slide-out opened from the Task-Mgmt COG. Configures the project's
@@ -37,17 +51,24 @@ const btnSubtle: React.CSSProperties = {
 };
 const sectionPad: React.CSSProperties = { padding: 20 };
 
-type ConfigTab = 'lanes' | 'settings' | 'external';
+type ConfigTab = 'lanes' | 'teams' | 'settings' | 'external';
 
 export interface BoardConfigPanelProps {
   open: boolean;
   onClose: () => void;
   projectId: number;
   projectName?: string;
+  /** Which tab to open on. Defaults to 'lanes'; the approval banner opens 'settings'. */
+  initialTab?: ConfigTab;
 }
 
-export function BoardConfigPanel({ open, onClose, projectId, projectName }: BoardConfigPanelProps) {
-  const [tab, setTab] = useState<ConfigTab>('lanes');
+export function BoardConfigPanel({ open, onClose, projectId, projectName, initialTab = 'lanes' }: BoardConfigPanelProps) {
+  const t = useTranslations('boardConfig');
+  const [tab, setTab] = useState<ConfigTab>(initialTab);
+  // Re-sync the active tab each time the panel is (re)opened so a caller that
+  // requests 'settings' always lands there, even after a prior open left another
+  // tab selected.
+  useEffect(() => { if (open) setTab(initialTab); }, [open, initialTab]);
   const { board, lanes, agentsByLane, loading, error, reload } = useBoardConfig(projectId, open);
   const [provisioning, setProvisioning] = useState(false);
   const [provisionError, setProvisionError] = useState<string | null>(null);
@@ -72,9 +93,9 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName }: Boar
     if (!board) {
       setProvisioning(true);
       boardsApi
-        .create({ projectId, name: `${projectName ?? 'Project'} board` })
+        .create({ projectId, name: t('boardNameDefault', { name: projectName ?? t('projectFallback') }) })
         .then(() => reload())
-        .catch((e) => setProvisionError(e instanceof Error ? e.message : 'Could not create board'))
+        .catch((e) => setProvisionError(e instanceof Error ? e.message : t('errCreateBoard')))
         .finally(() => setProvisioning(false));
       return;
     }
@@ -84,10 +105,10 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName }: Boar
       boardsApi.swimlanes
         .ensureDefaults(board.id)
         .then(() => reload())
-        .catch((e) => setProvisionError(e instanceof Error ? e.message : 'Could not set up swimlanes'))
+        .catch((e) => setProvisionError(e instanceof Error ? e.message : t('errSetupLanes')))
         .finally(() => setProvisioning(false));
     }
-  }, [open, loading, error, board, lanes.length, provisioning, provisionError, projectId, projectName, reload]);
+  }, [open, loading, error, board, lanes.length, provisioning, provisionError, projectId, projectName, reload, t]);
 
   const shownError = error ?? provisionError;
 
@@ -95,12 +116,13 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName }: Boar
     <SlideOutPanel
       open={open}
       onClose={onClose}
-      title="Board configuration"
+      title={t('title')}
       width="min(720px, 96vw)"
       tabs={[
-        { id: 'lanes', label: 'Swimlanes & agents' },
-        { id: 'settings', label: 'Board settings' },
-        { id: 'external', label: 'External boards' },
+        { id: 'lanes', label: t('tab.lanes') },
+        { id: 'teams', label: t('tab.teams') },
+        { id: 'settings', label: t('tab.settings') },
+        { id: 'external', label: t('tab.external') },
       ]}
       activeTabId={tab}
       onTabChange={(t) => setTab(t as ConfigTab)}
@@ -111,7 +133,7 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName }: Boar
             <span style={{ fontSize: 13, color: 'var(--danger, #dc2626)' }}>{shownError}</span>
           ) : (
             <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-              {provisioning || !board ? 'Setting up this board…' : 'Loading…'}
+              {provisioning || !board ? t('settingUp') : t('loading')}
             </span>
           )}
         </div>
@@ -119,11 +141,13 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName }: Boar
         <div style={sectionPad}><span style={{ fontSize: 13, color: 'var(--danger, #dc2626)' }}>{shownError}</span></div>
       ) : tab === 'lanes' ? (
         <LanesTab board={board} lanes={lanes} agentsByLane={agentsByLane} reload={reload} />
+      ) : tab === 'teams' ? (
+        <TeamsTab projectId={projectId} />
       ) : tab === 'settings' ? (
-        <SettingsTab board={board} onSaved={reload} />
+        <SettingsTab board={board} projectId={projectId} onSaved={reload} />
       ) : (
         <div style={sectionPad}>
-          <BoardConnectionsManager projectId={projectId} heading="External boards feeding this board" />
+          <BoardConnectionsManager projectId={projectId} heading={t('externalHeading')} />
         </div>
       )}
     </SlideOutPanel>
@@ -135,6 +159,8 @@ export function BoardConfigPanel({ open, onClose, projectId, projectName }: Boar
 function LanesTab({ board, lanes, agentsByLane, reload }: {
   board: Board; lanes: Swimlane[]; agentsByLane: Record<string, SwimlaneAgent[]>; reload: () => void;
 }) {
+  const t = useTranslations('boardConfig');
+  const confirm = useConfirm();
   const [laneName, setLaneName] = useState('');
   const [adding, setAdding] = useState(false);
   // Workflow definitions are the targets for a lane's "Run workflow" action.
@@ -163,7 +189,7 @@ function LanesTab({ board, lanes, agentsByLane, reload }: {
     await boardsApi.swimlanes.create(board.id, { key: keyFor(name), name, position: lanes.length });
     setLaneName(''); setAdding(false); reload();
   };
-  const removeLane = async (id: string) => { if (confirm('Delete this swimlane?')) { await boardsApi.swimlanes.remove(board.id, id); reload(); } };
+  const removeLane = async (id: string) => { if (await confirm(t('confirmDeleteLane'))) { await boardsApi.swimlanes.remove(board.id, id); reload(); } };
   const patchLane = async (id: string, body: Record<string, unknown>) => { await boardsApi.swimlanes.patch(board.id, id, body); reload(); };
   // Swap a lane's position with its neighbour to reorder the board columns.
   const moveLane = async (index: number, dir: -1 | 1) => {
@@ -178,54 +204,54 @@ function LanesTab({ board, lanes, agentsByLane, reload }: {
   return (
     <div style={sectionPad}>
       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-        Swimlanes are the columns of this project&apos;s task board. Add, rename, reorder, or assign agents and the
-        board updates to match.
+        {t('lanesIntro')}
       </div>
-      {lanes.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No swimlanes yet.</div>}
+      {lanes.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('noLanes')}</div>}
       {lanes.map((lane, index) => (
         <div key={lane.id} style={{ border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 14, marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <button type="button" style={{ ...btnSubtle, padding: '0 6px', lineHeight: 1.2 }} disabled={index === 0} title="Move left" onClick={() => moveLane(index, -1)}>▲</button>
-              <button type="button" style={{ ...btnSubtle, padding: '0 6px', lineHeight: 1.2 }} disabled={index === lanes.length - 1} title="Move right" onClick={() => moveLane(index, 1)}>▼</button>
+              <button type="button" style={{ ...btnSubtle, padding: '0 6px', lineHeight: 1.2 }} disabled={index === 0} title={t('moveLeft')} onClick={() => moveLane(index, -1)}>▲</button>
+              <button type="button" style={{ ...btnSubtle, padding: '0 6px', lineHeight: 1.2 }} disabled={index === lanes.length - 1} title={t('moveRight')} onClick={() => moveLane(index, 1)}>▼</button>
             </div>
             <input
               style={{ ...inputStyle, fontWeight: 600, fontSize: 14, flex: 1, minWidth: 140 }}
               defaultValue={lane.name}
-              title="Swimlane name (shown as the board column header)"
+              title={t('laneNameTitle')}
               onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== lane.name) patchLane(lane.id, { name: v }); }}
             />
-            <Select value={lane.gate} onChange={(e) => patchLane(lane.id, { gate: e.target.value })} style={inputStyle} title="Gate">
-              <option value="auto">auto</option>
-              <option value="human">human gate</option>
+            <Select value={lane.gate} onChange={(e) => patchLane(lane.id, { gate: e.target.value })} style={inputStyle} title={t('gate')}>
+              <option value="auto">{t('gateAuto')}</option>
+              <option value="human">{t('gateHuman')}</option>
             </Select>
-            <Select value={lane.executionMode} onChange={(e) => patchLane(lane.id, { executionMode: e.target.value })} style={inputStyle} title="Execution">
-              <option value="sequential">sequential</option>
-              <option value="parallel">parallel</option>
+            <Select value={lane.executionMode} onChange={(e) => patchLane(lane.id, { executionMode: e.target.value })} style={inputStyle} title={t('execution')}>
+              <option value="sequential">{t('execSequential')}</option>
+              <option value="parallel">{t('execParallel')}</option>
             </Select>
-            <Select value={lane.failurePolicy} onChange={(e) => patchLane(lane.id, { failurePolicy: e.target.value })} style={inputStyle} title="On failure">
-              <option value="needs_attention">needs attention</option>
-              <option value="retry">retry</option>
-              <option value="skip">skip</option>
+            <Select value={lane.failurePolicy} onChange={(e) => patchLane(lane.id, { failurePolicy: e.target.value })} style={inputStyle} title={t('onFailure')}>
+              <option value="needs_attention">{t('failNeedsAttention')}</option>
+              <option value="retry">{t('failRetry')}</option>
+              <option value="skip">{t('failSkip')}</option>
             </Select>
             <label style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', gap: 4, alignItems: 'center' }}>
-              <input type="checkbox" checked={lane.isTerminal} onChange={(e) => patchLane(lane.id, { isTerminal: e.target.checked })} /> terminal
+              <input type="checkbox" checked={lane.isTerminal} onChange={(e) => patchLane(lane.id, { isTerminal: e.target.checked })} /> {t('terminal')}
             </label>
-            <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => removeLane(lane.id)}>Delete</button>
+            <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => removeLane(lane.id)}>{t('delete')}</button>
           </div>
           <LaneActionRow lane={lane} lanes={lanes} workflows={workflows} patchLane={patchLane} />
           <AgentList board={board} lane={lane} agents={agentsByLane[lane.id] ?? []} reload={reload} />
+          <LaneRequirementsRow board={board} lane={lane} patchLane={patchLane} />
         </div>
       ))}
 
       {adding ? (
         <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-          <input style={{ ...inputStyle, flex: 1, minWidth: 140 }} placeholder="Column name (e.g. Design, In Review, QA)" value={laneName} onChange={(e) => setLaneName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addLane(); }} />
-          <button type="button" style={btnPrimary} onClick={addLane}>Add</button>
-          <button type="button" style={btnSubtle} onClick={() => { setAdding(false); setLaneName(''); }}>Cancel</button>
+          <input style={{ ...inputStyle, flex: 1, minWidth: 140 }} placeholder={t('columnNamePlaceholder')} value={laneName} onChange={(e) => setLaneName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addLane(); }} />
+          <button type="button" style={btnPrimary} onClick={addLane}>{t('add')}</button>
+          <button type="button" style={btnSubtle} onClick={() => { setAdding(false); setLaneName(''); }}>{t('cancel')}</button>
         </div>
       ) : (
-        <button type="button" style={btnPrimary} onClick={() => setAdding(true)}>Add swimlane</button>
+        <button type="button" style={btnPrimary} onClick={() => setAdding(true)}>{t('addSwimlane')}</button>
       )}
     </div>
   );
@@ -238,60 +264,156 @@ function LaneActionRow({ lane, lanes, workflows, patchLane }: {
   workflows: WorkflowDefinitionSummary[];
   patchLane: (id: string, body: Record<string, unknown>) => void;
 }) {
+  const t = useTranslations('boardConfig');
   const actionType = lane.actionType ?? 'advance';
   const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)' };
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 }}>
-      <span style={labelStyle}>When done</span>
+      <span style={labelStyle}>{t('whenDone')}</span>
       <Select
         value={actionType}
         onChange={(e) => patchLane(lane.id, { actionType: e.target.value, actionTarget: '' })}
         style={inputStyle}
-        title="What happens to the ticket once this lane's agents finish"
+        title={t('whenDoneTitle')}
       >
-        <option value="advance">Advance to next lane</option>
-        <option value="move_ticket">Move ticket to…</option>
-        <option value="run_workflow">Run workflow…</option>
+        <option value="advance">{t('actionAdvance')}</option>
+        <option value="move_ticket">{t('actionMoveTicket')}</option>
+        <option value="run_workflow">{t('actionRunWorkflow')}</option>
+        <option value="do_nothing">{t('actionDoNothing')}</option>
       </Select>
       {actionType === 'move_ticket' && (
-        <Select value={lane.actionTarget ?? ''} onChange={(e) => patchLane(lane.id, { actionTarget: e.target.value })} style={inputStyle} title="Destination lane">
-          <option value="">Select lane…</option>
+        <Select value={lane.actionTarget ?? ''} onChange={(e) => patchLane(lane.id, { actionTarget: e.target.value })} style={inputStyle} title={t('destinationLane')}>
+          <option value="">{t('selectLane')}</option>
           {lanes.filter((l) => l.id !== lane.id).map((l) => <option key={l.id} value={l.key}>{l.name}</option>)}
         </Select>
       )}
       {actionType === 'run_workflow' && (
-        <Select value={lane.actionTarget ?? ''} onChange={(e) => patchLane(lane.id, { actionTarget: e.target.value })} style={inputStyle} title="Workflow to run">
-          <option value="">Select workflow…</option>
+        <Select value={lane.actionTarget ?? ''} onChange={(e) => patchLane(lane.id, { actionTarget: e.target.value })} style={inputStyle} title={t('workflowToRun')}>
+          <option value="">{t('selectWorkflow')}</option>
           {workflows.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
         </Select>
       )}
       <span style={{ width: 1, height: 18, background: 'var(--border-subtle)' }} />
-      <span style={labelStyle}>Succeeds when</span>
+      <span style={labelStyle}>{t('succeedsWhen')}</span>
       <Select
         value={lane.successPolicy ?? 'all'}
         onChange={(e) => patchLane(lane.id, { successPolicy: e.target.value, ...(e.target.value === 'n_of_m' ? {} : { successThreshold: null }) })}
         style={inputStyle}
-        title="How many of this lane's agents must succeed for the action to fire"
+        title={t('succeedsWhenTitle')}
       >
-        <option value="all">All agents</option>
-        <option value="any">At least one</option>
-        <option value="n_of_m">At least N</option>
+        <option value="all">{t('successAll')}</option>
+        <option value="any">{t('successAny')}</option>
+        <option value="n_of_m">{t('successNofM')}</option>
       </Select>
       {lane.successPolicy === 'n_of_m' && (
         <input
           type="number" min={1} style={{ ...inputStyle, width: 64 }} defaultValue={lane.successThreshold ?? 1}
-          onBlur={(e) => patchLane(lane.id, { successThreshold: Math.max(1, Number(e.target.value) || 1) })} title="N"
+          onBlur={(e) => patchLane(lane.id, { successThreshold: Math.max(1, Number(e.target.value) || 1) })} title={t('nLabel')}
         />
       )}
     </div>
   );
 }
 
+/** Per-lane role/diagnostic/review requirements — editable live (no template re-apply).
+ *  Requirements are lazily loaded when the section is expanded to avoid an N+1 across
+ *  all lanes. The `requirement_gate` control lives here too so gating strictness and the
+ *  checks it enforces are configured in one place. */
+function LaneRequirementsRow({ board, lane, patchLane }: {
+  board: Board; lane: Swimlane; patchLane: (id: string, body: Record<string, unknown>) => void;
+}) {
+  const t = useTranslations('boardConfig');
+  const [open, setOpen] = useState(false);
+  const [reqs, setReqs] = useState<SwimlaneRequirement[] | null>(null);
+  const [kind, setKind] = useState<SwimlaneRequirement['kind']>('role');
+  const [ref, setRef] = useState('');
+  const [responsibility, setResponsibility] = useState<'owner' | 'reviewer' | 'contributor'>('reviewer');
+
+  const load = useCallback(() => {
+    boardsApi.requirements.list(board.id, lane.id).then(setReqs).catch(() => setReqs([]));
+  }, [board.id, lane.id]);
+  useEffect(() => { if (open && reqs === null) load(); }, [open, reqs, load]);
+
+  const add = async () => {
+    const r = ref.trim();
+    if (!r) return;
+    await boardsApi.requirements.create(board.id, lane.id, {
+      kind, ref: r, responsibility: kind === 'diagnostic' ? null : responsibility, isRequired: true, position: reqs?.length ?? 0,
+    });
+    setRef(''); load();
+  };
+  const remove = async (id: string) => { await boardsApi.requirements.remove(board.id, lane.id, id); load(); };
+  const toggleRequired = async (r: SwimlaneRequirement) => { await boardsApi.requirements.patch(board.id, lane.id, r.id, { isRequired: !r.isRequired }); load(); };
+
+  const kindLabel = (k: SwimlaneRequirement['kind']) => t(k === 'role' ? 'reqKindRole' : k === 'diagnostic' ? 'reqKindDiagnostic' : 'reqKindReview');
+
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px dashed var(--border-subtle)', paddingTop: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <button type="button" style={{ ...btnSubtle }} onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+          {open ? '▾' : '▸'} {t('requirements')}
+        </button>
+        <label style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', gap: 6, alignItems: 'center' }}>
+          {t('requirementGate')}
+          <Select value={lane.requirementGate ?? 'soft'} onChange={(e) => patchLane(lane.id, { requirementGate: e.target.value })} style={inputStyle} title={t('requirementGateTitle')}>
+            <option value="off">{t('gateOff')}</option>
+            <option value="soft">{t('gateSoft')}</option>
+            <option value="hard">{t('gateHard')}</option>
+          </Select>
+        </label>
+      </div>
+      {open && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>{t('requirementsIntro')}</div>
+          {reqs === null ? (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('loading')}</div>
+          ) : reqs.length === 0 ? (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('noRequirements')}</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+              {reqs.map((r) => (
+                <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '6px 10px' }}>
+                  <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{kindLabel(r.kind)}</span>
+                  <span style={{ color: 'var(--text-primary)' }}>{r.ref}</span>
+                  {r.responsibility && <span style={{ color: 'var(--text-muted)' }}>· {t(r.responsibility === 'owner' ? 'respOwner' : r.responsibility === 'reviewer' ? 'respReviewer' : 'respContributor')}</span>}
+                  <label style={{ marginLeft: 'auto', display: 'flex', gap: 4, alignItems: 'center', color: 'var(--text-secondary)' }}>
+                    <input type="checkbox" checked={r.isRequired} onChange={() => toggleRequired(r)} /> {t('required')}
+                  </label>
+                  <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)', padding: '2px 8px' }} onClick={() => remove(r.id)}>{t('delete')}</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Select value={kind} onChange={(e) => setKind(e.target.value as SwimlaneRequirement['kind'])} style={inputStyle} title={t('reqKind')}>
+              <option value="role">{t('reqKindRole')}</option>
+              <option value="review">{t('reqKindReview')}</option>
+              <option value="diagnostic">{t('reqKindDiagnostic')}</option>
+            </Select>
+            <input style={{ ...inputStyle, flex: 1, minWidth: 120 }} placeholder={t('reqRefPlaceholder')} value={ref} onChange={(e) => setRef(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') add(); }} />
+            {kind !== 'diagnostic' && (
+              <Select value={responsibility} onChange={(e) => setResponsibility(e.target.value as 'owner' | 'reviewer' | 'contributor')} style={inputStyle} title={t('responsibility')}>
+                <option value="reviewer">{t('respReviewer')}</option>
+                <option value="owner">{t('respOwner')}</option>
+                <option value="contributor">{t('respContributor')}</option>
+              </Select>
+            )}
+            <button type="button" style={btnPrimary} onClick={add}>{t('addRequirement')}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AgentList({ board, lane, agents, reload }: { board: Board; lane: Swimlane; agents: SwimlaneAgent[]; reload: () => void }) {
+  const t = useTranslations('boardConfig');
   // The user picks an agent from the project's registered/workforce agents; that
   // agent already carries its runtime/host/model defaults, so the form is just
   // "which agent" + an optional model override.
   const [agentSel, setAgentSel] = useState(''); // 'kind:ref'
+  const [name, setName] = useState('');
+  const [role, setRole] = useState('');
   const [model, setModel] = useState('');
   const [available, setAvailable] = useState<PoolAgent[]>([]);
   const [adding, setAdding] = useState(false);
@@ -311,81 +433,339 @@ function AgentList({ board, lane, agents, reload }: { board: Board; lane: Swimla
     await boardsApi.agents.create(board.id, lane.id, {
       agentKind,
       agentRef,
+      name: name.trim() || null,
+      role: role.trim() || null,
       model: model.trim() || null,
       position: agents.length,
     });
-    setAgentSel(''); setModel(''); setAdding(false); reload();
+    setAgentSel(''); setName(''); setRole(''); setModel(''); setAdding(false); reload();
   };
   const remove = async (id: string) => { await boardsApi.agents.remove(board.id, lane.id, id); reload(); };
 
   return (
     <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed var(--border-subtle)' }}>
-      <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Autonomous agents</div>
-      {agents.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No agents assigned to this lane.</div>}
+      <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>{t('autonomousAgents')}</div>
+      {agents.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('noAgentsInLane')}</div>}
       {agents.map((a) => (
         <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '4px 0' }}>
           <span style={{ fontWeight: 600 }}>{a.name ?? a.role}</span>
+          <span className="badge-blue" style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, textTransform: 'capitalize' }} title={t('roleTitle')}>
+            {a.role}
+          </span>
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
             {a.runtime}
-            {a.model ? ` · ${a.model}` : ' · default LLM'}
+            {a.model ? ` · ${a.model}` : ` · ${t('defaultLlm')}`}
           </span>
           <span style={{ flex: 1 }} />
-          <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(a.id)}>Remove</button>
+          <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(a.id)}>{t('remove')}</button>
         </div>
       ))}
       {adding ? (
         <>
           <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-            <Select value={agentSel} onChange={(e) => setAgentSel(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 180 }} aria-label="Select an agent">
-              <option value="">Select an agent…</option>
+            <Select value={agentSel} onChange={(e) => setAgentSel(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 180 }} aria-label={t('selectAgent')}>
+              <option value="">{t('selectAgent')}</option>
               {available.map((a) => (
                 <option key={`${a.kind}:${a.ref}`} value={`${a.kind}:${a.ref}`}>{a.name}</option>
               ))}
             </Select>
-            <input style={{ ...inputStyle, width: 160 }} placeholder="model (blank = default)" value={model} onChange={(e) => setModel(e.target.value)} />
-            <button type="button" style={btnPrimary} onClick={add} disabled={!agentSel}>Add</button>
-            <button type="button" style={btnSubtle} onClick={() => { setAdding(false); setAgentSel(''); setModel(''); }}>Cancel</button>
+            <input style={{ ...inputStyle, width: 140 }} placeholder={t('namePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} title={t('nameTitle')} />
+            <input style={{ ...inputStyle, width: 120 }} placeholder={t('rolePlaceholder')} value={role} onChange={(e) => setRole(e.target.value)} title={t('roleTitle')} />
+            <input style={{ ...inputStyle, width: 160 }} placeholder={t('modelPlaceholder')} value={model} onChange={(e) => setModel(e.target.value)} />
+            <button type="button" style={btnPrimary} onClick={add} disabled={!agentSel}>{t('add')}</button>
+            <button type="button" style={btnSubtle} onClick={() => { setAdding(false); setAgentSel(''); setName(''); setRole(''); setModel(''); }}>{t('cancel')}</button>
           </div>
           {available.length === 0 && (
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
-              No agents registered yet — create one in Workforce or register one in Settings.
+              {t('noAgentsRegistered')}
             </div>
           )}
         </>
       ) : (
-        <button type="button" style={{ ...btnSubtle, marginTop: 8 }} onClick={() => setAdding(true)}>+ Assign agent</button>
+        <button type="button" style={{ ...btnSubtle, marginTop: 8 }} onClick={() => setAdding(true)}>{t('assignAgent')}</button>
       )}
     </div>
   );
 }
 
-function SettingsTab({ board, onSaved }: { board: Board; onSaved: () => void }) {
+/**
+ * Assign workforce Teams to this board. A board is 1:1 with its project, so
+ * "assign a team to the board" attaches the team to the board's project
+ * (team_projects). Members of an attached team are managed in Workforce → Teams;
+ * this tab only governs which teams work this board.
+ */
+function TeamsTab({ projectId }: { projectId: number }) {
+  const t = useTranslations('boardConfig');
+  const [allTeams, setAllTeams] = useState<TeamSummary[]>([]);
+  const [attached, setAttached] = useState<AttachedTeam[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [pick, setPick] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [all, here] = await Promise.all([listTeams(), listTeamsByProject(projectId)]);
+      setAllTeams(all);
+      setAttached(here);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('errLoadTeams'));
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId, t]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const attachedIds = new Set(attached.map((t) => t.id));
+  const available = allTeams.filter((t) => !attachedIds.has(t.id));
+
+  const mutate = async (fn: () =>
+    Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try { await fn(); await load(); }
+    catch (e) { setError(e instanceof Error ? e.message : t('errUpdate')); }
+    finally { setBusy(false); }
+  };
+
+  const workforceLink = (chunks: React.ReactNode) => (
+    <a href="/workforce?tab=teams" style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>{chunks}</a>
+  );
+
+  return (
+    <div style={sectionPad}>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+        {t.rich('teamsIntro', { link: workforceLink })}
+      </div>
+
+      {error && (
+        <div style={{ fontSize: 13, color: 'var(--danger, #dc2626)', marginBottom: 10 }}>{error}</div>
+      )}
+
+      {loading ? (
+        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loadingTeams')}</div>
+      ) : (
+        <>
+          {attached.length === 0 ? (
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>{t('noTeamsAssigned')}</div>
+          ) : (
+            <div style={{ marginBottom: 12 }}>
+              {attached.map((tm) => (
+                <div key={tm.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{tm.name}</div>
+                    {tm.description && (
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tm.description}</div>
+                    )}
+                  </div>
+                  <span style={{ flex: 1 }} />
+                  <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} disabled={busy} onClick={() => void mutate(() => removeTeamProject(tm.id, projectId))}>
+                    {t('remove')}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {allTeams.length === 0 ? (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              {t.rich('noTeamsExist', { link: workforceLink })}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <Select
+                value={pick}
+                onChange={(e) => setPick(e.target.value)}
+                style={{ ...inputStyle, flex: 1, minWidth: 200 }}
+                aria-label={t('selectTeamToAssign')}
+                disabled={busy || available.length === 0}
+              >
+                <option value="">{available.length === 0 ? t('allTeamsAssigned') : t('assignTeam')}</option>
+                {available.map((tm) => <option key={tm.id} value={tm.id}>{tm.name}</option>)}
+              </Select>
+              <button
+                type="button"
+                style={{ ...btnPrimary, opacity: !pick || busy ? 0.6 : 1 }}
+                disabled={!pick || busy}
+                onClick={() => { const id = Number(pick); if (id) void mutate(async () => { await addTeamProject(id, projectId); setPick(''); }); }}
+              >
+                {t('assign')}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function SettingsTab({ board, projectId, onSaved }: { board: Board; projectId: number; onSaved: () => void }) {
+  const t = useTranslations('boardConfig');
+  const confirm = useConfirm();
   const [maxConcurrent, setMaxConcurrent] = useState(board.maxConcurrentTickets);
   const [name, setName] = useState(board.name);
+  const [turnMode, setTurnMode] = useState<'facilitator' | 'timeboxed'>(board.standupTurnMode ?? 'facilitator');
+  const [turnSeconds, setTurnSeconds] = useState(board.standupTurnSeconds ?? 90);
+  const [hideDoneItems, setHideDoneItems] = useState(board.hideDoneItems ?? false);
+  // Default true: a board with the flag unset still gates high/urgent work.
+  const [requireApproval, setRequireApproval] = useState(board.requireExecutionApproval ?? true);
   const [saving, setSaving] = useState(false);
+  const [templates, setTemplates] = useState<TemplateSummary[]>([]);
+  const [activeTemplateId, setActiveTemplateId] = useState('');
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [templateBusy, setTemplateBusy] = useState(false);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    Promise.all([kanbanApi.listTemplates(), kanbanApi.roster(projectId)])
+      .then(([available, roster]) => {
+        if (!live) return;
+        setTemplates(available);
+        setActiveTemplateId(roster.templateId);
+        setSelectedTemplateId(roster.templateId);
+      })
+      .catch((e) => { if (live) setTemplateError(e instanceof Error ? e.message : t('templateLoadError')); });
+    return () => { live = false; };
+  }, [projectId, t]);
+
+  const applyTemplate = async () => {
+    if (!selectedTemplateId || selectedTemplateId === activeTemplateId) return;
+    const selected = templates.find((template) => template.id === selectedTemplateId);
+    const accepted = await confirm({
+      title: t('templateConfirmTitle'),
+      message: t('templateConfirmMessage', { name: selected?.name ?? selectedTemplateId }),
+      confirmLabel: t('templateApply'),
+      destructive: true,
+    });
+    if (!accepted) return;
+    setTemplateBusy(true);
+    setTemplateError(null);
+    try {
+      await kanbanApi.applyTemplate(projectId, selectedTemplateId);
+      setActiveTemplateId(selectedTemplateId);
+      onSaved();
+    } catch (e) {
+      setTemplateError(e instanceof Error ? e.message : t('templateApplyError'));
+    } finally {
+      setTemplateBusy(false);
+    }
+  };
 
   const save = async () => {
     setSaving(true);
     try {
-      await boardsApi.update(board.id, { name: name.trim() || board.name, maxConcurrentTickets: maxConcurrent });
+      await boardsApi.update(board.id, {
+        name: name.trim() || board.name,
+        maxConcurrentTickets: maxConcurrent,
+        standupTurnMode: turnMode,
+        standupTurnSeconds: turnSeconds,
+        hideDoneItems,
+        requireExecutionApproval: requireApproval,
+      });
       onSaved();
     } finally { setSaving(false); }
   };
 
   return (
     <div style={{ ...sectionPad, display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 420 }}>
+      <div style={{ paddingBottom: 14, borderBottom: '1px solid var(--border-subtle)' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{t('templateHeading')}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>{t('templateHint')}</div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+          <Select
+            value={selectedTemplateId}
+            onChange={(e) => setSelectedTemplateId(e.target.value)}
+            disabled={templateBusy || templates.length === 0}
+            aria-label={t('templateLabel')}
+            style={{ ...inputStyle, flex: 1, minWidth: 220 }}
+          >
+            {templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
+          </Select>
+          <RoleGate capability="manager.manage" variant="block">
+            <button
+              type="button"
+              style={{ ...btnPrimary, opacity: !selectedTemplateId || selectedTemplateId === activeTemplateId || templateBusy ? 0.6 : 1 }}
+              disabled={!selectedTemplateId || selectedTemplateId === activeTemplateId || templateBusy}
+              onClick={() => void applyTemplate()}
+            >
+              {templateBusy ? t('templateApplying') : t('templateApply')}
+            </button>
+          </RoleGate>
+        </div>
+        {templateError && <div style={{ marginTop: 6, fontSize: 12, color: 'var(--danger, #dc2626)' }}>{templateError}</div>}
+      </div>
       <label style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-        Board name
+        {t('boardNameLabel')}
         <input style={{ ...inputStyle, width: '100%', marginTop: 4 }} value={name} onChange={(e) => setName(e.target.value)} />
       </label>
       {/* Autonomy is implicit now: a lane with agents + an auto gate advances on
           its own; a human gate waits. There is no board-level autonomous toggle. */}
       <label style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-        Max concurrent tickets
+        {t('maxConcurrent')}
         <input type="number" min={1} style={{ ...inputStyle, width: 120, marginTop: 4 }} value={maxConcurrent} onChange={(e) => setMaxConcurrent(Number(e.target.value))} />
       </label>
+
+      {/* Hide tickets sitting in a terminal (Done) lane so the board shows only
+          live work. Display-only — the tickets and their history are untouched. */}
+      <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input type="checkbox" checked={hideDoneItems} onChange={(e) => setHideDoneItems(e.target.checked)} />
+        {t('hideDoneItems')}
+      </label>
+
+      {/* Governance: whether HIGH/URGENT tickets must clear a manager-approval
+          request before an agent runs them. Manager-gated (disabled, not hidden,
+          for non-managers) — the same control the board banner points to when it
+          blocks a run. Off = the override: high/urgent work runs without approval. */}
+      <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>
+          {t('approvalHeading')}
+        </div>
+        <RoleGate capability="board.manageApproval" variant="block">
+          <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            <input
+              type="checkbox"
+              checked={requireApproval}
+              onChange={(e) => setRequireApproval(e.target.checked)}
+              style={{ marginTop: 3 }}
+            />
+            <span>
+              {t('approvalToggle')}
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                {requireApproval ? t('approvalOnHint') : t('approvalOffHint')}
+              </span>
+            </span>
+          </label>
+        </RoleGate>
+      </div>
+
+      {/* Standup turn timer — drives the ceremony round-table's "who's next". */}
+      <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>{t('standupTimer')}</div>
+        <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'block' }}>
+          {t('mode')}
+          <Select
+            style={{ ...inputStyle, width: '100%', marginTop: 4 }}
+            value={turnMode}
+            onChange={(e) => setTurnMode(e.target.value as 'facilitator' | 'timeboxed')}
+          >
+            <option value="facilitator">{t('modeFacilitator')}</option>
+            <option value="timeboxed">{t('modeTimeboxed')}</option>
+          </Select>
+        </label>
+        {turnMode === 'timeboxed' && (
+          <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'block', marginTop: 10 }}>
+            {t('secondsPerPerson')}
+            <input type="number" min={10} step={5} style={{ ...inputStyle, width: 120, marginTop: 4 }} value={turnSeconds} onChange={(e) => setTurnSeconds(Number(e.target.value))} />
+          </label>
+        )}
+      </div>
+
       <div>
-        <button type="button" style={btnPrimary} disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Save settings'}</button>
+        <button type="button" style={btnPrimary} disabled={saving} onClick={save}>{saving ? t('saving') : t('saveSettings')}</button>
       </div>
     </div>
   );

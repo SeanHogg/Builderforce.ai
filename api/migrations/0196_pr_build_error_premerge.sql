@@ -1,0 +1,15 @@
+-- 0196_pr_build_error_premerge.sql
+-- Surface WHY a build failed on the ticket, for the PRE-merge (PR-branch) build too.
+--
+-- Until now `build_status` was only stamped by the POST-merge deploy build, and the
+-- failure REASON was never persisted at all — it lived only in transient telemetry,
+-- so a buyer (and the agent that marked the task "complete") never saw why CI went
+-- red on the agent's `builderforce/task-<id>` branch. We now:
+--   1. record the failing-jobs/steps summary on the PR row (`build_error`) so the
+--      in-product Pull Request tab can render the reason for both pre- and post-merge
+--      failures, and
+--   2. stamp `build_status` on the OPEN PR row from the pre-merge CI result (not just
+--      after merge) so the same column drives the UI in both phases.
+--
+--   build_error — human/LLM-readable failed-jobs/steps summary (cleared on a green build).
+ALTER TABLE pull_requests ADD COLUMN IF NOT EXISTS build_error text;

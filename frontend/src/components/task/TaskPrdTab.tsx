@@ -5,6 +5,8 @@ import { createPortal } from 'react-dom';
 import { specsApi, taskSpecsApi, type Spec } from '@/lib/builderforceApi';
 import { ChatMessageContent } from '../ChatMessageContent';
 import { Select } from '@/components/Select';
+import { ViewToggle } from '@/components/ViewToggle';
+import { unwrapMarkdownFence } from '@/lib/utils';
 import { PrdCreateModal } from '../prd/PrdCreateModal';
 
 /**
@@ -48,6 +50,10 @@ export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: 
   const [busy, setBusy] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  // PRDs drafted by an LLM occasionally arrive wrapped in a whole-document
+  // ```markdown fence, which renders as one raw "MARKDOWN" code box. Default to
+  // the rendered Preview (fence stripped); let the user drop to RAW source.
+  const [view, setView] = useState<'preview' | 'raw'>('preview');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -123,10 +129,29 @@ export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: 
     );
   }
 
+  const prd = selected?.prd ?? '';
   const body = (
     <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-primary)' }}>
-      <ChatMessageContent content={selected?.prd ?? ''} />
+      {view === 'raw' ? (
+        <pre style={{
+          margin: 0, padding: '12px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+          background: 'var(--bg-elevated)', color: 'var(--text-primary)', overflowX: 'auto',
+          fontFamily: "'JetBrains Mono', 'Fira Code', monospace", fontSize: '0.78rem', lineHeight: 1.6, whiteSpace: 'pre-wrap',
+        }}>
+          {prd}
+        </pre>
+      ) : (
+        <ChatMessageContent content={unwrapMarkdownFence(prd)} />
+      )}
     </div>
+  );
+
+  const viewToggle = (
+    <ViewToggle
+      value={view}
+      onChange={setView}
+      options={[{ value: 'preview', label: 'Preview' }, { value: 'raw', label: 'RAW' }]}
+    />
   );
 
   return (
@@ -146,6 +171,7 @@ export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: 
             <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 400 }}> · {selected?.status}</span>
           </div>
         )}
+        {viewToggle}
         <button type="button" style={iconBtn} title="Expand to full screen" aria-label="Expand to full screen" onClick={() => setFullscreen(true)}>
           <ExpandIcon />
         </button>
@@ -183,11 +209,14 @@ export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: 
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 24px', borderBottom: '1px solid var(--border-subtle)' }}>
             <div style={{ fontWeight: 700, fontSize: 16 }}>{selected?.goal || 'PRD'}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {viewToggle}
             <button type="button" style={iconBtn} aria-label="Close full screen" onClick={() => setFullscreen(false)}>
               <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
                 <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
+            </div>
           </div>
           <div style={{ flex: 1, overflow: 'auto', padding: '24px 32px', maxWidth: 900, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
             {body}

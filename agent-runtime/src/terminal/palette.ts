@@ -1,6 +1,6 @@
-// Lobster palette tokens for CLI/UI theming. "lobster seam" == use this palette.
-// Keep in sync with docs/cli/index.md (CLI palette section).
-export const LOBSTER_PALETTE = {
+// BuilderForce brand palette tokens for CLI/UI theming. Use this palette for all
+// CLI/UI theming. Keep in sync with docs/cli/index.md (CLI palette section).
+export const BRAND_PALETTE = {
   brand: "#3B82F6",
   accent: "#FF5A2D",
   accentBright: "#FF7A3D",

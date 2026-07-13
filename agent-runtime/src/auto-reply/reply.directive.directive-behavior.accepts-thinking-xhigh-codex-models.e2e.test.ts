@@ -7,7 +7,7 @@ import {
   makeWhatsAppDirectiveConfig,
   replyText,
   replyTexts,
-  runEmbeddedPiAgent,
+  runEmbeddedAgent,
   sessionStorePath,
   withTempHome,
 } from "./reply.directive.directive-behavior.e2e-harness.js";
@@ -85,7 +85,7 @@ describe("directive behavior", () => {
 
       const text = replyText(res);
       expect(text).toContain("Help");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("treats skill commands as reserved for model aliases", async () => {
@@ -118,8 +118,8 @@ describe("directive behavior", () => {
         ),
       );
 
-      expect(runEmbeddedPiAgent).toHaveBeenCalled();
-      const prompt = vi.mocked(runEmbeddedPiAgent).mock.calls[0]?.[0]?.prompt ?? "";
+      expect(runEmbeddedAgent).toHaveBeenCalled();
+      const prompt = vi.mocked(runEmbeddedAgent).mock.calls[0]?.[0]?.prompt ?? "";
       expect(prompt).toContain('Use the "demo-skill" skill');
     });
   });
@@ -146,7 +146,7 @@ describe("directive behavior", () => {
       expect(text).toContain("Invalid debounce");
       expect(text).toContain("Invalid cap");
       expect(text).toContain("Invalid drop policy");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("shows current queue settings when /queue has no arguments", async () => {
@@ -184,7 +184,7 @@ describe("directive behavior", () => {
       expect(text).toContain(
         "Options: modes steer, followup, collect, steer+backlog, interrupt; debounce:<ms|s|m>, cap:<n>, drop:old|new|summarize.",
       );
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("shows current think level when /think has no argument", async () => {
@@ -202,7 +202,7 @@ describe("directive behavior", () => {
       const text = replyText(res);
       expect(text).toContain("Current thinking level: high");
       expect(text).toContain("Options: off, minimal, low, medium, high.");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
 });

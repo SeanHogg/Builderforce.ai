@@ -1,18 +1,25 @@
 /**
  * GitHub webhook handler — /api/webhooks/github
  *
- * Receives GitHub App or repository webhook events and auto-dispatches
- * labelled issues as BuilderForce Agents tasks.
+ * Three jobs, keyed off X-GitHub-Event:
+ *   - CI/deploy events → feed build/deploy results back to the cloud execution
+ *     (and auto-fix on failure).
+ *   - push / pull_request / pull_request_review → INGEST engineering activity into
+ *     activity_events (the producer side of the consolidation surface): commits,
+ *     PRs, reviews — attributed to a contributor (auto-created on first sight) and a
+ *     project (via the connected repo). Issues are ingested inline below too.
+ *   - issues → auto-dispatch labelled/opened issues as BuilderForce Agents tasks.
  *
  * SETUP:
  *   1. In GitHub, create a webhook (App or repo level) pointing to:
  *        https://api.builderforce.ai/api/webhooks/github
  *      Content type: application/json
- *      Events: Issues
+ *      Events: Pushes, Pull requests, Pull request reviews, Issues (+ CI events).
  *   2. Set the webhook secret, then:
  *        wrangler secret put GITHUB_WEBHOOK_SECRET
- *   3. Link your Builderforce project to a GitHub repo (set sourceControlRepoFullName
- *      on the project) — the webhook matches repos to projects by this field.
+ *   3. Link the repo to a Builderforce project — either via project_repositories
+ *      (Project → Repositories) or the project's sourceControlRepoFullName. The
+ *      webhook resolves repo → tenant/project by that link for both ingest + dispatch.
  *
  * DISPATCH TRIGGER:
  *   An issue is dispatched as a task when:
@@ -32,12 +39,148 @@ import { verifyHmacSignature } from '../../application/workflow/verifySignature'
 import { ingestRepoCiEvent, AUTOFIX_DISPATCH_EVENT, type RepoCiEvent, type AutoFixIntent } from '../../application/ci/ingestRepoCiEvent';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
+import { ingestForRepo, type IngestEvent } from '../../application/contributors/activityIngest';
 
 /** Labels that trigger auto-dispatch. Lower-cased for comparison. */
 const DISPATCH_LABELS = new Set(['coderclaw', 'ai-task', 'host', 'ai']);
 
 /** GitHub CI/deploy events we feed back to the originating cloud execution. */
 const CI_EVENTS = new Set(['check_suite', 'check_run', 'workflow_run', 'deployment_status', 'status']);
+
+/** Engineering-activity events we ingest into activity_events (the producer side
+ *  of the consolidation surface): commits, PR lifecycle, reviews. Issues are
+ *  ingested inline alongside the existing issue→task dispatch. */
+const ACTIVITY_EVENTS = new Set(['push', 'pull_request', 'pull_request_review']);
+
+// ── GitHub payload → normalized activity events ──────────────────────────────
+// Loose accessors so a missing/odd field degrades to a skipped event, never a throw.
+const g = (o: unknown, k: string): unknown => (o && typeof o === 'object' ? (o as Record<string, unknown>)[k] : undefined);
+const gs = (o: unknown, k: string): string | null => { const v = g(o, k); return typeof v === 'string' ? v : null; };
+const gn = (o: unknown, k: string): number | null => { const v = g(o, k); return typeof v === 'number' ? v : null; };
+
+/** "owner/repo" + repo short name from a webhook payload's repository object. */
+function repoNames(p: Record<string, unknown>): { full: string | null; short: string | null } {
+  const repo = g(p, 'repository');
+  return { full: gs(repo, 'full_name'), short: gs(repo, 'name') };
+}
+
+/** push → one 'commit' event per commit on a branch push (tag pushes skipped). */
+export function commitEvents(p: Record<string, unknown>): IngestEvent[] {
+  const ref = gs(p, 'ref');
+  if (ref && !ref.startsWith('refs/heads/')) return [];
+  const { full, short } = repoNames(p);
+  const commits = Array.isArray(g(p, 'commits')) ? (g(p, 'commits') as Array<Record<string, unknown>>) : [];
+  return commits.map((ci) => {
+    const author = g(ci, 'author');
+    const login = gs(author, 'username');
+    const email = gs(author, 'email');
+    const message = gs(ci, 'message') ?? '';
+    return {
+      eventType: 'commit',
+      externalId: gs(ci, 'id'),                       // commit SHA
+      contributorExternalId: login ?? email,          // GH login, else email
+      authorDisplayName: gs(author, 'name'),
+      authorEmail: email,
+      repositoryName: short,
+      repositoryFullName: full,
+      title: (message.split('\n')[0] ?? '').slice(0, 500),
+      url: gs(ci, 'url'),
+      occurredAt: gs(ci, 'timestamp') ?? new Date().toISOString(),
+    } satisfies IngestEvent;
+  });
+}
+
+/** pull_request → pr_opened / pr_merged / pr_closed (with merge cycle time). */
+export function pullRequestEvents(p: Record<string, unknown>): IngestEvent[] {
+  const action = gs(p, 'action');
+  const pr = g(p, 'pull_request');
+  if (!pr) return [];
+  let eventType: IngestEvent['eventType'];
+  if (action === 'opened' || action === 'reopened') eventType = 'pr_opened';
+  else if (action === 'closed') eventType = g(pr, 'merged') ? 'pr_merged' : 'pr_closed';
+  else return [];
+  const { full, short } = repoNames(p);
+  const user = g(pr, 'user');
+  const createdAt = gs(pr, 'created_at');
+  const mergedAt = gs(pr, 'merged_at');
+  const occurredAt =
+    (eventType === 'pr_opened' ? createdAt : (mergedAt ?? gs(pr, 'closed_at') ?? gs(pr, 'updated_at'))) ??
+    new Date().toISOString();
+  const cycleTimeHours =
+    eventType === 'pr_merged' && mergedAt && createdAt
+      ? Math.max(0, Math.round((new Date(mergedAt).getTime() - new Date(createdAt).getTime()) / 3_600_000))
+      : null;
+  const number = gn(p, 'number') ?? gn(pr, 'number');
+  return [{
+    eventType,
+    externalId: number != null ? `pr-${number}` : null,
+    contributorExternalId: gs(user, 'login'),
+    authorDisplayName: gs(user, 'login'),
+    authorAvatarUrl: gs(user, 'avatar_url'),
+    repositoryName: short,
+    repositoryFullName: full,
+    title: gs(pr, 'title'),
+    url: gs(pr, 'html_url'),
+    linesAdded: gn(pr, 'additions'),
+    linesRemoved: gn(pr, 'deletions'),
+    filesChanged: gn(pr, 'changed_files'),
+    cycleTimeHours,
+    occurredAt,
+  }];
+}
+
+/** pull_request_review (submitted) → pr_reviewed. */
+export function reviewEvents(p: Record<string, unknown>): IngestEvent[] {
+  if (gs(p, 'action') !== 'submitted') return [];
+  const r = g(p, 'review');
+  if (!r) return [];
+  const { full, short } = repoNames(p);
+  const user = g(r, 'user');
+  const id = gn(r, 'id');
+  const state = gs(r, 'state');
+  return [{
+    eventType: 'pr_reviewed',
+    externalId: id != null ? `review-${id}` : null,
+    contributorExternalId: gs(user, 'login'),
+    authorDisplayName: gs(user, 'login'),
+    authorAvatarUrl: gs(user, 'avatar_url'),
+    repositoryName: short,
+    repositoryFullName: full,
+    title: state ? `Review: ${state}` : 'Review',
+    url: gs(r, 'html_url'),
+    occurredAt: gs(r, 'submitted_at') ?? new Date().toISOString(),
+  }];
+}
+
+/** issues (opened/closed) → issue_created / issue_resolved. */
+export function issueEvents(p: Record<string, unknown>): IngestEvent[] {
+  const action = gs(p, 'action');
+  const issue = g(p, 'issue');
+  if (!issue) return [];
+  let eventType: IngestEvent['eventType'];
+  if (action === 'opened') eventType = 'issue_created';
+  else if (action === 'closed') eventType = 'issue_resolved';
+  else return [];
+  const { full, short } = repoNames(p);
+  const user = g(issue, 'user');
+  const number = gn(issue, 'number');
+  return [{
+    eventType,
+    externalId: number != null ? `issue-${number}` : null,
+    contributorExternalId: gs(user, 'login'),
+    authorDisplayName: gs(user, 'login'),
+    authorAvatarUrl: gs(user, 'avatar_url'),
+    repositoryName: short,
+    repositoryFullName: full,
+    title: gs(issue, 'title'),
+    url: gs(issue, 'html_url'),
+    occurredAt: (action === 'opened' ? gs(issue, 'created_at') : gs(issue, 'closed_at') ?? gs(issue, 'updated_at')) ?? new Date().toISOString(),
+  }];
+}
+
+/** Ingest normalized GitHub events for the tenant that owns the repo. */
+const ingestGithubActivity = (env: Env, db: Db, repoFullName: string, events: IngestEvent[]) =>
+  ingestForRepo(env, db, 'github', repoFullName, events);
 
 /** Map a provider conclusion/state to our normalized outcome. */
 function toOutcome(s: string | null | undefined): RepoCiEvent['outcome'] {
@@ -101,10 +244,11 @@ export function createGitHubWebhookRoutes(db: Db, runtimeService: RuntimeService
   const router = new Hono<HonoEnv>();
 
   /**
-   * Post-merge build failed → dispatch an auto-fix run for the task (the agent
-   * fixes the build → new approval-gated PR). The loop-guard lives in
-   * `ingestRepoCiEvent` (it only returns an intent under the attempt cap); here we
-   * just start the run and record the `autofix.dispatch` event the guard counts.
+   * A build failed (pre-merge PR branch or post-merge deploy) → dispatch an auto-fix
+   * run for the task (the agent fixes the build → updated/new approval-gated PR). The
+   * loop-guard lives in `ingestRepoCiEvent` (it only returns an intent under the
+   * attempt cap); here we just start the run and record the `autofix.dispatch` event
+   * the guard counts.
    */
   const dispatchAutoFix = (c: Context<HonoEnv>, intent: AutoFixIntent): void => {
     c.executionCtx.waitUntil((async () => {
@@ -159,9 +303,29 @@ export function createGitHubWebhookRoutes(db: Db, runtimeService: RuntimeService
       if (!norm) return c.json({ received: true, processed: false, reason: `event '${event}' not normalized` });
       const secret = c.env.INTEGRATION_ENCRYPTION_SECRET ?? c.env.JWT_SECRET ?? '';
       const res = await ingestRepoCiEvent(db, c.env as Env, secret, norm);
-      // Post-merge build failed and under the attempt cap → kick off a fix run.
+      // A build failed (pre-merge PR branch or post-merge deploy) and is under the
+      // attempt cap → kick off a fix run so the agent fixes the build it broke.
       if (res.autoFix) dispatchAutoFix(c, res.autoFix);
       return c.json({ received: true, ...res, autoFix: res.autoFix ? { dispatched: true, attempt: res.autoFix.attempt } : undefined });
+    }
+
+    // Engineering-activity ingestion: connecting a repo makes its commits / PRs /
+    // reviews flow into activity_events, attributed to a contributor (auto-created
+    // on first sight) and a project, for the consolidation + rollup surfaces.
+    if (event && ACTIVITY_EVENTS.has(event)) {
+      let p: Record<string, unknown>;
+      try { p = JSON.parse(rawBody) as Record<string, unknown>; } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
+      const { full } = repoNames(p);
+      if (!full) return c.json({ received: true, processed: false, reason: 'no repository in payload' });
+      const events =
+        event === 'push' ? commitEvents(p)
+        : event === 'pull_request' ? pullRequestEvents(p)
+        : reviewEvents(p);
+      const out = await ingestGithubActivity(c.env as Env, db, full, events);
+      if (!out) {
+        return c.json({ received: true, processed: false, reason: `no project linked to repo '${full}'` });
+      }
+      return c.json({ received: true, processed: true, inserted: out.inserted, skipped: out.skipped });
     }
 
     if (event !== 'issues') {
@@ -177,6 +341,15 @@ export function createGitHubWebhookRoutes(db: Db, runtimeService: RuntimeService
     }
 
     const { action, issue, repository } = payload;
+
+    // Ingest issue activity (opened → issue_created, closed → issue_resolved) for
+    // the consolidation surface — independent of, and in addition to, task dispatch
+    // below (which only fires for labelled/open issues). Best-effort: a no-link or
+    // non-tracked action just yields zero events.
+    try {
+      const issuePayload = JSON.parse(rawBody) as Record<string, unknown>;
+      await ingestGithubActivity(c.env as Env, db, repository.full_name, issueEvents(issuePayload));
+    } catch { /* activity ingest is best-effort; never block dispatch */ }
 
     // Only dispatch on 'opened' or when a dispatch label is added
     const isOpen = action === 'opened';

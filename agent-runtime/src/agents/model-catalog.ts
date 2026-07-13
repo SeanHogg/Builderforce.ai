@@ -2,9 +2,9 @@ import { type BuilderForceAgentsConfig, loadConfig } from "../config/config.js";
 import { resolveBuilderForceAgentsAgentDir } from "./agent-paths.js";
 import { ensureBuilderForceAgentsModelsJson } from "./models-config.js";
 import {
-  AuthStorage as PiAuthStorage,
-  ModelRegistry as PiModelRegistry,
-} from "./pi-model-discovery.js";
+  AuthStorage as NativeAuthStorage,
+  ModelRegistry as NativeModelRegistry,
+} from "./model-discovery.js";
 
 export type ModelCatalogEntry = {
   id: string;
@@ -24,16 +24,16 @@ type DiscoveredModel = {
   input?: Array<"text" | "image">;
 };
 
-type PiSdkModule = typeof import("./pi-model-discovery.js");
+type ModelSdkModule = typeof import("./model-discovery.js");
 
 let modelCatalogPromise: Promise<ModelCatalogEntry[]> | null = null;
 let hasLoggedModelCatalogError = false;
 // Use a factory so tests can inject mock implementations via __setModelCatalogImportForTest.
 // The default uses static imports to avoid creating a split chunk that would
 // import __exportAll from the parent bundle chunk, causing a circular TDZ crash.
-const defaultImportPiSdk = (): Promise<PiSdkModule> =>
-  Promise.resolve({ AuthStorage: PiAuthStorage, ModelRegistry: PiModelRegistry } as PiSdkModule);
-let importPiSdk = defaultImportPiSdk;
+const defaultImportModelSdk = (): Promise<ModelSdkModule> =>
+  Promise.resolve({ AuthStorage: NativeAuthStorage, ModelRegistry: NativeModelRegistry } as ModelSdkModule);
+let importModelSdk = defaultImportModelSdk;
 
 const CODEX_PROVIDER = "openai-codex";
 const OPENAI_CODEX_GPT53_MODEL_ID = "gpt-5.3-codex";
@@ -67,7 +67,7 @@ function applyOpenAICodexSparkFallback(models: ModelCatalogEntry[]): void {
 export function resetModelCatalogCacheForTest() {
   modelCatalogPromise = null;
   hasLoggedModelCatalogError = false;
-  importPiSdk = defaultImportPiSdk;
+  importModelSdk = defaultImportModelSdk;
 }
 
 /** Invalidate the model catalog cache so the next loadModelCatalog call reloads from disk. */
@@ -76,8 +76,8 @@ export function invalidateModelCatalogCache() {
 }
 
 // Test-only escape hatch: allow mocking the dynamic import to simulate transient failures.
-export function __setModelCatalogImportForTest(loader?: () => Promise<PiSdkModule>) {
-  importPiSdk = loader ?? defaultImportPiSdk;
+export function __setModelCatalogImportForTest(loader?: () => Promise<ModelSdkModule>) {
+  importModelSdk = loader ?? defaultImportModelSdk;
 }
 
 function createAuthStorage(AuthStorageLike: unknown, path: string) {
@@ -113,17 +113,17 @@ export async function loadModelCatalog(params?: {
       const cfg = params?.config ?? loadConfig();
       await ensureBuilderForceAgentsModelsJson(cfg);
       await (
-        await import("./pi-auth-json.js")
-      ).ensurePiAuthJsonFromAuthProfiles(resolveBuilderForceAgentsAgentDir());
+        await import("./auth-json.js")
+      ).ensureAuthJsonFromAuthProfiles(resolveBuilderForceAgentsAgentDir());
       // IMPORTANT: keep the dynamic import *inside* the try/catch.
       // If this fails once (e.g. during a pnpm install that temporarily swaps node_modules),
       // we must not poison the cache with a rejected promise (otherwise all channel handlers
       // will keep failing until restart).
-      const piSdk = await importPiSdk();
+      const modelSdk = await importModelSdk();
       const agentDir = resolveBuilderForceAgentsAgentDir();
       const { join } = await import("node:path");
-      const authStorage = createAuthStorage(piSdk.AuthStorage, join(agentDir, "auth.json"));
-      const registry = new (piSdk.ModelRegistry as unknown as {
+      const authStorage = createAuthStorage(modelSdk.AuthStorage, join(agentDir, "auth.json"));
+      const registry = new (modelSdk.ModelRegistry as unknown as {
         new (
           authStorage: unknown,
           modelsFile: string,

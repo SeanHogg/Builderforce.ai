@@ -17,7 +17,7 @@ import {
   isStableTag,
   type UpdateChannel,
 } from "./update-channels.js";
-import { compareSemverStrings } from "./update-check.js";
+import { compareSemverStrings, gitWorkingTreeStatusArgs } from "./update-check.js";
 import {
   cleanupGlobalRenameDirs,
   detectGlobalInstallManagerForRoot,
@@ -407,11 +407,7 @@ export async function runGatewayUpdate(opts: UpdateRunnerOptions = {}): Promise<
     };
 
     const statusCheck = await runStep(
-      step(
-        "clean check",
-        ["git", "-C", gitRoot, "status", "--porcelain", "--", ":!dist/control-ui/"],
-        gitRoot,
-      ),
+      step("clean check", gitWorkingTreeStatusArgs(gitRoot), gitRoot),
     );
     steps.push(statusCheck);
     const hasUncommittedChanges =

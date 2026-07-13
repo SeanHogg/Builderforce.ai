@@ -12,6 +12,8 @@ Every team on Builderforce shares the same API infrastructure. No team can see a
 
 This post explains the trust model, the access control system, how agent authentication works, and what the audit trail covers.
 
+![Diagram of Builderforce multi-tenant security: three isolated tenant lanes separated by locked walls, three authentication mechanisms (web JWT, hashed AgentHost API key, HMAC-SHA256 dispatch signing), and query-level isolation where every tenant-scoped query carries an eq(tenantId) filter](/blog/security-multitenant.svg)
+
 ---
 
 ## The Tenant Model

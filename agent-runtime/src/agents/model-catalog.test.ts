@@ -4,7 +4,7 @@ import { __setModelCatalogImportForTest, loadModelCatalog } from "./model-catalo
 import {
   installModelCatalogTestHooks,
   mockCatalogImportFailThenRecover,
-  type PiSdkModule,
+  type ModelSdkModule,
 } from "./model-catalog.test-harness.js";
 
 describe("loadModelCatalog", () => {
@@ -45,7 +45,7 @@ describe("loadModelCatalog", () => {
               ];
             }
           },
-        }) as unknown as PiSdkModule,
+        }) as unknown as ModelSdkModule,
     );
 
     const result = await loadModelCatalog({ config: {} as BuilderForceAgentsConfig });
@@ -77,7 +77,7 @@ describe("loadModelCatalog", () => {
               ];
             }
           },
-        }) as unknown as PiSdkModule,
+        }) as unknown as ModelSdkModule,
     );
 
     const result = await loadModelCatalog({ config: {} as BuilderForceAgentsConfig });

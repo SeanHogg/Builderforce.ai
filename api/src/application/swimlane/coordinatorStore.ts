@@ -11,7 +11,6 @@
 export interface BoardLite {
   id: string;
   tenantId: number;
-  autonomous: boolean;
   maxConcurrentTickets: number;
   needsAttentionLane: string;
 }
@@ -29,6 +28,14 @@ export interface LaneLite {
   actionTarget: string | null;     // target lane key (move_ticket) | workflow id (run_workflow)
   successPolicy: string;           // 'all' | 'any' | 'n_of_m'
   successThreshold: number | null; // required when successPolicy='n_of_m'
+  /** What a FAILED/unmet-quorum stage does (migration 0084): 'needs_attention'
+   *  (default — park for a human), 'skip' (tolerate + advance past the lane), or
+   *  'retry' (re-run — currently falls back to needs_attention, see Gap Register). */
+  failurePolicy: string;
+  /** How strictly this lane's requirements gate entry (migration 0274): 'off' | 'soft'
+   *  | 'hard'. The coordinator blocks a 'hard' lane's stage launch while a required
+   *  reviewer sign-off is missing. */
+  requirementGate: string;
 }
 
 export interface AssignmentLite {
@@ -49,6 +56,8 @@ export interface TicketRunLite {
   currentSwimlaneId: string | null;
   lifecycle: string;
   currentWorkflowId: string | null;
+  /** When lifecycle='awaiting_workflow': the spawned run_workflow id being awaited. */
+  awaitingWorkflowId: string | null;
   stageHistory: string | null;
   error: string | null;
 }
@@ -110,6 +119,10 @@ export interface CoordinatorStore {
   /** All lanes of a board, ordered by position ascending. */
   listLanes(boardId: string, tenantId: number): Promise<LaneLite[]>;
   getLane(swimlaneId: string, tenantId: number): Promise<LaneLite | null>;
+  /** True when this lane declares a REQUIRED reviewer check (review, or role with
+   *  responsibility='reviewer') that the ticket has NOT satisfied with an approved
+   *  sign-off. Drives the coordinator's 'hard'-gate block. */
+  hasUnmetRequiredReviewers(taskId: number, swimlaneId: string, tenantId: number): Promise<boolean>;
   listAssignments(swimlaneId: string, tenantId: number): Promise<AssignmentLite[]>;
 
   createTicketRun(data: {
@@ -124,9 +137,23 @@ export interface CoordinatorStore {
   updateTicketRun(
     id: string,
     tenantId: number,
-    patch: { lifecycle: string; currentSwimlaneId: string | null; stageHistory: string; error: string | null },
+    patch: {
+      lifecycle: string;
+      currentSwimlaneId: string | null;
+      stageHistory: string;
+      error: string | null;
+      /** Set/clear the parked-on workflow id. Omit to leave it unchanged. */
+      awaitingWorkflowId?: string | null;
+    },
   ): Promise<TicketRunLite | null>;
   recordTransition(t: TransitionRecord): Promise<void>;
+  /**
+   * Find the ticket run currently parked on (awaiting) the given spawned
+   * workflow id, if any. Used by the parked-workflow sweep to resume a ticket
+   * once its run_workflow side-effect settles. Optional — in-memory test stores
+   * that don't exercise the gate may omit it.
+   */
+  findAwaitingWorkflowRun?(workflowId: string): Promise<TicketRunLite | null>;
 
   insertDispatch(data: NewDispatch): Promise<string>;
   updateDispatch(

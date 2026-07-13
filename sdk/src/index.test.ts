@@ -38,6 +38,42 @@ describe('@seanhogg/builderforce-sdk', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('filters models by capability (ocr / vision / image-capable)', async () => {
+    const fetchMock = vi.fn(async () => createJsonResponse({
+      configured: true,
+      object: 'list',
+      data: [
+        { model: 'baidu/qianfan-ocr-fast:free',  vendor: 'openrouter', preferred: false, available: true,  capabilities: ['ocr'] },
+        { model: 'google/gemini-2.5-pro',         vendor: 'openrouter', preferred: true,  available: true,  capabilities: ['tools', 'structured_output', 'vision'] },
+        { model: 'anthropic/claude-sonnet-4.6',   vendor: 'openrouter', preferred: true,  available: false, capabilities: ['tools', 'vision'] },
+        { model: 'meta-llama/llama-3.3-70b:free', vendor: 'openrouter', preferred: false, available: true,  capabilities: ['tools'] },
+      ],
+    }));
+
+    const client = new BuilderforceClient({ apiKey: 'k', fetch: fetchMock as unknown as typeof fetch });
+
+    const ocr = await client.models.listOcr();
+    expect(ocr.map((m) => m.model)).toEqual(['baidu/qianfan-ocr-fast:free']);
+
+    // Vision filter excludes the unavailable Claude model by default…
+    const vision = await client.models.listVision();
+    expect(vision.map((m) => m.model)).toEqual(['google/gemini-2.5-pro']);
+
+    // …but includes it when asked.
+    const visionAll = await client.models.listVision({ includeUnavailable: true });
+    expect(visionAll.map((m) => m.model)).toEqual(['google/gemini-2.5-pro', 'anthropic/claude-sonnet-4.6']);
+
+    // Image-capable = vision OR ocr (the "read images and PDFs" set).
+    const imageCapable = await client.models.listImageCapable();
+    expect(imageCapable.map((m) => m.model)).toEqual(['baidu/qianfan-ocr-fast:free', 'google/gemini-2.5-pro']);
+  });
+
+  it('returns no models for capability filters when gateway is unconfigured', async () => {
+    const fetchMock = vi.fn(async () => createJsonResponse({ configured: false, models: ['x/y'] }));
+    const client = new BuilderforceClient({ apiKey: 'k', fetch: fetchMock as unknown as typeof fetch });
+    await expect(client.models.listImageCapable()).resolves.toEqual([]);
+  });
+
   it('posts non-stream chat completion', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as { stream?: boolean };

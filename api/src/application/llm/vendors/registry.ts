@@ -6,17 +6,26 @@
  * catalog/tier/cascade behavior is derived automatically from the module.
  */
 
+import { anthropicModule } from './anthropic';
 import { cerebrasModule } from './cerebras';
 import { cloudflareModule } from './cloudflare';
+import { evermindModule } from './evermind';
 import { googleAiModule } from './googleai';
 import { nvidiaModule } from './nvidia';
 import { ollamaModule } from './ollama';
 import { openRouterModule } from './openrouter';
+import { openAiCodexModule } from './openaiCodex';
+import { xaiOAuthModule } from './xaiOAuth';
+import { openAICompatibleModules, openAICompatibleModulesById } from './openaiCompatibleVendors';
+import { registerSchemaDialectResolver } from '../jsonSchemaSanitize';
 import {
   VendorRetryableError,
+  VendorFatalError,
+  VendorSchemaError,
   WorkerSubrequestExhaustedError,
   RequestAbortedError,
   isEmptyChatResponse,
+  SCHEMA_TOO_COMPLEX_REASON,
   type AiModelTier,
   type VendorCallParams,
   type VendorCallResult,
@@ -38,16 +47,47 @@ import {
  *   - `getCrossVendorFallbacks(...)` → the cross-vendor tail of each chain
  * Drives both Pool composition and Pool ordering with one source of truth.
  */
-const MODULES: ReadonlyArray<VendorModule> = [cerebrasModule, ollamaModule, nvidiaModule, cloudflareModule, openRouterModule, googleAiModule];
+// `anthropicModule` sits last: it is `autoRoute: false` (never part of the FREE/PRO
+// rotation), reachable only via the curated coding fallback chain or an explicit
+// pin, so its position here does not affect auto-pool ordering.
+// The OpenAI-compatible commercial vendors (openai/groq/deepseek/…) sit at the
+// TAIL: every one is `autoRoute: false`, so their position never affects the
+// auto-selected FREE/PRO pool ordering above — they only matter when a caller
+// pins `<vendor>/<id>` explicitly. Appending them here brings the live, wired
+// vendor count to 30+ (the "30+ model providers" marketing claim) without
+// touching the tuned free/paid cascade. See openaiCompatibleVendors.ts.
+const MODULES: ReadonlyArray<VendorModule> = [
+  cerebrasModule, ollamaModule, nvidiaModule, cloudflareModule, openRouterModule, googleAiModule, anthropicModule, openAiCodexModule, xaiOAuthModule,
+  // `evermind` is autoRoute:false (explicit `evermind/<ref>` pin only), so its
+  // position never affects the auto-selected FREE/PRO pool ordering.
+  evermindModule,
+  ...openAICompatibleModules,
+];
 
 const MODULES_BY_ID: Record<VendorId, VendorModule> = {
+  // Factory-built OpenAI-compatible commercial vendors first (spread, keyed by id);
+  // the bespoke modules below are distinct ids, so nothing is overwritten.
+  ...(openAICompatibleModulesById as Record<VendorId, VendorModule>),
   openrouter: openRouterModule,
   cerebras:   cerebrasModule,
   nvidia:     nvidiaModule,
   ollama:     ollamaModule,
   googleai:   googleAiModule,
   cloudflare: cloudflareModule,
+  anthropic:  anthropicModule,
+  'openai-codex': openAiCodexModule,
+  'xai-oauth': xaiOAuthModule,
+  evermind:   evermindModule,
 };
+
+/** Wire the JSON-Schema sanitizer to read each vendor's `schemaDialect` from
+ *  the registry (metadata-driven strip sets, no hardcoded vendor-id list).
+ *  Done at module-init to avoid a circular import (the sanitizer is imported by
+ *  the vendor modules themselves). Unknown ids resolve to no strip set. */
+registerSchemaDialectResolver((vendorId: string): readonly string[] => {
+  const mod = (MODULES_BY_ID as Record<string, VendorModule | undefined>)[vendorId];
+  return mod?.schemaDialect?.stripKeywords ?? [];
+});
 
 /** Used when a model id isn't in any vendor's catalog (treats as OpenRouter). */
 const DEFAULT_VENDOR: VendorId = 'openrouter';
@@ -69,11 +109,32 @@ const VENDOR_PREFIXES: ReadonlyArray<{ prefix: string; vendor: VendorId }> = [
   { prefix: 'nim/',        vendor: 'nvidia' },
   { prefix: 'ollama/',     vendor: 'ollama' },
   { prefix: 'googleai/',   vendor: 'googleai' },
+  // Our own model: `evermind/<r2-ref>` routes to the in-Worker EvermindLM. The
+  // ref may itself contain `/` (it's an R2 key prefix) — parseVendorPrefix takes
+  // everything after `evermind/` as the model id, which is exactly the ref.
+  { prefix: 'evermind/',   vendor: 'evermind' },
+  { prefix: 'openai-codex/', vendor: 'openai-codex' },
+  { prefix: 'xai-oauth/', vendor: 'xai-oauth' },
   // Cloudflare model ids natively start with `@cf/...` so they're
   // self-identifying without a `cloudflare/` URL-style prefix. We still accept
   // `cloudflare/@cf/...` for symmetry with the other vendors — callers who
   // prefer the explicit form can use it; bare `@cf/...` resolves via catalog.
   { prefix: 'cloudflare/', vendor: 'cloudflare' },
+  // Explicit `direct/<vendor>/<model-id>` routing for every factory-built
+  // OpenAI-compatible commercial vendor (`direct/openai/gpt-4o`,
+  // `direct/groq/llama-3.3-70b-versatile`, `direct/deepseek/deepseek-chat`, …).
+  //
+  // The `direct/` namespace is REQUIRED to avoid a collision: a bare provider
+  // prefix like `openai/` or `mistral/` would hijack OpenRouter's `<org>/<slug>`
+  // model id namespace (`openai/gpt-oss-120b:free`, `mistralai/...`) and silently
+  // re-route an OpenRouter model to the direct vendor. `direct/<vendor>/...` can
+  // never collide with an OpenRouter slug. These vendors are autoRoute:false, so a
+  // prefix pin is the ONLY way to reach them — exactly what the dataset wizard /
+  // model picker passes through.
+  //
+  // Derived from the module list so the prefix set can never drift from the
+  // registered vendors.
+  ...openAICompatibleModules.map((m) => ({ prefix: `direct/${m.id}/`, vendor: m.id })),
 ];
 
 /**
@@ -145,6 +206,28 @@ export function modelsByTier(...tiers: AiModelTier[]): string[] {
   );
 }
 
+/** Whether a vendor's models may be auto-selected into a failover pool. A vendor
+ *  is auto-routable unless it opts out (`autoRoute: false`) — e.g. Ollama, which
+ *  must only run when a caller explicitly pins `ollama/<id>`. */
+export function vendorAutoRoutes(vendor: VendorId): boolean {
+  return MODULES_BY_ID[vendor].autoRoute !== false;
+}
+
+/**
+ * Like {@link modelsByTier}, but EXCLUDES vendors that opt out of auto-routing
+ * (`autoRoute: false`). This is the composer for the gateway's auto-selected
+ * FREE/PRO pools: a non-auto-route vendor (Ollama) stays in the catalog — and so
+ * remains reachable via an explicit `ollama/<id>` pin — but can never be the model
+ * a cascade silently falls onto. Keeping this separate from `modelsByTier` leaves
+ * the "all models of a tier" query (catalog/admin) honest.
+ */
+export function autoRoutableModelsByTier(...tiers: AiModelTier[]): string[] {
+  const set = new Set(tiers);
+  return MODULES.filter((mod) => mod.autoRoute !== false).flatMap((mod) =>
+    mod.catalog.filter((m) => set.has(m.tier)).map((m) => m.id),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Dispatch — walk a model chain across vendors
 // ---------------------------------------------------------------------------
@@ -159,8 +242,16 @@ export interface DispatchAttempt {
   /** Wall-clock time spent on this attempt, ms (diagnostic tracing). */
   durationMs?: number;
   /** Coarse failure class — rate_limit | timeout | auth | server_error |
-   *  client_error | network (diagnostic tracing). Derived from status + error. */
+   *  client_error | schema | network (diagnostic tracing). Derived from status +
+   *  error, except `schema` which is set explicitly for a {@link VendorSchemaError}. */
   kind?: string;
+  /** Stable machine-readable cause slug when one applies (e.g. `schema_too_complex`).
+   *  Lets consumers branch on structured data instead of regex-sniffing the message. */
+  reason?: string;
+  /** The REAL upstream HTTP status before the gateway normalized it into its own
+   *  class (e.g. a Gemini schema 400 normalized to the 422 request-error class is
+   *  recorded here as `400`). Absent when `status` already IS the upstream status. */
+  upstreamStatus?: number;
 }
 
 /**
@@ -225,72 +316,6 @@ export interface StreamDispatchResult extends VendorStreamResult {
   attempts: DispatchAttempt[];
 }
 
-/** Walk a model chain non-streaming. Throws if every model in the chain fails. */
-export async function dispatchVendor(params: DispatchParams): Promise<DispatchResult> {
-  const { env, modelChain, ...rest } = params;
-  if (modelChain.length === 0) {
-    throw new Error('dispatchVendor: modelChain is empty');
-  }
-
-  const attempts: DispatchAttempt[] = [];
-  const skippedNoKey: string[] = [];
-
-  for (const model of modelChain) {
-    const { vendorId, vendorModel } = resolveVendorAndModel(model);
-    const mod = MODULES_BY_ID[vendorId];
-    const apiKey = mod.apiKeyFrom(env);
-    if (!apiKey) {
-      skippedNoKey.push(`${vendorId}:${model}`);
-      continue;
-    }
-
-    const startedAt = Date.now();
-    try {
-      const result = await mod.call({ ...rest, apiKey, model: vendorModel });
-      // Empty-but-200 detection. Some free-tier upstreams accept a request,
-      // burn 10–20s, then return `choices[0].message.content === ""` with no
-      // error code. Treat as retryable so the cascade advances and the model
-      // gets cooled via the `embedded` classification (5 min).
-      if (isEmptyChatResponse(result)) {
-        throw new VendorRetryableError(
-          vendorId,
-          vendorModel,
-          502,
-          `embedded:empty: upstream returned 200 OK with no content for ${vendorId}/${vendorModel}`,
-        );
-      }
-      // `modelUsed` echoes what the caller asked for (with prefix preserved).
-      return { ...result, modelUsed: model, vendorUsed: vendorId, attempts };
-    } catch (err) {
-      const durationMs = Date.now() - startedAt;
-      // Worker hit Cloudflare's per-invocation subrequest cap — every future
-      // fetch from this isolate is guaranteed to throw the same thing.
-      // Stop advancing the cascade and bubble up so the proxy can surface a
-      // distinct 503 envelope WITHOUT writing more cooldown KV entries
-      // (which would themselves be additional subrequests).
-      if (err instanceof WorkerSubrequestExhaustedError) {
-        attempts.push({ model, vendor: vendorId, status: 0, error: err.message, durationMs, kind: 'network' });
-        throw err;
-      }
-      // Caller cancelled mid-run — stop the cascade (don't fail over and spend more).
-      if (err instanceof RequestAbortedError) {
-        attempts.push({ model, vendor: vendorId, status: 0, error: err.message, durationMs, kind: 'aborted' });
-        throw err;
-      }
-      if (err instanceof VendorRetryableError) {
-        attempts.push({ model, vendor: vendorId, status: err.status, error: err.message, durationMs, kind: kindForStatus(err.status, err.message) });
-        console.warn(
-          `[vendors] ${vendorId}/${model} returned ${err.status}; trying next in chain (${attempts.length}/${modelChain.length} failed)`,
-        );
-        continue;
-      }
-      throw err; // VendorFatalError (or anything else) — bubble up
-    }
-  }
-
-  throw new CascadeExhaustedError('json', attempts, skippedNoKey);
-}
-
 /**
  * Resolve a model id to its vendor + the un-prefixed id the vendor expects.
  *   - `openrouter/<x>` → vendor=openrouter, vendorModel=`<x>`
@@ -305,13 +330,41 @@ function resolveVendorAndModel(model: string): { vendorId: VendorId; vendorModel
 }
 
 /**
- * Walk a model chain in streaming mode. Skips vendors that don't implement
- * `callStream` (e.g. Ollama). Throws if every streaming-capable model fails.
+ * Per-surface configuration for {@link dispatchInternal}. The JSON and streaming
+ * dispatchers differ ONLY in these four points — the chain walk, key/skip
+ * handling, error classification, cooldown-relevant `attempts[]`, and
+ * exhaustion error are identical and live once below.
  */
-export async function dispatchVendorStream(params: DispatchParams): Promise<StreamDispatchResult> {
+interface SurfaceConfig<R extends VendorCallResult | VendorStreamResult> {
+  /** Tags the {@link CascadeExhaustedError} and toggles its no-stream list. */
+  kind: 'json' | 'stream';
+  /** Function name for the empty-chain guard message. */
+  fnName: string;
+  /** Log prefix (`''` for JSON, `'stream '` for streaming). */
+  logTag: string;
+  /** False → vendor doesn't support this surface; the model is skipped+recorded. */
+  supports: (mod: VendorModule) => boolean;
+  /** The vendor call for this surface (`mod.call` vs `mod.callStream`). */
+  invoke: (mod: VendorModule, params: VendorCallParams) => Promise<R>;
+  /** Post-success validation; may throw VendorRetryableError (empty-200 check). */
+  validate?: (result: R, vendorId: VendorId, vendorModel: string) => void;
+}
+
+/**
+ * Shared cascade walk for both the JSON and streaming surfaces. Resolves each
+ * model to its vendor, skips no-key (and, per `supports`, no-surface) vendors,
+ * invokes the call, and on `VendorRetryableError` advances to the next model —
+ * recording every attempt so the proxy can apply per-vendor cooldowns before
+ * surfacing exhaustion. Subrequest-exhaustion and request-abort short-circuit
+ * the chain; any other error bubbles up (fatal).
+ */
+async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>(
+  params: DispatchParams,
+  cfg: SurfaceConfig<R>,
+): Promise<R & { modelUsed: string; vendorUsed: VendorId; attempts: DispatchAttempt[] }> {
   const { env, modelChain, ...rest } = params;
   if (modelChain.length === 0) {
-    throw new Error('dispatchVendorStream: modelChain is empty');
+    throw new Error(`${cfg.fnName}: modelChain is empty`);
   }
 
   const attempts: DispatchAttempt[] = [];
@@ -321,7 +374,7 @@ export async function dispatchVendorStream(params: DispatchParams): Promise<Stre
   for (const model of modelChain) {
     const { vendorId, vendorModel } = resolveVendorAndModel(model);
     const mod = MODULES_BY_ID[vendorId];
-    if (!mod.callStream) {
+    if (!cfg.supports(mod)) {
       skippedNoStream.push(`${vendorId}:${model}`);
       continue;
     }
@@ -333,30 +386,103 @@ export async function dispatchVendorStream(params: DispatchParams): Promise<Stre
 
     const startedAt = Date.now();
     try {
-      const result = await mod.callStream({ ...rest, apiKey, model: vendorModel });
+      const result = await cfg.invoke(mod, { ...rest, apiKey, model: vendorModel });
+      cfg.validate?.(result, vendorId, vendorModel);
+      // `modelUsed` echoes what the caller asked for (with prefix preserved).
       return { ...result, modelUsed: model, vendorUsed: vendorId, attempts };
     } catch (err) {
       const durationMs = Date.now() - startedAt;
-      // See dispatchVendor — short-circuit on subrequest exhaustion so we
-      // don't burn the rest of the chain on identical 0ms failures.
+      // Worker hit Cloudflare's per-invocation subrequest cap — every future
+      // fetch from this isolate is guaranteed to throw the same thing. Stop the
+      // cascade and bubble up so the proxy surfaces a distinct 503 envelope
+      // WITHOUT writing more cooldown KV entries (themselves more subrequests).
       if (err instanceof WorkerSubrequestExhaustedError) {
         attempts.push({ model, vendor: vendorId, status: 0, error: err.message, durationMs, kind: 'network' });
         throw err;
       }
+      // Caller cancelled mid-run — stop the cascade (don't fail over and spend more).
       if (err instanceof RequestAbortedError) {
         attempts.push({ model, vendor: vendorId, status: 0, error: err.message, durationMs, kind: 'aborted' });
         throw err;
       }
-      if (err instanceof VendorRetryableError) {
-        attempts.push({ model, vendor: vendorId, status: err.status, error: err.message, durationMs, kind: kindForStatus(err.status, err.message) });
+      // Schema-too-complex: the upstream rejected the json_schema as too complex
+      // for ITS constrained-decoding engine. A different vendor may accept the
+      // same schema, so CASCADE — but normalize to the 422 request-error class
+      // (so it writes NO cooldown; the model is healthy) and tag `kind: 'schema'`
+      // + the real upstream status. If EVERY candidate rejects it, the proxy
+      // surfaces a terminal `schema_too_complex` 4xx instead of a 429.
+      if (err instanceof VendorSchemaError) {
+        attempts.push({
+          model, vendor: vendorId, status: 422, error: err.message, durationMs,
+          kind: 'schema', reason: SCHEMA_TOO_COMPLEX_REASON, upstreamStatus: err.status,
+        });
         console.warn(
-          `[vendors] stream ${vendorId}/${model} returned ${err.status}; trying next in chain (${attempts.length}/${modelChain.length} failed)`,
+          `[vendors] ${cfg.logTag}${vendorId}/${model} rejected json_schema as too complex (upstream ${err.status}); trying next vendor (${attempts.length}/${modelChain.length})`,
         );
         continue;
       }
-      throw err;
+      if (err instanceof VendorRetryableError) {
+        attempts.push({ model, vendor: vendorId, status: err.status, error: err.message, durationMs, kind: kindForStatus(err.status, err.message) });
+        console.warn(
+          `[vendors] ${cfg.logTag}${vendorId}/${model} returned ${err.status}; trying next in chain (${attempts.length}/${modelChain.length} failed)`,
+        );
+        continue;
+      }
+      // Request-error (400/422) VendorFatalError: the payload is bad for THIS
+      // vendor, but vendors differ on schema dialects — one may reject a tool/
+      // json-schema another accepts. Advance the cascade instead of bubbling out
+      // [1488]; if EVERY candidate request-errors, CascadeExhaustedError carries
+      // these attempts and the proxy's exhaustedResponse surfaces a real 4xx (not
+      // a misleading 429). recordFailure no-ops request_error, so no model cools.
+      if (err instanceof VendorFatalError && (err.status === 400 || err.status === 422)) {
+        attempts.push({ model, vendor: vendorId, status: err.status, error: err.message, durationMs, kind: kindForStatus(err.status, err.message) });
+        console.warn(
+          `[vendors] ${cfg.logTag}${vendorId}/${model} returned ${err.status} (request error); trying next vendor (${attempts.length}/${modelChain.length})`,
+        );
+        continue;
+      }
+      throw err; // other VendorFatalError (or anything else) — bubble up
     }
   }
 
-  throw new CascadeExhaustedError('stream', attempts, skippedNoKey, skippedNoStream);
+  throw new CascadeExhaustedError(cfg.kind, attempts, skippedNoKey, skippedNoStream);
+}
+
+/** Walk a model chain non-streaming. Throws if every model in the chain fails. */
+export function dispatchVendor(params: DispatchParams): Promise<DispatchResult> {
+  return dispatchInternal<VendorCallResult>(params, {
+    kind: 'json',
+    fnName: 'dispatchVendor',
+    logTag: '',
+    supports: () => true, // every vendor implements the non-streaming `call`
+    invoke: (mod, p) => mod.call(p),
+    // Empty-but-200 detection. Some free-tier upstreams accept a request, burn
+    // 10–20s, then return `choices[0].message.content === ""` with no error
+    // code. Treat as retryable so the cascade advances and the model gets cooled
+    // via the `embedded` classification (5 min).
+    validate: (result, vendorId, vendorModel) => {
+      if (isEmptyChatResponse(result)) {
+        throw new VendorRetryableError(
+          vendorId,
+          vendorModel,
+          502,
+          `embedded:empty: upstream returned 200 OK with no content for ${vendorId}/${vendorModel}`,
+        );
+      }
+    },
+  });
+}
+
+/**
+ * Walk a model chain in streaming mode. Skips vendors that don't implement
+ * `callStream` (e.g. Ollama). Throws if every streaming-capable model fails.
+ */
+export function dispatchVendorStream(params: DispatchParams): Promise<StreamDispatchResult> {
+  return dispatchInternal<VendorStreamResult>(params, {
+    kind: 'stream',
+    fnName: 'dispatchVendorStream',
+    logTag: 'stream ',
+    supports: (mod) => !!mod.callStream,
+    invoke: (mod, p) => mod.callStream!(p),
+  });
 }

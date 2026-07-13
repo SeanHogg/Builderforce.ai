@@ -19,19 +19,19 @@ function formatApiKeySnippet(apiKey: string): string {
   return `${head}…${tail}`;
 }
 
-export function resolveModelAuthLabel(params: {
+export async function resolveModelAuthLabel(params: {
   provider?: string;
   cfg?: BuilderForceAgentsConfig;
   sessionEntry?: SessionEntry;
   agentDir?: string;
-}): string | undefined {
+}): Promise<string | undefined> {
   const resolvedProvider = params.provider?.trim();
   if (!resolvedProvider) {
     return undefined;
   }
 
   const providerKey = normalizeProviderId(resolvedProvider);
-  const store = ensureAuthProfileStore(params.agentDir, {
+  const store = await ensureAuthProfileStore(params.agentDir, {
     allowKeychainPrompt: false,
   });
   const profileOverride = params.sessionEntry?.authProfileOverride?.trim();

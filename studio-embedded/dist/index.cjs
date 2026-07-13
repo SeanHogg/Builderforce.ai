@@ -20,22 +20,22 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var src_exports = {};
 __export(src_exports, {
-  CAMERA_MOVES: () => import_builderforce_studio5.CAMERA_MOVES,
+  CAMERA_MOVES: () => import_builderforce_studio6.CAMERA_MOVES,
   CoherenceControls: () => CoherenceControls,
   DebugCopyButton: () => DebugCopyButton,
-  MODEL_REGISTRY: () => import_builderforce_studio5.MODEL_REGISTRY,
+  MODEL_REGISTRY: () => import_builderforce_studio6.MODEL_REGISTRY,
   ModelPicker: () => ModelPicker,
   ProgressFeedback: () => ProgressFeedback,
   QUALITY_TIERS: () => QUALITY_TIERS,
   QualityTierPicker: () => QualityTierPicker,
   StoryboardEditor: () => StoryboardEditor,
   StudioPanel: () => StudioPanel,
-  VideoEngine: () => import_builderforce_studio5.VideoEngine,
+  VideoEngine: () => import_builderforce_studio6.VideoEngine,
   VideoPreview: () => VideoPreview,
-  configureOnnxRuntime: () => import_builderforce_studio5.configureOnnxRuntime,
-  hasWebGPUSupport: () => import_builderforce_studio5.hasWebGPUSupport,
-  planScene: () => import_builderforce_studio5.planScene,
-  probeDevice: () => import_builderforce_studio5.probeDevice,
+  configureOnnxRuntime: () => import_builderforce_studio6.configureOnnxRuntime,
+  hasWebGPUSupport: () => import_builderforce_studio6.hasWebGPUSupport,
+  planScene: () => import_builderforce_studio6.planScene,
+  probeDevice: () => import_builderforce_studio6.probeDevice,
   resolveQualityTier: () => resolveQualityTier,
   useEngineStatus: () => useEngineStatus
 });
@@ -43,7 +43,7 @@ module.exports = __toCommonJS(src_exports);
 
 // src/components/StudioPanel.tsx
 var import_react4 = require("react");
-var import_builderforce_studio4 = require("@seanhogg/builderforce-studio");
+var import_builderforce_studio5 = require("@seanhogg/builderforce-studio");
 
 // src/components/ModelPicker.tsx
 var import_builderforce_studio = require("@seanhogg/builderforce-studio");
@@ -394,6 +394,9 @@ function ProgressFeedback({ progressLabel, error }) {
 // src/components/DebugCopyButton.tsx
 var import_react2 = require("react");
 var import_jsx_runtime5 = require("react/jsx-runtime");
+function describeModelChain(p) {
+  return p.refinementModel ? `${p.model} \u2192 ${p.refinementModel} (two-pass)` : `${p.model} (single pass)`;
+}
 async function bitmapToBase64(bitmap, maxSize = 128, quality = 0.6) {
   const scale = Math.min(1, maxSize / Math.max(bitmap.width, bitmap.height));
   const w = Math.max(1, Math.round(bitmap.width * scale));
@@ -441,9 +444,11 @@ async function buildMarkdownSnapshot(p) {
     p.device?.approxMemoryMb != null ? `- Approx memory: ${(p.device.approxMemoryMb / 1024).toFixed(1)} GB` : "- Approx memory: unknown",
     "",
     "### Configuration",
-    `- Model: \`${p.model}\``,
+    `- Quality tier: \`${p.quality}\``,
+    `- Model chain: \`${describeModelChain(p)}\``,
     `- Resolution: ${p.resolution}\xD7${p.resolution}`,
     `- Frames: ${p.frames}, FPS: ${p.fps}, Duration: ${(p.frames / p.fps).toFixed(2)}s`,
+    `- Keyframe interpolation: ${p.interpolationFactor === 1 ? "off" : `${p.interpolationFactor}\xD7`}`,
     "",
     "### Prompt",
     p.prompt ? `> ${p.prompt.replace(/\n/g, "\n> ")}` : "> (empty)",
@@ -454,6 +459,7 @@ async function buildMarkdownSnapshot(p) {
     `- Mamba mode: \`${p.coherenceMode}\` (strength ${p.coherenceStrength.toFixed(2)})`,
     `- motionAmount: ${p.motionAmount.toFixed(2)}`,
     `- imgToImgStrength: ${p.imgToImgStrength.toFixed(2)}`,
+    `- anchorRefreshInterval: ${p.anchorRefreshInterval > 0 ? `${p.anchorRefreshInterval} keyframes` : "off"}`,
     `- cameraMotion: ${p.cameraMotion ? `dx=${p.cameraMotion.dx}, dy=${p.cameraMotion.dy}` : "none"}`,
     "",
     "### Version chain",
@@ -496,10 +502,14 @@ async function buildJsonSnapshot(p) {
       capturedAt: (/* @__PURE__ */ new Date()).toISOString(),
       device: p.device ? { kind: p.device.kind, label: p.device.label, approxMemoryMb: p.device.approxMemoryMb } : null,
       config: {
+        quality: p.quality,
         model: p.model,
+        refinementModel: p.refinementModel,
+        modelChain: describeModelChain(p),
         resolution: p.resolution,
         frames: p.frames,
-        fps: p.fps
+        fps: p.fps,
+        interpolationFactor: p.interpolationFactor
       },
       prompt: { user: p.prompt, expanded: p.expandedPrompt || null },
       continuity: {
@@ -507,6 +517,7 @@ async function buildJsonSnapshot(p) {
         coherenceStrength: p.coherenceStrength,
         motionAmount: p.motionAmount,
         imgToImgStrength: p.imgToImgStrength,
+        anchorRefreshInterval: p.anchorRefreshInterval,
         cameraMotion: p.cameraMotion
       },
       version: { currentId: p.currentVersionId },
@@ -556,6 +567,7 @@ function DebugCopyButton(props) {
 }
 
 // src/components/QualityTierPicker.tsx
+var import_builderforce_studio2 = require("@seanhogg/builderforce-studio");
 var import_jsx_runtime6 = require("react/jsx-runtime");
 var QUALITY_TIERS = [
   {
@@ -581,6 +593,73 @@ var QUALITY_TIERS = [
 function resolveQualityTier(tier) {
   const found = QUALITY_TIERS.find((t) => t.id === tier) ?? QUALITY_TIERS[0];
   return { primary: found.primary, refinement: found.refinement };
+}
+function resolveEffectiveChain(opts) {
+  if (opts.showAdvanced) {
+    const refinement = opts.customRefinement && opts.customRefinement !== opts.advancedModel ? opts.customRefinement : null;
+    return { primary: opts.advancedModel, refinement, overridesQuality: true };
+  }
+  const tier = resolveQualityTier(opts.quality);
+  return { primary: tier.primary, refinement: tier.refinement ?? null, overridesQuality: false };
+}
+function describeChain(chain) {
+  return chain.refinement ? `${chain.primary} \u2192 ${chain.refinement} (two-pass)` : `${chain.primary} (single pass)`;
+}
+function EffectiveChainBadge(props) {
+  const chain = resolveEffectiveChain(props);
+  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(
+    "p",
+    {
+      className: "bfs-hint",
+      style: {
+        marginTop: 6,
+        padding: "6px 8px",
+        borderRadius: 6,
+        border: "1px solid var(--bfs-border)",
+        background: "var(--bfs-surface, transparent)"
+      },
+      children: [
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("strong", { children: "Effective model chain:" }),
+        " ",
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "bfs-mono", children: describeChain(chain) }),
+        chain.overridesQuality ? /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(import_jsx_runtime6.Fragment, { children: [
+          " ",
+          "\u2014 Advanced model override is active, so the ",
+          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("strong", { children: "Quality" }),
+          " tier above is ignored.",
+          " ",
+          chain.refinement ? "A custom two-pass chain is set (draft \u2192 refine)." : "Add a refinement model below for a custom two-pass chain, or close Advanced to use the tier."
+        ] }) : null
+      ]
+    }
+  );
+}
+function CustomRefinementPicker({
+  primary,
+  value,
+  onChange,
+  disabled
+}) {
+  const options = Object.keys(import_builderforce_studio2.MODEL_REGISTRY).filter(
+    (id) => id !== primary
+  );
+  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "bfs-field", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("label", { className: "bfs-label", children: "Refinement model (custom two-pass)" }),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(
+      "select",
+      {
+        className: "bfs-select",
+        value: value ?? "",
+        onChange: (e) => onChange(e.target.value || null),
+        disabled,
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("option", { value: "", children: "None (single pass)" }),
+          options.map((id) => /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("option", { value: id, children: id }, id))
+        ]
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("p", { className: "bfs-hint", children: "Optional second pass: the primary model lays in composition, this model refines each frame via img2img. Picks any draft/refine pair (e.g. sd-turbo \u2192 lcm-dreamshaper), generalising the fixed Refined tier." })
+  ] });
 }
 function QualityTierPicker({ value, onChange, disabled }) {
   const current = QUALITY_TIERS.find((t) => t.id === value) ?? QUALITY_TIERS[0];
@@ -615,7 +694,7 @@ function QualityTierPicker({ value, onChange, disabled }) {
 }
 
 // src/components/StoryboardEditor.tsx
-var import_builderforce_studio2 = require("@seanhogg/builderforce-studio");
+var import_builderforce_studio3 = require("@seanhogg/builderforce-studio");
 var import_jsx_runtime7 = require("react/jsx-runtime");
 function uniqueId(prefix, taken) {
   let n = 1;
@@ -631,7 +710,7 @@ function StoryboardEditor({
   busy
 }) {
   const { shots, characters } = storyboard;
-  const totalFrames = (0, import_builderforce_studio2.storyboardFrameCount)(storyboard);
+  const totalFrames = (0, import_builderforce_studio3.storyboardFrameCount)(storyboard);
   const validationByShot = new Map((validations ?? []).map((v) => [v.shotId, v.validation]));
   const updateShot = (idx, patch) => onChange({ ...storyboard, shots: shots.map((s, i) => i === idx ? { ...s, ...patch } : s) });
   const addShot = () => {
@@ -799,7 +878,7 @@ function StoryboardEditor({
                     value: shot.camera,
                     onChange: (e) => updateShot(idx, { camera: e.target.value }),
                     disabled: busy,
-                    children: import_builderforce_studio2.CAMERA_MOVES.map((m) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("option", { value: m, children: m }, m))
+                    children: import_builderforce_studio3.CAMERA_MOVES.map((m) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("option", { value: m, children: m }, m))
                   }
                 )
               ] }),
@@ -890,13 +969,13 @@ function ValidationBadge({ ok, score }) {
 
 // src/components/useEngineStatus.ts
 var import_react3 = require("react");
-var import_builderforce_studio3 = require("@seanhogg/builderforce-studio");
+var import_builderforce_studio4 = require("@seanhogg/builderforce-studio");
 function useEngineStatus() {
   const [status, setStatus] = (0, import_react3.useState)({ state: "probing" });
   const probedRef = (0, import_react3.useRef)(null);
   (0, import_react3.useEffect)(() => {
     let cancelled = false;
-    (0, import_builderforce_studio3.probeDevice)("auto").then((device) => {
+    (0, import_builderforce_studio4.probeDevice)("auto").then((device) => {
       if (cancelled) {
         if (device?.kind === "webgpu" && device.gpuDevice) {
           try {
@@ -965,12 +1044,14 @@ function StudioPanel({
   const [prompt, setPrompt] = (0, import_react4.useState)("");
   const [quality, setQuality] = (0, import_react4.useState)("fast");
   const [model, setModel] = (0, import_react4.useState)(defaultModel);
+  const [refinementOverride, setRefinementOverride] = (0, import_react4.useState)(null);
   const [showAdvanced, setShowAdvanced] = (0, import_react4.useState)(false);
   const [resolution, setResolution] = (0, import_react4.useState)(DEFAULT_RESOLUTION);
   const [coherenceMode, setCoherenceMode] = (0, import_react4.useState)(defaultCoherence);
   const [coherenceStrength, setCoherenceStrength] = (0, import_react4.useState)(0.5);
   const [motionAmount, setMotionAmount] = (0, import_react4.useState)(0.15);
   const [imgToImgStrength, setImgToImgStrength] = (0, import_react4.useState)(0);
+  const [anchorRefreshInterval, setAnchorRefreshInterval] = (0, import_react4.useState)(0);
   const [cameraDx, setCameraDx] = (0, import_react4.useState)(0);
   const [cameraDy, setCameraDy] = (0, import_react4.useState)(0);
   const [frames, setFrames] = (0, import_react4.useState)(defaultFrames);
@@ -983,7 +1064,7 @@ function StudioPanel({
   const [interpolationBackend, setInterpolationBackend] = (0, import_react4.useState)("latent-slerp");
   (0, import_react4.useEffect)(() => {
     disposeEngineAndOutputs();
-  }, [quality, resolution]);
+  }, [quality, resolution, model, showAdvanced, refinementOverride]);
   const [isGenerating, setIsGenerating] = (0, import_react4.useState)(false);
   const [progressLabel, setProgressLabel] = (0, import_react4.useState)("");
   const [framesDone, setFramesDone] = (0, import_react4.useState)(0);
@@ -1054,12 +1135,17 @@ function StudioPanel({
   }, []);
   const ensureEngine = (0, import_react4.useCallback)(async () => {
     if (engineRef.current) return engineRef.current;
-    const tier = resolveQualityTier(quality);
-    const engine = await import_builderforce_studio4.VideoEngine.create({
+    const chain = resolveEffectiveChain({
+      showAdvanced,
+      advancedModel: model,
+      quality,
+      customRefinement: refinementOverride
+    });
+    const engine = await import_builderforce_studio5.VideoEngine.create({
       apiKey: token,
       baseUrl,
-      model: showAdvanced ? model : tier.primary,
-      refinementModel: showAdvanced ? void 0 : tier.refinement,
+      model: chain.primary,
+      refinementModel: chain.refinement ?? void 0,
       mambaState: initialMambaState,
       width: resolution,
       height: resolution,
@@ -1068,7 +1154,7 @@ function StudioPanel({
     if (!engine) throw new Error("Engine refused to start on this device.");
     engineRef.current = engine;
     return engine;
-  }, [token, baseUrl, quality, showAdvanced, model, initialMambaState, resolution, handleProgress]);
+  }, [token, baseUrl, quality, showAdvanced, model, refinementOverride, initialMambaState, resolution, handleProgress]);
   const finishGeneration = (0, import_react4.useCallback)(
     async (generated, wasCinematic) => {
       const url = URL.createObjectURL(generated.blob);
@@ -1078,12 +1164,18 @@ function StudioPanel({
       onVideoGenerated?.(generated.blob, generated.mambaState);
       if (onSaveVersion) {
         try {
-          const tier = resolveQualityTier(quality);
+          const chain = resolveEffectiveChain({
+            showAdvanced,
+            advancedModel: model,
+            quality,
+            customRefinement: refinementOverride
+          });
           const params = {
             prompt,
             quality,
-            model: showAdvanced ? model : tier.primary,
-            refinementModel: showAdvanced ? null : tier.refinement ?? null,
+            model: chain.primary,
+            refinementModel: chain.refinement,
+            advanced: showAdvanced,
             width: resolution,
             height: resolution,
             frames,
@@ -1099,6 +1191,7 @@ function StudioPanel({
             coherenceStrength,
             motionAmount,
             imgToImgStrength,
+            anchorRefreshInterval,
             cameraMotion: imgToImgStrength > 0 && (cameraDx !== 0 || cameraDy !== 0) ? { dx: cameraDx, dy: cameraDy } : null,
             mambaState: generated.mambaState,
             elapsedMs: generated.elapsedMs,
@@ -1121,6 +1214,7 @@ function StudioPanel({
       quality,
       showAdvanced,
       model,
+      refinementOverride,
       resolution,
       prompt,
       frames,
@@ -1131,6 +1225,7 @@ function StudioPanel({
       coherenceStrength,
       motionAmount,
       imgToImgStrength,
+      anchorRefreshInterval,
       cameraDx,
       cameraDy,
       currentVersionId,
@@ -1188,7 +1283,7 @@ function StudioPanel({
     const abort = new AbortController();
     abortRef.current = abort;
     try {
-      const planned = await (0, import_builderforce_studio4.planScene)({
+      const planned = await (0, import_builderforce_studio5.planScene)({
         apiKey: token,
         baseUrl,
         request: prompt,
@@ -1266,6 +1361,7 @@ function StudioPanel({
         coherenceStrength,
         motionAmount,
         imgToImgStrength,
+        anchorRefreshInterval,
         interpolationFactor,
         interpolationBackend,
         cameraMotion: imgToImgStrength > 0 && (cameraDx !== 0 || cameraDy !== 0) ? { dx: cameraDx, dy: cameraDy } : void 0,
@@ -1287,6 +1383,7 @@ function StudioPanel({
     coherenceStrength,
     motionAmount,
     imgToImgStrength,
+    anchorRefreshInterval,
     interpolationFactor,
     interpolationBackend,
     cameraDx,
@@ -1333,6 +1430,8 @@ function StudioPanel({
       const p = entry.params;
       setPrompt(p.prompt);
       setModel(p.model);
+      setShowAdvanced(p.advanced ?? false);
+      setRefinementOverride(p.advanced ? p.refinementModel ?? null : null);
       if (p.quality) setQuality(p.quality);
       setInterpolationFactor(p.interpolationFactor ?? 1);
       setInterpolationBackend(p.interpolationBackend ?? "latent-slerp");
@@ -1348,6 +1447,7 @@ function StudioPanel({
       setCoherenceStrength(p.coherenceStrength);
       setMotionAmount(p.motionAmount);
       setImgToImgStrength(p.imgToImgStrength);
+      setAnchorRefreshInterval(p.anchorRefreshInterval ?? 0);
       setCameraDx(p.cameraMotion?.dx ?? 0);
       setCameraDy(p.cameraMotion?.dy ?? 0);
       setCurrentVersionId(entry.id);
@@ -1372,6 +1472,12 @@ function StudioPanel({
     ] });
   }
   const device = status.device;
+  const effectiveChain = resolveEffectiveChain({
+    showAdvanced,
+    advancedModel: model,
+    quality,
+    customRefinement: refinementOverride
+  });
   return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "bfs-root", children: [
     !hideHeader && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("header", { className: "bfs-header", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { children: [
       /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h1", { className: "bfs-title", children: "AI Video Studio" }),
@@ -1424,7 +1530,23 @@ function StudioPanel({
             expandedPrompt
           ] })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(QualityTierPicker, { value: quality, onChange: setQuality, disabled: isGenerating }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+          QualityTierPicker,
+          {
+            value: quality,
+            onChange: setQuality,
+            disabled: isGenerating || showAdvanced
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+          EffectiveChainBadge,
+          {
+            showAdvanced,
+            advancedModel: model,
+            quality,
+            customRefinement: refinementOverride
+          }
+        ),
         /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
           "label",
           {
@@ -1487,8 +1609,17 @@ function StudioPanel({
               ),
               /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { style: { marginTop: 12 }, children: [
                 /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(ModelPicker, { value: model, onChange: setModel, disabled: isGenerating }),
-                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "bfs-hint", children: "Overrides the Quality preset above. When this is set, the engine uses this model directly (no refinement pass)." })
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "bfs-hint", children: "Overrides the Quality preset above. When this is set, the engine uses this model directly \u2014 add a refinement model below for a custom two-pass chain." })
               ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { style: { marginTop: 12 }, children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+                CustomRefinementPicker,
+                {
+                  primary: model,
+                  value: refinementOverride,
+                  onChange: setRefinementOverride,
+                  disabled: isGenerating
+                }
+              ) }),
               /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "bfs-field", style: { marginTop: 12 }, children: [
                 /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("label", { className: "bfs-label", children: "Resolution" }),
                 /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bfs-radio-row", children: RESOLUTION_PRESETS.map((px) => {
@@ -1659,7 +1790,24 @@ function StudioPanel({
                   onCameraDyChange: setCameraDy,
                   disabled: isGenerating
                 }
-              )
+              ),
+              imgToImgStrength > 0 && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "bfs-field", style: { marginTop: 12 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("label", { className: "bfs-label", htmlFor: "bfs-anchor-refresh", children: "Anchor refresh (img2img drift bound)" }),
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+                  "input",
+                  {
+                    id: "bfs-anchor-refresh",
+                    type: "number",
+                    className: "bfs-input",
+                    min: 0,
+                    max: 120,
+                    value: anchorRefreshInterval,
+                    onChange: (e) => setAnchorRefreshInterval(Math.max(0, Math.min(120, Number(e.target.value) || 0))),
+                    disabled: isGenerating
+                  }
+                ),
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "bfs-hint", children: "Restart from fresh noise every N keyframes so long clips don't progressively blur as img2img recursion accumulates VAE round-trip error. 0 = never refresh (carry content forward indefinitely). Try 8\u201312 for clips past ~30 frames." })
+              ] })
             ]
           }
         ),
@@ -1693,7 +1841,7 @@ function StudioPanel({
               // the engine emits one onFrame per storyboard frame, so a 50-
               // frame storyboard would otherwise read "28 / 16". Falls back
               // to `frames` for the single-clip path / pre-plan phase.
-              framesTotal: cinematic && storyboard ? (0, import_builderforce_studio4.storyboardFrameCount)(storyboard) : frames
+              framesTotal: cinematic && storyboard ? (0, import_builderforce_studio5.storyboardFrameCount)(storyboard) : frames
             } : null
           }
         ),
@@ -1703,14 +1851,18 @@ function StudioPanel({
           {
             prompt,
             expandedPrompt,
-            model,
+            quality,
+            model: effectiveChain.primary,
+            refinementModel: effectiveChain.refinement,
             resolution,
             frames,
             fps,
+            interpolationFactor,
             coherenceMode,
             coherenceStrength,
             motionAmount,
             imgToImgStrength,
+            anchorRefreshInterval,
             cameraMotion: imgToImgStrength > 0 && (cameraDx !== 0 || cameraDy !== 0) ? { dx: cameraDx, dy: cameraDy } : null,
             device: status.state === "ready" ? status.device : null,
             progressLabel,
@@ -1784,7 +1936,7 @@ function StudioPanel({
 }
 
 // src/index.ts
-var import_builderforce_studio5 = require("@seanhogg/builderforce-studio");
+var import_builderforce_studio6 = require("@seanhogg/builderforce-studio");
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   CAMERA_MOVES,

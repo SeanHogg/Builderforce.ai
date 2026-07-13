@@ -35,7 +35,7 @@ import {
   registerGateway,
   unregisterGateway,
 } from "./gateway-registry.js";
-import { clearPresences, getPresence, presenceCacheSize, setPresence } from "./presence-cache.js";
+import { clearPresences, getPresence, setPresence } from "./presence-cache.js";
 import { resolveDiscordPresenceUpdate } from "./presence.js";
 import {
   maybeCreateDiscordAutoThread,
@@ -586,7 +586,6 @@ describe("presence-cache", () => {
 
     expect(getPresence("account-a", "user-1")).toBeUndefined();
     expect(getPresence("account-b", "user-2")).toBe(presence);
-    expect(presenceCacheSize()).toBe(1);
   });
 });
 

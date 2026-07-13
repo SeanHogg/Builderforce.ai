@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import { resolveDefaultAgentId } from "../../agents/agent-scope.js";
-import { abortEmbeddedPiRun, waitForEmbeddedPiRunEnd } from "../../agents/pi-embedded.js";
+import { abortEmbeddedRun, waitForEmbeddedRunEnd } from "../../agents/embedded.js";
 import { stopSubagentsForRequester } from "../../auto-reply/reply/abort.js";
 import { clearSessionQueues } from "../../auto-reply/reply/queue.js";
 import { loadConfig } from "../../config/config.js";
@@ -128,8 +128,8 @@ async function ensureSessionRuntimeCleanup(params: {
   if (!params.sessionId) {
     return undefined;
   }
-  abortEmbeddedPiRun(params.sessionId);
-  const ended = await waitForEmbeddedPiRunEnd(params.sessionId, 15_000);
+  abortEmbeddedRun(params.sessionId);
+  const ended = await waitForEmbeddedRunEnd(params.sessionId, 15_000);
   if (ended) {
     return undefined;
   }

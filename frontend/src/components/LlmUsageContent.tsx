@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import { llmApi, dashboardApi, type LlmUsageStats, type LlmModelStatus, type LlmHealthResponse, type DashboardUsage, type UsageByKind } from '@/lib/builderforceApi';
 
 const cardStyle: React.CSSProperties = {
@@ -29,6 +30,7 @@ const KIND_META: Record<UsageByKind['kind'], { label: string; color: string }> =
 };
 
 export function LlmUsageContent() {
+  const t = useTranslations('llmUsage');
   const [usage, setUsage] = useState<LlmUsageStats | null>(null);
   const [health, setHealth] = useState<LlmHealthResponse | null>(null);
   const [models, setModels] = useState<LlmModelStatus[]>([]);
@@ -191,7 +193,7 @@ export function LlmUsageContent() {
           {/* Totals */}
           <div style={{ ...cardStyle }}>
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14 }}>Usage Summary</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 150px), 1fr))', gap: 16 }}>
               {[
                 { label: 'Total requests', value: fmtNum(usage.totalRequests), color: 'var(--coral-bright, #f4726e)' },
                 { label: 'Prompt tokens', value: fmtNum(usage.promptTokens), color: 'var(--cyan-bright, #00e5cc)' },
@@ -267,6 +269,114 @@ export function LlmUsageContent() {
                     <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--coral-bright, #f4726e)', flexShrink: 0, minWidth: 56, textAlign: 'right' }}>
                       est. {fmtUsd(p.estimatedCostUsd)}
                     </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* By user — spend attributed to each individual human / SDK caller. */}
+          {bySource && bySource.perUser.length > 0 && (
+            <div style={cardStyle}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>{t('byUser')}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  {t('rollsUpTo', { total: fmtUsd(bySource.totals.estimatedCostUsd) })}
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {bySource.perUser.map((u) => (
+                  <div
+                    key={u.userId ?? 'none'}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '8px 10px', borderRadius: 8, background: 'var(--bg-elevated)',
+                    }}
+                  >
+                    <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.userName}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{fmtNum(u.requests)} req</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--cyan-bright, #00e5cc)', flexShrink: 0 }}>{fmtNum(u.totalTokens)} tok</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--coral-bright, #f4726e)', flexShrink: 0, minWidth: 56, textAlign: 'right' }}>
+                      est. {fmtUsd(u.estimatedCostUsd)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* By team — usage mapped to a team via team membership. */}
+          {bySource && bySource.perTeam.length > 0 && (
+            <div style={cardStyle}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>{t('byTeam')}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  {t('rollsUpTo', { total: fmtUsd(bySource.totals.estimatedCostUsd) })}
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {bySource.perTeam.map((tm) => (
+                  <div
+                    key={tm.teamId}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '8px 10px', borderRadius: 8, background: 'var(--bg-elevated)',
+                    }}
+                  >
+                    <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tm.teamName}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{fmtNum(tm.requests)} req</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--cyan-bright, #00e5cc)', flexShrink: 0 }}>{fmtNum(tm.totalTokens)} tok</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--coral-bright, #f4726e)', flexShrink: 0, minWidth: 56, textAlign: 'right' }}>
+                      est. {fmtUsd(tm.estimatedCostUsd)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* By repo — spend attributed to the explicit repo of the originating task. */}
+          {bySource && bySource.perRepo.length > 0 && (
+            <div style={cardStyle}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>{t('byRepo')}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  {t('rollsUpTo', { total: fmtUsd(bySource.totals.estimatedCostUsd) })}
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {bySource.perRepo.map((r) => (
+                  <div
+                    key={r.repoId}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '8px 10px', borderRadius: 8, background: 'var(--bg-elevated)',
+                    }}
+                  >
+                    <span style={{ flex: 1, fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.repoLabel}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{fmtNum(r.requests)} req</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--cyan-bright, #00e5cc)', flexShrink: 0 }}>{fmtNum(r.totalTokens)} tok</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--coral-bright, #f4726e)', flexShrink: 0, minWidth: 56, textAlign: 'right' }}>
+                      est. {fmtUsd(r.estimatedCostUsd)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* By model */}
+          {usage.byCredential.length > 0 && (
+            <div style={cardStyle}>
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>By Integration / API Key</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {usage.byCredential.map((credential) => (
+                  <div key={`${credential.type}:${credential.id}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 10px', borderRadius: 8, background: 'var(--bg-elevated)' }}>
+                    <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{credential.name}</span>
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{credential.type === 'integration' ? 'BYO integration' : 'API key'}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{fmtNum(credential.modelCount)} models</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{fmtNum(credential.requests)} req</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--cyan-bright, #00e5cc)' }}>{fmtNum(credential.tokens)} tok</span>
                   </div>
                 ))}
               </div>

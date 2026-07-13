@@ -13,24 +13,11 @@
 import { Hono } from 'hono';
 import { and, desc, eq, gte, lte } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { agentHosts, telemetrySpans } from '../../infrastructure/database/schema';
-import { verifySecret } from '../../infrastructure/auth/HashService';
+import { telemetrySpans } from '../../infrastructure/database/schema';
+import { verifyAgentHostApiKey } from '../../infrastructure/auth/agentHostAuth';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-
-async function verifyAgentHostApiKey(
-  db: Db,
-  agentHostId: number,
-  key: string,
-): Promise<{ id: number; tenantId: number } | null> {
-  const [agentHost] = await db
-    .select({ id: agentHosts.id, tenantId: agentHosts.tenantId, apiKeyHash: agentHosts.apiKeyHash })
-    .from(agentHosts)
-    .where(eq(agentHosts.id, agentHostId));
-  if (!agentHost) return null;
-  const valid = await verifySecret(key, agentHost.apiKeyHash);
-  return valid ? agentHost : null;
-}
+import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 
 export function createTelemetryRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -145,7 +132,7 @@ export function createTelemetryRoutes(db: Db): Hono<HonoEnv> {
     // Convert millicents back to USD for clients
     const result = rows.map((r) => ({
       ...r,
-      estimatedCostUsd: r.estimatedCostUsd != null ? r.estimatedCostUsd / 100_000 : null,
+      estimatedCostUsd: r.estimatedCostUsd != null ? r.estimatedCostUsd / MILLICENTS_PER_USD : null,
     }));
 
     return c.json({ spans: result, total: result.length });
@@ -214,7 +201,7 @@ export function createTelemetryRoutes(db: Db): Hono<HonoEnv> {
       .slice(0, limit)
       .map((t) => ({
         ...t,
-        totalCostUsd: t.totalCostMillicents / 100_000,
+        totalCostUsd: t.totalCostMillicents / MILLICENTS_PER_USD,
         totalCostMillicents: undefined,
       }));
 

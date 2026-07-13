@@ -1,4 +1,4 @@
-import * as react_jsx_runtime from 'react/jsx-runtime';
+import * as react from 'react';
 import { DiffusionModelId, CoherenceMode, MambaStateSnapshot, QualityMode, InterpolationBackend, Storyboard, ProbedDevice, GenerateResult, ShotValidation } from '@seanhogg/builderforce-studio';
 export { ActiveDevice, CAMERA_MOVES, CameraMove, CharacterBible, CoherenceMode, DeviceTarget, DiffusionModelId, FrameValidation, GenerateOptions, GenerateResult, InterpolationBackend, MODEL_REGISTRY, MambaStateSnapshot, ModelDescriptor, OnnxFile, OnnxRuntimeConfigOptions, PlannedShot, ProbedDevice, QualityMode, ScenePlanOptions, ShotValidation, Storyboard, StoryboardGenerateOptions, StoryboardGenerateResult, VideoEngine, VideoEngineOptions, WeightSource, configureOnnxRuntime, hasWebGPUSupport, planScene, probeDevice } from '@seanhogg/builderforce-studio';
 
@@ -15,8 +15,13 @@ interface VideoVersionParams {
     /** Resolved primary model (tier.primary in simple mode, or the explicit
      *  Advanced override). NOT the stale picker default. */
     model: DiffusionModelId;
-    /** Resolved refinement model for the two-pass tier, else null. */
+    /** Resolved refinement model for the two-pass tier OR the Advanced custom
+     *  draft→refine pair, else null. */
     refinementModel: DiffusionModelId | null;
+    /** True when this version's chain came from the Advanced model override (so
+     *  `refinementModel` is a CUSTOM pair, not a tier-derived one). Optional for
+     *  legacy sidecars that predate the custom-chain control. */
+    advanced?: boolean;
     width: number;
     height: number;
     frames: number;
@@ -38,6 +43,8 @@ interface VideoVersionParams {
     coherenceStrength: number;
     motionAmount: number;
     imgToImgStrength: number;
+    /** Anchor-refresh interval used (0 = never) to bound img2img recursion drift. */
+    anchorRefreshInterval: number;
     cameraMotion: {
         dx: number;
         dy: number;
@@ -98,14 +105,14 @@ interface StudioPanelProps {
      *  restores the saved params (prompt, sliders) so the user can edit on top. */
     onLoadVersion?: (id: string) => Promise<Blob>;
 }
-declare function StudioPanel({ authToken, apiKey, baseUrl, defaultModel, defaultCoherence, defaultFrames, defaultFps, onVideoGenerated, initialMambaState, hideHeader, promptValue, onPromptChange, onSaveVersion, versions, onLoadVersion, }: StudioPanelProps): react_jsx_runtime.JSX.Element;
+declare function StudioPanel({ authToken, apiKey, baseUrl, defaultModel, defaultCoherence, defaultFrames, defaultFps, onVideoGenerated, initialMambaState, hideHeader, promptValue, onPromptChange, onSaveVersion, versions, onLoadVersion, }: StudioPanelProps): react.JSX.Element;
 
 interface ModelPickerProps {
     value: DiffusionModelId;
     onChange: (next: DiffusionModelId) => void;
     disabled?: boolean;
 }
-declare function ModelPicker({ value, onChange, disabled }: ModelPickerProps): react_jsx_runtime.JSX.Element;
+declare function ModelPicker({ value, onChange, disabled }: ModelPickerProps): react.JSX.Element;
 
 interface CoherenceControlsProps {
     mode: CoherenceMode;
@@ -122,7 +129,7 @@ interface CoherenceControlsProps {
     onCameraDyChange: (dy: number) => void;
     disabled?: boolean;
 }
-declare function CoherenceControls({ mode, strength, motionAmount, imgToImgStrength, cameraDx, cameraDy, onModeChange, onStrengthChange, onMotionAmountChange, onImgToImgStrengthChange, onCameraDxChange, onCameraDyChange, disabled, }: CoherenceControlsProps): react_jsx_runtime.JSX.Element;
+declare function CoherenceControls({ mode, strength, motionAmount, imgToImgStrength, cameraDx, cameraDy, onModeChange, onStrengthChange, onMotionAmountChange, onImgToImgStrengthChange, onCameraDxChange, onCameraDyChange, disabled, }: CoherenceControlsProps): react.JSX.Element;
 
 interface VideoPreviewProps {
     frames: ImageBitmap[];
@@ -153,7 +160,7 @@ interface VideoPreviewProps {
  * Click a thumbnail → seeks the video to that frame. Lets the user inspect
  * any single frame without scrubbing the timeline pixel-perfectly.
  */
-declare function VideoPreview({ frames, videoUrl, width, height, loading }: VideoPreviewProps): react_jsx_runtime.JSX.Element;
+declare function VideoPreview({ frames, videoUrl, width, height, loading }: VideoPreviewProps): react.JSX.Element;
 
 /**
  * ProgressFeedback — single rendering site for the studio's per-phase progress
@@ -170,19 +177,30 @@ interface ProgressFeedbackProps {
     progressLabel: string;
     error: string | null;
 }
-declare function ProgressFeedback({ progressLabel, error }: ProgressFeedbackProps): react_jsx_runtime.JSX.Element | null;
+declare function ProgressFeedback({ progressLabel, error }: ProgressFeedbackProps): react.JSX.Element | null;
 
 interface DebugSnapshotProps {
     prompt: string;
     expandedPrompt: string;
+    /** The Quality tier the user picked (simple mode), for triage context. */
+    quality: QualityMode;
+    /** RESOLVED primary model that actually ran — the tier's primary OR the
+     *  Advanced override — never the stale Advanced picker default. */
     model: DiffusionModelId;
+    /** RESOLVED refinement model (two-pass tier), else null. Without this a
+     *  "Refined" capture read `Model: lcm-tiny-sd` with no sign a second pass ran. */
+    refinementModel: DiffusionModelId | null;
     resolution: number;
     frames: number;
     fps: number;
+    /** Keyframe interpolation factor (1 = every frame fully generated). */
+    interpolationFactor: number;
     coherenceMode: CoherenceMode;
     coherenceStrength: number;
     motionAmount: number;
     imgToImgStrength: number;
+    /** Anchor-refresh interval (0 = never) bounding img2img recursion drift. */
+    anchorRefreshInterval: number;
     cameraMotion: {
         dx: number;
         dy: number;
@@ -196,7 +214,7 @@ interface DebugSnapshotProps {
     /** Set true to write JSON instead of markdown — useful for machine ingest. */
     asJson?: boolean;
 }
-declare function DebugCopyButton(props: DebugSnapshotProps): react_jsx_runtime.JSX.Element;
+declare function DebugCopyButton(props: DebugSnapshotProps): react.JSX.Element;
 
 interface QualityTierDef {
     id: QualityMode;
@@ -217,7 +235,7 @@ interface QualityTierPickerProps {
     onChange: (mode: QualityMode) => void;
     disabled?: boolean;
 }
-declare function QualityTierPicker({ value, onChange, disabled }: QualityTierPickerProps): react_jsx_runtime.JSX.Element;
+declare function QualityTierPicker({ value, onChange, disabled }: QualityTierPickerProps): react.JSX.Element;
 
 interface StoryboardEditorProps {
     storyboard: Storyboard;
@@ -229,7 +247,7 @@ interface StoryboardEditorProps {
     /** True while planning or rendering — disables editing + buttons. */
     busy?: boolean;
 }
-declare function StoryboardEditor({ storyboard, onChange, onRender, onReplan, validations, busy, }: StoryboardEditorProps): react_jsx_runtime.JSX.Element;
+declare function StoryboardEditor({ storyboard, onChange, onRender, onReplan, validations, busy, }: StoryboardEditorProps): react.JSX.Element;
 
 /**
  * Shared engine-readiness hook — the single source of "can the host run the studio?"

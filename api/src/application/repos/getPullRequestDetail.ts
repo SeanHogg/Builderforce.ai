@@ -6,8 +6,10 @@
  * This is a read-heavy provider round-trip on a read path, so it is served through
  * the canonical read-through cache ({@link getOrSetCached} — L1 + KV), keyed by the
  * PR id + a version token (its `updatedAt`) so the entry ages out when the row
- * changes and a merge can bust it explicitly. GitHub-only; other providers return
- * `supported: false` so the UI degrades to "open on provider".
+ * changes and a merge can bust it explicitly. GitHub has the richest detail
+ * (mergeable + combined CI + diff stat); GitLab/Bitbucket Cloud return core
+ * state/merged (+ GitLab mergeable/pipeline) so the PR tab + merge gate work for
+ * them too. Unmapped providers (e.g. Bitbucket Server) return `supported: false`.
  */
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { buildGitApiBaseUrl } from './gitProxy';
@@ -53,8 +55,67 @@ function ghHeaders(token: string): Record<string, string> {
   };
 }
 
+/** GitLab MR detail — core fields (state/merged/mergeable/changedFiles + CI from
+ *  the head pipeline). Rich per-file additions/deletions need the /changes call;
+ *  left null (best-effort). Never throws. */
+async function fetchGitlabDetail(coords: PrCoords): Promise<PullRequestDetail> {
+  let apiBase: string;
+  try { apiBase = buildGitApiBaseUrl(coords.provider, coords.host); } catch (e) { return UNSUPPORTED(e instanceof Error ? e.message : 'unsupported host'); }
+  const projectId = encodeURIComponent(`${coords.owner}/${coords.repo}`);
+  const headers = { Authorization: `Bearer ${coords.token}`, Accept: 'application/json', 'User-Agent': 'BuilderForce-PR-Detail/1.0' };
+  const res = await fetch(`${apiBase}/projects/${projectId}/merge_requests/${coords.number}`, { headers }).catch(() => null);
+  if (!res || !res.ok) return UNSUPPORTED(res ? `GitLab ${res.status}` : 'network error');
+  const mr = (await res.json().catch(() => null)) as {
+    state?: string; merged_at?: string | null; merge_status?: string; changes_count?: string;
+    head_pipeline?: { status?: string } | null;
+  } | null;
+  if (!mr) return UNSUPPORTED('malformed MR response');
+  const pipe = mr.head_pipeline?.status;
+  const checks: PullRequestDetail['checks'] =
+    pipe === 'success' ? 'success' : pipe === 'failed' ? 'failure'
+    : pipe === 'running' || pipe === 'pending' ? 'pending' : null;
+  return {
+    supported: true,
+    state: mr.state === 'opened' ? 'open' : mr.state ?? null,
+    merged: mr.state === 'merged' || !!mr.merged_at,
+    mergeable: mr.merge_status ? mr.merge_status === 'can_be_merged' : null,
+    mergeableState: mr.merge_status ?? null,
+    additions: null,
+    deletions: null,
+    changedFiles: mr.changes_count ? Number(mr.changes_count) || null : null,
+    checks,
+    checksTotal: checks ? 1 : 0,
+  };
+}
+
+/** Bitbucket Cloud PR detail — core state/merged. Diff stat + build statuses need
+ *  extra calls; left null (best-effort). Never throws. */
+async function fetchBitbucketDetail(coords: PrCoords): Promise<PullRequestDetail> {
+  let apiBase: string;
+  try { apiBase = buildGitApiBaseUrl(coords.provider, coords.host); } catch (e) { return UNSUPPORTED(e instanceof Error ? e.message : 'unsupported host'); }
+  const headers = { Authorization: `Bearer ${coords.token}`, Accept: 'application/json', 'User-Agent': 'BuilderForce-PR-Detail/1.0' };
+  const res = await fetch(`${apiBase}/repositories/${coords.owner}/${coords.repo}/pullrequests/${coords.number}`, { headers }).catch(() => null);
+  if (!res || !res.ok) return UNSUPPORTED(res ? `Bitbucket ${res.status}` : 'network error');
+  const pr = (await res.json().catch(() => null)) as { state?: string } | null;
+  if (!pr) return UNSUPPORTED('malformed PR response');
+  return {
+    supported: true,
+    state: pr.state === 'OPEN' ? 'open' : pr.state === 'MERGED' ? 'merged' : pr.state === 'DECLINED' ? 'closed' : pr.state ?? null,
+    merged: pr.state === 'MERGED',
+    mergeable: null,
+    mergeableState: null,
+    additions: null,
+    deletions: null,
+    changedFiles: null,
+    checks: null,
+    checksTotal: 0,
+  };
+}
+
 /** Live fetch (uncached). Never throws — returns a typed `error` detail instead. */
 async function fetchDetail(coords: PrCoords): Promise<PullRequestDetail> {
+  if (coords.provider === 'gitlab') return fetchGitlabDetail(coords);
+  if (coords.provider === 'bitbucket') return fetchBitbucketDetail(coords);
   if (coords.provider !== 'github') return UNSUPPORTED(`detail not implemented for provider '${coords.provider}'`);
 
   const apiBase = buildGitApiBaseUrl(coords.provider, coords.host);

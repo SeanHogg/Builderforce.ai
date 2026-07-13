@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { SessionEntry as PiSessionEntry, SessionHeader } from "@mariozechner/pi-coding-agent";
-import { SessionManager } from "@mariozechner/pi-coding-agent";
+import type { SessionEntry as ExportedSessionEntry, SessionHeader } from "../../builderforce/agent-loop/index.js";
+import { SessionManager } from "../../builderforce/agent-loop/index.js";
 import {
   resolveDefaultSessionStorePath,
   resolveSessionFilePath,
@@ -18,7 +18,7 @@ const EXPORT_HTML_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 
 
 interface SessionData {
   header: SessionHeader | null;
-  entries: PiSessionEntry[];
+  entries: ExportedSessionEntry[];
   leafId: string | null;
   systemPrompt?: string;
   tools?: Array<{ name: string; description?: string; parameters?: unknown }>;

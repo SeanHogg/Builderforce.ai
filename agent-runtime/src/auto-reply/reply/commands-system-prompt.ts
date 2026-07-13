@@ -1,9 +1,9 @@
-import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { AgentTool } from "../../builderforce/model/agent-types.js";
 import { resolveSessionAgentIds } from "../../agents/agent-scope.js";
 import { resolveBootstrapContextForRun } from "../../agents/bootstrap-files.js";
 import { resolveDefaultModelForAgent } from "../../agents/model-selection.js";
-import type { EmbeddedContextFile } from "../../agents/pi-embedded-helpers.js";
-import { createBuilderForceAgentsCodingTools } from "../../agents/pi-tools.js";
+import type { EmbeddedContextFile } from "../../agents/embedded-helpers.js";
+import { createBuilderForceAgentsCodingTools } from "../../agents/coding-tools.js";
 import { resolveSandboxRuntimeStatus } from "../../agents/sandbox.js";
 import { buildWorkspaceSkillSnapshot } from "../../agents/skills.js";
 import { getSkillsSnapshotVersion } from "../../agents/skills/refresh.js";

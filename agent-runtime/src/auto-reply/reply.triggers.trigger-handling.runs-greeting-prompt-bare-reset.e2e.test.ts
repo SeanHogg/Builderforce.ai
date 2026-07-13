@@ -2,7 +2,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  getRunEmbeddedPiAgentMock,
+  getRunEmbeddedAgentMock,
   installTriggerHandlingE2eTestHooks,
   runGreetingPromptForBareNewOrReset,
   withTempHome,
@@ -47,7 +47,7 @@ async function expectResetBlockedForNonOwner(params: {
     },
   );
   expect(res).toBeUndefined();
-  expect(getRunEmbeddedPiAgentMock()).not.toHaveBeenCalled();
+  expect(getRunEmbeddedAgentMock()).not.toHaveBeenCalled();
 }
 
 describe("trigger handling", () => {

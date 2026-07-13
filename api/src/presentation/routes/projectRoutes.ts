@@ -1,15 +1,24 @@
 import { Hono, type Context } from 'hono';
-import { and, count, desc, eq, inArray, max, min } from 'drizzle-orm';
+import { and, count, eq, inArray, max, min, sql } from 'drizzle-orm';
 import { ProjectService } from '../../application/project/ProjectService';
+import { notSystemTask } from '../../application/task/taskScope';
 import { ensureProjectTemplate } from '../../application/project/projectTemplate';
-import { buildProjectKey } from '../../application/project/projectKey';
+import { KanbanTemplateService } from '../../application/kanban/kanbanTemplateService';
+import { provisionDefaultProjectEvermind } from '../../application/llm/projectEvermind';
+import { DEFAULT_TEMPLATE_ID } from '../../application/kanban/templateCatalog';
 import type { HonoEnv } from '../../env';
+import type { Env } from '../../env';
+import { getCacheVersion, getOrSetCached, bumpCacheVersion, bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
+import { computeProject360, type Project360Aggregate } from '../../application/project/computeProject360';
+import { computeProjectDeliverySignals } from '../../application/insights/projectDeliverySignals';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { ProjectStatus, TenantRole } from '../../domain/shared/types';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import type { Db } from '../../infrastructure/database/connection';
-import { agentHostProjects, agentHosts, ideProjectChatMessages, ideProjectChats, projectInsightEvents, projects, sourceControlIntegrations, specs, tasks, tenants, workflows } from '../../infrastructure/database/schema';
+import { agentHostProjects, agentHosts, objectiveLinks, objectives, projectInsightEvents, projects, sourceControlIntegrations, specs, tasks, tenants, workflows } from '../../infrastructure/database/schema';
+import { relayToRoom } from './realtimeRelay';
 import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
+import { projectRoomName } from '../../infrastructure/relay/broadcastRoom';
 
 type SourceControlProvider = 'github' | 'bitbucket';
 
@@ -44,9 +53,42 @@ type ChatCompletionPayload = {
  * Maps between HTTP request/response and the application service.
  * No business logic lives here.
  */
+/** Version-token key for a tenant's cached `/api/projects` list. */
+export function projectsListVersionKey(tenantId: number): string {
+  return `projects-list:tenant:${tenantId}`;
+}
+
+/**
+ * Bust the cached `/api/projects` list for a tenant. Call from any write that
+ * changes the list rows OR the aggregates it folds in (project CRUD, task
+ * count/status/date/archival changes). Bumping a per-tenant version token is one
+ * cheap KV write; every list key embedding the old token ages out on its TTL.
+ * The KV TTL is the backstop for the rarer aggregates we don't bump explicitly
+ * (workflow count, architecture PRD, agent-host assignment, initiative-level
+ * goal links) — mirrors the completed-by-assignee convention in reportRoutes.
+ */
+export async function invalidateProjectsList(env: Env, tenantId: number): Promise<void> {
+  // Task/objective/project writes that reshape the list also change what the
+  // chat↔ticket link picker can find, so orphan its typeahead cache in the same
+  // beat (the picker is a ticket surface, exactly like the projects list).
+  await Promise.all([
+    bumpCacheVersion(env, projectsListVersionKey(tenantId)),
+    bumpTicketSearchVersion(env, tenantId),
+  ]);
+}
+
 export function createProjectRoutes(projectService: ProjectService, db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
+
+  // Live board channel: a single WebSocket per project over which every
+  // project-scoped change is pushed as `{type:"changed"}`, so the board / kanban /
+  // calendar / list and any open task drawer re-fetch in real time when a teammate
+  // OR an agent mutates the project. Mirrors the poker/retro/ceremony rooms: the DO
+  // is a dumb fan-out relay (no domain data flows through it), and the authed REST
+  // routes stay the source of truth. The browser passes its JWT as `?token=` since
+  // it can't set WS headers (authMiddleware already accepts the query param).
+  router.get('/:id/stream', (c) => relayToRoom(c, c.env?.SESSION_ROOM, projectRoomName(c.req.param('id'))));
 
   const normalizeName = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
 
@@ -241,31 +283,70 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
   };
 
   // GET /api/projects
+  // Read-through cached per tenant + version token: ~7 grouped aggregates is too
+  // much to recompute on every dashboard/projects load. Writes bump the token via
+  // invalidateProjectsList() so the next read recomputes; the KV TTL backstops the
+  // rarer aggregates we don't bump explicitly.
   router.get('/', async (c) => {
-    const projectList = await projectService.listProjects(c.get('tenantId'));
+    const tenantId = c.get('tenantId');
+    const version = await getCacheVersion(c.env as Env, projectsListVersionKey(tenantId));
+    const projects = await getOrSetCached(
+      c.env as Env,
+      `${projectsListVersionKey(tenantId)}:v:${version}`,
+      () => buildProjectsList(tenantId),
+    );
+    return c.json({ projects });
+  });
+
+  /** Window for the per-project delivery-health signals — matches the delivery
+   *  tab's default so the card and the tab agree for a single-project tenant. */
+  const DELIVERY_SIGNAL_WINDOW_DAYS = 30;
+
+  /** Compute the full projects-list payload (base rows + all card aggregates). */
+  async function buildProjectsList(tenantId: number) {
+    const projectList = await projectService.listProjects(tenantId);
     const plainProjects = projectList.map((project) => project.toPlain());
 
     if (plainProjects.length === 0) {
-      return c.json({ projects: [] });
+      return [];
     }
 
     const projectIds = plainProjects.map((project) => project.id);
+    // One grouped aggregate over the project's tasks → total + the status/timeliness
+    // breakdown that drives the card's health speedometer and % done ring. Postgres
+    // FILTER keeps this a SINGLE query (no N+1, no extra round-trips vs. the prior
+    // plain count). `done` spans the canonical + common imported-board "completed"
+    // statuses; `overdue` = past-due work not yet resolved.
+    const DONE_SQL = sql`${tasks.status} in ('done', 'completed', 'closed', 'merged', 'resolved')`;
+    const TERMINAL_SQL = sql`${tasks.status} in ('done', 'completed', 'closed', 'merged', 'resolved', 'cancelled')`;
     const taskCounts = await db
       .select({
         projectId: tasks.projectId,
         taskCount: count(),
+        doneCount: sql<number>`count(*) filter (where ${DONE_SQL})`,
+        blockedCount: sql<number>`count(*) filter (where ${tasks.status} = 'blocked')`,
+        cancelledCount: sql<number>`count(*) filter (where ${tasks.status} = 'cancelled')`,
+        overdueCount: sql<number>`count(*) filter (where ${tasks.dueDate} < now() and not (${TERMINAL_SQL}))`,
       })
       .from(tasks)
       .where(
         and(
           inArray(tasks.projectId, projectIds),
           eq(tasks.archived, false),
+          notSystemTask,
         ),
       )
       .groupBy(tasks.projectId);
 
-    const taskCountByProject = new Map<number, number>(
-      taskCounts.map((row) => [row.projectId, Number(row.taskCount)]),
+    interface TaskBreakdown { total: number; done: number; blocked: number; cancelled: number; overdue: number }
+    const taskBreakdownByProject = new Map<number, TaskBreakdown>(
+      taskCounts.map((row) => [row.projectId, {
+        total: Number(row.taskCount),
+        done: Number(row.doneCount),
+        blocked: Number(row.blockedCount),
+        cancelled: Number(row.cancelledCount),
+        overdue: Number(row.overdueCount),
+      }]),
     );
 
     // Project timelines are derived from their tasks: a project has no date column
@@ -283,6 +364,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
         and(
           inArray(tasks.projectId, projectIds),
           eq(tasks.archived, false),
+          notSystemTask,
         ),
       )
       .groupBy(tasks.projectId);
@@ -296,7 +378,6 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       ]),
     );
 
-    const tenantId = c.get('tenantId');
     const assignedAgentHostRows = await db
       .select({
         projectId: agentHostProjects.projectId,
@@ -337,18 +418,112 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       archSpecRows.filter((row) => row.projectId != null).map((row) => row.projectId as number),
     );
 
-    return c.json({
-      projects: plainProjects.map((project) => ({
+    // Distinct objectives/OKRs linked to each project — the "is the need defined"
+    // (goals) signal behind the inspection's Direction dimension. A project's goals
+    // come from TWO edges: objectives linked to its TASKS, and objectives linked to
+    // the INITIATIVE it rolls up to. We union both into a distinct count per project
+    // (two grouped reads, no per-project round trip; merged in memory).
+    const initiativeByProject = new Map<number, string>();
+    for (const project of plainProjects) {
+      if (project.initiativeId) initiativeByProject.set(project.id, project.initiativeId);
+    }
+
+    const taskGoalRows = await db
+      .select({ projectId: tasks.projectId, objectiveId: objectiveLinks.objectiveId })
+      .from(objectiveLinks)
+      .innerJoin(tasks, eq(objectiveLinks.taskId, tasks.id))
+      .where(and(
+        eq(objectiveLinks.tenantId, tenantId),
+        eq(objectiveLinks.linkKind, 'task'),
+        inArray(tasks.projectId, projectIds),
+      ));
+
+    const initiativeIds = [...new Set(initiativeByProject.values())];
+    const initiativeGoalRows = initiativeIds.length
+      ? await db
+          .select({ initiativeId: objectiveLinks.initiativeId, objectiveId: objectiveLinks.objectiveId })
+          .from(objectiveLinks)
+          .where(and(
+            eq(objectiveLinks.tenantId, tenantId),
+            eq(objectiveLinks.linkKind, 'initiative'),
+            inArray(objectiveLinks.initiativeId, initiativeIds),
+          ))
+      : [];
+    const objectivesByInitiative = new Map<string, Set<string>>();
+    for (const row of initiativeGoalRows) {
+      if (!row.initiativeId || !row.objectiveId) continue;
+      const set = objectivesByInitiative.get(row.initiativeId) ?? new Set<string>();
+      set.add(row.objectiveId);
+      objectivesByInitiative.set(row.initiativeId, set);
+    }
+
+    const goalObjectivesByProject = new Map<number, Set<string>>();
+    const goalSet = (projectId: number): Set<string> => {
+      const set = goalObjectivesByProject.get(projectId) ?? new Set<string>();
+      goalObjectivesByProject.set(projectId, set);
+      return set;
+    };
+    for (const row of taskGoalRows) {
+      if (row.objectiveId) goalSet(row.projectId).add(row.objectiveId);
+    }
+    for (const [projectId, initiativeId] of initiativeByProject) {
+      const initiativeObjectives = objectivesByInitiative.get(initiativeId);
+      if (initiativeObjectives) for (const objectiveId of initiativeObjectives) goalSet(projectId).add(objectiveId);
+    }
+    // Third edge (0268): objectives scoped DIRECTLY to a project — the Brain's
+    // `objectives.create` with a projectId, or the OKR tab's project scope. Merged
+    // into the same distinct set so a project counts each linked objective once.
+    const projectScopedGoalRows = await db
+      .select({ projectId: objectives.projectId, objectiveId: objectives.id })
+      .from(objectives)
+      .where(and(eq(objectives.tenantId, tenantId), inArray(objectives.projectId, projectIds)));
+    for (const row of projectScopedGoalRows) {
+      if (row.projectId != null) goalSet(row.projectId).add(row.objectiveId);
+    }
+    const goalCountByProject = new Map<number, number>(
+      [...goalObjectivesByProject].map(([projectId, set]) => [projectId, set.size]),
+    );
+
+    // Per-project delivery signals (DORA + cycle time + flow) over the standard
+    // 30-day window — the compact inputs the frontend runs through the SAME
+    // computeDeliveryVerdict the /insights/delivery banner uses, so a project's
+    // health score is identical on its card and on the delivery tab. One bounded
+    // grouped pass (no N+1); the whole list payload is version-token cached.
+    const deliverySignalsByProject = await computeProjectDeliverySignals(db, tenantId, DELIVERY_SIGNAL_WINDOW_DAYS);
+
+    return plainProjects.map((project) => {
+      const b = taskBreakdownByProject.get(project.id);
+      return {
         ...project,
-        taskCount: taskCountByProject.get(project.id) ?? 0,
+        taskCount: b?.total ?? 0,
+        // Status/timeliness breakdown for the health speedometer + % done ring
+        // (frontend derives the score via the shared computeProjectHealth helper).
+        completedTaskCount: b?.done ?? 0,
+        openTaskCount: b ? Math.max(0, b.total - b.done - b.cancelled) : 0,
+        blockedTaskCount: b?.blocked ?? 0,
+        overdueTaskCount: b?.overdue ?? 0,
+        // Delivery-health inputs — the frontend fuses these via the shared verdict
+        // so the card's health matches the /insights/delivery gauge (null = no
+        // deploys/throughput yet → the card shows a neutral "no data" health).
+        deliverySignals: deliverySignalsByProject.get(project.id) ?? null,
         workflowCount: workflowCountByProject.get(project.id) ?? 0,
         hasArchitecturePrd: hasArchByProject.has(project.id),
+        // Goal/OKR linkage + planning-spine membership — the inspection Direction
+        // dimension treats a project with linked objectives or an initiative as
+        // having a defined "need" (the platform North Star).
+        linkedGoalCount: goalCountByProject.get(project.id) ?? 0,
+        initiativeId: project.initiativeId ?? null,
         assignedAgentHost: assignedAgentHostByProject.get(project.id) ?? null,
         startDate: dateRangeByProject.get(project.id)?.startDate ?? null,
-        dueDate: dateRangeByProject.get(project.id)?.dueDate ?? null,
-      })),
+        // Effective deadline drives the calendar/Gantt: the PM's explicit project
+        // due date (0255) when set, else the derived latest-task-due-date.
+        dueDate: toIso(project.dueDate) ?? dateRangeByProject.get(project.id)?.dueDate ?? null,
+        // The explicit value alone, so the details editor can distinguish "set by a
+        // PM" from "auto-derived from tasks" and seed its date input correctly.
+        projectDueDate: toIso(project.dueDate),
+      };
     });
-  });
+  }
 
   // GET /api/projects/check-key?key=SOMEKEY[&excludeId=123] — returns { available: boolean }
   router.get('/check-key', async (c) => {
@@ -366,116 +541,60 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     return c.json(project.toPlain());
   });
 
-  // GET /api/projects/:id/chats — list all chats for this project (any origin: ide, brainstorm assigned here, etc.)
-  router.get('/:id/chats', async (c) => {
+  /**
+   * GET /api/projects/:id/360 — the whole-picture health rollup (Project 360): four
+   * pillars × eight dimensions, the missing-item "improve" checklist, and the LIVE
+   * workforce (who's working / idle and why). The single source of truth the VS Code
+   * native panel renders — the web app can render the SAME payload later.
+   *
+   * Reuses the already-cached projects-list aggregate for the expensive grouped task
+   * counts (no re-count), then composes the live signals (per-task assignment,
+   * non-terminal executions, availability). The composed result rides a DELIBERATELY
+   * SHORT read-through cache (5s L1 / 10s KV, keyed by the projects-list version so a
+   * task write busts it) — enough to absorb open/refresh storms without serving stale
+   * "who's working": an explicit refresh sends `?fresh=1` to bypass it entirely.
+   */
+  router.get('/:id/360', async (c) => {
     const tenantId = c.get('tenantId');
     const project = await projectService.getProject(c.req.param('id'), tenantId);
-    const projectId = project.id;
-    const list = await db
-      .select({
-        id: ideProjectChats.id,
-        title: ideProjectChats.title,
-        origin: ideProjectChats.origin,
-        createdAt: ideProjectChats.createdAt,
-        updatedAt: ideProjectChats.updatedAt,
-      })
-      .from(ideProjectChats)
-      .where(and(eq(ideProjectChats.projectId, projectId), eq(ideProjectChats.tenantId, tenantId)))
-      .orderBy(desc(ideProjectChats.updatedAt));
-    return c.json({ chats: list });
+    const version = await getCacheVersion(c.env as Env, projectsListVersionKey(tenantId));
+    const list = await getOrSetCached(
+      c.env as Env,
+      `${projectsListVersionKey(tenantId)}:v:${version}`,
+      () => buildProjectsList(tenantId),
+    );
+    const row = list.find((p) => p.id === project.id);
+    if (!row) return c.json({ error: 'project not found' }, 404);
+    const aggregate: Project360Aggregate = {
+      id: row.id,
+      name: row.name,
+      key: row.key ?? null,
+      status: row.status ?? null,
+      taskCount: row.taskCount,
+      completedTaskCount: row.completedTaskCount,
+      openTaskCount: row.openTaskCount,
+      blockedTaskCount: row.blockedTaskCount,
+      overdueTaskCount: row.overdueTaskCount,
+      linkedGoalCount: row.linkedGoalCount,
+      initiativeId: row.initiativeId ?? null,
+      hasArchitecturePrd: row.hasArchitecturePrd,
+      assignedAgentHost: row.assignedAgentHost ?? null,
+    };
+    const fresh = c.req.query('fresh') === '1';
+    if (fresh) return c.json(await computeProject360(db, tenantId, aggregate));
+    const model = await getOrSetCached(
+      c.env as Env,
+      `project-360:tenant:${tenantId}:project:${project.id}:v:${version}`,
+      () => computeProject360(db, tenantId, aggregate),
+      { l1TtlMs: 5_000, kvTtlSeconds: 10 },
+    );
+    return c.json(model);
   });
 
-  // POST /api/projects/:id/chats — create a new chat in this project (origin=ide)
-  router.post('/:id/chats', async (c) => {
-    const tenantId = c.get('tenantId');
-    const project = await projectService.getProject(c.req.param('id'), tenantId);
-    const projectId = project.id;
-    const body = await c.req.json<{ title?: string }>().catch((): { title?: string } => ({}));
-    const title = (body.title ?? 'New chat').trim().slice(0, 500) || 'New chat';
-    const [chat] = await db
-      .insert(ideProjectChats)
-      .values({
-        projectId,
-        tenantId,
-        origin: 'ide',
-        title,
-      })
-      .returning({
-        id: ideProjectChats.id,
-        title: ideProjectChats.title,
-        origin: ideProjectChats.origin,
-        createdAt: ideProjectChats.createdAt,
-        updatedAt: ideProjectChats.updatedAt,
-      });
-    return c.json(chat!, 201);
-  });
-
-  // GET /api/projects/:id/chats/:chatId — get one chat with messages (origin included so UI can load right tools)
-  router.get('/:id/chats/:chatId', async (c) => {
-    const chatId = Number(c.req.param('chatId'));
-    const tenantId = c.get('tenantId');
-    const project = await projectService.getProject(c.req.param('id'), tenantId);
-    const projectId = project.id;
-    const [chat] = await db
-      .select()
-      .from(ideProjectChats)
-      .where(and(eq(ideProjectChats.id, chatId), eq(ideProjectChats.projectId, projectId), eq(ideProjectChats.tenantId, tenantId)))
-      .limit(1);
-    if (!chat) return c.json({ error: 'Chat not found' }, 404);
-    const messages = await db
-      .select({ id: ideProjectChatMessages.id, role: ideProjectChatMessages.role, content: ideProjectChatMessages.content, seq: ideProjectChatMessages.seq, createdAt: ideProjectChatMessages.createdAt })
-      .from(ideProjectChatMessages)
-      .where(eq(ideProjectChatMessages.chatId, chatId))
-      .orderBy(ideProjectChatMessages.seq);
-    return c.json({ ...chat, messages });
-  });
-
-  // PATCH /api/projects/:id/chats/:chatId — append messages and optionally update title
-  router.patch('/:id/chats/:chatId', async (c) => {
-    const chatId = Number(c.req.param('chatId'));
-    const tenantId = c.get('tenantId');
-    const project = await projectService.getProject(c.req.param('id'), tenantId);
-    const projectId = project.id;
-    const [chat] = await db
-      .select()
-      .from(ideProjectChats)
-      .where(and(eq(ideProjectChats.id, chatId), eq(ideProjectChats.projectId, projectId), eq(ideProjectChats.tenantId, tenantId)))
-      .limit(1);
-    if (!chat) return c.json({ error: 'Chat not found' }, 404);
-    const body = await c.req.json<{ title?: string; messages?: Array<{ role: string; content: string }> }>();
-    if (body.title !== undefined) {
-      await db
-        .update(ideProjectChats)
-        .set({ title: String(body.title).trim().slice(0, 500) || chat.title, updatedAt: new Date() })
-        .where(eq(ideProjectChats.id, chatId));
-    }
-    if (Array.isArray(body.messages) && body.messages.length > 0) {
-      const lastMsg = await db
-        .select({ seq: ideProjectChatMessages.seq })
-        .from(ideProjectChatMessages)
-        .where(eq(ideProjectChatMessages.chatId, chatId))
-        .orderBy(desc(ideProjectChatMessages.seq))
-        .limit(1);
-      let seq = (lastMsg[0]?.seq ?? -1) + 1;
-      for (const m of body.messages) {
-        await db.insert(ideProjectChatMessages).values({
-          chatId,
-          role: (m.role ?? 'user').slice(0, 16),
-          content: String(m.content ?? '').slice(0, 1_000_000),
-          seq,
-        });
-        seq += 1;
-      }
-      await db.update(ideProjectChats).set({ updatedAt: new Date() }).where(eq(ideProjectChats.id, chatId));
-    }
-    const [updated] = await db.select().from(ideProjectChats).where(eq(ideProjectChats.id, chatId)).limit(1);
-    const messages = await db
-      .select({ id: ideProjectChatMessages.id, role: ideProjectChatMessages.role, content: ideProjectChatMessages.content, seq: ideProjectChatMessages.seq, createdAt: ideProjectChatMessages.createdAt })
-      .from(ideProjectChatMessages)
-      .where(eq(ideProjectChatMessages.chatId, chatId))
-      .orderBy(ideProjectChatMessages.seq);
-    return c.json({ ...updated!, messages });
-  });
+  // NOTE: the per-project chat CRUD (`GET/POST /:id/chats`, `GET/PATCH
+  // /:id/chats/:chatId`) was removed [1436] — all chat traffic now goes through
+  // the canonical BrainService (`/api/brain/chats*`); these handlers had no
+  // remaining caller and duplicated query paths over the same tables.
 
   // POST /api/projects/:id/insights/code-changes
   // Record code-change deltas for project interactions (Insights is available on all plans)
@@ -517,8 +636,10 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       sourceControlRepoUrl?: string | null;
       githubRepoUrl?: string | null;
       governance?: string | null;
-      /** IDE project type: 'designer' | 'video' | 'llm'. Defaults to 'designer'. */
+      /** IDE project type: 'designer' | 'video' | 'evermind' | 'finetune' | 'voice'. Defaults to 'designer'. */
       modality?: string | null;
+      /** Where the project was born — 'ide' tags it for the Designer badge. */
+      origin?: string | null;
     }>();
     const tenantId = c.get('tenantId');
     const name = body.name?.trim();
@@ -537,7 +658,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     if (!assignment.ok) return c.json({ error: assignment.message }, assignment.status);
 
     const project = await projectService.createProject({
-      key:           body.key?.trim() || buildProjectKey(tenantId, name),
+      key:           body.key?.trim() || (await projectService.buildUniqueKey(tenantId, name)),
       name,
       description:   body.description,
       template:      body.template ?? null,
@@ -549,9 +670,26 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       githubRepoUrl: assignment.value.githubRepoUrl,
       governance: body.governance ?? null,
       modality: body.modality ?? null,
+      origin: body.origin ?? null,
       tenantId,
     });
     await ensureProjectTemplate(c.env.UPLOADS, project);
+    // Provision the project's board from a kanban template so its lanes carry role
+    // ownership + per-lane requirements from day one (the onboarding "recommended
+    // roster" reads from this). Defaults to the Standard SWE board; best-effort so a
+    // template failure never blocks project creation.
+    {
+      const plain = project.toPlain();
+      const templateId = (body as { kanbanTemplateId?: string }).kanbanTemplateId?.trim() || DEFAULT_TEMPLATE_ID;
+      await new KanbanTemplateService(db)
+        .applyToProject(c.env as Env, tenantId, plain.id, templateId, plain.name)
+        .catch(() => {});
+    }
+    // Give the project a DEFAULT Evermind so it always has a self-learning model to
+    // run/learn/edit — even when the manager never seeds one from a Studio model.
+    // Best-effort (never blocks creation); inference stays OFF until opted in.
+    await provisionDefaultProjectEvermind(c.env as Env, db, tenantId, project.toPlain().id, name);
+    await invalidateProjectsList(c.env as Env, tenantId).catch(() => {});
     return c.json(project.toPlain(), 201);
   });
 
@@ -608,12 +746,13 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
         },
         tenantId,
       );
+      await invalidateProjectsList(c.env as Env, tenantId).catch(() => {});
       return c.json({ action: 'updated', project: updated.toPlain() });
     }
 
     const created = await projectService.createProject({
       tenantId,
-      key: buildProjectKey(tenantId, name),
+      key: await projectService.buildUniqueKey(tenantId, name),
       name,
       description: body.description,
       rootWorkingDirectory: body.rootWorkingDirectory,
@@ -625,6 +764,9 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     });
 
     await ensureProjectTemplate(c.env.UPLOADS, created);
+    // Default Evermind for every newly-created project (see POST / above).
+    await provisionDefaultProjectEvermind(c.env as Env, db, tenantId, created.toPlain().id, name);
+    await invalidateProjectsList(c.env as Env, tenantId).catch(() => {});
     return c.json({ action: 'created', project: created.toPlain() }, 201);
   });
 
@@ -644,7 +786,20 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       sourceControlRepoUrl?: string | null;
       githubRepoUrl?: string | null;
       modality?: string | null;
+      /** Explicit project deadline as an ISO/date string, or null to clear it. */
+      dueDate?: string | null;
     }>();
+
+    // Parse the explicit deadline: a non-empty string → Date, explicit null → clear,
+    // omitted (undefined) → leave unchanged. An unparseable string is treated as
+    // "leave unchanged" rather than silently writing an Invalid Date.
+    let dueDate: Date | null | undefined;
+    if (body.dueDate === null) {
+      dueDate = null;
+    } else if (typeof body.dueDate === 'string' && body.dueDate.trim()) {
+      const parsed = new Date(body.dueDate);
+      dueDate = Number.isNaN(parsed.getTime()) ? undefined : parsed;
+    }
 
     const existing = await projectService.getProject(rawId, tenantId);
     const assignment = await resolveSourceControlAssignment(
@@ -667,12 +822,20 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
 
     const project = await projectService.updateProject(existing.id, {
       ...body,
+      dueDate,
       sourceControlIntegrationId: assignment.value.sourceControlIntegrationId,
       sourceControlProvider: assignment.value.sourceControlProvider,
       sourceControlRepoFullName: assignment.value.sourceControlRepoFullName,
       sourceControlRepoUrl: assignment.value.sourceControlRepoUrl,
       githubRepoUrl: assignment.value.githubRepoUrl,
     }, tenantId);
+    await invalidateProjectsList(c.env as Env, tenantId).catch(() => {});
+    // A Project Key change re-keys every task (`<oldKey>-NNN` → `<newKey>-NNN`) in
+    // updateProject; bust the cached Epic trees for this project so they don't
+    // serve stale keys. Task-list reads are uncached, so they reflect it already.
+    if (project.key !== existing.key) {
+      await bumpCacheVersion(c.env as Env, `task-tree-version:project:${existing.id}`).catch(() => {});
+    }
     return c.json(project.toPlain());
   });
 
@@ -710,7 +873,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
         )
       : await projectService.createProject({
           tenantId,
-          key: buildProjectKey(tenantId, name),
+          key: await projectService.buildUniqueKey(tenantId, name),
           name,
           description,
           rootWorkingDirectory,
@@ -720,6 +883,8 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     // template so the IDE opens runnable — updates of an existing project keep
     // whatever files it already has.
     if (!existing) await ensureProjectTemplate(c.env.UPLOADS, project);
+    // Default Evermind for a freshly-scaffolded project (see POST / above).
+    if (!existing) await provisionDefaultProjectEvermind(c.env as Env, db, tenantId, project.id, name);
 
     let selectedAgentHostId: number | null = null;
 
@@ -764,6 +929,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       ? await projectService.updateProject(project.id, { status: ProjectStatus.ON_HOLD }, tenantId)
       : await projectService.updateProject(project.id, { status: ProjectStatus.ACTIVE }, tenantId);
 
+    await invalidateProjectsList(c.env as Env, tenantId).catch(() => {});
     return c.json({
       project: finalProject.toPlain(),
       scaffold: {
@@ -779,6 +945,7 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
     const tenantId = c.get('tenantId');
     const project = await projectService.getProject(c.req.param('id'), tenantId);
     await projectService.deleteProject(project.id, tenantId);
+    await invalidateProjectsList(c.env as Env, tenantId).catch(() => {});
     return c.body(null, 204);
   });
 

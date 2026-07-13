@@ -12,7 +12,7 @@
  * POST   /api/contributors/:id/identities    Add platform identity (MANAGER+)
  * DELETE /api/contributors/:id/identities/:identityId (MANAGER+)
  *
- * POST   /api/contributors/activity          Ingest activity events (agentHost API key OR JWT)
+ * POST   /api/contributors/activity          Ingest activity events (tenant JWT)
  * GET    /api/contributors/:id/activity      List activity events (MANAGER+)
  * GET    /api/contributors/:id/metrics       Aggregated daily metrics (MANAGER+)
  * POST   /api/contributors/aggregate         Trigger daily metrics recalculation (MANAGER+)
@@ -28,70 +28,17 @@ import {
   contributorDailyMetrics,
 } from '../../infrastructure/database/schema';
 import { TenantRole } from '../../domain/shared/types';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-
-// ---------------------------------------------------------------------------
-// Metrics aggregation helper
-// ---------------------------------------------------------------------------
-
-async function aggregateDailyMetrics(
-  db: Db,
-  tenantId: number,
-  contributorId: number,
-  date: Date,
-): Promise<void> {
-  const dayStart = new Date(date);
-  dayStart.setUTCHours(0, 0, 0, 0);
-  const dayEnd = new Date(dayStart);
-  dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
-
-  const events = await db
-    .select()
-    .from(activityEvents)
-    .where(and(
-      eq(activityEvents.tenantId, tenantId),
-      eq(activityEvents.contributorId, contributorId),
-      gte(activityEvents.occurredAt, dayStart),
-      lte(activityEvents.occurredAt, dayEnd),
-    ));
-
-  const m = {
-    commits:        events.filter((e) => e.eventType === 'commit').length,
-    prsOpened:      events.filter((e) => e.eventType === 'pr_opened').length,
-    prsMerged:      events.filter((e) => e.eventType === 'pr_merged').length,
-    prsReviewed:    events.filter((e) => e.eventType === 'pr_reviewed').length,
-    issuesCreated:  events.filter((e) => e.eventType === 'issue_created').length,
-    issuesResolved: events.filter((e) => e.eventType === 'issue_resolved').length,
-    linesAdded:     events.reduce((s, e) => s + (e.linesAdded ?? 0), 0),
-    linesRemoved:   events.reduce((s, e) => s + (e.linesRemoved ?? 0), 0),
-    filesChanged:   events.reduce((s, e) => s + (e.filesChanged ?? 0), 0),
-  };
-
-  // Weighted activity score: commits×1 + PRs×3 + reviews×2 + issues×1.5
-  const activityScore = Math.round(
-    m.commits * 1 +
-    (m.prsOpened + m.prsMerged) * 3 +
-    m.prsReviewed * 2 +
-    (m.issuesCreated + m.issuesResolved) * 1.5,
-  );
-  const isActiveDay = m.commits > 0 || m.prsOpened > 0 || m.prsMerged > 0;
-
-  await db
-    .insert(contributorDailyMetrics)
-    .values({
-      tenantId,
-      contributorId,
-      date: dayStart,
-      ...m,
-      activityScore,
-      isActiveDay,
-    })
-    .onConflictDoUpdate({
-      target: [contributorDailyMetrics.tenantId, contributorDailyMetrics.contributorId, contributorDailyMetrics.date],
-      set: { ...m, activityScore, isActiveDay, updatedAt: new Date() },
-    });
-}
+import { contributorMerges, tenantMembers } from '../../infrastructure/database/schema';
+import {
+  MergeError,
+  previewMerge,
+  mergeContributors,
+  unmergeContributors,
+  suggestDuplicates,
+} from '../../application/contributors/mergeService';
+import { aggregateDailyMetrics, ingestActivityEvents } from '../../application/contributors/activityIngest';
 
 // ---------------------------------------------------------------------------
 // Routes
@@ -100,10 +47,12 @@ async function aggregateDailyMetrics(
 export function createContributorRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
-  // ── Activity ingest (no JWT — accepts agentHost API key via query params) ──────
+  // ── Activity ingest (tenant JWT) ───────────────────────────────────────────
   // POST /api/contributors/activity
+  // Shares the same producer→store core as the GitHub webhook: unknown authors are
+  // auto-created (no orphan events) and each event is attributed to a project via
+  // its connected repo. See application/contributors/activityIngest.ts.
   router.post('/activity', async (c) => {
-    // Accept tenant JWT for this endpoint
     await authMiddleware(c as unknown as Parameters<typeof authMiddleware>[0], async () => {});
     const tenantId = (c as unknown as { get: (k: string) => unknown }).get('tenantId') as number | undefined;
     if (!tenantId) return c.text('Unauthorized', 401);
@@ -113,6 +62,9 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
       events: Array<{
         externalId?: string;
         contributorExternalId?: string;
+        authorDisplayName?: string;
+        authorEmail?: string;
+        authorAvatarUrl?: string;
         eventType: string;
         repositoryName?: string;
         repositoryFullName?: string;
@@ -130,76 +82,106 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
       return c.json({ error: 'provider and events[] are required' }, 400);
     }
 
-    const inserted: number[] = [];
-    const skipped: string[] = [];
-    const now = new Date();
+    const result = await ingestActivityEvents(c.env as Env, db, {
+      tenantId,
+      provider: body.provider as typeof activityEvents.$inferInsert['provider'],
+      events: body.events.map((ev) => ({
+        ...ev,
+        eventType: ev.eventType as typeof activityEvents.$inferInsert['eventType'],
+      })),
+    });
 
-    for (const ev of body.events) {
-      // Resolve contributorId from external identity
-      let contributorId: number | null = null;
-      if (ev.contributorExternalId) {
-        const [identity] = await db
-          .select({ contributorId: contributorIdentities.contributorId })
-          .from(contributorIdentities)
-          .where(and(
-            eq(contributorIdentities.tenantId, tenantId),
-            eq(contributorIdentities.provider, body.provider as 'github'),
-            eq(contributorIdentities.externalId, ev.contributorExternalId),
-          ));
-        contributorId = identity?.contributorId ?? null;
-      }
-
-      try {
-        const [row] = await db
-          .insert(activityEvents)
-          .values({
-            tenantId,
-            contributorId,
-            provider:           body.provider as 'github',
-            eventType:          ev.eventType as 'commit',
-            externalId:         ev.externalId ?? null,
-            repositoryName:     ev.repositoryName ?? null,
-            repositoryFullName: ev.repositoryFullName ?? null,
-            title:              ev.title ?? null,
-            url:                ev.url ?? null,
-            linesAdded:         ev.linesAdded ?? null,
-            linesRemoved:       ev.linesRemoved ?? null,
-            filesChanged:       ev.filesChanged ?? null,
-            cycleTimeHours:     ev.cycleTimeHours ?? null,
-            occurredAt:         new Date(ev.occurredAt),
-            createdAt:          now,
-          })
-          .onConflictDoNothing()
-          .returning({ id: activityEvents.id });
-
-        if (row) {
-          inserted.push(row.id);
-          // Trigger incremental daily metrics update
-          if (contributorId) {
-            aggregateDailyMetrics(db, tenantId, contributorId, new Date(ev.occurredAt)).catch(() => {});
-          }
-        } else {
-          skipped.push(ev.externalId ?? 'unknown');
-        }
-      } catch {
-        skipped.push(ev.externalId ?? 'unknown');
-      }
-    }
-
-    return c.json({ inserted: inserted.length, skipped: skipped.length }, 201);
+    return c.json(result, 201);
   });
 
   // All remaining routes require JWT + MANAGER role
   router.use('*', authMiddleware);
   router.use('*', requireRole(TenantRole.MANAGER));
 
+  // ── Consolidation (merge duplicate profiles) ──────────────────────────────
+  // Registered before GET /:id so the static paths aren't swallowed by the
+  // dynamic id route.
+
+  // GET /api/contributors/duplicates — likely-duplicate groups to consolidate.
+  router.get('/duplicates', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const groups = await suggestDuplicates(db, tenantId);
+    return c.json({ groups });
+  });
+
+  // GET /api/contributors/merges — merge history (audit + undo).
+  router.get('/merges', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const rows = await db
+      .select({
+        id: contributorMerges.id,
+        targetContributorId: contributorMerges.targetContributorId,
+        sourceContributorId: contributorMerges.sourceContributorId,
+        movedActivityCount: contributorMerges.movedActivityCount,
+        movedIdentityCount: contributorMerges.movedIdentityCount,
+        status: contributorMerges.status,
+        mergedByUserId: contributorMerges.mergedByUserId,
+        mergedAt: contributorMerges.mergedAt,
+        revertedAt: contributorMerges.revertedAt,
+      })
+      .from(contributorMerges)
+      .where(eq(contributorMerges.tenantId, tenantId))
+      .orderBy(desc(contributorMerges.mergedAt))
+      .limit(100);
+    return c.json({ merges: rows });
+  });
+
+  // POST /api/contributors/merge/preview — counts + conflicts for a proposed merge.
+  router.post('/merge/preview', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const { sourceId, targetId } = await c.req.json<{ sourceId: number; targetId: number }>();
+    if (!sourceId || !targetId) return c.json({ error: 'sourceId and targetId are required' }, 400);
+    try {
+      return c.json(await previewMerge(db, tenantId, sourceId, targetId));
+    } catch (e) {
+      if (e instanceof MergeError) return c.json({ error: e.message }, e.status);
+      throw e;
+    }
+  });
+
+  // POST /api/contributors/merge — consolidate source INTO target (tenant-wide).
+  router.post('/merge', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string | undefined;
+    const { sourceId, targetId } = await c.req.json<{ sourceId: number; targetId: number }>();
+    if (!sourceId || !targetId) return c.json({ error: 'sourceId and targetId are required' }, 400);
+    try {
+      const result = await mergeContributors(db, c.env as Env, { tenantId, sourceId, targetId, mergedByUserId: userId ?? null });
+      return c.json(result, 201);
+    } catch (e) {
+      if (e instanceof MergeError) return c.json({ error: e.message }, e.status);
+      throw e;
+    }
+  });
+
+  // POST /api/contributors/merges/:mergeId/revert — undo a prior merge.
+  router.post('/merges/:mergeId/revert', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const mergeId = c.req.param('mergeId');
+    try {
+      return c.json(await unmergeContributors(db, c.env as Env, { tenantId, mergeId }));
+    } catch (e) {
+      if (e instanceof MergeError) return c.json({ error: e.message }, e.status);
+      throw e;
+    }
+  });
+
   // ── GET /api/contributors ─────────────────────────────────────────────────
   router.get('/', async (c) => {
     const tenantId = c.get('tenantId') as number;
+    // Hide merged-away (tombstoned) profiles by default; ?includeMerged=true shows them.
+    const includeMerged = c.req.query('includeMerged') === 'true';
+    const conds = [eq(contributors.tenantId, tenantId)];
+    if (!includeMerged) conds.push(sql`${contributors.mergedIntoId} is null`);
     const rows = await db
       .select()
       .from(contributors)
-      .where(eq(contributors.tenantId, tenantId))
+      .where(and(...conds))
       .orderBy(asc(contributors.displayName));
     return c.json({ contributors: rows });
   });
@@ -354,6 +336,38 @@ export function createContributorRoutes(db: Db): Hono<HonoEnv> {
       ));
 
     return c.json({ deleted: true });
+  });
+
+  // ── PATCH /api/contributors/:id/link-user ────────────────────────────────
+  // Bind (or unbind, userId: null) this contributor to a Builderforce user, so
+  // external activity (this profile) and platform/VS Code engagement (that user)
+  // attach to one person. Validates the user is a member of the tenant.
+  router.patch('/:id/link-user', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = Number(c.req.param('id'));
+    const { userId } = await c.req.json<{ userId: string | null }>();
+
+    const [existing] = await db
+      .select({ id: contributors.id })
+      .from(contributors)
+      .where(and(eq(contributors.id, id), eq(contributors.tenantId, tenantId)));
+    if (!existing) return c.json({ error: 'Contributor not found' }, 404);
+
+    if (userId) {
+      const [member] = await db
+        .select({ userId: tenantMembers.userId })
+        .from(tenantMembers)
+        .where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.userId, userId)));
+      if (!member) return c.json({ error: 'User is not a member of this workspace' }, 400);
+    }
+
+    const [updated] = await db
+      .update(contributors)
+      .set({ userId: userId ?? null, updatedAt: new Date() })
+      .where(and(eq(contributors.id, id), eq(contributors.tenantId, tenantId)))
+      .returning();
+
+    return c.json(updated);
   });
 
   // ── GET /api/contributors/:id/activity ────────────────────────────────────

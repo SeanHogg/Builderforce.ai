@@ -14,30 +14,12 @@ import {
   chatSessions,
   chatMessages,
 } from '../../infrastructure/database/schema';
-import { verifySecret } from '../../infrastructure/auth/HashService';
+import { verifyAgentHostApiKey } from '../../infrastructure/auth/agentHostAuth';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 export function createChatRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
-
-  // ---------------------------------------------------------------------------
-  // Helper: verify agentHost API key (same pattern as agentHostRoutes)
-  // ---------------------------------------------------------------------------
-  const verifyAgentHostApiKey = async (id: number, key?: string) => {
-    if (!key) return null;
-    const [agentHost] = await db
-      .select({
-        id: agentHosts.id,
-        tenantId: agentHosts.tenantId,
-        apiKeyHash: agentHosts.apiKeyHash,
-      })
-      .from(agentHosts)
-      .where(eq(agentHosts.id, id));
-    if (!agentHost) return null;
-    const valid = await verifySecret(key, agentHost.apiKeyHash);
-    return valid ? agentHost : null;
-  };
 
   // ---------------------------------------------------------------------------
   // POST /api/agent-hosts/:agentHostId/messages?key=<agentHostApiKey>
@@ -52,7 +34,7 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
       return c.json({ error: 'invalid agentHostId' }, 400);
     }
 
-    const agentHost = await verifyAgentHostApiKey(agentHostId, key);
+    const agentHost = await verifyAgentHostApiKey(db, agentHostId, key);
     if (!agentHost) return c.text('Unauthorized', 401);
 
     let body: { sessionKey: string; projectId?: number; messages: Array<{ role: string; content: string; metadata?: string; seq: number }> };
@@ -96,24 +78,28 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
 
     if (!session) return c.json({ error: 'failed to upsert session' }, 500);
 
-    // Insert messages
+    // Insert messages — ONE multi-row insert (neon-http has no interactive tx).
+    // onConflictDoNothing keeps the idempotent "skip duplicates" behavior; the
+    // returned rows are exactly those actually inserted, so `inserted` is accurate.
     let inserted = 0;
-    for (const msg of messages) {
-      if (!msg.role || typeof msg.content !== 'string') continue;
-      try {
-        await db.insert(chatMessages).values({
-          tenantId: agentHost.tenantId,
-          agentHostId,
-          sessionId: session.id,
-          role: msg.role,
-          content: msg.content,
-          metadata: msg.metadata ?? null,
-          seq: msg.seq,
-        });
-        inserted++;
-      } catch {
-        // Skip duplicates (seq conflict) — idempotent
-      }
+    const rows = messages
+      .filter((msg) => msg.role && typeof msg.content === 'string')
+      .map((msg) => ({
+        tenantId: agentHost.tenantId,
+        agentHostId,
+        sessionId: session.id,
+        role: msg.role,
+        content: msg.content,
+        metadata: msg.metadata ?? null,
+        seq: msg.seq,
+      }));
+    if (rows.length > 0) {
+      const insertedRows = await db
+        .insert(chatMessages)
+        .values(rows)
+        .onConflictDoNothing()
+        .returning({ id: chatMessages.id });
+      inserted = insertedRows.length;
     }
 
     // Update session stats

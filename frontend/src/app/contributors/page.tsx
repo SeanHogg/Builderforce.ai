@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 
-// Contributors was consolidated into Workforce as a tab. Keep this route alive
-// as a redirect so old links and bookmarks land on the Contributors tab.
+// Contributors activity was merged into the Workforce → Performance tab. Keep
+// this route alive as a redirect so old links and bookmarks still resolve.
 export default function ContributorsPage() {
-  redirect('/workforce?tab=contributors');
+  redirect('/workforce?tab=performance');
 }

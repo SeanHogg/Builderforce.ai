@@ -16,7 +16,8 @@
  * proxy can stamp it onto `ProxyResult` even for internal callers that don't
  * pre-generate one); routes pass that same id here.
  */
-import { buildDatabase } from '../../infrastructure/database/connection';
+import { eq } from 'drizzle-orm';
+import { buildTransactionalDatabase } from '../../infrastructure/database/connection';
 import { llmTraces } from '../../infrastructure/database/schema';
 import type { ProxyResult } from './LlmProxyService';
 import type { HonoEnv } from '../../env';
@@ -141,9 +142,38 @@ export function logTrace(env: Env, ctx: ExecutionContext, input: TraceInput): vo
     callerMetadata:    jsonOrNull(input.callerMetadata ?? null),
   };
   ctx.waitUntil(
-    buildDatabase(env)
+    buildTransactionalDatabase(env)
       .insert(llmTraces)
       .values(row)
+      .catch(() => { /* tracing must never fail the request */ }),
+  );
+}
+
+/**
+ * Back-fill token usage onto an already-written streaming trace [1298].
+ *
+ * For `stream: true` calls the trace row is inserted up-front (identity, timing,
+ * chain) with zero tokens, because usage is only known from the final SSE chunk.
+ * The stream's usage callback calls this to UPDATE the matching row by trace id,
+ * so streamed traces show real token counts instead of 0. Fire-and-forget; never
+ * fails the request. (The completion `response_body` for streams is still not
+ * captured — that needs buffering the stream; tokens are the higher-value half.)
+ */
+export function backfillTraceUsage(
+  env: Env,
+  ctx: ExecutionContext,
+  traceId: string,
+  usage: { promptTokens?: number; completionTokens?: number; totalTokens?: number },
+): void {
+  ctx.waitUntil(
+    buildTransactionalDatabase(env)
+      .update(llmTraces)
+      .set({
+        promptTokens:     usage.promptTokens ?? 0,
+        completionTokens: usage.completionTokens ?? 0,
+        totalTokens:      usage.totalTokens ?? 0,
+      })
+      .where(eq(llmTraces.traceId, traceId))
       .catch(() => { /* tracing must never fail the request */ }),
   );
 }

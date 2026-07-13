@@ -64,8 +64,24 @@ export interface UpsertTaskInput {
   provider:    string;
   title:       string;
   description: string | null;
+  /** Story-point estimate from the tracker (EMP-4), or null/undefined when the
+   *  provider exposes none — the store only writes it when present so a manual
+   *  estimate is never clobbered with null. */
+  storyPoints?: number | null;
+  /** Mapped BF task type ('task'|'epic') for a NEW task, from board_type_mappings.
+   *  Applied only on insert so a later sync never resets a board move. */
+  taskType?: string | null;
+  /** Mapped BF status lane for a NEW task, from board_type_mappings (insert only). */
+  status?: string | null;
   /** Existing BF task id when the link already points at one. */
   existingTaskId: number | null;
+}
+
+/** Persistent external-type → BF task mapping row (board_type_mappings). */
+export interface TypeMapping {
+  externalType:   string;
+  targetTaskType: string;
+  targetStatus:   string | null;
 }
 
 export interface OutboxRow {
@@ -81,6 +97,8 @@ export interface OutboxRow {
 export interface BoardSyncStore {
   getConnection(connectionId: string): Promise<StoredConnection | null>;
   getLink(connectionId: string, externalId: string): Promise<StoredLink | null>;
+  /** Persistent external-type → task_type/status map for a connection (migration 0256). */
+  listTypeMappings(connectionId: string): Promise<TypeMapping[]>;
   upsertLink(input: UpsertLinkInput): Promise<StoredLink>;
   /** Create or update the BF task; returns its id. */
   upsertTask(input: UpsertTaskInput): Promise<number>;
@@ -208,6 +226,21 @@ export class SyncEngine {
   /** Decision from the most recent applyInboundTicket (private tally channel). */
   private lastDecision: ReconcileResult['decision'] = 'skipped_idempotent';
 
+  /** Per-connection type-mapping cache (loaded once, reused across a sync run). */
+  private typeMapCache = new Map<string, Map<string, TypeMapping>>();
+
+  /** Resolve the external-type → BF mapping for a connection (cached). */
+  private async resolveTypeMapping(connectionId: string, externalType: string | null | undefined): Promise<TypeMapping | null> {
+    if (!externalType) return null;
+    let map = this.typeMapCache.get(connectionId);
+    if (!map) {
+      const rows = await this.store.listTypeMappings(connectionId);
+      map = new Map(rows.map((r) => [r.externalType.toLowerCase(), r]));
+      this.typeMapCache.set(connectionId, map);
+    }
+    return map.get(externalType.toLowerCase()) ?? null;
+  }
+
   /** Reconcile + persist one inbound ticket. Also exposed for the webhook path. */
   async applyInboundTicket(
     conn: StoredConnection,
@@ -258,6 +291,9 @@ export class SyncEngine {
     // applied OR conflict → upsert the link, and (for applied) the BF task.
     let taskId = existing?.taskId ?? null;
     if (decision.decision === 'applied') {
+      // Resolve the persistent type mapping for NEW tasks only — applying it on
+      // update would reset a manual board move on every subsequent sync.
+      const mapping = existing?.taskId == null ? await this.resolveTypeMapping(conn.id, ticket.externalType) : null;
       taskId = await this.store.upsertTask({
         projectId: conn.projectId,
         tenantId: conn.tenantId,
@@ -266,6 +302,9 @@ export class SyncEngine {
         provider: conn.provider,
         title: ticket.title,
         description: ticket.body,
+        storyPoints: ticket.storyPoints ?? null,
+        taskType: mapping?.targetTaskType ?? null,
+        status: mapping?.targetStatus ?? null,
         existingTaskId: existing?.taskId ?? null,
       });
     }

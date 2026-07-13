@@ -144,11 +144,21 @@ const MAGIC_LINK_BODY = `
 // Public send functions
 // ---------------------------------------------------------------------------
 
+/** Append the landing anon-id (`aid`) to a signup/sign-in URL when present, so a
+ *  cross-device email-link open (start on phone, click link on desktop) can adopt
+ *  the originating device's anon id and reunite the pre-signup session. No-op when
+ *  anonId is absent — fully backward compatible. */
+export function appendAnonId(url: string, anonId?: string | null): string {
+  if (!anonId) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}aid=${encodeURIComponent(anonId)}`;
+}
+
 export async function sendMagicLinkEmail(
   env: EmailEnv,
   to: string,
   name: string,
   magicUrl: string,
+  anonId?: string | null,
 ): Promise<void> {
   const provider = getEmailProvider(env);
   if (!provider) return;
@@ -156,11 +166,52 @@ export async function sendMagicLinkEmail(
   const html = render(HEADER + MAGIC_LINK_BODY + FOOTER, {
     Subject: 'Your Builderforce sign-in link',
     RecipientName: name || to,
-    MagicUrl: magicUrl,
+    MagicUrl: appendAnonId(magicUrl, anonId),
     Year: String(new Date().getFullYear()),
   });
 
   await provider.send({ to, subject: 'Your Builderforce sign-in link', html });
+}
+
+const VERIFICATION_CODE_BODY = `
+      <p>Hi {{RecipientName}},</p>
+      <p>Welcome to Builderforce! Enter this code to confirm your email address
+         and activate your account:</p>
+      <p style="text-align:center; margin: 28px 0;">
+        <span style="display:inline-block; font-family: 'Courier New', monospace;
+                     font-size: 34px; font-weight: 700; letter-spacing: 10px;
+                     color: #0f172a; background: #f1f5f9; border: 1px solid #e2e8f0;
+                     border-radius: 10px; padding: 16px 28px;">{{Code}}</span>
+      </p>
+      <p>This code expires in <strong>15 minutes</strong>.</p>
+      <p style="font-size:13px; color:#64748b;">
+        If you did not create a Builderforce account, you can safely ignore this
+        email — no account will be activated without this code.
+      </p>`;
+
+export async function sendVerificationCodeEmail(
+  env: EmailEnv,
+  to: string,
+  name: string,
+  code: string,
+  // Accepted for signature parity with sendMagicLinkEmail (the auth start handlers
+  // thread the landing anon-id through both paths). The code-entry email carries no
+  // link, so there is no URL to attach `aid` to today — kept for a future link-based
+  // verify flow and so callers can pass it uniformly.
+  _anonId?: string | null,
+): Promise<void> {
+  const provider = getEmailProvider(env);
+  if (!provider) return;
+
+  const subject = `Your Builderforce verification code: ${code}`;
+  const html = render(HEADER + VERIFICATION_CODE_BODY + FOOTER, {
+    Subject: subject,
+    RecipientName: name || to,
+    Code: code,
+    Year: String(new Date().getFullYear()),
+  });
+
+  await provider.send({ to, subject, html });
 }
 
 const ADMIN_RESET_BODY = `
@@ -191,6 +242,89 @@ export async function sendAdminPasswordResetEmail(
   });
 
   await provider.send({ to, subject: 'Your Builderforce account access has been reset', html });
+}
+
+const WORKSPACE_INVITE_BODY = `
+      <p>Hi,</p>
+      <p><strong>{{InviterName}}</strong> invited you to join the
+         <strong>{{WorkspaceName}}</strong> workspace on Builderforce as a
+         <strong>{{Role}}</strong>.</p>
+      <p>Builderforce.ai is your AI agent workforce — build, train and govern AI
+         agents that ship code, run workflows and connect your systems.</p>
+      <p style="text-align:center; margin: 28px 0;">
+        <a href="{{SignupUrl}}" class="button">Accept your invitation</a>
+      </p>
+      <p style="font-size:13px; color:#64748b;">
+        Sign up with this email address ({{Email}}) and you will join
+        {{WorkspaceName}} automatically. If you were not expecting this, you can
+        ignore this email.
+      </p>`;
+
+/**
+ * Cold-invite email: tells someone with no Builderforce account that they were
+ * invited to a workspace and links them to sign up with the invited address (so
+ * the pending invitation auto-converts on first login). Best-effort — no-ops
+ * when RESEND_API_KEY is unset, like the other senders.
+ */
+export async function sendWorkspaceInviteEmail(
+  env: EmailEnv,
+  to: string,
+  opts: { workspaceName: string; inviterName: string; signupUrl: string; role: string },
+): Promise<void> {
+  const provider = getEmailProvider(env);
+  if (!provider) return;
+
+  const subject = `${opts.inviterName} invited you to ${opts.workspaceName} on Builderforce`;
+  const html = render(HEADER + WORKSPACE_INVITE_BODY + FOOTER, {
+    Subject: subject,
+    InviterName: opts.inviterName,
+    WorkspaceName: opts.workspaceName,
+    Role: opts.role,
+    SignupUrl: opts.signupUrl,
+    Email: to,
+    Year: String(new Date().getFullYear()),
+  });
+
+  await provider.send({ to, subject, html });
+}
+
+const CHAT_INVITE_BODY = `
+      <p>Hi,</p>
+      <p><strong>{{InviterName}}</strong> invited you to collaborate on the chat
+         <strong>{{ChatTitle}}</strong> in Builderforce.</p>
+      <p>Open Builderforce to join the conversation, share ideas and work together
+         with the team and its AI agents.</p>
+      <p style="text-align:center; margin: 28px 0;">
+        <a href="{{ChatUrl}}" class="button">Open the chat</a>
+      </p>
+      <p style="font-size:13px; color:#64748b;">
+        Sign in with this email address ({{Email}}) to join. If you were not
+        expecting this, you can ignore this email.
+      </p>`;
+
+/**
+ * Chat-invite email: tells someone they were invited to collaborate on a Brain
+ * chat. Best-effort — no-ops when RESEND_API_KEY is unset, like the other senders.
+ */
+export async function sendChatInviteEmail(
+  env: EmailEnv,
+  to: string,
+  opts: { chatTitle: string; inviterName: string; chatUrl: string },
+): Promise<void> {
+  const provider = getEmailProvider(env);
+  if (!provider) return;
+
+  const subject = `${opts.inviterName} invited you to a chat on Builderforce`;
+  const html = render(HEADER + CHAT_INVITE_BODY + FOOTER, {
+    Subject: subject,
+    InviterName: opts.inviterName,
+    ChatTitle: opts.chatTitle,
+    ChatUrl: opts.chatUrl,
+    Email: to,
+    Year: String(new Date().getFullYear()),
+  });
+
+  await provider.send({ to, subject, html });
 }
 
 // ---------------------------------------------------------------------------
@@ -249,6 +383,123 @@ export async function sendLlmHealthAlertEmail(
       </p>`;
 
   const subject = `[Builderforce] LLM vendor health changed — ${changes.map((c) => `${c.vendor}=${c.currentStatus}`).join(', ')}`;
+  const html = render(HEADER + body + FOOTER, {
+    Subject: subject,
+    Year: String(new Date().getFullYear()),
+  });
+
+  await provider.send({ to, subject, html });
+}
+
+// ---------------------------------------------------------------------------
+// Scheduled report digest — sent by the report-schedule dispatcher (runDueReports)
+// for each due report_schedules row. Renders the report's summary/kpis object as
+// a key/value table; values are server-generated but escaped defensively.
+// ---------------------------------------------------------------------------
+
+/** camelCase / snake_case key → spaced Title-ish label for the digest table. */
+function humanizeKey(key: string): string {
+  const spaced = key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/_/g, ' ');
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** Present a cell value: round floats, blank-dash nullish, escape everything. */
+function cell(v: unknown): string {
+  if (v == null) return '—';
+  if (typeof v === 'number') return escapeHtml(Number.isInteger(v) ? String(v) : String(Math.round(v * 100) / 100));
+  return escapeHtml(String(v));
+}
+
+const TH = 'text-align:left;padding:6px 12px;border-bottom:2px solid #e2e8f0;font-size:12px;color:#64748b';
+const TD = 'padding:6px 12px;border-bottom:1px solid #e2e8f0';
+
+/** A key/value summary table (the legacy digest body; reused as one section). */
+function renderKvTable(kv: Record<string, unknown>): string {
+  const rows = Object.entries(kv)
+    .filter(([, v]) => v == null || typeof v !== 'object')
+    .map(([k, v]) =>
+      `<tr>
+        <td style="${TD}">${escapeHtml(humanizeKey(k))}</td>
+        <td style="${TD};text-align:right"><strong>${cell(v)}</strong></td>
+      </tr>`)
+    .join('');
+  return rows ? `<table style="border-collapse:collapse;width:100%;margin-top:8px">${rows}</table>` : '';
+}
+
+/** A titled table over an array of row objects, projecting the given columns. */
+function renderObjectTable(title: string, items: Array<Record<string, unknown>>, columns: Array<[key: string, label: string]>): string {
+  if (!Array.isArray(items) || items.length === 0) return '';
+  const head = columns.map(([, label]) => `<th style="${TH}">${escapeHtml(label)}</th>`).join('');
+  const body = items.slice(0, 25).map((row) =>
+    `<tr>${columns.map(([key]) => `<td style="${TD}">${cell(row[key])}</td>`).join('')}</tr>`).join('');
+  return `
+      <p style="margin:22px 0 6px;font-weight:600">${escapeHtml(title)}</p>
+      <table style="border-collapse:collapse;width:100%">
+        <thead><tr>${head}</tr></thead>
+        <tbody>${body}</tbody>
+      </table>`;
+}
+
+/** A simple bulleted list section (e.g. standup insights). */
+function renderBullets(title: string, items: unknown): string {
+  if (!Array.isArray(items) || items.length === 0) return '';
+  const lis = items.filter((x) => typeof x === 'string').map((x) => `<li>${escapeHtml(String(x))}</li>`).join('');
+  return lis ? `<p style="margin:22px 0 6px;font-weight:600">${escapeHtml(title)}</p><ul style="margin:0;padding-left:20px;color:#334155">${lis}</ul>` : '';
+}
+
+/**
+ * Type-specific rich sections appended below the summary. Each known report_type
+ * renders its arrays as tables/lists; unknown types add nothing (backward-compat —
+ * they still get the summary kv table from the caller).
+ */
+function renderReportSections(report: Record<string, unknown>): string {
+  const arr = (k: string) => (Array.isArray(report[k]) ? (report[k] as Array<Record<string, unknown>>) : []);
+  switch (report.reportType) {
+    case 'project_status':
+      return renderObjectTable('Projects', arr('projects'), [
+        ['name', 'Project'], ['verdict', 'Status'], ['deployments', 'Deploys'],
+        ['changeFailureRatePct', 'CFR %'], ['leadTimeHours', 'Lead (h)'], ['reworkRatePct', 'Rework %'], ['stuckCount', 'Stuck'],
+      ]);
+    case 'portfolio_rollup':
+      return renderObjectTable('Portfolios', arr('portfolios'), [
+        ['name', 'Portfolio'], ['status', 'Status'], ['completedTasks', 'Done'], ['openTasks', 'Open'],
+        ['agentLlmCostUsd', 'AI $'], ['okrProgressPct', 'OKR %'], ['blockedInitiatives', 'Blocked'],
+      ]);
+    case 'completed_by_assignee':
+      return renderObjectTable('By assignee', arr('assignees'), [
+        ['assigneeName', 'Assignee'], ['assigneeKind', 'Kind'], ['completed', 'Completed'],
+      ]);
+    case 'standup':
+      return renderObjectTable('Recent PRs', arr('recentPrs'), [['title', 'Title'], ['repo', 'Repo']])
+        + renderBullets('Insights', report.insights);
+    case 'code_review':
+      return renderObjectTable('Stale PRs', arr('stalePrList'), [['title', 'Title'], ['repo', 'Repo'], ['ageHours', 'Age (h)']]);
+    default:
+      return '';
+  }
+}
+
+export async function sendReportEmail(
+  env: EmailEnv,
+  to: string,
+  subject: string,
+  report: Record<string, unknown>,
+): Promise<void> {
+  const provider = getEmailProvider(env);
+  if (!provider) return;
+
+  const kv = (report.summary ?? report.kpis ?? {}) as Record<string, unknown>;
+  const summaryTable = renderKvTable(kv);
+  const sections = renderReportSections(report);
+
+  const body = `
+      <p>Your scheduled <strong>${escapeHtml(humanizeKey(String(report.reportType ?? 'report')))}</strong> report is ready.</p>
+      ${summaryTable || (sections ? '' : '<p style="color:#64748b">No data for this period.</p>')}
+      ${sections}
+      <p style="text-align:center; margin: 24px 0 8px;">
+        <a href="https://builderforce.ai/pmo" class="button">Open in Builderforce</a>
+      </p>`;
+
   const html = render(HEADER + body + FOOTER, {
     Subject: subject,
     Year: String(new Date().getFullYear()),

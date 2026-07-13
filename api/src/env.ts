@@ -4,12 +4,26 @@ import type { TenantRole } from './domain/shared/types';
 export interface Env {
   /** Postgres connection string. Set via `wrangler secret put NEON_DATABASE_URL`. */
   NEON_DATABASE_URL: string;
+  /** Operational Postgres connection (logs, audit, telemetry and processing
+   * ledgers). When omitted during local/test rollout, the primary connection is
+   * used for backwards compatibility. */
+  NEON_TRANSACTIONAL_DATABASE_URL?: string;
   /** Comma-separated allowed CORS origins, e.g. "https://builderforce.ai" */
   CORS_ORIGINS: string;
   /** "production" | "development" */
   ENVIRONMENT: string;
   /** Secret used to sign JWTs.  Set via `wrangler secret put JWT_SECRET`. */
   JWT_SECRET: string;
+  /** Kill switch for the logged-out guest Brain/Ideas chat. Guests can try the
+   *  Brain before signing up (metered per visitor + IP, tiny cap). Set to the
+   *  string "false" to hard-disable anonymous gateway traffic; any other value
+   *  (or unset) leaves it ON. Toggle via `wrangler secret put GUEST_BRAIN_ENABLED`. */
+  GUEST_BRAIN_ENABLED?: string;
+  /** Quality ingest key (bfq_…) for DOGFOODING — the API ships its OWN unhandled
+   *  500s to the Product Quality pillar via the public /api/quality-ingest endpoint
+   *  (the same SDK path any customer uses). Unbound → self-reporting is skipped.
+   *  Set via `wrangler secret put BUILDERFORCE_ERROR_API_KEY`. */
+  BUILDERFORCE_ERROR_API_KEY?: string;
   /** OpenRouter API key — drives builderforceLLM (Free plan) and IDE chat. Required for /api/ai/chat.
    *  Set via `wrangler secret put OPENROUTER_API_KEY` (or api/.env + `npm run secrets:from-env`). */
   OPENROUTER_API_KEY?: string;
@@ -30,16 +44,90 @@ export interface Env {
    *  (`gemini-2.5-flash` / `gemini-2.5-flash-lite`) so callers always see a successful
    *  response. Set via `wrangler secret put GOOGLE_API_KEY` (or api/.env + `npm run secrets:from-env`). */
   GOOGLE_API_KEY?: string;
+  /** Anthropic (Claude) API key — the last-resort reliability floor for cloud CODING
+   *  runs. When every OpenRouter-routed paid coder is unreachable, the coding cascade
+   *  falls back to Claude DIRECTLY on api.anthropic.com (claude-sonnet-4-6 →
+   *  claude-opus-4-8), vendor-diverse from OpenRouter. Unbound → the cascade simply
+   *  skips the Anthropic floor. Set via `wrangler secret put CLAUDE_API_KEY` (or
+   *  api/.env + `npm run secrets:from-env`). */
+  CLAUDE_API_KEY?: string;
   /** Cloudflare Workers AI auth token — `cfut_*`. Adds Cloudflare-hosted models
-   *  (e.g. `@cf/meta/llama-3-8b-instruct`) to the paid pool. Both this AND
+   *  (e.g. `@cf/qwen/qwen3-30b-a3b-fp8`) to the paid pool. Both this AND
    *  `CLOUDFLARE_ACCOUNT_ID` must be set; either missing → Cloudflare is skipped
    *  by the cascade. Set via `wrangler secret put CLOUDFLARE_AI_API_TOKEN`. */
   CLOUDFLARE_AI_API_TOKEN?: string;
   /** Cloudflare account id (32-char hex). Embedded in the Workers AI URL —
-   *  `https://api.cloudflare.com/client/v4/accounts/<id>/ai/run/<model>`. Not a
-   *  secret per se, but stored alongside the token in Worker bindings.
+   *  `https://api.cloudflare.com/client/v4/accounts/<id>/ai/run/<model>`. Stored as
+   *  a Worker SECRET (not committed config) so the id isn't exposed in the repo.
    *  Set via `wrangler secret put CLOUDFLARE_ACCOUNT_ID`. */
   CLOUDFLARE_ACCOUNT_ID?: string;
+
+  // ---------------------------------------------------------------------------
+  // OpenAI-compatible commercial LLM vendors (the "30+ providers" surface).
+  // Each is an optional Bearer-key secret; when bound, that provider's models
+  // are reachable via an explicit `<vendor>/<model-id>` pin through the same
+  // gateway dispatch/fallback/cooldown machinery. Unbound → the vendor is simply
+  // skipped. Set via `wrangler secret put <NAME>` (or api/.env + secrets:from-env).
+  // ---------------------------------------------------------------------------
+  /** OpenAI — api.openai.com/v1. */
+  OPENAI_API_KEY?: string;
+  /** Groq — api.groq.com/openai/v1. */
+  GROQ_API_KEY?: string;
+  /** DeepSeek — api.deepseek.com/v1. */
+  DEEPSEEK_API_KEY?: string;
+  /** Mistral — api.mistral.ai/v1. */
+  MISTRAL_API_KEY?: string;
+  /** Fireworks AI — api.fireworks.ai/inference/v1. */
+  FIREWORKS_API_KEY?: string;
+  /** DeepInfra — api.deepinfra.com/v1/openai. */
+  DEEPINFRA_API_KEY?: string;
+  /** xAI (Grok) — api.x.ai/v1. */
+  XAI_API_KEY?: string;
+  /** Perplexity — api.perplexity.ai. */
+  PERPLEXITY_API_KEY?: string;
+  /** Moonshot AI (Kimi) — api.moonshot.cn/v1. */
+  MOONSHOT_API_KEY?: string;
+  QWEN_API_KEY?: string;
+  /** Hyperbolic — api.hyperbolic.xyz/v1. */
+  HYPERBOLIC_API_KEY?: string;
+  /** Novita AI — api.novita.ai/v3/openai. */
+  NOVITA_API_KEY?: string;
+  /** SambaNova Cloud — api.sambanova.ai/v1. */
+  SAMBANOVA_API_KEY?: string;
+  /** Lepton AI — api.lepton.ai/v1. */
+  LEPTON_API_KEY?: string;
+  /** Anyscale Endpoints — api.endpoints.anyscale.com/v1. */
+  ANYSCALE_API_KEY?: string;
+  /** OctoAI — text.octoai.run/v1. */
+  OCTOAI_API_KEY?: string;
+  /** Featherless AI — api.featherless.ai/v1. */
+  FEATHERLESS_API_KEY?: string;
+  /** Inference.net — api.inference.net/v1. */
+  INFERENCENET_API_KEY?: string;
+  /** Targon — api.targon.com/v1. */
+  TARGON_API_KEY?: string;
+  /** Avian.io — api.avian.io/v1. */
+  AVIAN_API_KEY?: string;
+  /** Nebius AI Studio — api.studio.nebius.com/v1. */
+  NEBIUS_API_KEY?: string;
+  /** Baseten — inference.baseten.co/v1. */
+  BASETEN_API_KEY?: string;
+  /** Lambda Inference — api.lambda.ai/v1. */
+  LAMBDA_API_KEY?: string;
+  /** Kluster.ai — api.kluster.ai/v1. */
+  KLUSTERAI_API_KEY?: string;
+  /** Parasail — api.parasail.io/v1. */
+  PARASAIL_API_KEY?: string;
+  /** nScale — inference.api.nscale.com/v1. */
+  NSCALE_API_KEY?: string;
+  /** Chutes AI — llm.chutes.ai/v1. */
+  CHUTES_API_KEY?: string;
+  /** AI21 (Jamba) — api.ai21.com/studio/v1. */
+  AI21_API_KEY?: string;
+  /** SiliconFlow — api.siliconflow.com/v1. */
+  SILICONFLOW_API_KEY?: string;
+  /** MiniMax — api.minimax.io/v1. */
+  MINIMAX_API_KEY?: string;
 
   // ---------------------------------------------------------------------------
   // Image generation (`POST /v1/images/generations`)
@@ -55,8 +143,60 @@ export interface Env {
    *  here so image-gen callers always see a successful response.
    *  Set via `wrangler secret put FLUX_API_KEY` (or api/.env + `npm run secrets:from-env`). */
   FLUX_API_KEY?: string;
+
+  // ---------------------------------------------------------------------------
+  // Embeddings (`POST /v1/embeddings`)
+  // ---------------------------------------------------------------------------
+
+  /** Voyage AI API key — embeddings failover. After the primary OpenRouter
+   *  embeddings attempts fail (endpoint outage, model removed, rate limit), the
+   *  proxy falls through to Voyage (`voyage-3-lite`) so vector workflows keep
+   *  working during a single-vendor outage. Optional — when unset, Voyage is
+   *  silently skipped in the embeddings cascade.
+   *  Set via `wrangler secret put VOYAGE_API_KEY` (or api/.env + `npm run secrets:from-env`). */
+  VOYAGE_API_KEY?: string;
+
   /** R2 bucket for file uploads. */
   UPLOADS?: R2Bucket;
+
+  /** hired.video partner API key (@seanhogg/hired-video-sdk). Provisions job-seeker
+   *  accounts for freelancers, uploads/parses resumes, and mints embed tokens for
+   *  the embedded profile/resume viewer. When unset the freelance marketplace still
+   *  works with the NATIVE R2 resume fallback; the hired.video calls are skipped and
+   *  the provider reports `configured=false`. Set via `wrangler secret put HIRED_API_KEY`. */
+  HIRED_API_KEY?: string;
+  /** Optional override for the hired.video API base URL (defaults to the SDK default).
+   *  `wrangler secret put HIRED_API_BASE_URL`. */
+  HIRED_API_BASE_URL?: string;
+
+  /** Freelancer payout provider webhook. When set, "Pay" on an approved freelancer
+   *  invoice POSTs `{invoiceId, amountCents, currency, freelancerUserId, tenantId}`
+   *  here (Bearer PAYOUT_WEBHOOK_KEY) and marks the invoice paid with the returned
+   *  reference. Unset = manual "Mark paid" only (no money movement).
+   *  `wrangler secret put PAYOUT_WEBHOOK_URL`. */
+  PAYOUT_WEBHOOK_URL?: string;
+  /** Bearer key for PAYOUT_WEBHOOK_URL. `wrangler secret put PAYOUT_WEBHOOK_KEY`. */
+  PAYOUT_WEBHOOK_KEY?: string;
+
+  /** Transactional-email webhook for marketplace notifications (invite/hire/paid/…).
+   *  When set, each in-app notification also POSTs `{to, subject, body}` here
+   *  (Bearer NOTIFY_EMAIL_KEY). Unset = in-app notifications only.
+   *  `wrangler secret put NOTIFY_EMAIL_URL`. */
+  NOTIFY_EMAIL_URL?: string;
+  /** Bearer key for NOTIFY_EMAIL_URL. `wrangler secret put NOTIFY_EMAIL_KEY`. */
+  NOTIFY_EMAIL_KEY?: string;
+
+  /** Clone-capable TTS endpoint for server-side voice synthesis (Voice PRD §3.1).
+   *  Provider-agnostic: any service that accepts (referenceAudio, text) and
+   *  returns audio bytes. When unset, the synthesize route returns an honest 503
+   *  ("synthesis provider not configured") instead of faking audio.
+   *  Set via `wrangler secret put VOICE_CLONE_TTS_URL`. */
+  VOICE_CLONE_TTS_URL?: string;
+  /** Bearer key for VOICE_CLONE_TTS_URL. `wrangler secret put VOICE_CLONE_TTS_KEY`. */
+  VOICE_CLONE_TTS_KEY?: string;
+  /** $/second-of-audio synthesis cost basis for ledger billing, in millicents
+   *  per second. Defaults to 5 (≈ $0.05/min). `wrangler secret put VOICE_CLONE_COST_MC_PER_SEC`. */
+  VOICE_CLONE_COST_MC_PER_SEC?: string;
 
   /** Durable Object namespace for per-tenant sliding-window rate limiting.
    *  Bind in wrangler.toml:  [[durable_objects.bindings]]  name = "TENANT_RATE_LIMITER" */
@@ -68,6 +208,14 @@ export interface Env {
    *  the surfaces still work (no live push). Bind in wrangler.toml:
    *    [[durable_objects.bindings]] name = "SESSION_ROOM" class_name = "SessionRoomDO" */
   SESSION_ROOM?: DurableObjectNamespace;
+
+  /** Durable Object namespace for the live standup/planning "ceremony" round-table.
+   *  One instance per room (`ceremony:<projectId>`); relays presence, cursor and
+   *  `changed` frames between connected clients (peer-to-peer multiplayer).
+   *  Optional: when unset the ceremony surface still works (no live multiplayer).
+   *  Bind in wrangler.toml:
+   *    [[durable_objects.bindings]] name = "CEREMONY_ROOM" class_name = "CeremonyRoomDO" */
+  CEREMONY_ROOM?: DurableObjectNamespace;
 
   /** Durable Object namespace for the Architect / Digital-Transformation
    *  repo-analysis pipeline. One instance per analysis run (`idFromName(runId)`),
@@ -82,6 +230,41 @@ export interface Env {
    *  back to the interim Worker `waitUntil` loop. Bind in wrangler.toml:
    *    [[durable_objects.bindings]] name = "CLOUD_RUNNER" class_name = "CloudRunnerDO" */
   CLOUD_RUNNER?: DurableObjectNamespace;
+
+  /** Durable Object: the SINGLE WRITER for a project's self-learning Evermind
+   *  model. One instance per project (`idFromName('proj:<tenantId>:<projectId>')`);
+   *  serializes concurrent learning pushes, FedAvg-merges weight deltas, and
+   *  republishes versioned models to R2 (UPLOADS). Optional: when unset, the
+   *  /learn path returns 503 (concurrent learning disabled) and replicas still
+   *  read published versions. Bind in wrangler.toml:
+   *    [[durable_objects.bindings]] name = "PROJECT_EVERMIND" class_name = "ProjectEvermindCoordinatorDO" */
+  PROJECT_EVERMIND?: DurableObjectNamespace;
+
+  /** Max text-path adaptations (fits) the Evermind coordinator DO runs per alarm —
+   *  the per-alarm CPU knob. Overrides the code default (8); lower it if a busy
+   *  project's alarm approaches the DO CPU limit. Parsed as an int; invalid → default. */
+  EVERMIND_MAX_FITS_PER_ALARM?: string;
+
+  /** Cloudflare Container runtime for a "Cloud Agent (Node/Container)" — a
+   *  long-lived Node process with a real shell (the `container` runtime surface).
+   *  One instance per execution (`idFromName('exec:<id>')`). Optional: when unset
+   *  (or the container can't start), a `container`-surface run degrades to the
+   *  durable executor so it still runs in the cloud. Backed by AgentContainerDO via
+   *  a `[[containers]]` block in wrangler.toml; binding name `AGENT_CONTAINER`. */
+  AGENT_CONTAINER?: DurableObjectNamespace;
+
+  /** Cloudflare Container runtime for the Agentic Tester (browser exploration) —
+   *  the Playwright runner image (qa-e2e/Dockerfile). The scheduled QA sweep
+   *  dispatches `POST /run` to it per queued exploration. One instance per
+   *  exploration (`idFromName('qa-exec:<id>')`). Optional: when unset the sweep
+   *  only enqueues (a runner must drain the queue externally). Backed by
+   *  QaRunnerContainerDO via a `[[containers]]` block; binding `QA_RUNNER_CONTAINER`. */
+  QA_RUNNER_CONTAINER?: DurableObjectNamespace;
+
+  /** Internal base URL the Container calls back into for each LLM step / repo
+   *  telemetry / PR finalize (the container-op endpoint). Defaults to the public
+   *  API origin; override for local/dev. e.g. "https://api.builderforce.ai". */
+  INTERNAL_API_BASE_URL?: string;
 
   /**
    * Optional KV namespace caching API-key → tenant resolutions for ~60s.
@@ -146,6 +329,14 @@ export interface Env {
    *  Set via: wrangler secret put GITHUB_WEBHOOK_SECRET */
   GITHUB_WEBHOOK_SECRET?: string;
 
+  /** Secret token configured on the GitLab project/group webhook (sent as the
+   *  `X-Gitlab-Token` header). Set via: wrangler secret put GITLAB_WEBHOOK_SECRET */
+  GITLAB_WEBHOOK_SECRET?: string;
+
+  /** Secret for the Bitbucket repo webhook HMAC (`X-Hub-Signature: sha256=…`).
+   *  Set via: wrangler secret put BITBUCKET_WEBHOOK_SECRET */
+  BITBUCKET_WEBHOOK_SECRET?: string;
+
   /** Shared secret for internal cron endpoints (e.g. GET /api/approvals/escalate).
    *  Set via: wrangler secret put CRON_SECRET */
   CRON_SECRET?: string;
@@ -175,6 +366,11 @@ export interface Env {
    *  Set via: wrangler secret put SLACK_APPROVAL_WEBHOOK_URL */
   SLACK_APPROVAL_WEBHOOK_URL?: string;
 
+  /** Incoming MS Teams webhook URL for incident/on-call notifications (an Incoming
+   *  Webhook connector posting MessageCard JSON — the low-effort analog to Slack).
+   *  Set via: wrangler secret put TEAMS_WEBHOOK_URL */
+  TEAMS_WEBHOOK_URL?: string;
+
   /** Resend API key for email notifications.
    *  Set via: wrangler secret put RESEND_API_KEY */
   RESEND_API_KEY?: string;
@@ -193,6 +389,23 @@ export interface Env {
 
   MICROSOFT_CLIENT_ID?: string;
   MICROSOFT_CLIENT_SECRET?: string;
+
+  /** Optional TURN relay for meeting media (mesh WebRTC). Without it, calls fall
+   *  back to public STUN only, which fails for peers behind symmetric NATs.
+   *  TURN_URL may be comma-separated (e.g. "turn:host:3478,turns:host:5349").
+   *  Set via: wrangler secret put TURN_URL / TURN_USERNAME / TURN_CREDENTIAL */
+  TURN_URL?: string;
+  TURN_USERNAME?: string;
+  TURN_CREDENTIAL?: string;
+
+  /** Optional Cloudflare TURN service — the managed alternative to running coturn.
+   *  When both are set, `/api/meetings/ice` mints short-lived TURN credentials per
+   *  key (cached) and appends them to the ICE list, so symmetric-NAT peers connect
+   *  with no self-hosted relay. Create a TURN key in the Cloudflare Realtime
+   *  dashboard, then: wrangler secret put CLOUDFLARE_TURN_KEY_ID /
+   *  CLOUDFLARE_TURN_API_TOKEN */
+  CLOUDFLARE_TURN_KEY_ID?: string;
+  CLOUDFLARE_TURN_API_TOKEN?: string;
 }
 
 /** Variables injected into Hono context by the auth middleware. */

@@ -17,42 +17,62 @@ const PASSWORD_HEURISTIC = 'input[type="password"], input[name*="pass" i], #pass
 const SUBMIT_HEURISTIC =
   'button[type="submit"], input[type="submit"], button:has-text("Sign in"), button:has-text("Log in"), button:has-text("Login")';
 
-export interface StorageState {
-  cookies: unknown[];
-  origins: unknown[];
-}
-
 /**
  * Logs in as one persona and returns the storageState (cookies + localStorage)
- * for re-use by the test specs. Throws if the login clearly failed (still on the
- * login URL with the password field present after submit).
+ * for re-use by the test specs / the explorer's browser context. Throws if the
+ * login clearly failed (still on the login URL with the password field present
+ * after submit). The return type is Playwright's own storageState shape so it
+ * drops straight into `browser.newContext({ storageState })`.
  */
-export async function loginPersona(baseUrl: string, secret: CredentialSecret): Promise<StorageState> {
+export async function loginPersona(baseUrl: string, secret: CredentialSecret) {
   const loginPath = secret.loginUrl ?? '/login';
   const loginUrl = new URL(loginPath, baseUrl).toString();
   const sel = secret.loginSelectors ?? {};
 
-  const browser = await chromium.launch();
+  const usernameSel = sel.usernameSelector ?? USERNAME_HEURISTIC;
+  const passwordSel = sel.passwordSelector ?? PASSWORD_HEURISTIC;
+  const submitSel = sel.submitSelector ?? SUBMIT_HEURISTIC;
+
+  const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage'] });
   try {
     const context = await browser.newContext();
     const page = await context.newPage();
     await page.goto(loginUrl, { waitUntil: 'domcontentloaded' });
 
-    await page.locator(sel.usernameSelector ?? USERNAME_HEURISTIC).first().fill(secret.username);
-    await page.locator(sel.passwordSelector ?? PASSWORD_HEURISTIC).first().fill(secret.password);
-    await page.locator(sel.submitSelector ?? SUBMIT_HEURISTIC).first().click();
+    await page.locator(usernameSel).first().fill(secret.username);
+
+    // Two-step (identifier-first) flows: the password field isn't on the page
+    // until the username is submitted. If we can't see a password field yet,
+    // click continue/next/submit and wait for it to appear before typing the
+    // password. Single-step forms fall straight through.
+    const passwordVisible = await page
+      .locator(passwordSel)
+      .first()
+      .isVisible()
+      .catch(() => false);
+    if (!passwordVisible) {
+      await page.locator(submitSel).first().click().catch(() => {});
+      await page
+        .locator(passwordSel)
+        .first()
+        .waitFor({ state: 'visible', timeout: 5_000 })
+        .catch(() => {});
+    }
+
+    await page.locator(passwordSel).first().fill(secret.password);
+    await page.locator(submitSel).first().click();
 
     // Give the app a moment to establish the session (redirect / token write).
     await page.waitForLoadState('networkidle').catch(() => {});
 
     const stillOnLogin =
       page.url().includes(loginPath) &&
-      (await page.locator(PASSWORD_HEURISTIC).count()) > 0;
+      (await page.locator(passwordSel).count()) > 0;
     if (stillOnLogin) {
       throw new Error(`login appears to have failed for ${secret.username} (still on ${loginPath})`);
     }
 
-    return (await context.storageState()) as StorageState;
+    return await context.storageState();
   } finally {
     await browser.close();
   }

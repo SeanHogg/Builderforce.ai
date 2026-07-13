@@ -1,110 +1,37 @@
 name: CI
 
+# PR-time gate for the file-based schema/migration/track checks (T9 · Platform ·
+# DB · CI). These same checks run at deploy time in release.yml (on push:main),
+# but that is AFTER merge — a missing-CREATE / duplicate-migration / manifest-drift
+# bug then only surfaces once it is already on main. Running them on every PR
+# catches the drift before merge instead of at deploy.
+#
+# All three scripts are purely file-based (they read schema.ts, api/migrations/*.sql
+# and .github/isolation-tracks.json — no database, no secrets, no install), so this
+# job is fast and needs no NEON_DATABASE_URL. The ephemeral-DB `db:migrate` dry-run
+# (which DOES need a provisioned throwaway Postgres) remains a separate follow-up.
+
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
 
 jobs:
-  sdk:
-    name: SDK (Node.js 20)
+  drift-guard:
+    name: Schema drift · migrations · track manifest
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: sdk/package-lock.json
-      - name: Install dependencies
-        working-directory: sdk
-        run: npm install
-      - name: Type check
-        working-directory: sdk
-        run: npm run type-check
-      - name: Test
-        working-directory: sdk
-        run: npm test
-      - name: Build
-        working-directory: sdk
-        run: npm run build
-
-  api:
-    name: API (Node.js 20)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: api/package-lock.json
-      - name: Install dependencies
+      # These scripts use only node builtins (node:fs / node:path / node:url), so
+      # no `npm install` is required — invoke them directly to keep the gate fast.
+      - name: Schema drift guard (schema.ts vs migrations vs allowlist)
         working-directory: api
-        run: npm install
-      - name: Type check
+        run: node scripts/check-schema-drift.mjs
+      - name: Migration sequence guard (no new duplicate prefixes)
         working-directory: api
-        run: npm run type-check
-      - name: Test
+        run: node scripts/check-migrations.mjs
+      - name: Track manifest valid + generated table in sync
         working-directory: api
-        run: npm test
-
-  frontend:
-    name: Frontend (Node.js 20)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      # No root package.json in this repo — pnpm lives in frontend/, so point
-      # action-setup at frontend/package.json to read its `packageManager` pin.
-      # Do not also set `version:` here — action-setup@v4 errors if both exist.
-      - uses: pnpm/action-setup@v4
-        with:
-          package_json_file: frontend/package.json
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
-
-      # Frontend's `link:` deps to ../sdk and ../studio require those packages'
-      # dist/ to exist before pnpm install symlinks them. Each linked package's
-      # `prepare` script runs `npm run build` on install — so a bare npm
-      # install in those dirs is sufficient.
-      - name: "Build SDK + Studio + Studio-embedded (link: dep prerequisites)"
-        run: |
-          (cd sdk && npm install --no-audit --no-fund)
-          (cd studio && npm install --no-audit --no-fund)
-          (cd studio-embedded && npm install --no-audit --no-fund)
-
-      - name: Install dependencies
-        working-directory: frontend
-        run: pnpm install --frozen-lockfile || pnpm install
-      - name: Lint
-        working-directory: frontend
-        run: pnpm run lint
-      - name: Test
-        working-directory: frontend
-        run: pnpm test
-      - name: Build
-        working-directory: frontend
-        env:
-          NEXT_PUBLIC_WORKER_URL: https://worker.builderforce.ai
-        run: pnpm run build
-
-  docs:
-    name: Docs (Astro Starlight)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: docs-site/package-lock.json
-      - name: Install dependencies
-        working-directory: docs-site
-        run: npm install
-      - name: Build
-        working-directory: docs-site
-        run: npm run build
+        run: node scripts/check-track-manifest.mjs --check

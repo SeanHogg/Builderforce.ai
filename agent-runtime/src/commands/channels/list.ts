@@ -112,7 +112,7 @@ export async function channelsListCommand(
 
   const plugins = listChannelPlugins();
 
-  const authStore = loadAuthProfileStore();
+  const authStore = await loadAuthProfileStore();
   const authProfiles = Object.entries(authStore.profiles).map(([profileId, profile]) => ({
     id: profileId,
     provider: profile.provider,

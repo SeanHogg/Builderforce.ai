@@ -10,7 +10,7 @@
  * out in each system prompt; output is parsed defensively and rendered into
  * deterministic Markdown so even a weak model produces a clean artifact.
  */
-import { ideProxy } from '../llm/LlmProxyService';
+import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
 import type { Env } from '../../env';
 import type {
   ArtifactKind,
@@ -37,12 +37,7 @@ export class ArtifactGenerationError extends Error {
 }
 
 export class ArchitectAnalysisService {
-  /**
-   * @param preferredModel  When an agent is assigned to architecture analysis
-   *   for this project, its resolved model (the agent's `base_model`) so the run
-   *   executes AS that agent; omitted → the gateway's default cascade.
-   */
-  constructor(private readonly env: Env, private readonly preferredModel?: string) {}
+  constructor(private readonly env: Env) {}
 
   // ── public generators ─────────────────────────────────────────────────────
 
@@ -292,8 +287,6 @@ export class ArchitectAnalysisService {
         max_tokens: MAX_TOKENS[kind],
         response_format: { type: 'json_object' },
         useCase: `repo_analysis_${kind}`,
-        // Run as the assigned architecture agent when one is set (else default cascade).
-        ...(this.preferredModel ? { model: this.preferredModel } : {}),
       });
     } catch (err) {
       throw new ArtifactGenerationError(kind, `gateway call failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -301,8 +294,7 @@ export class ArchitectAnalysisService {
     if (result.response.status >= 400) {
       throw new ArtifactGenerationError(kind, `gateway returned ${result.response.status}`);
     }
-    const raw = await result.response.json().catch(() => null);
-    const content = extractContent(raw);
+    const { content } = await readProxyChoice(result);
     const json = content ? parseJsonObject(content) : null;
     if (!json) throw new ArtifactGenerationError(kind, 'model returned unparseable JSON');
     return { json, model: result.resolvedModel ?? null, tokens: result.usage?.totalTokens ?? 0 };
@@ -347,11 +339,6 @@ export class ArchitectAnalysisService {
 
 const VALID_MODALITY = new Set(['designer', 'architect', 'developer']);
 
-function extractContent(raw: unknown): string | null {
-  const choices = (raw as { choices?: Array<{ message?: { content?: unknown } }> } | null)?.choices;
-  const content = choices?.[0]?.message?.content;
-  return typeof content === 'string' ? content : null;
-}
 
 /** Strip ```...``` fences and parse the first balanced JSON object. */
 function parseJsonObject(content: string): Record<string, unknown> | null {

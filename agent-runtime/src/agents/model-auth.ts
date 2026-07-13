@@ -1,5 +1,6 @@
 import path from "node:path";
-import { type Api, getEnvApiKey, type Model } from "@mariozechner/pi-ai";
+import { getEnvApiKey } from "./model-sdk-shims.js";
+import type { Api, Model } from "../builderforce/model/types.js";
 import { formatCliCommand } from "../cli/command-format.js";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import type { ModelProviderAuthMode, ModelProviderConfig } from "../config/types.js";
@@ -142,7 +143,7 @@ export async function resolveApiKeyForProvider(params: {
   agentDir?: string;
 }): Promise<ResolvedProviderAuth> {
   const { provider, cfg, profileId, preferredProfile } = params;
-  const store = params.store ?? ensureAuthProfileStore(params.agentDir);
+  const store = params.store ?? (await ensureAuthProfileStore(params.agentDir));
 
   if (profileId) {
     const resolved = await resolveApiKeyForProfile({
@@ -339,11 +340,11 @@ export function resolveEnvApiKey(provider: string): EnvApiKeyResult | null {
   return pick(envVar);
 }
 
-export function resolveModelAuthMode(
+export async function resolveModelAuthMode(
   provider?: string,
   cfg?: BuilderForceAgentsConfig,
   store?: AuthProfileStore,
-): ModelAuthMode | undefined {
+): Promise<ModelAuthMode | undefined> {
   const resolved = provider?.trim();
   if (!resolved) {
     return undefined;
@@ -354,7 +355,7 @@ export function resolveModelAuthMode(
     return "aws-sdk";
   }
 
-  const authStore = store ?? ensureAuthProfileStore();
+  const authStore = store ?? (await ensureAuthProfileStore());
   const profiles = listProfilesForProvider(authStore, resolved);
   if (profiles.length > 0) {
     const modes = new Set(

@@ -136,10 +136,10 @@ describe("subagent registry nested agent tracking", () => {
     });
 
     // Main has 1 active child
-    expect(countActiveRunsForSession("agent:main:main")).toBe(1);
+    expect(await countActiveRunsForSession("agent:main:main")).toBe(1);
 
     // Orchestrator has 2 active children
-    expect(countActiveRunsForSession("agent:main:subagent:orch1")).toBe(2);
+    expect(await countActiveRunsForSession("agent:main:subagent:orch1")).toBe(2);
   });
 
   it("countActiveDescendantRuns traverses through ended parents", async () => {
@@ -170,7 +170,7 @@ describe("subagent registry nested agent tracking", () => {
       cleanupHandled: false,
     });
 
-    expect(countActiveDescendantRuns("agent:main:main")).toBe(1);
-    expect(countActiveDescendantRuns("agent:main:subagent:orch-ended")).toBe(1);
+    expect(await countActiveDescendantRuns("agent:main:main")).toBe(1);
+    expect(await countActiveDescendantRuns("agent:main:subagent:orch-ended")).toBe(1);
   });
 });

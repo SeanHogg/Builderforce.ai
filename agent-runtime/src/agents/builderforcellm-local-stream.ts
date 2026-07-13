@@ -32,9 +32,9 @@
 
 import { randomUUID } from "node:crypto";
 import { Worker } from "node:worker_threads";
-import type { StreamFn } from "@mariozechner/pi-agent-core";
-import type { AssistantMessage, StopReason, TextContent, Usage } from "@mariozechner/pi-ai";
-import { createAssistantMessageEventStream } from "@mariozechner/pi-ai";
+import type { StreamFn } from "../builderforce/agent-loop/index.js";
+import type { AssistantMessage, StopReason, TextContent, Usage } from "../builderforce/model/types.js";
+import { createAssistantMessageEventStream } from "../builderforce/agent-loop/index.js";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
@@ -49,6 +49,7 @@ import {
   type ToolResult,
 } from "./builderforcellm-tools.js";
 import { loadMambaState, mambaStateToContextLine } from "./mamba-state-engine.js";
+import { getSsmMemoryService } from "../infra/ssm-memory-service.js";
 import {
   AMYGDALA_DEFAULT_DTYPE,
   AMYGDALA_DEFAULT_MODEL_ID,
@@ -308,13 +309,19 @@ function parseModelKey(key: string): { provider: string; modelId: string } | nul
   return { provider: key.slice(0, idx).trim(), modelId: key.slice(idx + 1).trim() };
 }
 
-async function callExecutionLlm(opts: {
+/** Sentinel: every configured provider failed/returned null. Thrown out of the cache
+ *  generator so a total failure returns null WITHOUT caching an empty answer. */
+const CORTEX_ALL_PROVIDERS_FAILED = Symbol("cortex-all-providers-failed");
+
+interface CortexCallOpts {
   config: BuilderForceAgentsConfig | undefined;
   messages: Array<{ role: string; content: string }>;
   maxTokens: number;
   temperature: number;
   signal?: AbortSignal;
-}): Promise<string | null> {
+}
+
+async function runProviderCascade(opts: CortexCallOpts): Promise<string | null> {
   const { config, messages, maxTokens, temperature, signal } = opts;
   const providers = config?.models?.providers ?? {};
 
@@ -391,6 +398,42 @@ async function callExecutionLlm(opts: {
   }
   log.info("cortex: no execution LLM returned a result");
   return null;
+}
+
+/**
+ * Cortex execution call with a read-through SEMANTIC cache in front of the provider
+ * cascade: a semantically-repeated prompt returns a prior answer (L1 on-device SSM
+ * embeddings, then the optional L2 gateway) instead of re-billing the frontier model.
+ * Degrades to a direct cascade when the SSM memory layer is unavailable. The generator
+ * is memoised so the cache's internal degrade-path never double-runs the cascade, and a
+ * total provider failure returns null without caching the empty result.
+ */
+async function callExecutionLlm(opts: CortexCallOpts): Promise<string | null> {
+  const svc = getSsmMemoryService();
+  if (!svc) {
+    return runProviderCascade(opts);
+  }
+  const query = opts.messages.map((m) => `${m.role}: ${m.content}`).join("\n");
+  let pending: Promise<string | null> | undefined;
+  const once = (): Promise<string | null> => (pending ??= runProviderCascade(opts));
+  try {
+    const { response, cached } = await svc.getCachedOrGenerate(query, async () => {
+      const r = await once();
+      if (r === null) {
+        throw CORTEX_ALL_PROVIDERS_FAILED;
+      }
+      return r;
+    });
+    if (cached) {
+      log.info("cortex: semantic cache hit — skipped provider call");
+    }
+    return response;
+  } catch (e) {
+    if (e === CORTEX_ALL_PROVIDERS_FAILED) {
+      return null;
+    }
+    throw e;
+  }
 }
 
 // ── Multi-step chain: plan → code → execution feedback ───────────────────────

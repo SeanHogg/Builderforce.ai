@@ -3,7 +3,7 @@ import { loadConfig } from "../../config/config.js";
 import { callGateway } from "../../gateway/call.js";
 import { capArrayByJsonBytes } from "../../gateway/session-utils.fs.js";
 import { truncateUtf16Safe } from "../../utils.js";
-import type { AnyAgentTool } from "./common.js";
+import type { AgentToolResult, AnyAgentTool } from "./common.js";
 import { jsonResult, readStringParam } from "./common.js";
 import {
   createSessionVisibilityGuard,
@@ -148,16 +148,17 @@ function enforceSessionsHistoryHardCap(params: {
   return { items: placeholder, bytes: jsonUtf8Bytes(placeholder), hardCapped: true };
 }
 
-export function createSessionsHistoryTool(opts?: {
+export interface SessionsHistoryDeps {
   agentSessionKey?: string;
   sandboxed?: boolean;
-}): AnyAgentTool {
-  return {
-    label: "Session History",
-    name: "sessions_history",
-    description: "Fetch message history for a session.",
-    parameters: SessionsHistoryToolSchema,
-    execute: async (_toolCallId, args) => {
+}
+
+/** Shared implementation — pi wrapper + native ToolDefinition both delegate here (DRY). */
+export async function runSessionsHistory(
+  opts: SessionsHistoryDeps | undefined,
+  args: Record<string, unknown>,
+): Promise<AgentToolResult<unknown>> {
+  {
       const params = args as Record<string, unknown>;
       const sessionKeyParam = readStringParam(params, "sessionKey", {
         required: true,
@@ -246,6 +247,15 @@ export function createSessionsHistoryTool(opts?: {
         contentTruncated,
         bytes: hardened.bytes,
       });
-    },
+  }
+}
+
+export function createSessionsHistoryTool(opts?: SessionsHistoryDeps): AnyAgentTool {
+  return {
+    label: "Session History",
+    name: "sessions_history",
+    description: "Fetch message history for a session.",
+    parameters: SessionsHistoryToolSchema,
+    execute: async (_toolCallId, args) => runSessionsHistory(opts, args as Record<string, unknown>),
   };
 }

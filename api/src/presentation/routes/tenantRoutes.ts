@@ -1,11 +1,16 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { TenantService } from '../../application/tenant/TenantService';
 import { TenantRole, TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { invalidateJwtMembershipCache } from '../../infrastructure/auth/keyResolutionCache';
 import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
-import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
+import { buildPlanLimitsGuard, seatCapacityForTenant } from '../middleware/planLimitsGuard';
+import { canAddSeat } from '../../domain/tenant/PlanLimits';
+import { trialDaysRemaining } from '../../domain/tenant/effectivePlan';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
 import {
@@ -14,9 +19,38 @@ import {
   agentHosts,
   agentHostProjects,
   sourceControlIntegrations,
+  tenantInvitations,
   tenantMembers,
+  tenants,
   users,
 } from '../../infrastructure/database/schema';
+import { sendWorkspaceInviteEmail } from '../../infrastructure/email/EmailService';
+import { countActiveSessionsAndTokens } from '../../application/security/sessionCounts';
+import { provisionBuiltinAgents } from '../../application/agent/provisionBuiltinAgents';
+import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
+
+/** Best-effort audit emit for a membership mutation (invite / add), attributed to
+ *  the acting manager. Off the response path; never throws. */
+function emitMemberActivity(
+  c: Context<HonoEnv>,
+  db: Db,
+  verb: string,
+  o: { targetId: string; targetLabel: string; summary: string; metadata?: Record<string, unknown> },
+): void {
+  c.executionCtx.waitUntil((async () => {
+    const actor = await resolveActorFromContext(c.env as Env, db, c);
+    await recordActivity(c.env as Env, db, {
+      tenantId: c.get('tenantId') as number,
+      actor,
+      verb,
+      targetType: 'member',
+      targetId: o.targetId,
+      targetLabel: o.targetLabel,
+      summary: o.summary,
+      metadata: o.metadata ?? null,
+    });
+  })().catch(() => {}));
+}
 
 type SourceControlProvider = 'github' | 'bitbucket';
 
@@ -36,6 +70,109 @@ async function assertTenantMember(db: Db, tenantId: number, userId: string): Pro
   return Boolean(row);
 }
 
+/**
+ * Drop the cached human assignee list for a tenant. Called from every membership
+ * add/remove path so GET /api/tasks/assignees re-loads immediately instead of
+ * serving a stale roster until the KV TTL expires (~5 min). Keep the key in sync
+ * with the producer in taskRoutes.ts (`task-assignees:tenant:<id>`).
+ */
+async function invalidateTaskAssignees(env: Env, tenantId: number): Promise<void> {
+  await invalidateCached(env, `task-assignees:tenant:${tenantId}`);
+}
+
+/** Cache key for a tenant's pending-invitation roster (GET /:id/invitations). */
+function invitationsCacheKey(tenantId: number): string {
+  return `tenant-invitations:tenant:${tenantId}`;
+}
+
+async function invalidateInvitations(env: Env, tenantId: number): Promise<void> {
+  await invalidateCached(env, invitationsCacheKey(tenantId));
+}
+
+/**
+ * Convert any still-pending invitations addressed to `email` into real
+ * memberships for `userId`. Called on login (GET /tenants/mine) so an invite
+ * sent before the person had an account "lands" the first time they return.
+ *
+ * Each accepted row is stamped accepted/accepted_at and the tenant's assignee +
+ * invitation caches are dropped. If the user is already a member (invited twice,
+ * or added manually in between) the row is still resolved to 'accepted' rather
+ * than retried forever. Best-effort: a single tenant failing never blocks the others.
+ */
+async function acceptPendingInvitations(
+  db: Db,
+  env: Env,
+  tenantService: TenantService,
+  userId: string,
+  email: string,
+): Promise<void> {
+  const normalized = email.toLowerCase().trim();
+  if (!normalized) return;
+
+  const pending = await db
+    .select({
+      id: tenantInvitations.id,
+      tenantId: tenantInvitations.tenantId,
+      role: tenantInvitations.role,
+      invitedByUserId: tenantInvitations.invitedByUserId,
+    })
+    .from(tenantInvitations)
+    .where(and(eq(tenantInvitations.email, normalized), eq(tenantInvitations.status, 'pending')));
+
+  // Per-tenant live seat tally, fetched lazily on first use and incremented as we
+  // seat invites within this run, so a batch of invites for the same tenant can't
+  // collectively overshoot the cap.
+  const seatState = new Map<number, { plan: TenantPlan; seated: number }>();
+
+  for (const invite of pending) {
+    // The invitee can't authorize their own membership — replay the add under
+    // the manager who sent the invite (guaranteed a manager/owner at invite time).
+    if (!invite.invitedByUserId) continue;
+    try {
+      // Already a member? Resolve the invite without re-adding (addMember would
+      // throw "already a member" and leave the row stuck pending).
+      const alreadyMember = await assertTenantMember(db, invite.tenantId, userId);
+      if (!alreadyMember) {
+        // Re-check seat capacity at ACCEPT time (members-only — this pending row
+        // is about to be consumed). The invite-time guard already counted pending
+        // seats, but a plan DOWNGRADE after the invites were queued can still
+        // over-subscribe. If the plan can't seat it, leave the invite pending
+        // (visible in the manager's invitations list, auto-retries once a seat
+        // frees up or they upgrade) instead of silently auto-accepting past the cap.
+        let state = seatState.get(invite.tenantId);
+        if (!state) {
+          const cap = await seatCapacityForTenant(db, invite.tenantId);
+          state = { plan: cap.plan, seated: cap.members };
+          seatState.set(invite.tenantId, state);
+        }
+        if (!canAddSeat(state.plan, state.seated)) {
+          continue; // over cap — leave pending, do not seat
+        }
+        await tenantService.addMember(invite.tenantId, invite.invitedByUserId, userId, invite.role as TenantRole);
+        state.seated += 1;
+      }
+      await db
+        .update(tenantInvitations)
+        .set({ status: 'accepted', acceptedAt: new Date() })
+        .where(eq(tenantInvitations.id, invite.id));
+      await invalidateTaskAssignees(env, invite.tenantId);
+      await invalidateInvitations(env, invite.tenantId);
+    } catch {
+      // A transient error on one tenant must not block the user's login or the
+      // other tenants' invites — leave the row pending so it retries next visit.
+    }
+  }
+}
+
+/**
+ * Tenant reads on the tenant-JWT path are SELF-SCOPED: a caller may only read the
+ * workspace its token is scoped to. Returns a 403 Response to short-circuit otherwise.
+ * Prevents enumerating another tenant's metadata (name/plan/billing) by guessing its id.
+ */
+function forbidCrossTenant(c: Context<HonoEnv>, id: number): Response | undefined {
+  return id === (c.get('tenantId') as number) ? undefined : c.json({ error: 'Forbidden' }, 403);
+}
+
 export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
@@ -43,6 +180,17 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   // Used by the tenant picker immediately after login (before a tenant JWT exists)
   router.get('/mine', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as string;
+    // Land any invitations sent to this user's email before they had an account
+    // (or before they last returned) — they convert to memberships and show up
+    // in the list below on this very request.
+    const [account] = await db
+      .select({ email: users.email })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    if (account?.email) {
+      await acceptPendingInvitations(db, c.env as Env, tenantService, userId, account.email);
+    }
     const result = await tenantService.listTenantsForUser(userId);
     return c.json({ tenants: result });
   });
@@ -54,6 +202,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const body   = await c.req.json<{ name: string }>();
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
     const tenant = await tenantService.createTenant({ name: body.name, ownerUserId: userId });
+    await provisionBuiltinAgents(db, tenant.id).catch(() => {});   // seed Validator + Security
     return c.json(tenant.toPlain(), 201);
   });
 
@@ -78,18 +227,26 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     return c.json({ tenants: tenants.map(t => t.toPlain()) });
   });
 
-  // GET /api/tenants/:id
+  // GET /api/tenants/:id — self-scoped (a caller can only read its own workspace).
+  // Surfaces the trial state (effectivePlan + days left) so the UI can render
+  // "Pro trial — N days left" without re-deriving the entitlement rules.
   router.get('/:id', async (c) => {
     const id = Number(c.req.param('id'));
+    const denied = forbidCrossTenant(c, id);
+    if (denied) return denied;
     const tenant = await tenantService.getTenant(id);
-    return c.json(tenant.toPlain());
+    return c.json({
+      ...tenant.toPlain(),
+      effectivePlan: tenant.effectivePlan(),
+      trialDaysRemaining: trialDaysRemaining(tenant.billingStatus, tenant.trialEndsAt),
+    });
   });
 
   // GET /api/tenants/:id/default-agentHost
   router.get('/:id/default-agentHost', async (c) => {
     const id = Number(c.req.param('id'));
-    const callerTenantId = c.get('tenantId') as number;
-    if (id !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
+    const denied = forbidCrossTenant(c, id);
+    if (denied) return denied;
     const tenant = await tenantService.getTenant(id);
     return c.json({ defaultAgentHostId: tenant.defaultAgentHostId });
   });
@@ -328,34 +485,43 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       ? rows.filter((row) => isAgentHostOnline(row))
       : rows;
 
-    const hostRows = await Promise.all(
-      filtered.map(async (row) => {
-        const associatedProjects = await db
-          .select({ projectId: agentHostProjects.projectId })
+    // Fetch every host's project links in ONE query (grouped in JS) instead of an
+    // N+1 per-host round-trip.
+    const hostIds = filtered.map((row) => row.id);
+    const projectLinks = hostIds.length
+      ? await db
+          .select({ agentHostId: agentHostProjects.agentHostId, projectId: agentHostProjects.projectId })
           .from(agentHostProjects)
-          .where(
-            and(
-              eq(agentHostProjects.tenantId, tenantId),
-              eq(agentHostProjects.agentHostId, row.id),
-            ),
-          );
-        const capabilities: string[] = row.capabilities
-          ? (JSON.parse(row.capabilities) as string[])
-          : [];
-        const online = isAgentHostOnline(row);
-        return {
-          ...row,
-          online,
-          capabilities,
-          capabilitySummary: {
-            distributed: online && associatedProjects.length > 1,
-            remoteDispatch: online && capabilities.includes('remote-dispatch'),
-            projectCount: associatedProjects.length,
-          },
-          projectIds: associatedProjects.map((p) => p.projectId),
-        };
-      }),
-    );
+          .where(and(
+            eq(agentHostProjects.tenantId, tenantId),
+            inArray(agentHostProjects.agentHostId, hostIds),
+          ))
+      : [];
+    const projectsByHost = new Map<number, number[]>();
+    for (const link of projectLinks) {
+      const list = projectsByHost.get(link.agentHostId) ?? [];
+      list.push(link.projectId);
+      projectsByHost.set(link.agentHostId, list);
+    }
+
+    const hostRows = filtered.map((row) => {
+      const associatedProjects = projectsByHost.get(row.id) ?? [];
+      const capabilities: string[] = row.capabilities
+        ? (JSON.parse(row.capabilities) as string[])
+        : [];
+      const online = isAgentHostOnline(row);
+      return {
+        ...row,
+        online,
+        capabilities,
+        capabilitySummary: {
+          distributed: online && associatedProjects.length > 1,
+          remoteDispatch: online && capabilities.includes('remote-dispatch'),
+          projectCount: associatedProjects.length,
+        },
+        projectIds: associatedProjects,
+      };
+    });
 
     return c.json({ agentHosts: hostRows });
   });
@@ -506,6 +672,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const body   = await c.req.json<{ name: string }>();
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
     const tenant = await tenantService.createTenant({ name: body.name, ownerUserId: userId });
+    await provisionBuiltinAgents(db, tenant.id).catch(() => {});   // seed Validator + Security
     return c.json(tenant.toPlain(), 201);
   });
 
@@ -520,10 +687,16 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     if (limitErr) return c.json(limitErr, 402);
 
     const tenant = await tenantService.addMember(id, actorUserId, body.newUserId, body.role);
+    await invalidateTaskAssignees(c.env as Env, id);
+    // New membership must resolve at the gateway immediately, not after the 60s TTL.
+    await invalidateJwtMembershipCache(c.env as Env, id, body.newUserId).catch(() => {});
     return c.json(tenant.toPlain());
   });
 
-  // POST /api/tenants/:id/invite-by-email — look up user by email and add as member
+  // POST /api/tenants/:id/invite-by-email
+  // Existing account → add as a member immediately (status 'added'). No account
+  // yet → record a pending invitation (status 'pending') that auto-converts to a
+  // membership the first time they log in with that email (see GET /mine).
   router.post('/:id/invite-by-email', requireRole(TenantRole.MANAGER), async (c) => {
     const id          = Number(c.req.param('id'));
     const callerTenantId = c.get('tenantId') as number;
@@ -532,28 +705,131 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const body = await c.req.json<{ email: string; role?: TenantRole }>();
     if (!body.email?.trim()) return c.json({ error: 'email is required' }, 400);
 
+    const email = body.email.toLowerCase().trim();
     const role = body.role ?? TenantRole.DEVELOPER;
+    const actorUserId = c.get('userId') as string;
 
-    const [found] = await db
-      .select({ id: users.id, email: users.email })
-      .from(users)
-      .where(eq(users.email, body.email.toLowerCase().trim()))
-      .limit(1);
-
-    if (!found) {
-      return c.json(
-        { error: 'No account found with that email. Ask them to sign up at builderforce.ai first.' },
-        404,
-      );
-    }
-
+    // Seat limit guards both paths: a pending invite is a promise of a seat, so
+    // refuse to queue one the plan can't honour. (It is not yet counted as a
+    // filled seat — see the Consolidated Gap Register.)
     const guard = buildPlanLimitsGuard(db);
     const limitErr = await guard.checkSeatLimit(id);
     if (limitErr) return c.json(limitErr, 402);
 
-    const actorUserId = c.get('userId') as string;
-    const tenant = await tenantService.addMember(id, actorUserId, found.id, role);
-    return c.json({ ok: true, tenant: tenant.toPlain(), addedUser: { id: found.id, email: found.email } });
+    const [found] = await db
+      .select({ id: users.id, email: users.email })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+
+    if (found) {
+      const tenant = await tenantService.addMember(id, actorUserId, found.id, role);
+      await invalidateTaskAssignees(c.env as Env, id);
+      await invalidateJwtMembershipCache(c.env as Env, id, found.id).catch(() => {});
+      emitMemberActivity(c, db, 'member.added', {
+        targetId: found.id, targetLabel: found.email,
+        summary: `Added ${found.email} as ${role}`, metadata: { role, userId: found.id },
+      });
+      return c.json({ ok: true, status: 'added', tenant: tenant.toPlain(), addedUser: { id: found.id, email: found.email } });
+    }
+
+    // No account: upsert the pending invitation (the partial-unique index allows
+    // only one open invite per email, so re-inviting refreshes role + timestamp).
+    const [existing] = await db
+      .select({ id: tenantInvitations.id })
+      .from(tenantInvitations)
+      .where(and(
+        eq(tenantInvitations.tenantId, id),
+        eq(tenantInvitations.email, email),
+        eq(tenantInvitations.status, 'pending'),
+      ))
+      .limit(1);
+
+    if (existing) {
+      await db
+        .update(tenantInvitations)
+        .set({ role, invitedByUserId: actorUserId, createdAt: new Date() })
+        .where(eq(tenantInvitations.id, existing.id));
+    } else {
+      await db
+        .insert(tenantInvitations)
+        .values({ tenantId: id, email, role, invitedByUserId: actorUserId });
+    }
+
+    await invalidateInvitations(c.env as Env, id);
+
+    emitMemberActivity(c, db, 'member.invited', {
+      targetId: email, targetLabel: email,
+      summary: `Invited ${email} as ${role}`, metadata: { role, email },
+    });
+
+    // Tell the cold invitee they were invited (best-effort — no-ops without
+    // RESEND_API_KEY). The signup link pre-fills the invited address so the
+    // pending invitation auto-converts on first login (see GET /mine). [1248]
+    try {
+      const [[tenantRow], [inviter]] = await Promise.all([
+        db.select({ name: tenants.name }).from(tenants).where(eq(tenants.id, id)).limit(1),
+        db.select({ displayName: users.displayName, email: users.email })
+          .from(users).where(eq(users.id, actorUserId)).limit(1),
+      ]);
+      const frontendBase = ((c.env as Env).APP_URL ?? 'https://builderforce.ai').split(',')[0]!.trim();
+      const signupUrl = `${frontendBase}/register?email=${encodeURIComponent(email)}`;
+      await sendWorkspaceInviteEmail(c.env as Env, email, {
+        workspaceName: tenantRow?.name ?? 'a Builderforce workspace',
+        inviterName: inviter?.displayName ?? inviter?.email ?? 'A teammate',
+        signupUrl,
+        role,
+      });
+    } catch (err) {
+      console.error('[invite-by-email] notification failed (invite still recorded):', err);
+    }
+
+    return c.json({ ok: true, status: 'pending', email });
+  });
+
+  // GET /api/tenants/:id/invitations — pending (not-yet-accepted) invitations.
+  router.get('/:id/invitations', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    const callerTenantId = c.get('tenantId') as number;
+    if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
+
+    const invitations = await getOrSetCached(c.env as Env, invitationsCacheKey(tenantId), async () => {
+      const rows = await db
+        .select({
+          id: tenantInvitations.id,
+          email: tenantInvitations.email,
+          role: tenantInvitations.role,
+          createdAt: tenantInvitations.createdAt,
+        })
+        .from(tenantInvitations)
+        .where(and(eq(tenantInvitations.tenantId, tenantId), eq(tenantInvitations.status, 'pending')))
+        .orderBy(desc(tenantInvitations.createdAt));
+      return rows;
+    });
+
+    return c.json({ invitations });
+  });
+
+  // DELETE /api/tenants/:id/invitations/:invId — revoke a pending invitation.
+  router.delete('/:id/invitations/:invId', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    const callerTenantId = c.get('tenantId') as number;
+    if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
+
+    const invId = c.req.param('invId');
+    if (!invId) return c.json({ error: 'invId is required' }, 400);
+
+    await db
+      .update(tenantInvitations)
+      .set({ status: 'revoked', revokedAt: new Date() })
+      .where(and(
+        eq(tenantInvitations.id, invId),
+        eq(tenantInvitations.tenantId, tenantId),
+        eq(tenantInvitations.status, 'pending'),
+      ));
+
+    await invalidateInvitations(c.env as Env, tenantId);
+    return c.json({ ok: true });
   });
 
   // DELETE /api/tenants/:id/members/:userId
@@ -562,6 +838,29 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const targetUserId = c.req.param('userId');
     const actorUserId  = c.get('userId') as string;
     const tenant = await tenantService.removeMember(id, actorUserId, targetUserId);
+    await invalidateTaskAssignees(c.env as Env, id);
+    // Revoke the removed member's gateway access at once (not after the 60s TTL).
+    await invalidateJwtMembershipCache(c.env as Env, id, targetUserId).catch(() => {});
+    return c.json(tenant.toPlain());
+  });
+
+  // PATCH /api/tenants/:id/members/:userId/role — change an existing member's role.
+  router.patch('/:id/members/:userId/role', requireRole(TenantRole.MANAGER), async (c) => {
+    const id           = Number(c.req.param('id'));
+    const callerTenantId = c.get('tenantId') as number;
+    if (id !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
+
+    const targetUserId = c.req.param('userId');
+    const actorUserId  = c.get('userId') as string;
+    const body = await c.req.json<{ role: TenantRole }>();
+    if (!body.role || !Object.values(TenantRole).includes(body.role)) {
+      return c.json({ error: 'role must be one of: ' + Object.values(TenantRole).join(', ') }, 400);
+    }
+
+    const tenant = await tenantService.changeMemberRole(id, actorUserId, targetUserId, body.role);
+    await invalidateTaskAssignees(c.env as Env, id);
+    // The role rides in the member's next JWT mint; clear the cached membership now.
+    await invalidateJwtMembershipCache(c.env as Env, id, targetUserId).catch(() => {});
     return c.json(tenant.toPlain());
   });
 
@@ -579,6 +878,9 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
         displayName: users.displayName,
         mfaEnabled: users.mfaEnabled,
         mfaEnabledAt: users.mfaEnabledAt,
+        psychometric: users.psychometric,
+        role: tenantMembers.role,
+        joinedAt: tenantMembers.joinedAt,
       })
       .from(tenantMembers)
       .innerJoin(users, eq(users.id, tenantMembers.userId))
@@ -586,33 +888,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
 
     const userIds = memberRows.map((row) => row.userId);
 
-    const sessionCounts = userIds.length
-      ? await db
-        .select({ userId: authUserSessions.userId, count: sql<number>`COUNT(*)` })
-        .from(authUserSessions)
-        .where(and(inArray(authUserSessions.userId, userIds), eq(authUserSessions.isActive, true)))
-        .groupBy(authUserSessions.userId)
-      : [];
-
-    const tokenCounts = userIds.length
-      ? await db
-        .select({ userId: authTokens.userId, count: sql<number>`COUNT(*)` })
-        .from(authTokens)
-        .where(
-          and(
-            inArray(authTokens.userId, userIds),
-            isNull(authTokens.revokedAt),
-            gt(authTokens.expiresAt, new Date()),
-          ),
-        )
-        .groupBy(authTokens.userId)
-      : [];
-
-    const sessionsByUser = new Map<string, number>();
-    for (const row of sessionCounts) sessionsByUser.set(row.userId, Number(row.count));
-
-    const tokensByUser = new Map<string, number>();
-    for (const row of tokenCounts) tokensByUser.set(row.userId, Number(row.count));
+    const { sessionsByUser, tokensByUser } = await countActiveSessionsAndTokens(db, userIds);
 
     return c.json({
       users: memberRows.map((row) => ({
@@ -622,6 +898,10 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
         displayName: row.displayName,
         mfaEnabled: row.mfaEnabled,
         mfaEnabledAt: row.mfaEnabledAt,
+        // A person's personality (parsed) — displayed on their card, self-hides when unset.
+        psychometric: row.psychometric ? (JSON.parse(row.psychometric) as unknown) : null,
+        role: row.role,
+        joinedAt: row.joinedAt,
         activeSessions: sessionsByUser.get(row.userId) ?? 0,
         activeTokens: tokensByUser.get(row.userId) ?? 0,
       })),

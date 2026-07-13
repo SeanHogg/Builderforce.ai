@@ -12,7 +12,7 @@
  * spawning duplicates.
  */
 
-import { and, asc, eq, gte } from 'drizzle-orm';
+import { and, asc, eq, gte, gt, or, sql, type SQL } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { qaFlows, qaJourneyEvents } from '../../infrastructure/database/schema';
 import { inferPersonaRole, type QaStep, shortHash, toSlug } from './qaTypes';
@@ -80,34 +80,92 @@ export class QaFlowService {
   async aggregate(
     tenantId: number,
     segmentId: string | undefined,
-    opts: { sinceDays?: number; minRoutes?: number; maxFlows?: number; projectId?: number } = {},
-  ): Promise<{ upserted: number }> {
+    opts: { sinceDays?: number; minRoutes?: number; maxFlows?: number; projectId?: number; maxEvents?: number; pageSize?: number } = {},
+  ): Promise<{ upserted: number; eventsScanned: number; truncated: boolean }> {
     const sinceDays = opts.sinceDays ?? 30;
     const minRoutes = opts.minRoutes ?? 2;
     const maxFlows = opts.maxFlows ?? 50;
+    // Hard ceiling on how many events one aggregation pass will pull into the
+    // Worker, and the keyset page size for reaching it [1073]. The previous
+    // implementation did a single LIMIT 20000 and silently dropped the rest;
+    // we now page deterministically by (sessionId, seq) and surface truncation.
+    const maxEvents = Math.max(1, opts.maxEvents ?? 20_000);
+    const pageSize = Math.min(Math.max(1, opts.pageSize ?? 5_000), maxEvents);
     const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
 
-    const rows = await this.db
-      .select({
-        sessionId: qaJourneyEvents.sessionId,
-        seq:       qaJourneyEvents.seq,
-        type:      qaJourneyEvents.type,
-        route:     qaJourneyEvents.route,
-        selector:  qaJourneyEvents.selector,
-        label:     qaJourneyEvents.label,
-        value:     qaJourneyEvents.value,
-      })
-      .from(qaJourneyEvents)
-      .where(and(eq(qaJourneyEvents.tenantId, tenantId), gte(qaJourneyEvents.ts, since)))
-      .orderBy(asc(qaJourneyEvents.sessionId), asc(qaJourneyEvents.seq))
-      .limit(20_000);
-
-    // Group ordered events by session.
+    // Group ordered events by session as we stream pages in. Because the keyset
+    // order is (sessionId, seq), a session's events are always contiguous across
+    // pages, so per-session grouping stays correct without buffering everything.
     const bySession = new Map<string, JourneyRow[]>();
-    for (const r of rows) {
-      const list = bySession.get(r.sessionId) ?? [];
-      list.push(r);
-      bySession.set(r.sessionId, list);
+    let eventsScanned = 0;
+    let truncated = false;
+    let cursorSession: string | null = null;
+    let cursorSeq = 0;
+
+    for (;;) {
+      const remaining = maxEvents - eventsScanned;
+      if (remaining <= 0) break;
+      const take = Math.min(pageSize, remaining);
+
+      const keyset: SQL | undefined = cursorSession === null
+        ? undefined
+        : or(
+            gt(qaJourneyEvents.sessionId, cursorSession),
+            and(eq(qaJourneyEvents.sessionId, cursorSession), gt(qaJourneyEvents.seq, cursorSeq)),
+          );
+
+      const page: JourneyRow[] = await this.db
+        .select({
+          sessionId: qaJourneyEvents.sessionId,
+          seq:       qaJourneyEvents.seq,
+          type:      qaJourneyEvents.type,
+          route:     qaJourneyEvents.route,
+          selector:  qaJourneyEvents.selector,
+          label:     qaJourneyEvents.label,
+          value:     qaJourneyEvents.value,
+        })
+        .from(qaJourneyEvents)
+        .where(and(eq(qaJourneyEvents.tenantId, tenantId), gte(qaJourneyEvents.ts, since), ...(keyset ? [keyset] : [])))
+        .orderBy(asc(qaJourneyEvents.sessionId), asc(qaJourneyEvents.seq))
+        .limit(take);
+
+      if (page.length === 0) break;
+      for (const r of page) {
+        const list = bySession.get(r.sessionId) ?? [];
+        list.push(r as JourneyRow);
+        bySession.set(r.sessionId, list);
+      }
+      eventsScanned += page.length;
+      const last = page[page.length - 1] as JourneyRow;
+      cursorSession = last.sessionId;
+      cursorSeq = last.seq;
+
+      if (page.length < take) break; // drained the window
+      if (eventsScanned >= maxEvents) {
+        // We hit the ceiling and there may be more — check whether anything
+        // remains beyond the cursor so we can log honest truncation instead of
+        // silently dropping events.
+        const [more] = await this.db
+          .select({ one: sql<number>`1` })
+          .from(qaJourneyEvents)
+          .where(and(
+            eq(qaJourneyEvents.tenantId, tenantId),
+            gte(qaJourneyEvents.ts, since),
+            or(
+              gt(qaJourneyEvents.sessionId, cursorSession),
+              and(eq(qaJourneyEvents.sessionId, cursorSession), gt(qaJourneyEvents.seq, cursorSeq)),
+            ),
+          ))
+          .limit(1);
+        truncated = Boolean(more);
+        if (truncated) {
+          console.warn(
+            `[qa-flow-aggregate] tenant ${tenantId}: hit ${maxEvents}-event ceiling over the last ${sinceDays}d; ` +
+            `additional events past sessionId=${cursorSession} seq=${cursorSeq} were NOT aggregated this pass.`,
+          );
+        }
+        break;
+      }
     }
 
     // Collapse sessions by route signature; keep the richest representative.
@@ -168,6 +226,6 @@ export class QaFlowService {
         });
       upserted++;
     }
-    return { upserted };
+    return { upserted, eventsScanned, truncated };
   }
 }

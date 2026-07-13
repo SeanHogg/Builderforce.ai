@@ -1,5 +1,17 @@
 'use client';
 
+/**
+ * SlideOutPanel — the canonical overlay for the app.
+ *
+ * CONVENTION (app-wide): a centered modal dialog is reserved for TERMINAL /
+ * DESTRUCTIVE approvals only — irreversible confirmations like "Delete", "Remove",
+ * "Disconnect", "Cancel subscription". EVERYTHING ELSE (forms, editors, detail
+ * views, creation flows, settings, pickers) uses this slide-out side panel: it
+ * adapts to mobile far better than a modal, doesn't trap the viewport, and keeps
+ * the underlying context visible. When you reach for a modal, ask "is this a
+ * terminal destructive approval?" — if not, use SlideOutPanel.
+ */
+
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -23,6 +35,9 @@ export interface SlideOutPanelProps {
   children: React.ReactNode;
   /** Drawer width. Default min(560px, 96vw). */
   width?: string;
+  /** Which edge the drawer docks to. Default 'right'. Use 'left' when the Brain
+   *  (which is right-docked) needs a companion work panel on the opposite side. */
+  side?: 'left' | 'right';
 }
 
 const overlayStyle: React.CSSProperties = {
@@ -41,6 +56,7 @@ export function SlideOutPanel({
   headerActions,
   children,
   width = 'min(560px, 96vw)',
+  side = 'right',
 }: SlideOutPanelProps) {
   // Portal to <body> so the fixed drawer escapes ancestor stacking contexts
   // (e.g. the app `.shell` has `position: relative; z-index: 1`, which would
@@ -69,12 +85,13 @@ export function SlideOutPanel({
         style={{
           position: 'fixed',
           top: 0,
-          right: 0,
+          ...(side === 'left' ? { left: 0 } : { right: 0 }),
           bottom: 0,
           width,
           maxWidth: '100%',
-          borderLeft: '1px solid var(--border-subtle)',
-          boxShadow: '-8px 0 24px rgba(0,0,0,0.2)',
+          ...(side === 'left'
+            ? { borderRight: '1px solid var(--border-subtle)', boxShadow: '8px 0 24px rgba(0,0,0,0.2)' }
+            : { borderLeft: '1px solid var(--border-subtle)', boxShadow: '-8px 0 24px rgba(0,0,0,0.2)' }),
           zIndex: 9999,
           display: 'flex',
           flexDirection: 'column',

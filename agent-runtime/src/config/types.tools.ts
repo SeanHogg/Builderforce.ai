@@ -160,7 +160,7 @@ export type ToolPolicyConfig = {
   /**
    * Additional allowlist entries merged into the effective allowlist.
    *
-   * Intended for additive configuration (e.g., "also allow lobster") without forcing
+   * Intended for additive configuration (e.g., "also allow web_search") without forcing
    * users to replace/duplicate an existing allowlist or profile.
    */
   alsoAllow?: string[];
@@ -228,6 +228,14 @@ export type FsToolsConfig = {
    * Default: false (unrestricted, matches legacy behavior).
    */
   workspaceOnly?: boolean;
+  /**
+   * Source the overlapping file tools (`write`/`edit` + additive `delete_file`/`list_files`)
+   * from the shared `@builderforce/agent-tools` registry via a disk capability provider —
+   * the on-prem half of the one-definition-per-tool convergence (PRD 12 Phase B). Honored
+   * only for NON-sandboxed sessions. Default: false (native per-tool copies). Opt-in pending
+   * a live cross-provider smoke test (see PRD 12 §9).
+   */
+  convergedFileTools?: boolean;
 };
 
 export type AgentToolsConfig = {

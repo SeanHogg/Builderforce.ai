@@ -1,5 +1,7 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
 import type { LegalCurrent } from './useLegalDocs';
 
@@ -13,93 +15,41 @@ interface LegalDocModalProps {
 }
 
 /**
- * The Terms/Privacy reader modal — shows the document content served by the
- * API (no external URL). Shared by the auth-screen footer and the sidebar
- * legal menu so the markup lives in one place.
+ * The Terms/Privacy reader — shows the document content served by the API (no
+ * external URL). Shared by the auth-screen footer and the sidebar legal menu so
+ * the markup lives in one place.
+ *
+ * Rendered as a SlideOutPanel (not a modal): per the app convention, centered
+ * modals are reserved for terminal / destructive approvals — every other overlay,
+ * including read-only detail views like this one, is a slide-out side panel.
  */
 export default function LegalDocModal({ type, legal, onClose }: LegalDocModalProps) {
-  if (type === null) return null;
+  const t = useTranslations('legal');
 
   const doc = type === 'terms' ? legal?.terms : legal?.privacy;
-  const modalTitle = type === 'terms' ? 'Terms of Use' : 'Privacy Policy';
+  const modalTitle = type === 'terms' ? t('termsTitle') : t('privacyTitle');
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={modalTitle}
-      className="modal-overlay"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+    <SlideOutPanel
+      open={type !== null}
+      onClose={onClose}
+      width="min(920px, 96vw)"
+      title={`${doc?.title ?? modalTitle}${doc?.version ? ` · v${doc.version}` : ''}`}
     >
-      <div
-        style={{
-          maxWidth: 920,
-          width: '100%',
-          maxHeight: '90vh',
-          display: 'flex',
-          flexDirection: 'column',
-          background: 'var(--bg-elevated)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 16,
-          boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
-          overflow: 'hidden',
-        }}
-      >
-        <div
-          style={{
-            padding: '20px 24px',
-            borderBottom: '1px solid var(--border-subtle)',
-            flexShrink: 0,
-          }}
-        >
-          <h2
-            style={{
-              margin: 0,
-              fontSize: '1.25rem',
-              fontWeight: 700,
-              color: 'var(--text-primary)',
-              fontFamily: 'var(--font-display)',
-            }}
-          >
-            {doc?.title ?? modalTitle}
-            {doc?.version ? ` · v${doc.version}` : ''}
-          </h2>
-          {doc?.publishedAt && (
-            <p
-              style={{
-                margin: '6px 0 0',
-                fontSize: '0.8rem',
-                color: 'var(--text-muted)',
-              }}
-            >
-              Published {new Date(doc.publishedAt).toLocaleString()}
-            </p>
-          )}
-        </div>
-        <div
-          style={{
-            flex: 1,
-            overflow: 'auto',
-            padding: 24,
-          }}
-        >
-          {doc?.content ? (
-            <LegalDocPreview content={doc.content} />
-          ) : (
-            <p style={{ margin: 0, color: 'var(--text-muted)' }}>Loading…</p>
-          )}
-        </div>
-        <div
-          style={{
-            padding: '16px 24px',
-            borderTop: '1px solid var(--border-subtle)',
-            flexShrink: 0,
-            display: 'flex',
-            justifyContent: 'flex-end',
-          }}
-        >
+      <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {doc?.publishedAt && (
+          <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+            {t('published', { date: new Date(doc.publishedAt).toLocaleString() })}
+          </p>
+        )}
+
+        {doc?.content ? (
+          <LegalDocPreview content={doc.content} />
+        ) : (
+          <p style={{ margin: 0, color: 'var(--text-muted)' }}>{t('loading')}</p>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
           <button
             type="button"
             onClick={onClose}
@@ -115,10 +65,10 @@ export default function LegalDocModal({ type, legal, onClose }: LegalDocModalPro
               fontFamily: 'var(--font-display)',
             }}
           >
-            Close
+            {t('close')}
           </button>
         </div>
       </div>
-    </div>
+    </SlideOutPanel>
   );
 }

@@ -1,14 +1,20 @@
 /**
  * Cloudflare Workers AI vendor module.
  *
- * Cloudflare hosts a catalog of `@cf/<owner>/<model>` checkpoints behind the
- * native `POST /accounts/<id>/ai/run/<model>` endpoint. The URL embeds the
- * model, which differs from the OpenAI-compatible vendors — so this module
- * builds the endpoint per call instead of using a fixed `ENDPOINT` const.
+ * Calls go through Cloudflare's **OpenAI-compatible** endpoint
+ * (`POST /accounts/<id>/ai/v1/chat/completions`) — standard OpenAI request
+ * (`{model, messages, tools, …}`) AND standard OpenAI response, so this module
+ * reuses the shared `executeChatCompletion` transport like every other
+ * OpenAI-shaped vendor. (It previously used the native `/ai/run/<model>` endpoint
+ * with a hand-rolled tool translation that flattened `tools` to `{name, …}` — the
+ * newer FC models, e.g. `@cf/moonshotai/kimi-k2.7-code`, REJECT that shape with
+ * `400: tools[0].function: Field required` because they want the OpenAI-nested
+ * `{type:'function', function:{…}}`. The OpenAI-compatible endpoint takes the
+ * nested shape verbatim, so the translation — and that whole class of bug — is gone.)
  *
  * Bindings:
  *   CLOUDFLARE_AI_API_TOKEN — `cfut_*` token sent as `Authorization: Bearer`.
- *   CLOUDFLARE_ACCOUNT_ID   — embedded in the URL (`/accounts/<id>/ai/run/...`).
+ *   CLOUDFLARE_ACCOUNT_ID   — embedded in the URL (`/accounts/<id>/ai/v1/...`).
  *
  * Both must be present for `apiKeyFrom` to return a non-null value; otherwise
  * the dispatcher skips Cloudflare with `skippedNoKey` exactly as it does any
@@ -17,12 +23,10 @@
  */
 
 import {
-  fetchWithVendorTimeout,
-  VendorRetryableError,
+  buildOpenAIChatBody,
+  executeChatCompletion,
+  forwardCallOpts,
   VendorFatalError,
-  pickUsage,
-  CASCADE_STATUSES,
-  AUTH_STATUSES,
   type AiModelTier,
   type VendorCallParams,
   type VendorCallResult,
@@ -31,8 +35,32 @@ import {
   type VendorModule,
 } from './types';
 
+// Paid Workers AI checkpoints joining the PRO paid pool (autoRoutableModelsByTier
+// pulls STANDARD/PREMIUM/ULTRA), LED by Cloudflare (PAID_LEAD_VENDOR) so the free
+// daily neuron allowance is drained before any metered vendor. Tool-capable entries
+// drive the multi-turn coding loop (the OpenAI-compatible endpoint takes OpenAI
+// `tools`/`tool_choice` verbatim), so the coders ALSO sit in CODING_MODEL_POOL.
+//
+// EVERY id + `tools` capability here is verified against the LIVE Cloudflare catalog
+// (`wrangler ai models --json` → `function_calling: true`), 2026-06-15 — a stale id
+// 404s on every call and silently floors coding overflow onto the metered Anthropic
+// key (the bug that drained the $10 cap: the old `@cf/meta/llama-3-8b-instruct` was
+// retired). Keep in sync with the live catalog, not from memory.
 const CATALOG: ReadonlyArray<VendorModelEntry> = [
-  { id: '@cf/meta/llama-3-8b-instruct', tier: 'STANDARD', label: 'Llama 3 8B (Cloudflare)', brand: 'Meta' },
+  // General utility (function-calling capable, but not curated coders).
+  { id: '@cf/meta/llama-3.1-8b-instruct-fp8', tier: 'STANDARD', label: 'Llama 3.1 8B FP8 (Cloudflare)',  brand: 'Meta',   capabilities: ['tools'] },
+  { id: '@cf/google/gemma-4-26b-a4b-it',      tier: 'STANDARD', label: 'Gemma 4 26B A4B (Cloudflare)',   brand: 'Google', capabilities: ['tools'] },
+  // Agentic coders — tool-capable, drive the multi-turn coding loop on free neurons.
+  // `contextWindow` is the LIVE per-model limit (verified via `wrangler ai models`).
+  // ALL are kept — the small-window ones are great first-pass picks for small tasks
+  // (fast, cheap neurons); the model-selection layer is context-aware (see
+  // `pickCloudModel` + SSM learned routing) so a small-window model isn't SEEDED into
+  // a context it can't hold (the 97K-into-32K 413 bug), and a 413 still cascades up
+  // to a bigger window (see CASCADE_STATUSES) as the safety net.
+  { id: '@cf/zai-org/glm-4.7-flash',                tier: 'STANDARD', label: 'GLM 4.7 Flash (Cloudflare)',         brand: 'Z.AI',        contextWindow: 131072, capabilities: ['tools', 'structured_output'] },
+  { id: '@cf/moonshotai/kimi-k2.7-code',            tier: 'PREMIUM',  label: 'Kimi K2.7 Code (Cloudflare)',        brand: 'Moonshot AI', contextWindow: 262144, capabilities: ['tools', 'structured_output'] },
+  { id: '@cf/qwen/qwen3-30b-a3b-fp8',               tier: 'STANDARD', label: 'Qwen3 30B A3B (Cloudflare)',         brand: 'Qwen',        contextWindow: 32768,  capabilities: ['tools', 'structured_output'] },
+  { id: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', tier: 'STANDARD', label: 'Llama 3.3 70B FP8 Fast (Cloudflare)', brand: 'Meta',        contextWindow: 24000,  capabilities: ['tools', 'structured_output'] },
 ];
 
 const CATALOG_BY_ID = new Map(CATALOG.map((m) => [m.id, m]));
@@ -42,53 +70,11 @@ function tierForCloudflareModel(modelId: string): AiModelTier {
 }
 
 /**
- * Build the per-call endpoint URL. Cloudflare's native API embeds the model id
- * after `/ai/run/`. The model id starts with `@cf/...` which is URL-safe as-is
- * (RFC 3986 allows `@` in the path component).
+ * Cloudflare's OpenAI-compatible chat-completions endpoint. The account id is in the
+ * path; the model id rides in the body like every other OpenAI-shaped vendor.
  */
-function endpointFor(accountId: string, model: string): string {
-  return `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`;
-}
-
-function buildBody(params: VendorCallParams): Record<string, unknown> {
-  const { messages, maxTokens, temperature, topP, extraBody } = params;
-  return {
-    messages,
-    ...(maxTokens   != null ? { max_tokens: maxTokens } : {}),
-    ...(temperature != null ? { temperature } : {}),
-    ...(topP        != null ? { top_p: topP } : {}),
-    ...(extraBody ?? {}),
-  };
-}
-
-/**
- * Cloudflare's native /ai/run response shape:
- *   { result: { response: "...", usage?: {...} }, success: true, errors: [], messages: [] }
- *
- * Map to OpenAI-style `{ choices: [{ message: { content } }], usage }` so the
- * downstream `_builderforce.resolvedModel` + restore-tool-names path doesn't
- * need a vendor-specific branch. Falls back to the raw body when shape is
- * unrecognised — caller still gets a usable `raw` for debugging.
- */
-function adaptCloudflareResponse(raw: unknown): {
-  raw: unknown;
-  content: string;
-  usage?: ReturnType<typeof pickUsage>;
-} {
-  const r = raw as {
-    result?:  { response?: unknown; usage?: unknown };
-    success?: boolean;
-    errors?:  unknown;
-  } | null;
-  const response = r?.result?.response;
-  const content  = typeof response === 'string' ? response : '';
-  const usage    = pickUsage(r?.result?.usage);
-  // Rewrap as OpenAI-compatible so logging + tool-name restore work uniformly.
-  const adapted = {
-    choices: [{ message: { role: 'assistant' as const, content } }],
-    usage,
-  };
-  return { raw: adapted, content, ...(Object.keys(usage).length > 0 ? { usage } : {}) };
+function endpointFor(accountId: string): string {
+  return `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1/chat/completions`;
 }
 
 export const cloudflareModule: VendorModule = {
@@ -110,47 +96,17 @@ export const cloudflareModule: VendorModule = {
     if (!token || !accountId) {
       throw new VendorFatalError('cloudflare', 500, 'malformed cloudflare apiKey sentinel (expected "<token>::<accountId>")');
     }
-    const endpoint = endpointFor(accountId, params.model);
-    const body     = buildBody(params);
-
-    const resp = await fetchWithVendorTimeout('cloudflare', params.model, endpoint, {
-      method: 'POST',
-      headers: {
-        Authorization:  `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'X-Title':      params.title ?? 'Builderforce.ai',
-      },
-      body: JSON.stringify(body),
-    }, params.timeoutMs, params.signal);
-
-    if (resp.ok) {
-      const raw = await resp.json();
-      // Cloudflare returns `success: false` in the 200-body for some failures
-      // (model not enabled, account quota, etc.) — convert to retryable so the
-      // cascade advances and a cooldown is recorded.
-      if (raw && typeof raw === 'object' && (raw as Record<string, unknown>).success === false) {
-        const errs = (raw as { errors?: unknown[] }).errors;
-        const msg = Array.isArray(errs) && errs.length > 0 ? JSON.stringify(errs).slice(0, 240) : 'cloudflare success=false';
-        throw new VendorRetryableError('cloudflare', params.model, 0, `embedded: ${msg}`);
-      }
-      return adaptCloudflareResponse(raw);
-    }
-
-    const errText = (await resp.text()).slice(0, 400);
-    if (CASCADE_STATUSES.has(resp.status)) {
-      throw new VendorRetryableError('cloudflare', params.model, resp.status, errText.slice(0, 240));
-    }
-    if (AUTH_STATUSES.has(resp.status)) {
-      console.error(
-        `[vendors] cloudflare/${params.model} auth ${resp.status} — check CLOUDFLARE_AI_API_TOKEN. Failing over to next model.`,
-        errText.slice(0, 200),
-      );
-      throw new VendorRetryableError('cloudflare', params.model, resp.status, `auth ${resp.status}: ${errText.slice(0, 200)}`);
-    }
-    throw new VendorFatalError('cloudflare', resp.status, errText);
+    // Shared OpenAI transport: standard request + response + 4xx classification
+    // (incl. the 413 context-overflow cascade and capacity-limit failover).
+    return executeChatCompletion({
+      vendorId: 'cloudflare',
+      endpoint: endpointFor(accountId),
+      apiKey: token,
+      model: params.model,
+      body: buildOpenAIChatBody(params),
+      ...forwardCallOpts(params),
+    });
   },
-  // No `callStream` — Cloudflare's `/ai/run/` endpoint doesn't expose SSE
-  // streaming on every model. Skip streaming dispatch; `dispatchVendorStream`
-  // will record `skippedNoStream` and walk past Cloudflare entries when the
-  // caller asked for `stream: true`.
+  // No `callStream` — streaming dispatch skips Cloudflare (records `skippedNoStream`);
+  // the cloud coding loop is non-streaming, so Cloudflare is reached on the `call` path.
 };

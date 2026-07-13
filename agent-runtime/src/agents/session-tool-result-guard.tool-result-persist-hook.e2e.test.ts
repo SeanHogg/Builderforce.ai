@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import { SessionManager } from "@mariozechner/pi-coding-agent";
+import type { AgentMessage } from "../builderforce/model/agent-types.js";
+import { SessionManager } from "../builderforce/agent-loop/index.js";
 import { describe, expect, it, afterEach } from "vitest";
 import {
   initializeGlobalHookRunner,

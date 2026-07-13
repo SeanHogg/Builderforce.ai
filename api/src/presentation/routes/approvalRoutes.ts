@@ -10,15 +10,35 @@
  * GET    /api/approvals/escalate  Expire timed-out pending approvals + re-notify (internal/cron)
  */
 import { Hono } from 'hono';
-import { eq, and, desc, lt, or } from 'drizzle-orm';
+import { eq, and, desc, lt, getTableColumns } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { approvals, agentHosts, tenantMembers, users } from '../../infrastructure/database/schema';
-import { verifySecret } from '../../infrastructure/auth/HashService';
+import { approvals, executions, tasks } from '../../infrastructure/database/schema';
+import { verifyAgentHostApiKey } from '../../infrastructure/auth/agentHostAuth';
 import { checkAutoApprovalRules } from './approvalRuleRoutes';
 import { normalizeRequestKind, isAnswerableKind } from '../../domain/approval/requestKind';
-import type { HonoEnv } from '../../env';
+import { sendSlackNotification, notifyApprovalRequested } from '../../application/approval/approvalNotifier';
+import { resumePausedExecution } from '../../application/runtime/executionResume';
+import { dispatchCloudRunForTask, parseApprovalReplay } from './runtimeRoutes';
+import { TicketAuditService } from '../../application/audit/ticketAuditService';
+import { TicketParticipantsService } from '../../application/kanban/ticketParticipants';
+import { resolveMemberDisplayName } from '../../application/kanban/roleCapability';
+import { recordActivity, resolveHumanActor } from '../../application/activity/activityLog';
+import type { RuntimeService } from '../../application/runtime/RuntimeService';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
+
+/** The role a `task.execution` approval was created for (set on the metadata when
+ *  the gated run is role-attributed), or null. Drives the §5.8 approvals→sign-off bridge. */
+function parseApprovalRoleKey(metadata: string | null): string | null {
+  if (!metadata) return null;
+  try {
+    const m = JSON.parse(metadata) as { roleKey?: unknown };
+    return typeof m.roleKey === 'string' && m.roleKey.trim() ? m.roleKey.trim() : null;
+  } catch {
+    return null;
+  }
+}
 
 type ApprovalHonoEnv = HonoEnv & {
   Bindings: HonoEnv['Bindings'] & {
@@ -26,68 +46,14 @@ type ApprovalHonoEnv = HonoEnv & {
   };
 };
 
-async function verifyAgentHostApiKey(db: Db, id: number, key?: string | null): Promise<{ id: number; tenantId: number } | null> {
-  if (!key) return null;
-  const [agentHost] = await db
-    .select({ id: agentHosts.id, tenantId: agentHosts.tenantId, apiKeyHash: agentHosts.apiKeyHash })
-    .from(agentHosts)
-    .where(eq(agentHosts.id, id));
-  if (!agentHost) return null;
-  const valid = await verifySecret(key, agentHost.apiKeyHash);
-  return valid ? agentHost : null;
-}
-
-// ---------------------------------------------------------------------------
-// Notification helpers
-// ---------------------------------------------------------------------------
-
-async function sendSlackNotification(webhookUrl: string, text: string): Promise<void> {
-  await fetch(webhookUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
-  }).catch(() => { /* best-effort */ });
-}
-
-async function sendEmailNotification(
-  apiKey: string,
-  from: string,
-  to: string[],
-  subject: string,
-  html: string,
-): Promise<void> {
-  await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({ from, to, subject, html }),
-  }).catch(() => { /* best-effort */ });
-}
-
-/** Collect manager email addresses for the tenant to use as notification recipients. */
-async function getManagerEmails(db: Db, tenantId: number): Promise<string[]> {
-  const rows = await db
-    .select({ email: users.email })
-    .from(tenantMembers)
-    .innerJoin(users, eq(tenantMembers.userId, users.id))
-    .where(and(
-      eq(tenantMembers.tenantId, tenantId),
-      eq(tenantMembers.isActive, true),
-      or(
-        eq(tenantMembers.role, 'manager'),
-        eq(tenantMembers.role, 'owner'),
-      ),
-    ));
-  return rows.map((r) => r.email);
-}
+// Slack/email fan-out + manager-email lookup live in the shared approvalNotifier
+// so the cloud `ask_human` path notifies identically — see imports above.
 
 // ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
 
-export function createApprovalRoutes(db: Db): Hono<ApprovalHonoEnv> {
+export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Hono<ApprovalHonoEnv> {
   const router = new Hono<ApprovalHonoEnv>();
 
   // ── GET /api/approvals/escalate ─────────────────────────────────────────
@@ -224,28 +190,11 @@ export function createApprovalRoutes(db: Db): Hono<ApprovalHonoEnv> {
       })).catch(() => { /* best-effort */ });
     }
 
-    // Slack notification for new pending approvals (skip if auto-approved)
-    if (!autoApproved && env.SLACK_APPROVAL_WEBHOOK_URL) {
-      await sendSlackNotification(
-        env.SLACK_APPROVAL_WEBHOOK_URL,
-        `:bell: *New approval request* (${body.actionType})\n${body.description}\n` +
-        `Approve or reject at: ${env.APP_URL ?? 'https://builderforce.ai'}/approvals/${approvalId}`,
-      );
-    }
-
-    // Email notification for new pending approvals
-    if (!autoApproved && env.RESEND_API_KEY && env.NOTIFICATION_EMAIL_FROM) {
-      const emails = await getManagerEmails(db, tenantId);
-      if (emails.length > 0) {
-        const subject = `[Builderforce] Approval required: ${body.actionType}`;
-        const html = `<p>A new approval request requires your attention.</p>
-<ul>
-  <li><strong>Action:</strong> ${body.actionType}</li>
-  <li><strong>Description:</strong> ${body.description}</li>
-</ul>
-<p><a href="${env.APP_URL ?? 'https://builderforce.ai'}/approvals/${approvalId}">Review approval</a></p>`;
-        await sendEmailNotification(env.RESEND_API_KEY, env.NOTIFICATION_EMAIL_FROM, emails, subject, html);
-      }
+    // Slack + email fan-out for new pending requests (skip if auto-approved).
+    if (!autoApproved) {
+      await notifyApprovalRequested(env, db, {
+        tenantId, approvalId, kind, actionType: body.actionType, description: body.description,
+      });
     }
 
     return c.json({ approvalId, status }, 201);
@@ -254,20 +203,32 @@ export function createApprovalRoutes(db: Db): Hono<ApprovalHonoEnv> {
   // All read/update routes require tenant JWT
   router.use('*', authMiddleware);
 
-  // GET /api/approvals?status=&agentHostId=
+  // GET /api/approvals?status=&agentHostId=&projectId=
+  // Each row is enriched with `taskId` and `projectId` (via execution → task) so
+  // callers can show the work item that caused the request and scope/group the
+  // queue by project without a second round-trip; null when the
+  // approval isn't tied to a task (e.g. a self-hosted host gate). An explicit
+  // `?projectId=` narrows server-side.
   router.get('/', async (c) => {
     const tenantId     = c.get('tenantId') as number;
     const statusFilter = c.req.query('status');
     const agentHostFilter   = c.req.query('agentHostId') ? Number(c.req.query('agentHostId')) : null;
+    const projectFilterRaw  = c.req.query('projectId');
+    const projectFilter     = projectFilterRaw && Number.isInteger(Number(projectFilterRaw))
+      ? Number(projectFilterRaw)
+      : null;
 
     let rows = await db
-      .select()
+      .select({ ...getTableColumns(approvals), taskId: tasks.id, projectId: tasks.projectId })
       .from(approvals)
+      .leftJoin(executions, eq(approvals.executionId, executions.id))
+      .leftJoin(tasks, eq(executions.taskId, tasks.id))
       .where(eq(approvals.tenantId, tenantId))
       .orderBy(desc(approvals.createdAt));
 
     if (statusFilter) rows = rows.filter((r) => r.status === statusFilter);
     if (agentHostFilter != null) rows = rows.filter((r) => r.agentHostId === agentHostFilter);
+    if (projectFilter != null) rows = rows.filter((r) => r.projectId === projectFilter);
 
     return c.json({ approvals: rows });
   });
@@ -329,6 +290,81 @@ export function createApprovalRoutes(db: Db): Hono<ApprovalHonoEnv> {
       })
       .where(and(eq(approvals.id, id), eq(approvals.tenantId, tenantId)));
 
+    // Resume a paused CLOUD run: a cloud agent's question carries the execution it
+    // paused (no agent_host_id). Deliver the answer the same way a steer is — as a
+    // pending user turn the loop drains on its next tick — and wake the durable run.
+    // (The on-prem relay branch below covers self-hosted agents.)
+    if (existing.executionId && responseText) {
+      await resumePausedExecution(env, db, {
+        executionId: existing.executionId,
+        tenantId,
+        answer: responseText,
+      });
+    }
+
+    // Approving a `task.execution` gate must actually START the run — approval only
+    // unlocks the gate, so without this the task would sit idle until a human went
+    // back to the ticket and clicked Run again. Replay the original submit (stored
+    // on the approval) AS the same agent + model. dispatchCloudRunForTask calls
+    // runtimeService.submit directly (no gate), so this can't loop. The LLM loop
+    // runs in waitUntil; we await setup so the execution exists before responding.
+    let startedExecutionId: number | null = null;
+    if (body.status === 'approved' && existing.actionType === 'task.execution') {
+      const replay = parseApprovalReplay(existing.metadata);
+      if (replay) {
+        startedExecutionId = await dispatchCloudRunForTask(
+          env as Env,
+          db,
+          runtimeService,
+          (p) => c.executionCtx.waitUntil(p),
+          {
+            taskId: replay.taskId,
+            tenantId,
+            payload: replay.payload,
+            agentHostId: replay.agentHostId,
+            submittedBy: existing.requestedBy ?? userId,
+          },
+        ).catch(() => null);
+      }
+    }
+
+    // §5.8 — Approvals ↔ sign-offs bridge: a human DECIDING a role-attributed execution
+    // gate records that role's sign-off on the accountability ledger, so a human approval
+    // satisfies the role/review requirement (and clears the audit) exactly like an agent
+    // reviewer's sign-off. Only when the approval carries an explicit roleKey (set at
+    // creation for a role-attributed run) — never inferred, so it can't forge a record.
+    if (body.status === 'approved' || body.status === 'rejected') {
+      const roleKey = parseApprovalRoleKey(existing.metadata);
+      const bridgeTaskId = parseApprovalReplay(existing.metadata)?.taskId;
+      if (roleKey && bridgeTaskId != null) {
+        try {
+          const auditSvc = new TicketAuditService(db);
+          const memberName = await resolveMemberDisplayName(db, tenantId, 'human', userId);
+          await auditSvc.recordSignoff(env, tenantId, {
+            taskId: bridgeTaskId,
+            roleKey,
+            verdict: body.status === 'approved' ? 'approved' : 'changes_requested',
+            memberKind: 'human',
+            memberRef: userId,
+            memberName,
+            summary: body.reviewNote ?? (body.status === 'approved' ? 'Approved via human gate' : 'Changes requested via human gate'),
+            contribution: existing.executionId ? { executionId: existing.executionId } : undefined,
+          });
+          const participants = new TicketParticipantsService(db);
+          await participants.syncStates(env, tenantId, bridgeTaskId).catch(() => {});
+          await participants.invalidate(env, bridgeTaskId).catch(() => {});
+          await recordActivity(env, db, {
+            tenantId, projectId: null,
+            actor: await resolveHumanActor(env, db, tenantId, userId),
+            verb: body.status === 'approved' ? 'ticket.role.completed' : 'ticket.signed_off',
+            targetType: 'task', targetId: String(bridgeTaskId), targetLabel: `#${bridgeTaskId}`,
+            summary: `${roleKey} ${body.status === 'approved' ? 'approved' : 'changes requested'} via human approval`.slice(0, 300),
+            metadata: { roleKey, via: 'approval', verdict: body.status },
+          }).catch(() => {});
+        } catch { /* best-effort bridge — never block the approval resolve */ }
+      }
+    }
+
     // Notify the agentHost about the decision via the relay so the blocked gate resumes.
     if (existing.agentHostId && env.AGENT_HOST_RELAY) {
       const stub = env.AGENT_HOST_RELAY.get(env.AGENT_HOST_RELAY.idFromName(String(existing.agentHostId)));
@@ -360,7 +396,9 @@ export function createApprovalRoutes(db: Db): Hono<ApprovalHonoEnv> {
     }
 
     const [row] = await db.select().from(approvals).where(and(eq(approvals.id, id), eq(approvals.tenantId, tenantId)));
-    return c.json(row);
+    // startedExecutionId is set when approving a task.execution gate auto-started a
+    // run — lets the caller (ticket panel / board) follow the new execution.
+    return c.json({ ...row, startedExecutionId });
   });
 
   return router;

@@ -11,6 +11,7 @@ vi.mock('@/lib/builderforceApi', () => {
       update: vi.fn().mockResolvedValue({}),
       create: vi.fn().mockResolvedValue({}),
       delete: vi.fn().mockResolvedValue(undefined),
+      assignees: vi.fn().mockResolvedValue([]),
     },
     agentHosts: { list: vi.fn().mockResolvedValue([]) },
     runtimeApi: {
@@ -22,6 +23,9 @@ vi.mock('@/lib/builderforceApi', () => {
       list: vi.fn().mockResolvedValue([]),
       swimlanes: { list: vi.fn().mockResolvedValue([]) },
       agents: { list: vi.fn().mockResolvedValue([]) },
+    },
+    workflowDefinitions: {
+      runTargets: vi.fn().mockResolvedValue({ hosts: [], cloudAgents: [] }),
     },
   };
 });

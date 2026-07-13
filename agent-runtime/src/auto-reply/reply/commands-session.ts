@@ -1,4 +1,4 @@
-import { abortEmbeddedPiRun } from "../../agents/pi-embedded.js";
+import { abortEmbeddedRun } from "../../agents/embedded.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import { updateSessionStore } from "../../config/sessions.js";
 import { logVerbose } from "../../globals.js";
@@ -48,7 +48,7 @@ async function applyAbortTarget(params: {
 }) {
   const { abortTarget } = params;
   if (abortTarget.sessionId) {
-    abortEmbeddedPiRun(abortTarget.sessionId);
+    abortEmbeddedRun(abortTarget.sessionId);
   }
   if (abortTarget.entry && params.sessionStore && abortTarget.key) {
     abortTarget.entry.abortedLastRun = true;
@@ -338,7 +338,7 @@ export const handleStopCommand: CommandHandler = async (params, allowTextCommand
   );
   await triggerInternalHook(hookEvent);
 
-  const { stopped } = stopSubagentsForRequester({
+  const { stopped } = await stopSubagentsForRequester({
     cfg: params.cfg,
     requesterSessionKey: abortTarget.key ?? params.sessionKey,
   });

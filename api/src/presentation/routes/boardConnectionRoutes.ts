@@ -17,17 +17,22 @@ import { Hono } from 'hono';
 import { and, desc, eq } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { boardConnections, externalTicketLinks, projects } from '../../infrastructure/database/schema';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { SyncEngine, type StoredConnection } from '../../application/boardsync/SyncEngine';
 import { createDrizzleStore, loadConnectionCredentials } from '../../application/boardsync/drizzleStore';
 import { createBoardProvider } from '../../application/boardsync/providers';
-
-const VALID_PROVIDERS = ['github', 'jira'];
+import { isItsmProvider, syncItsmConnection } from '../../application/boardsync/itsmIngest';
+import { BOARD_PROVIDERS, BOARD_PROVIDER_IDS } from '../../application/boardsync/providerCatalog';
 
 export function createBoardConnectionRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
+
+  // GET /api/board-connections/providers — the connectable-board catalog.
+  // Static in-process constant (no DB / no external IO), so no cache layer is
+  // needed; the frontend renders its provider picker from this single source.
+  router.get('/providers', (c) => c.json({ providers: BOARD_PROVIDERS }));
 
   // POST /api/board-connections
   router.post('/', async (c) => {
@@ -46,8 +51,8 @@ export function createBoardConnectionRoutes(db: Db): Hono<HonoEnv> {
     if (!body.projectId || !body.provider) {
       return c.json({ error: 'projectId and provider are required' }, 400);
     }
-    if (!VALID_PROVIDERS.includes(body.provider)) {
-      return c.json({ error: `provider must be one of: ${VALID_PROVIDERS.join(', ')}` }, 400);
+    if (!BOARD_PROVIDER_IDS.includes(body.provider)) {
+      return c.json({ error: `provider must be one of: ${BOARD_PROVIDER_IDS.join(', ')}` }, 400);
     }
 
     // Ensure the project belongs to the tenant.
@@ -172,6 +177,23 @@ export function createBoardConnectionRoutes(db: Db): Hono<HonoEnv> {
     if (!loaded) return c.json({ error: 'Failed to load connection credentials' }, 400);
 
     const store = createDrizzleStore(db);
+
+    // ITSM connections (Freshservice/ServiceNow) feed support_tickets (the Quality
+    // lens), NOT the task board — divert manual sync the same way the sweep does.
+    if (isItsmProvider(conn.provider)) {
+      const provider = createBoardProvider(
+        conn.provider,
+        { credentials: loaded.credentials, baseUrl: loaded.baseUrl, externalBoardId: conn.externalBoardId },
+        fetch,
+      );
+      try {
+        const result = await syncItsmConnection(db, c.env as Env, conn, provider, store);
+        return c.json({ connectionId: id, ...result, target: 'support_tickets' });
+      } catch (err) {
+        return c.json({ error: err instanceof Error ? err.message : 'sync failed' }, 502);
+      }
+    }
+
     const engine = new SyncEngine(store, (sc: StoredConnection) =>
       createBoardProvider(
         sc.provider,

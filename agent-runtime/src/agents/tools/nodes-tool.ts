@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import type { AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentToolResult } from "../../builderforce/model/agent-types.js";
 import { Type } from "@sinclair/typebox";
 import {
   type CameraFacing,
@@ -93,23 +93,23 @@ const NodesToolSchema = Type.Object({
   invokeParamsJson: Type.Optional(Type.String()),
 });
 
-export function createNodesTool(options?: {
+export interface NodesDeps {
   agentSessionKey?: string;
   config?: BuilderForceAgentsConfig;
-}): AnyAgentTool {
+}
+
+/** Shared implementation — pi wrapper + native ToolDefinition both delegate here (DRY). */
+export async function runNodes(
+  options: NodesDeps | undefined,
+  args: Record<string, unknown>,
+): Promise<AgentToolResult<unknown>> {
   const sessionKey = options?.agentSessionKey?.trim() || undefined;
   const agentId = resolveSessionAgentId({
     sessionKey: options?.agentSessionKey,
     config: options?.config,
   });
   const imageSanitization = resolveImageSanitizationLimits(options?.config);
-  return {
-    label: "Nodes",
-    name: "nodes",
-    description:
-      "Discover and control paired nodes (status/describe/pairing/notify/camera/screen/location/run/invoke).",
-    parameters: NodesToolSchema,
-    execute: async (_toolCallId, args) => {
+  {
       const params = args as Record<string, unknown>;
       const action = readStringParam(params, "action", { required: true });
       const gatewayOpts = readGatewayCallOptions(params);
@@ -550,6 +550,16 @@ export function createNodesTool(options?: {
           { cause: err },
         );
       }
-    },
+  }
+}
+
+export function createNodesTool(options?: NodesDeps): AnyAgentTool {
+  return {
+    label: "Nodes",
+    name: "nodes",
+    description:
+      "Discover and control paired nodes (status/describe/pairing/notify/camera/screen/location/run/invoke).",
+    parameters: NodesToolSchema,
+    execute: async (_toolCallId, args) => runNodes(options, args as Record<string, unknown>),
   };
 }

@@ -11,13 +11,18 @@
  */
 import { Hono } from 'hono';
 import { and, desc, eq, gt, ilike, inArray, isNull, sql } from 'drizzle-orm';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
-import { buildDatabase, type Db } from '../../infrastructure/database/connection';
+import { buildDatabase, buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
+import { writeAdminAudit, type AdminAuditOpts } from '../../infrastructure/audit/adminAudit';
+import { parseJsonArray } from '../../domain/shared/json';
+import { slugify } from '../../domain/shared/strings';
+import { countActiveSessionsAndTokens } from '../../application/security/sessionCounts';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { computePlatformRollup } from '../../application/admin/platformRollup';
 import {
   authTokens,
   authUserSessions,
-  legalDocuments,
   privacyRequests,
   newsletterEvents,
   newsletterSubscribers,
@@ -53,13 +58,15 @@ import {
   adminPoolProxy,
   FREE_MODEL_POOL,
   PRO_PAID_MODEL_POOL,
+  PREMIUM_FALLBACK_MODELS,
   type ProductName,
   type ProxyEnv,
 } from '../../application/llm/LlmProxyService';
 import { getAllVendorIds, vendorForModel, type VendorId } from '../../application/llm/vendors';
 import { llmFailoverLog, llmHealthProbes, llmTraces } from '../../infrastructure/database/schema';
-import { probeVendor, type VendorProbeResult } from '../../application/llm/vendorHealthProbe';
+import { probeVendor, tryAcquireProbeSlot, type VendorProbeResult } from '../../application/llm/vendorHealthProbe';
 import { invalidateCapabilityCache } from '../../application/artifact/capabilityContext';
+import { invalidateJwtMembershipCache } from '../../infrastructure/auth/keyResolutionCache';
 import {
   mintTenantApiKey,
   listTenantApiKeys,
@@ -68,6 +75,14 @@ import {
   updateTenantApiKey,
 } from '../../application/llm/tenantApiKeyService';
 import { normalizeOrigins } from './tenantApiKeyRoutes';
+import {
+  amendActiveLegalDoc,
+  enhanceLegalContent,
+  getLegalCurrent,
+  getLegalHistory,
+  LegalDocError,
+  publishLegalDoc,
+} from '../../application/legal/legalDocsService';
 import {
   buildOtpAuthUrl,
   decryptSecretFromStorage,
@@ -80,6 +95,8 @@ import {
 } from '../../infrastructure/auth/MfaService';
 import { magicLinkTokens } from '../../infrastructure/database/schema';
 import { sendAdminPasswordResetEmail } from '../../infrastructure/email/EmailService';
+import { runRetentionPurge } from '../../application/maintenance/retentionPurge';
+import { API_VERSION } from '../../version';
 
 /**
  * Coerce a `platform_modules.permissions` value into `string[]`.
@@ -92,15 +109,11 @@ import { sendAdminPasswordResetEmail } from '../../infrastructure/email/EmailSer
  * and null inputs uniformly so every read site stays one-liner safe.
  */
 function coercePermissions(value: unknown): string[] {
-  if (Array.isArray(value)) return value as string[];
-  if (typeof value === 'string' && value.length > 0) {
-    try { return JSON.parse(value) as string[]; } catch { return []; }
-  }
-  return [];
+  return parseJsonArray<string>(value);
 }
 
 /** Persist one health-probe run. Shared by the manual route and the cron handler.
- *  `modelsJson` column is `text` per schema convention — store as a JSON string. */
+ *  `modelsJson` is a JSONB column ([1449]) — pass the JS array; Drizzle encodes it. */
 export async function persistProbe(
   db: Db,
   result: VendorProbeResult,
@@ -113,20 +126,16 @@ export async function persistProbe(
     okCount:      result.okCount,
     failedCount:  result.failedCount,
     latencyMs:    result.latencyMs,
-    modelsJson:   JSON.stringify(result.models),
+    modelsJson:   result.models,
     trigger,
   });
 }
 
-/** Schema-drift coercion mirroring `coercePermissions` above: the column is
- *  declared `text` in Drizzle but is JSONB in the database, so the pg driver
- *  may return either a string or a pre-decoded array. */
+/** Defensive coercion for `models_json` (now `jsonb` [1449]): the pg driver
+ *  decodes JSONB to an array, but legacy rows written while the column was
+ *  mis-handled as text may still come back as a JSON string. Accept both. */
 function coerceProbeModels(value: unknown): unknown[] {
-  if (Array.isArray(value)) return value;
-  if (typeof value === 'string' && value.length > 0) {
-    try { return JSON.parse(value) as unknown[]; } catch { return []; }
-  }
-  return [];
+  return parseJsonArray(value);
 }
 
 /** Status entry for one model in the admin LLM panel. Delegates to the proxy
@@ -141,14 +150,6 @@ async function poolStatus(
   return adminPoolProxy(env, pool, productName).status();
 }
 
-type LegalDocResponse = {
-  documentType: 'terms' | 'privacy';
-  version: string;
-  title: string;
-  content: string;
-  publishedAt: string;
-};
-
 type PrivacyRequestStatus = 'pending' | 'completed' | 'closed';
 type PrivacyRequestType = 'ccpa' | 'gdpr';
 
@@ -158,50 +159,6 @@ function isPrivacyRequestStatus(value: string): value is PrivacyRequestStatus {
 
 function isPrivacyRequestType(value: string): value is PrivacyRequestType {
   return value === 'ccpa' || value === 'gdpr';
-}
-
-const DEFAULT_LEGAL: Record<'terms' | 'privacy', Omit<LegalDocResponse, 'documentType'>> = {
-  terms: {
-    version: '1.0.0',
-    title: 'Terms of Use',
-    content: 'By using Builderforce.ai, you agree to these Terms of Use. Continued use of the service indicates acceptance of current terms.',
-    publishedAt: new Date(0).toISOString(),
-  },
-  privacy: {
-    version: '1.0.0',
-    title: 'Privacy Policy',
-    content: 'Builderforce.ai processes account, usage, and operational metadata to provide and secure the service.',
-    publishedAt: new Date(0).toISOString(),
-  },
-};
-
-async function getActiveLegalDoc(db: Db, documentType: 'terms' | 'privacy'): Promise<LegalDocResponse> {
-  const [doc] = await db
-    .select({
-      version: legalDocuments.version,
-      title: legalDocuments.title,
-      content: legalDocuments.content,
-      publishedAt: legalDocuments.publishedAt,
-    })
-    .from(legalDocuments)
-    .where(and(eq(legalDocuments.documentType, documentType), eq(legalDocuments.isActive, true)))
-    .orderBy(desc(legalDocuments.publishedAt))
-    .limit(1);
-
-  if (!doc) {
-    return {
-      documentType,
-      ...DEFAULT_LEGAL[documentType],
-    };
-  }
-
-  return {
-    documentType,
-    version: doc.version,
-    title: doc.title,
-    content: doc.content,
-    publishedAt: doc.publishedAt ? doc.publishedAt.toISOString() : new Date().toISOString(),
-  };
 }
 
 function parseTenantId(raw: string | undefined): number | null {
@@ -217,12 +174,7 @@ function parsePositiveInt(raw: string | undefined, fallback: number): number {
 }
 
 function slugifyName(input: string): string {
-  return input
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 180);
+  return slugify(input, { maxLen: 180 });
 }
 
 async function assertTenantMember(db: Db, tenantId: number, userId: string): Promise<boolean> {
@@ -293,6 +245,45 @@ async function replaceRecoveryCodes(db: Db, userId: string, codes: string[]) {
   await db.insert(userMfaRecoveryCodes).values(hashed);
 }
 
+type DatabaseTarget = 'primary' | 'transactional';
+
+async function inspectDatabase(db: Db, name: DatabaseTarget) {
+  const started = Date.now();
+  try {
+    const [database] = (await db.execute(sql`
+      SELECT current_database() AS "databaseName", pg_database_size(current_database())::bigint AS "totalBytes"
+    `)).rows as Array<{ databaseName: string; totalBytes: number | string }>;
+    const tables = (await db.execute(sql`
+      SELECT relname AS name,
+        pg_total_relation_size(relid)::bigint AS "totalBytes",
+        COALESCE(n_live_tup, 0)::bigint AS "estimatedRows",
+        COALESCE(n_tup_ins, 0)::bigint AS "insertsSinceStatsReset",
+        COALESCE(n_tup_upd, 0)::bigint AS "updatesSinceStatsReset",
+        COALESCE(n_tup_del, 0)::bigint AS "deletesSinceStatsReset",
+        last_autovacuum AS "lastAutovacuum",
+        last_analyze AS "lastAnalyze"
+      FROM pg_stat_user_tables
+      ORDER BY pg_total_relation_size(relid) DESC
+      LIMIT 100
+    `)).rows;
+    return {
+      name, ok: true, latencyMs: Date.now() - started,
+      databaseName: database?.databaseName ?? null,
+      totalBytes: Number(database?.totalBytes ?? 0),
+      tables,
+    };
+  } catch (error) {
+    return {
+      name, ok: false, latencyMs: Date.now() - started, databaseName: null,
+      totalBytes: 0, tables: [], error: error instanceof Error ? error.message : 'Database inspection failed',
+    };
+  }
+}
+
+function isSafeRelationName(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-z_][a-z0-9_]{0,62}$/.test(value);
+}
+
 export function createAdminRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
@@ -304,11 +295,18 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // -------------------------------------------------------------------------
   router.get('/legal/current', async (c) => {
     const db = buildDatabase(c.env);
-    const [terms, privacy] = await Promise.all([
-      getActiveLegalDoc(db, 'terms'),
-      getActiveLegalDoc(db, 'privacy'),
-    ]);
-    return c.json({ terms, privacy });
+    return c.json(await getLegalCurrent(db));
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/legal/history[?docType=terms|privacy] — full audit trail of
+  // every publish + amend, newest first.
+  // -------------------------------------------------------------------------
+  router.get('/legal/history', async (c) => {
+    const db = buildDatabase(c.env);
+    const docTypeParam = c.req.query('docType');
+    const docType = docTypeParam === 'terms' || docTypeParam === 'privacy' ? docTypeParam : undefined;
+    return c.json({ versions: await getLegalHistory(db, docType) });
   });
 
   // -------------------------------------------------------------------------
@@ -321,47 +319,14 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (docType !== 'terms' && docType !== 'privacy') {
       return c.json({ error: 'docType must be "terms" or "privacy"' }, 400);
     }
-    const docLabel = docType === 'terms' ? 'Terms of Use' : 'Privacy Policy';
     const body = await c.req.json<{ version: string; title?: string; content: string }>();
-
-    const version = body.version?.trim();
-    const content = body.content?.trim();
-    const title = body.title?.trim() || docLabel;
-
-    if (!version) return c.json({ error: 'version is required' }, 400);
-    if (!content) return c.json({ error: 'content is required' }, 400);
-
-    const [existing] = await db
-      .select({ id: legalDocuments.id })
-      .from(legalDocuments)
-      .where(
-        and(
-          eq(legalDocuments.documentType, docType),
-          eq(legalDocuments.version, version),
-        ),
-      )
-      .limit(1);
-
-    if (existing) {
-      return c.json({ error: `${docLabel} version ${version} already exists` }, 409);
+    try {
+      const document = await publishLegalDoc(db, docType, body, actorUserId);
+      return c.json({ document }, 201);
+    } catch (e) {
+      if (e instanceof LegalDocError) return c.json({ error: e.message }, e.status as 400);
+      throw e;
     }
-
-    await db
-      .update(legalDocuments)
-      .set({ isActive: false, updatedAt: sql`now()` })
-      .where(and(eq(legalDocuments.documentType, docType), eq(legalDocuments.isActive, true)));
-
-    await db.insert(legalDocuments).values({
-      documentType: docType,
-      version,
-      title,
-      content,
-      isActive: true,
-      publishedBy: actorUserId,
-    });
-
-    const document = await getActiveLegalDoc(db, docType);
-    return c.json({ document }, 201);
   });
 
   // -------------------------------------------------------------------------
@@ -374,44 +339,45 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (docType !== 'terms' && docType !== 'privacy') {
       return c.json({ error: 'docType must be "terms" or "privacy"' }, 400);
     }
-    const docLabel = docType === 'terms' ? 'Terms of Use' : 'Privacy Policy';
+    const actorUserId = c.get('userId') as string;
     const body = await c.req.json<{ version?: string; title?: string; content: string }>();
-    const version = body.version?.trim();
-    const content = body.content?.trim();
-    const title = body.title?.trim() || docLabel;
-
-    if (!content) return c.json({ error: 'content is required' }, 400);
-
-    const [active] = await db
-      .select({ id: legalDocuments.id, version: legalDocuments.version })
-      .from(legalDocuments)
-      .where(and(eq(legalDocuments.documentType, docType), eq(legalDocuments.isActive, true)))
-      .orderBy(desc(legalDocuments.publishedAt))
-      .limit(1);
-
-    if (!active) {
-      return c.json({ error: `No active ${docLabel} to amend` }, 404);
+    try {
+      const document = await amendActiveLegalDoc(db, docType, body, actorUserId);
+      return c.json({ document });
+    } catch (e) {
+      if (e instanceof LegalDocError) return c.json({ error: e.message }, e.status as 400);
+      throw e;
     }
+  });
 
-    // If the version is being changed, make sure it doesn't collide with another row.
-    if (version && version !== active.version) {
-      const [clash] = await db
-        .select({ id: legalDocuments.id })
-        .from(legalDocuments)
-        .where(and(eq(legalDocuments.documentType, docType), eq(legalDocuments.version, version)))
-        .limit(1);
-      if (clash) {
-        return c.json({ error: `${docLabel} version ${version} already exists` }, 409);
-      }
+  // -------------------------------------------------------------------------
+  // POST /api/admin/legal/:docType/enhance — AI-draft or improve the document.
+  // Returns { content } (clean Markdown); the editor previews it before saving,
+  // so nothing is persisted here. Metered through the shared LLM gateway.
+  // -------------------------------------------------------------------------
+  router.post('/legal/:docType/enhance', async (c) => {
+    const actorUserId = c.get('userId') as string;
+    const docType = c.req.param('docType');
+    if (docType !== 'terms' && docType !== 'privacy') {
+      return c.json({ error: 'docType must be "terms" or "privacy"' }, 400);
     }
-
-    await db
-      .update(legalDocuments)
-      .set({ title, content, version: version || active.version, updatedAt: sql`now()` })
-      .where(eq(legalDocuments.id, active.id));
-
-    const document = await getActiveLegalDoc(db, docType);
-    return c.json({ document });
+    const body = await c.req.json<{ content?: string; instruction?: string; title?: string }>();
+    try {
+      const content = await enhanceLegalContent(c.env, c.executionCtx, {
+        docType,
+        content: body.content ?? '',
+        instruction: body.instruction,
+        title: body.title,
+        userId: actorUserId,
+        requestIp: c.req.header('cf-connecting-ip') ?? null,
+        origin: c.req.header('Origin') ?? null,
+        userAgent: c.req.header('User-Agent') ?? null,
+      });
+      return c.json({ content });
+    } catch (e) {
+      if (e instanceof LegalDocError) return c.json({ error: e.message }, e.status as 400);
+      throw e;
+    }
   });
 
   // -------------------------------------------------------------------------
@@ -812,33 +778,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
     const userIds = memberRows.map((row) => row.userId);
 
-    const sessionCounts = userIds.length
-      ? await db
-        .select({ userId: authUserSessions.userId, count: sql<number>`COUNT(*)` })
-        .from(authUserSessions)
-        .where(and(inArray(authUserSessions.userId, userIds), eq(authUserSessions.isActive, true)))
-        .groupBy(authUserSessions.userId)
-      : [];
-
-    const tokenCounts = userIds.length
-      ? await db
-        .select({ userId: authTokens.userId, count: sql<number>`COUNT(*)` })
-        .from(authTokens)
-        .where(
-          and(
-            inArray(authTokens.userId, userIds),
-            isNull(authTokens.revokedAt),
-            gt(authTokens.expiresAt, new Date()),
-          ),
-        )
-        .groupBy(authTokens.userId)
-      : [];
-
-    const sessionsByUser = new Map<string, number>();
-    for (const row of sessionCounts) sessionsByUser.set(row.userId, Number(row.count));
-
-    const tokensByUser = new Map<string, number>();
-    for (const row of tokenCounts) tokensByUser.set(row.userId, Number(row.count));
+    const { sessionsByUser, tokensByUser } = await countActiveSessionsAndTokens(db, userIds);
 
     return c.json({
       users: memberRows.map((row) => ({
@@ -1263,6 +1203,8 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         t.external_customer_id AS "externalCustomerId",
         t.external_subscription_id AS "externalSubscriptionId",
         t.token_daily_limit_override AS "tokenDailyLimitOverride",
+        t.paid_overflow_daily_cap AS "paidOverflowDailyCap",
+        t.image_credits_daily_limit AS "imageCreditsDailyLimit",
         t.premium_override AS "premiumOverride",
         CASE WHEN t.plan = 'pro' AND t.billing_status = 'active' THEN true ELSE false END AS "isPaid",
         CASE WHEN t.plan = 'pro' AND t.billing_status = 'active' THEN 'pro' ELSE 'free' END AS "effectivePlan",
@@ -1272,7 +1214,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       FROM tenants t
       LEFT JOIN tenant_members tm ON tm.tenant_id = t.id AND tm.is_active = true
       LEFT JOIN agent_hosts ci ON ci.tenant_id = t.id
-      GROUP BY t.id, t.name, t.slug, t.status, t.plan, t.billing_status, t.billing_email, t.billing_updated_at, t.external_customer_id, t.external_subscription_id, t.token_daily_limit_override, t.premium_override, t.created_at
+      GROUP BY t.id, t.name, t.slug, t.status, t.plan, t.billing_status, t.billing_email, t.billing_updated_at, t.external_customer_id, t.external_subscription_id, t.token_daily_limit_override, t.paid_overflow_daily_cap, t.image_credits_daily_limit, t.premium_override, t.created_at
       ORDER BY t.created_at DESC
       LIMIT 500
     `);
@@ -1303,6 +1245,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const next = value === undefined ? null : value;
 
     const db = buildDatabase(c.env);
+    const [before] = await db.select({ prev: tenants.tokenDailyLimitOverride }).from(tenants).where(eq(tenants.id, tenantId));
     const [updated] = await db
       .update(tenants)
       .set({ tokenDailyLimitOverride: next, updatedAt: new Date() })
@@ -1311,7 +1254,100 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
     if (!updated) return c.json({ error: 'Tenant not found' }, 404);
 
+    // Forensic trail: who flipped a tenant's token cap, from what to what, and when.
+    await writeAudit(db, 'TOKEN_LIMIT_OVERRIDE_CHANGED', c.get('userId') as string, {
+      tenantId,
+      metadata: { from: before?.prev ?? null, to: updated.tokenDailyLimitOverride },
+      ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
+    }).catch(() => {});
+
     return c.json({ id: updated.id, tokenDailyLimitOverride: updated.tokenDailyLimitOverride });
+  });
+
+  // -------------------------------------------------------------------------
+  // PATCH /api/admin/tenants/:id/paid-overflow-cap
+  // Body: { paidOverflowDailyCap: number | null }  (value in MILLICENTS, 1/100000 USD)
+  //   null → clear override (free → $0.50/day default; pro/teams → unlimited)
+  //   -1   → unlimited (funded-overflow gate skipped)
+  //   >= 0 → use this daily $ ceiling (millicents) on funded-overflow spend
+  // The funded-overflow path = the always-on premium-fallback + reliability
+  // backstop chain that runs on Builderforce's own keys (migration 0130).
+  // -------------------------------------------------------------------------
+  router.patch('/tenants/:id/paid-overflow-cap', async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    if (!tenantId) return c.json({ error: 'Invalid tenant id' }, 400);
+
+    const body = await c.req.json<{ paidOverflowDailyCap?: number | null }>();
+    const value = body.paidOverflowDailyCap;
+    if (value !== null && value !== undefined) {
+      if (!Number.isInteger(value) || value < -1) {
+        return c.json({
+          error: 'paidOverflowDailyCap must be null, -1 (unlimited), or a non-negative integer (millicents)',
+        }, 400);
+      }
+    }
+    const next = value === undefined ? null : value;
+
+    const db = buildDatabase(c.env);
+    const [before] = await db.select({ prev: tenants.paidOverflowDailyCap }).from(tenants).where(eq(tenants.id, tenantId));
+    const [updated] = await db
+      .update(tenants)
+      .set({ paidOverflowDailyCap: next, updatedAt: new Date() })
+      .where(eq(tenants.id, tenantId))
+      .returning({ id: tenants.id, paidOverflowDailyCap: tenants.paidOverflowDailyCap });
+
+    if (!updated) return c.json({ error: 'Tenant not found' }, 404);
+
+    // Forensic trail: who changed a tenant's funded-overflow ceiling, and when.
+    await writeAudit(db, 'PAID_OVERFLOW_CAP_CHANGED', c.get('userId') as string, {
+      tenantId,
+      metadata: { from: before?.prev ?? null, to: updated.paidOverflowDailyCap },
+      ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
+    }).catch(() => {});
+
+    return c.json({ id: updated.id, paidOverflowDailyCap: updated.paidOverflowDailyCap });
+  });
+
+  // -------------------------------------------------------------------------
+  // PATCH /api/admin/tenants/:id/image-credits-limit
+  // Body: { imageCreditsDailyLimit: number | null }  (credits = returned images)
+  //   null → clear override (plan default: free 10 / pro 1000 / teams 5000)
+  //   -1   → unlimited (gate skipped)
+  //   >= 0 → explicit images/day ceiling
+  // Metered independently of the text token cap (migration 0131).
+  // -------------------------------------------------------------------------
+  router.patch('/tenants/:id/image-credits-limit', async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    if (!tenantId) return c.json({ error: 'Invalid tenant id' }, 400);
+
+    const body = await c.req.json<{ imageCreditsDailyLimit?: number | null }>();
+    const value = body.imageCreditsDailyLimit;
+    if (value !== null && value !== undefined) {
+      if (!Number.isInteger(value) || value < -1) {
+        return c.json({
+          error: 'imageCreditsDailyLimit must be null, -1 (unlimited), or a non-negative integer',
+        }, 400);
+      }
+    }
+    const next = value === undefined ? null : value;
+
+    const db = buildDatabase(c.env);
+    const [before] = await db.select({ prev: tenants.imageCreditsDailyLimit }).from(tenants).where(eq(tenants.id, tenantId));
+    const [updated] = await db
+      .update(tenants)
+      .set({ imageCreditsDailyLimit: next, updatedAt: new Date() })
+      .where(eq(tenants.id, tenantId))
+      .returning({ id: tenants.id, imageCreditsDailyLimit: tenants.imageCreditsDailyLimit });
+
+    if (!updated) return c.json({ error: 'Tenant not found' }, 404);
+
+    await writeAudit(db, 'IMAGE_CREDITS_LIMIT_CHANGED', c.get('userId') as string, {
+      tenantId,
+      metadata: { from: before?.prev ?? null, to: updated.imageCreditsDailyLimit },
+      ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
+    }).catch(() => {});
+
+    return c.json({ id: updated.id, imageCreditsDailyLimit: updated.imageCreditsDailyLimit });
   });
 
   // -------------------------------------------------------------------------
@@ -1330,6 +1366,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     }
 
     const db = buildDatabase(c.env);
+    const [before] = await db.select({ prev: tenants.premiumOverride }).from(tenants).where(eq(tenants.id, tenantId));
     const [updated] = await db
       .update(tenants)
       .set({ premiumOverride: body.premiumOverride, updatedAt: new Date() })
@@ -1337,6 +1374,13 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       .returning({ id: tenants.id, premiumOverride: tenants.premiumOverride });
 
     if (!updated) return c.json({ error: 'Tenant not found' }, 404);
+
+    // Forensic trail: who flipped a tenant to/from premium routing, and when.
+    await writeAudit(db, 'PREMIUM_OVERRIDE_CHANGED', c.get('userId') as string, {
+      tenantId,
+      metadata: { from: before?.prev ?? null, to: updated.premiumOverride },
+      ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
+    }).catch(() => {});
 
     return c.json({ id: updated.id, premiumOverride: updated.premiumOverride });
   });
@@ -1369,6 +1413,22 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // -------------------------------------------------------------------------
   // GET /api/admin/health
   // -------------------------------------------------------------------------
+  // GET /api/admin/platform-rollup?days= — platform-wide historical trends
+  // (user + workspace growth, LLM tokens/spend, error-event volume) for the
+  // superadmin Health/Usage charts. Cached on a short TTL (platform-scoped).
+  router.get('/platform-rollup', async (c) => {
+    const db = buildDatabase(c.env);
+    const raw = Number(c.req.query('days'));
+    const days = Number.isFinite(raw) && raw >= 1 && raw <= 365 ? Math.floor(raw) : 30;
+    const rollup = await getOrSetCached(
+      c.env as Env,
+      `admin:platform-rollup:d:${days}`,
+      () => computePlatformRollup(db, days),
+      { kvTtlSeconds: 120, l1TtlMs: 30_000 },
+    );
+    return c.json(rollup);
+  });
+
   router.get('/health', async (c) => {
     const db = buildDatabase(c.env);
 
@@ -1398,9 +1458,13 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     // LLM model pool — include both Free + Pro pools. Per-model availability
     // (cooldown / vendor-key / vendor-cooldown) is resolved inside the proxy
     // service so this call doesn't need to know which vendor owns each model.
-    const [freeModelPool, proModelPool] = await Promise.all([
-      poolStatus(c.env, FREE_MODEL_POOL,     'builderforceLLM'),
-      poolStatus(c.env, PRO_PAID_MODEL_POOL, 'builderforceLLMPro'),
+    // The premium-fallback tail is appended to EVERY chain (Free included) as the
+    // always-on backstop, but it isn't part of the Free/Pro pools — surface it as
+    // its own row so superadmins can see its cooldown/key-bound state too [1430].
+    const [freeModelPool, proModelPool, premiumFallbackPool] = await Promise.all([
+      poolStatus(c.env, FREE_MODEL_POOL,            'builderforceLLM'),
+      poolStatus(c.env, PRO_PAID_MODEL_POOL,        'builderforceLLMPro'),
+      poolStatus(c.env, PREMIUM_FALLBACK_MODELS,    'builderforceLLMPro'),
     ]);
 
     const modelPool = [...freeModelPool, ...proModelPool];
@@ -1414,9 +1478,88 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         models: modelPool,
         free:   freeModelPool,
         pro:    proModelPool,
+        premiumFallback: premiumFallbackPool,
       },
       timestamp:    new Date().toISOString(),
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/system-health — operational infrastructure + both Neon DBs.
+  // Table mutation counters are PostgreSQL counters since the last stats reset;
+  // they make sustained growth visible without retaining a second metrics table.
+  // -------------------------------------------------------------------------
+  router.get('/system-health', async (c) => {
+    const primary = buildDatabase(c.env);
+    const transactional = buildTransactionalDatabase(c.env);
+    const [primaryDb, transactionalDb, runtime] = await Promise.all([
+      inspectDatabase(primary, 'primary'),
+      inspectDatabase(transactional, 'transactional'),
+      primary.execute(sql`
+        SELECT
+          (SELECT COUNT(*)::int FROM agent_hosts) AS "agentHosts",
+          (SELECT COUNT(*)::int FROM agent_hosts WHERE connected_at IS NOT NULL AND last_seen_at > now() - interval '5 minutes') AS "onlineAgentHosts",
+          (SELECT COUNT(*)::int FROM executions WHERE status IN ('pending', 'running')) AS "activeExecutions",
+          (SELECT COUNT(*)::int FROM executions WHERE status = 'failed' AND updated_at > now() - interval '24 hours') AS "failedExecutions24h"
+      `).catch(() => ({ rows: [] })),
+    ]);
+    const row = (runtime.rows[0] ?? {}) as Record<string, number>;
+    return c.json({
+      timestamp: new Date().toISOString(),
+      worker: {
+        version: API_VERSION,
+        environment: c.env.ENVIRONMENT ?? 'unknown',
+        bindings: {
+          analysisRunner: Boolean(c.env.ANALYSIS_RUNNER),
+          agentContainer: Boolean(c.env.AGENT_CONTAINER),
+          qaRunnerContainer: Boolean(c.env.QA_RUNNER_CONTAINER),
+          cloudRunner: Boolean(c.env.CLOUD_RUNNER),
+          cloudflareAi: Boolean(c.env.CLOUDFLARE_AI_API_TOKEN && c.env.CLOUDFLARE_ACCOUNT_ID),
+        },
+      },
+      runtime: {
+        agentHosts: Number(row.agentHosts ?? 0),
+        onlineAgentHosts: Number(row.onlineAgentHosts ?? 0),
+        activeExecutions: Number(row.activeExecutions ?? 0),
+        failedExecutions24h: Number(row.failedExecutions24h ?? 0),
+      },
+      databases: [primaryDb, transactionalDb],
+    });
+  });
+
+  // POST /api/admin/system-health/maintenance
+  // { action: 'purge_expired' } runs only the existing retention policy.
+  // { action: 'vacuum_analyze', target, table? } is intentionally limited to
+  // normal VACUUM ANALYZE (never VACUUM FULL / arbitrary SQL).
+  router.post('/system-health/maintenance', async (c) => {
+    const body = await c.req.json().catch(() => ({})) as {
+      action?: string; target?: DatabaseTarget; table?: string;
+    };
+    const actorId = c.get('userId') as string | undefined;
+    if (body.action === 'purge_expired') {
+      await runRetentionPurge(c.env as Env);
+      await writeAdminAudit(buildDatabase(c.env), 'SYSTEM_HEALTH_PURGE_EXPIRED', actorId ?? null, {
+        metadata: { target: 'both', retentionPolicy: true }, ipAddress: c.req.header('cf-connecting-ip') ?? null,
+      });
+      return c.json({ ok: true, action: body.action });
+    }
+    if (body.action !== 'vacuum_analyze' || (body.target !== 'primary' && body.target !== 'transactional')) {
+      return c.json({ error: 'Use purge_expired or vacuum_analyze with target primary|transactional.' }, 400);
+    }
+    if (body.table != null && !isSafeRelationName(body.table)) {
+      return c.json({ error: 'Invalid table name.' }, 400);
+    }
+    const db = body.target === 'primary' ? buildDatabase(c.env) : buildTransactionalDatabase(c.env);
+    const statement = body.table ? `VACUUM (ANALYZE) "${body.table}"` : 'VACUUM (ANALYZE)';
+    try {
+      await db.execute(sql.raw(statement));
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : 'VACUUM failed' }, 500);
+    }
+    await writeAdminAudit(buildDatabase(c.env), 'SYSTEM_HEALTH_VACUUM_ANALYZE', actorId ?? null, {
+      metadata: { target: body.target, table: body.table ?? null }, ipAddress: c.req.header('cf-connecting-ip') ?? null,
+    });
+    return c.json({ ok: true, action: body.action, target: body.target, table: body.table ?? null });
   });
 
   // -------------------------------------------------------------------------
@@ -1640,6 +1783,14 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       .limit(1);
     if (!row) return c.json({ error: 'Trace not found' }, 404);
 
+    // Reading a single trace exposes the FULL captured request/response bodies
+    // (which may contain end-user PII). Record who viewed which trace [1300].
+    await writeAudit(db, 'LLM_TRACE_VIEWED', c.get('userId') as string, {
+      tenantId:  row.tenantId ?? null,
+      metadata:  { traceId },
+      ipAddress: c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? null,
+    });
+
     const parse = (v: string | null): unknown => {
       if (v == null) return null;
       try { return JSON.parse(v); } catch { return v; }
@@ -1671,8 +1822,19 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (!allowed.has(vendorParam)) {
       return c.json({ error: `Unknown vendor: ${vendorParam}` }, 400);
     }
+    // Rate-limit the manual button: each probe fans out N upstream calls, so a
+    // repeated click can burn free-tier quota. At most one manual probe per
+    // vendor per minute (the daily cron is unaffected). [1424]
+    const slot = tryAcquireProbeSlot(vendorParam, Date.now());
+    if (!slot.ok) {
+      const retryAfterSeconds = Math.ceil(slot.retryAfterMs / 1000);
+      return c.json(
+        { error: `Health probe for '${vendorParam}' ran recently — retry in ${retryAfterSeconds}s`, retryAfterSeconds },
+        429,
+      );
+    }
     const result = await probeVendor(c.env, vendorParam as VendorId);
-    await persistProbe(buildDatabase(c.env), result, 'manual');
+    await persistProbe(buildTransactionalDatabase(c.env), result, 'manual');
     return c.json(result);
   });
 
@@ -1680,7 +1842,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // GET /api/admin/llm-health — latest probe per vendor, for the admin UI
   // -------------------------------------------------------------------------
   router.get('/llm-health', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = buildTransactionalDatabase(c.env);
     const rows = (await db.execute(sql`
       SELECT DISTINCT ON (vendor)
         vendor, status, probed_count AS "probedCount", ok_count AS "okCount",
@@ -1726,6 +1888,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       outputPrefix: r.outputPrefix ?? null,
       capabilities: r.capabilities ? (JSON.parse(r.capabilities) as string[]) : [],
       tags:       r.tags ? (JSON.parse(r.tags) as string[]) : [],
+      psychometric: r.psychometric ? JSON.parse(r.psychometric) : null,
       source:     r.source ?? 'builtin',
       author:     r.author ?? null,
       active:     r.active,
@@ -1750,6 +1913,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       outputPrefix?: string | null;
       capabilities?: string[];
       tags?: string[];
+      psychometric?: unknown; // PsychometricProfile object, or null
       source?: string;
       author?: string | null;
       active?: boolean;
@@ -1769,6 +1933,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         outputPrefix: body.outputPrefix ?? null,
         capabilities: body.capabilities?.length ? JSON.stringify(body.capabilities) : null,
         tags: body.tags?.length ? JSON.stringify(body.tags) : null,
+        psychometric: body.psychometric ? JSON.stringify(body.psychometric) : null,
         source: body.source ?? 'builtin',
         author: body.author ?? null,
         active: body.active ?? true,
@@ -1787,6 +1952,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         outputPrefix: inserted.outputPrefix ?? null,
         capabilities: inserted.capabilities ? (JSON.parse(inserted.capabilities) as string[]) : [],
         tags:        inserted.tags ? (JSON.parse(inserted.tags) as string[]) : [],
+        psychometric: inserted.psychometric ? JSON.parse(inserted.psychometric) : null,
         source:      inserted.source ?? 'builtin',
         author:      inserted.author ?? null,
         active:      inserted.active,
@@ -1813,6 +1979,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       outputPrefix?: string | null;
       capabilities?: string[];
       tags?: string[];
+      psychometric?: unknown; // PsychometricProfile object, or null to clear
       source?: string;
       author?: string | null;
       active?: boolean;
@@ -1829,6 +1996,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (body.outputPrefix !== undefined) updates.outputPrefix = body.outputPrefix;
     if (body.capabilities !== undefined) updates.capabilities = body.capabilities?.length ? JSON.stringify(body.capabilities) : null;
     if (body.tags !== undefined) updates.tags = body.tags?.length ? JSON.stringify(body.tags) : null;
+    if (body.psychometric !== undefined) updates.psychometric = body.psychometric ? JSON.stringify(body.psychometric) : null;
     if (body.source !== undefined) updates.source = body.source;
     if (body.author !== undefined) updates.author = body.author;
     if (body.active !== undefined) updates.active = body.active;
@@ -1850,6 +2018,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         outputPrefix: updated.outputPrefix ?? null,
         capabilities: updated.capabilities ? (JSON.parse(updated.capabilities) as string[]) : [],
         tags:        updated.tags ? (JSON.parse(updated.tags) as string[]) : [],
+        psychometric: updated.psychometric ? JSON.parse(updated.psychometric) : null,
         source:      updated.source ?? 'builtin',
         author:      updated.author ?? null,
         active:      updated.active,
@@ -1922,27 +2091,14 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // IMPERSONATION SYSTEM  (PRD §4.2)
   // ===========================================================================
 
-  // Helper: write an audit log entry
-  async function writeAudit(
+  // Helper: write an audit log entry. Thin wrapper over the shared
+  // `writeAdminAudit` so every admin route uses one insert path.
+  const writeAudit = (
     db: Db,
     event: string,
     actorId: string,
-    opts: {
-      targetUserId?: string | null;
-      tenantId?: number | null;
-      metadata?: Record<string, unknown>;
-      ipAddress?: string | null;
-    } = {},
-  ) {
-    await db.insert(adminAuditLog).values({
-      event,
-      actorId,
-      targetUserId: opts.targetUserId ?? null,
-      tenantId:     opts.tenantId ?? null,
-      metadata:     JSON.stringify(opts.metadata ?? {}),
-      ipAddress:    opts.ipAddress ?? null,
-    });
-  }
+    opts: AdminAuditOpts = {},
+  ) => writeAdminAudit(db, event, actorId, opts);
 
   // -------------------------------------------------------------------------
   // POST /api/admin/impersonation/start
@@ -2367,7 +2523,12 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       const roleOverrides = overrides.filter((o) => o.role === role);
       matrix[role] = resolveRolePermissions(role, roleOverrides);
     }
-    return c.json({ matrix, permissions: ALL_PERMISSIONS });
+    return c.json({
+      roles,
+      permissions: ALL_PERMISSIONS,
+      matrix,
+      overrides: overrides.map((o) => ({ tenantId: null, role: o.role, permission: o.permission, granted: o.granted })),
+    });
   });
 
   // PUT /api/admin/permissions/roles/:role — update permission overrides for a role
@@ -2666,6 +2827,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const [row] = await db.select({ id: tenantMembers.id }).from(tenantMembers).where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.userId, userId))).limit(1);
     if (!row) return c.json({ error: 'Member not found in tenant' }, 404);
     await db.update(tenantMembers).set({ role: body.role as 'viewer' | 'developer' | 'manager' | 'owner' }).where(eq(tenantMembers.id, row.id));
+    // Bust the gateway's JWT→membership cache so the new role takes effect at once
+    // (otherwise a demote keeps elevated gateway access until the 60s TTL lapses).
+    await invalidateJwtMembershipCache(c.env as Env, tenantId, userId).catch(() => {});
     await writeAudit(db, 'USER_PERSONA_CHANGED', actorId, {
       targetUserId: userId,
       tenantId,

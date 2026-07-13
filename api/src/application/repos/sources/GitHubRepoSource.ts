@@ -17,7 +17,12 @@ import {
 const MAX_FILE_BYTES = 512 * 1024;
 
 interface GhRepo { default_branch?: string }
-interface GhTree { tree?: Array<{ path?: string; type?: string; size?: number }>; truncated?: boolean }
+interface GhTreeNode { path?: string; type?: string; size?: number; sha?: string }
+interface GhTree { tree?: GhTreeNode[]; truncated?: boolean }
+
+/** Cap on extra per-subtree fetches when the recursive root tree truncates —
+ *  keeps the Worker subrequest budget safe on pathologically large repos. */
+const MAX_SUBTREE_FETCHES = 30;
 interface GhContent { content?: string; encoding?: string; size?: number }
 interface GhCommit { sha?: string; commit?: { message?: string; author?: { date?: string } } }
 
@@ -59,19 +64,55 @@ export class GitHubRepoSource implements RepoSource {
     return ok && body ? body : {};
   }
 
+  private mapNode(t: GhTreeNode): RepoTreeEntry {
+    return {
+      path: t.path as string,
+      type: t.type === 'tree' ? 'dir' : 'file',
+      bytes: typeof t.size === 'number' ? t.size : undefined,
+    };
+  }
+
   async getTree(ref: string): Promise<{ entries: RepoTreeEntry[]; truncated: boolean }> {
     const { ok, status, body } = await this.get<GhTree>(
       `/repos/${this.slug}/git/trees/${encodeURIComponent(ref)}?recursive=1`,
     );
     if (!ok) throw new RepoSourceError('github', status, 'tree fetch failed');
-    const entries: RepoTreeEntry[] = (body?.tree ?? [])
-      .filter((t) => typeof t.path === 'string')
-      .map((t) => ({
-        path: t.path as string,
-        type: t.type === 'tree' ? 'dir' : 'file',
-        bytes: typeof t.size === 'number' ? t.size : undefined,
-      }));
-    return { entries, truncated: body?.truncated === true };
+    const nodes = (body?.tree ?? []).filter((t) => typeof t.path === 'string');
+    if (body?.truncated !== true) {
+      return { entries: nodes.map((t) => this.mapNode(t)), truncated: false };
+    }
+
+    // Truncated: GitHub's single recursive call capped out (≈100k entries / 7MB).
+    // Recover coverage by listing the ROOT non-recursively, then fetching each
+    // top-level directory's subtree recursively (per-subdir trees rarely
+    // truncate). Bounded by MAX_SUBTREE_FETCHES so a pathological repo can't
+    // exhaust the Worker subrequest budget — still-truncated is reported honestly.
+    const rootRes = await this.get<GhTree>(`/repos/${this.slug}/git/trees/${encodeURIComponent(ref)}`);
+    if (!rootRes.ok || !rootRes.body) {
+      // Fallback failed — return the partial recursive result we already have.
+      return { entries: nodes.map((t) => this.mapNode(t)), truncated: true };
+    }
+    const byPath = new Map<string, RepoTreeEntry>();
+    const add = (n: GhTreeNode) => { if (typeof n.path === 'string') byPath.set(n.path, this.mapNode(n)); };
+    nodes.forEach(add); // keep whatever the recursive call did return
+
+    const rootNodes = (rootRes.body.tree ?? []).filter((t) => typeof t.path === 'string');
+    rootNodes.forEach((n) => { add({ ...n, path: n.path }); }); // root-level files + dir markers
+    const subdirs = rootNodes.filter((n) => n.type === 'tree' && typeof n.sha === 'string');
+
+    let fetches = 0;
+    let stillTruncated = false;
+    for (const dir of subdirs) {
+      if (fetches >= MAX_SUBTREE_FETCHES) { stillTruncated = true; break; }
+      fetches += 1;
+      const sub = await this.get<GhTree>(`/repos/${this.slug}/git/trees/${dir.sha}?recursive=1`);
+      if (!sub.ok || !sub.body) { stillTruncated = true; continue; }
+      if (sub.body.truncated === true) stillTruncated = true;
+      for (const n of sub.body.tree ?? []) {
+        if (typeof n.path === 'string') add({ ...n, path: `${dir.path}/${n.path}` }); // re-root under the subdir
+      }
+    }
+    return { entries: [...byPath.values()], truncated: stillTruncated };
   }
 
   async getFileContent(path: string, ref: string): Promise<string | null> {

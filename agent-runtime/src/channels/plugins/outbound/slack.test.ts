@@ -86,13 +86,13 @@ describe("slack outbound hook wiring", () => {
       text: "hello",
       accountId: "default",
       replyToId: "1111.2222",
-      identity: { emoji: ":lobster:" },
+      identity: { emoji: ":robot:" },
     });
 
     expect(sendMessageSlack).toHaveBeenCalledWith("C123", "hello", {
       threadTs: "1111.2222",
       accountId: "default",
-      identity: { iconEmoji: ":lobster:" },
+      identity: { iconEmoji: ":robot:" },
     });
   });
 

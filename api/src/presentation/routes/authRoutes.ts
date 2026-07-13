@@ -1,6 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { and, desc, eq, gt, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { AuthService } from '../../application/auth/AuthService';
+import { DeviceAuthService } from '../../application/auth/DeviceAuthService';
 import type { HonoEnv } from '../../env';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { TenantRole, type UserId } from '../../domain/shared/types';
@@ -9,7 +10,6 @@ import {
   authTokens,
   authUserSessions,
   agentHosts,
-  legalDocuments,
   newsletterEvents,
   newsletterSubscribers,
   privacyRequests,
@@ -17,9 +17,12 @@ import {
   userLegalAcceptances,
   userMfaRecoveryCodes,
   users,
+  tenantApiKeys,
+  tenantMembers,
 } from '../../infrastructure/database/schema';
 import { hashPassword, hashSecret, verifyPassword } from '../../infrastructure/auth/HashService';
 import { decodeJwtPayload, signJwt, signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
+import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
 import type { Db } from '../../infrastructure/database/connection';
 import {
   buildOtpAuthUrl,
@@ -32,7 +35,20 @@ import {
   parseTokenTimeToDate,
   verifyTotpCode,
 } from '../../infrastructure/auth/MfaService';
+import { revokeTenantApiKeyByRawKey } from '../../application/llm/tenantApiKeyService';
+import { issueVerificationCode, verifyVerificationCode, type VerifyResult } from '../../application/auth/EmailVerificationService';
 import { checkTermsAcceptance } from '../middleware/termsEnforcement';
+import { getActiveLegalDoc } from '../../application/legal/legalDocsService';
+import { sanitizePsychometricProfile } from '../../application/persona/psychometricCatalog';
+import { provisionForHireProfile } from '../../application/freelance/provisionForHire';
+import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
+
+/** Parse a stored psychometric JSON column into an object (null when unset/invalid). */
+function parsePsychometric(raw: string | null | undefined): unknown {
+  if (!raw) return null;
+  try { return JSON.parse(raw) as unknown; } catch { return null; }
+}
 
 type TokenPayload = {
   sub: string;
@@ -72,65 +88,41 @@ function toUserResponse(user: typeof users.$inferSelect) {
     displayName: user.displayName,
     avatarUrl: user.avatarUrl,
     bio: user.bio,
+    // This human's OWN personality (same PsychometricProfile shape agents/personas use).
+    psychometric: parsePsychometric(user.psychometric),
     isSuperadmin: superadmin,
+    // 'standard' | 'freelancer' — drives the restricted gig shell on the client.
+    accountType: user.accountType ?? 'standard',
+    // True once the user has EXPLICITLY picked Build vs Hired. False for an
+    // OAuth/magic-link account that hasn't chosen — the gate forces the choice.
+    accountTypeSelected: !!user.accountTypeSelectedAt,
+    // Opt-in to being hired talent (a builder can also be for-hire). Drives the
+    // for-hire nav destinations + Settings toggle on the client.
+    availableForHire: user.availableForHire ?? false,
     mfaEnabled: user.mfaEnabled,
   };
 }
 
-function normalizeEmail(input: string): string {
-  return input.trim().toLowerCase();
+/**
+ * Give a freelancer account its for-hire profile stub — a private, unpublished
+ * profile plus a hired.video job-seeker provisioning (native résumé path when the
+ * partner SDK isn't configured). Idempotent. Shared by the password-register path
+ * and the post-OAuth role chooser (and, via provisionForHireProfile, by a standard
+ * builder opting in) so the row shape never drifts.
+ */
+async function provisionFreelancer(
+  c: Context<HonoEnv>,
+  user: typeof users.$inferSelect,
+): Promise<void> {
+  await provisionForHireProfile(c.env, {
+    id: user.id,
+    email: user.email,
+    name: user.displayName ?? user.username ?? undefined,
+  });
 }
 
-type LegalDocResponse = {
-  documentType: 'terms' | 'privacy';
-  version: string;
-  title: string;
-  content: string;
-  publishedAt: string;
-};
-
-const DEFAULT_LEGAL: Record<'terms' | 'privacy', Omit<LegalDocResponse, 'documentType'>> = {
-  terms: {
-    version: '1.0.0',
-    title: 'Terms of Use',
-    content: 'By using BuilderForce Link, you agree to these Terms of Use. Continued use of the service indicates acceptance of current terms.',
-    publishedAt: new Date(0).toISOString(),
-  },
-  privacy: {
-    version: '1.0.0',
-    title: 'Privacy Policy',
-    content: 'BuilderForce Link processes account, usage, and operational metadata to provide and secure the service.',
-    publishedAt: new Date(0).toISOString(),
-  },
-};
-
-async function getActiveLegalDoc(db: Db, documentType: 'terms' | 'privacy'): Promise<LegalDocResponse> {
-  const [doc] = await db
-    .select({
-      version: legalDocuments.version,
-      title: legalDocuments.title,
-      content: legalDocuments.content,
-      publishedAt: legalDocuments.publishedAt,
-    })
-    .from(legalDocuments)
-    .where(and(eq(legalDocuments.documentType, documentType), eq(legalDocuments.isActive, true)))
-    .orderBy(desc(legalDocuments.publishedAt))
-    .limit(1);
-
-  if (!doc) {
-    return {
-      documentType,
-      ...DEFAULT_LEGAL[documentType],
-    };
-  }
-
-  return {
-    documentType,
-    version: doc.version,
-    title: doc.title,
-    content: doc.content,
-    publishedAt: doc.publishedAt ? doc.publishedAt.toISOString() : new Date().toISOString(),
-  };
+function normalizeEmail(input: string): string {
+  return input.trim().toLowerCase();
 }
 
 async function ensureSession(
@@ -513,6 +505,135 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
   });
 
   // -------------------------------------------------------------------------
+  // Device-code (RFC 8628) sign-in for editor clients (VS Code extension)
+  // -------------------------------------------------------------------------
+  const deviceAuth = new DeviceAuthService(db);
+
+  // POST /api/auth/device/code — public; start a device login.
+  router.post('/device/code', async (c) => {
+    const body = await c.req.json<{ client?: string }>().catch(() => ({} as { client?: string }));
+    const appUrl = c.env.APP_URL || 'https://builderforce.ai';
+    const start = await deviceAuth.start(appUrl, body.client);
+    return c.json(start);
+  });
+
+  // POST /api/auth/device/approve — WebJWT; called by the /activate page.
+  router.post('/device/approve', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as string;
+    const body = await c.req.json<{
+      userCode?: string;
+      user_code?: string;
+      tenantId?: number;
+      decision?: 'approve' | 'deny';
+    }>();
+    const userCode = (body.userCode ?? body.user_code ?? '').trim();
+    if (!userCode) return c.json({ error: 'user_code is required' }, 400);
+
+    if (body.decision === 'deny') {
+      await deviceAuth.deny(userCode);
+      return c.json({ ok: true, decision: 'deny' });
+    }
+
+    const res = await deviceAuth.approve({
+      userCode,
+      userId,
+      tenantId: body.tenantId,
+      envSecret: c.env.JWT_SECRET,
+    });
+    if (!res.ok) return c.json({ error: res.error }, res.error === 'no_tenant' ? 409 : 400);
+    return c.json({ ok: true, decision: 'approve' });
+  });
+
+  // POST /api/auth/editor-key — WebJWT; mint a personal editor key (copy-button flow).
+  // Not owner-gated: it's the signed-in member's own editor credential.
+  router.post('/editor-key', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as string;
+    const body = await c.req
+      .json<{ tenantId?: number }>()
+      .catch(() => ({} as { tenantId?: number }));
+    const res = await deviceAuth.mintEditorKey({ userId, tenantId: body.tenantId });
+    if (!res.ok) return c.json({ error: res.error }, res.error === 'no_tenant' ? 409 : 400);
+    return c.json({ access_key: res.key, tenant_id: res.tenantId, token_type: 'bearer' });
+  });
+
+  // POST /api/auth/device/token — public; polled by the extension.
+  router.post('/device/token', async (c) => {
+    const body = await c.req.json<{ device_code?: string }>();
+    if (!body.device_code) return c.json({ error: 'device_code is required' }, 400);
+    const res = await deviceAuth.poll(body.device_code, c.env.JWT_SECRET);
+    switch (res.state) {
+      case 'approved':
+        return c.json({ access_key: res.accessKey, tenant_id: res.tenantId, token_type: 'bearer' }, 200);
+      case 'pending':
+        return c.json({ error: 'authorization_pending' }, 428);
+      case 'slow_down':
+        return c.json({ error: 'slow_down' }, 429);
+      case 'denied':
+        return c.json({ error: 'access_denied' }, 403);
+      case 'expired':
+        return c.json({ error: 'expired_token' }, 410);
+    }
+  });
+
+  // POST /api/auth/keys/revoke — self-service revoke of an editor key (bfk_*) by
+  // presenting the raw key. Possession of the key authorizes its own revocation,
+  // so no JWT is required. Editor clients (VS Code) call this on sign-out so the
+  // server-side key dies with the local session instead of being orphaned.
+  // Idempotent: unknown / malformed / already-revoked keys return { revoked: false }
+  // with 200, never leaking whether the key existed.
+  router.post('/keys/revoke', async (c) => {
+    const body = await c.req
+      .json<{ apiKey?: string; key?: string }>()
+      .catch(() => ({} as { apiKey?: string; key?: string }));
+    const rawKey = (body.apiKey ?? body.key ?? '').trim();
+    if (!rawKey) return c.json({ error: 'apiKey is required' }, 400);
+    const revoked = await revokeTenantApiKeyByRawKey(db, { rawKey, env: c.env });
+    return c.json({ revoked });
+  });
+
+  // POST /api/auth/tenant-api-key-token — exchange a tenant API key (bfk_*) for a
+  // tenant-scoped JWT so editor clients (VS Code) can call /api/projects, /api/tasks,
+  // etc. The token is minted as the key's creator (human-in-the-loop identity).
+  router.post('/tenant-api-key-token', async (c) => {
+    const body = await c.req.json<{ apiKey: string }>();
+    if (!body.apiKey) return c.json({ error: 'apiKey is required' }, 400);
+
+    const keyHash = await hashSecret(body.apiKey);
+    const [row] = await db
+      .select({
+        id: tenantApiKeys.id,
+        tenantId: tenantApiKeys.tenantId,
+        revokedAt: tenantApiKeys.revokedAt,
+        createdByUserId: tenantApiKeys.createdByUserId,
+      })
+      .from(tenantApiKeys)
+      .where(eq(tenantApiKeys.keyHash, keyHash))
+      .limit(1);
+
+    if (!row || row.revokedAt) return c.json({ error: 'Invalid or revoked API key' }, 401);
+    // The token is minted AS the key's creator (human-in-the-loop) and MUST be a real
+    // user: signJwt always stamps a `jti`, and authMiddleware rejects any jti without a
+    // matching persisted authTokens row — so we persist it below (FK → users.id).
+    if (!row.createdByUserId) {
+      return c.json(
+        { error: 'This API key has no associated user. Re-create it from Settings → API Keys or use device sign-in.' },
+        400,
+      );
+    }
+
+    // Mint + persist via the shared editor-token minter (also used by the VS Code
+    // workspace switch). Persisting is required so authMiddleware's jti-revocation
+    // check finds an active token — otherwise every /api call 401s.
+    const { token, expiresIn } = await mintTenantSessionToken(db, c.env.JWT_SECRET, {
+      userId: row.createdByUserId,
+      tenantId: row.tenantId,
+      userAgent: getUserAgent(c),
+      ipAddress: getClientIp(c),
+    });
+    return c.json({ token, expiresIn, tenantId: row.tenantId, userId: row.createdByUserId });
+  });
+
+  // -------------------------------------------------------------------------
   // Web / marketplace auth
   // -------------------------------------------------------------------------
 
@@ -523,10 +644,16 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       username?: string;
       password: string;
       agreeToTerms?: boolean;
+      accountType?: string;
+      anonId?: string;
     }>();
     if (!body.email || !body.password) {
       return c.json({ error: 'email and password are required' }, 400);
     }
+    // Optional landing anon-id — threaded through so the verification path can carry it.
+    const anonId = typeof body.anonId === 'string' && body.anonId.trim() ? body.anonId.trim() : undefined;
+    // 'freelancer' = restricted gig account for hire; anything else = standard.
+    const accountType = body.accountType === 'freelancer' ? 'freelancer' : 'standard';
     if (body.agreeToTerms !== true) {
       return c.json({ error: 'You must accept the Terms of Use and Privacy Policy' }, 400);
     }
@@ -570,6 +697,12 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         displayName: username,
         passwordHash,
         apiKeyHash,
+        accountType,
+        // A freelancer account is inherently for-hire.
+        availableForHire: accountType === 'freelancer',
+        // The register form is an explicit role choice, so mark it selected now —
+        // the onboarding gate must never re-prompt a password signup.
+        accountTypeSelectedAt: sql`now()`,
       })
       .returning();
 
@@ -580,36 +713,113 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       { userId: created.id, documentType: 'privacy', version: privacyDoc.version },
     ]);
 
-    const sessionName = 'Current device';
-    const userAgent = getUserAgent(c);
-    const ipAddress = getClientIp(c);
+    // A freelancer gets a for-hire profile stub immediately (private + unpublished
+    // until they fill it in) and is auto-provisioned a hired.video job-seeker
+    // account when the partner SDK is configured — otherwise the native resume
+    // path is used and hired.video linkage is filled in later on resume upload.
+    if (accountType === 'freelancer') {
+      await provisionFreelancer(c, created);
+    }
 
+    // Email-ownership gate: the account exists but is UNVERIFIED — no session is
+    // issued until the user enters the 6-digit code we email now. This is what
+    // stops fake / unowned-email signups. The client flips to the code-entry step
+    // on `verificationRequired` and calls /web/register/verify to obtain a session.
+    await issueVerificationCode(db, c.env, created, { force: true, anonId });
+
+    return c.json({
+      verificationRequired: true,
+      email: created.email,
+    }, 201);
+  });
+
+  // POST /api/auth/web/register/verify — exchange the emailed OTP for a session.
+  // `trustDevice` extends the session to 30 days (vs 24h) so a verified user isn't
+  // asked to sign in again on this device for a month.
+  router.post('/web/register/verify', async (c) => {
+    const body = await c.req.json<{
+      email?: string;
+      code?: string;
+      trustDevice?: boolean;
+      sessionName?: string;
+    }>();
+    const email = normalizeEmail(body.email ?? '');
+    const code = (body.code ?? '').trim();
+    if (!email || !code) return c.json({ error: 'email and code are required' }, 400);
+
+    const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    // Don't reveal whether the address exists — same generic failure either way.
+    if (!user) return c.json({ error: 'Invalid or expired code', reason: 'invalid' }, 401);
+    if (user.isSuspended) return c.json({ error: 'Account suspended. Contact support.' }, 403);
+
+    // Only require a code when still unverified. A double-submit / returning tab on an
+    // already-verified account just mints a session (idempotent).
+    if (!user.emailVerifiedAt) {
+      const result = await verifyVerificationCode(db, user.id, code);
+      if (result !== 'ok') {
+        const messages: Record<Exclude<VerifyResult, 'ok'>, string> = {
+          invalid: 'Invalid or expired code',
+          expired: 'This code has expired. Request a new one.',
+          too_many: 'Too many attempts. Request a new code.',
+          none: 'No active code. Request a new one.',
+        };
+        return c.json(
+          { error: messages[result], reason: result },
+          result === 'invalid' ? 401 : 400,
+        );
+      }
+      await db
+        .update(users)
+        .set({ emailVerifiedAt: sql`now()`, updatedAt: sql`now()` })
+        .where(eq(users.id, user.id));
+    }
+
+    const expiresIn = body.trustDevice === true ? 30 * 86_400 : 86_400;
     const token = await signWebJwt(
       {
-        sub: created.id,
-        email: created.email,
-        username: created.username ?? '',
+        sub: user.id,
+        email: user.email,
+        username: user.username ?? '',
+        act: user.accountType === 'freelancer' ? 'freelancer' : undefined,
         mfa: false,
-        amr: ['pwd'],
+        amr: ['pwd', 'email'],
       },
       c.env.JWT_SECRET,
-      86_400,
+      expiresIn,
     );
 
     await persistToken(db, token, {
-      userId: created.id,
+      userId: user.id,
       tokenType: 'web',
-      sessionName,
-      userAgent,
-      ipAddress,
+      sessionName: body.sessionName ?? 'Current device',
+      userAgent: getUserAgent(c),
+      ipAddress: getClientIp(c),
     });
 
     return c.json({
       token,
-      expiresIn: 86_400,
-      user: toUserResponse(created),
+      expiresIn,
+      user: toUserResponse({ ...user, emailVerifiedAt: user.emailVerifiedAt ?? new Date() }),
       mfaRequired: false,
-    }, 201);
+    });
+  });
+
+  // POST /api/auth/web/register/resend — re-send a verification code (cooldown-guarded).
+  // Always 200 with no detail so it can't be used to probe which emails exist / are
+  // unverified.
+  router.post('/web/register/resend', async (c) => {
+    const body = await c.req.json<{ email?: string }>().catch(() => ({} as { email?: string }));
+    const email = normalizeEmail(body.email ?? '');
+    if (email) {
+      const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+      if (user && !user.emailVerifiedAt && !user.isSuspended) {
+        const res = await issueVerificationCode(db, c.env, user);
+        if (!res.sent && res.cooldownSeconds) {
+          return c.json({ ok: true, cooldownSeconds: res.cooldownSeconds });
+        }
+      }
+    }
+    return c.json({ ok: true });
   });
 
   // POST /api/auth/web/login
@@ -636,6 +846,14 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     const ok = await verifyPassword(body.password, user.passwordHash);
     if (!ok) {
       return c.json({ error: 'Invalid email or password' }, 401);
+    }
+
+    // Unverified email — the account was created but never activated. Re-send a code
+    // (cooldown-guarded) and route the client into the same code-entry step instead
+    // of issuing a session. Keeps a half-finished fake signup from ever logging in.
+    if (!user.emailVerifiedAt) {
+      await issueVerificationCode(db, c.env, user);
+      return c.json({ verificationRequired: true, email: user.email }, 403);
     }
 
     if (user.mfaEnabled) {
@@ -669,6 +887,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         email: user.email,
         username: user.username ?? '',
         sa: superadmin ? true : undefined,
+        act: user.accountType === 'freelancer' ? 'freelancer' : undefined,
         mfa: false,
         amr: ['pwd'],
       },
@@ -735,6 +954,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         email: user.email,
         username: user.username ?? '',
         sa: superadmin ? true : undefined,
+        act: user.accountType === 'freelancer' ? 'freelancer' : undefined,
         mfa: true,
         amr: ['pwd', 'mfa'],
       },
@@ -769,7 +989,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     const user = await authService.getMe(userId);
     if (!user) return c.json({ error: 'User not found' }, 404);
     const [full] = await db
-      .select({ mfaEnabled: users.mfaEnabled, onboardingCompletedAt: users.onboardingCompletedAt })
+      .select({ mfaEnabled: users.mfaEnabled, onboardingCompletedAt: users.onboardingCompletedAt, psychometric: users.psychometric, accountType: users.accountType, accountTypeSelectedAt: users.accountTypeSelectedAt, availableForHire: users.availableForHire })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
@@ -778,8 +998,79 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         ...user,
         mfaEnabled: full?.mfaEnabled ?? false,
         onboardingCompletedAt: full?.onboardingCompletedAt ?? null,
+        psychometric: parsePsychometric(full?.psychometric),
+        // Account type + whether the user has explicitly chosen it (Build vs
+        // Hired). The onboarding gate forces the choice when not yet selected.
+        accountType: full?.accountType ?? 'standard',
+        accountTypeSelected: !!full?.accountTypeSelectedAt,
+        // Opt-in to being hired talent (independent of accountType).
+        availableForHire: full?.availableForHire ?? false,
       },
     });
+  });
+
+  // POST /api/auth/me/account-type — the ONE-TIME role choice (Build vs Hired) for
+  // an account that was provisioned via OAuth / magic-link and never picked on a
+  // /register form. Idempotent: once chosen it can't be flipped here (prevents
+  // shell churn); returns the current account unchanged in that case.
+  router.post('/me/account-type', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as UserId;
+    const body = await c.req.json<{ accountType?: string }>().catch(() => ({} as { accountType?: string }));
+    const accountType = body.accountType === 'freelancer' ? 'freelancer' : 'standard';
+
+    const [existing] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!existing) return c.json({ error: 'User not found' }, 404);
+
+    // Already chosen — return as-is so the client can just advance.
+    if (existing.accountTypeSelectedAt) {
+      return c.json({ user: toUserResponse(existing), alreadySelected: true });
+    }
+
+    const [row] = await db
+      .update(users)
+      .set({
+        accountType,
+        // A freelancer account is inherently for-hire.
+        availableForHire: accountType === 'freelancer',
+        accountTypeSelectedAt: sql`now()`,
+        updatedAt: sql`now()`,
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    if (!row) return c.json({ error: 'Failed to update account type' }, 500);
+
+    // Picking Hired provisions the same for-hire profile stub the register path creates.
+    if (accountType === 'freelancer') {
+      await provisionFreelancer(c, row);
+    }
+
+    return c.json({ user: toUserResponse(row) });
+  });
+
+  // PATCH /api/auth/me — the signed-in user edits their OWN profile. Currently the
+  // personality (psychometric) only — personality is intrinsic to a person and
+  // applies to any and all users, so it is NOT Pro-gated here (unlike the agent /
+  // persona editor). Send `psychometric: null` to clear it. Sanitized to the same
+  // trait-vector shape agents/personas store, so a person and an agent are described
+  // identically.
+  router.patch('/me', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as UserId;
+    const body = await c.req.json<{ psychometric?: unknown }>().catch(() => ({} as { psychometric?: unknown }));
+
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (body.psychometric !== undefined) {
+      updates.psychometric = body.psychometric === null ? null : sanitizePsychometricProfile(body.psychometric);
+    }
+
+    const [row] = await db.update(users).set(updates).where(eq(users.id, userId)).returning();
+    if (!row) return c.json({ error: 'User not found' }, 404);
+    // A personality change alters this person's assignee hovercard on every board.
+    // Invalidate the cached assignee-profile map for each tenant they belong to.
+    if (body.psychometric !== undefined) {
+      const memberships = await db.select({ tenantId: tenantMembers.tenantId }).from(tenantMembers).where(eq(tenantMembers.userId, userId));
+      await Promise.all(memberships.map((m) => invalidateCached(c.env, assigneeProfilesCacheKey(m.tenantId))));
+    }
+    return c.json({ user: toUserResponse(row) });
   });
 
   // POST /api/auth/me/onboarding/complete — marks onboarding as done, stores intent

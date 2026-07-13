@@ -6,6 +6,7 @@
 import { getApiBaseUrl } from './apiClient';
 import { checkUnauthorizedAndRedirect, getStoredWebToken } from './auth';
 import type { LlmModelStatus, VendorId } from './builderforceApi';
+import type { PsychometricProfile } from './psychometric';
 
 export type { LlmModelStatus, VendorId };
 
@@ -44,6 +45,22 @@ export interface AdminTenant {
    *   >= 0 → use this value
    */
   tokenDailyLimitOverride: number | null;
+  /**
+   * Per-tenant daily ceiling on FUNDED paid-overflow spend (millicents, 1/100000 USD).
+   *   null → plan default (free = $0.50/day; pro/teams = unlimited)
+   *   -1   → unlimited (gate skipped)
+   *   >= 0 → explicit millicents/day ceiling
+   * See migration 0130 + the gateway overflow gate.
+   */
+  paidOverflowDailyCap: number | null;
+  /**
+   * Per-tenant daily image-generation credit override (1 credit = 1 image).
+   *   null → plan default (free 10 / pro 1000 / teams 5000)
+   *   -1   → unlimited
+   *   >= 0 → explicit images/day
+   * Metered independently of the text token budget (migration 0131).
+   */
+  imageCreditsDailyLimit: number | null;
   /** Superadmin grant of premium routing — when true the LLM proxy uses the
    *  premium model pool (top PREMIUM-tier models) and the extended per-vendor
    *  timeout regardless of plan/billingStatus. */
@@ -66,8 +83,62 @@ export interface AdminHealth {
     models: LlmModelStatus[];
     free: LlmModelStatus[];
     pro: LlmModelStatus[];
+    /** Always-on premium-fallback tail appended to every chain [1430]. */
+    premiumFallback?: LlmModelStatus[];
   };
   timestamp: string;
+}
+
+export interface AdminSystemTable {
+  name: string;
+  totalBytes: number;
+  estimatedRows: number;
+  insertsSinceStatsReset: number;
+  updatesSinceStatsReset: number;
+  deletesSinceStatsReset: number;
+  lastAutovacuum: string | null;
+  lastAnalyze: string | null;
+}
+
+export interface AdminSystemDatabase {
+  name: 'primary' | 'transactional';
+  ok: boolean;
+  latencyMs: number;
+  databaseName: string | null;
+  totalBytes: number;
+  tables: AdminSystemTable[];
+  error?: string;
+}
+
+export interface AdminSystemHealth {
+  timestamp: string;
+  worker: {
+    version: string;
+    environment: string;
+    bindings: Record<string, boolean>;
+  };
+  runtime: {
+    agentHosts: number;
+    onlineAgentHosts: number;
+    activeExecutions: number;
+    failedExecutions24h: number;
+  };
+  databases: AdminSystemDatabase[];
+}
+
+/** One zero-filled daily point (matches the API MetricPoint). */
+export interface AdminMetricPoint { day: string; value: number; }
+
+export interface AdminPlatformRollup {
+  windowDays: number;
+  totals: { newUsers: number; newTenants: number; tokens: number; spendUsd: number; errorEvents: number };
+  series: {
+    newUsers: AdminMetricPoint[];
+    newTenants: AdminMetricPoint[];
+    tokens: AdminMetricPoint[];
+    spendUsd: AdminMetricPoint[];
+    errorEvents: AdminMetricPoint[];
+  };
 }
 
 export interface AdminError {
@@ -209,6 +280,17 @@ export interface AdminLegalCurrent {
   privacy: LegalDocument;
 }
 
+export interface LegalDocVersion {
+  id: number;
+  documentType: 'terms' | 'privacy';
+  version: string;
+  title: string;
+  content: string;
+  changeKind: 'publish' | 'amend';
+  changedBy: string | null;
+  createdAt: string;
+}
+
 export interface AdminNewsletterSubscriber {
   id: number;
   userId: string | null;
@@ -323,6 +405,8 @@ export interface AdminPlatformPersona {
   source: string;
   author: string | null;
   active: boolean;
+  /** JSON PsychometricProfile (Pro trait vector) compiled into behaviour at run time; null = none. */
+  psychometric: PsychometricProfile | null;
   createdAt: string | null;
   updatedAt: string | null;
 }
@@ -510,6 +594,42 @@ export const adminApi = {
   },
 
   /**
+   * Set / clear the per-tenant funded paid-overflow daily cap (millicents).
+   *   null → revert to plan default (free $0.50/day; pro/teams unlimited)
+   *   -1   → unlimited
+   *   >= 0 → explicit millicents/day ceiling
+   */
+  async setTenantPaidOverflowCap(
+    tenantId: number,
+    paidOverflowDailyCap: number | null,
+  ): Promise<{ id: number; paidOverflowDailyCap: number | null }> {
+    return adminRequest<{ id: number; paidOverflowDailyCap: number | null }>(
+      `/api/admin/tenants/${tenantId}/paid-overflow-cap`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ paidOverflowDailyCap }),
+      },
+    );
+  },
+
+  /**
+   * Set / clear the per-tenant daily image-generation credit limit.
+   *   null → revert to plan default · -1 → unlimited · >= 0 → explicit images/day
+   */
+  async setTenantImageCreditsLimit(
+    tenantId: number,
+    imageCreditsDailyLimit: number | null,
+  ): Promise<{ id: number; imageCreditsDailyLimit: number | null }> {
+    return adminRequest<{ id: number; imageCreditsDailyLimit: number | null }>(
+      `/api/admin/tenants/${tenantId}/image-credits-limit`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ imageCreditsDailyLimit }),
+      },
+    );
+  },
+
+  /**
    * Set / clear the superadmin premium-routing override.
    *   true  → tenant routes through PREMIUM-tier models + extended vendor timeout
    *   false → tenant routes through their plan default
@@ -531,9 +651,29 @@ export const adminApi = {
     return adminRequest<AdminHealth>('/api/admin/health');
   },
 
+  async systemHealth(): Promise<AdminSystemHealth> {
+    return adminRequest<AdminSystemHealth>('/api/admin/system-health');
+  },
+
+  async systemMaintenance(input: {
+    action: 'purge_expired' | 'vacuum_analyze';
+    target?: 'primary' | 'transactional';
+    table?: string;
+  }): Promise<{ ok: boolean }> {
+    return adminRequest('/api/admin/system-health/maintenance', {
+      method: 'POST', body: JSON.stringify(input),
+    });
+  },
+
   async errors(): Promise<AdminError[]> {
     const res = await adminRequest<{ errors: AdminError[] }>('/api/admin/errors');
     return res.errors;
+  },
+
+  /** Platform-wide historical trends (growth / LLM usage / errors) for the
+   *  superadmin Health/Usage charts. */
+  async platformRollup(days = 30): Promise<AdminPlatformRollup> {
+    return adminRequest<AdminPlatformRollup>(`/api/admin/platform-rollup?days=${days}`);
   },
 
   async listLlmTraces(params: {
@@ -589,6 +729,12 @@ export const adminApi = {
   async legalCurrent(): Promise<AdminLegalCurrent> {
     return adminRequest<AdminLegalCurrent>('/api/admin/legal/current');
   },
+  /** Full publish + amend audit trail (newest first); scope with docType. */
+  async legalHistory(docType?: 'terms' | 'privacy'): Promise<LegalDocVersion[]> {
+    const qs = docType ? `?docType=${docType}` : '';
+    const res = await adminRequest<{ versions: LegalDocVersion[] }>(`/api/admin/legal/history${qs}`);
+    return res.versions;
+  },
   async publishLegal(
     docType: 'terms' | 'privacy',
     data: { version: string; title?: string; content: string },
@@ -604,6 +750,16 @@ export const adminApi = {
   ): Promise<{ document: LegalDocument }> {
     return adminRequest(`/api/admin/legal/${docType}`, {
       method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+  /** AI-draft or improve a legal document; returns clean Markdown (nothing is saved). */
+  async enhanceLegal(
+    docType: 'terms' | 'privacy',
+    data: { content: string; instruction?: string; title?: string },
+  ): Promise<{ content: string }> {
+    return adminRequest(`/api/admin/legal/${docType}/enhance`, {
+      method: 'POST',
       body: JSON.stringify(data),
     });
   },
@@ -793,6 +949,7 @@ export const adminApi = {
     source?: string;
     author?: string | null;
     active?: boolean;
+    psychometric?: PsychometricProfile | null;
   }): Promise<{ persona: AdminPlatformPersona }> {
     return adminRequest('/api/admin/personas', { method: 'POST', body: JSON.stringify(data) });
   },
@@ -811,6 +968,7 @@ export const adminApi = {
       source: string;
       author: string | null;
       active: boolean;
+      psychometric: PsychometricProfile | null;
     }>
   ): Promise<{ persona: AdminPlatformPersona }> {
     return adminRequest(`/api/admin/personas/${id}`, { method: 'PATCH', body: JSON.stringify(data) });

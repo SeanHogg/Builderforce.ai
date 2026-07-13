@@ -22,7 +22,9 @@ import { SyncEngine, type StoredConnection } from '../../application/boardsync/S
 import { createDrizzleStore, loadConnectionCredentials } from '../../application/boardsync/drizzleStore';
 import { createBoardProvider, type NormalizedTicket } from '../../application/boardsync/providers';
 import { hashFields } from '../../application/boardsync/reconciler';
-import { verifyWebhookSignature, normalizeWebhookPayload } from '../../application/boardsync/webhookIngest';
+import { verifyProviderWebhookSignature, normalizeWebhookPayload } from '../../application/boardsync/webhookIngest';
+import { getBoardProviderMeta } from '../../application/boardsync/providerCatalog';
+import { ingestIncidentWebhook } from '../../application/boardsync/opsIngest';
 
 export function createBoardWebhookRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -47,13 +49,23 @@ export function createBoardWebhookRoutes(db: Db): Hono<HonoEnv> {
 
     // Read raw body BEFORE parsing — needed for HMAC.
     const rawBody = await c.req.text();
-    const sigHeader =
-      c.req.header('X-Hub-Signature-256') ??
-      c.req.header('X-Board-Signature-256') ??
-      c.req.header('X-Signature-256') ??
-      '';
 
-    const valid = await verifyWebhookSignature(rawBody, sigHeader, conn.webhookSecret);
+    // monday.com subscription handshake: an unsigned { challenge } POST that must
+    // be echoed verbatim to activate the webhook. No signature on this one event.
+    if (provider === 'monday') {
+      try {
+        const probe = JSON.parse(rawBody) as { challenge?: unknown };
+        if (probe && typeof probe.challenge === 'string') {
+          return c.json({ challenge: probe.challenge });
+        }
+      } catch {
+        /* fall through to normal signed handling */
+      }
+    }
+
+    // Provider-aware signature verification (each provider signs differently;
+    // trust is the per-connection webhook_secret in every case).
+    const valid = await verifyProviderWebhookSignature(provider, rawBody, (n) => c.req.header(n), conn.webhookSecret);
     if (!valid) return c.json({ error: 'Invalid signature' }, 401);
 
     let payload: unknown;
@@ -66,6 +78,17 @@ export function createBoardWebhookRoutes(db: Db): Hono<HonoEnv> {
     const normalized = normalizeWebhookPayload(provider, payload);
     if (!normalized) {
       return c.json({ received: true, processed: false, reason: 'event carried no actionable ticket' });
+    }
+
+    // Ops events (Sentry/PagerDuty = `incident` category) are NOT kanban tickets:
+    // divert them into prod_incidents (the Quality lens) instead of the task board.
+    if (getBoardProviderMeta(provider)?.category === 'incident') {
+      try {
+        const id = await ingestIncidentWebhook(db, c.env, conn, provider, normalized);
+        return c.json({ received: true, processed: true, decision: 'incident', incidentId: id }, 200);
+      } catch (err) {
+        return c.json({ error: err instanceof Error ? err.message : 'incident ingest failed' }, 500);
+      }
     }
 
     const ticket: NormalizedTicket = {

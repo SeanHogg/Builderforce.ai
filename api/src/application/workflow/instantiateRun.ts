@@ -14,6 +14,7 @@ import { workflows, workflowTasks } from '../../infrastructure/database/schema';
 import {
   compileDefinition,
   validateDefinition,
+  type CompiledStep,
   type WorkflowDefinition,
 } from '../../domain/workflowGraph';
 import type { Db } from '../../infrastructure/database/connection';
@@ -45,6 +46,11 @@ export interface InstantiateRunParams {
   triggerPayload?: unknown;
   /** How the run was started — recorded on the trigger task input for tracing. */
   triggerSource?: string;
+  /** Reliability linkage: the incident/monitor whose event fired this run (or the
+   *  incident a manual runbook was launched from). Persisted on the `workflows` row
+   *  so the incident detail can list its runs. */
+  sourceIncidentId?: string | null;
+  sourceMonitorId?: string | null;
 }
 
 export type InstantiateRunResult =
@@ -87,6 +93,21 @@ export async function instantiateWorkflowRun(
   if (invalid) return { ok: false, error: invalid };
 
   const steps = compileDefinition(params.definition);
+  return persistCompiledRun(db, steps, params);
+}
+
+/**
+ * Persist a run from ALREADY-COMPILED steps — the shared tail of
+ * {@link instantiateWorkflowRun} (which compiles a definition first) AND the entry
+ * point for the compile primitive's `deploy()` of a step-bearing `AgentSpec`, whose
+ * steps are already `CompiledStep[]`. Inserts the `workflows` row + one
+ * `workflow_tasks` row per step. Run-target precondition is the caller's to validate.
+ */
+export async function persistCompiledRun(
+  db: Db,
+  steps: CompiledStep[],
+  params: Omit<InstantiateRunParams, 'definition'>,
+): Promise<InstantiateRunResult> {
   const nodeToTaskId = new Map(steps.map((s) => [s.nodeId, crypto.randomUUID()]));
 
   const workflowId = crypto.randomUUID();
@@ -98,6 +119,8 @@ export async function instantiateWorkflowRun(
     segmentId: params.segmentId ?? null,
     projectId: params.projectId ?? null,
     workflowDefinitionId: params.definitionId ?? null,
+    sourceIncidentId: params.sourceIncidentId ?? null,
+    sourceMonitorId: params.sourceMonitorId ?? null,
     agentHostId: params.target.runtime === 'host' ? params.target.agentHostId! : null,
     runtime: params.target.runtime,
     cloudAgentRef: params.target.runtime === 'cloud' ? params.target.cloudAgentRef ?? null : null,

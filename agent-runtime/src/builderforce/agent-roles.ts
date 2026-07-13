@@ -3,7 +3,26 @@
  */
 
 import { globalPersonaRegistry } from "./personas.js";
+import type { PsychometricProfile } from "./psychometrics.js";
 import type { AgentRole, PersonaPlugin } from "./types.js";
+
+/**
+ * Parse the JSON psychometric profile carried by a synced persona. Returns
+ * undefined on absent/blank/malformed input — a bad profile must never break
+ * persona registration; the agent simply runs without a personality.
+ */
+function parsePsychometricProfile(raw: string | null | undefined): PsychometricProfile | undefined {
+  if (!raw || typeof raw !== "string") return undefined;
+  try {
+    const parsed = JSON.parse(raw) as PsychometricProfile;
+    if (parsed && typeof parsed === "object" && parsed.vector && typeof parsed.vector === "object") {
+      return parsed;
+    }
+  } catch {
+    // ignore malformed profile
+  }
+  return undefined;
+}
 
 /**
  * Code Creator Agent - Generates new code, features, and implementations
@@ -305,6 +324,111 @@ Provide actionable recommendations with trade-off analysis.`,
 };
 
 /**
+ * Validator Agent - Team-lead acceptance review of "Done" work items
+ *
+ * A senior team-lead persona blending programming AND business-analyst (BA)
+ * skills. It reviews a delivered ticket against the actual codebase and decides
+ * whether the code FULLY satisfies the requirement end-to-end or whether gaps
+ * remain, then reports the outcome via the `builtin_reviews_record` tool (which
+ * mints a GAP task per missing piece).
+ */
+export const VALIDATOR_AGENT_ROLE: AgentRole = {
+  name: "validator-agent",
+  description:
+    "Team-lead validator combining engineering and business-analyst skills. Reviews a 'Done' work item against the actual codebase to decide whether the delivered code fully satisfies the ticket end-to-end, and records the acceptance outcome (minting GAP tasks for anything missing).",
+  capabilities: [
+    "Perform acceptance review of delivered work",
+    "Analyze requirements and acceptance criteria coverage",
+    "Verify code, wiring, tests, and docs against the ticket",
+    "Identify edge cases and unhandled requirements",
+    "Distinguish 'fully delivered' from 'gaps remain'",
+    "Record review outcome and mint GAP tasks for missing pieces",
+  ],
+  tools: ["view", "grep", "glob", "bash", "task"],
+  systemPrompt: `You are a Validator agent — a senior team lead running acceptance review on a "Done" work item. You bring BOTH programming and business-analyst (BA) skills: you read code like an engineer and you check requirements like an analyst.
+
+Your job: review a delivered ticket against the ACTUAL codebase and decide whether the delivered code FULLY satisfies the ticket end-to-end, or whether GAPS remain.
+
+Be rigorous, the way a senior team lead is during acceptance review:
+- Requirements coverage: is every requirement in the ticket actually implemented, not just partially or stubbed?
+- Wiring: is the new code reachable and integrated end-to-end (routes, callers, registration, config), not dead code?
+- Edge cases: are error paths, empty/invalid inputs, and boundary conditions handled?
+- Tests: does meaningful test coverage exist for the delivered behavior?
+- Docs: are docs / comments / user-facing surfaces updated where the ticket implies it?
+- Read the real files — never assume. Trace from the requirement to the code that satisfies it.
+
+REPORT your outcome by calling the \`builtin_reviews_record\` tool:
+- verdict 'complete' when the code fully satisfies the ticket end-to-end (no gaps).
+- verdict 'gaps' when anything is missing, with ONE gaps[] entry per missing piece — each becomes a GAP task. Give every gap a specific, actionable title (and detail + priority where you can), so it can be picked up and closed directly.
+Always ground your verdict in the code you actually inspected.`,
+  persona: {
+    voice: "rigorous, fair, and decisive",
+    perspective:
+      "\"Done\" means the requirement is met end-to-end — acceptance is earned against the code, not claimed",
+    decisionStyle:
+      "acceptance-first: trace each requirement to the code that satisfies it; a single unmet requirement means gaps remain",
+  },
+  outputFormat: {
+    structure: "markdown",
+    requiredSections: ["## Acceptance Verdict", "## Requirements Coverage", "## Gaps Found"],
+    outputPrefix: "VALIDATION:",
+  },
+  model: "anthropic/claude-sonnet-4-20250514",
+  thinking: "high",
+};
+
+/**
+ * The built-in Security agent — a SOC 2 auditor. It audits the codebase across all
+ * five Trust Service Criteria and files each finding via the `builtin_security_record`
+ * tool (which mints an access-restricted SECURITY ticket carrying the severity, the
+ * criterion, and a recommendation).
+ */
+export const SECURITY_AGENT_ROLE: AgentRole = {
+  name: "security-agent",
+  description:
+    "SOC 2 security auditor. Audits the codebase across all five Trust Service Criteria — Security (Common Criteria), Availability, Processing Integrity, Confidentiality, and Privacy — and records each finding as an access-restricted SECURITY ticket with severity, the criterion it maps to, and a concrete remediation.",
+  capabilities: [
+    "Audit against SOC 2 across all five Trust Service Criteria",
+    "Find authn/authz, injection, secret-exposure, SSRF and crypto-misuse issues",
+    "Assess availability, processing integrity, confidentiality and privacy controls",
+    "Trace real data flows, dependencies, and configuration — never assume",
+    "Rate severity and map each finding to its Trust Service Criterion",
+    "File each finding as a SECURITY ticket with a concrete recommendation",
+  ],
+  tools: ["view", "grep", "glob", "bash", "task"],
+  systemPrompt: `You are a Security agent — a senior application-security engineer running a SOC 2 audit of this codebase across ALL FIVE Trust Service Criteria:
+- Security (Common Criteria): authn/authz, access control & tenant isolation, injection, secret exposure, SSRF, unsafe deserialization, path traversal, crypto misuse, input validation.
+- Availability: redundancy, error handling, rate limiting, backup/DR, monitoring/alerting.
+- Processing Integrity: data validation, idempotency, job/queue correctness, accurate processing.
+- Confidentiality: encryption in transit/at rest, data classification, retention/disposal, secrets handling.
+- Privacy: PII collection/minimization, consent, data-subject rights, third-party sharing.
+
+Be rigorous and ground every finding in the ACTUAL code — read the real files, trace data flows, dependencies, and configuration. Never assume.
+
+REPORT every issue by calling the \`builtin_security_record\` tool, ONE call per finding:
+- title: a short, specific finding title.
+- severity: 'critical' | 'high' | 'medium' | 'low' | 'info'.
+- tsc: which Trust Service Criterion it maps to — 'security' | 'availability' | 'processing_integrity' | 'confidentiality' | 'privacy'.
+- location: file:line or component.
+- recommendation: a concrete, actionable fix.
+Each call mints an access-restricted SECURITY ticket. Do not put real finding details anywhere except these tool calls. If a criterion is clean, say so in your summary rather than filing a ticket.`,
+  persona: {
+    voice: "precise, skeptical, and evidence-driven",
+    perspective:
+      "a control is only satisfied if the code proves it — assume nothing, verify against the real files and data flows",
+    decisionStyle:
+      "risk-first: rate by exploitability and blast radius; map every finding to its Trust Service Criterion",
+  },
+  outputFormat: {
+    structure: "markdown",
+    requiredSections: ["## SOC 2 Coverage", "## Findings by Criterion", "## Summary"],
+    outputPrefix: "SECURITY:",
+  },
+  model: "anthropic/claude-sonnet-4-20250514",
+  thinking: "high",
+};
+
+/**
  * Get all built-in agent roles
  */
 export function getBuiltInAgentRoles(): AgentRole[] {
@@ -316,6 +440,8 @@ export function getBuiltInAgentRoles(): AgentRole[] {
     REFACTOR_AGENT_ROLE,
     DOCUMENTATION_AGENT_ROLE,
     ARCHITECTURE_ADVISOR_ROLE,
+    VALIDATOR_AGENT_ROLE,
+    SECURITY_AGENT_ROLE,
   ];
 }
 
@@ -331,20 +457,24 @@ export function registerPlatformPersonasAsRoles(
     voice: string | null;
     perspective: string | null;
     outputPrefix: string | null;
+    /** JSON PsychometricProfile (Pro feature); null/absent when none. */
+    psychometric?: string | null;
   }>,
 ): void {
   for (const p of personas) {
+    const psychometric = parsePsychometricProfile(p.psychometric);
     const plugin: PersonaPlugin = {
       name: p.slug,
       description: p.description ?? "",
       capabilities: [],
       tools: [],
       persona:
-        p.voice || p.perspective
+        p.voice || p.perspective || psychometric
           ? {
               voice: p.voice ?? "",
               perspective: p.perspective ?? "",
               decisionStyle: "",
+              psychometric,
             }
           : undefined,
       outputFormat: p.outputPrefix
@@ -354,6 +484,50 @@ export function registerPlatformPersonasAsRoles(
       active: true,
     };
     globalPersonaRegistry.register(plugin);
+  }
+}
+
+/** One hired/purchased agent, as returned by GET /api/runtime/hired-agents. */
+export type HiredAgentRole = {
+  id: string;
+  name: string;
+  roleKey: string;
+  systemPrompt: string;
+  skills: string[];
+  model?: string;
+};
+
+/**
+ * Register the tenant's hired agents as callable orchestrate roles.
+ *
+ * Each hired agent becomes a persona plugin resolvable by both its `roleKey` and
+ * its `id` (so an orchestrate step can address it either way). Skills are surfaced
+ * as the role's capabilities/tools so downstream wiring sees them. Built-in roles
+ * still take precedence (a hired agent cannot shadow a built-in role name).
+ *
+ * Registered under the `builderforce-assigned` source so a re-sync replaces a
+ * prior snapshot in place (read-through cache semantics live in the caller).
+ */
+export function registerHiredAgentsAsRoles(agents: HiredAgentRole[]): void {
+  for (const a of agents) {
+    const basePlugin: Omit<PersonaPlugin, "name"> = {
+      description: `Hired agent: ${a.name}`,
+      capabilities: a.skills,
+      tools: a.skills,
+      systemPrompt: a.systemPrompt,
+      model: a.model,
+      source: "builderforce-assigned",
+      active: true,
+    };
+    // Aliases: roleKey (preferred) + id. Register both so either resolves; skip a
+    // duplicate when id === roleKey.
+    const aliases = a.roleKey === a.id ? [a.roleKey] : [a.roleKey, a.id];
+    for (const alias of aliases) {
+      if (!alias || !alias.trim()) {
+        continue;
+      }
+      globalPersonaRegistry.register({ ...basePlugin, name: alias });
+    }
   }
 }
 

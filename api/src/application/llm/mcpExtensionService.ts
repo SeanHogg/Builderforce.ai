@@ -17,11 +17,23 @@
 
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
 import { tenantMcpExtensions } from '../../infrastructure/database/schema';
+import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { assertSafeUrl } from '../../infrastructure/net/ssrfGuard';
 import {
   encryptSecretForStorage,
   decryptSecretFromStorage,
 } from '../../infrastructure/auth/MfaService';
+
+/** Read-through cache key for a tenant's merged MCP tool list [1406]. */
+const mcpToolsCacheKey = (tenantId: number): string => `mcp-tools:tenant:${tenantId}`;
+
+/** Drop the cached tool list for a tenant — call after any extension mutation so
+ *  the next Brain open re-fetches the live `/tools` set instead of a stale one. */
+export async function invalidateMcpToolsCache(env: Env, tenantId: number): Promise<void> {
+  await invalidateCached(env, mcpToolsCacheKey(tenantId));
+}
 
 /** A registered extension as returned to the portal — never includes the secret. */
 export interface McpExtensionView {
@@ -43,18 +55,31 @@ export interface McpToolEntry {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
+  /**
+   * Whether the tool changes state. Lets every client (web Brain, VS Code
+   * extension, external MCP clients) gate writes behind a confirm prompt off ONE
+   * advertised flag instead of re-deriving it. First-party built-in tools always
+   * set this; external tenant MCP servers don't expose it, so it's omitted there
+   * and clients MUST treat `undefined` as mutating (fail safe — confirm).
+   */
+  mutates?: boolean;
 }
 
-/** Reject anything that isn't a plain https URL — minimal SSRF guard. */
-function assertSafeServerUrl(serverUrl: string): void {
-  let u: URL;
+/**
+ * SSRF guard for a tenant-supplied MCP server URL [1402]. The gateway fetches
+ * this URL server-side with the tenant's stored secret, so an internal target
+ * must be rejected. Delegates to the shared {@link assertSafeUrl} guard
+ * (https-only here), which blocks loopback/private/link-local/reserved IP
+ * literals (incl. 169.254.169.254 metadata) and obvious internal hostnames.
+ */
+export function assertSafeServerUrl(serverUrl: string): void {
   try {
-    u = new URL(serverUrl);
-  } catch {
-    throw new Error('serverUrl must be a valid absolute URL');
-  }
-  if (u.protocol !== 'https:') {
-    throw new Error('serverUrl must use https://');
+    assertSafeUrl(serverUrl, { allowHttp: false });
+  } catch (e) {
+    // Preserve this endpoint's "serverUrl …" wording (and its tests) while the
+    // host/IP rules live once in the shared guard.
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(msg.replace(/^URL/, 'serverUrl'));
   }
 }
 
@@ -161,39 +186,49 @@ export async function listToolsForTenant(
   tenantId: number,
   keyMaterial: string,
   fetchImpl: typeof fetch = fetch,
+  /** When provided, the merged tool list is served through the read-through cache
+   *  (L1 + AUTH_CACHE_KV, 60s) so opening the Brain doesn't hit every customer MCP
+   *  server's `/tools` on each mount [1406]. Invalidated by extension mutations via
+   *  {@link invalidateMcpToolsCache}. Omit (e.g. unit tests) to always fetch live. */
+  env?: Env,
 ): Promise<McpToolEntry[]> {
-  const rows = await db
-    .select()
-    .from(tenantMcpExtensions)
-    .where(and(eq(tenantMcpExtensions.tenantId, tenantId), eq(tenantMcpExtensions.enabled, true)));
+  const load = async (): Promise<McpToolEntry[]> => {
+    const rows = await db
+      .select()
+      .from(tenantMcpExtensions)
+      .where(and(eq(tenantMcpExtensions.tenantId, tenantId), eq(tenantMcpExtensions.enabled, true)));
 
-  const all: McpToolEntry[] = [];
-  await Promise.all(
-    rows.map(async (row) => {
-      try {
-        const headers: Record<string, string> = { Accept: 'application/json' };
-        if (row.secretEnc) {
-          headers.Authorization = `Bearer ${await decryptSecretFromStorage(row.secretEnc, keyMaterial)}`;
+    const all: McpToolEntry[] = [];
+    await Promise.all(
+      rows.map(async (row) => {
+        try {
+          const headers: Record<string, string> = { Accept: 'application/json' };
+          if (row.secretEnc) {
+            headers.Authorization = `Bearer ${await decryptSecretFromStorage(row.secretEnc, keyMaterial)}`;
+          }
+          const res = await fetchImpl(`${row.serverUrl.replace(/\/$/, '')}/tools`, { headers });
+          if (!res.ok) return;
+          const body = (await res.json()) as { tools?: Array<{ name?: string; description?: string; parameters?: Record<string, unknown> }> };
+          for (const t of body.tools ?? []) {
+            if (!t.name) continue;
+            all.push({
+              extensionId: row.id,
+              tool: t.name,
+              name: advertisedName(row.id, t.name),
+              description: t.description ?? '',
+              parameters: t.parameters ?? { type: 'object', properties: {} },
+            });
+          }
+        } catch {
+          /* skip unreachable / malformed extension */
         }
-        const res = await fetchImpl(`${row.serverUrl.replace(/\/$/, '')}/tools`, { headers });
-        if (!res.ok) return;
-        const body = (await res.json()) as { tools?: Array<{ name?: string; description?: string; parameters?: Record<string, unknown> }> };
-        for (const t of body.tools ?? []) {
-          if (!t.name) continue;
-          all.push({
-            extensionId: row.id,
-            tool: t.name,
-            name: advertisedName(row.id, t.name),
-            description: t.description ?? '',
-            parameters: t.parameters ?? { type: 'object', properties: {} },
-          });
-        }
-      } catch {
-        /* skip unreachable / malformed extension */
-      }
-    }),
-  );
-  return all;
+      }),
+    );
+    return all;
+  };
+
+  if (!env) return load();
+  return getOrSetCached(env, mcpToolsCacheKey(tenantId), load, { kvTtlSeconds: 60, l1TtlMs: 30_000 });
 }
 
 /**

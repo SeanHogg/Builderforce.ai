@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Script from 'next/script';
 import { JetBrains_Mono } from 'next/font/google';
+import { LocaleProvider } from './LocaleProvider';
 import './globals.css';
 import { AuthProvider } from '@/lib/AuthContext';
 import { CartProvider } from '@/lib/CartContext';
@@ -15,12 +16,27 @@ import { EmulationProvider } from '@/lib/EmulationContext';
 import { RolePreviewProvider } from '@/lib/RolePreviewContext';
 import { PermissionDebuggerProvider } from '@/lib/PermissionDebuggerContext';
 import ThemeProvider from './ThemeProvider';
+import { ConfirmProvider } from '@/components/ConfirmProvider';
+import { ToastProvider } from '@/components/ToastProvider';
 import ConditionalAppShell from '@/components/ConditionalAppShell';
 import { PwaUpdateBanner } from '@/components/PwaUpdateBanner';
+import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
 import { GlobalErrorHandler } from '@/components/GlobalErrorHandler';
+import { QualityErrorReporter } from '@/components/QualityErrorReporter';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
+import { ChunkErrorRecovery } from '@/components/ChunkErrorRecovery';
+import { EMBED_ERROR_REPORTER } from '@/lib/embed/embedErrorReporter';
+import { AUTH_API_URL } from '@/lib/auth';
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://builderforce.ai';
+
+// Dogfood: our own web errors flow to the Product Quality pillar. The public
+// bfq_ ingest key is read server-side (no NEXT_PUBLIC_ needed) and handed to the
+// client island; the endpoint tracks whatever API origin auth uses.
+const QUALITY_ERROR_KEY = process.env.NEXT_BUILDERFORCE_ERROR_API_KEY || '';
+const QUALITY_ENDPOINT = `${AUTH_API_URL}/api/quality-ingest`;
+const QUALITY_ENVIRONMENT = process.env.NODE_ENV === 'production' ? 'production' : 'development';
 
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
@@ -29,10 +45,15 @@ export const metadata: Metadata = {
     template: '%s | Builderforce.ai',
   },
   description:
-    'Build, train, and deploy custom AI agents. WebGPU LoRA fine-tuning in the browser. Generate datasets, evaluate with AI judges, publish to the Workforce Registry. Skills marketplace, personas, and AI-native workflows.',
+    'A human-in-the-loop, fully agentic cloud. Train your own AI agents and use them inside your own agent, manage your whole workforce on a Kanban board, and review and approve every action — without leaving VS Code. WebGPU LoRA fine-tuning, skills marketplace, personas, and the Workforce Registry.',
   keywords: [
     'AI agent training',
     'AI agents',
+    'human-in-the-loop AI',
+    'agentic cloud',
+    'Kanban board',
+    'project management',
+    'VS Code extension',
     'WebGPU',
     'LoRA fine-tuning',
     'AI workforce',
@@ -51,24 +72,21 @@ export const metadata: Metadata = {
     type: 'website',
     url: BASE_URL,
     siteName: 'Builderforce.ai',
-    title: 'Builderforce.ai — AI Agent Training Platform',
+    title: 'Builderforce.ai — Your AI CTO, CIO & Security Officer',
+    // Front-loaded for chat/link unfurls, which truncate after ~1–2 lines on mobile.
     description:
-      'Build, train, and deploy custom AI agents. WebGPU LoRA fine-tuning, skills marketplace, personas, and AI-native workflows. Publish to the Workforce Registry.',
-    images: [
-      {
-        url: '/og-image.png',
-        width: 1200,
-        height: 630,
-        alt: 'Builderforce.ai — AI Agent Training Platform',
-      },
-    ],
+      'Train your own AI agents, run a whole AI workforce on a Kanban board, and approve every action — without leaving VS Code.',
+    // Static branded PNG (the B-logo lockup). We do NOT use a next/og ImageResponse
+    // route here: on the Cloudflare edge runtime it returns an empty 0-byte image, so
+    // iMessage/SMS/Slack unfurl a stale cached preview. See lib/seo.ts → OG_IMAGE.
+    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'Builderforce.ai' }],
     locale: 'en_US',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Builderforce.ai — AI Agent Training Platform',
+    title: 'Builderforce.ai — Your AI CTO, CIO & Security Officer',
     description:
-      'Build, train, and deploy custom AI agents. WebGPU LoRA, skills marketplace, personas. Publish to the Workforce Registry.',
+      'Train your own AI agents and run an AI workforce on a Kanban board — approve every action without leaving VS Code.',
     images: ['/og-image.png'],
   },
   manifest: '/manifest.json',
@@ -96,6 +114,10 @@ export const viewport = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // Static-rendered shell in the default locale; the client LocaleProvider swaps
+  // to the user's cookie locale after hydration (see LocaleProvider). This keeps
+  // marketing/public pages statically prerendered (SEO) instead of forcing every
+  // route dynamic via a server-side cookie read.
   return (
     <html lang="en" data-theme="dark" suppressHydrationWarning className={jetbrainsMono.variable}>
       <head>
@@ -121,6 +143,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
 
+        {/*
+          Framed-only embed crash reporter. Runs before any route bundle (raw
+          inline <head> script — the reliable "beforeInteractive", which a nested
+          layout can't provide). No-ops on the top-level app; when framed, it
+          relays render/hydration throws to the host so an embed failure is
+          diagnosable instead of a silent 15s timeout. See embedErrorReporter.ts.
+        */}
+        <script dangerouslySetInnerHTML={{ __html: EMBED_ERROR_REPORTER }} />
+
         {/* Fontshare loaded via CSS @import in globals.css — no <link> needed here */}
         {/* JetBrains Mono loaded via next/font/google (see jetbrainsMono variable above) — no <link> needed */}
         {/* JSON-LD Structured Data (SEO) — homepage schema injected at layout
@@ -145,23 +176,45 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Client island: syncs icon labels after JS hydrates */}
         <ThemeProvider />
 
-        <ErrorBoundary homePath="/dashboard" homeLabel="Go to Dashboard">
-          <AuthProvider>
-            <CartProvider>
-              <EmulationProvider>
-                <RolePreviewProvider>
-                  <PermissionDebuggerProvider>
-                    <ConditionalAppShell>{children}</ConditionalAppShell>
-                  </PermissionDebuggerProvider>
-                </RolePreviewProvider>
-              </EmulationProvider>
-            </CartProvider>
-          </AuthProvider>
+        {/* Default-locale messages render statically; LocaleProvider swaps to the
+            user's cookie locale on the client after hydration. */}
+        <LocaleProvider>
+          <ErrorBoundary homePath="/dashboard" homeLabel="Go to Dashboard">
+            {/* Chunk-load crashes self-heal (purge stale SW cache + reload onto
+                the current build) instead of hitting the generic crash page; any
+                non-chunk error re-throws up to ErrorBoundary above. */}
+            <ChunkErrorBoundary>
+              <AuthProvider>
+                <CartProvider>
+                  <EmulationProvider>
+                    <RolePreviewProvider>
+                      <PermissionDebuggerProvider>
+                        <ConfirmProvider>
+                          <ToastProvider>
+                            <ConditionalAppShell>{children}</ConditionalAppShell>
+                          </ToastProvider>
+                        </ConfirmProvider>
+                      </PermissionDebuggerProvider>
+                    </RolePreviewProvider>
+                  </EmulationProvider>
+                </CartProvider>
+              </AuthProvider>
+            </ChunkErrorBoundary>
 
-          <GlobalErrorHandler />
-        </ErrorBoundary>
+            <GlobalErrorHandler />
+            {QUALITY_ERROR_KEY && (
+              <QualityErrorReporter
+                apiKey={QUALITY_ERROR_KEY}
+                endpoint={QUALITY_ENDPOINT}
+                environment={QUALITY_ENVIRONMENT}
+              />
+            )}
+          </ErrorBoundary>
 
-        <PwaUpdateBanner />
+          <ChunkErrorRecovery />
+          <PwaUpdateBanner />
+          <PwaInstallPrompt />
+        </LocaleProvider>
       </body>
     </html>
   );

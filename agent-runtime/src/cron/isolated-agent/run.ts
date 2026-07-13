@@ -20,8 +20,8 @@ import {
   resolveHooksGmailModel,
   resolveThinkingDefault,
 } from "../../agents/model-selection.js";
-import type { MessagingToolSend } from "../../agents/pi-embedded-messaging.js";
-import { runEmbeddedPiAgent } from "../../agents/pi-embedded.js";
+import type { MessagingToolSend } from "../../agents/embedded-messaging.js";
+import { runEmbeddedAgent } from "../../agents/embedded.js";
 import { runSubagentAnnounceFlow } from "../../agents/subagent-announce.js";
 import { countActiveDescendantRuns } from "../../agents/subagent-registry.js";
 import { resolveAgentTimeoutMs } from "../../agents/timeout.js";
@@ -431,7 +431,7 @@ export async function runCronIsolatedAgentTurn(params: {
   cronSession.sessionEntry.systemSent = true;
   await persistSessionEntry();
 
-  let runResult: Awaited<ReturnType<typeof runEmbeddedPiAgent>>;
+  let runResult: Awaited<ReturnType<typeof runEmbeddedAgent>>;
   let fallbackProvider = provider;
   let fallbackModel = model;
   const runStartedAt = Date.now();
@@ -472,7 +472,7 @@ export async function runCronIsolatedAgentTurn(params: {
             cliSessionId,
           });
         }
-        return runEmbeddedPiAgent({
+        return runEmbeddedAgent({
           sessionId: cronSession.sessionEntry.sessionId,
           sessionKey: agentSessionKey,
           agentId,
@@ -679,7 +679,7 @@ export async function runCronIsolatedAgentTurn(params: {
           ? params.job.name.trim()
           : `cron:${params.job.id}`;
       const initialSynthesizedText = synthesizedText.trim();
-      let activeSubagentRuns = countActiveDescendantRuns(agentSessionKey);
+      let activeSubagentRuns = await countActiveDescendantRuns(agentSessionKey);
       const expectedSubagentFollowup = expectsSubagentFollowup(initialSynthesizedText);
       const hadActiveDescendants = activeSubagentRuns > 0;
       if (activeSubagentRuns > 0 || expectedSubagentFollowup) {
@@ -689,7 +689,7 @@ export async function runCronIsolatedAgentTurn(params: {
           timeoutMs,
           observedActiveDescendants: activeSubagentRuns > 0 || expectedSubagentFollowup,
         });
-        activeSubagentRuns = countActiveDescendantRuns(agentSessionKey);
+        activeSubagentRuns = await countActiveDescendantRuns(agentSessionKey);
         if (
           !finalReply &&
           activeSubagentRuns === 0 &&

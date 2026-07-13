@@ -76,6 +76,63 @@
     9c lifecycle → 9d parity+harness) so the operator can prove cloud agents deliver a merged PR
     with no self-hosted host online before GA.
 
+11. **[10 — PRD: PI Framework Cutover](./10-prd-pi-cutover.md)**
+    The **on-prem runtime de-framework**: remove `@mariozechner/pi-*` (138 files) and run the
+    On-Prem agent on the native, surface-agnostic `LocalAgentEngine`. Records what's **done +
+    verified** (Stage 1 — all ~40 tools native; Stage 2 foundations — native LLM client +
+    streaming + native model types) and the **remaining staged plan** (2a type repoint → 2b
+    completion/auth→gateway → 3 agent-loop swap → 4 TUI → 5 delete + flip default), each with
+    tasks + falsifiable acceptance checks. Multi-session by design; nothing is deleted before its
+    replacement is wired + verified.
+
+12. **[11 — PRD: Agent Engine Consolidation](./11-prd-engine-consolidation.md)**
+    The **umbrella** PRD for the whole "one tool contract + one swappable engine seam, four
+    surfaces" program (cloud Worker/DO, cloud Container, on-prem Node). Records the three pillars
+    (shared `@builderforce/agent-tools` contract, the `resolveEngine` DI seam, capability-gated
+    providers), what's **done** (cloud fully derived from the shared registry + model cascade;
+    shared contract built; on-prem Stage 1/2 per doc 10), and the **full remaining-capability
+    catalog**: the pi-removal tail (doc 10), parity gaps (`ask_human` on Node + Container,
+    `web.search` backend, local-engine streaming), and the cloud concretions of the Node-only
+    tools (orchestrate / memory / message / media), with a surfaces × capabilities target matrix.
+    Read this for the feature-level picture; doc 10 for the pi-removal staging detail.
+
+13. **[13 — PRD: Learned Model Routing](./13-prd-learned-model-routing.md)**
+    Closes the model-selection feedback loop: label each task with an **action type** (free-model
+    classifier, cached on the task), score each terminal cloud run's **outcome** (composite of PR
+    merged + green CI + no-degradation + efficiency) into a `run_model_outcomes` fact table, and feed
+    it back into `pickCloudModel`'s soft-seed so a run prefers the empirically-best reachable model per
+    action type (project→tenant→global scope). **Cost model (§4.1, load-bearing):** the routing
+    *decision* must work headless, so it's a **server-side O(1) read of a tiny incrementally-maintained
+    `routing:<scope>` KV blob** (no SQL/aggregation on the hot path); the heavy **SSM/Samba recall runs
+    on the client GPU** (WebGPU/builderforce-memory, IndexedDB) and only *biases* interactive runs — zero server
+    CPU/DB. 3 phases (Capture → Analyze+Route → client-SSM recall); degrades to today's static cascade
+    under cold-start/error/headless/kill-switch. Builds on existing `llm_usage_log` capture + the curated
+    coding pool — see [[claude-direct-coding-floor]].
+
+14. **[14 — PRD: BuilderForce VS Code Extension](./14-prd-vscode-extension.md)**
+    The first **editor-native client**, built by **reuse, not rebuild**. A sidebar webview renders the
+    **exact same `BrainPanel` chat the web app uses** — by extracting the Brain UI into the shared
+    `@seanhogg/builderforce-brain-embedded` package (new `/ui` subpath, app couplings made injectable),
+    repointing the frontend, and deleting the app-resident copies (one source, two hosts; no fork). The
+    agent runs **in-process** (`agentLoop()`) against **whatever folder is open** (sandboxed via the
+    existing `wrapToolWorkspaceRootGuard`), LLM traffic on the unchanged gateway, with the **gateway key
+    held only in the extension host** (`SecretStorage`) and webview LLM calls **proxied through the host**
+    (brain-embedded's injectable `transport`) so the secret never enters the webview. **Codebase-aware so
+    it doesn't misfire:** on first open of a folder it runs a **scan + knowledge summary** (the
+    PRD-initialization flow — `initializeBuilderForceAgentsProject` + a net-new `architecture.md`
+    auto-fill + seeded `SsmMemoryService`, cached by a git-HEAD/tree version token) and keeps learning via
+    `KnowledgeLoopService`. **Consumes [13 — Learned Model Routing](./13-prd-learned-model-routing.md):**
+    the Node extension host is PRD 13's SSM client — it classifies the action type, reads the cached
+    `routing:<scope>` table, computes a local SSM `routingBias` over this repo's memory, seeds the
+    best reachable model via `rankModelsForAction`, and writes each run's outcome back into the **same
+    `run_model_outcomes` brain** as cloud runs (`source='vscode'`, table extended with two nullable
+    columns). **Auth:** browser **device-code login** (RFC 8628) → scoped gateway key
+    (`generateApiKey('clu')`) in the OS keychain, reused across restarts, no gateway-auth change. The
+    only server work is the device-authorization grant (3 endpoints + `device_authorizations` table +
+    verify page) + a `run-outcome` write endpoint. 4 phases (shared-UI extract+auth → chat+agent →
+    codebase scan/knowledge → learned routing). Out of scope: Visual Studio (C#/VSIX) and JetBrains —
+    same backend, separate clients.
+
 > **Decision log.** PM + Agile = Phase 1 (BuilderForce owns data, autonomous dev agents, thin
 > embed shells, Tenant→Segment isolation with BurnRateOS as IdP). Security/Governance = Phase 2
 > (doc 07), same model. DSR/suppression re-home per-Segment; BurnRateOS keeps its own

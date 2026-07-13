@@ -3,7 +3,9 @@
  *
  * Manages third-party integration credentials (GitHub, Jira, Bitbucket,
  * Confluence, Freshservice).  Credentials are encrypted at rest using
- * AES-256-GCM with a tenant-derived key.
+ * AES-256-GCM with a PER-TENANT derived key (the base secret is folded with the
+ * tenant id into the PBKDF2 salt; new rows are written as `v2:` ciphertext, legacy
+ * global-key rows still decrypt — see application/integrations/credentialCrypto).
  *
  * POST   /api/integrations           Create credential     (MANAGER+)
  * GET    /api/integrations           List credentials      (MANAGER+)
@@ -21,61 +23,19 @@ import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { githubStatusMessage } from '../../application/integrations/githubTestError';
+import { encryptCredentials, decryptCredentials } from '../../application/integrations/credentialCrypto';
 
-// ---------------------------------------------------------------------------
-// AES-256-GCM encryption helpers (Web Crypto — works in Cloudflare Workers)
-// ---------------------------------------------------------------------------
-
-/** Derive an AES-256 key from a passphrase using PBKDF2. */
-async function deriveKey(passphrase: string): Promise<CryptoKey> {
-  const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
-    'raw', enc.encode(passphrase), 'PBKDF2', false, ['deriveKey'],
-  );
-  return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt: enc.encode('builderforce-integrations'), iterations: 100_000, hash: 'SHA-256' },
-    keyMaterial,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt'],
-  );
-}
-
-async function encryptCredentials(
-  data: Record<string, unknown>,
-  secret: string,
-): Promise<{ enc: string; iv: string }> {
-  const key = await deriveKey(secret);
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const enc = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    key,
-    new TextEncoder().encode(JSON.stringify(data)),
-  );
-  return {
-    enc: btoa(String.fromCharCode(...new Uint8Array(enc))),
-    iv:  Array.from(iv).map((b) => b.toString(16).padStart(2, '0')).join(''),
-  };
-}
-
-async function decryptCredentials(
-  encB64: string,
-  ivHex: string,
-  secret: string,
-): Promise<Record<string, unknown> | null> {
-  try {
-    const key = await deriveKey(secret);
-    const iv  = new Uint8Array(ivHex.match(/.{2}/g)!.map((h) => parseInt(h, 16)));
-    const dec = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv },
-      key,
-      Uint8Array.from(atob(encB64), (c) => c.charCodeAt(0)),
-    );
-    return JSON.parse(new TextDecoder().decode(dec));
-  } catch {
-    return null;
-  }
-}
+/**
+ * Credential providers accepted by this endpoint. Mirrors integrationProviderEnum
+ * in schema.ts (sans google_calendar/rally/freshworks, which are managed by their
+ * own flows). Board-sync providers are a subset of this list.
+ */
+const CREDENTIAL_PROVIDERS = [
+  'github', 'gitlab', 'bitbucket', 'jira', 'confluence',
+  'freshservice', 'freshdesk', 'servicenow', 'linear', 'sentry', 'pagerduty',
+  'monday', 'asana', 'clickup',
+] as const;
+type CredentialProvider = (typeof CREDENTIAL_PROVIDERS)[number];
 
 /** Mask a credential value for display (show last 4 chars). */
 function maskToken(token: string): string {
@@ -185,6 +145,112 @@ async function testFreshservice(
     : { ok: false, message: `Freshservice API returned ${res.status}` };
 }
 
+async function testFreshdesk(
+  creds: Record<string, unknown>,
+  baseUrl: string | null,
+): Promise<{ ok: boolean; message: string }> {
+  const apiKey = creds.apiKey as string;
+  if (!apiKey || !baseUrl) return { ok: false, message: 'apiKey and baseUrl are required' };
+  // Freshdesk REST API — a lightweight agent-list probe; Basic auth with apiKey:X.
+  const url = `${baseUrl.replace(/\/$/, '')}/api/v2/agents?per_page=1`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Basic ${btoa(`${apiKey}:X`)}`, Accept: 'application/json' },
+  });
+  return res.ok
+    ? { ok: true, message: 'Connected' }
+    : { ok: false, message: `Freshdesk API returned ${res.status}` };
+}
+
+async function testLinear(creds: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
+  const apiKey = creds.apiKey as string;
+  if (!apiKey) return { ok: false, message: 'apiKey is required' };
+  const res = await fetch('https://api.linear.app/graphql', {
+    method: 'POST',
+    headers: { Authorization: apiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: '{ viewer { id } }' }),
+  });
+  if (!res.ok) return { ok: false, message: `Linear API returned ${res.status}` };
+  const json = (await res.json()) as { errors?: unknown[] };
+  return json.errors?.length ? { ok: false, message: 'Linear rejected the API key' } : { ok: true, message: 'Connected' };
+}
+
+async function testSentry(
+  creds: Record<string, unknown>,
+  baseUrl: string | null,
+): Promise<{ ok: boolean; message: string }> {
+  const token = creds.token as string;
+  if (!token) return { ok: false, message: 'token is required' };
+  const root = (baseUrl?.replace(/\/$/, '') || 'https://sentry.io');
+  const res = await fetch(`${root}/api/0/organizations/`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+  });
+  return res.ok
+    ? { ok: true, message: 'Connected' }
+    : { ok: false, message: `Sentry API returned ${res.status}` };
+}
+
+async function testPagerDuty(creds: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
+  const apiToken = creds.apiToken as string;
+  if (!apiToken) return { ok: false, message: 'apiToken is required' };
+  const res = await fetch('https://api.pagerduty.com/users?limit=1', {
+    headers: { Authorization: `Token token=${apiToken}`, Accept: 'application/vnd.pagerduty+json;version=2' },
+  });
+  return res.ok
+    ? { ok: true, message: 'Connected' }
+    : { ok: false, message: `PagerDuty API returned ${res.status}` };
+}
+
+async function testServiceNow(
+  creds: Record<string, unknown>,
+  baseUrl: string | null,
+): Promise<{ ok: boolean; message: string }> {
+  const username = creds.username as string;
+  const password = creds.password as string;
+  if (!username || !password || !baseUrl) return { ok: false, message: 'username, password, and baseUrl are required' };
+  const url = `${baseUrl.replace(/\/$/, '')}/api/now/table/sys_user?sysparm_limit=1`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Basic ${btoa(`${username}:${password}`)}`, Accept: 'application/json' },
+  });
+  return res.ok
+    ? { ok: true, message: 'Connected' }
+    : { ok: false, message: `ServiceNow API returned ${res.status}` };
+}
+
+async function testMonday(creds: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
+  const token = creds.token as string;
+  if (!token) return { ok: false, message: 'token is required' };
+  const res = await fetch('https://api.monday.com/v2', {
+    method: 'POST',
+    headers: { Authorization: token, 'Content-Type': 'application/json', 'API-Version': '2024-01' },
+    body: JSON.stringify({ query: '{ me { id } }' }),
+  });
+  if (!res.ok) return { ok: false, message: `monday API returned ${res.status}` };
+  const json = (await res.json()) as { errors?: unknown[] };
+  return json.errors?.length ? { ok: false, message: 'monday rejected the token' } : { ok: true, message: 'Connected' };
+}
+
+async function testAsana(creds: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
+  const token = creds.accessToken as string;
+  if (!token) return { ok: false, message: 'accessToken is required' };
+  const res = await fetch('https://app.asana.com/api/1.0/users/me', {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+  });
+  return res.ok
+    ? { ok: true, message: 'Connected' }
+    : { ok: false, message: `Asana API returned ${res.status}` };
+}
+
+async function testClickUp(creds: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
+  const token = creds.token as string;
+  if (!token) return { ok: false, message: 'token is required' };
+  const res = await fetch('https://api.clickup.com/api/v2/user', {
+    headers: { Authorization: token, Accept: 'application/json' },
+  });
+  return res.ok
+    ? { ok: true, message: 'Connected' }
+    : { ok: false, message: `ClickUp API returned ${res.status}` };
+}
+
 // ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
@@ -213,9 +279,8 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
       return c.json({ error: 'provider, name, and credentials are required' }, 400);
     }
 
-    const validProviders = ['github', 'gitlab', 'bitbucket', 'jira', 'confluence', 'freshservice'];
-    if (!validProviders.includes(body.provider)) {
-      return c.json({ error: `provider must be one of: ${validProviders.join(', ')}` }, 400);
+    if (!CREDENTIAL_PROVIDERS.includes(body.provider as CredentialProvider)) {
+      return c.json({ error: `provider must be one of: ${CREDENTIAL_PROVIDERS.join(', ')}` }, 400);
     }
 
     // Optional project scope — NULL means workspace-global. When set, the
@@ -230,14 +295,14 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
       projectId = proj.id;
     }
 
-    const { enc, iv } = await encryptCredentials(body.credentials, encryptionSecret);
+    const { enc, iv } = await encryptCredentials(body.credentials, encryptionSecret, tenantId);
 
     const [row] = await db
       .insert(integrationCredentials)
       .values({
         tenantId,
         projectId,
-        provider:       body.provider as 'github' | 'gitlab' | 'bitbucket' | 'jira' | 'confluence' | 'freshservice',
+        provider:       body.provider as CredentialProvider,
         name:           body.name.trim(),
         baseUrl:        body.baseUrl ?? null,
         credentialsEnc: enc,
@@ -303,7 +368,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
     if (!row) return c.json({ error: 'Integration not found' }, 404);
 
     // Decrypt and mask for display
-    const creds = await decryptCredentials(row.credentialsEnc, row.iv, encryptionSecret);
+    const creds = await decryptCredentials(row.credentialsEnc, row.iv, encryptionSecret, tenantId);
     const maskedCreds: Record<string, string> = {};
     if (creds) {
       for (const [k, v] of Object.entries(creds)) {
@@ -336,7 +401,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
     let iv = existing.iv;
     const rotated = !!body.credentials;
     if (body.credentials) {
-      const encrypted = await encryptCredentials(body.credentials, encryptionSecret);
+      const encrypted = await encryptCredentials(body.credentials, encryptionSecret, tenantId);
       credentialsEnc = encrypted.enc;
       iv = encrypted.iv;
     }
@@ -396,7 +461,7 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
       .where(and(eq(integrationCredentials.id, id), eq(integrationCredentials.tenantId, tenantId)));
     if (!row) return c.json({ error: 'Integration not found' }, 404);
 
-    const creds = await decryptCredentials(row.credentialsEnc, row.iv, encryptionSecret);
+    const creds = await decryptCredentials(row.credentialsEnc, row.iv, encryptionSecret, tenantId);
     if (!creds) return c.json({ error: 'Failed to decrypt credentials' }, 500);
 
     let result: { ok: boolean; message: string };
@@ -418,6 +483,30 @@ export function createIntegrationRoutes(db: Db, encryptionSecret: string): Hono<
         break;
       case 'freshservice':
         result = await testFreshservice(creds, row.baseUrl);
+        break;
+      case 'freshdesk':
+        result = await testFreshdesk(creds, row.baseUrl);
+        break;
+      case 'linear':
+        result = await testLinear(creds);
+        break;
+      case 'sentry':
+        result = await testSentry(creds, row.baseUrl);
+        break;
+      case 'pagerduty':
+        result = await testPagerDuty(creds);
+        break;
+      case 'servicenow':
+        result = await testServiceNow(creds, row.baseUrl);
+        break;
+      case 'monday':
+        result = await testMonday(creds);
+        break;
+      case 'asana':
+        result = await testAsana(creds);
+        break;
+      case 'clickup':
+        result = await testClickUp(creds);
         break;
       default:
         result = { ok: false, message: `Connectivity test not available for provider: ${row.provider}` };

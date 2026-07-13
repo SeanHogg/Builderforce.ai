@@ -4,7 +4,7 @@ import {
   installDirectiveBehaviorE2EHooks,
   makeWhatsAppDirectiveConfig,
   replyText,
-  runEmbeddedPiAgent,
+  runEmbeddedAgent,
   withTempHome,
 } from "./reply.directive.directive-behavior.e2e-harness.js";
 import { getReplyFromConfig } from "./reply.js";
@@ -97,7 +97,7 @@ describe("directive behavior", () => {
 
       const text = replyText(res);
       expect(text).toContain("agents.list[].tools.elevated.allowFrom.whatsapp");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("allows elevated when both global and per-agent allowlists match", async () => {
@@ -113,7 +113,7 @@ describe("directive behavior", () => {
 
       const text = replyText(res);
       expect(text).toContain("Elevated mode set to ask");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("warns when elevated is used in direct runtime", async () => {
@@ -127,7 +127,7 @@ describe("directive behavior", () => {
       const text = replyText(res);
       expect(text).toContain("Elevated mode disabled.");
       expect(text).toContain("Runtime is direct; sandboxing does not apply.");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("rejects invalid elevated level", async () => {
@@ -140,7 +140,7 @@ describe("directive behavior", () => {
 
       const text = replyText(res);
       expect(text).toContain("Unrecognized elevated level");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("handles multiple directives in a single message", async () => {
@@ -154,7 +154,7 @@ describe("directive behavior", () => {
       const text = replyText(res);
       expect(text).toContain("Elevated mode disabled.");
       expect(text).toContain("Verbose logging enabled.");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
 });

@@ -15,7 +15,9 @@ import { and, eq, gte, sum } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { llmUsageLog, tenants } from '../../infrastructure/database/schema';
 import { getLimits } from '../../domain/tenant/PlanLimits';
-import { TenantPlan } from '../../domain/shared/types';
+import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
+import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
+import { estimateTokensFromChars } from '../../application/llm/tokenUsage';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -43,7 +45,7 @@ function estimateCostPerToken(plan: TenantPlan): number {
  * Accurate to within ~15% for typical English/code content.
  */
 function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
+  return estimateTokensFromChars(text.length);
 }
 
 /**
@@ -90,15 +92,17 @@ export function createCostForecastRoutes(db: Db): Hono<HonoEnv> {
 
     // Fetch tenant plan
     const [tenantRow] = await db
-      .select({ plan: tenants.plan, billingStatus: tenants.billingStatus })
+      .select({ plan: tenants.plan, billingStatus: tenants.billingStatus, trialEndsAt: tenants.trialEndsAt })
       .from(tenants)
       .where(eq(tenants.id, tenantId))
       .limit(1);
 
-    const rawPlan = (tenantRow?.plan ?? 'free') as TenantPlan;
     const billingStatus = tenantRow?.billingStatus ?? 'none';
-    const effectivePlan: TenantPlan =
-      billingStatus === 'active' ? rawPlan : TenantPlan.FREE;
+    const effectivePlan: TenantPlan = resolveEffectivePlan({
+      plan: (tenantRow?.plan ?? 'free') as TenantPlan,
+      billingStatus: billingStatus as TenantBillingStatus,
+      trialEndsAt: tenantRow?.trialEndsAt ?? null,
+    });
 
     const limits = getLimits(effectivePlan);
 

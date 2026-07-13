@@ -1,0 +1,1141 @@
+'use client';
+
+import { Select } from '@/components/Select';
+import Link from 'next/link';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
+import { useTranslations } from 'next-intl';
+import { useConfirm } from '@/components/ConfirmProvider';
+
+import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@/lib/AuthContext';
+import { useIsMobile } from '@/lib/useIsMobile';
+import { contrastText } from '@/lib/contrastText';
+import { useCart, type ArtifactType } from '@/lib/CartContext';
+import {
+  agentHosts,
+  artifactAssignments,
+  marketplaceStats,
+  listMarketplaceSkills,
+  marketplacePublisherApi,
+  setMarketplaceToken,
+  type ArtifactStats,
+} from '@/lib/builderforceApi';
+import {
+  BUILTIN_PERSONAS,
+  BUILTIN_SKILLS,
+  userSkillsKey,
+  type Persona,
+  type BuiltinSkill,
+} from '@/lib/marketplaceData';
+import { listAgents, listPurchasedAgents, hireAgent, unhireAgent, updateAgent, deleteAgent } from '@/lib/api';
+import type { PublishedAgent } from '@/lib/types';
+import { isAgentOwner } from '@/lib/agentPermissions';
+import { formatAgentPrice } from '@/lib/agentPresentation';
+import ArtifactAssigner from '@/components/ArtifactAssigner';
+import { KnowledgeMarketSection } from './KnowledgeMarketSection';
+import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
+import { AgentCard } from '@/components/workforce/AgentCard';
+import { AgentOwnerActions } from '@/components/workforce/AgentOwnerActions';
+import { CloudAgentSlideOutPanel, type CloudAgentPanelTab } from '@/components/workforce/CloudAgentSlideOutPanel';
+import { SkillTags } from '@/components/SkillTags';
+import { listFreelancers, type FreelancerProfile } from '@/lib/freelancerApi';
+import { RatingStars } from '@/components/freelance/RatingStars';
+import { TrustBadge } from '@/components/freelance/TrustBadge';
+import { SkeletonGrid } from './SkeletonGrid';
+import { ModelsExplorer } from './ModelsExplorer';
+import MarketplaceGigsSection from './MarketplaceGigsSection';
+
+// Human freelancers ("Talent"), the live model catalog ("Models"), and open work to
+// bid on ("Gigs") are now categories of the marketplace rather than standalone
+// /talent, /models, and /freelancer/gigs pages — same search box, one merged surface.
+type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'workforce' | 'talent' | 'models' | 'gigs' | 'publish';
+
+const CATEGORY_IDS: MarketplaceCategory[] = ['all', 'personas', 'skills', 'workforce', 'talent', 'models', 'gigs', 'publish'];
+
+const TALENT_DISCIPLINES = ['developer', 'dba', 'designer', 'devops', 'qa', 'pm', 'data', 'security', 'other'] as const;
+
+const TALENT_PAGE_SIZE = 24;
+
+const talentCardStyle: React.CSSProperties = {
+  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 18,
+  display: 'flex', flexDirection: 'column', gap: 10, textDecoration: 'none',
+};
+
+const filterControlStyle: React.CSSProperties = {
+  background: 'var(--bg-elevated)', color: 'var(--text)', border: '1px solid var(--border)',
+  borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none',
+};
+
+function talentInitials(name: string | null): string {
+  return (name ?? '?').trim().split(/\s+/).slice(0, 2).map((s) => s[0]?.toUpperCase() ?? '').join('') || '?';
+}
+
+interface UserSkill {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  category: string;
+  tags?: string[];
+  version: string;
+  shared: boolean;
+}
+
+interface MarketplaceListing {
+  id: string;
+  type: 'persona' | 'skill';
+  artifactSlug: string;
+  name: string;
+  description: string;
+  author: string;
+  version: string;
+  tags: string[];
+  downloads: number;
+  likes: number;
+  image?: string;
+  emoji?: string;
+  price?: number;
+  pricingModel?: 'flat_fee' | 'consumption';
+  priceUnit?: string;
+}
+
+function loadSharedSkills(tenantId: string): MarketplaceListing[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(userSkillsKey(tenantId));
+    if (!raw) return [];
+    const skills = JSON.parse(raw) as UserSkill[];
+    return skills
+      .filter((s) => s.shared)
+      .map((s) => ({
+        id: `skill:${s.id}`,
+        type: 'skill' as const,
+        artifactSlug: s.slug || s.id,
+        name: s.name,
+        description: s.description || '',
+        author: 'You',
+        version: s.version || '1.0.0',
+        tags: (s.tags?.length ? s.tags : s.category ? [s.category] : []),
+        downloads: 0,
+        likes: 0,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+// Content blocks migrated from the retired /content-manager now live as knowledge
+// documents and are sold via the knowledge listings surface (KnowledgeMarketSection),
+// so the marketplace no longer reads content-manager's localStorage.
+
+function personaToListing(p: Persona): MarketplaceListing {
+  return {
+    id: `persona:${p.name}`,
+    type: 'persona',
+    artifactSlug: p.name,
+    name: p.name,
+    description: p.description,
+    author: p.author ?? 'Builderforce',
+    version: '1.0.0',
+    tags: p.tags ?? [],
+    downloads: p.downloads ?? 0,
+    likes: p.likes ?? 0,
+    image: p.image,
+  };
+}
+
+function builtinSkillToListing(b: BuiltinSkill): MarketplaceListing {
+  return {
+    id: `builtin-skill:${b.slug}`,
+    type: 'skill',
+    artifactSlug: b.slug,
+    name: b.name,
+    description: b.description,
+    author: b.author ?? 'Builderforce',
+    version: b.version ?? '1.0.0',
+    tags: b.tags ?? [],
+    downloads: b.downloads ?? 0,
+    likes: b.likes ?? 0,
+    image: b.image,
+    emoji: b.emoji,
+  };
+}
+
+export default function MarketplacePageClient() {
+  const { tenant, user, webToken, isAuthenticated, hasTenant } = useAuth();
+  const { addItem, hasItem } = useCart();
+  const tenantId = tenant?.id ?? '';
+  const tm = useTranslations('marketplace');
+  const confirm = useConfirm();
+  const tt = useTranslations('talent');
+  const tdis = useTranslations('freelancer');
+  const tmodels = useTranslations('models');
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const isMobile = useIsMobile();
+
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState<MarketplaceCategory>('all');
+  const [viewMode, setViewMode] = useState<ViewMode>('card');
+  const [listings, setListings] = useState<MarketplaceListing[]>([]);
+  const [stats, setStats] = useState<Record<string, ArtifactStats>>({});
+  const [installed, setInstalled] = useState<Set<string>>(new Set());
+  const [hasAgentHosts, setHasAgentHosts] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [agents, setAgents] = useState<PublishedAgent[]>([]);
+  const [loadingAgents, setLoadingAgents] = useState(true);
+  const [hiringId, setHiringId] = useState<string | null>(null);
+  const [unhiringId, setUnhiringId] = useState<string | null>(null);
+  // Agents this tenant has already hired — drives Hire vs Unhire on each listing.
+  const [hiredIds, setHiredIds] = useState<Set<string>>(new Set());
+
+  // Talent (human freelancers) — lazy-loaded only when the Talent tab is opened, so
+  // the marketplace never pays for a freelancer round-trip up front.
+  const [talentRows, setTalentRows] = useState<FreelancerProfile[]>([]);
+  const [talentTotal, setTalentTotal] = useState(0);
+  const [talentLoading, setTalentLoading] = useState(false);
+  const [talentError, setTalentError] = useState(false);
+  const [talentDiscipline, setTalentDiscipline] = useState('');
+  const [talentSort, setTalentSort] = useState('');
+  const [talentPage, setTalentPage] = useState(1);
+  const talentPages = Math.max(1, Math.ceil(talentTotal / TALENT_PAGE_SIZE));
+
+  // Owner-managed agent slide-out (edit / pricing) — owners manage their own
+  // listings in place on the marketplace, same panel as the workforce directory.
+  const [selectedAgent, setSelectedAgent] = useState<PublishedAgent | null>(null);
+  const [agentPanelTab, setAgentPanelTab] = useState<CloudAgentPanelTab>('details');
+
+  // Publish skill form
+  const [skillForm, setSkillForm] = useState({ name: '', slug: '', description: '', category: '', version: '1.0.0', repoUrl: '', price: '0', pricingModel: 'flat_fee' as 'flat_fee' | 'consumption', priceUnit: '' });
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [publishSuccess, setPublishSuccess] = useState(false);
+
+  // Bridge main web JWT → marketplace token so authenticated users can publish
+  // without a separate "publisher account" login.
+  useEffect(() => {
+    if (webToken) setMarketplaceToken(webToken);
+  }, [webToken]);
+
+  const handlePublishSkill = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!skillForm.name.trim() || !skillForm.slug.trim()) return;
+    setPublishing(true);
+    setPublishError(null);
+    setPublishSuccess(false);
+    try {
+      await marketplacePublisherApi.publishSkill({
+        name: skillForm.name.trim(),
+        slug: skillForm.slug.trim().toLowerCase().replace(/\s+/g, '-'),
+        description: skillForm.description.trim() || undefined,
+        category: skillForm.category.trim() || undefined,
+        version: skillForm.version.trim() || '1.0.0',
+        repoUrl: skillForm.repoUrl.trim() || undefined,
+      });
+      setPublishSuccess(true);
+      setSkillForm({ name: '', slug: '', description: '', category: '', version: '1.0.0', repoUrl: '', price: '0', pricingModel: 'flat_fee', priceUnit: '' });
+    } catch (e) {
+      setPublishError(e instanceof Error ? e.message : tm('publish.failed'));
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  // Keyed by ArtifactType so listing keys (persona|skill) and assignment keys
+  // (which carry the full ArtifactType) collide correctly in the installed set.
+  const key = (type: ArtifactType, slug: string) => `${type}:${slug}`;
+
+  const refreshListings = useCallback(async () => {
+    const tenantNum = Number(tenantId);
+    const personaListings = BUILTIN_PERSONAS.map(personaToListing);
+    const builtinSkillListings = BUILTIN_SKILLS.map(builtinSkillToListing);
+    let apiSkills: MarketplaceListing[] = [];
+    try {
+      const res = await listMarketplaceSkills({ limit: 100 });
+      apiSkills = (res.skills ?? []).map((s) => ({
+        id: `api-skill:${s.slug}`,
+        type: 'skill' as const,
+        artifactSlug: s.slug,
+        name: s.name,
+        description: s.description ?? '',
+        author: s.author_username ?? s.author_display_name ?? 'Marketplace',
+        version: s.version ?? '1.0.0',
+        tags: Array.isArray(s.tags) ? s.tags : [],
+        downloads: s.downloads ?? 0,
+        likes: s.likes ?? 0,
+        image: s.icon_url ?? undefined,
+      }));
+    } catch {
+      // ignore
+    }
+    const sharedSkills = loadSharedSkills(tenantId);
+    const allListings = [
+      ...personaListings,
+      ...builtinSkillListings,
+      ...apiSkills,
+      ...sharedSkills,
+    ];
+    setListings(allListings);
+
+    // Owned agentHosts + installed artifacts are TENANT-scoped (require the tenant
+    // JWT). Only fetch them for a user with an active workspace — a freelancer/gig
+    // account (authenticated but tenantless) would otherwise 401 on both. Anonymous
+    // and tenantless browsers see listings + stats but no install state.
+    if (hasTenant && tenantNum) {
+      const [agentHostList, assignList] = await Promise.all([
+        agentHosts.list().catch(() => []),
+        artifactAssignments.list('tenant', tenantNum).catch(() => []),
+      ]);
+      setHasAgentHosts(agentHostList.length > 0);
+      setInstalled(new Set(assignList.map((a) => key(a.artifactType, a.artifactSlug))));
+    } else {
+      setHasAgentHosts(false);
+      setInstalled(new Set());
+    }
+
+    const byType: Record<'skill' | 'persona', string[]> = { skill: [], persona: [] };
+    for (const item of allListings) byType[item.type].push(item.artifactSlug);
+
+    const [skillStats, personaStats] = await Promise.all([
+      byType.skill.length ? marketplaceStats.getStats('skill', byType.skill) : Promise.resolve({} as Record<string, ArtifactStats>),
+      byType.persona.length ? marketplaceStats.getStats('persona', byType.persona) : Promise.resolve({} as Record<string, ArtifactStats>),
+    ]);
+    const merged: Record<string, ArtifactStats> = {};
+    for (const slug of Object.keys(skillStats)) merged[key('skill', slug)] = skillStats[slug]!;
+    for (const slug of Object.keys(personaStats)) merged[key('persona', slug)] = personaStats[slug]!;
+    setStats(merged);
+  }, [tenantId, hasTenant]);
+
+  useEffect(() => {
+    refreshListings().finally(() => setLoading(false));
+  }, [refreshListings]);
+
+  const loadAgents = useCallback(() => {
+    setLoadingAgents(true);
+    // GET /api/workforce/agents already filters WHERE status = 'active' server-side.
+    return listAgents()
+      .then((list) => { setAgents(list); return list; })
+      .catch(() => { setAgents([]); return [] as PublishedAgent[]; })
+      .finally(() => setLoadingAgents(false));
+  }, []);
+
+  useEffect(() => { loadAgents(); }, [loadAgents]);
+
+  // Which listings has this tenant already hired? The purchased set is TENANT-scoped;
+  // only fetch it for a user with an active workspace (a tenantless freelancer would
+  // 401). Anonymous + tenantless browsers see Hire on everything.
+  const loadHired = useCallback(() => {
+    if (!hasTenant) { setHiredIds(new Set()); return Promise.resolve(); }
+    return listPurchasedAgents()
+      .then((list) => setHiredIds(new Set(list.map((a) => a.id))))
+      .catch(() => setHiredIds(new Set()));
+  }, [hasTenant]);
+
+  useEffect(() => { loadHired(); }, [loadHired]);
+
+  // Deep-link support: /marketplace?category=talent|models (the retired /talent and
+  // /models routes redirect here, and the header links deep-link in) selects the
+  // right tab — reactively, so a query-only nav on the same route still switches
+  // (a mount-once read would miss it for a visitor already on /marketplace).
+  const categoryParam = searchParams.get('category');
+  useEffect(() => {
+    if (categoryParam && (CATEGORY_IDS as string[]).includes(categoryParam)) {
+      setCategory(categoryParam as MarketplaceCategory);
+    }
+  }, [categoryParam]);
+
+  // Selecting a category chip mirrors the choice into the URL (?category=…) so the tab
+  // is deep-linkable + shareable + survives refresh — 'all' clears the param. Reuses
+  // the same query the deep-link read above consumes (one source of truth).
+  const selectCategory = (id: MarketplaceCategory) => {
+    setCategory(id);
+    const params = new URLSearchParams(Array.from(searchParams.entries()));
+    if (id === 'all') params.delete('category');
+    else params.set('category', id);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
+
+  // Any change to the talent filters (shared search box, discipline, sort) resets to
+  // page 1 so the viewer never lands on an out-of-range page.
+  useEffect(() => { setTalentPage(1); }, [search, talentDiscipline, talentSort]);
+
+  // Lazy talent fetch — runs only while the Talent tab is active, debounced so the
+  // shared search box does not fire a request per keystroke.
+  useEffect(() => {
+    if (category !== 'talent') return;
+    let cancelled = false;
+    const handle = setTimeout(() => {
+      setTalentLoading(true);
+      setTalentError(false);
+      listFreelancers({
+        q: search || undefined,
+        discipline: talentDiscipline || undefined,
+        sort: talentSort || undefined,
+        page: talentPage,
+        pageSize: TALENT_PAGE_SIZE,
+      })
+        .then((res) => { if (!cancelled) { setTalentRows(res.items); setTalentTotal(res.total); } })
+        .catch(() => { if (!cancelled) setTalentError(true); })
+        .finally(() => { if (!cancelled) setTalentLoading(false); });
+    }, 250);
+    return () => { cancelled = true; clearTimeout(handle); };
+  }, [category, search, talentDiscipline, talentSort, talentPage]);
+
+  const toggleLike = async (item: MarketplaceListing) => {
+    const k = key(item.type, item.artifactSlug);
+    const prev = stats[k] ?? { likes: 0, installs: 0, liked: false };
+    try {
+      const liked = await marketplaceStats.toggleLike(item.type, item.artifactSlug);
+      setStats((s) => ({
+        ...s,
+        [k]: {
+          ...prev,
+          liked,
+          likes: liked ? prev.likes + 1 : Math.max(0, prev.likes - 1),
+        },
+      }));
+    } catch {
+      // keep UI stable
+    }
+  };
+
+  const toggleInstall = async (item: MarketplaceListing) => {
+    const k = key(item.type, item.artifactSlug);
+    const tenantNum = Number(tenantId);
+    if (!tenantNum) return;
+    const wasInstalled = installed.has(k);
+    try {
+      if (wasInstalled) {
+        await artifactAssignments.unassign(item.type, item.artifactSlug, 'tenant', tenantNum);
+      } else {
+        await artifactAssignments.assign(item.type, item.artifactSlug, 'tenant', tenantNum);
+      }
+      setInstalled((prev) => {
+        const next = new Set(prev);
+        if (wasInstalled) next.delete(k);
+        else next.add(k);
+        return next;
+      });
+      const prev = stats[k] ?? { likes: 0, installs: 0, liked: false };
+      setStats((s) => ({
+        ...s,
+        [k]: { ...prev, installs: wasInstalled ? Math.max(0, prev.installs - 1) : prev.installs + 1 },
+      }));
+    } catch {
+      // keep UI stable
+    }
+  };
+
+  let filtered = listings;
+  if (category === 'personas') filtered = filtered.filter((l) => l.type === 'persona');
+  if (category === 'skills') filtered = filtered.filter((l) => l.type === 'skill');
+  const q = search.toLowerCase();
+  if (q) {
+    filtered = filtered.filter(
+      (l) =>
+        l.name.toLowerCase().includes(q) ||
+        l.description.toLowerCase().includes(q) ||
+        l.tags.some((t) => t.includes(q))
+    );
+  }
+
+  const filteredAgents = agents.filter(
+    (a) =>
+      !q ||
+      a.name.toLowerCase().includes(q) ||
+      (a.title && a.title.toLowerCase().includes(q)) ||
+      (a.bio && a.bio.toLowerCase().includes(q)) ||
+      (a.skills && a.skills.some((s) => s.toLowerCase().includes(q)))
+  );
+
+  const handleHire = useCallback(async (agentId: string) => {
+    // Hiring requires an account — route anonymous users to sign in (mirrors the
+    // Publish tab gate) instead of firing an auth-only POST that 401s silently.
+    if (!isAuthenticated) {
+      window.location.href = '/login?next=/marketplace';
+      return;
+    }
+    setHiringId(agentId);
+    try {
+      const updated = await hireAgent(agentId);
+      setAgents((prev) => prev.map((a) => (a.id === agentId ? updated : a)));
+      setHiredIds((prev) => new Set(prev).add(agentId));
+    } catch {
+      // keep UI stable
+    } finally {
+      setHiringId(null);
+    }
+  }, [isAuthenticated]);
+
+  const handleUnhire = useCallback(async (agentId: string) => {
+    setUnhiringId(agentId);
+    try {
+      await unhireAgent(agentId);
+      setHiredIds((prev) => { const next = new Set(prev); next.delete(agentId); return next; });
+      // hire_count is cumulative (unhire doesn't decrement), so the listing's
+      // displayed count is unchanged — no need to refetch the agent row.
+    } catch {
+      // keep UI stable
+    } finally {
+      setUnhiringId(null);
+    }
+  }, []);
+
+  // --- Owner management of own listings ------------------------------------
+  const openAgentPanel = useCallback((a: PublishedAgent, tab: CloudAgentPanelTab) => {
+    setAgentPanelTab(tab);
+    setSelectedAgent(a);
+  }, []);
+  const unpublishAgent = useCallback(async (a: PublishedAgent) => {
+    // Unpublishing removes it from the public registry; refetch so it drops out.
+    await updateAgent(a.id, { published: false });
+    loadAgents();
+  }, [loadAgents]);
+  const deleteOwnedAgent = useCallback(async (a: PublishedAgent) => {
+    if (!(await confirm(tm('action.deleteConfirm', { name: a.name })))) return;
+    try {
+      await deleteAgent(a.id);
+      loadAgents();
+    } catch {
+      // keep UI stable
+    }
+  }, [loadAgents]);
+
+  const categories: { id: MarketplaceCategory }[] = CATEGORY_IDS.map((id) => ({ id }));
+
+  const searchPlaceholder =
+    category === 'talent' ? tt('filter.search')
+    : category === 'models' ? tmodels('searchPlaceholder')
+    : tm('searchPlaceholder');
+
+  return (
+    // Full-width surface: the marketplace is a browse-heavy grid, so it overrides the
+    // shared 1100px `.page-inner` cap and runs to 100% of the shell width.
+    <div className="page-inner" style={{ maxWidth: '100%' }}>
+      <div style={{ textAlign: 'center', marginBottom: 32 }}>
+        <h1 style={{ fontSize: 'clamp(24px,4vw,36px)', fontWeight: 800, color: 'var(--text-strong)', margin: '0 0 8px' }}>
+          {tm('title')}
+        </h1>
+        <p style={{ color: 'var(--muted)', fontSize: 14, maxWidth: 520, margin: '0 auto' }}>
+          {tm('blurb')}
+        </p>
+      </div>
+
+      {/* Knowledge listings (SOPs/processes/docs published for sale). Public
+          browse — renders for logged-out visitors too; hides only when there are
+          no listings. Acquiring prompts sign-in / checkout as needed. */}
+      <KnowledgeMarketSection />
+
+      <div
+        style={{
+          position: 'sticky',
+          top: -16,
+          zIndex: 15,
+          background: 'color-mix(in srgb, var(--bg) 68%, transparent)',
+          backdropFilter: 'blur(6px)',
+          padding: '12px 0 16px',
+          display: 'flex',
+          alignItems: isMobile ? 'stretch' : 'center',
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: 12,
+          flexWrap: 'wrap',
+          marginBottom: 16,
+          borderBottom: '1px solid var(--border)',
+        }}
+      >
+        <input
+          type="search"
+          placeholder={searchPlaceholder}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{
+            flex: 1,
+            minWidth: isMobile ? 0 : 200,
+            maxWidth: isMobile ? '100%' : 360,
+            width: isMobile ? '100%' : undefined,
+            padding: '8px 12px',
+            borderRadius: 8,
+            border: '1px solid var(--border)',
+            background: 'var(--bg-elevated)',
+            color: 'var(--text)',
+            fontSize: 13,
+          }}
+          aria-label={searchPlaceholder}
+        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: isMobile ? 1 : 0, flexWrap: 'wrap', width: isMobile ? '100%' : undefined, minWidth: 0 }} role="group" aria-label={tm('categoryLabel')}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-strong)' }}>{tm('categoryLabel')}</span>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
+            {categories.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => selectCategory(c.id)}
+                className={category === c.id ? 'btn btn-primary' : 'btn btn-secondary'}
+                aria-pressed={category === c.id}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  border: '1px solid var(--border)',
+                  fontWeight: 500,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                }}
+              >
+                {c.id === 'talent' ? '👤 ' : c.id === 'models' ? '🧠 ' : c.id === 'gigs' ? '💼 ' : ''}{tm(`cat.${c.id}`)}
+              </button>
+            ))}
+          </div>
+        </div>
+        {/* Talent-only sub-filters (discipline + sort) mirror the retired /talent page. */}
+        {category === 'talent' && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
+            <select
+              style={filterControlStyle}
+              value={talentDiscipline}
+              onChange={(e) => setTalentDiscipline(e.target.value)}
+              aria-label={tt('filter.discipline')}
+            >
+              <option value="">{tt('filter.allDisciplines')}</option>
+              {TALENT_DISCIPLINES.map((d) => <option key={d} value={d}>{tdis(`discipline.${d}`)}</option>)}
+            </select>
+            <select
+              style={filterControlStyle}
+              value={talentSort}
+              onChange={(e) => setTalentSort(e.target.value)}
+              aria-label={tt('filter.sort')}
+            >
+              <option value="">{tt('filter.sortRecent')}</option>
+              <option value="rating">{tt('filter.sortRating')}</option>
+              <option value="rate_asc">{tt('filter.sortRateAsc')}</option>
+              <option value="rate_desc">{tt('filter.sortRateDesc')}</option>
+            </select>
+          </div>
+        )}
+        {category !== 'publish' && category !== 'talent' && category !== 'gigs' && (
+          <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
+            <ViewToggle value={viewMode} onChange={setViewMode} />
+          </div>
+        )}
+      </div>
+
+      {category === 'publish' ? (
+        <div style={{ maxWidth: 560, margin: '0 auto' }}>
+          {!isAuthenticated ? (
+            <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 12, padding: 32, textAlign: 'center' }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>🚀</div>
+              <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 8 }}>{tm('publish.becomePublisher')}</div>
+              <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 24, maxWidth: 380, margin: '0 auto 24px' }}>
+                {tm('publish.publisherBlurb')}
+              </p>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                <Link href="/register" className="btn btn-primary" style={{ textDecoration: 'none', padding: '10px 24px' }}>{tm('publish.createAccount')}</Link>
+                <Link href="/login" className="btn btn-secondary" style={{ textDecoration: 'none', padding: '10px 24px' }}>{tm('publish.signIn')}</Link>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>{tm('publish.publishingAs')} <strong>{user?.name ?? user?.email}</strong></div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>{user?.email}</div>
+                </div>
+              </div>
+              <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 12, padding: 24 }}>
+                <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 16 }}>{tm('publish.heading')}</div>
+                {publishSuccess && (
+                  <div style={{ marginBottom: 12, padding: '10px 14px', fontSize: 13, color: 'var(--success, #22c55e)', background: 'rgba(34,197,94,0.08)', borderRadius: 8, border: '1px solid rgba(34,197,94,0.2)' }}>
+                    {tm('publish.success')}
+                  </div>
+                )}
+                <form onSubmit={handlePublishSkill} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 10 }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.name')} *</label>
+                      <input required type="text" placeholder={tm('publish.namePlaceholder')} value={skillForm.name}
+                        onChange={(e) => setSkillForm((f) => ({ ...f, name: e.target.value, slug: f.slug || e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') }))}
+                        style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.slug')} * {tm('publish.slugHint')}</label>
+                      <input required type="text" placeholder={tm('publish.slugPlaceholder')} value={skillForm.slug}
+                        onChange={(e) => setSkillForm((f) => ({ ...f, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') }))}
+                        style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', fontFamily: 'var(--font-mono)', boxSizing: 'border-box' }} />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.description')}</label>
+                    <textarea rows={3} placeholder={tm('publish.descriptionPlaceholder')} value={skillForm.description}
+                      onChange={(e) => setSkillForm((f) => ({ ...f, description: e.target.value }))}
+                      style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box' }} />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 10 }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.category')}</label>
+                      <input type="text" placeholder={tm('publish.categoryPlaceholder')} value={skillForm.category}
+                        onChange={(e) => setSkillForm((f) => ({ ...f, category: e.target.value }))}
+                        style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.version')}</label>
+                      <input type="text" value={skillForm.version}
+                        onChange={(e) => setSkillForm((f) => ({ ...f, version: e.target.value }))}
+                        style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.repoUrl')}</label>
+                      <input type="url" placeholder={tm('publish.repoPlaceholder')} value={skillForm.repoUrl}
+                        onChange={(e) => setSkillForm((f) => ({ ...f, repoUrl: e.target.value }))}
+                        style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: 10 }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.price')}</label>
+                      <input type="number" min="0" step="0.01" placeholder={tm('publish.pricePlaceholder')} value={skillForm.price}
+                        onChange={(e) => setSkillForm((f) => ({ ...f, price: e.target.value }))}
+                        style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.pricingModel')}</label>
+                      <Select value={skillForm.pricingModel} onChange={(e) => setSkillForm((f) => ({ ...f, pricingModel: e.target.value as 'flat_fee' | 'consumption' }))}
+                        style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }}>
+                        <option value="flat_fee">{tm('publish.flatFee')}</option>
+                        <option value="consumption">{tm('publish.consumption')}</option>
+                      </Select>
+                    </div>
+                    {skillForm.pricingModel === 'consumption' && (
+                      <div>
+                        <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{tm('publish.priceUnit')}</label>
+                        <input type="text" placeholder={tm('publish.priceUnitPlaceholder')} value={skillForm.priceUnit}
+                          onChange={(e) => setSkillForm((f) => ({ ...f, priceUnit: e.target.value }))}
+                          style={{ width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-base)', color: 'var(--text)', boxSizing: 'border-box' }} />
+                      </div>
+                    )}
+                  </div>
+                  {publishError && <div style={{ fontSize: 12, color: 'var(--error-text)' }}>{publishError}</div>}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button type="submit" disabled={publishing || !skillForm.name.trim() || !skillForm.slug.trim()} className="btn btn-primary">
+                      {publishing ? tm('publish.submitting') : tm('publish.submit')}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : category === 'talent' ? (
+        talentLoading && talentRows.length === 0 ? (
+          <SkeletonGrid />
+        ) : talentError ? (
+          <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--muted)' }}>{tm('talentError')}</div>
+        ) : talentRows.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--muted)' }}>{tt('empty')}</div>
+        ) : (
+          <>
+            <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))' }}>
+              {talentRows.map((f) => (
+                <Link key={f.userId} href={`/talent/${f.userId}`} style={talentCardStyle} className="hover-lift">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--surface-interactive)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: 'var(--text-primary)', flexShrink: 0 }}>
+                      {talentInitials(f.displayName)}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.displayName ?? '—'}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{f.headline ?? f.discipline ?? ''}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
+                        <RatingStars rating={f.rating} count={f.ratingCount} />
+                        <TrustBadge badge={f.badge ?? null} jss={f.jss} size="sm" showJss={false} />
+                      </div>
+                    </div>
+                  </div>
+                  {f.skills.length > 0 && (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {f.skills.slice(0, 4).map((s) => (
+                        <span key={s} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>{s}</span>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--coral-bright)' }}>
+                      {f.hourlyRateCents != null ? `${f.currency} ${(f.hourlyRateCents / 100).toFixed(0)}${tt('perHour')}` : ''}
+                    </span>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{tt('viewProfile')} →</span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+            {talentPages > 1 && (
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'center', alignItems: 'center', marginTop: 24 }}>
+                <button type="button" disabled={talentPage <= 1} onClick={() => setTalentPage((p) => p - 1)}
+                  style={{ ...filterControlStyle, cursor: talentPage <= 1 ? 'default' : 'pointer', opacity: talentPage <= 1 ? 0.5 : 1 }}>←</button>
+                <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{tt('filter.pageOf', { page: talentPage, pages: talentPages })}</span>
+                <button type="button" disabled={talentPage >= talentPages} onClick={() => setTalentPage((p) => p + 1)}
+                  style={{ ...filterControlStyle, cursor: talentPage >= talentPages ? 'default' : 'pointer', opacity: talentPage >= talentPages ? 0.5 : 1 }}>→</button>
+              </div>
+            )}
+          </>
+        )
+      ) : category === 'models' ? (
+        <ModelsExplorer search={search} viewMode={viewMode} />
+      ) : category === 'gigs' ? (
+        <MarketplaceGigsSection search={search} />
+      ) : category === 'workforce' ? (
+        loadingAgents ? (
+          <SkeletonGrid />
+        ) : filteredAgents.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--muted)' }}>
+            {agents.length === 0 ? tm('emptyAgentsNone') : tm('emptyAgentsSearch')}
+          </div>
+        ) : viewMode === 'table' ? (
+          <div style={tableWrapStyle}>
+            <table style={tableStyle}>
+              <thead>
+                <tr style={theadRowStyle}>
+                  <th style={thStyle}>{tm('table.name')}</th>
+                  <th style={thStyle}>{tm('table.title')}</th>
+                  <th style={thStyle}>{tm('table.tags')}</th>
+                  <th style={thStyle}>{tm('table.price')}</th>
+                  <th style={thStyle}>{tm('table.hires')}</th>
+                  <th style={thStyle}>{tm('table.eval')}</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>{tm('table.actions')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredAgents.map((agent) => {
+                  const owner = isAgentOwner(agent, tenant?.id);
+                  return (
+                  <tr key={agent.id} style={trStyle}>
+                    <td style={tdStyle}>
+                      <span style={{ marginRight: 6 }}>👤</span>
+                      <strong style={{ color: 'var(--text-strong)' }}>{agent.name}</strong>
+                    </td>
+                    <td style={tdMutedStyle}>{agent.title || tm('action.workforceAgent')}</td>
+                    <td style={tdMutedStyle}><SkillTags skills={agent.skills} max={4} variant="inline" /></td>
+                    <td style={tdMutedStyle}>{formatAgentPrice(agent)}</td>
+                    <td style={tdMutedStyle}>{agent.hire_count != null ? `${agent.hire_count}×` : '—'}</td>
+                    <td style={tdMutedStyle}>{(() => { const e = agent.evalScore ?? agent.eval_score; return typeof e === 'number' && Number.isFinite(e) ? e.toFixed(2) : '—'; })()}</td>
+                    <td style={{ ...tdStyle, textAlign: 'right' }}>
+                      {owner ? (
+                        <div style={{ display: 'inline-flex' }}>
+                          <AgentOwnerActions
+                            agent={agent}
+                            onOpenPanel={openAgentPanel}
+                            onUnpublish={unpublishAgent}
+                            onDelete={deleteOwnedAgent}
+                            includeEditPrice={false}
+                          />
+                        </div>
+                      ) : hiredIds.has(agent.id) ? (
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          disabled={unhiringId === agent.id}
+                          onClick={() => handleUnhire(agent.id)}
+                        >
+                          {unhiringId === agent.id ? tm('action.unhiring') : tm('action.unhire')}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          disabled={hiringId === agent.id}
+                          onClick={() => handleHire(agent.id)}
+                        >
+                          {hiringId === agent.id ? tm('action.hiring') : tm('action.hire')}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: 16 }}>
+            {filteredAgents.map((agent) => (
+              <AgentCard
+                key={agent.id}
+                agent={agent}
+                hired={hiredIds.has(agent.id)}
+                onHire={handleHire}
+                hiring={hiringId === agent.id}
+                onUnhire={handleUnhire}
+                unhiring={unhiringId === agent.id}
+                onOpenPanel={openAgentPanel}
+                onUnpublish={unpublishAgent}
+                onDelete={deleteOwnedAgent}
+              />
+            ))}
+          </div>
+        )
+      ) : loading ? (
+        <SkeletonGrid />
+      ) : filtered.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--muted)' }}>
+          {tm('emptyItems')}
+        </div>
+      ) : viewMode === 'table' ? (
+        <div style={tableWrapStyle}>
+          <table style={tableStyle}>
+            <thead>
+              <tr style={theadRowStyle}>
+                <th style={thStyle}>{tm('table.name')}</th>
+                <th style={thStyle}>{tm('table.type')}</th>
+                <th style={thStyle}>{tm('table.author')}</th>
+                <th style={thStyle}>{tm('table.price')}</th>
+                <th style={thStyle}>{tm('table.stats')}</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>{tm('table.actions')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((item) => {
+                const typeIcon = item.emoji ?? (item.type === 'persona' ? '🎭' : '⚡');
+                const k = key(item.type, item.artifactSlug);
+                const stat = stats[k] ?? { likes: item.likes, installs: item.downloads, liked: false };
+                const isInstalled = installed.has(k);
+                return (
+                  <tr key={item.id} style={trStyle}>
+                    <td style={tdStyle}>
+                      <span style={{ marginRight: 6 }}>{typeIcon}</span>
+                      <strong style={{ color: 'var(--text-strong)' }}>{item.name}</strong>
+                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>v{item.version}</div>
+                    </td>
+                    <td style={{ ...tdStyle, textTransform: 'capitalize' }}>{item.type}</td>
+                    <td style={tdMutedStyle}>{item.author}</td>
+                    <td style={tdStyle}>
+                      {(item.price ?? 0) === 0
+                        ? tm('free')
+                        : `$${(item.price ?? 0).toFixed(2)}${item.pricingModel === 'consumption' ? ` / ${item.priceUnit ?? tm('defaultPriceUnit')}` : ''}`}
+                    </td>
+                    <td style={tdMutedStyle}>
+                      <button
+                        type="button"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          padding: 0,
+                          fontSize: 12,
+                          color: stat.liked ? 'var(--error)' : 'var(--muted)',
+                        }}
+                        title={stat.liked ? tm('action.unlike') : tm('action.like')}
+                        onClick={() => toggleLike(item)}
+                      >
+                        {stat.liked ? '❤️' : '🤍'} {stat.likes}
+                      </button>
+                      <span style={{ marginLeft: 10 }} title={tm('action.installsTitle')}>⬇️ {stat.installs}</span>
+                      {isInstalled && <span style={{ marginLeft: 10 }}>✓</span>}
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: 'right' }}>
+                      <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-secondary"
+                          title={hasItem(item.id) ? tm('action.inCartTitle') : tm('action.addCartTitle')}
+                          onClick={() => addItem({
+                            id: item.id,
+                            type: item.type as ArtifactType,
+                            slug: item.artifactSlug,
+                            name: item.name,
+                            price: item.price ?? 0,
+                            pricingModel: item.pricingModel ?? 'flat_fee',
+                            priceUnit: item.priceUnit,
+                            emoji: item.emoji,
+                            image: item.image,
+                          })}
+                          style={{ color: hasItem(item.id) ? '#22c55e' : undefined }}
+                        >
+                          {hasItem(item.id) ? tm('action.inCart') : tm('action.addCart')}
+                        </button>
+                        <ArtifactAssigner
+                          artifactType={item.type}
+                          artifactSlug={item.artifactSlug}
+                          artifactName={item.name}
+                        />
+                        <button
+                          type="button"
+                          className={`btn btn-sm ${isInstalled ? 'btn-secondary' : 'btn-primary'}`}
+                          disabled={!hasAgentHosts}
+                          onClick={() => toggleInstall(item)}
+                        >
+                          {!hasAgentHosts ? tm('action.registerHost') : isInstalled ? tm('action.uninstall') : tm('action.install')}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+          {filtered.map((item) => {
+            const typeColor = item.type === 'persona' ? 'var(--accent,#6366f1)' : '#22c55e';
+            const typeIcon = item.emoji ?? (item.type === 'persona' ? '🎭' : '⚡');
+            const k = key(item.type, item.artifactSlug);
+            const stat = stats[k] ?? { likes: item.likes, installs: item.downloads, liked: false };
+            const isInstalled = installed.has(k);
+            return (
+              <div key={item.id} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12, overflow: 'hidden' }}>
+                {item.image && (
+                  <div
+                    style={{
+                      height: 120,
+                      background: `url('${item.image}') center/cover`,
+                      borderBottom: '1px solid var(--border)',
+                      margin: '-16px -16px 0',
+                      width: 'calc(100% + 32px)',
+                    }}
+                  />
+                )}
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 24 }}>{typeIcon}</span>
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-strong)' }}>{item.name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)' }}>{tm('by')} {item.author} · v{item.version}</div>
+                    </div>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: 99,
+                      background: typeColor,
+                      color: contrastText(typeColor),
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {item.type}
+                  </span>
+                </div>
+
+                <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, flex: 1 }}>{item.description}</div>
+
+                {item.tags.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {item.tags.slice(0, 5).map((t) => (
+                      <span
+                        key={t}
+                        style={{
+                          fontSize: 10,
+                          padding: '2px 6px',
+                          borderRadius: 99,
+                          background: 'var(--surface-2)',
+                          color: 'var(--text)',
+                          border: '1px solid var(--border)',
+                        }}
+                      >
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Price badge */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {(item.price ?? 0) === 0 ? (
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#22c55e', background: 'rgba(34,197,94,0.1)', padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(34,197,94,0.3)' }}>{tm('free')}</span>
+                  ) : (
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-strong)', background: 'var(--bg-elevated)', padding: '2px 8px', borderRadius: 6, border: '1px solid var(--border)' }}>
+                      ${(item.price ?? 0).toFixed(2)}{item.pricingModel === 'consumption' ? ` / ${item.priceUnit ?? tm('defaultPriceUnit')}` : ''}
+                    </span>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 8,
+                    borderTop: '1px solid var(--border)',
+                    paddingTop: 10,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: 'var(--muted)' }}>
+                    <button
+                      type="button"
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: 0,
+                        fontSize: 11,
+                        color: stat.liked ? 'var(--error)' : 'var(--muted)',
+                      }}
+                      title={stat.liked ? tm('action.unlike') : tm('action.like')}
+                      onClick={() => toggleLike(item)}
+                    >
+                      {stat.liked ? '❤️' : '🤍'} {stat.likes}
+                    </button>
+                    <span title={tm('action.installsTitle')}>⬇️ {stat.installs}</span>
+                    {isInstalled && <span>✓ {tm('installed')}</span>}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', flex: '1 1 auto' }}>
+                    {/* Add to Cart */}
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-secondary"
+                      title={hasItem(item.id) ? tm('action.inCartTitle') : tm('action.addCartTitle')}
+                      onClick={() => addItem({
+                        id: item.id,
+                        type: item.type as ArtifactType,
+                        slug: item.artifactSlug,
+                        name: item.name,
+                        price: item.price ?? 0,
+                        pricingModel: item.pricingModel ?? 'flat_fee',
+                        priceUnit: item.priceUnit,
+                        emoji: item.emoji,
+                        image: item.image,
+                      })}
+                      style={{ color: hasItem(item.id) ? '#22c55e' : undefined }}
+                    >
+                      {hasItem(item.id) ? tm('action.inCart') : tm('action.addCart')}
+                    </button>
+                    <ArtifactAssigner
+                      artifactType={item.type}
+                      artifactSlug={item.artifactSlug}
+                      artifactName={item.name}
+                    />
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${isInstalled ? 'btn-secondary' : 'btn-primary'}`}
+                      disabled={!hasAgentHosts}
+                      onClick={() => toggleInstall(item)}
+                    >
+                      {!hasAgentHosts ? tm('action.registerHost') : isInstalled ? tm('action.uninstall') : tm('action.install')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Owner manages their own listing in place (edit / pricing). */}
+      {selectedAgent && (
+        <CloudAgentSlideOutPanel
+          agent={selectedAgent}
+          open={!!selectedAgent}
+          initialTab={agentPanelTab}
+          tenantId={tenant?.id != null && tenant.id !== '' ? Number(tenant.id) : undefined}
+          onClose={() => setSelectedAgent(null)}
+          onSaved={async () => {
+            const list = await loadAgents();
+            setSelectedAgent((cur) => (cur ? list.find((x) => x.id === cur.id) ?? cur : cur));
+          }}
+          onDeleted={() => { setSelectedAgent(null); loadAgents(); }}
+        />
+      )}
+    </div>
+  );
+}

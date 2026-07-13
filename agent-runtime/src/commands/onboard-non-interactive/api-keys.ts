@@ -15,7 +15,7 @@ async function resolveApiKeyFromProfiles(params: {
   cfg: BuilderForceAgentsConfig;
   agentDir?: string;
 }): Promise<string | null> {
-  const store = ensureAuthProfileStore(params.agentDir);
+  const store = await ensureAuthProfileStore(params.agentDir);
   const order = resolveAuthProfileOrder({
     cfg: params.cfg,
     store,

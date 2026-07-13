@@ -15,7 +15,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
-import { AUTH_API_URL, checkUnauthorizedAndRedirect } from './auth';
+import { AUTH_API_URL, checkUnauthorizedAndRedirect, getMe, getMyTenants } from './auth';
 
 export interface ActiveTermsDoc {
   documentType: 'terms';
@@ -35,6 +35,7 @@ export interface TermsStatus {
 export type OnboardingPhase =
   | 'pre-auth'
   | 'pending-terms'
+  | 'pending-role'
   | 'pending-tenant'
   | 'ready';
 
@@ -46,7 +47,10 @@ export interface OnboardingState {
   terms: ActiveTermsDoc | null;
   /** Accept the active terms version. Resolves once the gate advances. */
   acceptTerms: () => Promise<void>;
-  /** Re-fetch terms status (e.g. after admin publishes a new version). */
+  /** Make the one-time account-type choice (Build vs Hired). Resolves once the
+   *  gate advances past `pending-role`. */
+  selectRole: (accountType: 'standard' | 'freelancer') => Promise<void>;
+  /** Re-fetch terms + role status (e.g. after admin publishes a new version). */
   refresh: () => Promise<void>;
 }
 
@@ -87,24 +91,31 @@ export async function acceptActiveTerms(
  * should consume `phase` here so all gates evolve together.
  */
 export function useOnboardingState(): OnboardingState {
-  const { webToken, tenantToken } = useAuth();
+  const { webToken, tenantToken, selectTenant, selectAccountType } = useAuth();
 
   const [terms, setTerms] = useState<ActiveTermsDoc | null>(null);
   const [needsTerms, setNeedsTerms] = useState<boolean | null>(null);
+  const [needsRole, setNeedsRole] = useState<boolean | null>(null);
   const [loading, setLoading] = useState<boolean>(!!webToken);
 
   const load = useCallback(async () => {
     if (!webToken) {
       setTerms(null);
       setNeedsTerms(null);
+      setNeedsRole(null);
       setLoading(false);
       return;
     }
     setLoading(true);
     try {
-      const status = await fetchTermsStatus(webToken);
+      // Terms + role status resolve together — both gate the chrome.
+      const [status, me] = await Promise.all([
+        fetchTermsStatus(webToken),
+        getMe(webToken),
+      ]);
       setTerms(status.terms);
       setNeedsTerms(status.needsAcceptance);
+      setNeedsRole(!me.accountTypeSelected);
     } finally {
       setLoading(false);
     }
@@ -114,17 +125,42 @@ export function useOnboardingState(): OnboardingState {
     void load();
   }, [load]);
 
+  const selectRole = useCallback(async (accountType: 'standard' | 'freelancer') => {
+    await selectAccountType(accountType);
+    setNeedsRole(false);
+  }, [selectAccountType]);
+
   const acceptTerms = useCallback(async () => {
     if (!webToken || !terms) throw new Error('Cannot accept terms before loading');
     await acceptActiveTerms(webToken, terms.version);
     setNeedsTerms(false);
-  }, [webToken, terms]);
+    // After a terms bump, a returning SINGLE-workspace user would otherwise be
+    // bounced through the tenant picker: both /my-tenants and /tenant-token are
+    // terms-gated, so the callback's auto-select returned null. Now that terms
+    // are accepted both are ungated — auto-select the lone workspace so the user
+    // lands straight on /dashboard. Guarded: any failure falls through to the
+    // normal pending-tenant picker, so this can't regress the multi-workspace
+    // or error paths. [1837]
+    if (!tenantToken) {
+      try {
+        const tenants = await getMyTenants(webToken);
+        if (tenants.length === 1 && tenants[0]) await selectTenant(tenants[0]);
+      } catch {
+        /* fall through to the tenant picker (pending-tenant phase) */
+      }
+    }
+  }, [webToken, terms, tenantToken, selectTenant]);
 
   let phase: OnboardingPhase;
   if (!webToken) {
     phase = 'pre-auth';
   } else if (needsTerms === null || needsTerms === true) {
     phase = 'pending-terms';
+  } else if (needsRole === null || needsRole === true) {
+    // Role choice comes AFTER terms and BEFORE any workspace/tenant step — it
+    // decides whether the user even needs a builder workspace (a freelancer does
+    // not). Blocks until an OAuth/magic-link account picks Build vs Hired.
+    phase = 'pending-role';
   } else if (!tenantToken) {
     phase = 'pending-tenant';
   } else {
@@ -136,6 +172,7 @@ export function useOnboardingState(): OnboardingState {
     loading,
     terms,
     acceptTerms,
+    selectRole,
     refresh: load,
   };
 }

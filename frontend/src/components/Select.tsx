@@ -55,9 +55,20 @@ export interface SelectProps {
 interface FlatOption {
   value: string;
   label: ReactNode;
+  /** Lower-cased plain-text of `label`, used for keyboard type-ahead matching. */
+  text: string;
   disabled?: boolean;
 }
 type RenderRow = { kind: 'group'; label: string } | { kind: 'option'; index: number };
+
+/** Flatten a `ReactNode` label into searchable plain text (handles strings, numbers, nested elements). */
+function optionText(node: ReactNode): string {
+  if (node === null || node === undefined || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(optionText).join('');
+  if (isValidElement(node)) return optionText((node.props as { children?: ReactNode }).children);
+  return '';
+}
 
 /** Walk `<option>` / `<optgroup>` children into a flat option list + render rows. */
 function collect(children: ReactNode): { options: FlatOption[]; rows: RenderRow[] } {
@@ -69,7 +80,12 @@ function collect(children: ReactNode): { options: FlatOption[]; rows: RenderRow[
     const props = el.props as { value?: string | number; children?: ReactNode; disabled?: boolean };
     const value = String(props.value ?? '');
     const index = options.length;
-    options.push({ value, label: props.children, disabled: props.disabled });
+    options.push({
+      value,
+      label: props.children,
+      text: optionText(props.children).trim().toLowerCase(),
+      disabled: props.disabled,
+    });
     rows.push({ kind: 'option', index });
   };
 
@@ -119,11 +135,25 @@ export function Select({
   const popupRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [rect, setRect] = useState<{ left: number; top: number; width: number } | null>(null);
+  // Type-ahead buffer: accumulates printable keystrokes, cleared after a short idle.
+  const typeahead = useRef<{ query: string; timer: ReturnType<typeof setTimeout> | null }>({
+    query: '',
+    timer: null,
+  });
 
   useEffect(() => {
     if (autoFocus) buttonRef.current?.focus();
     // autoFocus is a mount-only intent
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    // Clear any pending type-ahead reset timer on unmount. `typeahead` is a
+    // stable ref object, so reading its `.timer` at cleanup is intentional.
+    const ta = typeahead.current;
+    return () => {
+      if (ta.timer) clearTimeout(ta.timer);
+    };
   }, []);
 
   const selected = options.find((o) => o.value === current);
@@ -190,8 +220,47 @@ export function Select({
     [options],
   );
 
+  /**
+   * Native-`<select>`-style type-ahead. Appends the typed char to a buffer that
+   * resets after 600ms idle, finds the first non-disabled option whose text starts
+   * with the buffer, then highlights it (open) or commits it (closed) — mirroring
+   * how a real `<select>` jumps to "Ge…" as you type "g", "e".
+   */
+  const handleTypeahead = useCallback(
+    (char: string) => {
+      const ta = typeahead.current;
+      if (ta.timer) clearTimeout(ta.timer);
+      ta.query += char.toLowerCase();
+      const query = ta.query;
+      ta.timer = setTimeout(() => {
+        ta.query = '';
+        ta.timer = null;
+      }, 600);
+
+      // Prefer a startsWith match; fall back to a substring match so a mistyped
+      // leading char still lands somewhere reasonable.
+      const startFrom = open ? activeIdx : options.findIndex((o) => o.value === current);
+      const order = options
+        .map((_, i) => (startFrom >= 0 ? (startFrom + 1 + i) % options.length : i))
+        .filter((i) => i < options.length);
+      const match =
+        order.find((i) => !options[i].disabled && options[i].text.startsWith(query)) ??
+        order.find((i) => !options[i].disabled && options[i].text.includes(query));
+      if (match === undefined) return;
+      if (open) setActiveIdx(match);
+      else commit(options[match].value);
+    },
+    [open, activeIdx, options, current, commit],
+  );
+
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (disabled) return;
+    // Printable single character with no modifier → type-ahead (works open or closed).
+    if (e.key.length === 1 && e.key !== ' ' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      handleTypeahead(e.key);
+      return;
+    }
     if (!open) {
       if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
@@ -257,7 +326,7 @@ export function Select({
         onBlur={onBlur}
         style={style}
       >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayLabel}</span>
+        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayLabel}</span>
         <svg viewBox="0 0 24 24" aria-hidden="true" style={{ width: 14, height: 14, flexShrink: 0, stroke: 'currentColor', fill: 'none', strokeWidth: 2, opacity: 0.7 }}>
           <path d="M6 9l6 6 6-6" />
         </svg>

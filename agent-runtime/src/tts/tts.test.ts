@@ -1,19 +1,16 @@
-import { completeSimple, type AssistantMessage } from "@mariozechner/pi-ai";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { getApiKeyForModel } from "../agents/model-auth.js";
-import { resolveModel } from "../agents/pi-embedded-runner/model.js";
+import { resolveModel } from "../agents/embedded-runner/model.js";
+import { nativeComplete } from "../builderforce/model/native-llm.js";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import { withEnv } from "../test-utils/env.js";
 import * as tts from "./tts.js";
 
-vi.mock("@mariozechner/pi-ai", () => ({
-  completeSimple: vi.fn(),
-  // Some auth helpers import oauth provider metadata at module load time.
-  getOAuthProviders: () => [],
-  getOAuthApiKey: vi.fn(async () => null),
+vi.mock("../builderforce/model/native-llm.js", () => ({
+  nativeComplete: vi.fn(),
 }));
 
-vi.mock("../agents/pi-embedded-runner/model.js", () => ({
+vi.mock("../agents/embedded-runner/model.js", () => ({
   resolveModel: vi.fn((provider: string, modelId: string) => ({
     model: {
       provider,
@@ -55,36 +52,10 @@ const {
   resolveEdgeOutputFormat,
 } = _test;
 
-const mockAssistantMessage = (content: AssistantMessage["content"]): AssistantMessage => ({
-  role: "assistant",
-  content,
-  api: "openai-completions",
-  provider: "openai",
-  model: "gpt-4o-mini",
-  usage: {
-    input: 1,
-    output: 1,
-    cacheRead: 0,
-    cacheWrite: 0,
-    totalTokens: 2,
-    cost: {
-      input: 0,
-      output: 0,
-      cacheRead: 0,
-      cacheWrite: 0,
-      total: 0,
-    },
-  },
-  stopReason: "stop",
-  timestamp: Date.now(),
-});
-
 describe("tts", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(completeSimple).mockResolvedValue(
-      mockAssistantMessage([{ type: "text", text: "Summary" }]),
-    );
+    vi.mocked(nativeComplete).mockResolvedValue({ content: "Summary", toolCalls: [] });
   });
 
   describe("isValidVoiceId", () => {
@@ -256,9 +227,7 @@ describe("tts", () => {
 
     it("summarizes text and returns result with metrics", async () => {
       const mockSummary = "This is a summarized version of the text.";
-      vi.mocked(completeSimple).mockResolvedValue(
-        mockAssistantMessage([{ type: "text", text: mockSummary }]),
-      );
+      vi.mocked(nativeComplete).mockResolvedValue({ content: mockSummary, toolCalls: [] });
 
       const longText = "A".repeat(2000);
       const result = await summarizeText({
@@ -273,7 +242,7 @@ describe("tts", () => {
       expect(result.inputLength).toBe(2000);
       expect(result.outputLength).toBe(mockSummary.length);
       expect(result.latencyMs).toBeGreaterThanOrEqual(0);
-      expect(completeSimple).toHaveBeenCalledTimes(1);
+      expect(nativeComplete).toHaveBeenCalledTimes(1);
     });
 
     it("calls the summary model with the expected parameters", async () => {
@@ -285,10 +254,10 @@ describe("tts", () => {
         timeoutMs: 30_000,
       });
 
-      const callArgs = vi.mocked(completeSimple).mock.calls[0];
+      const callArgs = vi.mocked(nativeComplete).mock.calls[0];
       expect(callArgs?.[1]?.messages?.[0]?.role).toBe("user");
-      expect(callArgs?.[2]?.maxTokens).toBe(250);
-      expect(callArgs?.[2]?.temperature).toBe(0.3);
+      expect((callArgs?.[1]?.extra as { max_tokens?: number })?.max_tokens).toBe(250);
+      expect(callArgs?.[1]?.temperature).toBe(0.3);
       expect(getApiKeyForModel).toHaveBeenCalledTimes(1);
     });
 
@@ -355,7 +324,7 @@ describe("tts", () => {
     });
 
     it("throws error when no summary is returned", async () => {
-      vi.mocked(completeSimple).mockResolvedValue(mockAssistantMessage([]));
+      vi.mocked(nativeComplete).mockResolvedValue({ content: "", toolCalls: [] });
 
       await expect(
         summarizeText({
@@ -369,9 +338,7 @@ describe("tts", () => {
     });
 
     it("throws error when summary content is empty", async () => {
-      vi.mocked(completeSimple).mockResolvedValue(
-        mockAssistantMessage([{ type: "text", text: "   " }]),
-      );
+      vi.mocked(nativeComplete).mockResolvedValue({ content: "   ", toolCalls: [] });
 
       await expect(
         summarizeText({

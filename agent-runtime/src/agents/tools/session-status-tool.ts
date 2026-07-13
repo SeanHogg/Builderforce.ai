@@ -33,7 +33,7 @@ import {
   resolveDefaultModelForAgent,
   resolveModelRefFromString,
 } from "../model-selection.js";
-import type { AnyAgentTool } from "./common.js";
+import type { AgentToolResult, AnyAgentTool } from "./common.js";
 import { readStringParam } from "./common.js";
 import {
   shouldResolveSessionIdInput,
@@ -172,17 +172,17 @@ async function resolveModelOverride(params: {
   };
 }
 
-export function createSessionStatusTool(opts?: {
+export interface SessionStatusDeps {
   agentSessionKey?: string;
   config?: BuilderForceAgentsConfig;
-}): AnyAgentTool {
-  return {
-    label: "Session Status",
-    name: "session_status",
-    description:
-      "Show a /status-equivalent session status card (usage + time + cost when available). Use for model-use questions (📊 session_status). Optional: set per-session model override (model=default resets overrides).",
-    parameters: SessionStatusToolSchema,
-    execute: async (_toolCallId, args) => {
+}
+
+/** Shared implementation — pi wrapper + native ToolDefinition both delegate here (DRY). */
+export async function runSessionStatus(
+  opts: SessionStatusDeps | undefined,
+  args: Record<string, unknown>,
+): Promise<AgentToolResult<unknown>> {
+  {
       const params = args as Record<string, unknown>;
       const cfg = opts?.config ?? loadConfig();
       const { mainKey, alias } = resolveMainSessionAlias(cfg);
@@ -354,7 +354,7 @@ export function createSessionStatusTool(opts?: {
         typeof agentDefaults.model === "object" && agentDefaults.model
           ? { ...agentDefaults.model, primary: defaultLabel }
           : { primary: defaultLabel };
-      const statusText = buildStatusMessage({
+      const statusText = await buildStatusMessage({
         config: cfg,
         agent: {
           ...agentDefaults,
@@ -365,7 +365,7 @@ export function createSessionStatusTool(opts?: {
         sessionKey: resolved.key,
         sessionStorePath: storePath,
         groupActivation,
-        modelAuth: resolveModelAuthLabel({
+        modelAuth: await resolveModelAuthLabel({
           provider: providerForCard,
           cfg,
           sessionEntry: resolved.entry,
@@ -393,6 +393,16 @@ export function createSessionStatusTool(opts?: {
           statusText,
         },
       };
-    },
+  }
+}
+
+export function createSessionStatusTool(opts?: SessionStatusDeps): AnyAgentTool {
+  return {
+    label: "Session Status",
+    name: "session_status",
+    description:
+      "Show a /status-equivalent session status card (usage + time + cost when available). Use for model-use questions (📊 session_status). Optional: set per-session model override (model=default resets overrides).",
+    parameters: SessionStatusToolSchema,
+    execute: async (_toolCallId, args) => runSessionStatus(opts, args as Record<string, unknown>),
   };
 }

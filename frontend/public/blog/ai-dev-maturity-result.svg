@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 480" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+  <rect width="760" height="480" fill="#0E1525"/>
+  <text x="380" y="40" fill="#FFFFFF" font-size="24" font-weight="700" text-anchor="middle">What you get back</text>
+  <text x="380" y="65" fill="#8FA0BD" font-size="14" text-anchor="middle">A banded level, a per-dimension breakdown, and a prioritized plan</text>
+
+  <!-- Headline card -->
+  <rect x="40" y="88" width="680" height="92" rx="12" fill="#15203A" stroke="#26324f"/>
+  <text x="92" y="132" fill="#FF6B5C" font-size="44" font-weight="800" text-anchor="middle">3.0</text>
+  <text x="92" y="156" fill="#8FA0BD" font-size="11" text-anchor="middle">out of 5.0</text>
+  <text x="168" y="128" fill="#FFFFFF" font-size="20" font-weight="800">Level 3 — AI-native workflow</text>
+  <text x="168" y="154" fill="#8FA0BD" font-size="13">The workflow itself is built around AI; review and</text>
+  <text x="168" y="170" fill="#8FA0BD" font-size="13">governance have been adapted to the higher output.</text>
+
+  <!-- Breakdown -->
+  <text x="40" y="214" fill="#FFFFFF" font-size="15" font-weight="700">Breakdown</text>
+  <g font-size="13">
+    <!-- helper: meter of 5 segments -->
+    <!-- Idea-to-customer speed: L4 -->
+    <text x="40" y="244" fill="#DCE6F7">Idea-to-customer speed</text>
+    <text x="430" y="244" fill="#fff" font-size="12" font-weight="700">Level 4</text>
+    <g>
+      <rect x="488" y="234" width="40" height="9" rx="3" fill="#FF6B5C"/>
+      <rect x="534" y="234" width="40" height="9" rx="3" fill="#FF6B5C"/>
+      <rect x="580" y="234" width="40" height="9" rx="3" fill="#FF6B5C"/>
+      <rect x="626" y="234" width="40" height="9" rx="3" fill="#FF6B5C"/>
+      <rect x="672" y="234" width="40" height="9" rx="3" fill="#26324f"/>
+    </g>
+
+    <!-- Prototype fidelity: L3 -->
+    <text x="40" y="276" fill="#DCE6F7">Prototype fidelity</text>
+    <text x="430" y="276" fill="#fff" font-size="12" font-weight="700">Level 3</text>
+    <g>
+      <rect x="488" y="266" width="40" height="9" rx="3" fill="#eab308"/>
+      <rect x="534" y="266" width="40" height="9" rx="3" fill="#eab308"/>
+      <rect x="580" y="266" width="40" height="9" rx="3" fill="#eab308"/>
+      <rect x="626" y="266" width="40" height="9" rx="3" fill="#26324f"/>
+      <rect x="672" y="266" width="40" height="9" rx="3" fill="#26324f"/>
+    </g>
+
+    <!-- Who can ship: L2 -->
+    <text x="40" y="308" fill="#DCE6F7">Who can ship</text>
+    <text x="430" y="308" fill="#fff" font-size="12" font-weight="700">Level 2</text>
+    <g>
+      <rect x="488" y="298" width="40" height="9" rx="3" fill="#f59e0b"/>
+      <rect x="534" y="298" width="40" height="9" rx="3" fill="#f59e0b"/>
+      <rect x="580" y="298" width="40" height="9" rx="3" fill="#26324f"/>
+      <rect x="626" y="298" width="40" height="9" rx="3" fill="#26324f"/>
+      <rect x="672" y="298" width="40" height="9" rx="3" fill="#26324f"/>
+    </g>
+
+    <!-- Org-level impact: L3 -->
+    <text x="40" y="340" fill="#DCE6F7">Org-level impact</text>
+    <text x="430" y="340" fill="#fff" font-size="12" font-weight="700">Level 3</text>
+    <g>
+      <rect x="488" y="330" width="40" height="9" rx="3" fill="#eab308"/>
+      <rect x="534" y="330" width="40" height="9" rx="3" fill="#eab308"/>
+      <rect x="580" y="330" width="40" height="9" rx="3" fill="#eab308"/>
+      <rect x="626" y="330" width="40" height="9" rx="3" fill="#26324f"/>
+      <rect x="672" y="330" width="40" height="9" rx="3" fill="#26324f"/>
+    </g>
+  </g>
+
+  <!-- Plan -->
+  <rect x="40" y="362" width="680" height="96" rx="12" fill="#15203A" stroke="#FF6B5C" stroke-opacity="0.4"/>
+  <text x="58" y="388" fill="#FFFFFF" font-size="14" font-weight="700">Your improvement plan — weakest dimension first</text>
+  <circle cx="66" cy="412" r="3" fill="#FF6B5C"/>
+  <text x="80" y="416" fill="#DCE6F7" font-size="12.5">Who can ship → Level 3: let non-engineers propose reviewed production changes.</text>
+  <circle cx="66" cy="436" r="3" fill="#FF6B5C"/>
+  <text x="80" y="440" fill="#DCE6F7" font-size="12.5">Prototype fidelity → Level 4: promote approved prototypes instead of rebuilding them.</text>
+</svg>

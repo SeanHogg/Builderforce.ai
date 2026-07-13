@@ -5,9 +5,9 @@ read_when:
 title: "BuilderForce Agents"
 ---
 
-# BuilderForce Agents 🦞
+# BuilderForce Agents 🤖
 
-> _"EXFOLIATE! EXFOLIATE!"_ — A space lobster, probably
+> _"Build faster. Ship anywhere."_ — BuilderForce Agents
 
 <p align="center">
   <strong>Self-hosted, open-source AI-powered coding assistant with multi-channel integrations for WhatsApp, Telegram, Discord, iMessage, and more.</strong><br />

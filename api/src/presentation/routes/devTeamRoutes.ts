@@ -153,6 +153,14 @@ export function createDevTeamRoutes(db: Db): Hono<HonoEnv> {
 
     if (!body.contributorId) return c.json({ error: 'contributorId is required' }, 400);
 
+    // The contributor must belong to THIS tenant — otherwise a manager could attach a
+    // foreign tenant's contributor (and then read their PII via GET /:id).
+    const [contributor] = await db
+      .select({ id: contributors.id })
+      .from(contributors)
+      .where(and(eq(contributors.id, body.contributorId), eq(contributors.tenantId, tenantId)));
+    if (!contributor) return c.json({ error: 'Contributor not found' }, 404);
+
     const [member] = await db
       .insert(devTeamMembers)
       .values({
@@ -168,8 +176,18 @@ export function createDevTeamRoutes(db: Db): Hono<HonoEnv> {
 
   // DELETE /api/dev-teams/:id/members/:contributorId
   router.delete('/:id/members/:contributorId', async (c) => {
+    const tenantId      = c.get('tenantId') as number;
     const id            = Number(c.req.param('id'));
     const contributorId = Number(c.req.param('contributorId'));
+
+    // Verify the team belongs to THIS tenant before mutating its membership —
+    // dev_team_members carries no tenant_id, so without this a manager could remove
+    // another tenant's members by guessing a teamId.
+    const [team] = await db
+      .select({ id: devTeams.id })
+      .from(devTeams)
+      .where(and(eq(devTeams.id, id), eq(devTeams.tenantId, tenantId)));
+    if (!team) return c.json({ error: 'Team not found' }, 404);
 
     await db.delete(devTeamMembers)
       .where(and(

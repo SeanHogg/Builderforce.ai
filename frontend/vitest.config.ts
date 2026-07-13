@@ -29,11 +29,17 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
-    // The `link:`ed brain-embedded package ships React as an external peer dep and
-    // imports a bare `react`. Vite follows the symlink into ../brain-embedded/dist and
-    // would resolve `react` from that package's own node_modules (absent in the
-    // frontend-only CI job). Dedupe forces a single React copy — the frontend's — which
-    // also prevents a second React instance breaking brain-embedded's context/hooks.
-    dedupe: ['react', 'react-dom', 'react/jsx-runtime'],
+    // The `link:`ed sibling packages (brain-embedded, brain-ui) ship their deps as
+    // external peers and import them bare. Vite follows the symlink into the sibling's
+    // dist and would resolve those bare imports from that package's own node_modules
+    // (absent in the frontend-only CI job). Dedupe forces resolution from the
+    // frontend's node_modules instead:
+    //  - react/react-dom: a single React copy (also prevents a second React instance
+    //    breaking brain-embedded's context/hooks);
+    //  - react-markdown/remark-gfm: brain-ui/dist imports these bare and brain-ui has
+    //    no installed node_modules in the frontend-only job, so they must resolve here.
+    //  - @seanhogg/builderforce-brain-embedded: brain-ui/dist imports it bare; it lives
+    //    in the frontend's node_modules (link: dep) but not in brain-ui's, so dedupe it.
+    dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react-markdown', 'remark-gfm', '@seanhogg/builderforce-brain-embedded'],
   },
 });

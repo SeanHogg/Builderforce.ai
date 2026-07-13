@@ -5,6 +5,8 @@ import { Select } from '@/components/Select';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { approvalsApi, agentHosts, type Approval, type ApprovalStatus, type RequestKind, type AgentHost } from '@/lib/builderforceApi';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
+import { ApprovalResolveControl } from './ApprovalResolveControl';
+import { TicketDetailsPanel } from '@/components/task/TicketDetailsPanel';
 
 /**
  * Human-in-the-loop request queue — the portal side of the agent's `ask_human`
@@ -43,10 +45,6 @@ const KIND_LABEL: Record<RequestKind, string> = {
   question: 'Question',
   feedback: 'Feedback',
 };
-
-function isAnswerable(kind: RequestKind): boolean {
-  return kind === 'question' || kind === 'feedback';
-}
 
 function fmtDate(value?: string | null): string {
   if (!value) return '-';
@@ -96,15 +94,13 @@ export function HumanRequestsView({
   const [rows, setRows] = useState<Approval[]>([]);
   const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [kind, setKind] = useState<KindFilter>(defaultKind);
   const [status, setStatus] = useState<StatusFilter>(defaultStatus);
   const [agentHostId, setAgentHostId] = useState<string>(lockedAgentHostId != null ? String(lockedAgentHostId) : '');
   const [query, setQuery] = useState<string>('');
   const [viewMode, setViewMode] = useState<ViewMode>('table');
-  // Per-request answer drafts (questions/feedback), keyed by request id.
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -156,78 +152,6 @@ export function HumanRequestsView({
   useEffect(() => {
     onPendingCountChange?.(filtered.filter((r) => r.status === 'pending').length);
   }, [filtered, onPendingCountChange]);
-
-  const decide = async (row: Approval, decision: 'approved' | 'rejected') => {
-    setBusyId(row.id);
-    setError(null);
-    try {
-      await approvalsApi.decide(row.id, { status: decision });
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to update request');
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const submitAnswer = async (row: Approval) => {
-    const text = (drafts[row.id] ?? '').trim();
-    if (!text) return;
-    setBusyId(row.id);
-    setError(null);
-    try {
-      await approvalsApi.decide(row.id, { status: 'answered', responseText: text });
-      setDrafts((d) => { const next = { ...d }; delete next[row.id]; return next; });
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to submit answer');
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  /** Resolve controls for a pending row — approve/reject for actions, answer box for Q&A. */
-  const renderResolveControls = (row: Approval) => {
-    const busy = busyId === row.id;
-    if (isAnswerable(row.kind)) {
-      return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <textarea
-            value={drafts[row.id] ?? ''}
-            onChange={(e) => setDrafts((d) => ({ ...d, [row.id]: e.target.value }))}
-            placeholder={row.kind === 'feedback' ? 'Write feedback…' : 'Write an answer…'}
-            rows={compact ? 2 : 3}
-            className="admin-select"
-            style={{ minWidth: 200, width: '100%', resize: 'vertical', fontFamily: 'inherit' }}
-          />
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              className="btn-ghost"
-              disabled={busy || !(drafts[row.id] ?? '').trim()}
-              onClick={() => void submitAnswer(row)}
-            >
-              {busy ? 'Sending…' : 'Send answer'}
-            </button>
-            <button
-              type="button"
-              className="btn-ghost"
-              disabled={busy}
-              onClick={() => void decide(row, 'rejected')}
-            >
-              Dismiss
-            </button>
-          </div>
-        </div>
-      );
-    }
-    return (
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        <button type="button" className="btn-ghost" disabled={busy} onClick={() => void decide(row, 'approved')}>Approve</button>
-        <button type="button" className="btn-ghost" disabled={busy} onClick={() => void decide(row, 'rejected')}>Reject</button>
-      </div>
-    );
-  };
 
   /** Resolution summary for a non-pending row. */
   const resolutionText = (row: Approval): string => {
@@ -312,6 +236,7 @@ export function HumanRequestsView({
                 <th>Status</th>
                 <th>Action</th>
                 <th>Description</th>
+                <th>Item</th>
                 <th>AgentHost</th>
                 <th>Requested</th>
                 <th>Resolution</th>
@@ -320,9 +245,9 @@ export function HumanRequestsView({
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={8} className="text-muted">Loading requests...</td></tr>
+                <tr><td colSpan={9} className="text-muted">Loading requests...</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={8} className="text-muted">{emptyText}</td></tr>
+                <tr><td colSpan={9} className="text-muted">{emptyText}</td></tr>
               ) : (
                 filtered.map((row) => (
                   <tr key={row.id}>
@@ -330,13 +255,20 @@ export function HumanRequestsView({
                     <td><span className={statusClass(row.status)}>{row.status}</span></td>
                     <td style={{ whiteSpace: 'nowrap' }}>{row.actionType}</td>
                     <td title={row.description} style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.description}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {row.taskId != null
+                        ? <button type="button" className="btn-ghost" onClick={() => setSelectedTaskId(row.taskId)}>View ticket</button>
+                        : <span className="text-muted">-</span>}
+                    </td>
                     <td>{row.agentHostId != null ? agentHostNameById.get(row.agentHostId) ?? `#${row.agentHostId}` : '-'}</td>
                     <td className="text-muted" style={{ whiteSpace: 'nowrap' }}>{fmtDate(row.createdAt)}</td>
                     <td className="text-muted" style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' }} title={resolutionText(row)}>
                       {row.status === 'pending' ? '-' : resolutionText(row)}
                     </td>
                     <td style={{ minWidth: 220 }}>
-                      {row.status === 'pending' ? renderResolveControls(row) : <span className="text-muted">-</span>}
+                      {row.status === 'pending'
+                        ? <ApprovalResolveControl approval={row} compact={compact} onResolved={() => void load()} />
+                        : <span className="text-muted">-</span>}
                     </td>
                   </tr>
                 ))
@@ -371,6 +303,12 @@ export function HumanRequestsView({
 
                 <div style={{ fontSize: 13, color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>{row.description}</div>
 
+                {row.taskId != null && (
+                  <button type="button" className="btn-ghost" style={{ alignSelf: 'flex-start' }} onClick={() => setSelectedTaskId(row.taskId)}>
+                    View ticket
+                  </button>
+                )}
+
                 {row.status !== 'pending' && row.status !== 'expired' && (
                   <div style={{ fontSize: 12, color: 'var(--text-primary)', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '8px 10px', overflowWrap: 'anywhere' }}>
                     <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>{row.status === 'answered' ? 'Answer' : 'Resolution'}</div>
@@ -393,7 +331,9 @@ export function HumanRequestsView({
                 </div>
 
                 {row.status === 'pending' ? (
-                  <div style={{ marginTop: 2 }}>{renderResolveControls(row)}</div>
+                  <div style={{ marginTop: 2 }}>
+                    <ApprovalResolveControl approval={row} compact={compact} onResolved={() => void load()} />
+                  </div>
                 ) : (
                   <span className="text-muted" style={{ fontSize: 12 }}>No actions available</span>
                 )}
@@ -402,6 +342,7 @@ export function HumanRequestsView({
           </div>
         )
       )}
+      <TicketDetailsPanel taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
     </div>
   );
 }

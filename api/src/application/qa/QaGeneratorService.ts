@@ -12,7 +12,8 @@
  * spec that at least navigates the flow and asserts each route renders.
  */
 
-import { ideProxy } from '../llm/LlmProxyService';
+import { ideProxy, readProxyChoice } from '../llm/LlmProxyService';
+import { TenantAiService } from '../llm/tenantProxy';
 import type { Env } from '../../env';
 import type { QaStep } from './qaTypes';
 
@@ -50,12 +51,6 @@ Hard requirements for the spec you output:
 Output ONLY a JSON object: {"spec": "<full .ts source>", "steps": [<normalized QaStep array you actually exercised>]}.
 Do not wrap the JSON in markdown fences.`;
 
-function extractContent(raw: unknown): string | null {
-  const choices = (raw as { choices?: Array<{ message?: { content?: unknown } }> } | null)?.choices;
-  const content = choices?.[0]?.message?.content;
-  return typeof content === 'string' ? content : null;
-}
-
 /** Strip ```...``` fences and pull the first balanced JSON object out of a string. */
 function parseModelJson(content: string): { spec?: string; steps?: QaStep[] } | null {
   let s = content.trim();
@@ -69,6 +64,68 @@ function parseModelJson(content: string): { spec?: string; steps?: QaStep[] } | 
   } catch {
     return null;
   }
+}
+
+/**
+ * Static validation of a model-authored spec before it is ever written to disk
+ * and executed in CI [1067]. A poisoned/hallucinated spec (or a compromised QA
+ * token) could otherwise run arbitrary code in the runner. We do NOT trust the
+ * generator prompt alone — we reject any spec that:
+ *   - imports anything other than '@playwright/test'
+ *   - references Node/host capabilities (fs, child_process, process, require,
+ *     dynamic import(), eval, Function constructor, fetch/XHR/WebSocket, env)
+ *   - is implausibly large (a spec that drives a browser is small).
+ * A rejected spec causes the generator to fall back to the deterministic
+ * template, so the pipeline still produces a safe runnable test.
+ *
+ * This is an allowlist on *imports* plus a denylist on *escape hatches* — a
+ * pragmatic AST-free guard that's cheap to run in a Worker. It does not attempt
+ * to prove the spec only drives the browser, but it removes every known vector
+ * for arbitrary code execution / data exfiltration from the CI runner.
+ */
+const FORBIDDEN_SPEC_PATTERNS: ReadonlyArray<{ re: RegExp; reason: string }> = [
+  { re: /\brequire\s*\(/, reason: 'require()' },
+  { re: /\bimport\s*\(/, reason: 'dynamic import()' },
+  { re: /\beval\s*\(/, reason: 'eval()' },
+  { re: /\bnew\s+Function\b/, reason: 'Function constructor' },
+  { re: /\bprocess\b/, reason: 'process access' },
+  { re: /\bchild_process\b/, reason: 'child_process' },
+  { re: /\bnode:[a-z]/i, reason: 'node: builtin import' },
+  { re: /\bfrom\s+['"]fs['"]/, reason: 'fs import' },
+  { re: /\bglobalThis\b/, reason: 'globalThis' },
+  { re: /\b(fetch|XMLHttpRequest|WebSocket|EventSource)\s*\(/, reason: 'raw network call' },
+  { re: /\bpage\.request\b/, reason: 'page.request (raw HTTP)' },
+  { re: /\brequest\.(get|post|put|delete|patch|fetch)\b/, reason: 'APIRequestContext (raw HTTP)' },
+  { re: /\bpage\.evaluate\w*\s*\(/, reason: 'page.evaluate (arbitrary in-page JS)' },
+  { re: /\baddInitScript\b/, reason: 'addInitScript (arbitrary in-page JS)' },
+  { re: /\bexposeFunction\b/, reason: 'exposeFunction' },
+];
+
+/** Only these top-level imports are allowed in a generated spec. */
+const SPEC_IMPORT_RE = /\bimport\b[\s\S]*?\bfrom\s+['"]([^'"]+)['"]/g;
+const SPEC_MAX_LEN = 16_000;
+
+export interface SpecValidation {
+  ok: boolean;
+  reason?: string;
+}
+
+export function validateSpec(spec: string): SpecValidation {
+  if (typeof spec !== 'string' || spec.length === 0) return { ok: false, reason: 'empty' };
+  if (spec.length > SPEC_MAX_LEN) return { ok: false, reason: `spec too large (${spec.length} > ${SPEC_MAX_LEN})` };
+  if (!spec.includes('@playwright/test')) return { ok: false, reason: 'missing @playwright/test import' };
+
+  // Allowlist imports: only '@playwright/test' may be imported.
+  let m: RegExpExecArray | null;
+  SPEC_IMPORT_RE.lastIndex = 0;
+  while ((m = SPEC_IMPORT_RE.exec(spec)) !== null) {
+    if (m[1] !== '@playwright/test') return { ok: false, reason: `disallowed import '${m[1]}'` };
+  }
+
+  for (const { re, reason } of FORBIDDEN_SPEC_PATTERNS) {
+    if (re.test(spec)) return { ok: false, reason };
+  }
+  return { ok: true };
 }
 
 /** Deterministic template — always produces a valid, runnable smoke spec. */
@@ -102,8 +159,10 @@ export function fallbackSpec(input: GenerateInput): string {
   return lines.join('\n');
 }
 
-export class QaGeneratorService {
-  constructor(private readonly env: Env) {}
+export class QaGeneratorService extends TenantAiService {
+  constructor(private readonly env: Env, private readonly tenantId?: number) {
+    super(env);
+  }
 
   async generate(input: GenerateInput): Promise<GenerateResult> {
     // No LLM key configured → deterministic spec, no model.
@@ -125,27 +184,38 @@ export class QaGeneratorService {
       `Write the Playwright smoke test for this flow.`;
 
     try {
-      const result = await ideProxy(this.env).complete({
+      const request = {
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: userPrompt },
+          { role: 'system' as const, content: SYSTEM_PROMPT },
+          { role: 'user' as const, content: userPrompt },
         ],
         temperature: 0.2,
         max_tokens: 2000,
-        response_format: { type: 'json_object' },
+        response_format: { type: 'json_object' as const },
         useCase: 'qa_test_generation',
-      });
+      };
+      // The tenant's own QA generation → base class runs it on their connected BYO
+      // account + meters usage. Without a tenant (should not happen in the product
+      // path) fall back to the operator pool.
+      const result = this.tenantId != null
+        ? await this.completeForTenant(this.tenantId, request, { meterUseCase: 'qa_test_generation' })
+        : await ideProxy(this.env).complete(request);
 
       if (result.response.status >= 400) {
         return { spec: fallbackSpec(input), steps: input.steps, model: result.resolvedModel ?? null };
       }
-      const raw = await result.response.json().catch(() => null);
-      const content = extractContent(raw);
+      const { content } = await readProxyChoice(result);
       const parsed = content ? parseModelJson(content) : null;
-      const spec = typeof parsed?.spec === 'string' && parsed.spec.includes('@playwright/test')
-        ? parsed.spec
-        : fallbackSpec(input);
-      const steps = Array.isArray(parsed?.steps) && parsed.steps.length > 0 ? parsed.steps : input.steps;
+      // Validate the model output against the import allowlist + escape-hatch
+      // denylist before accepting it [1067]. Any failure → deterministic
+      // fallback, so a poisoned/hallucinated spec never reaches the CI runner.
+      const candidate = typeof parsed?.spec === 'string' ? parsed.spec : '';
+      const validation = validateSpec(candidate);
+      const spec = validation.ok ? candidate : fallbackSpec(input);
+      // Only trust the model's steps if its spec was trusted.
+      const steps = validation.ok && Array.isArray(parsed?.steps) && parsed.steps.length > 0
+        ? parsed.steps
+        : input.steps;
       return { spec, steps, model: result.resolvedModel ?? null };
     } catch {
       return { spec: fallbackSpec(input), steps: input.steps, model: null };

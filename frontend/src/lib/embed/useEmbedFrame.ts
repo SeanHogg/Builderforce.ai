@@ -8,6 +8,7 @@ import {
   type FrameToHostMessage,
 } from '@seanhogg/builderforce-embedded';
 import { setEmbedAuth } from '../auth';
+import { isTrustedHostOrigin, isVsCodeWebviewOrigin } from './embedTrust';
 
 /**
  * The iframe (BuilderForce) half of the embed protocol — the mirror of
@@ -30,6 +31,14 @@ export interface EmbedFrameState {
   theme: EmbedTheme;
   /** True once auth has been received. */
   ready: boolean;
+  /**
+   * True when the authenticating host is the first-party BuilderForce VS Code
+   * extension (a `vscode-webview://` origin) rather than a third-party host app
+   * (e.g. BurnRateOS). The extension mints the tenant JWT from the tenant's OWN
+   * API key, so it is not subject to the host-integration enablement/consent gate
+   * — that gate exists to protect tenants from EXTERNAL hosts surfacing their data.
+   */
+  firstParty: boolean;
   /** Emit a deep-link to the host (host mirrors it into its own URL). */
   navigate: (path: string) => void;
   /** Surface an error to the host. */
@@ -49,6 +58,7 @@ export function useEmbedFrame(): EmbedFrameState {
     token: null,
     theme: 'light',
     ready: false,
+    firstParty: false,
   });
   const hostOriginRef = useRef<string | null>(null);
 
@@ -70,8 +80,11 @@ export function useEmbedFrame(): EmbedFrameState {
   // Inbound host → frame messages + the initial ready handshake.
   useEffect(() => {
     const allow = allowedHostOrigins();
+    const isProduction = process.env.NODE_ENV === 'production';
     const onMessage = (event: MessageEvent) => {
-      if (allow.length > 0 && !allow.includes(event.origin)) return; // trust boundary
+      // Trust boundary: allowlisted origins only; with no allowlist, default-closed
+      // in prod (mirrors the frame-ancestors CSP), open in dev. [1462]
+      if (!isTrustedHostOrigin(event.origin, allow, isProduction)) return;
       const msg = event.data;
       if (!isHostToFrameMessage(msg)) return;
       if (msg.type === 'auth') {
@@ -85,6 +98,7 @@ export function useEmbedFrame(): EmbedFrameState {
           companyId: msg.companyId,
           theme: msg.theme ?? 'light',
           ready: true,
+          firstParty: isVsCodeWebviewOrigin(event.origin),
         });
       } else if (msg.type === 'navigate') {
         // Host → frame deep link; surfaces subscribe to this event.
@@ -98,6 +112,10 @@ export function useEmbedFrame(): EmbedFrameState {
     };
     window.addEventListener('message', onMessage);
     window.addEventListener('bfembed:unauthorized', onUnauthorized);
+    // Signal the early embed reporter (embedErrorReporter.ts) that the app booted
+    // far enough to post `ready`, so its boot-stall heartbeat stays quiet on a
+    // healthy frame and only fires when the bundle never reaches this point.
+    (window as unknown as { __bfEmbedReady?: boolean }).__bfEmbedReady = true;
     postToHost({ source: BFEMBED_SOURCE, type: 'ready' });
     return () => {
       window.removeEventListener('message', onMessage);

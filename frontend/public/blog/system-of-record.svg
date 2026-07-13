@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="amberGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFCE6B"/><stop offset="100%" stop-color="#F5A623"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+    <marker id="arw" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8891AE"/></marker>
+    <marker id="arwm" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#F5A623"/></marker>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">SYSTEM OF RECORD</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">The work writes itself down</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- Stage pipeline -->
+  <rect x="100" y="240" width="310" height="240" rx="20" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="100" y="240" width="6" height="240" rx="3" fill="url(#violetGrad)"/>
+  <text x="140" y="300" font-size="30">💡</text>
+  <text x="188" y="300" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="24" font-weight="800" fill="#EEF0FA">Idea</text>
+  <text x="140" y="344" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="140" dy="0">Specs and brainstorming are</tspan><tspan x="140" dy="26">first-class, so an initiative</tspan><tspan x="140" dy="26">has a beginning you can point</tspan><tspan x="140" dy="26">to — not a half-remembered</tspan><tspan x="140" dy="26">Slack thread.</tspan></text>
+
+  <rect x="450" y="240" width="310" height="240" rx="20" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="450" y="240" width="6" height="240" rx="3" fill="url(#coolGrad)"/>
+  <text x="490" y="300" font-size="30">🔨</text>
+  <text x="538" y="300" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="24" font-weight="800" fill="#EEF0FA">Build</text>
+  <text x="490" y="344" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="490" dy="0">Tasks flow across a Kanban</tspan><tspan x="490" dy="26">board worked by humans and</tspan><tspan x="490" dy="26">agents alike, every transition</tspan><tspan x="490" dy="26">timestamped.</tspan></text>
+
+  <rect x="800" y="240" width="310" height="240" rx="20" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="800" y="240" width="6" height="240" rx="3" fill="url(#mintGrad)"/>
+  <text x="840" y="300" font-size="30">🚀</text>
+  <text x="888" y="300" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="24" font-weight="800" fill="#EEF0FA">Ship</text>
+  <text x="840" y="344" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="840" dy="0">Agent pull requests carry</tspan><tspan x="840" dy="26">build status and merge state;</tspan><tspan x="840" dy="26">deployments emit the DORA</tspan><tspan x="840" dy="26">primitives.</tspan></text>
+
+  <rect x="1150" y="240" width="310" height="240" rx="20" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="1150" y="240" width="6" height="240" rx="3" fill="url(#amberGrad)"/>
+  <text x="1190" y="300" font-size="30">📊</text>
+  <text x="1238" y="300" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="24" font-weight="800" fill="#EEF0FA">Learn</text>
+  <text x="1190" y="344" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="1190" dy="0">Every terminal run is scored</tspan><tspan x="1190" dy="26">on whether it actually shipped</tspan><tspan x="1190" dy="26">— and that outcome feeds the</tspan><tspan x="1190" dy="26">next run's routing.</tspan></text>
+
+  <line x1="410" y1="360" x2="446" y2="360" stroke="#8891AE" stroke-width="2.5" marker-end="url(#arw)"/>
+  <line x1="760" y1="360" x2="796" y2="360" stroke="#8891AE" stroke-width="2.5" marker-end="url(#arw)"/>
+  <line x1="1110" y1="360" x2="1146" y2="360" stroke="#8891AE" stroke-width="2.5" marker-end="url(#arw)"/>
+
+  <!-- Learn loops back to routing -->
+  <path d="M1305 480 Q1305 545 1180 545 L730 545 Q605 545 605 484" fill="none" stroke="#F5A623" stroke-width="2" stroke-dasharray="7 7" marker-end="url(#arwm)"/>
+  <text x="955" y="536" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#FFCE6B">outcome feeds how the next run is routed</text>
+
+  <!-- Rollup bar -->
+  <rect x="100" y="590" width="1360" height="90" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="100" y="590" width="6" height="90" rx="3" fill="url(#coolGrad)"/>
+  <text x="140" y="628" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="800" fill="#EEF0FA">Priced at write time, attributed once — never reconciled</text>
+  <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" font-weight="700">
+    <rect x="140" y="642" width="150" height="30" rx="15" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.12)"/><text x="215" y="663" text-anchor="middle" fill="#A6ADC8">ticket</text>
+    <text x="300" y="663" text-anchor="middle" fill="#8891AE">→</text>
+    <rect x="318" y="642" width="150" height="30" rx="15" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.12)"/><text x="393" y="663" text-anchor="middle" fill="#A6ADC8">project</text>
+    <text x="478" y="663" text-anchor="middle" fill="#8891AE">→</text>
+    <rect x="496" y="642" width="160" height="30" rx="15" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.12)"/><text x="576" y="663" text-anchor="middle" fill="#A6ADC8">initiative</text>
+    <text x="666" y="663" text-anchor="middle" fill="#8891AE">→</text>
+    <rect x="684" y="642" width="150" height="30" rx="15" fill="rgba(91,240,188,0.10)" stroke="rgba(91,240,188,0.30)"/><text x="759" y="663" text-anchor="middle" fill="#5BF0BC">tenant</text>
+  </g>
+
+  <!-- One board note -->
+  <rect x="100" y="700" width="1360" height="86" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(139,108,255,0.30)" stroke-width="1.5"/>
+  <rect x="100" y="700" width="6" height="86" rx="3" fill="url(#violetGrad)"/>
+  <text x="140" y="738" font-size="26">👥</text>
+  <text x="184" y="746" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" fill="#A6ADC8"><tspan x="184" dy="0">Humans and agents share one board — the same instrumentation is mirrored onto people:</tspan><tspan x="184" dy="28">throughput, cycle time, rework, engagement. Half your workforce is now fully instrumented.</tspan></text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">One record where every unit of work is captured, costed, and attributed — idea to ship to learn</text>
+</svg>

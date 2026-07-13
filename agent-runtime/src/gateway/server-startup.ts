@@ -7,10 +7,10 @@ import {
 } from "../agents/model-selection.js";
 import { resolveAgentSessionDirs } from "../agents/session-dirs.js";
 import { cleanStaleLockFiles } from "../agents/session-write-lock.js";
-import type { CliDeps } from "../cli/deps.js";
 import { registerPlatformPersonasAsRoles } from "../builderforce/agent-roles.js";
 import { globalOrchestrator } from "../builderforce/orchestrator.js";
 import { loadProjectContext } from "../builderforce/project-context.js";
+import type { CliDeps } from "../cli/deps.js";
 import type { loadConfig } from "../config/config.js";
 import { resolveStateDir } from "../config/paths.js";
 import { startGmailWatcherWithLogs } from "../hooks/gmail-watcher-lifecycle.js";
@@ -26,13 +26,14 @@ import { syncBuilderForceAgentsDirectoryOnStartup } from "../infra/builderforce-
 import { BuilderforceRelayService } from "../infra/builderforce-relay.js";
 import { CompositeAgentTransport } from "../infra/composite-agent-transport.js";
 import { CronPollerService } from "../infra/cron-poller.js";
-import { WorkflowPollerService } from "../infra/workflow-poller.js";
-import { GatewayLlmService } from "../infra/gateway-llm-service.js";
-import { readSharedEnvVar } from "../infra/env-file.js";
+import { isOfflineMode, readSharedEnvVar } from "../infra/env-file.js";
 import { isTruthyEnvValue } from "../infra/env.js";
+import { GatewayLlmService } from "../infra/gateway-llm-service.js";
+import { loadHiredAgentsCached } from "../infra/hired-agents-sync.js";
 import { KnowledgeLoopService, setKnowledgeLoopService } from "../infra/knowledge-loop.js";
 import { LocalAgentTransport } from "../infra/local-agent-transport.js";
 import {
+  LimbicSystemAdapter,
   LocalResultBrokerAdapter,
   SsmMemoryAdapter,
   WorkflowTelemetryAdapter,
@@ -42,6 +43,8 @@ import { pushProjectContextToBuilderforce } from "../infra/project-context-push.
 import { checkAndWarnQuota } from "../infra/quota-monitor.js";
 import { fetchAndLoadSkills } from "../infra/skill-registry.js";
 import { initSsmMemoryService } from "../infra/ssm-memory-service.js";
+import { initLimbicSystemService } from "../infra/limbic-system-service.js";
+import { WorkflowPollerService } from "../infra/workflow-poller.js";
 import type { loadBuilderForceAgentsPlugins } from "../plugins/loader.js";
 import { type PluginServicesHandle, startPluginServices } from "../plugins/services.js";
 import { startBrowserControlServerIfEnabled } from "./server-browser.js";
@@ -115,6 +118,21 @@ async function startOrchestrator(
     params.log.warn(
       `[orchestrator] ${incompleteWorkflows.length} incomplete workflow(s) restored: ${incompleteWorkflows.join(", ")}`,
     );
+    // Self-healing: actually continue in-flight work after a restart rather than
+    // leaving restored workflows idle. Resumes are fired independently and never
+    // throw out of here, so a blocked workflow can't stall gateway startup.
+    try {
+      const resumed = await globalOrchestrator.resumeAllIncomplete(
+        globalOrchestrator.currentSpawnContext(),
+      );
+      if (resumed.length > 0) {
+        params.log.warn(
+          `[orchestrator] auto-resumed ${resumed.length} workflow(s): ${resumed.join(", ")}`,
+        );
+      }
+    } catch (err) {
+      params.log.warn(`[orchestrator] auto-resume failed: ${String(err)}`);
+    }
   }
 }
 
@@ -247,17 +265,71 @@ function startMemoryBackend(
     .catch((err) => {
       params.log.warn(`[ssm-memory] startup failed: ${String(err)}`);
     });
+
+  // Limbic system — the dynamic affective layer riding on the hippocampus +
+  // personality. Always starts (heuristic regions even without GPU/model).
+  void initLimbicSystemService({
+    checkpointPath: `${params.defaultWorkspaceDir}/.builderforce/limbic.bin`,
+  })
+    .then((svc) => {
+      params.log.warn(`[limbic] affective layer started (model=${svc.modelAvailable}, gpu=${svc.gpuAvailable})`);
+      globalOrchestrator.configure({ limbicSystem: new LimbicSystemAdapter() });
+    })
+    .catch((err) => {
+      params.log.warn(`[limbic] startup failed: ${String(err)}`);
+    });
+}
+
+/**
+ * Start the local-only knowledge loop (writes per-day memory to
+ * `.builderforce/memory/*.md` and registers the team-memory context builder).
+ * Constructed WITHOUT credentials so none of its upstream sync/push paths can
+ * fire — safe for offline / air-gapped mode and for credential-less standalone.
+ */
+function startLocalKnowledgeLoop(
+  params: Pick<SidecarParams, "defaultWorkspaceDir" | "log">,
+): KnowledgeLoopService {
+  const knowledgeLoop = new KnowledgeLoopService({
+    workspaceDir: params.defaultWorkspaceDir,
+    apiKey: null,
+    agentNodeId: null,
+  });
+  knowledgeLoop.start();
+  setKnowledgeLoopService(knowledgeLoop);
+  params.log.warn("[knowledge-loop] started (local-only)");
+  return knowledgeLoop;
 }
 
 /**
  * Start Builderforce upstream relay, knowledge loop, cron poller, and all
  * cloud-connected services. No-ops gracefully when BUILDERFORCE_API_KEY is absent.
+ *
+ * In offline / air-gapped mode ({@link isOfflineMode}) every control-plane
+ * outbound — relay, cron-poller, workflow-poller, fleet/directory sync,
+ * hired-agents/persona sync, knowledge-loop upstream sync and remote dispatch —
+ * is gated off; only the local knowledge loop is started so on-disk memory and
+ * the local agent loop keep working with zero required network egress.
  */
 async function startBuilderforceServices(
   params: Pick<SidecarParams, "cfg" | "defaultWorkspaceDir" | "log">,
 ): Promise<{ relay: BuilderforceRelayService | null; knowledgeLoop: KnowledgeLoopService | null }> {
   let relay: BuilderforceRelayService | null = null;
   let knowledgeLoop: KnowledgeLoopService | null = null;
+
+  if (isOfflineMode()) {
+    params.log.warn(
+      "[builderforce] offline mode — BUILDERFORCE_OFFLINE set; all control-plane " +
+        "syncs disabled (relay, cron/workflow pollers, fleet/directory sync, " +
+        "hired-agents/persona sync, knowledge-loop upstream, remote dispatch). " +
+        "Local agent loop + local model inference + local MCP/dev tools remain active.",
+    );
+    try {
+      knowledgeLoop = startLocalKnowledgeLoop(params);
+    } catch (err) {
+      params.log.warn(`[builderforce/knowledge-loop] offline startup failed: ${String(err)}`);
+    }
+    return { relay, knowledgeLoop };
+  }
 
   try {
     const apiKey = readSharedEnvVar("BUILDERFORCE_API_KEY");
@@ -299,16 +371,34 @@ async function startBuilderforceServices(
       // SIGTERM/SIGINT doesn't leave a dangling upstream connection. Orphaned
       // ticket workspaces are reclaimed by the startup sweep on the next boot.
       const relayRef = relay;
-      const stopRelay = () => { try { relayRef.stop(); } catch { /* ignore */ } };
+      const stopRelay = () => {
+        try {
+          relayRef.stop();
+        } catch {
+          /* ignore */
+        }
+      };
       process.once("SIGTERM", stopRelay);
       process.once("SIGINT", stopRelay);
 
-      void fetchPlatformPersonas({ baseUrl, agentNodeId: String(agentNodeId), apiKey }).then((personas) => {
-        if (personas.length > 0) {
-          params.log.warn(`[platform-personas] loaded ${personas.length} platform persona(s)`);
-          registerPlatformPersonasAsRoles(personas);
-        }
-      });
+      void fetchPlatformPersonas({ baseUrl, agentNodeId: String(agentNodeId), apiKey }).then(
+        (personas) => {
+          if (personas.length > 0) {
+            params.log.warn(`[platform-personas] loaded ${personas.length} platform persona(s)`);
+            registerPlatformPersonasAsRoles(personas);
+          }
+        },
+      );
+
+      // Hired/purchased agents become callable orchestrate roles. Read-through
+      // cached + registered here; degrades to built-ins only on an older API.
+      void loadHiredAgentsCached({ baseUrl, agentNodeId: String(agentNodeId), apiKey }).then(
+        (agents) => {
+          if (agents.length > 0) {
+            params.log.warn(`[hired-agents] registered ${agents.length} hired agent role(s)`);
+          }
+        },
+      );
 
       void checkAndWarnQuota({ baseUrl, agentNodeId: String(agentNodeId), apiKey });
 
@@ -327,7 +417,11 @@ async function startBuilderforceServices(
 
       void fetchAndLoadSkills({ baseUrl, agentNodeId: String(agentNodeId), apiKey });
 
-      const cronPoller = new CronPollerService({ baseUrl, agentNodeId: String(agentNodeId), apiKey });
+      const cronPoller = new CronPollerService({
+        baseUrl,
+        agentNodeId: String(agentNodeId),
+        apiKey,
+      });
       void cronPoller.start();
       params.log.warn("[cron-poller] started");
 

@@ -3,6 +3,7 @@
 import { Select } from '@/components/Select';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   SUPPORTED_MODELS,
   type TrainingConfig,
@@ -51,6 +52,7 @@ const DEFAULT_MAMBA_PROVIDER_CONFIG: MambaProviderConfig = {
 };
 
 export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITrainingPanelProps) {
+  const t = useTranslations('aiTraining');
   const [tab, setTab] = useState<PanelTab>('configure');
   const [trainingMode, setTrainingMode] = useState<TrainingMode>('behavior');
   const [config, setConfig] = useState<TrainingConfig>(DEFAULT_CONFIG);
@@ -59,6 +61,8 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [jobs, setJobs] = useState<TrainingJob[]>([]);
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
+  /** Optional generation model — e.g. an OpenRouter model id; empty = gateway default pool. */
+  const [genModel, setGenModel] = useState<string>('');
   const [logs, setLogs] = useState<string[]>([]);
   const [lossHistory, setLossHistory] = useState<TrainingStep[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -93,29 +97,30 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
   const handleGenerateDataset = useCallback(async () => {
     if (!config.capabilityPrompt.trim()) return;
     setIsGenerating(true);
-    appendLog(`🔄 Generating dataset for: "${config.capabilityPrompt}"…`);
+    appendLog(t('logGenerating', { prompt: config.capabilityPrompt }));
     try {
       const dataset = await generateDataset(
         projectId,
         config.capabilityPrompt,
         `Dataset for ${config.capabilityPrompt}`,
-        (chunk) => appendLog(`  ${chunk}`)
+        (chunk) => appendLog(`  ${chunk}`),
+        genModel.trim() || undefined
       );
-      appendLog(`✅ Dataset ready: ${dataset.example_count} examples (${dataset.id})`);
+      appendLog(t('logDatasetReady', { count: dataset.example_count, id: dataset.id }));
       setDatasets(prev => [dataset, ...prev]);
       setSelectedDatasetId(dataset.id);
     } catch (e) {
-      appendLog(`❌ Dataset generation failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
+      appendLog(t('logDatasetFailed', { error: e instanceof Error ? e.message : t('errUnknown') }));
     } finally {
       setIsGenerating(false);
     }
-  }, [config.capabilityPrompt, projectId, appendLog]);
+  }, [config.capabilityPrompt, projectId, appendLog, genModel, t]);
 
   const handleStartTraining = useCallback(async () => {
     if (!config.baseModel) return;
     setIsTraining(true);
     setLossHistory([]);
-    appendLog(`🚀 Starting training: ${selectedModel?.name ?? config.baseModel}`);
+    appendLog(t('logStartTraining', { model: selectedModel?.name ?? config.baseModel }));
 
     try {
       // Create a training job record in the backend
@@ -130,17 +135,18 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
       });
       setActiveJobId(job.id);
       setJobs(prev => [job, ...prev]);
-      appendLog(`📋 Job created: ${job.id}`);
+      appendLog(t('logJobCreated', { id: job.id }));
 
       if (webgpuAvailable && canUseWebGPU) {
-        // In-browser WebGPU training
-        appendLog('🎮 Starting in-browser WebGPU LoRA training…');
+        // In-browser WebGPU training — REAL Mamba SSM gradient descent.
+        appendLog(t('logWebgpuStart'));
         const trainer = new WebGPUTrainer({
           modelId: config.baseModel,
           workerUrl: getApiBaseUrl(),
           projectId,
           jobId: job.id,
           datasetId: selectedDatasetId || undefined,
+          mambaConfig: mambaProviderConfig,
           onLog: appendLog,
           onStep: (step) => {
             setLossHistory(prev => [...prev, step]);
@@ -151,10 +157,10 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
             ));
           },
           onEpochEnd: (epoch, avgLoss) => {
-            appendLog(`📊 Epoch ${epoch} complete — avg loss: ${avgLoss.toFixed(4)}`);
+            appendLog(t('logEpochComplete', { epoch, loss: avgLoss.toFixed(4) }));
           },
           onComplete: (artifactKey) => {
-            appendLog(`✅ Training complete! Artifact: ${artifactKey}`);
+            appendLog(t('logTrainingComplete', { key: artifactKey }));
             setJobs(prev => {
               const completedJob = { ...prev.find(j => j.id === job.id)!, status: 'completed' as const, r2_artifact_key: artifactKey };
               onJobCompleted?.(completedJob);
@@ -163,7 +169,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
             setIsTraining(false);
           },
           onError: (err) => {
-            appendLog(`❌ Training error: ${err.message}`);
+            appendLog(t('logTrainingError', { error: err.message }));
             setJobs(prev => prev.map(j =>
               j.id === job.id ? { ...j, status: 'failed', error_message: err.message } : j
             ));
@@ -191,40 +197,29 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
         );
         trainerRef.current = null;
       } else {
-        // Cloud GPU offload for large models
-        appendLog(`☁️  Model >2B params — using cloud GPU offload (orchestrated via Cloudflare Workers)`);
-        appendLog(`📡 Job ${job.id} queued for cloud training…`);
-
-        // Simulate cloud offload polling
-        for (let epoch = 1; epoch <= config.epochs; epoch++) {
-          await new Promise(resolve => setTimeout(resolve, 1200));
-          const loss = 2.5 * Math.exp(-epoch * 0.4) + (Math.random() - 0.5) * 0.1;
-          appendLog(`  ☁️  Cloud epoch ${epoch}/${config.epochs} — loss: ${loss.toFixed(4)}`);
-          setLossHistory(prev => [...prev, { epoch, step: epoch, loss, learningRate: config.learningRate }]);
-          setJobs(prev => prev.map(j =>
-            j.id === job.id ? { ...j, current_epoch: epoch, current_loss: loss, status: 'running' } : j
-          ));
-        }
-
-        appendLog('✅ Cloud training complete!');
-        setJobs(prev => {
-          const completedJob = { ...prev.find(j => j.id === job.id)!, status: 'completed' as const };
-          onJobCompleted?.(completedJob);
-          return prev.map(j => j.id === job.id ? completedJob : j);
-        });
+        // In-browser WebGPU training only runs for models within the WebGPU
+        // parameter budget. There is no real cloud-offload training pipeline
+        // wired here yet — so rather than fabricate a loss curve, fail honestly.
+        const reason = !webgpuAvailable
+          ? t('reasonNoWebgpu')
+          : t('reasonExceedsBudget', { model: selectedModel?.name ?? config.baseModel });
+        appendLog(t('logCannotStart', { reason }));
+        setJobs(prev => prev.map(j =>
+          j.id === job.id ? { ...j, status: 'failed', error_message: reason } : j
+        ));
         setIsTraining(false);
       }
     } catch (e) {
-      appendLog(`❌ Failed to start training: ${e instanceof Error ? e.message : 'Unknown error'}`);
+      appendLog(t('logStartFailed', { error: e instanceof Error ? e.message : t('errUnknown') }));
       setIsTraining(false);
     }
-  }, [config, selectedModel, selectedDatasetId, projectId, webgpuAvailable, canUseWebGPU, appendLog, onJobCompleted]);
+  }, [config, selectedModel, selectedDatasetId, projectId, webgpuAvailable, canUseWebGPU, appendLog, onJobCompleted, mambaProviderConfig, t]);
 
   const handleStopTraining = useCallback(() => {
     trainerRef.current?.stop();
     setIsTraining(false);
-    appendLog('⏹  Training stopped.');
-  }, [appendLog]);
+    appendLog(t('logStopped'));
+  }, [appendLog, t]);
 
   /** Memory Training — advance Mamba state through provided sequences */
   const handleMemoryTraining = useCallback(async () => {
@@ -233,11 +228,11 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
       .map(s => s.trim())
       .filter(Boolean);
     if (sequences.length === 0) {
-      appendLog('⚠️ No sequences provided for memory training.');
+      appendLog(t('logNoSequences'));
       return;
     }
     setIsTraining(true);
-    appendLog(`🧬 Starting Memory Training — ${sequences.length} sequence(s)…`);
+    appendLog(t('logMemoryStart', { count: sequences.length }));
 
     try {
       const { MambaEngine } = await import('@/lib/mamba-engine');
@@ -247,69 +242,71 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
       mambaRef.current = engine;
 
       await engine.trainMemory(sequences, (i, total) => {
-        appendLog(`  🔄 Processed ${i}/${total}: ${sequences[i - 1]?.slice(0, 60)}…`);
+        appendLog(t('logMemoryProcessed', { i, total, seq: sequences[i - 1]?.slice(0, 60) ?? '' }));
       });
 
       await engine.save();
       const snap = engine.getSnapshot();
-      appendLog(`✅ Memory training complete — state step: ${snap.step}, channels: ${snap.channels}`);
+      appendLog(t('logMemoryComplete', { step: snap.step, channels: snap.channels }));
     } catch (e) {
-      appendLog(`❌ Memory training failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
+      appendLog(t('logMemoryFailed', { error: e instanceof Error ? e.message : t('errUnknown') }));
     } finally {
       setIsTraining(false);
     }
-  }, [memorySequences, projectId, appendLog]);
+  }, [memorySequences, projectId, appendLog, t]);
 
   const handleEvaluate = useCallback(async (jobId: string) => {
-    appendLog(`🧪 Evaluating model for job ${jobId}…`);
+    appendLog(t('logEvaluating', { id: jobId }));
     try {
       const result = await evaluateModel(jobId);
-      appendLog(`📊 Evaluation results:`);
-      appendLog(`  Score:              ${(result.score * 100).toFixed(1)}%`);
-      appendLog(`  Code correctness:   ${((result.code_correctness ?? 0) * 100).toFixed(1)}%`);
-      appendLog(`  Reasoning quality:  ${((result.reasoning_quality ?? 0) * 100).toFixed(1)}%`);
-      appendLog(`  Hallucination rate: ${((result.hallucination_rate ?? 0) * 100).toFixed(1)}%`);
-      appendLog(`  Details: ${result.details}`);
+      appendLog(t('logEvalResults'));
+      appendLog(t('logEvalScore', { value: (result.score * 100).toFixed(1) }));
+      appendLog(t('logEvalCode', { value: ((result.code_correctness ?? 0) * 100).toFixed(1) }));
+      appendLog(t('logEvalReasoning', { value: ((result.reasoning_quality ?? 0) * 100).toFixed(1) }));
+      appendLog(t('logEvalHallucination', { value: ((result.hallucination_rate ?? 0) * 100).toFixed(1) }));
+      appendLog(t('logEvalDetails', { details: result.details }));
+      // Reload jobs so the now-persisted eval breakdown renders durably on the card.
+      listTrainingJobs(projectId).then(setJobs).catch(() => { });
     } catch (e) {
-      appendLog(`❌ Evaluation failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
+      appendLog(t('logEvalFailed', { error: e instanceof Error ? e.message : t('errUnknown') }));
     }
-  }, [appendLog]);
+  }, [appendLog, t, projectId]);
 
-  /** Mamba Full-Model Training — trains the actual Mamba model weights via mambacode.js */
+  /** Mamba Full-Model Training — trains the actual Mamba model weights via the builderforce-memory engine */
   const handleMambaModelTraining = useCallback(async () => {
     if (!mambaTrainCode.trim()) {
-      appendLog('⚠️ No training code provided for Mamba model training.');
+      appendLog(t('logNoCode'));
       return;
     }
     setIsTraining(true);
-    appendLog('🐍 Initialising Mamba model (mambacode.js)…');
+    appendLog(t('logMambaInit'));
     try {
       const provider = new MambaModelProvider(mambaProviderConfig);
       mambaProviderRef.current = provider;
       await provider.init();
 
       if (!provider.isReady()) {
-        appendLog('❌ Mamba model failed to initialise — WebGPU may not be available in this browser.');
+        appendLog(t('logMambaFailInit', { reason: provider.failureReason() ?? t('errUnknown') }));
         return;
       }
 
-      appendLog(`✅ Mamba model ready. Starting training (${config.epochs} epoch(s)${mambaProviderConfig.wsla ? ', WSLA mode' : ''})…`);
+      appendLog(t('logMambaReady', { epochs: config.epochs, wsla: mambaProviderConfig.wsla ? t('wslaModeSuffix') : '' }));
       const losses = await provider.train(mambaTrainCode, {
         learningRate: 1e-4,
         epochs: config.epochs,
         wsla: mambaProviderConfig.wsla,
         onEpochEnd: (epoch, loss) => {
-          appendLog(`  📊 Epoch ${epoch}: loss=${loss.toFixed(4)}`);
+          appendLog(t('logMambaEpoch', { epoch, loss: loss.toFixed(4) }));
           setLossHistory(prev => [...prev, { epoch, step: epoch, loss, learningRate: 1e-4 }]);
         },
       });
-      appendLog(`✅ Mamba training complete — final loss: ${(losses[losses.length - 1] ?? 0).toFixed(4)}`);
+      appendLog(t('logMambaComplete', { loss: (losses[losses.length - 1] ?? 0).toFixed(4) }));
     } catch (e) {
-      appendLog(`❌ Mamba training failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
+      appendLog(t('logMambaFailed', { error: e instanceof Error ? e.message : t('errUnknown') }));
     } finally {
       setIsTraining(false);
     }
-  }, [mambaTrainCode, mambaProviderConfig, config.epochs, appendLog]);
+  }, [mambaTrainCode, mambaProviderConfig, config.epochs, appendLog, t]);
 
   /** Hybrid Training — memory pass first, then LoRA behavior pass */
   const handleHybridTraining = useCallback(async () => {
@@ -319,12 +316,19 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
 
   const maxLoss = lossHistory.length > 0 ? Math.max(...lossHistory.map(s => s.loss)) : 3;
 
+  const MODE_LABELS: Record<TrainingMode, string> = {
+    behavior: `⚙️ ${t('modeBehavior')}`,
+    memory: `🧬 ${t('modeMemory')}`,
+    hybrid: `🔮 ${t('modeHybrid')}`,
+    mamba: `🐍 ${t('modeMamba')}`,
+  };
+
   return (
     <div className="h-full flex flex-col text-sm" style={{ background: 'var(--bg-base)', color: 'var(--text-primary)' }}>
       {/* Header */}
       <div className="px-3 py-2 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
         <h2 className="font-semibold flex items-center gap-1" style={{ color: 'var(--text-primary)' }}>
-          <span>🧠</span> AI Model Training
+          <span>🧠</span> {t('title')}
         </h2>
         <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
           <span className={`w-2 h-2 rounded-full ${webgpuAvailable ? 'bg-green-400' : 'bg-yellow-400'}`} />
@@ -332,7 +336,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
           {mambaWebGPU && (
             <>
               <span className="w-2 h-2 rounded-full bg-purple-400" />
-              <span>Mamba</span>
+              <span>{'Mamba'}</span>
             </>
           )}
         </div>
@@ -340,23 +344,22 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
 
       {/* Tabs — theme-aware so readable in light mode */}
       <div className="flex" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-        {(['configure', 'datasets', 'jobs'] as PanelTab[]).map(t => (
+        {([['configure', t('tabConfigure')], ['datasets', t('tabDatasets')], ['jobs', t('tabJobs')]] as [PanelTab, string][]).map(([tabId, label]) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={tabId}
+            onClick={() => setTab(tabId)}
             style={{
               padding: '6px 12px',
               fontSize: '0.75rem',
-              textTransform: 'capitalize',
-              background: tab === t ? 'var(--bg-elevated)' : 'transparent',
-              color: tab === t ? 'var(--text-primary)' : 'var(--text-secondary)',
+              background: tab === tabId ? 'var(--bg-elevated)' : 'transparent',
+              color: tab === tabId ? 'var(--text-primary)' : 'var(--text-secondary)',
               border: 'none',
-              borderTop: tab === t ? '2px solid var(--coral-bright)' : '2px solid transparent',
+              borderTop: tab === tabId ? '2px solid var(--coral-bright)' : '2px solid transparent',
               cursor: 'pointer',
               fontFamily: 'var(--font-display)',
             }}
           >
-            {t}
+            {label}
           </button>
         ))}
       </div>
@@ -367,27 +370,27 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
           <div className="p-3 space-y-3">
             {/* Training Mode Selector */}
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Training Mode</label>
+              <label className="block text-xs text-gray-400 mb-1">{t('trainingMode')}</label>
               <div className="flex rounded overflow-hidden border border-gray-700">
                 {(['behavior', 'memory', 'hybrid', 'mamba'] as TrainingMode[]).map(mode => (
                   <button
                     key={mode}
                     onClick={() => setTrainingMode(mode)}
-                    className={`flex-1 py-1.5 text-xs font-semibold capitalize transition-colors ${
+                    className={`flex-1 py-1.5 text-xs font-semibold transition-colors ${
                       trainingMode === mode
                         ? 'bg-indigo-700 text-white'
                         : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
                     }`}
                   >
-                    {mode === 'behavior' ? '⚙️ Behavior' : mode === 'memory' ? '🧬 Memory' : mode === 'hybrid' ? '🔮 Hybrid' : '🐍 Mamba'}
+                    {MODE_LABELS[mode]}
                   </button>
                 ))}
               </div>
               <div className="mt-1 text-xs text-gray-500">
-                {trainingMode === 'behavior' && 'LoRA fine-tuning — adjusts model weights (existing pipeline)'}
-                {trainingMode === 'memory' && 'Mamba state evolution — no gradient descent required'}
-                {trainingMode === 'hybrid' && 'Combines LoRA weight updates + Mamba memory evolution'}
-                {trainingMode === 'mamba' && 'Full Mamba model training via mambacode.js (WebGPU on-device)'}
+                {trainingMode === 'behavior' && t('descBehavior')}
+                {trainingMode === 'memory' && t('descMemory')}
+                {trainingMode === 'hybrid' && t('descHybrid')}
+                {trainingMode === 'mamba' && t('descMamba')}
               </div>
             </div>
 
@@ -395,18 +398,18 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
             {trainingMode === 'mamba' && (
               <div className="space-y-2">
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Training Code (paste your codebase or examples)</label>
+                  <label className="block text-xs text-gray-400 mb-1">{t('trainingCode')}</label>
                   <textarea
                     value={mambaTrainCode}
                     onChange={e => setMambaTrainCode(e.target.value)}
-                    placeholder="// Paste code or text to fine-tune the Mamba model on…"
-                    className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none resize-none font-mono"
+                    placeholder={t('trainingCodePlaceholder')}
+                    className="w-full bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none resize-none font-mono"
                     rows={5}
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-xs text-gray-400 mb-1">Model Dim</label>
+                    <label className="block text-xs text-gray-400 mb-1">{t('modelDim')}</label>
                     <input
                       type="number"
                       min={64}
@@ -414,29 +417,29 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
                       step={64}
                       value={mambaProviderConfig.dModel ?? 512}
                       onChange={e => setMambaProviderConfig(c => ({ ...c, dModel: parseInt(e.target.value) || 512 }))}
-                      className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                      className="w-full bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-400 mb-1">Layers</label>
+                    <label className="block text-xs text-gray-400 mb-1">{t('layers')}</label>
                     <input
                       type="number"
                       min={1}
                       max={32}
                       value={mambaProviderConfig.numLayers ?? 8}
                       onChange={e => setMambaProviderConfig(c => ({ ...c, numLayers: parseInt(e.target.value) || 8 }))}
-                      className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                      className="w-full bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-400 mb-1">Epochs</label>
+                    <label className="block text-xs text-gray-400 mb-1">{t('epochs')}</label>
                     <input
                       type="number"
                       min={1}
                       max={20}
                       value={config.epochs}
                       onChange={e => setConfig(c => ({ ...c, epochs: parseInt(e.target.value) || 3 }))}
-                      className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                      className="w-full bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
                     />
                   </div>
                   <div className="flex items-end pb-1.5">
@@ -447,14 +450,12 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
                         onChange={e => setMambaProviderConfig(c => ({ ...c, wsla: e.target.checked }))}
                         className="accent-purple-500"
                       />
-                      WSLA mode
+                      {t('wslaMode')}
                     </label>
                   </div>
                 </div>
                 <div className="text-xs text-gray-500">
-                  {mambaProviderConfig.wsla
-                    ? 'WSLA: only B and C matrices are updated — rapid local adaptation'
-                    : 'Full weight update — updates all model parameters'}
+                  {mambaProviderConfig.wsla ? t('wslaOn') : t('wslaOff')}
                 </div>
               </div>
             )}
@@ -462,16 +463,16 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
             {/* Memory Training UI */}
             {(trainingMode === 'memory' || trainingMode === 'hybrid') && (
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Memory Sequences (one per line)</label>
+                <label className="block text-xs text-gray-400 mb-1">{t('memorySequences')}</label>
                 <textarea
                   value={memorySequences}
                   onChange={e => setMemorySequences(e.target.value)}
-                  placeholder="Enter interaction sequences, chat logs, or workflows — one per line…"
-                  className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none resize-none"
+                  placeholder={t('memoryPlaceholder')}
+                  className="w-full bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none resize-none"
                   rows={4}
                 />
                 <div className="text-xs text-gray-500 mt-0.5">
-                  These sequences evolve the Mamba state without retraining weights.
+                  {t('memoryHint')}
                 </div>
               </div>
             )}
@@ -479,11 +480,11 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
             {/* Model selection — shown for behavior + hybrid */}
             {(trainingMode === 'behavior' || trainingMode === 'hybrid') && (
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Base Model</label>
+                <label className="block text-xs text-gray-400 mb-1">{t('baseModel')}</label>
                 <Select
                   value={config.baseModel}
                   onChange={e => setConfig(c => ({ ...c, baseModel: e.target.value }))}
-                  className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                  className="w-full bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
                 >
                   {SUPPORTED_MODELS.map(m => (
                     <option key={m.id} value={m.id}>
@@ -494,7 +495,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
                 {selectedModel && (
                   <div className="mt-1 text-xs text-gray-500 flex items-center gap-1">
                     <span className={`w-1.5 h-1.5 rounded-full ${canUseWebGPU ? 'bg-green-400' : 'bg-orange-400'}`} />
-                    {canUseWebGPU ? 'In-browser WebGPU' : 'Cloud GPU offload required'}
+                    {canUseWebGPU ? t('inBrowserWebGPU') : t('cloudOffload')}
                   </div>
                 )}
               </div>
@@ -502,12 +503,12 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
             {/* Capability prompt — shown for behavior + hybrid */}
             {(trainingMode === 'behavior' || trainingMode === 'hybrid') && (
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Capability Prompt</label>
+                <label className="block text-xs text-gray-400 mb-1">{t('capabilityPrompt')}</label>
                 <textarea
                   value={config.capabilityPrompt}
                   onChange={e => setConfig(c => ({ ...c, capabilityPrompt: e.target.value }))}
-                  placeholder="Describe the target capability, e.g. 'Python debugging and error explanation'"
-                  className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none resize-none"
+                  placeholder={t('capabilityPlaceholder')}
+                  className="w-full bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none resize-none"
                   rows={3}
                 />
               </div>
@@ -517,27 +518,35 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
             {(trainingMode === 'behavior' || trainingMode === 'hybrid') && (
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs text-gray-400">Training Dataset</label>
+                  <label className="text-xs text-gray-400">{t('trainingDataset')}</label>
                   <button
                     onClick={handleGenerateDataset}
                     disabled={isGenerating || !config.capabilityPrompt.trim()}
                     className="text-xs bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50 text-white px-2 py-0.5 rounded"
                   >
-                    {isGenerating ? '⏳ Generating…' : '✨ Generate'}
+                    {isGenerating ? `⏳ ${t('generating')}` : `✨ ${t('generate')}`}
                   </button>
                 </div>
                 <Select
                   value={selectedDatasetId}
                   onChange={e => setSelectedDatasetId(e.target.value)}
-                  className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                  className="w-full bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
                 >
-                  <option value="">— no dataset (use capability prompt only) —</option>
+                  <option value="">{t('noDataset')}</option>
                   {datasets.map(d => (
                     <option key={d.id} value={d.id}>
-                      {d.name} ({d.example_count} examples)
+                      {t('datasetOption', { name: d.name, count: d.example_count })}
                     </option>
                   ))}
                 </Select>
+                <input
+                  type="text"
+                  value={genModel}
+                  onChange={e => setGenModel(e.target.value)}
+                  placeholder={t('genModelPlaceholder')}
+                  className="w-full mt-1 bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                  title={t('genModelTitle')}
+                />
               </div>
             )}
 
@@ -545,40 +554,40 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
             {(trainingMode === 'behavior' || trainingMode === 'hybrid') && (
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">LoRA Rank</label>
+                  <label className="block text-xs text-gray-400 mb-1">{t('loraRank')}</label>
                   <input
                     type="number"
                     min={1}
                     max={64}
                     value={config.loraRank}
                     onChange={e => setConfig(c => ({ ...c, loraRank: parseInt(e.target.value) || 8 }))}
-                    className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                    className="w-full bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Epochs</label>
+                  <label className="block text-xs text-gray-400 mb-1">{t('epochs')}</label>
                   <input
                     type="number"
                     min={1}
                     max={20}
                     value={config.epochs}
                     onChange={e => setConfig(c => ({ ...c, epochs: parseInt(e.target.value) || 3 }))}
-                    className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                    className="w-full bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Batch Size</label>
+                  <label className="block text-xs text-gray-400 mb-1">{t('batchSize')}</label>
                   <input
                     type="number"
                     min={1}
                     max={32}
                     value={config.batchSize}
                     onChange={e => setConfig(c => ({ ...c, batchSize: parseInt(e.target.value) || 4 }))}
-                    className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                    className="w-full bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Learning Rate</label>
+                  <label className="block text-xs text-gray-400 mb-1">{t('learningRate')}</label>
                   <input
                     type="number"
                     step={0.00001}
@@ -586,7 +595,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
                     max={0.01}
                     value={config.learningRate}
                     onChange={e => setConfig(c => ({ ...c, learningRate: parseFloat(e.target.value) || 0.0002 }))}
-                    className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                    className="w-full bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
                   />
                 </div>
               </div>
@@ -600,7 +609,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
                   disabled={isTraining || !mambaTrainCode.trim()}
                   className="flex-1 bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
                 >
-                  {isTraining ? '⏳ Training…' : '🐍 Train Mamba Model'}
+                  {isTraining ? `⏳ ${t('training')}` : `🐍 ${t('trainMamba')}`}
                 </button>
               ) : trainingMode === 'memory' ? (
                 <button
@@ -608,7 +617,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
                   disabled={isTraining || !memorySequences.trim()}
                   className="flex-1 bg-purple-700 hover:bg-purple-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
                 >
-                  {isTraining ? '⏳ Training…' : '🧬 Train Memory'}
+                  {isTraining ? `⏳ ${t('training')}` : `🧬 ${t('trainMemory')}`}
                 </button>
               ) : trainingMode === 'hybrid' ? (
                 <button
@@ -616,7 +625,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
                   disabled={isTraining || isGenerating}
                   className="flex-1 bg-gradient-to-r from-purple-700 to-green-700 hover:from-purple-600 hover:to-green-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
                 >
-                  {isTraining ? '⏳ Training…' : '🔮 Start Hybrid Training'}
+                  {isTraining ? `⏳ ${t('training')}` : `🔮 ${t('startHybrid')}`}
                 </button>
               ) : (
                 <button
@@ -624,7 +633,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
                   disabled={isTraining || isGenerating}
                   className="flex-1 bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
                 >
-                  {isTraining ? '⏳ Training…' : '▶ Start Training'}
+                  {isTraining ? `⏳ ${t('training')}` : `▶ ${t('startTraining')}`}
                 </button>
               )}
               {isTraining && (
@@ -632,7 +641,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
                   onClick={handleStopTraining}
                   className="bg-red-700 hover:bg-red-600 text-white px-3 py-2 rounded text-xs"
                 >
-                  ⏹ Stop
+                  ⏹ {t('stop')}
                 </button>
               )}
             </div>
@@ -641,7 +650,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
             {lossHistory.length > 0 && (
               <div>
                 <div className="text-xs text-gray-400 mb-1">
-                  Loss Curve (latest: {lossHistory[lossHistory.length - 1]?.loss.toFixed(4)})
+                  {t('lossCurve', { loss: lossHistory[lossHistory.length - 1]?.loss.toFixed(4) ?? '' })}
                 </div>
                 <div className="bg-gray-800 rounded p-2 h-20 flex items-end gap-px overflow-hidden">
                   {lossHistory.slice(-60).map((s, i) => (
@@ -649,7 +658,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
                       key={i}
                       className="bg-blue-500 opacity-80 flex-1 min-w-0 rounded-sm"
                       style={{ height: `${Math.max(4, (s.loss / maxLoss) * 100)}%` }}
-                      title={`Epoch ${s.epoch} step ${s.step}: ${s.loss.toFixed(4)}`}
+                      title={t('lossBarTitle', { epoch: s.epoch, step: s.step, loss: s.loss.toFixed(4) })}
                     />
                   ))}
                 </div>
@@ -659,7 +668,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
             {/* Training logs */}
             {logs.length > 0 && (
               <div>
-                <div className="text-xs text-gray-400 mb-1">Training Logs</div>
+                <div className="text-xs text-gray-400 mb-1">{t('trainingLogs')}</div>
                 <div className="bg-gray-950 rounded p-2 h-32 overflow-y-auto font-mono text-xs text-green-400">
                   {logs.map((log, i) => (
                     <div key={i}>{log}</div>
@@ -675,12 +684,12 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
         {tab === 'datasets' && (
           <div className="p-3 space-y-2">
             <div className="text-xs text-gray-400 mb-2">
-              {datasets.length} dataset{datasets.length !== 1 ? 's' : ''} for this project
+              {t('datasetsCount', { count: datasets.length })}
             </div>
             {datasets.length === 0 && (
               <div className="text-center text-gray-500 text-xs py-6">
                 <div className="text-2xl mb-2">📦</div>
-                No datasets yet. Generate one in the Configure tab.
+                {t('noDatasets')}
               </div>
             )}
             {datasets.map(d => (
@@ -694,7 +703,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
                     }`}>{d.status}</span>
                 </div>
                 <div className="text-xs text-gray-400">{d.capability_prompt}</div>
-                <div className="text-xs text-gray-500">{d.example_count} examples</div>
+                <div className="text-xs text-gray-500">{t('examples', { count: d.example_count })}</div>
               </div>
             ))}
           </div>
@@ -704,12 +713,12 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
         {tab === 'jobs' && (
           <div className="p-3 space-y-2">
             <div className="text-xs text-gray-400 mb-2">
-              {jobs.length} training job{jobs.length !== 1 ? 's' : ''} for this project
+              {t('jobsCount', { count: jobs.length })}
             </div>
             {jobs.length === 0 && (
               <div className="text-center text-gray-500 text-xs py-6">
                 <div className="text-2xl mb-2">🤖</div>
-                No training jobs yet. Start one in the Configure tab.
+                {t('noJobs')}
               </div>
             )}
             {jobs.map(job => (
@@ -723,19 +732,40 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
                     }`}>{job.status}</span>
                 </div>
                 <div className="text-xs text-gray-400">
-                  Epoch {job.current_epoch}/{job.epochs}
-                  {job.current_loss != null && ` — loss: ${job.current_loss.toFixed(4)}`}
+                  {t('epochProgress', { current: job.current_epoch, total: job.epochs })}
+                  {job.current_loss != null && ` — ${t('lossValue', { loss: job.current_loss.toFixed(4) })}`}
                 </div>
                 <div className="text-xs text-gray-500">
-                  rank={job.lora_rank} · lr={job.learning_rate} · bs={job.batch_size}
+                  {t('jobParams', { rank: job.lora_rank, lr: job.learning_rate, bs: job.batch_size })}
                 </div>
                 {job.status === 'completed' && (
                   <button
                     onClick={() => handleEvaluate(job.id)}
                     className="text-xs bg-purple-700 hover:bg-purple-600 text-white px-2 py-0.5 rounded"
                   >
-                    🧪 Evaluate
+                    🧪 {job.eval_score != null ? t('reEvaluate') : t('evaluate')}
                   </button>
+                )}
+                {job.eval_score != null && (
+                  <div className="mt-1 rounded bg-gray-900 border border-gray-700 p-1.5 space-y-0.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-400">{t('evalScoreLabel')}</span>
+                      <span className="font-semibold tabular-nums text-gray-100">{(job.eval_score * 100).toFixed(0)}%</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-500">{t('evalCodeLabel')}</span>
+                      <span className="tabular-nums text-gray-300">{((job.eval_code_correctness ?? 0) * 100).toFixed(0)}%</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-500">{t('evalReasoningLabel')}</span>
+                      <span className="tabular-nums text-gray-300">{((job.eval_reasoning_quality ?? 0) * 100).toFixed(0)}%</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-500">{t('evalHallucinationLabel')}</span>
+                      <span className="tabular-nums text-gray-300">{((job.eval_hallucination_rate ?? 0) * 100).toFixed(0)}%</span>
+                    </div>
+                    {job.eval_details && <div className="text-xs text-gray-500 pt-0.5 leading-snug">{job.eval_details}</div>}
+                  </div>
                 )}
                 {job.error_message && (
                   <div className="text-xs text-red-400 mt-1">{job.error_message}</div>

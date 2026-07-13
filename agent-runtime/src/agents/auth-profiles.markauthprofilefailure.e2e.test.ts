@@ -8,7 +8,7 @@ import {
   markAuthProfileFailure,
 } from "./auth-profiles.js";
 
-type AuthProfileStore = ReturnType<typeof ensureAuthProfileStore>;
+type AuthProfileStore = Awaited<ReturnType<typeof ensureAuthProfileStore>>;
 
 async function withAuthProfileStore(
   fn: (ctx: { agentDir: string; store: AuthProfileStore }) => Promise<void>,
@@ -30,7 +30,7 @@ async function withAuthProfileStore(
       }),
     );
 
-    const store = ensureAuthProfileStore(agentDir);
+    const store = await ensureAuthProfileStore(agentDir);
     await fn({ agentDir, store });
   } finally {
     fs.rmSync(agentDir, { recursive: true, force: true });
@@ -109,7 +109,7 @@ describe("markAuthProfileFailure", () => {
         }),
       );
 
-      const store = ensureAuthProfileStore(agentDir);
+      const store = await ensureAuthProfileStore(agentDir);
       await markAuthProfileFailure({
         store,
         profileId: "anthropic:default",

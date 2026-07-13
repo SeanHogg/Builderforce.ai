@@ -17,20 +17,25 @@ import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { executions, projects, repoAnalysisRuns, tenants } from '../../infrastructure/database/schema';
 import { RepoService } from '../../application/repos/RepoService';
 import { TaskService } from '../../application/task/TaskService';
-import { TaskStatus, TenantRole } from '../../domain/shared/types';
+import { TaskStatus, TenantRole, TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
+import { resolveEffectivePlan as resolveTenantEffectivePlan } from '../../domain/tenant/effectivePlan';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
-/** Resolve the tenant's effective plan for the analysis token budget. */
+/** Resolve the tenant's effective plan for the analysis token budget. Honours an
+ *  unexpired trial (via the shared resolver) and the superadmin premium override. */
 async function resolveEffectivePlan(db: Db, tenantId: number): Promise<string> {
   const [row] = await db
-    .select({ plan: tenants.plan, billingStatus: tenants.billingStatus, premiumOverride: tenants.premiumOverride })
+    .select({ plan: tenants.plan, billingStatus: tenants.billingStatus, trialEndsAt: tenants.trialEndsAt, premiumOverride: tenants.premiumOverride })
     .from(tenants)
     .where(eq(tenants.id, tenantId));
   if (!row) return 'free';
   if (row.premiumOverride) return 'pro';
-  if ((row.plan === 'pro' || row.plan === 'teams') && row.billingStatus === 'active') return row.plan;
-  return 'free';
+  return resolveTenantEffectivePlan({
+    plan: (row.plan as TenantPlan) ?? TenantPlan.FREE,
+    billingStatus: (row.billingStatus as TenantBillingStatus) ?? TenantBillingStatus.NONE,
+    trialEndsAt: row.trialEndsAt ?? null,
+  });
 }
 
 export function createRepoAnalysisRoutes(db: Db, taskService: TaskService): Hono<HonoEnv> {

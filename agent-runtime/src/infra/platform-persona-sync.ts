@@ -16,6 +16,8 @@ export type PlatformPersona = {
   outputPrefix: string | null;
   capabilities: string | null; // JSON array
   tags: string | null; // JSON array
+  /** JSON PsychometricProfile (Pro feature); null when the persona has no profile. */
+  psychometric: string | null;
   source: string;
 };
 

@@ -12,6 +12,8 @@ A single BuilderForce Agents instance on a developer's laptop is already powerfu
 
 Builderforce.ai is the control plane for that fleet. This post explains how to register instances, declare capabilities, route tasks intelligently, and monitor your mesh from the portal.
 
+![Fleet routing: an incoming task declaring required capabilities is scored by the fleet router against online AgentHosts, dispatched to the best-matched host while offline and partial-match hosts are skipped or held as fallback](/blog/fleet-routing.svg)
+
 ---
 
 ## What Is a AgentHost Fleet?

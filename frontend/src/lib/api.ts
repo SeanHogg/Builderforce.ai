@@ -17,6 +17,8 @@ import {
 import { planLimitErrorFromResponse } from './planLimitError';
 import type {
   Project,
+  IdeProject,
+  IdeContainerOption,
   FileEntry,
   Dataset,
   TrainingJob,
@@ -56,13 +58,28 @@ async function projectsRequest<T>(
 // Projects (worker: /api/projects array | API: /api/projects { projects })
 // ---------------------------------------------------------------------------
 
+// In-flight coalescing: concurrent callers (e.g. the dashboard's stat-card load
+// AND an embedded <ProjectsContent>) share ONE /api/projects round-trip instead of
+// each firing their own. Browser-side, so this is request coalescing — not the
+// server's cross-isolate getOrSetCached, which can't run here. Cleared on settle,
+// so there's no staleness window: later (sequential) calls always re-fetch.
+let inFlightProjects: Promise<Project[]> | null = null;
+
 export async function fetchProjects(): Promise<Project[]> {
-  if (isWorkerForProjects()) {
-    const arr = await projectsRequest<Project[]>('/api/projects');
-    return Array.isArray(arr) ? arr : [];
+  if (inFlightProjects) return inFlightProjects;
+  inFlightProjects = (async () => {
+    if (isWorkerForProjects()) {
+      const arr = await projectsRequest<Project[]>('/api/projects');
+      return Array.isArray(arr) ? arr : [];
+    }
+    const res = await apiRequest<{ projects: Project[] }>('/api/projects');
+    return res?.projects ?? [];
+  })();
+  try {
+    return await inFlightProjects;
+  } finally {
+    inFlightProjects = null;
   }
-  const res = await apiRequest<{ projects: Project[] }>('/api/projects');
-  return res?.projects ?? [];
 }
 
 export async function fetchProject(id: number | string): Promise<Project> {
@@ -81,6 +98,8 @@ export async function createProject(data: {
   template?: string;
   /** IDE project type — 'designer' | 'video' | 'llm'. Defaults server-side to 'designer'. */
   modality?: string;
+  /** Where the project was born — 'ide' tags it for the Designer badge. */
+  origin?: string;
 }): Promise<Project> {
   const res = await projectsRequest<Project>('/api/projects', {
     method: 'POST',
@@ -97,7 +116,7 @@ export async function createProject(data: {
 
 export async function updateProject(
   id: number | string,
-  data: Partial<Pick<Project, 'name' | 'description' | 'template' | 'key' | 'status' | 'governance' | 'modality'>>
+  data: Partial<Pick<Project, 'name' | 'description' | 'template' | 'key' | 'status' | 'governance' | 'modality' | 'dueDate'>>
 ): Promise<Project> {
   const res = isWorkerForProjects()
     ? await projectsRequest<Project>(`/api/projects/${id}`, {
@@ -115,6 +134,73 @@ export async function updateProject(
 
 export async function deleteProject(id: number | string): Promise<void> {
   await projectsRequest(`/api/projects/${id}`, { method: 'DELETE' });
+}
+
+// ---------------------------------------------------------------------------
+// IDE projects (0224) — the first-class child entity of a Project. Always the
+// auth API (/api/ide-projects); the worker has no ide_projects routes.
+// ---------------------------------------------------------------------------
+
+export async function listIdeProjects(): Promise<IdeProject[]> {
+  return apiRequest<IdeProject[]>('/api/ide-projects');
+}
+
+export async function fetchIdeProject(id: number | string): Promise<IdeProject> {
+  return apiRequest<IdeProject>(`/api/ide-projects/${id}`);
+}
+
+/** Resolve the IDE project backing a given storage project (e.g. to scope the
+ *  Voice studio when the IDE is opened by storage project id). */
+export async function fetchIdeProjectByStorage(storageProjectId: number): Promise<IdeProject> {
+  return apiRequest<IdeProject>(`/api/ide-projects/by-storage/${storageProjectId}`);
+}
+
+export async function listIdeContainers(): Promise<IdeContainerOption[]> {
+  return apiRequest<IdeContainerOption[]>('/api/ide-projects/containers');
+}
+
+export async function createIdeProject(data: {
+  name: string;
+  /** 'designer' | 'video' | 'evermind' | 'finetune' | 'voice'. Defaults server-side to 'designer'. */
+  modality?: string;
+  /** Optional parent Project to group this build under. */
+  containerProjectId?: number | null;
+  template?: string | null;
+  /** Optional automation workflow to attach (any modality). Not required for evermind. */
+  workflowDefinitionId?: string | null;
+  /** Evermind modality: the one-click Evermind recipe that provisions the project's model. */
+  evermindRecipe?: string | null;
+  /** Evermind modality: frontier teacher model to distil through (recipe-dependent). */
+  evermindTeacherModel?: string | null;
+  /** Evermind modality: for the 'seed-published' recipe, the published model slug to clone. */
+  evermindSeedModelSlug?: string | null;
+}): Promise<IdeProject> {
+  return apiRequest<IdeProject>('/api/ide-projects', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateIdeProject(
+  id: number | string,
+  data: {
+    name?: string;
+    /** Reassign the parent Project; null to ungroup. */
+    containerProjectId?: number | null;
+    workflowDefinitionId?: string | null;
+    status?: string;
+  },
+): Promise<IdeProject> {
+  return apiRequest<IdeProject>(`/api/ide-projects/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteIdeProject(id: number | string): Promise<void> {
+  await apiRequest<void>(`/api/ide-projects/${id}`, { method: 'DELETE' });
 }
 
 // ---------------------------------------------------------------------------
@@ -164,6 +250,112 @@ export async function deleteFile(
   await projectsRequest(`${filesBase(projectId)}/${filePath.split('/').map(encodeURIComponent).join('/')}`, {
     method: 'DELETE',
   });
+}
+
+// ---------------------------------------------------------------------------
+// IDE ↔ repo bridge — import a repo into the R2 workspace, commit edits back,
+// create a clean repo, and read sync status. Siblings of /files under the IDE base.
+// ---------------------------------------------------------------------------
+
+/** Project-scoped IDE base (mirrors filesBase, minus the /files segment). */
+function ideProjectBase(projectId: number | string): string {
+  return isWorkerForProjects() ? `/api/projects/${projectId}` : `${IDE}/projects/${projectId}`;
+}
+
+export interface RepoSyncStatus {
+  linked: boolean;
+  repoId?: string;
+  owner?: string;
+  repo?: string;
+  provider?: string;
+  lastSyncedRef?: string | null;
+  lastSyncedAt?: string | null;
+}
+
+export const ideRepoApi = {
+  status: (projectId: number | string): Promise<RepoSyncStatus> =>
+    projectsRequest<RepoSyncStatus>(`${ideProjectBase(projectId)}/repo-status`),
+
+  import: (projectId: number | string, repoId: string, ref?: string): Promise<{ ok: boolean; imported: number; ref: string; truncated: boolean }> =>
+    projectsRequest(`${ideProjectBase(projectId)}/import`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ repoId, ref }),
+    }),
+
+  commit: (projectId: number | string, repoId: string, message?: string, branch?: string): Promise<{ ok: boolean; branch: string; committed: number; deleted: number; prNumber: number | null; prUrl: string | null }> =>
+    projectsRequest(`${ideProjectBase(projectId)}/commit`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ repoId, message, branch }),
+    }),
+
+  createRepo: (projectId: number | string, body: { name: string; provider?: string; private?: boolean; credentialId: string }): Promise<{ ok: boolean; repoId: string; owner: string; repo: string; committed: number }> =>
+    projectsRequest(`${ideProjectBase(projectId)}/create-repo`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }),
+};
+
+// ---------------------------------------------------------------------------
+// IDE: Subdomain hosting (publish a Designer build to <sub>.builderforce.ai)
+// ---------------------------------------------------------------------------
+
+export interface SiteInfo {
+  subdomain: string;
+  mode: string;
+  status: string;
+  versionToken: string;
+  assetCount: number;
+  totalBytes: number;
+  publishedAt: string | null;
+  url: string;
+  pathUrl: string;
+}
+
+export interface SitePublishResult {
+  subdomain: string;
+  versionToken: string;
+  assetCount: number;
+  totalBytes: number;
+  url: string;
+  pathUrl: string;
+}
+
+/** Current published-site record for a project (or null if never published). */
+export async function fetchSite(projectId: number | string): Promise<SiteInfo | null> {
+  const res = await apiRequest<{ site: SiteInfo | null }>(`${IDE}/projects/${projectId}/site`);
+  return res?.site ?? null;
+}
+
+/**
+ * Publish a built static site. `assets` are the files under the build's `dist/`
+ * root (path is dist-relative). Sent as multipart/form-data — one part per file,
+ * the part name being the relative path — plus an optional `subdomain` field.
+ * Always targets the auth API (the publish endpoint lives in ideRoutes).
+ */
+export async function publishSite(
+  projectId: number | string,
+  assets: Array<{ path: string; data: Uint8Array }>,
+  subdomain?: string,
+): Promise<SitePublishResult> {
+  const form = new FormData();
+  if (subdomain) form.append('subdomain', subdomain);
+  for (const { path, data } of assets) {
+    form.append(path, new Blob([data as BlobPart]), path);
+  }
+  // FormData sets its own multipart Content-Type (with boundary) — don't override.
+  const authHeaders = getAuthHeaders();
+  const hadToken = !!authHeaders.Authorization;
+  const headers = { ...authHeaders } as Record<string, string>;
+  delete headers['Content-Type'];
+  const res = await fetch(`${getApiBaseUrl()}${IDE}/projects/${projectId}/publish`, {
+    method: 'POST',
+    headers,
+    body: form,
+  });
+  checkUnauthorizedAndRedirect(res, hadToken);
+  if (res.status === 402) throw await planLimitErrorFromResponse(res);
+  if (!res.ok) {
+    const msg = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(msg.error || res.statusText || `Publish failed (${res.status})`);
+  }
+  return res.json() as Promise<SitePublishResult>;
 }
 
 // ---------------------------------------------------------------------------
@@ -227,12 +419,14 @@ export async function generateDataset(
   projectId: number | string,
   capabilityPrompt: string,
   name: string,
-  onChunk?: (chunk: string) => void
+  onChunk?: (chunk: string) => void,
+  /** Optional generation model id (e.g. an OpenRouter model). Routed by the gateway; omit for the default pool. */
+  model?: string
 ): Promise<Dataset> {
   const res = await apiRequestStream(`${IDE}/datasets/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectId, capabilityPrompt, name }),
+    body: JSON.stringify({ projectId, capabilityPrompt, name, ...(model ? { model } : {}) }),
   });
   if (!res.ok) throw new Error('Failed to generate dataset');
   if (onChunk && res.headers.get('content-type')?.includes('text/event-stream')) {
@@ -409,6 +603,54 @@ export async function publishAgent(data: {
   });
 }
 
+/** Result of a pre-publish validation call against a candidate model. */
+export interface ValidateAgentResult {
+  ok: boolean;
+  inference_mode?: 'base' | 'lora' | 'hybrid';
+  latency_ms?: number;
+  model_ref?: string;
+  sample?: string;
+  error?: string;
+}
+
+/**
+ * Validates a freshly-trained candidate model by CALLING it via API before it can
+ * be published — runs one test inference against the candidate descriptor and
+ * returns the sample output. The publish UI gates "Publish" on `ok === true`.
+ */
+export async function validateAgent(data: {
+  name: string;
+  title?: string;
+  bio?: string;
+  skills?: string[];
+  base_model: string;
+  r2_artifact_key?: string;
+  mamba_state?: unknown;
+  prompt?: string;
+}): Promise<ValidateAgentResult> {
+  return apiRequest<ValidateAgentResult>(`${IDE}/agents/validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * Ingest proprietary documents for a published agent so it recalls them at
+ * inference (grounded context). Replace semantics — re-ingesting supersedes the
+ * agent's prior knowledge. Returns the number of stored chunks.
+ */
+export async function ingestAgentKnowledge(
+  agentId: string,
+  data: { text?: string; documents?: Array<{ name?: string; text: string }> },
+): Promise<{ chunks: number }> {
+  return apiRequest<{ chunks: number }>(`${IDE}/agents/${agentId}/ingest`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
+
 export async function listAgents(): Promise<PublishedAgent[]> {
   // Public workforce registry — works for anonymous visitors on /marketplace.
   // Management endpoints (hire, update, etc.) still live under /api/ide/agents.
@@ -444,10 +686,11 @@ export async function fetchAgentPackage(agentId: string): Promise<AgentPackage> 
 export type AgentRuntimeSupport = 'cloud' | 'host' | 'both';
 export type AgentPricingModel = 'flat_fee' | 'consumption';
 /**
- * Agent runtime engine. `builderforce-v1` is the pi-coding-agent embedded runner
- * (default); `builderforce-v2` is the Claude Agent SDK runner.
+ * Agent runtime engine. There is ONE engine — the current version (`builderforce-v3`,
+ * the Claude-Agent-SDK loop with the limbic layer always composed). It is not
+ * user-selectable; the field is a read-only denormalized value on the agent record.
  */
-export type AgentEngine = 'builderforce-v1' | 'builderforce-v2';
+export type AgentEngine = 'builderforce-v3';
 /**
  * Execution surface for a V2 cloud agent — the two types the user picks at
  * creation. Both run the full task IN THE CLOUD (all Cloudflare, no local/hybrid
@@ -471,6 +714,8 @@ export interface CloudAgentInput {
   pricingModel?: AgentPricingModel;
   priceUnit?: string | null;
   published?: boolean;
+  /** This agent's OWN personality (Pro). null clears it; server ignores for free plans. */
+  psychometric?: import('./psychometric').PsychometricProfile | null;
 }
 
 /** The tenant's own agents (any publish state). */
@@ -501,6 +746,115 @@ export async function updateAgent(agentId: string, data: Partial<CloudAgentInput
 
 export async function deleteAgent(agentId: string): Promise<void> {
   await apiRequest<{ deleted: boolean }>(`/api/workforce/agents/${agentId}`, { method: 'DELETE' });
+}
+
+/**
+ * Owner-only agent performance + buyer-feedback rollup (gap [1247]). Success rate
+ * / runs / latency are computed per currently-hired tenant from execution
+ * telemetry; ratings are the buyers' feedback. The backend 404s unless the caller
+ * owns the agent, so this is safe to call only from owner surfaces.
+ */
+export interface AgentPerfRollup {
+  totalRuns: number;
+  completedRuns: number;
+  failedRuns: number;
+  successRate: number | null;
+  avgLatencyMs: number | null;
+  hiredTenants: number;
+  ratingCount: number;
+  avgRating: number | null;
+  feedback: { rating: number; comment: string | null; createdAt: string }[];
+}
+
+export async function fetchAgentPerf(agentId: string): Promise<AgentPerfRollup> {
+  return apiRequest<AgentPerfRollup>(`/api/workforce/agents/${agentId}/perf`);
+}
+
+// ── Personality LEARNING + TRACKING (Gaps 6 & 7) ──────────────────────────────
+// Usage events + outcome-driven trait reinforcement for a cloud agent. Powers the
+// PersonalityUsagePanel in the agent details slide-out.
+
+/** One "personality applied to a run" entry — recorded durably, or derived live
+ *  from a real terminal run (`recorded: false`). */
+export interface PersonalityEvent {
+  id: string;
+  recorded: boolean;
+  executionId: number | null;
+  runId: string | null;
+  profileSource: string;
+  personaIds: string[];
+  directivesSummary: string;
+  directiveCount: number;
+  thinkLevel: string | null;
+  reasoningLevel: string | null;
+  temperature: number | null;
+  at: string | null;
+}
+
+export interface PersonalityEventsResponse {
+  agentRef: string;
+  activeSummary: string;
+  activeDirectiveCount: number;
+  events: PersonalityEvent[];
+}
+
+/** A bounded, reversible trait-reinforcement proposal computed from run outcomes. */
+export interface ReinforcementProposal {
+  deltas: Record<string, number>;
+  rationale: string[];
+  summary: string;
+  previewVector: Record<string, number>;
+}
+
+export interface ReinforcementHistoryItem {
+  id: number;
+  status: 'proposed' | 'applied' | 'dismissed';
+  deltas: Record<string, number>;
+  rationale: string[];
+  basedOnRuns: number;
+  autoApplied: boolean;
+  proposedAt: string | null;
+  decidedAt: string | null;
+}
+
+export interface ReinforcementResponse {
+  agentRef: string;
+  windowDays: number;
+  basedOnRuns: number;
+  proposal: ReinforcementProposal | null;
+  rationale: string[];
+  caps: { perDimension: number; perPeriod: number };
+  history: ReinforcementHistoryItem[];
+}
+
+export async function fetchPersonalityEvents(agentId: string, limit = 20): Promise<PersonalityEventsResponse> {
+  return apiRequest<PersonalityEventsResponse>(`/api/personality/agents/${agentId}/events?limit=${limit}`);
+}
+
+export async function fetchTraitReinforcements(agentId: string, days = 14): Promise<ReinforcementResponse> {
+  return apiRequest<ReinforcementResponse>(`/api/personality/agents/${agentId}/reinforcements?days=${days}`);
+}
+
+export async function applyTraitReinforcement(
+  agentId: string,
+  body: { deltas: Record<string, number>; rationale: string[]; basedOnRuns: number; windowDays: number },
+): Promise<{ id: number; applied: Record<string, number>; vector: Record<string, number>; summary: string }> {
+  return apiRequest(`/api/personality/agents/${agentId}/reinforcements/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function dismissTraitReinforcement(
+  agentId: string,
+  body: { deltas: Record<string, number>; rationale: string[] },
+): Promise<{ id: number; dismissed: boolean }> {
+  return apiRequest(`/api/personality/agents/${agentId}/reinforcements/dismiss`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 }
 
 /**

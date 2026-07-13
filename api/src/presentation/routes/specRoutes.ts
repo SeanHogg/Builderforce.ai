@@ -17,24 +17,14 @@
 import { Hono } from 'hono';
 import { eq, and } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { specs, workflows, agentHosts, projects, tasks } from '../../infrastructure/database/schema';
-import { verifySecret } from '../../infrastructure/auth/HashService';
+import { specs, workflows, projects, tasks } from '../../infrastructure/database/schema';
+import { verifyAgentHostApiKey } from '../../infrastructure/auth/agentHostAuth';
 import { linkSpecToTask } from '../../application/prd/taskPrd';
-import type { HonoEnv } from '../../env';
+import { bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 type SpecsHonoEnv = HonoEnv;
-
-async function verifyAgentHostApiKey(db: Db, id: number, key?: string | null): Promise<{ id: number; tenantId: number } | null> {
-  if (!key) return null;
-  const [agentHost] = await db
-    .select({ id: agentHosts.id, tenantId: agentHosts.tenantId, apiKeyHash: agentHosts.apiKeyHash })
-    .from(agentHosts)
-    .where(eq(agentHosts.id, id));
-  if (!agentHost) return null;
-  const valid = await verifySecret(key, agentHost.apiKeyHash);
-  return valid ? agentHost : null;
-}
 
 export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
   const router = new Hono<SpecsHonoEnv>();
@@ -118,6 +108,9 @@ export function createSpecRoutes(db: Db): Hono<SpecsHonoEnv> {
         .where(and(eq(tasks.id, body.taskId), eq(projects.tenantId, tenantId)));
       if (task) await linkSpecToTask(db, { taskId: body.taskId, specId, tenantId, isPrimary: true });
     }
+
+    // A spec is a link-picker ticket kind — orphan the chat↔ticket typeahead cache.
+    await bumpTicketSearchVersion(c.env as Env, tenantId);
 
     const [row] = await db.select().from(specs).where(eq(specs.id, specId));
     return c.json(row, 201);

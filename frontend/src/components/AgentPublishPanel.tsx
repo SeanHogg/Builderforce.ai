@@ -3,8 +3,10 @@
 import { Select } from '@/components/Select';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import type { TrainingJob, AgentProfile, AgentPackage, MambaStateSnapshot } from '@/lib/types';
-import { publishAgent } from '@/lib/api';
+import { publishAgent, validateAgent, ingestAgentKnowledge, type ValidateAgentResult } from '@/lib/api';
+import ModelApiSamples from '@/components/ModelApiSamples';
 import { MambaEngine } from '@/lib/mamba-engine';
 
 const INSTALL_COMMAND = 'iwr -useb https://builderforce.ai/install.ps1 | iex';
@@ -61,9 +63,30 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishedId, setPublishedId] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
+  const [validation, setValidation] = useState<ValidateAgentResult | null>(null);
   const [copiedInstall, setCopiedInstall] = useState(false);
   const [includeMamba, setIncludeMamba] = useState(false);
   const [mambaSnapshot, setMambaSnapshot] = useState<MambaStateSnapshot | null>(null);
+  const [knowledgeText, setKnowledgeText] = useState('');
+  const [isIngesting, setIsIngesting] = useState(false);
+  const [ingestResult, setIngestResult] = useState<{ chunks: number } | null>(null);
+  const [ingestError, setIngestError] = useState<string | null>(null);
+
+  const handleIngestKnowledge = useCallback(async () => {
+    if (!publishedId || !knowledgeText.trim()) return;
+    setIsIngesting(true);
+    setIngestError(null);
+    setIngestResult(null);
+    try {
+      const result = await ingestAgentKnowledge(publishedId, { text: knowledgeText });
+      setIngestResult(result);
+    } catch (err) {
+      setIngestError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsIngesting(false);
+    }
+  }, [publishedId, knowledgeText]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load Mamba snapshot from IndexedDB when toggled on
@@ -133,6 +156,35 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
     URL.revokeObjectURL(url);
   }, [profile.resumeMarkdown, profile.name]);
 
+  const tp = useTranslations('agentPublish');
+
+  // Editing the profile or switching the source job invalidates a prior pass —
+  // the user must re-validate the actual candidate before the publish gate opens.
+  useEffect(() => {
+    setValidation(null);
+  }, [profile.name, profile.title, profile.bio, profile.skills, selectedJobId]);
+
+  const handleValidate = useCallback(async () => {
+    if (!isProfileValid) return;
+    setIsValidating(true);
+    try {
+      const result = await validateAgent({
+        name: profile.name,
+        title: profile.title,
+        bio: profile.bio,
+        skills: profile.skills,
+        base_model: selectedJob?.base_model ?? '',
+        r2_artifact_key: selectedJob?.r2_artifact_key,
+        mamba_state: includeMamba ? mambaSnapshot ?? undefined : undefined,
+      });
+      setValidation(result);
+    } catch (e) {
+      setValidation({ ok: false, error: e instanceof Error ? e.message : 'Validation failed' });
+    } finally {
+      setIsValidating(false);
+    }
+  }, [isProfileValid, profile, selectedJob, includeMamba, mambaSnapshot]);
+
   const handlePublish = useCallback(async () => {
     if (!isProfileValid) return;
     setIsPublishing(true);
@@ -166,11 +218,11 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
   }, []);
 
   return (
-    <div className="h-full flex flex-col bg-gray-900 text-white text-sm">
+    <div className="h-full flex flex-col bg-gray-900 text-gray-100 text-sm">
       {/* Header */}
       <div className="px-3 py-2 border-b border-gray-700 flex items-center gap-2 shrink-0">
         <span>🚀</span>
-        <h2 className="font-semibold text-gray-300">Publish Agent</h2>
+        <h2 className="font-semibold text-gray-300">{tp('title')}</h2>
       </div>
 
       {/* Tabs */}
@@ -179,9 +231,9 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`px-3 py-1.5 text-xs capitalize ${tab === t ? 'bg-gray-800 text-white border-t-2 border-t-blue-500' : 'text-gray-400 hover:text-white'}`}
+            className={`px-3 py-1.5 text-xs capitalize ${tab === t ? 'bg-gray-800 text-gray-100 border-t-2 border-t-blue-500' : 'text-gray-400 hover:text-gray-100'}`}
           >
-            {t === 'profile' ? '👤 Profile' : t === 'download' ? '⬇ Download' : '🌐 Publish'}
+            {t === 'profile' ? `👤 ${tp('tabProfile')}` : t === 'download' ? `⬇ ${tp('tabDownload')}` : `🌐 ${tp('tabPublish')}`}
           </button>
         ))}
       </div>
@@ -191,40 +243,40 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
         {tab === 'profile' && (
           <div className="p-3 space-y-3">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Agent Name *</label>
+              <label className="block text-xs text-gray-400 mb-1">{tp('nameLabel')}</label>
               <input
                 type="text"
                 value={profile.name}
                 onChange={e => setProfile(p => ({ ...p, name: e.target.value }))}
-                placeholder="e.g. Python Expert"
-                className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                placeholder={tp('namePlaceholder')}
+                className="w-full bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
               />
             </div>
 
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Title / Role *</label>
+              <label className="block text-xs text-gray-400 mb-1">{tp('titleLabel')}</label>
               <input
                 type="text"
                 value={profile.title}
                 onChange={e => setProfile(p => ({ ...p, title: e.target.value }))}
-                placeholder="e.g. Senior Python Developer"
-                className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                placeholder={tp('titlePlaceholder')}
+                className="w-full bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
               />
             </div>
 
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Bio / Description *</label>
+              <label className="block text-xs text-gray-400 mb-1">{tp('bioLabel')}</label>
               <textarea
                 value={profile.bio}
                 onChange={e => setProfile(p => ({ ...p, bio: e.target.value }))}
-                placeholder="Describe what this agent specializes in…"
+                placeholder={tp('bioPlaceholder')}
                 rows={3}
-                className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none resize-none"
+                className="w-full bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none resize-none"
               />
             </div>
 
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Tags / Labels</label>
+              <label className="block text-xs text-gray-400 mb-1">{tp('tagsLabel')}</label>
               <div className="flex gap-1 mb-1.5 flex-wrap">
                 {profile.skills.map(s => (
                   <span
@@ -234,8 +286,8 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                     {s}
                     <button
                       onClick={() => handleRemoveSkill(s)}
-                      className="text-blue-400 hover:text-white leading-none"
-                      aria-label={`Remove ${s}`}
+                      className="text-blue-400 hover:text-gray-100 leading-none"
+                      aria-label={tp('removeTag', { tag: s })}
                     >
                       ×
                     </button>
@@ -248,13 +300,13 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                   value={skillInput}
                   onChange={e => setSkillInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddSkill(); } }}
-                  placeholder="Add tag…"
-                  className="flex-1 bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                  placeholder={tp('tagPlaceholder')}
+                  className="flex-1 bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
                 />
                 <button
                   onClick={handleAddSkill}
                   disabled={!skillInput.trim()}
-                  className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white text-xs px-2 py-1.5 rounded"
+                  className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-100 text-xs px-2 py-1.5 rounded"
                 >
                   +
                 </button>
@@ -263,12 +315,12 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-xs text-gray-400">Resume (Markdown)</label>
+                <label className="text-xs text-gray-400">{tp('resumeLabel')}</label>
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   className="text-xs text-blue-400 hover:text-blue-300"
                 >
-                  Upload .md / .txt
+                  {tp('resumeUpload')}
                 </button>
               </div>
               <input
@@ -281,22 +333,22 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
               <textarea
                 value={profile.resumeMarkdown}
                 onChange={e => setProfile(p => ({ ...p, resumeMarkdown: e.target.value }))}
-                placeholder="Paste or write your resume in Markdown, or upload a .md / .txt file above. For PDF, copy-paste the text here."
+                placeholder={tp('resumePlaceholder')}
                 rows={6}
-                className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none resize-none font-mono"
+                className="w-full bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none resize-none font-mono"
               />
             </div>
 
             {/* Associated training job */}
             {completedJobs.length > 0 && (
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Associated Model</label>
+                <label className="block text-xs text-gray-400 mb-1">{tp('associatedModel')}</label>
                 <Select
                   value={selectedJobId}
                   onChange={e => setSelectedJobId(e.target.value)}
-                  className="w-full bg-gray-800 text-white text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
+                  className="w-full bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
                 >
-                  <option value="">— no model selected —</option>
+                  <option value="">{tp('noModelSelected')}</option>
                   {completedJobs.map(j => (
                     <option key={j.id} value={j.id}>
                       {j.base_model} (rank={j.lora_rank})
@@ -312,8 +364,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
         {tab === 'download' && (
           <div className="p-3 space-y-3">
             <p className="text-xs text-gray-400">
-              Download your agent as a portable package. Install it in BuilderForce Agents or any
-              Builderforce-compatible platform to use your custom-trained LLM.
+              {tp('downloadIntro')}
             </p>
             {/* Mamba memory toggle */}
             <div className="flex items-center gap-2">
@@ -326,18 +377,18 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                 }`}
               >
                 <span>🧬</span>
-                {includeMamba ? 'Memory included (v2.0)' : 'Include Mamba memory'}
+                {includeMamba ? tp('memoryIncluded') : tp('includeMemory')}
               </button>
               {includeMamba && mambaSnapshot && (
-                <span className="text-xs text-gray-500">step {mambaSnapshot.step}</span>
+                <span className="text-xs text-gray-500">{tp('stepLabel', { step: mambaSnapshot.step })}</span>
               )}
               {includeMamba && !mambaSnapshot && (
-                <span className="text-xs text-gray-500">no state found</span>
+                <span className="text-xs text-gray-500">{tp('noStateFound')}</span>
               )}
             </div>
             {!isProfileValid ? (
               <div className="bg-yellow-900/30 border border-yellow-700 rounded p-2 text-xs text-yellow-300">
-                ⚠ Fill in the Profile tab (name, title, bio) before downloading.
+                ⚠ {tp('fillProfileDownload')}
               </div>
             ) : (
               <>
@@ -348,14 +399,14 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                   onClick={handleDownload}
                   className="w-full bg-blue-700 hover:bg-blue-600 text-white px-3 py-2 rounded text-xs font-semibold"
                 >
-                  ⬇ Download agent-package.json
+                  ⬇ {tp('downloadPackage')}
                 </button>
                 {profile.resumeMarkdown && (
                   <button
                     onClick={handleDownloadResume}
-                    className="w-full bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded text-xs"
+                    className="w-full bg-gray-700 hover:bg-gray-600 text-gray-100 px-3 py-2 rounded text-xs"
                   >
-                    ⬇ Download resume.md
+                    ⬇ {tp('downloadResume')}
                   </button>
                 )}
               </>
@@ -369,10 +420,10 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
             {publishedId ? (
               <div className="space-y-2">
                 <div className="bg-green-900/30 border border-green-700 rounded p-3 text-xs text-green-300">
-                  ✅ Agent published to the Workforce Registry!
+                  ✅ {tp('publishedSuccess')}
                 </div>
                 <div>
-                  <div className="text-xs text-gray-400 mb-1">Agent ID</div>
+                  <div className="text-xs text-gray-400 mb-1">{tp('agentId')}</div>
                   <div className="bg-gray-800 rounded p-2 font-mono text-xs text-gray-300 break-all">
                     {publishedId}
                   </div>
@@ -380,22 +431,60 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
 
                 {/* Install command */}
                 <div>
-                  <div className="text-xs text-gray-400 mb-1">📦 Install Command</div>
+                  <div className="text-xs text-gray-400 mb-1">📦 {tp('installCommand')}</div>
                   <div className="bg-gray-950 border border-gray-700 rounded p-2 flex items-center gap-2">
                     <code className="flex-1 font-mono text-xs text-green-300 break-all select-all">
                       {INSTALL_COMMAND}
                     </code>
                     <button
                       onClick={handleCopyInstall}
-                      className="shrink-0 bg-gray-700 hover:bg-gray-600 text-white text-xs px-2 py-1 rounded"
-                      title="Copy to clipboard"
+                      className="shrink-0 bg-gray-700 hover:bg-gray-600 text-gray-100 text-xs px-2 py-1 rounded"
+                      title={tp('copyTitle')}
                     >
-                      {copiedInstall ? '✓ Copied' : 'Copy'}
+                      {copiedInstall ? `✓ ${tp('copied')}` : tp('copy')}
                     </button>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">
-                    Run this in PowerShell to browse and install agents from the registry.
+                    {tp('installHint')}
                   </p>
+                </div>
+
+                {/* How to call the just-published model (OpenAI standard + dedicated endpoint). */}
+                <div>
+                  <div className="text-xs text-gray-400 mb-1">{tp('callTitle')}</div>
+                  <ModelApiSamples agentId={publishedId} modelRef={`builderforce/workforce-${publishedId}`} />
+                </div>
+
+                {/* Ground the agent in proprietary knowledge — ingested, then
+                    recalled (BM25) and injected at inference. */}
+                <div>
+                  <div className="text-xs text-gray-400 mb-1">{tp('knowledgeTitle')}</div>
+                  <p className="text-xs text-gray-500 mb-2">{tp('knowledgeDesc')}</p>
+                  <textarea
+                    value={knowledgeText}
+                    onChange={(e) => setKnowledgeText(e.target.value)}
+                    placeholder={tp('knowledgePlaceholder')}
+                    rows={5}
+                    className="w-full bg-gray-950 border border-gray-700 rounded p-2 font-mono text-xs text-gray-100"
+                    aria-label={tp('knowledgeTitle')}
+                  />
+                  <button
+                    onClick={handleIngestKnowledge}
+                    disabled={isIngesting || !knowledgeText.trim()}
+                    className="mt-2 w-full bg-purple-700 hover:bg-purple-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
+                  >
+                    {isIngesting ? tp('knowledgeIngesting') : tp('knowledgeBtn')}
+                  </button>
+                  {ingestResult && (
+                    <div className="mt-2 bg-green-900/30 border border-green-700 rounded p-2 text-xs text-green-300">
+                      {tp('knowledgeDone', { count: ingestResult.chunks })}
+                    </div>
+                  )}
+                  {ingestError && (
+                    <div className="mt-2 bg-red-900/30 border border-red-700 rounded p-2 text-xs text-red-300">
+                      {tp('knowledgeError', { error: ingestError })}
+                    </div>
+                  )}
                 </div>
 
                 <a
@@ -404,23 +493,23 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                   rel="noopener noreferrer"
                   className="block w-full text-center bg-purple-700 hover:bg-purple-600 text-white px-3 py-2 rounded text-xs font-semibold"
                 >
-                  🌐 View in Workforce Registry
+                  🌐 {tp('viewInRegistry')}
                 </a>
                 <button
                   onClick={() => { setPublishedId(null); setTab('profile'); }}
-                  className="w-full bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded text-xs"
+                  className="w-full bg-gray-700 hover:bg-gray-600 text-gray-100 px-3 py-2 rounded text-xs"
                 >
-                  Publish another agent
+                  {tp('publishAnother')}
                 </button>
               </div>
             ) : (
               <>
                 <p className="text-xs text-gray-400">
-                  Publishing registers your agent in the Builderforce Workforce Registry so
-                  businesses can discover and hire it.                </p>
+                  {tp('publishIntro')}
+                </p>
                 {!isProfileValid && (
                   <div className="bg-yellow-900/30 border border-yellow-700 rounded p-2 text-xs text-yellow-300">
-                    ⚠ Fill in the Profile tab (name, title, bio) first.
+                    ⚠ {tp('fillProfilePublish')}
                   </div>
                 )}
                 {isProfileValid && (
@@ -437,7 +526,36 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                     )}
                     {selectedJob && (
                       <div className="text-gray-500 pt-1">
-                        Model: {selectedJob.base_model} · rank={selectedJob.lora_rank}
+                        {tp('modelSummary', { model: selectedJob.base_model, rank: selectedJob.lora_rank ?? '' })}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* Validate-via-API gate — call the candidate model before publishing. */}
+                {isProfileValid && (
+                  <div className="bg-gray-800 rounded p-2 space-y-2">
+                    <div className="text-xs text-gray-300 font-medium">{tp('validateTitle')}</div>
+                    <div className="text-xs text-gray-500">{tp('validateDesc')}</div>
+                    <button
+                      onClick={handleValidate}
+                      disabled={isValidating}
+                      className="w-full bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
+                    >
+                      {isValidating ? `⏳ ${tp('validating')}` : `🧪 ${tp('validateBtn')}`}
+                    </button>
+                    {validation?.ok && (
+                      <div className="bg-green-900/30 border border-green-700 rounded p-2 text-xs text-green-300 space-y-1">
+                        <div className="font-semibold">✅ {tp('validatePassed')}</div>
+                        <div className="text-green-400/90">
+                          {tp('modeLabel')}: {validation.inference_mode} · {tp('latencyLabel')}: {validation.latency_ms}ms
+                        </div>
+                        <div className="text-gray-400">{tp('sampleLabel')}:</div>
+                        <div className="text-gray-300 italic line-clamp-3">“{validation.sample}”</div>
+                      </div>
+                    )}
+                    {validation && !validation.ok && (
+                      <div className="bg-red-900/30 border border-red-700 rounded p-2 text-xs text-red-300">
+                        ❌ {tp('validateFailed')}: {validation.error}
                       </div>
                     )}
                   </div>
@@ -447,12 +565,15 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                     ❌ {publishError}
                   </div>
                 )}
+                {isProfileValid && !validation?.ok && (
+                  <div className="text-xs text-gray-500">{tp('validateGate')}</div>
+                )}
                 <button
                   onClick={handlePublish}
-                  disabled={isPublishing || !isProfileValid}
+                  disabled={isPublishing || !isProfileValid || !validation?.ok}
                   className="w-full bg-purple-700 hover:bg-purple-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
                 >
-                  {isPublishing ? '⏳ Publishing…' : '🌐 Publish to Workforce'}
+                  {isPublishing ? `⏳ ${tp('publishing')}` : `🌐 ${tp('publishBtn')}`}
                 </button>
               </>
             )}

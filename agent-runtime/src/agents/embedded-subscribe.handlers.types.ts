@@ -1,0 +1,169 @@
+import type { AgentEvent, AgentMessage } from "../builderforce/model/agent-types.js";
+import type { ReplyDirectiveParseResult } from "../auto-reply/reply/reply-directives.js";
+import type { ReasoningLevel } from "../auto-reply/thinking.js";
+import type { InlineCodeState } from "../markdown/code-spans.js";
+import type { HookRunner } from "../plugins/hooks.js";
+import type { EmbeddedBlockChunker } from "./embedded-block-chunker.js";
+import type { MessagingToolSend } from "./embedded-messaging.js";
+import type {
+  BlockReplyChunking,
+  SubscribeEmbeddedSessionParams,
+} from "./embedded-subscribe.types.js";
+import type { NormalizedUsage } from "./usage.js";
+
+export type EmbeddedSubscribeLogger = {
+  debug: (message: string) => void;
+  warn: (message: string) => void;
+};
+
+export type ToolErrorSummary = {
+  toolName: string;
+  meta?: string;
+  error?: string;
+  mutatingAction?: boolean;
+  actionFingerprint?: string;
+};
+
+export type ToolCallSummary = {
+  meta?: string;
+  mutatingAction: boolean;
+  actionFingerprint?: string;
+};
+
+export type EmbeddedSubscribeState = {
+  assistantTexts: string[];
+  toolMetas: Array<{ toolName?: string; meta?: string }>;
+  toolMetaById: Map<string, ToolCallSummary>;
+  toolSummaryById: Set<string>;
+  lastToolError?: ToolErrorSummary;
+
+  blockReplyBreak: "text_end" | "message_end";
+  reasoningMode: ReasoningLevel;
+  includeReasoning: boolean;
+  shouldEmitPartialReplies: boolean;
+  streamReasoning: boolean;
+
+  deltaBuffer: string;
+  blockBuffer: string;
+  blockState: { thinking: boolean; final: boolean; inlineCode: InlineCodeState };
+  partialBlockState: { thinking: boolean; final: boolean; inlineCode: InlineCodeState };
+  lastStreamedAssistant?: string;
+  lastStreamedAssistantCleaned?: string;
+  emittedAssistantUpdate: boolean;
+  lastStreamedReasoning?: string;
+  lastBlockReplyText?: string;
+  assistantMessageIndex: number;
+  lastAssistantTextMessageIndex: number;
+  lastAssistantTextNormalized?: string;
+  lastAssistantTextTrimmed?: string;
+  assistantTextBaseline: number;
+  suppressBlockChunks: boolean;
+  lastReasoningSent?: string;
+
+  compactionInFlight: boolean;
+  pendingCompactionRetry: number;
+  compactionRetryResolve?: () => void;
+  compactionRetryReject?: (reason?: unknown) => void;
+  compactionRetryPromise: Promise<void> | null;
+  unsubscribed: boolean;
+
+  messagingToolSentTexts: string[];
+  messagingToolSentTextsNormalized: string[];
+  messagingToolSentTargets: MessagingToolSend[];
+  messagingToolSentMediaUrls: string[];
+  pendingMessagingTexts: Map<string, string>;
+  pendingMessagingTargets: Map<string, MessagingToolSend>;
+  successfulCronAdds: number;
+  pendingMessagingMediaUrls: Map<string, string[]>;
+  lastAssistant?: AgentMessage;
+};
+
+export type EmbeddedSubscribeContext = {
+  params: SubscribeEmbeddedSessionParams;
+  state: EmbeddedSubscribeState;
+  log: EmbeddedSubscribeLogger;
+  blockChunking?: BlockReplyChunking;
+  blockChunker: EmbeddedBlockChunker | null;
+  hookRunner?: HookRunner;
+  noteLastAssistant: (msg: AgentMessage) => void;
+
+  shouldEmitToolResult: () => boolean;
+  shouldEmitToolOutput: () => boolean;
+  emitToolSummary: (toolName?: string, meta?: string) => void;
+  emitToolOutput: (toolName?: string, meta?: string, output?: string) => void;
+  stripBlockTags: (
+    text: string,
+    state: { thinking: boolean; final: boolean; inlineCode?: InlineCodeState },
+  ) => string;
+  emitBlockChunk: (text: string) => void;
+  flushBlockReplyBuffer: () => void;
+  emitReasoningStream: (text: string) => void;
+  consumeReplyDirectives: (
+    text: string,
+    options?: { final?: boolean },
+  ) => ReplyDirectiveParseResult | null;
+  consumePartialReplyDirectives: (
+    text: string,
+    options?: { final?: boolean },
+  ) => ReplyDirectiveParseResult | null;
+  resetAssistantMessageState: (nextAssistantTextBaseline: number) => void;
+  resetForCompactionRetry: () => void;
+  finalizeAssistantTexts: (args: {
+    text: string;
+    addedDuringMessage: boolean;
+    chunkerHasBuffered: boolean;
+  }) => void;
+  trimMessagingToolSent: () => void;
+  ensureCompactionPromise: () => void;
+  noteCompactionRetry: () => void;
+  resolveCompactionRetry: () => void;
+  maybeResolveCompactionWait: () => void;
+  recordAssistantUsage: (usage: unknown) => void;
+  incrementCompactionCount: () => void;
+  getUsageTotals: () => NormalizedUsage | undefined;
+  getCompactionCount: () => number;
+};
+
+/**
+ * Minimal context type for tool execution handlers. Allows
+ * tests provide only the fields they exercise
+ * without needing the full `EmbeddedSubscribeContext`.
+ */
+export type ToolHandlerParams = Pick<
+  SubscribeEmbeddedSessionParams,
+  "runId" | "onBlockReplyFlush" | "onAgentEvent" | "onToolResult"
+>;
+
+export type ToolHandlerState = Pick<
+  EmbeddedSubscribeState,
+  | "toolMetaById"
+  | "toolMetas"
+  | "toolSummaryById"
+  | "lastToolError"
+  | "pendingMessagingTargets"
+  | "pendingMessagingTexts"
+  | "pendingMessagingMediaUrls"
+  | "messagingToolSentTexts"
+  | "messagingToolSentTextsNormalized"
+  | "messagingToolSentMediaUrls"
+  | "messagingToolSentTargets"
+  | "successfulCronAdds"
+>;
+
+export type ToolHandlerContext = {
+  params: ToolHandlerParams;
+  state: ToolHandlerState;
+  log: EmbeddedSubscribeLogger;
+  hookRunner?: HookRunner;
+  flushBlockReplyBuffer: () => void;
+  shouldEmitToolResult: () => boolean;
+  shouldEmitToolOutput: () => boolean;
+  emitToolSummary: (toolName?: string, meta?: string) => void;
+  emitToolOutput: (toolName?: string, meta?: string, output?: string) => void;
+  trimMessagingToolSent: () => void;
+};
+
+export type EmbeddedSubscribeEvent =
+  | AgentEvent
+  | { type: string; [k: string]: unknown }
+  | { type: "message_start"; message: AgentMessage };

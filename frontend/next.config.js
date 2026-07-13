@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
+const createNextIntlPlugin = require('next-intl/plugin');
 const { version } = require('./package.json');
+
+// next-intl: points the plugin at the per-request locale/message resolver.
+const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 
 const nextConfig = {
   env: {
@@ -10,7 +14,7 @@ const nextConfig = {
   // optimizer endpoint (/_next/image), so optimized <Image> requests 404 and
   // render broken. Serve images unoptimized — they emit plain <img src> tags.
   images: { unoptimized: true },
-  transpilePackages: ['@monaco-editor/react', 'monaco-editor', '@seanhogg/builderforce-studio', '@seanhogg/builderforce-studio-embedded', '@seanhogg/builderforce-sdk'],
+  transpilePackages: ['@monaco-editor/react', 'monaco-editor', '@seanhogg/builderforce-studio', '@seanhogg/builderforce-studio-embedded', '@seanhogg/builderforce-sdk', '@seanhogg/builderforce-brain-ui'],
   webpack(config) {
     config.module.rules.push({
       test: /\.md$/,
@@ -23,6 +27,29 @@ const nextConfig = {
     // declared path's parents — which are inside frontend/node_modules
     // where both packages exist together.
     config.resolve.symlinks = false;
+    // @huggingface/transformers (pulled in transitively by the linked
+    // @seanhogg/builderforce-studio voice/video engine) ships a Node build that
+    // imports the native `onnxruntime-node` binding and `sharp`. Neither is
+    // usable in the browser/edge bundle this app ships — webpack chokes trying
+    // to parse the `.node` binaries. Stub both to `false` so the bundle uses the
+    // browser inference path (onnxruntime-web, a studio peerDependency) instead.
+    // This is the transformers.js-recommended Next.js config.
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      'onnxruntime-node$': false,
+      sharp$: false,
+    };
+    // Silence unactionable "Critical dependency" warnings emitted from inside
+    // third-party deps we don't control: @huggingface/transformers uses a
+    // dynamic `require(expr)` and reads `import.meta` directly, and
+    // @seanhogg/builderforce-memory's HF publish path does the same. These are
+    // browser/edge-unused code paths (stubbed above) — the warnings are pure
+    // noise and cannot be fixed in our source, so filter them out.
+    config.ignoreWarnings = [
+      ...(config.ignoreWarnings || []),
+      { message: /Critical dependency: the request of a dependency is an expression/ },
+      { message: /Critical dependency: Accessing import\.meta directly is unsupported/ },
+    ];
     return config;
   },
   async redirects() {
@@ -53,18 +80,24 @@ const nextConfig = {
   async headers() {
     return [
       // WebContainer connect route: must NOT be cross-origin isolated so the
-      // preview tab can complete the connect handshake with the IDE.
+      // preview tab can complete the connect handshake with the IDE. BOTH COOP
+      // and COEP must be relaxed — COOP:same-origin (inherited from the catch-all
+      // below) severs the opener/postMessage bridge setupConnect needs. The
+      // catch-all's negative-lookahead also excludes this path so it can't re-add
+      // same-origin (Next applies every matching rule).
       // @see https://github.com/stackblitz/webcontainer-core/issues/1725
       {
         source: '/webcontainer/connect/:path*',
         headers: [
+          { key: 'Cross-Origin-Opener-Policy', value: 'unsafe-none' },
           { key: 'Cross-Origin-Embedder-Policy', value: 'unsafe-none' },
         ],
       },
       {
         // Pages + assets: COOP required for popups; COEP=credentialless allows
         // cross-origin fonts/images while still enabling SharedArrayBuffer (WebGPU).
-        source: '/((?!api/).*)',
+        // Excludes /webcontainer/connect (served non-isolated, rule above).
+        source: '/((?!api/|webcontainer/connect).*)',
         headers: [
           { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
           { key: 'Cross-Origin-Embedder-Policy', value: 'credentialless' },
@@ -74,4 +107,4 @@ const nextConfig = {
   },
 }
 
-module.exports = nextConfig
+module.exports = withNextIntl(nextConfig)

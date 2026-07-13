@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import type { ModelDefinitionConfig } from "../../config/types.models.js";
 import { withFetchPreconnect } from "../../test-utils/fetch-mock.js";
-import { createBuilderForceAgentsCodingTools } from "../pi-tools.js";
+import { createBuilderForceAgentsCodingTools } from "../coding-tools.js";
 import { createHostSandboxFsBridge } from "../test-helpers/host-sandbox-fs-bridge.js";
 import { __testing, createImageTool, resolveImageModelConfigForTool } from "./image-tool.js";
 
@@ -137,7 +137,7 @@ describe("image tool implicit imageModel config", () => {
     const cfg: BuilderForceAgentsConfig = {
       agents: { defaults: { model: { primary: "openai/gpt-5.2" } } },
     };
-    expect(resolveImageModelConfigForTool({ cfg, agentDir })).toBeNull();
+    expect(await resolveImageModelConfigForTool({ cfg, agentDir })).toBeNull();
     expect(createImageTool({ config: cfg, agentDir })).toBeNull();
   });
 
@@ -149,7 +149,7 @@ describe("image tool implicit imageModel config", () => {
     const cfg: BuilderForceAgentsConfig = {
       agents: { defaults: { model: { primary: "minimax/MiniMax-M2.1" } } },
     };
-    expect(resolveImageModelConfigForTool({ cfg, agentDir })).toEqual({
+    expect(await resolveImageModelConfigForTool({ cfg, agentDir })).toEqual({
       primary: "minimax/MiniMax-VL-01",
       fallbacks: ["openai/gpt-5-mini", "anthropic/claude-opus-4-5"],
     });
@@ -164,7 +164,7 @@ describe("image tool implicit imageModel config", () => {
     const cfg: BuilderForceAgentsConfig = {
       agents: { defaults: { model: { primary: "zai/glm-4.7" } } },
     };
-    expect(resolveImageModelConfigForTool({ cfg, agentDir })).toEqual({
+    expect(await resolveImageModelConfigForTool({ cfg, agentDir })).toEqual({
       primary: "zai/glm-4.6v",
       fallbacks: ["openai/gpt-5-mini", "anthropic/claude-opus-4-5"],
     });
@@ -193,7 +193,7 @@ describe("image tool implicit imageModel config", () => {
         },
       },
     };
-    expect(resolveImageModelConfigForTool({ cfg, agentDir })).toEqual({
+    expect(await resolveImageModelConfigForTool({ cfg, agentDir })).toEqual({
       primary: "acme/vision-1",
     });
     expect(createImageTool({ config: cfg, agentDir })).not.toBeNull();
@@ -209,7 +209,7 @@ describe("image tool implicit imageModel config", () => {
         },
       },
     };
-    expect(resolveImageModelConfigForTool({ cfg, agentDir })).toEqual({
+    expect(await resolveImageModelConfigForTool({ cfg, agentDir })).toEqual({
       primary: "openai/gpt-5-mini",
     });
   });
@@ -237,7 +237,7 @@ describe("image tool implicit imageModel config", () => {
       },
     };
     // Tool should still be available for explicit image analysis requests
-    expect(resolveImageModelConfigForTool({ cfg, agentDir })).toEqual({
+    expect(await resolveImageModelConfigForTool({ cfg, agentDir })).toEqual({
       primary: "openai/gpt-5-mini",
     });
     const tool = createImageTool({ config: cfg, agentDir, modelHasVision: true });

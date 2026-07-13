@@ -8,7 +8,7 @@ import {
   makeElevatedDirectiveConfig,
   replyText,
   makeRestrictedElevatedDisabledConfig,
-  runEmbeddedPiAgent,
+  runEmbeddedAgent,
   sessionStorePath,
   withTempHome,
 } from "./reply.directive.directive-behavior.e2e-harness.js";
@@ -34,7 +34,7 @@ describe("directive behavior", () => {
       const res = await runAuthorizedCommand(home, "/elevated");
       const text = replyText(res);
       expect(text).toContain("Current elevated level: off");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("can toggle elevated off then back on (status reflects on)", async () => {
@@ -50,7 +50,7 @@ describe("directive behavior", () => {
 
       const store = loadSessionStore(storePath);
       expect(store["agent:main:main"]?.elevatedLevel).toBe("on");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("rejects per-agent elevated when disabled", async () => {
@@ -71,7 +71,7 @@ describe("directive behavior", () => {
 
       const text = replyText(res);
       expect(text).toContain("agents.list[].tools.elevated.enabled");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
 });

@@ -1,6 +1,8 @@
 'use client';
 
 import { Select } from '@/components/Select';
+import { useTranslations } from 'next-intl';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -37,15 +39,29 @@ interface ProviderMeta {
   secrets: SecretField[];
   /** Whether a base URL is needed: 'required', 'optional', or false. */
   baseUrl: 'required' | 'optional' | false;
+  /**
+   * Present when this provider can be connected as a synced board. Drives the
+   * BoardConnectionsManager picker + external-board-id hint so that surface
+   * derives from this single source instead of its own provider list.
+   */
+  board?: { externalId: 'required' | 'optional'; hint: string };
 }
 
 export const PROVIDER_META: Record<IntegrationProvider, ProviderMeta> = {
-  github: { label: 'GitHub', baseUrl: false, secrets: [{ key: 'accessToken', label: 'Personal access token', placeholder: 'ghp_…' }] },
+  github: { label: 'GitHub', baseUrl: false, secrets: [{ key: 'accessToken', label: 'Personal access token', placeholder: 'ghp_…' }], board: { externalId: 'required', hint: 'Repository — owner/repo (e.g. octocat/hello-world)' } },
   gitlab: { label: 'GitLab', baseUrl: 'optional', secrets: [{ key: 'accessToken', label: 'Personal access token', placeholder: 'glpat-…' }] },
   bitbucket: { label: 'Bitbucket', baseUrl: false, secrets: [{ key: 'accessToken', label: 'Access token' }] },
-  jira: { label: 'Jira', baseUrl: 'required', secrets: [{ key: 'email', label: 'Account email', type: 'text' }, { key: 'apiToken', label: 'API token' }] },
+  jira: { label: 'Jira', baseUrl: 'required', secrets: [{ key: 'email', label: 'Account email', type: 'text' }, { key: 'apiToken', label: 'API token' }], board: { externalId: 'optional', hint: 'Project key (e.g. ENG) — blank syncs all' } },
   confluence: { label: 'Confluence', baseUrl: 'required', secrets: [{ key: 'email', label: 'Account email', type: 'text' }, { key: 'apiToken', label: 'API token' }] },
-  freshservice: { label: 'Freshservice', baseUrl: 'required', secrets: [{ key: 'apiKey', label: 'API key' }] },
+  freshservice: { label: 'Freshservice', baseUrl: 'required', secrets: [{ key: 'apiKey', label: 'API key' }], board: { externalId: 'optional', hint: 'Workspace ID (optional) — blank syncs all tickets' } },
+  freshdesk: { label: 'Freshdesk', baseUrl: 'required', secrets: [{ key: 'apiKey', label: 'API key' }], board: { externalId: 'optional', hint: 'Freshdesk domain (e.g. https://yourco.freshdesk.com)' } },
+  servicenow: { label: 'ServiceNow', baseUrl: 'required', secrets: [{ key: 'username', label: 'Username', type: 'text' }, { key: 'password', label: 'Password' }], board: { externalId: 'optional', hint: 'Table name (default: incident)' } },
+  linear: { label: 'Linear', baseUrl: false, secrets: [{ key: 'apiKey', label: 'API key', placeholder: 'lin_api_…' }], board: { externalId: 'optional', hint: 'Team ID (optional) — blank syncs all teams' } },
+  sentry: { label: 'Sentry', baseUrl: 'optional', secrets: [{ key: 'token', label: 'Auth token', placeholder: 'sntrys_…' }], board: { externalId: 'required', hint: 'organization-slug/project-slug' } },
+  pagerduty: { label: 'PagerDuty', baseUrl: false, secrets: [{ key: 'apiToken', label: 'API token' }, { key: 'fromEmail', label: 'From email (for write-back)', type: 'text', placeholder: 'you@company.com' }], board: { externalId: 'optional', hint: 'Service ID (optional) — blank syncs all services' } },
+  monday: { label: 'monday.com', baseUrl: false, secrets: [{ key: 'token', label: 'API token' }], board: { externalId: 'required', hint: 'Board ID (numeric)' } },
+  asana: { label: 'Asana', baseUrl: false, secrets: [{ key: 'accessToken', label: 'Personal access token' }], board: { externalId: 'required', hint: 'Project GID' } },
+  clickup: { label: 'ClickUp', baseUrl: false, secrets: [{ key: 'token', label: 'API token', placeholder: 'pk_…' }], board: { externalId: 'required', hint: 'List ID' } },
 };
 
 const cardStyle: React.CSSProperties = {
@@ -87,7 +103,10 @@ export interface IntegrationCredentialsManagerProps {
   heading?: string | null;
 }
 
-export function IntegrationCredentialsManager({ projectId, providers, heading = 'Integration keys' }: IntegrationCredentialsManagerProps) {
+export function IntegrationCredentialsManager({ projectId, providers, heading }: IntegrationCredentialsManagerProps) {
+  const confirm = useConfirm();
+  const tc = useTranslations('common');
+  const t = useTranslations('integrationCredentials');
   const role = getStoredTenant()?.role;
   const canManage = role === 'owner' || role === 'manager';
 
@@ -122,7 +141,7 @@ export function IntegrationCredentialsManager({ projectId, providers, heading = 
       : Promise.resolve<IntegrationCredential[]>([]);
     Promise.all([scopedP, inheritedP])
       .then(([s, i]) => { setScoped(s); setInherited(i); })
-      .catch(() => setError('Could not load integration keys.'))
+      .catch(() => setError(t('loadError')))
       .finally(() => setLoading(false));
   }, [canManage, projectId]);
 
@@ -131,6 +150,8 @@ export function IntegrationCredentialsManager({ projectId, providers, heading = 
   if (!canManage) return null;
 
   const meta = PROVIDER_META[provider];
+  // undefined default → localized fallback heading; null → headerless; string → as given.
+  const resolvedHeading = heading === undefined ? t('heading') : heading;
 
   const editing = editingId != null;
 
@@ -159,7 +180,7 @@ export function IntegrationCredentialsManager({ projectId, providers, heading = 
     setSaving(true);
     setError(null);
     try {
-      if (meta.baseUrl === 'required' && !baseUrl.trim()) { setError('Base URL is required'); setSaving(false); return; }
+      if (meta.baseUrl === 'required' && !baseUrl.trim()) { setError(t('baseUrlRequired')); setSaving(false); return; }
       // The credential blob is stored/replaced wholesale, so secrets are
       // all-or-nothing: required on create, and on edit only when rotating (if any
       // secret field is filled, every one must be, else we'd drop the others).
@@ -167,20 +188,20 @@ export function IntegrationCredentialsManager({ projectId, providers, heading = 
       if (!editing || anySecret) {
         const missing = meta.secrets.find((f) => !secrets[f.key]?.trim());
         if (missing) {
-          setError(editing ? `Enter all fields to rotate the key — ${missing.label} is missing` : `${missing.label} is required`);
+          setError(editing ? t('rotateFieldMissing', { field: missing.label }) : t('fieldRequired', { field: missing.label }));
           setSaving(false); return;
         }
       }
       if (editingId !== null) {
         await integrationsApi.update(editingId, {
-          name: name.trim() || `${meta.label} key`,
+          name: name.trim() || t('defaultKeyName', { provider: meta.label }),
           baseUrl: meta.baseUrl ? baseUrl.trim() || null : null,
           ...(anySecret ? { credentials: secrets } : {}),
         });
       } else {
         await integrationsApi.create({
           provider,
-          name: name.trim() || `${meta.label} key`,
+          name: name.trim() || t('defaultKeyName', { provider: meta.label }),
           baseUrl: meta.baseUrl ? baseUrl.trim() || null : null,
           projectId: projectId ?? null,
           credentials: secrets,
@@ -189,7 +210,7 @@ export function IntegrationCredentialsManager({ projectId, providers, heading = 
       closeForm();
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setError(e instanceof Error ? e.message : t('saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -201,7 +222,7 @@ export function IntegrationCredentialsManager({ projectId, providers, heading = 
       const res = await integrationsApi.test(id);
       setTestResult((prev) => ({ ...prev, [id]: res }));
     } catch (e) {
-      setTestResult((prev) => ({ ...prev, [id]: { ok: false, message: e instanceof Error ? e.message : 'Test failed' } }));
+      setTestResult((prev) => ({ ...prev, [id]: { ok: false, message: e instanceof Error ? e.message : t('testFailed') } }));
     } finally {
       setTesting(null);
       load();
@@ -209,7 +230,7 @@ export function IntegrationCredentialsManager({ projectId, providers, heading = 
   };
 
   const remove = async (id: string) => {
-    if (!confirm('Delete this integration key?')) return;
+    if (!(await confirm(tc('deleteIntegrationKeyConfirm')))) return;
     await integrationsApi.remove(id);
     load();
   };
@@ -224,24 +245,24 @@ export function IntegrationCredentialsManager({ projectId, providers, heading = 
         </span>
         <span style={{ fontSize: 13, color: 'var(--text-primary)', flex: 1 }}>
           {c.name}
-          {readOnly && <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 6 }}>(workspace)</span>}
+          {readOnly && <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 6 }}>{t('workspaceTag')}</span>}
         </span>
         {ok != null && (
           <span style={{ fontSize: 11, color: ok ? 'var(--success, #16a34a)' : 'var(--danger, #dc2626)' }}>
-            {ok ? '● connected' : '● failed'}
+            {ok ? `● ${t('connected')}` : `● ${t('failed')}`}
           </span>
         )}
         {result && !result.ok && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{result.message}</span>}
         {!readOnly && (
           <>
             <button type="button" style={btnSubtle} disabled={testing === c.id} onClick={() => test(c.id)}>
-              {testing === c.id ? 'Testing…' : 'Test'}
+              {testing === c.id ? t('testing') : t('test')}
             </button>
             <button type="button" style={btnSubtle} onClick={() => openEdit(c)}>
-              Edit
+              {tc('edit')}
             </button>
             <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={() => remove(c.id)}>
-              Delete
+              {tc('delete')}
             </button>
           </>
         )}
@@ -251,19 +272,19 @@ export function IntegrationCredentialsManager({ projectId, providers, heading = 
 
   return (
     <div style={cardStyle}>
-      {heading && <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 14 }}>{heading}</div>}
+      {resolvedHeading && <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 14 }}>{resolvedHeading}</div>}
       <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
         {projectId != null
-          ? 'Keys scoped to this project. Workspace-wide keys are inherited and shown below.'
-          : 'Keys available to every project in this workspace.'}
+          ? t('scopedDescription')
+          : t('globalDescription')}
       </div>
 
       {loading ? (
-        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 12 }}>Loading…</div>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 12 }}>{tc('loading')}</div>
       ) : (
         <div style={{ marginTop: 12 }}>
           {scoped.length === 0 && inherited.length === 0 && (
-            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No keys configured yet.</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('noKeys')}</div>
           )}
           {scoped.map((c) => renderRow(c, false))}
           {inherited.map((c) => renderRow(c, true))}
@@ -274,7 +295,7 @@ export function IntegrationCredentialsManager({ projectId, providers, heading = 
 
       {adding ? (
         <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-deep)', borderRadius: 10 }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>{editing ? `Edit ${meta.label} key` : 'Add a key'}</div>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>{editing ? t('editKeyTitle', { provider: meta.label }) : t('addKeyTitle')}</div>
           <Select
             value={provider}
             onChange={(e) => { setProvider(e.target.value as IntegrationProvider); setSecrets({}); }}
@@ -286,11 +307,11 @@ export function IntegrationCredentialsManager({ projectId, providers, heading = 
               <option key={p} value={p}>{PROVIDER_META[p].label}</option>
             ))}
           </Select>
-          <input style={inputStyle} placeholder="Label (e.g. Production GitHub)" value={name} onChange={(e) => setName(e.target.value)} />
+          <input style={inputStyle} placeholder={t('labelPlaceholder')} value={name} onChange={(e) => setName(e.target.value)} />
           {meta.baseUrl && (
             <input
               style={inputStyle}
-              placeholder={meta.baseUrl === 'required' ? 'Base URL (required)' : 'Base URL (optional, e.g. https://gitlab.example.com)'}
+              placeholder={meta.baseUrl === 'required' ? t('baseUrlRequiredPlaceholder') : t('baseUrlOptionalPlaceholder')}
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
             />
@@ -300,28 +321,28 @@ export function IntegrationCredentialsManager({ projectId, providers, heading = 
               key={f.key}
               style={inputStyle}
               type={f.type === 'text' ? 'text' : 'password'}
-              placeholder={editing ? `${f.label} — leave blank to keep current` : (f.placeholder ?? f.label)}
+              placeholder={editing ? t('secretEditPlaceholder', { field: f.label }) : (f.placeholder ?? f.label)}
               value={secrets[f.key] ?? ''}
               onChange={(e) => setSecrets((prev) => ({ ...prev, [f.key]: e.target.value }))}
             />
           ))}
           {editing && (
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              Leave the {meta.secrets.length > 1 ? 'secret fields' : 'token'} blank to keep the current key, or enter a new value to rotate it.
+              {meta.secrets.length > 1 ? t('rotateHintMulti') : t('rotateHintSingle')}
             </div>
           )}
           <div style={{ display: 'flex', gap: 8 }}>
             <button type="button" style={btnPrimary} disabled={saving} onClick={save}>
-              {saving ? 'Saving…' : editing ? 'Save changes' : 'Save key'}
+              {saving ? tc('saving') : editing ? t('saveChanges') : t('saveKey')}
             </button>
             <button type="button" style={btnSubtle} onClick={closeForm}>
-              Cancel
+              {tc('cancel')}
             </button>
           </div>
         </div>
       ) : (
         <button type="button" style={{ ...btnPrimary, marginTop: 14 }} onClick={() => setAdding(true)}>
-          Add key
+          {t('addKey')}
         </button>
       )}
     </div>

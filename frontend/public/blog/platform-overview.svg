@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="amberGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFCE6B"/><stop offset="100%" stop-color="#F5A623"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">PLATFORM OVERVIEW</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">One platform, six core building blocks</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- ROW 1 -->
+  <!-- Projects and IDE -->
+  <rect x="200" y="250" width="380" height="230" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="200" y="250" width="6" height="230" rx="3" fill="url(#coolGrad)"/>
+  <text x="236" y="322" font-size="40">🗂️</text>
+  <text x="236" y="372" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="25" font-weight="800" fill="#EEF0FA">Projects &amp; IDE</text>
+  <text x="236" y="410" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="236" dy="0">A browser Monaco workspace —</tspan><tspan x="236" dy="26">terminal, files, and AI chat</tspan></text>
+
+  <!-- AI Agents -->
+  <rect x="620" y="250" width="380" height="230" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="620" y="250" width="6" height="230" rx="3" fill="url(#violetGrad)"/>
+  <text x="656" y="322" font-size="40">🤖</text>
+  <text x="656" y="372" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="25" font-weight="800" fill="#EEF0FA">AI Agents</text>
+  <text x="656" y="410" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="656" dy="0">Fine-tuned models with an</tspan><tspan x="656" dy="26">identity, skills, and a profile</tspan></text>
+
+  <!-- In-Browser Training -->
+  <rect x="1040" y="250" width="380" height="230" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="1040" y="250" width="6" height="230" rx="3" fill="url(#mintGrad)"/>
+  <text x="1076" y="322" font-size="40">⚡</text>
+  <text x="1076" y="372" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="25" font-weight="800" fill="#EEF0FA">In-Browser Training</text>
+  <text x="1076" y="410" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="1076" dy="0">WebGPU LoRA fine-tuning —</tspan><tspan x="1076" dy="26">no cloud GPU, data stays local</tspan></text>
+
+  <!-- ROW 2 -->
+  <!-- Workforce Registry -->
+  <rect x="200" y="520" width="380" height="230" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="200" y="520" width="6" height="230" rx="3" fill="url(#amberGrad)"/>
+  <text x="236" y="592" font-size="40">🌐</text>
+  <text x="236" y="642" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="25" font-weight="800" fill="#EEF0FA">Workforce Registry</text>
+  <text x="236" y="680" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="236" dy="0">Browse, evaluate, and hire</tspan><tspan x="236" dy="26">published community agents</tspan></text>
+
+  <!-- Skills Marketplace -->
+  <rect x="620" y="520" width="380" height="230" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="620" y="520" width="6" height="230" rx="3" fill="url(#coralGrad)"/>
+  <text x="656" y="592" font-size="40">🧩</text>
+  <text x="656" y="642" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="25" font-weight="800" fill="#EEF0FA">Skills Marketplace</text>
+  <text x="656" y="680" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="656" dy="0">Modular capability packages</tspan><tspan x="656" dy="26">that extend what agents can do</tspan></text>
+
+  <!-- BuilderForce Agents -->
+  <rect x="1040" y="520" width="380" height="230" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="1040" y="520" width="6" height="230" rx="3" fill="url(#violetGrad)"/>
+  <text x="1076" y="592" font-size="40">🔗</text>
+  <text x="1076" y="642" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="25" font-weight="800" fill="#EEF0FA">Agent Orchestration</text>
+  <text x="1076" y="680" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8"><tspan x="1076" dy="0">Agents discover &amp; call each</tspan><tspan x="1076" dy="26">other into multi-agent pipelines</tspan></text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">Build agents, train them, publish, hire, and orchestrate — all in the browser</text>
+</svg>

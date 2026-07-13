@@ -1,10 +1,16 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
+import type { ProjectDiagnosticSummary } from '@/lib/tools';
+import { ProjectHealthGauges } from './ProjectHealth';
+import { ProjectInspectionGrade } from './ProjectInspection';
+import { ProjectOriginBadge } from './ProjectOriginBadge';
 import type { ProjectPanelTab } from './ProjectDetailsPanel';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
-import { ArchitectureAnalysisButton } from './ArchitectureAnalysisButton';
+import { RunDiagnosticsButton } from './RunDiagnosticsButton';
+import { ProjectDiagnosticsStrip } from './ProjectDiagnosticsStrip';
 
 export interface ProjectCardProps {
   project: Project;
@@ -26,6 +32,9 @@ export interface ProjectCardProps {
    *  editor (`/ide/<id>`); the Projects page overrides this to route through the
    *  IDE dashboard scoped to the project. */
   onOpenIde?: (project: Project) => void;
+  /** Latest per-diagnostic scores (SOC 2, Quality, …) for this project, from the
+   *  workspace rollup. Rendered as a compact score strip; omit/empty hides it. */
+  diagnostics?: ProjectDiagnosticSummary[];
 }
 
 const createdDate = (project: Project): string => {
@@ -43,7 +52,9 @@ export function ProjectCard({
   onDelete,
   showDeleteButton = !!onDelete,
   onOpenIde,
+  diagnostics,
 }: ProjectCardProps) {
+  const t = useTranslations('projectCard');
   const openIde = onOpenIde ?? ((p: Project) => { window.location.href = `/ide/${p.publicId ?? p.id}`; });
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (onCardClick && e.key === 'Enter') {
@@ -103,21 +114,24 @@ export function ProjectCard({
               {project.key}
             </div>
           )}
-          {project.status != null && project.status !== '' && (
-            <span
-              style={{
-                fontSize: 11,
-                color: 'var(--text-secondary)',
-                background: 'var(--surface-interactive)',
-                padding: '2px 6px',
-                borderRadius: 6,
-                textTransform: 'capitalize',
-                display: 'inline-block',
-              }}
-            >
-              {project.status.replace(/_/g, ' ')}
-            </span>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            {project.status != null && project.status !== '' && (
+              <span
+                style={{
+                  fontSize: 11,
+                  color: 'var(--text-secondary)',
+                  background: 'var(--surface-interactive)',
+                  padding: '2px 6px',
+                  borderRadius: 6,
+                  textTransform: 'capitalize',
+                  display: 'inline-block',
+                }}
+              >
+                {project.status.replace(/_/g, ' ')}
+              </span>
+            )}
+            <ProjectOriginBadge origin={project.origin} />
+          </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           {showDetailsButton && (
@@ -127,7 +141,7 @@ export function ProjectCard({
                 e.stopPropagation();
                 onDetailsClick?.(project);
               }}
-              aria-label="Details"
+              aria-label={t('details')}
               style={iconButtonStyle}
             >
               <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
@@ -144,14 +158,31 @@ export function ProjectCard({
               e.stopPropagation();
               window.location.href = `/projects?tab=tasks&project=${project.id}`;
             }}
-            aria-label="Task board"
-            title="Task board"
+            aria-label={t('taskBoard')}
+            title={t('taskBoard')}
             style={iconButtonStyle}
           >
             <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
               <rect x="3" y="4" width="4" height="16" rx="1" />
               <rect x="10" y="4" width="4" height="11" rx="1" />
               <rect x="17" y="4" width="4" height="14" rx="1" />
+            </svg>
+          </button>
+          {/* Project 360 button — the whole-picture health view (health wheel,
+              missing items, who's working). Reuses the shared <Project360View>. */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              window.location.href = `/projects/${project.id}/360`;
+            }}
+            aria-label={t('health360')}
+            title={t('health360')}
+            style={iconButtonStyle}
+          >
+            <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 3 v9 l6.5 3.5" />
             </svg>
           </button>
           {/* IDE button */}
@@ -161,7 +192,7 @@ export function ProjectCard({
               e.stopPropagation();
               openIde(project);
             }}
-            aria-label="Open in IDE"
+            aria-label={t('openIde')}
             style={iconButtonStyle}
           >
             <span style={{ fontSize: 18 }} aria-hidden>💻</span>
@@ -171,7 +202,7 @@ export function ProjectCard({
               <button
                 type="button"
                 onClick={handleDeleteClick}
-                aria-label="Delete project"
+                aria-label={t('deleteProject')}
                 style={iconButtonStyle}
               >
                 <svg
@@ -216,7 +247,7 @@ export function ProjectCard({
       )}
       {project.assignedAgentHost && (
         <div style={{ marginBottom: 4 }}>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', marginRight: 4 }}>Agent:</span>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', marginRight: 4 }}>{t('agentLabel')}</span>
           <button
             type="button"
             onClick={(e) => {
@@ -238,33 +269,54 @@ export function ProjectCard({
           </button>
         </div>
       )}
+
+      {/* Health speedometer + % done ring — the at-a-glance "is this project on
+          track and how far along" visual. Shared with the details panel so the
+          numbers/colours can never drift between surfaces. */}
+      <ProjectHealthGauges project={project} />
+
+      {/* Full-inspection PM grade — the "where does this project need to go" rating
+          (vision/goals/planning/health/progress/execution). Clicking opens the
+          prescriptive report in the details panel so the user knows what to target. */}
+      <ProjectInspectionGrade
+        project={project}
+        onOpen={onDetailsClick ? (p) => onDetailsClick(p, 'analytics') : undefined}
+      />
+
+      {/* Diagnostics run against this project (SOC 2 readiness, Quality, …) — the
+          latest score per diagnostic, straight from the workspace rollup so the
+          card can show them without a per-card fetch. Self-hides when none. */}
+      <ProjectDiagnosticsStrip
+        diagnostics={diagnostics ?? []}
+        onOpen={onDetailsClick ? () => onDetailsClick(project, 'diagnostics') : undefined}
+      />
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 'auto', flexWrap: 'wrap' }}>
         {project.taskCount != null && (
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            {project.taskCount} task{project.taskCount !== 1 ? 's' : ''}
+            {t('tasks', { count: project.taskCount })}
           </span>
         )}
         {project.workflowCount != null && (
           <>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>·</span>
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              {project.workflowCount} workflow{project.workflowCount !== 1 ? 's' : ''}
+              {t('workflows', { count: project.workflowCount })}
             </span>
           </>
         )}
         <div style={{ flex: 1, minWidth: 0 }} />
         {onDetailsClick && (
-          <ArchitectureAnalysisButton
+          <RunDiagnosticsButton
             project={project}
-            onView={(p) => onDetailsClick(p, 'prds')}
-            onConfigureRepo={(p) => onDetailsClick(p, 'integrations')}
+            onOpen={(p) => onDetailsClick(p, 'diagnostics')}
           />
         )}
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            window.location.href = `/workflows?projectId=${project.id}`;
+            window.location.href = `/workflows?project=${project.id}`;
           }}
           style={{
             fontSize: 12,
@@ -277,7 +329,7 @@ export function ProjectCard({
             cursor: 'pointer',
           }}
         >
-          View workflows
+          {t('viewWorkflows')}
         </button>
       </div>
       <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{createdDate(project)}</p>

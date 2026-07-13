@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/>
+      <stop offset="55%" stop-color="#13152F"/>
+      <stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/>
+    </linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/>
+    </linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/>
+    </linearGradient>
+    <linearGradient id="legacyGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#7A8099"/><stop offset="100%" stop-color="#474C63"/>
+    </linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="rgba(139,108,255,0)"/>
+      <stop offset="50%" stop-color="rgba(139,108,255,0.55)"/>
+      <stop offset="100%" stop-color="rgba(61,214,245,0)"/>
+    </linearGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="14" result="b"/><feMerge>
+      <feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <rect width="1600" height="900" fill="none"/>
+  
+    <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">WHY IT WINS</text>
+    <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">Three edges that matter to the business</text>
+    <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+  <rect x="80" y="250" width="440" height="420" rx="24" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.09)" stroke-width="1.5"/><rect x="80" y="250" width="440" height="6" rx="3" fill="url(#coolGrad)"/><circle cx="160" cy="360" r="46" fill="url(#coolGrad)" opacity="0.18"/><text x="160" y="376" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="48" fill="url(#coolGrad)">◷</text><text x="120" y="460" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="34" font-weight="900" fill="#EEF0FA">Currency</text><text x="120" y="512" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" fill="#A6ADC8"><tspan x="120" dy="0">Never stale. Knowledge updates land</tspan><tspan x="120" dy="30">in the model the moment they happen</tspan><tspan x="120" dy="30">— no retrain cycle, no knowledge</tspan><tspan x="120" dy="30">cutoff.</tspan></text><rect x="560" y="250" width="440" height="420" rx="24" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.09)" stroke-width="1.5"/><rect x="560" y="250" width="440" height="6" rx="3" fill="url(#violetGrad)"/><circle cx="640" cy="360" r="46" fill="url(#violetGrad)" opacity="0.18"/><text x="640" y="376" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="48" fill="url(#violetGrad)">◇</text><text x="600" y="460" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="34" font-weight="900" fill="#EEF0FA">Footprint</text><text x="600" y="512" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" fill="#A6ADC8"><tspan x="600" dy="0">Runs in any runtime — in the</tspan><tspan x="600" dy="30">browser, on-device, or embedded in</tspan><tspan x="600" dy="30">every agent via WebGPU. Not locked</tspan><tspan x="600" dy="30">to a vendor cloud.</tspan></text><rect x="1040" y="250" width="440" height="420" rx="24" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.09)" stroke-width="1.5"/><rect x="1040" y="250" width="440" height="6" rx="3" fill="url(#mintGrad)"/><circle cx="1120" cy="360" r="46" fill="url(#mintGrad)" opacity="0.18"/><text x="1120" y="376" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="48" fill="url(#mintGrad)">◈</text><text x="1080" y="460" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="34" font-weight="900" fill="#EEF0FA">Ownership</text><text x="1080" y="512" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" fill="#A6ADC8"><tspan x="1080" dy="0">Yours end to end — open packages,</tspan><tspan x="1080" dy="30">your data, no third-party model</tspan><tspan x="1080" dy="30">dependency you cannot control.</tspan></text><text x="80" y="760" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="24" fill="#A6ADC8">It beats a frozen frontier model <tspan font-weight="800" fill="#EEF0FA">not on raw scale</tspan> — but on the axes that decide an enterprise rollout.</text>
+  <g opacity="0.85">
+    <circle cx="1336" cy="838" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="845" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="844" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">The innovation platform for the agentic era</text>
+</svg>

@@ -1,11 +1,15 @@
 /**
- * Tool for checking workflow status
+ * Tool for checking workflow status.
+ *
+ * Legacy pi (`AgentTool`) wrapper — the implementation lives once in the pi-free
+ * `shared-tools/node-orchestration-tools.ts` (`runWorkflowStatus`), shared with the
+ * native `ToolDefinition` (DRY). Removed when the pi loop is retired.
  */
 
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentTool, AgentToolResult } from "../model/agent-types.js";
 import { Type } from "@sinclair/typebox";
 import { jsonResult } from "../../agents/tools/common.js";
-import { globalOrchestrator } from "../orchestrator.js";
+import { runWorkflowStatus } from "../shared-tools/node-orchestration-tools.js";
 
 const WorkflowStatusSchema = Type.Object({
   workflowId: Type.Optional(
@@ -16,9 +20,7 @@ const WorkflowStatusSchema = Type.Object({
   ),
 });
 
-type WorkflowStatusParams = {
-  workflowId?: string;
-};
+type WorkflowStatusParams = { workflowId?: string };
 
 export const workflowStatusTool: AgentTool<typeof WorkflowStatusSchema, string> = {
   name: "workflow_status",
@@ -26,63 +28,6 @@ export const workflowStatusTool: AgentTool<typeof WorkflowStatusSchema, string> 
   description: "Check the status of a multi-agent workflow and its tasks.",
   parameters: WorkflowStatusSchema,
   async execute(_toolCallId: string, params: WorkflowStatusParams) {
-    const requestedWorkflowId =
-      typeof params.workflowId === "string" && params.workflowId.trim().length > 0
-        ? params.workflowId.trim()
-        : undefined;
-
-    try {
-      const workflow = requestedWorkflowId
-        ? globalOrchestrator.getWorkflowStatus(requestedWorkflowId)
-        : (globalOrchestrator.getLatestWorkflow({ activeOnly: true }) ??
-          globalOrchestrator.getLatestWorkflow());
-
-      if (!workflow) {
-        if (requestedWorkflowId) {
-          return jsonResult({
-            error: `Workflow ${requestedWorkflowId} not found`,
-          }) as AgentToolResult<string>;
-        }
-        return jsonResult({
-          error: "No workflows found",
-        }) as AgentToolResult<string>;
-      }
-
-      const runnableTasks = globalOrchestrator.getRunnableTasks(workflow.id);
-
-      return jsonResult({
-        workflowId: workflow.id,
-        status: workflow.status,
-        totalTasks: workflow.tasks.size,
-        requestedWorkflowId,
-        source: requestedWorkflowId ? "explicit" : "latest",
-        taskStatus: {
-          pending: Array.from(workflow.tasks.values()).filter((t) => t.status === "pending").length,
-          running: Array.from(workflow.tasks.values()).filter((t) => t.status === "running").length,
-          completed: Array.from(workflow.tasks.values()).filter((t) => t.status === "completed")
-            .length,
-          failed: Array.from(workflow.tasks.values()).filter((t) => t.status === "failed").length,
-        },
-        nextTasks: runnableTasks.map((task) => ({
-          id: task.id,
-          role: task.agentRole,
-          description: task.description,
-        })),
-        tasks: Array.from(workflow.tasks.values()).map((task) => ({
-          id: task.id,
-          role: task.agentRole,
-          description: task.description,
-          status: task.status,
-          error: task.error,
-          createdAt: task.createdAt.toISOString(),
-          startedAt: task.startedAt?.toISOString(),
-          completedAt: task.completedAt?.toISOString(),
-        })),
-      }) as AgentToolResult<string>;
-    } catch (error) {
-      return jsonResult({
-        error: `Failed to check workflow status: ${error instanceof Error ? error.message : String(error)}`,
-      }) as AgentToolResult<string>;
-    }
+    return jsonResult(runWorkflowStatus(params.workflowId)) as AgentToolResult<string>;
   },
 };

@@ -1,3 +1,5 @@
+import type { DeliverySignals } from '@/lib/deliveryVerdict';
+
 // ---------------------------------------------------------------------------
 // Authentication & Multi-tenant
 // ---------------------------------------------------------------------------
@@ -9,6 +11,21 @@ export interface AuthUser {
   avatar?: string;
   /** When true, user can access Platform Admin (/admin). */
   isSuperadmin?: boolean;
+  /** Account-type discriminator. 'freelancer' = a restricted gig/for-hire account
+   *  that sees only the Profile / Find Work / Timecard shell; 'standard' (or
+   *  undefined) = the full builder app. Sourced from the web JWT `act` claim /
+   *  /api/auth/me. */
+  accountType?: 'standard' | 'freelancer';
+  /** True once the user has EXPLICITLY chosen Build vs Hired. False/undefined for an
+   *  OAuth/magic-link account that was auto-provisioned and hasn't picked a role yet —
+   *  the onboarding gate forces the one-time choice. From /api/auth/me. */
+  accountTypeSelected?: boolean;
+  /** Opt-in to being hired talent. INDEPENDENT of accountType: a 'standard' builder can
+   *  turn this on to publish a for-hire profile + bid on gigs while keeping the full
+   *  builder shell. Always true for 'freelancer' accounts. From /api/auth/me. */
+  availableForHire?: boolean;
+  /** This user's OWN personality (same shape agents/personas use); null when unset. */
+  psychometric?: import('./psychometric').PsychometricProfile | null;
 }
 
 export interface Tenant {
@@ -36,8 +53,10 @@ export interface Project {
   name: string;
   description?: string | null;
   template?: string | null;
-  /** Active IDE modality for this project: 'designer' | 'video' | 'llm'. Defaults to 'designer'. */
+  /** Active IDE modality: 'designer' | 'video' | 'evermind' | 'finetune' | 'voice'. Defaults to 'designer'. */
   modality?: string | null;
+  /** Where the project was born — 'ide' | 'imported' | 'external'. Drives the origin badge. */
+  origin?: string | null;
   key?: string;
   tenantId?: number;
   status?: string;
@@ -48,22 +67,75 @@ export interface Project {
   updatedAt?: string;
   /** From list endpoint */
   taskCount?: number;
+  /** From list endpoint: tasks in a completed status (done/closed/merged/…). */
+  completedTaskCount?: number;
+  /** From list endpoint: tasks not yet completed or cancelled. */
+  openTaskCount?: number;
+  /** From list endpoint: tasks in the blocked status. */
+  blockedTaskCount?: number;
+  /** From list endpoint: open tasks whose due date has passed. */
+  overdueTaskCount?: number;
+  /** From list endpoint: compact DORA + cycle-time + flow signals for this project
+   *  over the last 30 days. Fed to the shared computeDeliveryVerdict so the card's
+   *  health score matches the /insights/delivery gauge. Null = no data yet. */
+  deliverySignals?: DeliverySignals | null;
   /** From list endpoint: number of workflows associated with this project */
   workflowCount?: number;
   /** From list endpoint: true once an architecture PRD (Architect analysis output) exists. */
   hasArchitecturePrd?: boolean;
+  /** From list endpoint: distinct objectives/OKRs linked to this project's tasks. Drives the inspection Direction (goals) signal. */
+  linkedGoalCount?: number;
+  /** Planning-spine initiative this project rolls up to, or null. Part of the inspection Direction (goals) signal. */
+  initiativeId?: string | null;
   /** From list endpoint: primary assigned Workforce agent (agentHost) for this project */
   assignedAgentHost?: { id: number; name: string } | null;
   /** From list endpoint: earliest task start date (falls back to earliest due date). ISO string. Drives the calendar/Gantt timeline. */
   startDate?: string | null;
-  /** From list endpoint: latest task due date — the project deadline. ISO string. */
+  /** From list endpoint: the EFFECTIVE project deadline (ISO) — the PM's explicit
+   *  due date when set, else the derived latest-task due date. Drives calendar/Gantt. */
   dueDate?: string | null;
+  /** From list endpoint: the PM's EXPLICIT project deadline only (ISO), or null when
+   *  the deadline is auto-derived from tasks. Seeds the details due-date editor. */
+  projectDueDate?: string | null;
 }
 
 export interface FileEntry {
   path: string;
   content: string;
   type: 'file' | 'directory';
+}
+
+/**
+ * An IDE project (0224) — the buildable artifact you open in the IDE. A
+ * first-class child of a Project: many can hang off one container Project
+ * (`containerProjectId`, optional + reassignable). Backed by a hidden storage
+ * project; you open it at `/ide/{storageProjectPublicId}`.
+ */
+export interface IdeProject {
+  id: number;
+  publicId: string;
+  name: string;
+  /** 'designer' | 'video' | 'llm' | 'voice'. */
+  modality: string;
+  status: string;
+  /** The parent Project this build is grouped under, or null when ungrouped. */
+  containerProjectId: number | null;
+  containerName: string | null;
+  /** The backing storage project (where files/datasets/site live; opens the IDE). */
+  storageProjectId: number;
+  storageProjectPublicId: string;
+  storageProjectKey: string;
+  /** Assigned workflow (LLM modality), or null. */
+  workflowDefinitionId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A candidate parent Project for the assign/reassign picker. */
+export interface IdeContainerOption {
+  id: number;
+  name: string;
+  key: string;
 }
 
 export interface AIMessage {
@@ -163,6 +235,15 @@ export interface TrainingJob {
   current_loss?: number;
   r2_artifact_key?: string;
   error_message?: string;
+  /** Persisted AI-judge evaluation breakdown (migration 0323) — null until the job
+   *  is evaluated. Lets the training panel show correctness/reasoning/hallucination
+   *  durably instead of only in an ephemeral log line. */
+  eval_score?: number | null;
+  eval_code_correctness?: number | null;
+  eval_reasoning_quality?: number | null;
+  eval_hallucination_rate?: number | null;
+  eval_details?: string | null;
+  evaluated_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -212,22 +293,32 @@ export interface PublishedAgent {
   r2_artifact_key?: string;
   resume_md?: string;
   status: 'active' | 'inactive';
+  /** Stable built-in-agent marker (e.g. 'validator', 'security'); null/absent for
+   *  ordinary agents. Drives the type indicator shown beside a (renameable) built-in
+   *  agent's name. Backend column ide_agents.builtin_kind (migration 0289). */
+  builtin_kind?: string | null;
   hire_count: number;
   eval_score?: number;
+  /** Public eval score (0-1) from the AI evaluation engine; null when not yet scored.
+   *  Surfaced on the marketplace/registry card. Backend sends camelCase `evalScore`. */
+  evalScore?: number | null;
   created_at: string;
   updated_at: string;
   // Workforce cloud agents (migration 0075). snake_case to match the raw row.
   tenant_id?: number | null;
   runtime_support?: 'cloud' | 'host' | 'both';
   preferred_runtime?: 'cloud' | 'host' | null;
-  /** Agent runtime engine (migration 0087): pi-coding-agent vs Claude Agent SDK. */
-  engine?: 'builderforce-v1' | 'builderforce-v2';
-  /** V2 execution surface (migration 0105): durable DO vs long-lived Cloudflare Container. */
+  /** Agent runtime engine — always the current version (read-only denormalized value). */
+  engine?: 'builderforce-v3';
+  /** Cloud execution surface (migration 0105): durable DO vs long-lived Cloudflare Container. */
   runtime_surface?: 'durable' | 'container';
   price_cents?: number;
   pricing_model?: 'flat_fee' | 'consumption';
   price_unit?: string | null;
   published?: boolean;
+  /** This agent's OWN personality (Pro). Parsed object (null when unset). Compiled at
+   *  run time into prompt directives, sampling temperature, and limbic setpoints. */
+  psychometric?: import('./psychometric').PsychometricProfile | null;
   /**
    * Number of tenants CURRENTLY holding this agent (active, non-unhired
    * purchases). Owner-only metric — populated by GET /agents/mine, not by the

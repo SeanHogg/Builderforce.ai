@@ -13,15 +13,31 @@ import { createHash } from "node:crypto";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import {
+  type AgentEngine,
+  type PolicyGate,
+  coercePolicyGates,
+  CURRENT_ENGINE_ID,
+  resolveEngineById,
+} from "@builderforce/agent-tools";
 import { WebSocket } from "ws";
+import { buildAssignedCapabilityAppend } from "../agents/assigned-capabilities.js";
+import { type V2RunnerSinks } from "../agents/claude-agent-sdk-runner.js";
 import { loadProjectContext, updateProjectContextFields } from "../builderforce/project-context.js";
 import type { IRelayService } from "../builderforce/relay-service.js";
 import { GatewayClient, type GatewayClientOptions } from "../gateway/client.js";
 import type { EventFrame } from "../gateway/protocol/index.js";
 import { logDebug, logWarn } from "../logger.js";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
+import type { RelayTaskEngine, EngineDispatch } from "./agent-engine.js";
 import { onAgentEvent } from "./agent-events.js";
 import { resolveApproval } from "./approval-gate.js";
+import {
+  makeCodingAgent,
+  makeCodingGit,
+  makeCodingHttp,
+} from "./builderforce-coding-dispatch-adapters.js";
+import { runCodingDispatch } from "./builderforce-coding-dispatch.js";
 import {
   buildLocalMachineProfile,
   mergeBuilderforceContext,
@@ -32,19 +48,12 @@ import {
   RelayLogPoller,
   RelayPresencePoller,
 } from "./builderforce-relay-helpers.js";
-import { resolveRemoteResult } from "./remote-result-broker.js";
 import { resolveCodingSession } from "./coding-session-broker.js";
-import { runCodingDispatch } from "./builderforce-coding-dispatch.js";
-import {
-  makeCodingAgent,
-  makeCodingGit,
-  makeCodingHttp,
-} from "./builderforce-coding-dispatch-adapters.js";
-import { dispatchResultToRemoteAgentNode, type RemoteDispatchOptions } from "./remote-subagent.js";
-import { setRelayHook } from "./workflow-telemetry.js";
 import { buildSteeringInjection } from "./relay-steering.js";
-import { runClaudeAgentSdkV2, type V2RunnerSinks } from "../agents/claude-agent-sdk-runner.js";
-import { buildAssignedCapabilityAppend } from "../agents/assigned-capabilities.js";
+import { resolveRemoteResult } from "./remote-result-broker.js";
+import { dispatchResultToRemoteAgentNode, type RemoteDispatchOptions } from "./remote-subagent.js";
+import { createGitRepoSync } from "./repo-sync.js";
+import { ClaudeSdkAgentEngine } from "./sdk-agent-engine.js";
 import {
   taskWorkspaceDir,
   buildTaskCloneUrl,
@@ -53,6 +62,7 @@ import {
   detectTaskChanges,
   sweepStaleTaskWorkspaces,
 } from "./task-workspace.js";
+import { setRelayHook } from "./workflow-telemetry.js";
 
 function extractChatText(message: unknown): string {
   if (!message || typeof message !== "object") {
@@ -115,16 +125,6 @@ export class BuilderforceRelayService implements IRelayService {
   /** Abort handles for in-flight V2 (Claude Agent SDK) runs, keyed by executionId,
    *  so an `execution.cancel` frame from the portal can actually halt the run. */
   private readonly v2Aborts = new Map<number, AbortController>();
-  /** Context for the in-flight V1 task run, so the session-final handler can
-   *  diff the shared workspace and attribute the changes to the executing agent. */
-  private pendingTaskRun: {
-    executionId?: number;
-    taskId?: number;
-    agentLabel: string;
-    cwd: string;
-    title: string;
-    repo?: { repoId: string; defaultBranch: string | null };
-  } | null = null;
   /** Tracks pending remote task correlations so results can be sent back. */
   private pendingRemoteCorrelations = new Map<
     string,
@@ -138,22 +138,23 @@ export class BuilderforceRelayService implements IRelayService {
   private readonly assignmentContextUrl: string;
   private readonly gatewayWsUrl: string;
 
-  private dispatchTaskFromRelay(payload: {
-    title: string;
-    description?: string;
-    executionId?: number;
-    taskId?: number;
-    sourceType: "task.assign" | "task.broadcast";
-    artifacts?: { skills?: string[]; personas?: string[]; content?: string[] };
-    /** Agent runtime engine. 'builderforce-v2' runs the Claude Agent SDK. */
-    engine?: string;
-    /** Model id from the run payload (forwarded to the engine). */
-    model?: string;
-    /** Repo bound to the task's project (for cloning into the ticket workspace). */
-    repo?: { repoId: string; defaultBranch: string | null };
-    /** Human label of the executing agent (for change traceability). */
-    agentLabel?: string;
-  }): void {
+  /**
+   * Engine registry — the dependency-injection seam. Maps an engine id to its
+   * {@link RelayTaskEngine} implementation; `dispatchTaskFromRelay` resolves by id and
+   * calls `run()` instead of branching. Adding/swapping a runner is a registry entry.
+   *
+   * There is ONE engine — the current version ({@link CURRENT_ENGINE_ID}, the
+   * Claude-Agent-SDK runner). Any legacy `engine` value on an old dispatch is ignored
+   * and resolves to the current engine; the DI seam stays even with one engine so the
+   * NEXT runner (a future V4) is a wiring change, not a branch.
+   */
+  private resolveEngine(engineId?: string): RelayTaskEngine {
+    const current: RelayTaskEngine = { id: CURRENT_ENGINE_ID, run: (d, p) => this.runV2Engine(d, p) };
+    const registry: Record<string, RelayTaskEngine> = { [current.id]: current };
+    return resolveEngineById(registry, engineId);
+  }
+
+  private dispatchTaskFromRelay(payload: EngineDispatch): void {
     const lines = [
       `[Builderforce ${payload.sourceType}] ${payload.title}`,
       payload.description ? "" : undefined,
@@ -174,23 +175,24 @@ export class BuilderforceRelayService implements IRelayService {
       void this.reportExecutionState(payload.executionId, "running");
     }
 
-    // Both engines run out of the shared per-ticket workspace; V2 runs the Claude
-    // Agent SDK loop in-process, V1 runs the pi-coding-agent loop via the local
-    // gateway's chat.send.
+    // Resolve the runtime by id from the engine registry (DI seam) and run it —
+    // no hard-coded V1/V2 branch. Adding/swapping a runner is a registry change;
+    // removing V1 is deleting its registration. Both engines run out of the shared
+    // per-ticket workspace.
+    const engine = this.resolveEngine(payload.engine);
     const runEngine = () => {
-      if (payload.engine === "builderforce-v2") {
-        void this.runV2Engine(payload, message);
-      } else {
-        void this.runV1Engine(payload, message);
-      }
+      void engine.run(payload, message);
     };
 
     // Apply assigned artifacts FIRST, then run — both engines read the synced
     // persona registry / sidecar at run start, so the sync must complete before
     // the run begins (otherwise the agent races past its own capabilities).
     if (payload.artifacts) {
-      void this.syncAssignedCapabilities(payload.artifacts, payload.executionId, payload.taskId)
-        .finally(runEngine);
+      void this.syncAssignedCapabilities(
+        payload.artifacts,
+        payload.executionId,
+        payload.taskId,
+      ).finally(runEngine);
     } else {
       runEngine();
     }
@@ -249,21 +251,31 @@ export class BuilderforceRelayService implements IRelayService {
   ): Promise<string> {
     const baseDir = this.opts.workspaceDir ?? process.cwd();
     const cwd = taskId != null ? taskWorkspaceDir(baseDir, taskId) : baseDir;
-    await fs.mkdir(cwd, { recursive: true }).catch(() => { /* fall back to baseDir */ });
+    await fs.mkdir(cwd, { recursive: true }).catch(() => {
+      /* fall back to baseDir */
+    });
     if (repo?.repoId && taskId != null) {
-      const git = makeCodingGit({ apiKey: this.opts.apiKey });
-      if (!(await isCloned(cwd))) {
-        try {
-          const cloneUrl = buildTaskCloneUrl(normalizeBaseUrl(this.opts.baseUrl), this.opts.agentNodeId, repo.repoId);
-          await git.clone(cloneUrl, cwd, repo.defaultBranch ?? null);
-        } catch (err) {
-          logWarn(`[builderforce] task ${taskId} clone failed: ${String(err)}`);
-        }
-      }
-      // Execute under the ticket branch so every change is pending on it. Idempotent:
-      // creating an existing branch fails harmlessly (the tree is already on it).
-      if (await isCloned(cwd)) {
-        await git.checkoutNewBranch(cwd, taskBranchName(taskId)).catch(() => { /* already on the branch */ });
+      // Modular repo preparation through the shared strategy: clone once, then on
+      // reuse refresh to the latest default branch ONLY when the tree is clean —
+      // the ticket workspace accumulates uncommitted WIP across runs, which the
+      // strategy preserves rather than clobbering. Finally land on the ticket
+      // branch (idempotent) so every change stays pending on it.
+      const repoSync = createGitRepoSync(makeCodingGit({ apiKey: this.opts.apiKey }));
+      const cloneUrl = buildTaskCloneUrl(
+        normalizeBaseUrl(this.opts.baseUrl),
+        this.opts.agentNodeId,
+        repo.repoId,
+      );
+      const prep = await repoSync.prepare({
+        dir: cwd,
+        repo: { cloneUrl, defaultBranch: repo.defaultBranch ?? null },
+        workBranch: taskBranchName(taskId),
+        mode: "ticket-branch",
+      });
+      if (!prep.ok) {
+        logWarn(`[builderforce] task ${taskId} repo sync failed: ${prep.error}`);
+      } else if (prep.preservedLocalChanges) {
+        logWarn(`[builderforce] task ${taskId}: preserved uncommitted WIP, skipped refresh`);
       }
     }
     return cwd;
@@ -286,17 +298,25 @@ export class BuilderforceRelayService implements IRelayService {
     const git = makeCodingGit({ apiKey: this.opts.apiKey });
     const branch = taskBranchName(taskId);
     try {
-      const { changed } = await git.commitAll(dir, `BuilderForce: task ${taskId} — ${title} (by ${agentLabel})`.trim());
+      const { changed } = await git.commitAll(
+        dir,
+        `BuilderForce: task ${taskId} — ${title} (by ${agentLabel})`.trim(),
+      );
       if (!changed) return; // nothing new to push
       const base = normalizeBaseUrl(this.opts.baseUrl);
       await git.push(dir, buildTaskCloneUrl(base, this.opts.agentNodeId, repo.repoId), branch);
       // Open/keep a PR so the pending changes are reviewable (idempotent server-side).
       await fetch(`${base}/api/agent-hosts/${this.opts.agentNodeId}/tasks/${taskId}/pull-request`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.opts.apiKey}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.opts.apiKey}`,
+        },
         body: JSON.stringify({ branch, base: repo.defaultBranch ?? undefined, title }),
         signal: AbortSignal.timeout(30_000),
-      }).catch(() => { /* branch pushed; PR can be opened manually */ });
+      }).catch(() => {
+        /* branch pushed; PR can be opened manually */
+      });
       logWarn(`[builderforce] task ${taskId}: pushed pending changes to ${branch}`);
     } catch (err) {
       logWarn(`[builderforce] task ${taskId} commit/push failed: ${String(err)}`);
@@ -323,83 +343,13 @@ export class BuilderforceRelayService implements IRelayService {
     }
   }
 
-  /** When a V1 session ends: attribute its changes, then commit + push them to the
-   *  ticket branch as pending changes. */
-  private flushPendingTaskChanges(): void {
-    const run = this.pendingTaskRun;
-    if (!run) return;
-    this.pendingTaskRun = null;
-    void (async () => {
-      await this.emitTaskChanges(run.cwd, run.agentLabel, run.executionId, run.taskId);
-      if (run.taskId != null && run.repo?.repoId) {
-        await this.commitAndPushTicketBranch(run.taskId, run.repo, run.title, run.agentLabel);
-      }
-    })();
-  }
-
-  /**
-   * BuilderForce-V1 engine path. Runs the pi-coding-agent loop via the gateway's
-   * `chat.send`, steered to work in the shared ticket workspace. The gateway's
-   * session-`final` handler attributes the changes (via `pendingTaskRun`) and
-   * reports the terminal execution state.
-   */
-  private async runV1Engine(
-    payload: {
-      executionId?: number;
-      taskId?: number;
-      title?: string;
-      sourceType: string;
-      repo?: { repoId: string; defaultBranch: string | null };
-      agentLabel?: string;
-    },
-    prompt: string,
-  ): Promise<void> {
-    const agentLabel = payload.agentLabel?.trim() || "BuilderForce-V1";
-    const cwd = await this.ensureTaskWorkspace(payload.taskId, payload.repo);
-    // Record context so the session-final handler can diff + attribute + commit changes.
-    this.pendingTaskRun = {
-      executionId: payload.executionId, taskId: payload.taskId, agentLabel, cwd,
-      title: payload.title ?? `Task ${payload.taskId ?? ""}`.trim(), repo: payload.repo,
-    };
-
-    // The agent's cwd is enforced via the chat.send workspaceDir param. Changes are
-    // committed to the ticket branch automatically after the run — the agent must
-    // not manage git itself.
-    const effectivePrompt = payload.repo?.repoId
-      ? `${prompt}\n\n[Workspace] You are working in the ticket's cloned git repository (already on its branch). Edit/create files freely. Do NOT run \`git\` — BuilderForce commits your changes to the ticket branch as pending changes after this run.`
-      : prompt;
-
-    this.gatewayClient
-      ?.request("chat.send", {
-        sessionKey: "main",
-        message: effectivePrompt,
-        // Enforce the shared ticket workspace as the agent's working directory.
-        ...(payload.taskId != null ? { workspaceDir: cwd } : {}),
-        idempotencyKey: `task-${payload.sourceType}-${payload.taskId ?? "na"}-${payload.executionId ?? Date.now()}`,
-      })
-      .catch((err: unknown) => {
-        logWarn(`[builderforce] ${payload.sourceType} dispatch failed: ${String(err)}`);
-      });
-  }
-
   /**
    * BuilderForce-V2 engine path. Runs the Claude Agent SDK against the workspace,
    * forwarding its events onto the same relay frames the V1 loop emits
    * (chat.message for assistant text, tool.audit for tool calls) so the portal
    * renders both engines identically, then reports the terminal execution state.
    */
-  private async runV2Engine(
-    payload: {
-      executionId?: number;
-      taskId?: number;
-      title?: string;
-      model?: string;
-      sourceType: string;
-      repo?: { repoId: string; defaultBranch: string | null };
-      agentLabel?: string;
-    },
-    prompt: string,
-  ): Promise<void> {
+  private async runV2Engine(payload: EngineDispatch, prompt: string): Promise<void> {
     const agentLabel = payload.agentLabel?.trim() || "BuilderForce-V2";
     const sinks: V2RunnerSinks = {
       onAssistantText: (text) => {
@@ -407,7 +357,12 @@ export class BuilderforceRelayService implements IRelayService {
         this.sendToRelay({ type: "chat.message", role: "assistant", text, session: "main" });
         // …and durable persistence, so the V2 run's natural-language turns show on
         // the Logs/Timeline after it ends (parity with V1's `agent.message`).
-        void this.persistToolAudit({ executionId: payload.executionId, toolName: "agent.message", category: "message", result: text });
+        void this.persistToolAudit({
+          executionId: payload.executionId,
+          toolName: "agent.message",
+          category: "message",
+          result: text,
+        });
       },
       onToolUse: (toolName, toolCallId, args) => {
         // Live view (fans out to subscribers)…
@@ -421,7 +376,13 @@ export class BuilderforceRelayService implements IRelayService {
           ts: new Date().toISOString(),
         });
         // …and durable persistence, so the run stays on the timeline after it ends.
-        void this.persistToolAudit({ executionId: payload.executionId, toolName, toolCallId, category: "v2", args });
+        void this.persistToolAudit({
+          executionId: payload.executionId,
+          toolName,
+          toolCallId,
+          category: "v2",
+          args,
+        });
       },
       onResult: () => {
         /* terminal state is reported below from the runner's return value */
@@ -438,26 +399,38 @@ export class BuilderforceRelayService implements IRelayService {
 
     // Register an abort handle so an `execution.cancel` frame can stop this run.
     const abortController = new AbortController();
-    if (payload.executionId != null) { this.v2Aborts.set(payload.executionId, abortController); }
+    if (payload.executionId != null) {
+      this.v2Aborts.set(payload.executionId, abortController);
+    }
 
+    // Drive the on-prem loop through the SHARED `AgentEngine` contract (the same
+    // interface the cloud `CloudToolLoopEngine` implements) — so a future V3 is a
+    // sibling `AgentEngine` constructed here, not a rewrite of this path (PRD 12).
+    const engine: AgentEngine = new ClaudeSdkAgentEngine({
+      cwd,
+      // SDK posts Messages to `${anthropicBaseUrl}/v1/messages`; the gateway's
+      // Anthropic-Messages endpoint lives under /llm.
+      anthropicBaseUrl: `${normalizeBaseUrl(this.opts.baseUrl)}/llm`,
+      gatewayAuthKey: this.opts.apiKey,
+      abortController,
+      sinks,
+    });
     let result: { ok: boolean; text: string };
     try {
-      result = await runClaudeAgentSdkV2(
-        {
-          prompt,
-          model: payload.model,
-          cwd,
-          // SDK posts Messages to `${anthropicBaseUrl}/v1/messages`; the gateway's
-          // Anthropic-Messages endpoint lives under /llm.
-          anthropicBaseUrl: `${normalizeBaseUrl(this.opts.baseUrl)}/llm`,
-          gatewayAuthKey: this.opts.apiKey,
-          appendSystemPrompt,
-          abortController,
-        },
-        sinks,
-      );
+      const run = await engine.run({
+        // Assigned Skills/Personas/Content ride as the system prompt (the SDK
+        // engine folds it into the prompt); the task message is the user content.
+        systemPrompt: appendSystemPrompt,
+        userContent: prompt,
+        model: payload.model,
+        signal: abortController.signal,
+        ...(payload.policyGates?.length ? { policy: { gates: payload.policyGates } } : {}),
+      });
+      result = { ok: run.ok, text: run.output };
     } finally {
-      if (payload.executionId != null) { this.v2Aborts.delete(payload.executionId); }
+      if (payload.executionId != null) {
+        this.v2Aborts.delete(payload.executionId);
+      }
     }
 
     // If the run was cancelled, the API already flipped the row to CANCELLED (a
@@ -472,7 +445,10 @@ export class BuilderforceRelayService implements IRelayService {
     await this.emitTaskChanges(cwd, agentLabel, payload.executionId, payload.taskId);
     if (payload.taskId != null && payload.repo?.repoId) {
       await this.commitAndPushTicketBranch(
-        payload.taskId, payload.repo, payload.title ?? `Task ${payload.taskId}`, agentLabel,
+        payload.taskId,
+        payload.repo,
+        payload.title ?? `Task ${payload.taskId}`,
+        agentLabel,
       );
     }
 
@@ -506,7 +482,9 @@ export class BuilderforceRelayService implements IRelayService {
       );
     }
     // Tear the ticket workspace down — the work is committed/pushed, ticket is Done.
-    await fs.rm(dir, { recursive: true, force: true }).catch(() => { /* best-effort */ });
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {
+      /* best-effort */
+    });
   }
 
   /**
@@ -729,13 +707,19 @@ export class BuilderforceRelayService implements IRelayService {
       this.sendToRelay({ type: "event", event, payload });
     });
     // Reclaim ticket workspaces orphaned by a previous crash/kill (a run that
-    // never received task.finalize leaves its clone on disk). Skips the dir of
-    // any run currently in flight. Best-effort; never blocks startup.
+    // never received task.finalize leaves its clone on disk). At startup nothing
+    // is in flight, so no active dir needs protecting. Best-effort; never blocks startup.
     void sweepStaleTaskWorkspaces(this.opts.workspaceDir ?? process.cwd(), {
-      activeTaskIds: this.pendingTaskRun?.taskId != null ? [this.pendingTaskRun.taskId] : [],
+      activeTaskIds: [],
     })
-      .then(({ removed }) => { if (removed.length) { logWarn(`[builderforce] swept ${removed.length} stale ticket workspace(s)`); } })
-      .catch(() => { /* best-effort */ });
+      .then(({ removed }) => {
+        if (removed.length) {
+          logWarn(`[builderforce] swept ${removed.length} stale ticket workspace(s)`);
+        }
+      })
+      .catch(() => {
+        /* best-effort */
+      });
     this.connectUpstream();
     this.connectLocalGateway();
     this.startRemoteResultTracking();
@@ -944,14 +928,18 @@ export class BuilderforceRelayService implements IRelayService {
       case "remote.task": {
         // Peer agentNode delegated a task to this agentNode — execute it as a chat message.
         const task = typeof msg.task === "string" ? msg.task : "";
-        const fromAgentNodeId = typeof msg.fromAgentNodeId === "string" ? msg.fromAgentNodeId : "unknown";
+        const fromAgentNodeId =
+          typeof msg.fromAgentNodeId === "string" ? msg.fromAgentNodeId : "unknown";
         const correlationId = typeof msg.correlationId === "string" ? msg.correlationId : "";
-        const callbackAgentNodeId = typeof msg.callbackAgentNodeId === "string" ? msg.callbackAgentNodeId : "";
+        const callbackAgentNodeId =
+          typeof msg.callbackAgentNodeId === "string" ? msg.callbackAgentNodeId : "";
         const callbackBaseUrl = typeof msg.callbackBaseUrl === "string" ? msg.callbackBaseUrl : "";
         if (!task) {
           break;
         }
-        logDebug(`[builderforce-relay] remote task from agentNode ${fromAgentNodeId}: ${task.slice(0, 80)}…`);
+        logDebug(
+          `[builderforce-relay] remote task from agentNode ${fromAgentNodeId}: ${task.slice(0, 80)}…`,
+        );
         // Track correlation so we can send result back when the session completes.
         const sessionKey = correlationId ? `remote-${correlationId}` : "main";
         if (correlationId && callbackAgentNodeId) {
@@ -1024,23 +1012,36 @@ export class BuilderforceRelayService implements IRelayService {
           break;
         }
 
-        // Engine selector + model are resolved by the API (engine from the cloud
-        // agent record, model from the run payload).
-        const engine = typeof msg.engine === "string" ? msg.engine : "builderforce-v1";
+        // One engine — the current version. Any legacy `engine` on the message is
+        // ignored (resolveEngine maps everything to the current runner).
+        const engine = typeof msg.engine === "string" ? msg.engine : CURRENT_ENGINE_ID;
         let model: string | undefined;
+        let policyGates: PolicyGate[] = [];
         try {
-          const p = typeof msg.payload === "string" ? (JSON.parse(msg.payload) as { model?: unknown }) : null;
+          const p =
+            typeof msg.payload === "string"
+              ? (JSON.parse(msg.payload) as { model?: unknown; policyGates?: unknown })
+              : null;
           if (p && typeof p.model === "string" && p.model.trim()) model = p.model.trim();
+          // Governance gates ride the same payload string the cloud surfaces read, so
+          // a self-hosted run enforces the SAME compiled policy (parsed identically).
+          if (p) policyGates = coercePolicyGates(p.policyGates);
         } catch {
-          /* payload not JSON — use the engine default model */
+          /* payload not JSON — use the engine default model + no gates */
         }
 
         // Repo coords (for cloning into the ticket workspace) + executing agent
         // label (for change traceability) are resolved by the API.
-        const repoRaw = msg.repo && typeof msg.repo === "object" ? (msg.repo as Record<string, unknown>) : null;
-        const repo = repoRaw && typeof repoRaw.repoId === "string"
-          ? { repoId: repoRaw.repoId, defaultBranch: typeof repoRaw.defaultBranch === "string" ? repoRaw.defaultBranch : null }
-          : undefined;
+        const repoRaw =
+          msg.repo && typeof msg.repo === "object" ? (msg.repo as Record<string, unknown>) : null;
+        const repo =
+          repoRaw && typeof repoRaw.repoId === "string"
+            ? {
+                repoId: repoRaw.repoId,
+                defaultBranch:
+                  typeof repoRaw.defaultBranch === "string" ? repoRaw.defaultBranch : null,
+              }
+            : undefined;
         const agentLabel = typeof msg.agentLabel === "string" ? msg.agentLabel : undefined;
 
         logWarn(
@@ -1058,6 +1059,7 @@ export class BuilderforceRelayService implements IRelayService {
           model,
           repo,
           agentLabel,
+          ...(policyGates.length ? { policyGates } : {}),
         });
         void this.syncAssignmentContext(type);
         break;
@@ -1074,11 +1076,9 @@ export class BuilderforceRelayService implements IRelayService {
         const injection = buildSteeringInjection(executionId, msg.text, Date.now());
         if (!injection) break;
         logWarn(`[builderforce] steering message for execution ${executionId ?? "?"}`);
-        this.gatewayClient
-          ?.request("chat.send", injection)
-          .catch((err: unknown) => {
-            logWarn(`[builderforce] execution.message dispatch failed: ${String(err)}`);
-          });
+        this.gatewayClient?.request("chat.send", injection).catch((err: unknown) => {
+          logWarn(`[builderforce] execution.message dispatch failed: ${String(err)}`);
+        });
         break;
       }
 
@@ -1094,7 +1094,13 @@ export class BuilderforceRelayService implements IRelayService {
         logWarn(`[builderforce] cancel execution ${executionId ?? "?"}`);
         if (executionId != null) {
           const ctrl = this.v2Aborts.get(executionId);
-          if (ctrl) { try { ctrl.abort(); } catch { /* ignore */ } }
+          if (ctrl) {
+            try {
+              ctrl.abort();
+            } catch {
+              /* ignore */
+            }
+          }
         }
         // V1 (pi) runs out of the live `main` session — abort the current turn.
         // The API already set the row to CANCELLED (terminal) before relaying
@@ -1109,12 +1115,14 @@ export class BuilderforceRelayService implements IRelayService {
         const finalizeTaskId =
           typeof msg.taskId === "number" && Number.isFinite(msg.taskId) ? msg.taskId : undefined;
         if (finalizeTaskId == null) break;
-        const repoRaw = msg.repo && typeof msg.repo === "object" ? (msg.repo as Record<string, unknown>) : null;
+        const repoRaw =
+          msg.repo && typeof msg.repo === "object" ? (msg.repo as Record<string, unknown>) : null;
         void this.finalizeTask({
           taskId: finalizeTaskId,
           title: typeof msg.title === "string" ? msg.title : undefined,
           repoId: repoRaw && typeof repoRaw.repoId === "string" ? repoRaw.repoId : undefined,
-          defaultBranch: repoRaw && typeof repoRaw.defaultBranch === "string" ? repoRaw.defaultBranch : null,
+          defaultBranch:
+            repoRaw && typeof repoRaw.defaultBranch === "string" ? repoRaw.defaultBranch : null,
         });
         break;
       }
@@ -1139,7 +1147,10 @@ export class BuilderforceRelayService implements IRelayService {
         const approvalId = typeof msg.approvalId === "string" ? msg.approvalId : "";
         const decision = typeof msg.status === "string" ? msg.status : "";
         const responseText = typeof msg.responseText === "string" ? msg.responseText : undefined;
-        if (approvalId && (decision === "approved" || decision === "rejected" || decision === "answered")) {
+        if (
+          approvalId &&
+          (decision === "approved" || decision === "rejected" || decision === "answered")
+        ) {
           logWarn(`[builderforce-relay] approval.decision ${approvalId}: ${decision}`);
           resolveApproval(approvalId, decision, responseText);
         }
@@ -1244,8 +1255,6 @@ export class BuilderforceRelayService implements IRelayService {
         if (resolveCodingSession(session, { ok: true, text })) {
           return;
         }
-        // Attribute the V1 run's file changes to its agent before completing.
-        this.flushPendingTaskChanges();
         // Report execution completed to Builderforce if one is pending.
         if (this.pendingExecutionId != null) {
           const eid = this.pendingExecutionId;
@@ -1268,8 +1277,6 @@ export class BuilderforceRelayService implements IRelayService {
         if (resolveCodingSession(session, { ok: false, text: text ?? "agent error" })) {
           return;
         }
-        // Attribute any partial changes the V1 run made before it errored.
-        this.flushPendingTaskChanges();
         // Report execution failed to Builderforce if one is pending.
         if (this.pendingExecutionId != null) {
           const eid = this.pendingExecutionId;

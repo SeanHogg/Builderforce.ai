@@ -12,72 +12,36 @@
  * Free-pool rotation. Authenticates with `GOOGLE_API_KEY`.
  */
 
-import {
-  executeChatCompletion,
-  executeChatCompletionStream,
-  type AiModelTier,
-  type VendorCallParams,
-  type VendorCallResult,
-  type VendorModelEntry,
-  type VendorModule,
-  type VendorStreamResult,
-} from './types';
+import { createOpenAICompatibleVendor } from './openaiCompatible';
+import type { VendorModelEntry, VendorModule } from './types';
 
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 
+// All Gemini 2.5 models are natively multimodal (image input), support function
+// calling, and emit structured output — declare it so the shape-router
+// (`reorderPoolByShape`/`capabilitiesForModel`) recognises them. Without this an
+// image request treated them as NON-vision and demoted them below the small
+// declared vision models, which returned an empty turn → the user's "No response"
+// on a pasted image. (The Gemini strict-`json_schema` ceiling is handled
+// separately by `isLowSchemaCeilingModel`, not by withholding `structured_output`.)
+const GEMINI_CAPS: VendorModelEntry['capabilities'] = ['tools', 'structured_output', 'vision'];
+
 const CATALOG: ReadonlyArray<VendorModelEntry> = [
-  { id: 'gemini-2.5-flash',      tier: 'PREMIUM', label: 'Gemini 2.5 Flash (Google AI)',      brand: 'Google' },
-  { id: 'gemini-2.5-flash-lite', tier: 'PREMIUM', label: 'Gemini 2.5 Flash Lite (Google AI)', brand: 'Google' },
-  { id: 'gemini-2.5-pro',        tier: 'PREMIUM', label: 'Gemini 2.5 Pro (Google AI)',        brand: 'Google' },
+  { id: 'gemini-2.5-flash',      tier: 'PREMIUM', label: 'Gemini 2.5 Flash (Google AI)',      brand: 'Google', capabilities: GEMINI_CAPS },
+  { id: 'gemini-2.5-flash-lite', tier: 'PREMIUM', label: 'Gemini 2.5 Flash Lite (Google AI)', brand: 'Google', capabilities: GEMINI_CAPS },
+  { id: 'gemini-2.5-pro',        tier: 'PREMIUM', label: 'Gemini 2.5 Pro (Google AI)',        brand: 'Google', capabilities: GEMINI_CAPS },
 ];
 
-const CATALOG_BY_ID = new Map(CATALOG.map((m) => [m.id, m]));
-
-function tierForGoogleAiModel(modelId: string): AiModelTier {
-  return CATALOG_BY_ID.get(modelId)?.tier ?? 'PREMIUM';
-}
-
-function buildBody(params: VendorCallParams): Record<string, unknown> {
-  const { model, messages, tools, toolChoice, maxTokens, temperature, topP, extraBody } = params;
-  return {
-    model,
-    messages,
-    ...(tools ? { tools } : {}),
-    ...(toolChoice ? { tool_choice: toolChoice } : {}),
-    ...(maxTokens != null ? { max_tokens: maxTokens } : {}),
-    ...(temperature != null ? { temperature } : {}),
-    ...(topP != null ? { top_p: topP } : {}),
-    ...(extraBody ?? {}),
-  };
-}
-
-export const googleAiModule: VendorModule = {
+// Google AI is a plain OpenAI-compatible endpoint (Bearer key, standard chat body
+// + response), so it's built from the shared factory like nvidia/cerebras. Unlike
+// the commercial factory vendors it stays `autoRoute: true` (it's the premium
+// fallback at the tail of every cascade) and defaults non-catalog ids to PREMIUM
+// (all Gemini here is paid). tierFor/apiKeyFrom/call/callStream are the factory's.
+export const googleAiModule: VendorModule = createOpenAICompatibleVendor({
   id: 'googleai',
+  baseUrl: ENDPOINT,
+  apiKeyEnv: 'GOOGLE_API_KEY',
   catalog: CATALOG,
-  tierFor: tierForGoogleAiModel,
-  apiKeyFrom(env) { return env.GOOGLE_API_KEY ?? null; },
-  async call(params: VendorCallParams): Promise<VendorCallResult> {
-    return executeChatCompletion({
-      vendorId: 'googleai',
-      endpoint: ENDPOINT,
-      apiKey: params.apiKey,
-      model: params.model,
-      body: { ...buildBody(params), stream: false },
-      ...(params.title ? { title: params.title } : {}),
-      ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
-      ...(params.signal ? { signal: params.signal } : {}),
-    });
-  },
-  async callStream(params: VendorCallParams): Promise<VendorStreamResult> {
-    return executeChatCompletionStream({
-      vendorId: 'googleai',
-      endpoint: ENDPOINT,
-      apiKey: params.apiKey,
-      model: params.model,
-      body: buildBody(params),
-      ...(params.title ? { title: params.title } : {}),
-      ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
-      ...(params.signal ? { signal: params.signal } : {}),
-    });
-  },
-};
+  defaultTier: 'PREMIUM',
+  autoRoute: true,
+});

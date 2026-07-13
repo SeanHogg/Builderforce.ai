@@ -12,6 +12,8 @@ Most AI fine-tuning workflows look the same: upload your data to a cloud provide
 
 Here's how we run LoRA training directly in your browser tab using WebGPU compute shaders.
 
+![LoRA decomposition: the frozen base weights W₀ plus the product of two small trainable adapter matrices B and A equals the adapted weights W — with stat cards for ~10,000× fewer trainable parameters, up to 2B parameters in-browser, and zero cloud GPU bills](/blog/webgpu-lora.svg)
+
 ## Background: What is LoRA?
 
 **LoRA** (Low-Rank Adaptation) is a parameter-efficient fine-tuning technique introduced by Hu et al. in 2021. Instead of updating all the weights in a large language model, LoRA freezes the original weights and injects small **adapter matrices** into each attention layer.

@@ -1,17 +1,21 @@
 /**
  * Builderforce auth + QA API helpers for the harness.
  *
- * Logs into the real auth API as the dedicated QA user, selects a workspace,
- * and exchanges for a tenant-scoped JWT — exactly what a real browser session
- * carries. The tokens are then injected into the browser's storageState
- * (see global-setup.ts) so generated specs run already-authenticated.
+ * Auth has two modes:
+ *   1. Agent mode (production) — the platform dispatches this agent and injects
+ *      a short-lived tenant-scoped token via BF_AGENT_TOKEN. The harness uses it
+ *      directly; NO human email/password is involved. This is the normal path
+ *      when the Agentic Tester runs as a scheduled/triggered platform agent.
+ *   2. Operator mode (local dev / manual) — BF_QA_EMAIL + BF_QA_PASSWORD log a
+ *      dedicated QA user in and exchange for a tenant token.
  *
- * Required env:
+ * Env:
  *   BF_API_URL       default https://api.builderforce.ai
  *   BF_BASE_URL      the app under test, e.g. https://builderforce.ai
- *   BF_QA_EMAIL      QA user email
- *   BF_QA_PASSWORD   QA user password
- *   BF_QA_TENANT_ID  optional — workspace to select (else the first one)
+ *   BF_AGENT_TOKEN   tenant-scoped JWT injected by the platform (agent mode)
+ *   BF_QA_EMAIL      QA user email          (operator mode)
+ *   BF_QA_PASSWORD   QA user password        (operator mode)
+ *   BF_QA_TENANT_ID  optional — workspace to select (operator mode)
  */
 
 export interface BfSession {
@@ -62,8 +66,38 @@ async function getJson<T>(path: string, token: string): Promise<T> {
 
 interface Tenant { id: number; name: string; slug?: string; role?: string }
 
-/** Full login → workspace-select → tenant-token exchange. */
+/** Decode a JWT payload (no verification — we only read tid/sub the platform set). */
+function decodeJwtPayload(token: string): { tid?: number; sub?: string; email?: string } {
+  const part = token.split('.')[1];
+  if (!part) return {};
+  try {
+    const json = Buffer.from(part.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+    return JSON.parse(json) as { tid?: number; sub?: string; email?: string };
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Establish a session.
+ *  - Agent mode: BF_AGENT_TOKEN is a tenant-scoped JWT the platform injected at
+ *    dispatch. Use it directly; the tenant id comes from its `tid` claim. No
+ *    human credentials, no /web/login round-trip.
+ *  - Operator mode: log the QA user in and exchange for a tenant token.
+ */
 export async function login(): Promise<BfSession> {
+  const agentToken = process.env.BF_AGENT_TOKEN?.trim();
+  if (agentToken) {
+    const claims = decodeJwtPayload(agentToken);
+    if (!claims.tid) throw new Error('BF_AGENT_TOKEN has no tenant (tid) claim — not a tenant-scoped token.');
+    return {
+      webToken: agentToken,
+      tenantToken: agentToken,
+      user: { id: claims.sub ?? 'agent:qa-tester', email: claims.email ?? 'agent@builderforce.ai' },
+      tenant: { id: claims.tid, name: 'agent', role: 'developer' },
+    };
+  }
+
   const email = requireEnv('BF_QA_EMAIL');
   const password = requireEnv('BF_QA_PASSWORD');
 
@@ -155,4 +189,79 @@ export interface RunReport {
 
 export async function postRun(session: BfSession, report: RunReport): Promise<void> {
   await postJson('/api/qa/runs', report, session.tenantToken);
+}
+
+// ── Agentic Tester (heatmap-driven exploration) ──────────────────────────────
+// The harness claims a queued exploration, drives a browser through its
+// heat-derived plan, posts captured findings, and reports the outcome. Plan
+// steps are QaStep-shaped; each carries the heat of the zone it targets.
+
+export interface ExplorePlanStep {
+  action: 'goto' | 'click' | 'fill' | 'expect' | 'press' | 'waitFor';
+  selector?: string;
+  route?: string;
+  value?: string;
+  assertion?: string;
+  label?: string;
+  heat?: number;
+}
+
+export interface ExplorationBundle {
+  exploration: { id: string; status: string; projectId: number | null; heatBudget: number } | null;
+  target?: { id: string; name: string; baseUrl: string } | null;
+  credential?: { id: string; label: string; role: string | null; username: string; loginUrl: string | null } | null;
+  plan?: ExplorePlanStep[];
+}
+
+export type ExploreFindingType = 'console' | 'pageerror' | 'network' | 'assertion' | 'crash' | 'navigation';
+
+export interface ExploreFinding {
+  type: ExploreFindingType;
+  severity?: 'low' | 'medium' | 'high' | 'critical';
+  route?: string | null;
+  selector?: string | null;
+  message: string;
+  detail?: string | null;
+  heat?: number;
+  screenshotKey?: string | null;
+}
+
+export interface ExplorationOutcome {
+  status: 'running' | 'passed' | 'failed' | 'error';
+  zonesExplored?: number;
+  browser?: string;
+  targetUrl?: string;
+  commitSha?: string;
+  runKey?: string;
+  summary?: string;
+  errorMessage?: string;
+}
+
+/** Claim a queued exploration (explicit id or oldest queued). Returns a bundle
+ *  with `exploration: null` when there's nothing to run. */
+export async function claimExploration(
+  session: BfSession,
+  opts: { explorationId?: string | null; projectId?: number | null } = {},
+): Promise<ExplorationBundle> {
+  return postJson<ExplorationBundle>('/api/qa/explorations/claim', {
+    explorationId: opts.explorationId ?? undefined,
+    projectId: opts.projectId ?? undefined,
+  }, session.tenantToken);
+}
+
+export async function postFindings(session: BfSession, explorationId: string, findings: ExploreFinding[]): Promise<void> {
+  if (findings.length === 0) return;
+  await postJson(`/api/qa/explorations/${explorationId}/findings`, { findings }, session.tenantToken);
+}
+
+export async function patchExploration(session: BfSession, explorationId: string, outcome: ExplorationOutcome): Promise<void> {
+  const res = await fetch(`${apiUrl()}/api/qa/explorations/${explorationId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.tenantToken}` },
+    body: JSON.stringify(outcome),
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`PATCH exploration failed (${res.status}): ${txt.slice(0, 300)}`);
+  }
 }

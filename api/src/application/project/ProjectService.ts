@@ -1,7 +1,9 @@
 import { IProjectRepository } from '../../domain/project/IProjectRepository';
+import { ITaskRepository } from '../../domain/task/ITaskRepository';
 import { Project } from '../../domain/project/Project';
 import { ProjectId, ProjectStatus, TenantId, asProjectId, asTenantId } from '../../domain/shared/types';
 import { NotFoundError, ConflictError, ForbiddenError } from '../../domain/shared/errors';
+import { buildProjectKey } from './projectKey';
 
 type SourceControlProvider = 'github' | 'bitbucket';
 
@@ -20,6 +22,7 @@ export interface CreateProjectDto {
   githubRepoUrl?: string | null;
   governance?:    string | null;
   modality?:      string | null;
+  origin?:        string | null;
 }
 
 export interface UpdateProjectDto {
@@ -36,6 +39,8 @@ export interface UpdateProjectDto {
   githubRepoUrl?: string | null;
   governance?: string | null;
   modality?: string | null;
+  /** Explicit project deadline (0255). null clears it (falls back to the derived task deadline). */
+  dueDate?: Date | null;
 }
 
 /**
@@ -45,7 +50,15 @@ export interface UpdateProjectDto {
  * Contains no infrastructure concerns (SQL, HTTP, etc.).
  */
 export class ProjectService {
-  constructor(private readonly projects: IProjectRepository) {}
+  /**
+   * `tasks` is optional: it's only needed on the key-change path (re-keying every
+   * task to a renamed Project Key). Call sites that never change a project key
+   * (MCP project.update, delta ingestion) may omit it.
+   */
+  constructor(
+    private readonly projects: IProjectRepository,
+    private readonly tasks?: ITaskRepository,
+  ) {}
 
   async listProjects(tenantId: number): Promise<Project[]> {
     return this.projects.findByTenant(asTenantId(tenantId));
@@ -53,6 +66,26 @@ export class ProjectService {
 
   async findByKey(key: string): Promise<Project | null> {
     return this.projects.findByKey(key);
+  }
+
+  /**
+   * Derive a project key from `name` (via `buildProjectKey`) that is free of
+   * collisions, suffixing `-2`, `-3`, … when the base key is already taken.
+   * Use this for the AUTO-generated key path; an explicitly user-supplied key
+   * keeps the hard `ConflictError` in `createProject` so the user learns their
+   * chosen key is taken. The project key is globally unique, so an unsuffixed
+   * collapse (e.g. every "Untitled" project → `<tid>-PROJECT`) would otherwise
+   * make the second such project fail to create.
+   */
+  async buildUniqueKey(tenantId: number, name: string): Promise<string> {
+    const base = buildProjectKey(tenantId, name);
+    if (!(await this.projects.findByKey(base))) return base;
+    for (let n = 2; n < 1000; n++) {
+      const candidate = `${base}-${n}`.slice(0, 50);
+      if (!(await this.projects.findByKey(candidate))) return candidate;
+    }
+    // Pathological fallback — keep it deterministic and bounded.
+    return `${base}-${tenantId}`.slice(0, 50);
   }
 
   async getProject(id: number | string, callerTenantId: number): Promise<Project> {
@@ -90,6 +123,7 @@ export class ProjectService {
       githubRepoName,
       governance: dto.governance ?? null,
       modality: dto.modality ?? 'designer',
+      origin: dto.origin ?? null,
     });
 
     return this.projects.save(project);
@@ -129,9 +163,26 @@ export class ProjectService {
       githubRepoName,
       governance: dto.governance,
       modality: dto.modality,
+      dueDate: dto.dueDate,
     });
 
-    return this.projects.update(updated);
+    // Detect a Project Key change from the DTO: the domain `update` treats an
+    // omitted key as "leave unchanged", so the intended new key can't be read
+    // back off the saved aggregate. Normalize exactly as the domain does.
+    const newKey = dto.key?.trim() ? dto.key.trim().toUpperCase() : null;
+    const keyChanged = newKey !== null && newKey !== project.key;
+
+    const saved = await this.projects.update(updated);
+
+    // When the Project Key changes, carry every existing task onto the new
+    // prefix (`<oldKey>-071` → `<newKey>-071`) so the whole project — existing
+    // and future tasks alike — shares one key. New tasks already mint off
+    // `project.key`, so this closes the gap for the ones created before the rename.
+    if (keyChanged && this.tasks) {
+      await this.tasks.rekeyProject(saved.id, newKey);
+    }
+
+    return saved;
   }
 
   async deleteProject(id: number, callerTenantId: number): Promise<void> {

@@ -4,18 +4,45 @@
  */
 import { Hono } from 'hono';
 import { neon } from '@neondatabase/serverless';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
+import { invalidateCached, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import {
+  type AgentDescriptor,
+  resolveInferenceMode,
+  buildAgentSystemPrompt,
+  applyAgentSystem,
+} from '../../application/agent/agentPrompt';
+import { recallAgentKnowledge, ingestAgentKnowledge } from '../../application/agent/agentKnowledge';
+import {
+  importRepoToWorkspace,
+  commitWorkspaceToRepo,
+  createRemoteRepo,
+  getRepoStatus,
+} from '../../application/ide/repoBridge';
+import { PUBLIC_LIST_CACHE_KEY } from './workforceRoutes';
 import {
   ideProxy,
+  readProxyChoice,
   type ChatCompletionRequest,
 } from '../../application/llm/LlmProxyService';
+import { evaluateFinetuneOutputs } from '../../application/finetune/evaluateFinetune';
+import { tenantProxyForPlan } from '../../application/llm/tenantProxy';
 import {
   IDE_PREFIX,
   ensureProjectTemplate,
   templateLooksUnseeded,
+  templateNeedsBackfill,
   type SeedableProject,
 } from '../../application/project/projectTemplate';
+import {
+  SITES_PREFIX,
+  HOSTING_APEX,
+  normalizeSubdomain,
+  newVersionToken,
+  invalidateSite,
+  contentTypeFor,
+} from '../../application/ide/siteHosting';
 
 function generateId(): string {
   return crypto.randomUUID();
@@ -86,25 +113,66 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   const r2 = (c: { env: HonoEnv['Bindings'] }) => storage(c.env);
   const getSql = (c: { env: HonoEnv['Bindings'] }) => sql(c.env);
 
+  /**
+   * Ownership gate for every project-scoped IDE resource. Files, sites, datasets,
+   * training jobs and agents are tenant-owned ONLY via projects.tenant_id, so a
+   * request-supplied projectId (or a resource's project_id) MUST be checked — else a
+   * caller could read/overwrite another tenant's source, datasets, models or sites by
+   * guessing an id. Returns false when the project is missing or another tenant's.
+   */
+  const projectInTenant = async (c: { env: HonoEnv['Bindings']; get: (k: 'tenantId') => unknown }, projectId: number): Promise<boolean> => {
+    if (!Number.isInteger(projectId) || projectId < 1) return false;
+    const [row] = await getSql(c)`SELECT 1 FROM projects WHERE id = ${projectId} AND tenant_id = ${c.get('tenantId') as number} LIMIT 1`;
+    return !!row;
+  };
+
+  /** Ownership gate for a training job (and its logs), via its project's tenant. */
+  const trainingJobInTenant = async (c: { env: HonoEnv['Bindings']; get: (k: 'tenantId') => unknown }, jobId: string): Promise<boolean> => {
+    const [job] = await getSql(c)`SELECT project_id FROM ide_training_jobs WHERE id = ${jobId} LIMIT 1`;
+    return !!job && projectInTenant(c, Number(job.project_id));
+  };
+
   // ---------- Project files (R2) — projectId accepts integer or public UUID ----------
   router.get('/projects/:projectId/files', async (c) => {
     const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
     const prefix = `${IDE_PREFIX}projects/${String(projectId)}/`;
     let objects = (await bucket.list({ prefix })).objects ?? [];
 
     // Lazy self-heal: projects created before template seeding (or via the
     // scaffold/upsert paths that historically didn't seed) open with their
-    // template files missing or empty. When the workspace looks unseeded, seed
-    // the vanilla starter so it opens runnable. The cheap in-memory
-    // `templateLooksUnseeded` gate runs first, so healthy projects never incur
-    // the project lookup or any writes — only a freshly-/un-seeded project does.
+    // template files missing or empty. Seed the vanilla starter so it opens
+    // runnable. The cheap in-memory `templateNeedsBackfill` gate runs first, so
+    // healthy projects never incur the project lookup or any writes — only a
+    // freshly-, un-, or PARTIALLY-seeded project does.
     const rel = objects.map(o => ({ path: o.key!.replace(prefix, ''), size: o.size }));
-    if (templateLooksUnseeded(rel)) {
-      const project = await fetchSeedableProject(c.env, projectId);
-      if (project && (await ensureProjectTemplate(bucket, project, rel)) > 0) {
-        objects = (await bucket.list({ prefix })).objects ?? [];
+    // Heal when ANY required scaffold file is missing or empty — not only when
+    // the whole workspace is unseeded. The all-empty gate let partial-empty
+    // projects (e.g. package.json has content but src/main.jsx is a 0-byte
+    // placeholder) slip through, so those files opened BLANK in the editor. The
+    // check is a cheap in-memory scan of the already-listed objects, so healthy
+    // workspaces still pay nothing (no project lookup, no writes).
+    if (templateNeedsBackfill(rel)) {
+      // Prefer importing a linked repo's files (open an existing repo-mapped project
+      // in the IDE like VS Code) — but only for a brand-new/fully-empty workspace,
+      // so we never clobber a repo project's real files. Otherwise template-seed
+      // the missing/empty vanilla files (never overwriting ones that have content).
+      const tenantId = c.get('tenantId') as number;
+      const repoStatus = await getRepoStatus(c.env as Env, tenantId, projectId).catch(() => ({ linked: false as const }));
+      if (repoStatus.linked && repoStatus.repoId) {
+        if (templateLooksUnseeded(rel)) {
+          const imported = await importRepoToWorkspace(c.env as Env, tenantId, projectId, repoStatus.repoId).catch(() => null);
+          if (imported?.ok && imported.imported > 0) {
+            objects = (await bucket.list({ prefix })).objects ?? [];
+          }
+        }
+      } else {
+        const project = await fetchSeedableProject(c.env, projectId);
+        if (project && (await ensureProjectTemplate(bucket, project, rel)) > 0) {
+          objects = (await bucket.list({ prefix })).objects ?? [];
+        }
       }
     }
 
@@ -121,6 +189,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const path = c.req.param('*') || '';
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
     const key = `${IDE_PREFIX}projects/${String(projectId)}/${path}`;
     const obj = await bucket.get(key);
     if (!obj) return c.text('', 200);
@@ -132,6 +201,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const path = c.req.param('*') || '';
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
     const key = `${IDE_PREFIX}projects/${String(projectId)}/${path}`;
     await bucket.put(key, await c.req.text());
     return c.json({ success: true });
@@ -142,9 +212,194 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const path = c.req.param('*') || '';
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
     const key = `${IDE_PREFIX}projects/${String(projectId)}/${path}`;
     await bucket.delete(key);
     return c.json({ success: true });
+  });
+
+  // ---------- Designer ↔ repo bridge (import / commit / create / status) ----------
+  // R2 is the working store; these sync it with a linked git repo using the shared
+  // cloud-native repo helpers (no on-prem host). All tenant-scoped via projectInTenant.
+
+  const repoStatusKey = (projectId: number) => `ide:repo-status:${projectId}`;
+
+  // GET status — the linked default repo + import baseline (cached; invalidated on
+  // any import/commit/create below).
+  router.get('/projects/:projectId/repo-status', async (c) => {
+    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
+    const tenantId = c.get('tenantId') as number;
+    const status = await getOrSetCached(
+      c.env as Env,
+      repoStatusKey(projectId),
+      () => getRepoStatus(c.env as Env, tenantId, projectId),
+      { kvTtlSeconds: 30 },
+    );
+    return c.json(status);
+  });
+
+  // POST import — pull a repo's files into the R2 workspace so it opens in the IDE.
+  router.post('/projects/:projectId/import', async (c) => {
+    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
+    const tenantId = c.get('tenantId') as number;
+    const body = await c.req.json<{ repoId?: string; ref?: string }>().catch(() => ({} as { repoId?: string; ref?: string }));
+    if (!body.repoId) return c.json({ error: 'repoId is required' }, 400);
+    const result = await importRepoToWorkspace(c.env as Env, tenantId, projectId, body.repoId, body.ref);
+    if (!result.ok) return c.json({ error: result.error }, result.status as 400);
+    await invalidateCached(c.env as Env, repoStatusKey(projectId));
+    return c.json(result);
+  });
+
+  // POST commit — push R2 workspace edits back to the repo as a branch + PR.
+  router.post('/projects/:projectId/commit', async (c) => {
+    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
+    const tenantId = c.get('tenantId') as number;
+    const body = await c.req.json<{ repoId?: string; message?: string; branch?: string }>().catch(() => ({} as { repoId?: string; message?: string; branch?: string }));
+    if (!body.repoId) return c.json({ error: 'repoId is required' }, 400);
+    const result = await commitWorkspaceToRepo(c.env as Env, tenantId, projectId, body.repoId, { message: body.message, branch: body.branch });
+    if (!result.ok) return c.json({ error: result.error }, result.status as 400);
+    await invalidateCached(c.env as Env, repoStatusKey(projectId));
+    return c.json(result);
+  });
+
+  // POST create-repo — make a clean remote repo, bind it, push the workspace.
+  router.post('/projects/:projectId/create-repo', async (c) => {
+    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
+    const tenantId = c.get('tenantId') as number;
+    const body = await c.req.json<{ provider?: string; name?: string; private?: boolean; credentialId?: string }>().catch(() => ({} as { provider?: string; name?: string; private?: boolean; credentialId?: string }));
+    if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
+    if (!body.credentialId) return c.json({ error: 'credentialId is required' }, 400);
+    const result = await createRemoteRepo(c.env as Env, tenantId, projectId, {
+      provider: body.provider, name: body.name, private: body.private, credentialId: body.credentialId,
+    });
+    if (!result.ok) return c.json({ error: result.error }, result.status as 400);
+    await invalidateCached(c.env as Env, repoStatusKey(projectId));
+    return c.json(result);
+  });
+
+  // ---------- Site hosting (publish a Designer project to a subdomain) ----------
+
+  // GET /projects/:projectId/site — current published-site record (or null).
+  router.get('/projects/:projectId/site', async (c) => {
+    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
+    const [row] = await getSql(c)`
+      SELECT subdomain, mode, status, version_token, asset_count, total_bytes, published_at
+      FROM project_sites WHERE project_id = ${projectId} LIMIT 1`;
+    if (!row) return c.json({ site: null });
+    return c.json({
+      site: {
+        subdomain: row.subdomain,
+        mode: row.mode,
+        status: row.status,
+        versionToken: row.version_token,
+        assetCount: row.asset_count,
+        totalBytes: row.total_bytes,
+        publishedAt: row.published_at,
+        url: `https://${row.subdomain}.${HOSTING_APEX}`,
+        pathUrl: `/api/sites/${row.subdomain}/`,
+      },
+    });
+  });
+
+  // POST /projects/:projectId/publish — deploy built static assets to a subdomain.
+  // Body: multipart/form-data — optional `subdomain` field + one file part per
+  // asset, the part NAME being the dist-relative path (e.g. `assets/app.4f3a.js`).
+  router.post('/projects/:projectId/publish', async (c) => {
+    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
+    const bucket = r2(c);
+    if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
+
+    const tenantId = c.get('tenantId') as number;
+    const [proj] = await getSql(c)`SELECT tenant_id, name FROM projects WHERE id = ${projectId} LIMIT 1`;
+    if (!proj) return c.json({ error: 'Project not found' }, 404);
+    if (Number(proj.tenant_id) !== tenantId) return c.json({ error: 'Forbidden' }, 403);
+
+    const form = await c.req.formData();
+
+    // Resolve the target subdomain: explicit field, else the existing site's, else
+    // a slug of the project name.
+    const [current] = await getSql(c)`
+      SELECT subdomain FROM project_sites WHERE project_id = ${projectId} LIMIT 1`;
+    const requested = (form.get('subdomain') as string | null)?.trim()
+      || (current?.subdomain as string | undefined)
+      || String(proj.name ?? `app-${projectId}`);
+    const subdomain = normalizeSubdomain(requested);
+    if (!subdomain) {
+      return c.json({ error: 'Invalid or reserved subdomain. Use lowercase letters, numbers and hyphens.' }, 400);
+    }
+
+    // Global uniqueness — a subdomain can't be claimed by another project.
+    const [owner] = await getSql(c)`
+      SELECT project_id FROM project_sites WHERE subdomain = ${subdomain} LIMIT 1`;
+    if (owner && Number(owner.project_id) !== projectId) {
+      return c.json({ error: `Subdomain "${subdomain}" is taken.` }, 409);
+    }
+
+    // Collect the asset parts (everything except the `subdomain` field).
+    const assets: Array<{ path: string; file: File }> = [];
+    for (const [name, value] of form.entries()) {
+      if (name === 'subdomain' || typeof value === 'string') continue;
+      const path = name.replace(/^\/+/, '').replace(/^dist\//, '');
+      if (path) assets.push({ path, file: value });
+    }
+    if (assets.length === 0) {
+      return c.json({ error: 'No assets uploaded. Build the project first.' }, 400);
+    }
+
+    const newPrefix = `${SITES_PREFIX}${subdomain}/`;
+    // Clear any prior contents under this subdomain (stale files from a previous
+    // build, or a different project that just released the name) before writing.
+    for (const obj of (await bucket.list({ prefix: newPrefix })).objects ?? []) {
+      await bucket.delete(obj.key!);
+    }
+    // If this project previously published under a DIFFERENT subdomain, retire it.
+    const oldSub = current?.subdomain as string | undefined;
+    if (oldSub && oldSub !== subdomain) {
+      const oldPrefix = `${SITES_PREFIX}${oldSub}/`;
+      for (const obj of (await bucket.list({ prefix: oldPrefix })).objects ?? []) {
+        await bucket.delete(obj.key!);
+      }
+      await invalidateSite(c.env, oldSub);
+    }
+
+    let totalBytes = 0;
+    for (const { path, file } of assets) {
+      totalBytes += file.size;
+      await bucket.put(newPrefix + path, file.stream(), {
+        httpMetadata: { contentType: contentTypeFor(path) },
+      });
+    }
+
+    const versionToken = newVersionToken();
+    await getSql(c)`
+      INSERT INTO project_sites
+        (project_id, tenant_id, subdomain, mode, status, r2_prefix, version_token, asset_count, total_bytes, published_at)
+      VALUES
+        (${projectId}, ${tenantId}, ${subdomain}, 'static', 'active', ${newPrefix}, ${versionToken}, ${assets.length}, ${totalBytes}, NOW())
+      ON CONFLICT (project_id) DO UPDATE SET
+        subdomain = EXCLUDED.subdomain,
+        r2_prefix = EXCLUDED.r2_prefix,
+        version_token = EXCLUDED.version_token,
+        status = 'active',
+        asset_count = EXCLUDED.asset_count,
+        total_bytes = EXCLUDED.total_bytes,
+        published_at = NOW(),
+        updated_at = NOW()`;
+    await invalidateSite(c.env, subdomain);
+
+    return c.json({
+      subdomain,
+      versionToken,
+      assetCount: assets.length,
+      totalBytes,
+      url: `https://${subdomain}.${HOSTING_APEX}`,
+      pathUrl: `/api/sites/${subdomain}/`,
+    }, 201);
   });
 
   // ---------- Datasets (project_id = API project id, integer) ----------
@@ -152,6 +407,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const raw = c.req.query('projectId');
     if (!raw) return c.json({ error: 'projectId query parameter is required' }, 400);
     const projectId = parseProjectIdInt(raw);
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
     const rows = await getSql(c)`
       SELECT * FROM ide_datasets WHERE project_id = ${projectId} ORDER BY created_at DESC
     `;
@@ -160,13 +416,13 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   router.get('/datasets/:id', async (c) => {
     const [row] = await getSql(c)`SELECT * FROM ide_datasets WHERE id = ${c.req.param('id')}`;
-    if (!row) return c.json({ error: 'Dataset not found' }, 404);
+    if (!row || !(await projectInTenant(c, Number(row.project_id)))) return c.json({ error: 'Dataset not found' }, 404);
     return c.json(row);
   });
 
   router.get('/datasets/:id/download', async (c) => {
-    const [row] = await getSql(c)`SELECT r2_key, status FROM ide_datasets WHERE id = ${c.req.param('id')}`;
-    if (!row) return c.json({ error: 'Dataset not found' }, 404);
+    const [row] = await getSql(c)`SELECT r2_key, status, project_id FROM ide_datasets WHERE id = ${c.req.param('id')}`;
+    if (!row || !(await projectInTenant(c, Number(row.project_id)))) return c.json({ error: 'Dataset not found' }, 404);
     if (row.status !== 'ready') return c.json({ error: 'Dataset is not ready' }, 409);
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
@@ -189,6 +445,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       return c.json({ error: 'projectId, capabilityPrompt, and name are required' }, 400);
     }
     const projectId = typeof body.projectId === 'number' ? body.projectId : parseProjectIdInt(String(body.projectId));
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
     const id = generateId();
     const exampleCount = Math.min(body.exampleCount ?? 50, 200);
     await getSql(c)`
@@ -208,7 +465,9 @@ export function createIdeRoutes(): Hono<HonoEnv> {
             controller.close();
             return;
           }
-          const service = ideProxy(c.env);
+          // Dataset generation is the tenant's own training work → prefer their
+          // connected BYO account (connected flagship leads), else the operator pool.
+          const { proxy: service } = await tenantProxyForPlan(c.env, c.get('tenantId') as number);
           const systemPrompt = `You are an expert AI trainer. Generate instruction-tuning examples. Return ONLY a valid JSON array of objects: {"instruction":"...","input":"...","output":"..."}. No other text.`;
           const userPrompt = `Generate ${exampleCount} diverse examples for: ${body.capabilityPrompt}. Return ONLY the JSON array.`;
           const result = await service.complete({
@@ -268,6 +527,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     }>();
     if (body.projectId == null || !body.baseModel) return c.json({ error: 'projectId and baseModel are required' }, 400);
     const projectId = typeof body.projectId === 'number' ? body.projectId : parseProjectIdInt(String(body.projectId));
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
     const id = generateId();
     await getSql(c)`
       INSERT INTO ide_training_jobs (id, project_id, dataset_id, base_model, lora_rank, epochs, batch_size, learning_rate)
@@ -281,7 +541,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   router.get('/training/:id', async (c) => {
     const [row] = await getSql(c)`SELECT * FROM ide_training_jobs WHERE id = ${c.req.param('id')}`;
-    if (!row) return c.json({ error: 'Training job not found' }, 404);
+    if (!row || !(await projectInTenant(c, Number(row.project_id)))) return c.json({ error: 'Training job not found' }, 404);
     return c.json(row);
   });
 
@@ -294,6 +554,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       errorMessage?: string;
     }>();
     const id = c.req.param('id');
+    if (!(await trainingJobInTenant(c, id))) return c.json({ error: 'Training job not found' }, 404);
     const [row] = await getSql(c)`
       UPDATE ide_training_jobs
       SET status = COALESCE(${body.status ?? null}, status),
@@ -310,6 +571,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   router.get('/training/:id/logs', async (c) => {
+    if (!(await trainingJobInTenant(c, c.req.param('id')))) return c.json({ error: 'Training job not found' }, 404);
     const rows = await getSql(c)`
       SELECT * FROM ide_training_logs WHERE job_id = ${c.req.param('id')} ORDER BY created_at ASC
     `;
@@ -320,6 +582,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const body = await c.req.json<{ epoch?: number; step?: number; loss?: number; message: string }>();
     if (!body.message) return c.json({ error: 'message is required' }, 400);
     const jobId = c.req.param('id');
+    if (!(await trainingJobInTenant(c, jobId))) return c.json({ error: 'Training job not found' }, 404);
     const [row] = await getSql(c)`
       INSERT INTO ide_training_logs (id, job_id, epoch, step, loss, message)
       VALUES (${generateId()}, ${jobId}, ${body.epoch ?? null}, ${body.step ?? null}, ${body.loss ?? null}, ${body.message})
@@ -330,6 +593,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   router.get('/training/:id/logs/stream', async (c) => {
     const jobId = c.req.param('id');
+    if (!(await trainingJobInTenant(c, jobId))) return c.json({ error: 'Training job not found' }, 404);
     const stream = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder();
@@ -362,7 +626,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   router.post('/training/:id/artifact', async (c) => {
     const jobId = c.req.param('id');
     const [job] = await getSql(c)`SELECT project_id FROM ide_training_jobs WHERE id = ${jobId}`;
-    if (!job) return c.json({ error: 'Training job not found' }, 404);
+    if (!job || !(await projectInTenant(c, Number(job.project_id)))) return c.json({ error: 'Training job not found' }, 404);
     const projectId = Number(job.project_id);
     const body = await c.req.arrayBuffer();
     if (!body || body.byteLength === 0) return c.json({ error: 'Empty artifact body' }, 400);
@@ -381,7 +645,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   router.post('/training/:id/evaluate', async (c) => {
     const jobId = c.req.param('id');
     const [job] = await getSql(c)`SELECT * FROM ide_training_jobs WHERE id = ${jobId}`;
-    if (!job) return c.json({ error: 'Training job not found' }, 404);
+    if (!job || !(await projectInTenant(c, Number(job.project_id)))) return c.json({ error: 'Training job not found' }, 404);
     let examples: { instruction: string; input: string; output: string }[] = [];
     if (job.dataset_id) {
       const [ds] = await getSql(c)`SELECT r2_key FROM ide_datasets WHERE id = ${job.dataset_id}`;
@@ -397,9 +661,9 @@ export function createIdeRoutes(): Hono<HonoEnv> {
         }
       }
     }
+    const service = ideProxy(c.env);
     const modelOutputs: string[] = [];
     if (c.env.OPENROUTER_API_KEY && examples.length > 0) {
-      const service = ideProxy(c.env);
       for (const ex of examples) {
         try {
           const result = await service.complete({
@@ -410,17 +674,30 @@ export function createIdeRoutes(): Hono<HonoEnv> {
             stream: false,
             max_tokens: 512,
           } as ChatCompletionRequest);
-          const json = await result.response.json() as { choices?: Array<{ message?: { content?: string } }> };
-          modelOutputs.push(json.choices?.[0]?.message?.content?.trim() ?? '(no output)');
+          const { content } = await readProxyChoice(result);
+          modelOutputs.push(content || '(no output)');
         } catch {
           modelOutputs.push('(Error generating output)');
         }
       }
     }
-    const score = modelOutputs.length > 0 ? 0.85 : 0;
-    const result = { job_id: jobId, score, code_correctness: score, reasoning_quality: score, hallucination_rate: 0.1, details: 'Evaluation complete', created_at: new Date().toISOString() };
-    await getSql(c)`INSERT INTO ide_training_logs (id, job_id, message) VALUES (${generateId()}, ${jobId}, ${`Evaluation complete — score: ${score.toFixed(3)}`})`;
-    return c.json(result);
+    // Real AI-judge scoring against the dataset's expected outputs (replaces the
+    // fabricated flat 0.85). Persist the full breakdown so it's queryable — the
+    // training panel charts correctness/reasoning/hallucination instead of a log.
+    const evaluated = await evaluateFinetuneOutputs(service, examples, modelOutputs);
+    await getSql(c)`
+      UPDATE ide_training_jobs
+      SET eval_score = ${evaluated.score},
+          eval_code_correctness = ${evaluated.code_correctness},
+          eval_reasoning_quality = ${evaluated.reasoning_quality},
+          eval_hallucination_rate = ${evaluated.hallucination_rate},
+          eval_details = ${evaluated.details},
+          evaluated_at = NOW(),
+          updated_at = NOW()
+      WHERE id = ${jobId}
+    `;
+    await getSql(c)`INSERT INTO ide_training_logs (id, job_id, message) VALUES (${generateId()}, ${jobId}, ${`Evaluation complete — score: ${evaluated.score.toFixed(3)}`})`;
+    return c.json({ job_id: jobId, ...evaluated, created_at: new Date().toISOString() });
   });
 
   // ---------- Agents (workforce registry) ----------
@@ -460,6 +737,10 @@ export function createIdeRoutes(): Hono<HonoEnv> {
         ${packageVersion}, ${mambaStateJson}::jsonb, ${inferenceMode})
     `;
     const [row] = await getSql(c)`SELECT * FROM ide_agents WHERE id = ${id}`;
+    // Publishing a trained agent (status 'active', carries its eval_score) makes it
+    // appear in the public workforce registry — drop the cached listing so the new
+    // agent and its evaluation score show up immediately.
+    await invalidateCached(c.env as Env, PUBLIC_LIST_CACHE_KEY);
     return c.json(row, 201);
   });
 
@@ -509,6 +790,10 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   router.put('/agents/:id/mamba-state', async (c) => {
     const agentId = c.req.param('id');
+    // Owner-only write: an agent's brain state may only be overwritten by the tenant
+    // whose project owns it (reads stay marketplace-public for hiring/inference).
+    const [owner] = await getSql(c)`SELECT project_id FROM ide_agents WHERE id = ${agentId} LIMIT 1`;
+    if (!owner || !(await projectInTenant(c, Number(owner.project_id)))) return c.json({ error: 'Agent not found' }, 404);
     const snapshot = await c.req.json();
     const required = ['data', 'dim', 'order', 'channels', 'step'];
     for (const key of required) {
@@ -539,32 +824,32 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const [agent] = await getSql(c)`SELECT * FROM ide_agents WHERE id = ${agentId}`;
     if (!agent) return c.json({ error: 'Agent not found' }, 404);
 
-    const inferenceMode = (agent.inference_mode as string) ?? 'base';
-    let messages = body.messages.map((m) => ({ role: m.role as 'system' | 'user' | 'assistant', content: m.content }));
-
-    // Inject Mamba state as memory context into system prompt (v1-style: no WebGPU needed)
-    if (agent.mamba_state) {
-      const snap = agent.mamba_state as { step?: number; data?: number[] };
-      const signal = snap.data ? snap.data.slice(0, 4).map((v: number) => v.toFixed(3)).join(',') : '';
-      const memoryLine = `[Memory: step=${snap.step ?? 0} signal=${signal} context="persistent agent state"]`;
-      const agentSystem = `You are ${agent.name as string}, ${agent.title as string}. ${agent.bio as string}\n\nSkills: ${Array.isArray(agent.skills) ? (agent.skills as string[]).join(', ') : agent.skills}\n\n${memoryLine}`;
-      const existing = messages.find((m) => m.role === 'system');
-      if (existing) {
-        messages = messages.map((m) => m.role === 'system' ? { ...m, content: agentSystem + '\n\n' + m.content } : m);
-      } else {
-        messages = [{ role: 'system', content: agentSystem }, ...messages];
-      }
-    } else {
-      const agentSystem = `You are ${agent.name as string}, ${agent.title as string}. ${agent.bio as string}\n\nSkills: ${Array.isArray(agent.skills) ? (agent.skills as string[]).join(', ') : agent.skills}`;
-      const existing = messages.find((m) => m.role === 'system');
-      if (!existing) {
-        messages = [{ role: 'system', content: agentSystem }, ...messages];
-      }
-    }
+    // Recall grounded context from the agent's ingested proprietary knowledge,
+    // keyed on the latest user message. '' when the agent has no knowledge or
+    // nothing is relevant (read-through cached; invalidated on re-ingest).
+    const latestUser = [...body.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+    const recalledContext = await recallAgentKnowledge(c.env, getSql(c), agentId, latestUser);
+    const descriptor: AgentDescriptor = {
+      name: agent.name as string,
+      title: agent.title as string,
+      bio: agent.bio as string,
+      skills: agent.skills as string[] | string | null,
+      r2_artifact_key: agent.r2_artifact_key as string | null,
+      mamba_state: agent.mamba_state,
+      recalledContext,
+    };
+    const inferenceMode = (agent.inference_mode as string) ?? resolveInferenceMode(descriptor);
+    const baseMessages = body.messages.map((m) => ({ role: m.role as 'system' | 'user' | 'assistant', content: m.content }));
+    // Persona + recalled-knowledge + Mamba-memory system prompt is built by the
+    // shared lowering (same helper as validate / the gateway).
+    const messages = applyAgentSystem(baseMessages, buildAgentSystemPrompt(descriptor));
 
     const logId = generateId();
     const startMs = Date.now();
-    const service = ideProxy(c.env);
+    // Workforce/hired-agent inference is the tenant's agent doing its job → run on the
+    // tenant's connected BYO account when present (connected flagship leads), else the
+    // operator pool. No explicit model here, so complete() seeds the BYO flagship.
+    const { proxy: service } = await tenantProxyForPlan(c.env, c.get('tenantId') as number);
     let status = 'ok';
     let errorMessage: string | null = null;
     try {
@@ -591,6 +876,82 @@ export function createIdeRoutes(): Hono<HonoEnv> {
         VALUES (${logId}, ${agentId}, ${'builderforce/workforce-' + agentId}, ${Date.now() - startMs}, ${status}, ${errorMessage}, ${inferenceMode}, NOW())
       `;
       return c.json({ error: errorMessage }, 502);
+    }
+  });
+
+  // ── Knowledge ingestion ──────────────────────────────────────────────────
+  // Ingest proprietary documents for a published agent: chunk → store → make
+  // recallable at inference (grounded context). Replace semantics — re-ingesting
+  // supersedes the agent's prior knowledge set. Body: { text?, documents?[] }.
+  router.post('/agents/:id/ingest', async (c) => {
+    const agentId = c.req.param('id');
+    const [agent] = await getSql(c)`SELECT id FROM ide_agents WHERE id = ${agentId}`;
+    if (!agent) return c.json({ error: 'Agent not found' }, 404);
+    const body = await c.req.json<{ text?: string; documents?: Array<{ name?: string; text?: string }> }>();
+    const docs = [
+      ...(body.text?.trim() ? [{ text: body.text }] : []),
+      ...((body.documents ?? []).filter((d): d is { name?: string; text: string } => Boolean(d?.text?.trim()))),
+    ];
+    if (docs.length === 0) return c.json({ error: 'text or documents required' }, 400);
+    const chunks = await ingestAgentKnowledge(c.env, getSql(c), agentId, docs);
+    return c.json({ chunks });
+  });
+
+  // ── Pre-publish validation ───────────────────────────────────────────────
+  // A user validates a freshly-trained model by CALLING it via API before it can
+  // be published to the Workforce Registry. Runs one non-streaming test inference
+  // against the CANDIDATE descriptor (no agent row required yet) and returns the
+  // sample output + latency + resolved inference mode. The publish UI gates the
+  // "Publish" button on a successful response here. Uses the SAME persona/memory
+  // prompt builder as the live chat endpoint, so a green validate predicts live
+  // behaviour rather than testing a different code path.
+  router.post('/agents/validate', async (c) => {
+    const body = await c.req.json<{
+      name: string;
+      title?: string;
+      bio?: string;
+      skills?: string[] | string;
+      base_model: string;
+      r2_artifact_key?: string | null;
+      mamba_state?: unknown;
+      prompt?: string;
+    }>();
+    if (!c.env.OPENROUTER_API_KEY?.trim()) return c.json({ ok: false, error: 'LLM not configured' }, 503);
+    if (!body.name?.trim() || !body.base_model?.trim()) {
+      return c.json({ ok: false, error: 'name and base_model are required' }, 400);
+    }
+
+    const descriptor: AgentDescriptor = {
+      name: body.name,
+      title: body.title ?? '',
+      bio: body.bio ?? '',
+      skills: body.skills ?? [],
+      r2_artifact_key: body.r2_artifact_key ?? null,
+      mamba_state: body.mamba_state,
+    };
+    const inferenceMode = resolveInferenceMode(descriptor);
+    const prompt = body.prompt?.trim() || 'In one sentence, introduce yourself and your single strongest skill.';
+    const messages = applyAgentSystem([{ role: 'user', content: prompt }], buildAgentSystemPrompt(descriptor));
+
+    const startMs = Date.now();
+    try {
+      const result = await ideProxy(c.env).complete({ messages, stream: false });
+      const latencyMs = Date.now() - startMs;
+      const json = (await result.response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+      const sample = json.choices?.[0]?.message?.content?.trim() ?? '';
+      // The validation RAN; an empty/failed model response is a validation result
+      // (ok:false), not a transport error — return 200 so the client reads it
+      // uniformly and the publish gate stays closed.
+      if (!sample) return c.json({ ok: false, error: 'Model returned an empty response', latency_ms: latencyMs });
+      return c.json({
+        ok: true,
+        inference_mode: inferenceMode,
+        latency_ms: latencyMs,
+        model_ref: 'builderforce/workforce-candidate',
+        sample,
+      });
+    } catch (err) {
+      return c.json({ ok: false, error: err instanceof Error ? err.message : String(err) });
     }
   });
 

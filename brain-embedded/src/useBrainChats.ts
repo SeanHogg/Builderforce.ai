@@ -10,11 +10,41 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useBrainConfig } from './config';
 import type { BrainChat } from './types';
 
+/** The placeholder title `create()` stamps on an untitled chat. A chat still carrying
+ *  it has never been named, so {@link deriveChatTitle}-based auto-titling may replace it
+ *  (a user/seed-provided title never matches this and is left alone). */
+export const DEFAULT_CHAT_TITLE = 'New chat';
+
+/**
+ * Derive a short, human chat title from the first user message — "what the chat is
+ * about" — so a conversation stops showing as "New chat" the moment it starts. Pure and
+ * LLM-free (no cost, instant, deterministic): first non-empty line, whitespace
+ * collapsed, trimmed to ~60 chars on a word boundary. Returns '' when there's nothing
+ * usable (so the caller leaves the placeholder in place).
+ */
+export function deriveChatTitle(text: string): string {
+  const firstLine = (text.split('\n').find((l) => l.trim()) ?? '').replace(/\s+/g, ' ').trim();
+  if (!firstLine) return '';
+  if (firstLine.length <= 60) return firstLine;
+  const cut = firstLine.slice(0, 60);
+  const lastSpace = cut.lastIndexOf(' ');
+  return `${(lastSpace > 30 ? cut.slice(0, lastSpace) : cut).trim()}…`;
+}
+
 export interface UseBrainChatsOptions {
   /** Dropdown filter — id string, 'none', or null (all). Ignored when `pinnedProjectId` is set. */
   filterProjectId?: string | null;
   /** Project pages: lock the list (and new chats) to this project; no filter UI. */
   pinnedProjectId?: number | null;
+  /**
+   * Controlled active chat. When provided (not `undefined`), the active chat id
+   * is owned by the caller instead of internal state — so two co-mounted Brain
+   * instances (e.g. the IDE Designer left-panel and the floating drawer) can
+   * share one selection via a common store. Pair with `onActiveChatChange`.
+   */
+  activeChatId?: number | null;
+  /** Controlled-mode setter, called whenever the hook would change the selection. */
+  onActiveChatChange?: (id: number | null) => void;
 }
 
 export interface UseBrainChats {
@@ -28,6 +58,13 @@ export interface UseBrainChats {
   /** Create a chat (defaults project to the active filter/pin) and select it. */
   create(opts?: { title?: string; projectId?: number | null }): Promise<BrainChat | null>;
   rename(id: number, title: string): Promise<void>;
+  /**
+   * Auto-name a still-untitled chat (title === {@link DEFAULT_CHAT_TITLE}) from its
+   * first user message, so "New chat" becomes the topic once the conversation begins.
+   * No-op when the chat was already given a real title (user rename / task seed), so it
+   * never clobbers an intentional name. Wired to the conversation's first-turn hook.
+   */
+  autoTitle(id: number, firstUserText: string): Promise<void>;
   summarize(id: number): Promise<void>;
   remove(id: number): Promise<void>;
   assignToProject(id: number, projectId: number | null): Promise<void>;
@@ -38,12 +75,36 @@ export interface UseBrainChats {
 
 export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats {
   const { persistence } = useBrainConfig();
-  const { filterProjectId, pinnedProjectId } = options;
+  const { filterProjectId, pinnedProjectId, activeChatId: controlledActiveId, onActiveChatChange } = options;
   const [chats, setChats] = useState<BrainChat[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeChatId, setActiveChatId] = useState<number | null>(null);
+  const [internalActiveId, setInternalActiveId] = useState<number | null>(null);
   const assigningRef = useRef(false);
+  // Latest chats in a ref so `autoTitle` can read the current title without a stale
+  // closure (and without re-creating the callback on every list change).
+  const chatsRef = useRef<BrainChat[]>(chats);
+  chatsRef.current = chats;
+  // Chats we've already auto-titled this session — a single-flight guard so the
+  // first-turn hook firing twice (e.g. StrictMode / rapid re-render) can't double-rename.
+  const autoTitledRef = useRef<Set<number>>(new Set());
+
+  // Controlled when the caller passes `activeChatId` (even null); otherwise the
+  // hook owns the selection. Either way `setActiveChatId` is the single mutation
+  // point so co-mounted instances can share one active chat via a common store.
+  const isControlled = controlledActiveId !== undefined;
+  const activeChatId = isControlled ? (controlledActiveId ?? null) : internalActiveId;
+  // Keep the latest active id in a ref so callbacks can read it without being
+  // re-created on every selection change (and without stale-closure bugs).
+  const activeIdRef = useRef(activeChatId);
+  activeIdRef.current = activeChatId;
+  const setActiveChatId = useCallback(
+    (id: number | null) => {
+      if (isControlled) onActiveChatChange?.(id);
+      else setInternalActiveId(id);
+    },
+    [isControlled, onActiveChatChange],
+  );
 
   /** Resolve the projectId new chats should be associated with. */
   const defaultProjectId = useCallback((): number | null => {
@@ -94,7 +155,7 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
       setError(e instanceof Error ? e.message : 'Failed to open chat');
       return null;
     }
-  }, [persistence, chats]);
+  }, [persistence, chats, setActiveChatId]);
 
   const create = useCallback(async (opts?: { title?: string; projectId?: number | null }): Promise<BrainChat | null> => {
     setError('');
@@ -108,7 +169,7 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
       setError(e instanceof Error ? e.message : 'Failed to create chat');
       return null;
     }
-  }, [persistence, defaultProjectId]);
+  }, [persistence, defaultProjectId, setActiveChatId]);
 
   const rename = useCallback(async (id: number, title: string) => {
     const trimmed = title.trim();
@@ -118,6 +179,23 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
       setChats((prev) => prev.map((c) => (c.id === id ? { ...c, title: updated.title } : c)));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Rename failed');
+    }
+  }, [persistence]);
+
+  const autoTitle = useCallback(async (id: number, firstUserText: string) => {
+    if (autoTitledRef.current.has(id)) return;
+    const chat = chatsRef.current.find((c) => c.id === id);
+    // Only replace the untitled placeholder — never an intentional user/seed title.
+    if (chat && chat.title && chat.title !== DEFAULT_CHAT_TITLE) return;
+    const title = deriveChatTitle(firstUserText);
+    if (!title) return;
+    autoTitledRef.current.add(id);
+    try {
+      const updated = await persistence.updateChat(id, { title });
+      setChats((prev) => prev.map((c) => (c.id === id ? { ...c, title: updated.title } : c)));
+    } catch {
+      // Best-effort — a failed auto-title just leaves the placeholder; allow a retry.
+      autoTitledRef.current.delete(id);
     }
   }, [persistence]);
 
@@ -142,11 +220,11 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
     try {
       await persistence.deleteChat(id);
       setChats((prev) => prev.filter((c) => c.id !== id));
-      setActiveChatId((cur) => (cur === id ? null : cur));
+      if (activeIdRef.current === id) setActiveChatId(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Delete failed');
     }
-  }, [persistence]);
+  }, [persistence, setActiveChatId]);
 
   const assignToProject = useCallback(async (id: number, projectId: number | null) => {
     if (assigningRef.current) return;
@@ -166,7 +244,7 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
     // After new messages, refresh so updatedAt ordering + any title change reflect.
     await reload();
     setActiveChatId(id);
-  }, [reload]);
+  }, [reload, setActiveChatId]);
 
   const activeChat = useMemo(
     () => chats.find((c) => c.id === activeChatId) ?? null,
@@ -183,6 +261,7 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
     select,
     create,
     rename,
+    autoTitle,
     summarize,
     remove,
     assignToProject,

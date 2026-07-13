@@ -466,9 +466,3 @@ export async function closeDispatcher(dispatcher?: Dispatcher | null): Promise<v
   }
 }
 
-export async function assertPublicHostname(
-  hostname: string,
-  lookupFn: LookupFn = dnsLookup,
-): Promise<void> {
-  await resolvePinnedHostname(hostname, lookupFn);
-}

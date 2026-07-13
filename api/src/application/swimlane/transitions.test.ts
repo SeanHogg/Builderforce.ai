@@ -4,13 +4,48 @@ import {
   canTransitionTicket,
   mapWorkflowStatusToTicketEvent,
   resolveStageAction,
+  shouldSkipFailedStage,
+  countLaneFailures,
   type TicketLifecycle,
   type WorkflowStatus,
 } from './transitions';
 
+describe('shouldSkipFailedStage [1316]', () => {
+  it("only 'skip' on a non-terminal lane advances a failed stage", () => {
+    expect(shouldSkipFailedStage('skip', false)).toBe(true);
+    expect(shouldSkipFailedStage('skip', true)).toBe(false);  // terminal lane → park
+    expect(shouldSkipFailedStage('needs_attention', false)).toBe(false);
+    expect(shouldSkipFailedStage('retry', false)).toBe(false); // retry is handled separately
+    expect(shouldSkipFailedStage(null, false)).toBe(false);
+    expect(shouldSkipFailedStage(undefined, false)).toBe(false);
+  });
+});
+
+describe('countLaneFailures [1316]', () => {
+  const history = JSON.stringify([
+    { swimlaneId: 'l0', status: 'failed' },
+    { swimlaneId: 'l0', status: 'retry' },
+    { swimlaneId: 'l0', status: 'failed' },
+    { swimlaneId: 'l1', status: 'failed' },
+    { swimlaneId: 'l0', status: 'completed' },
+  ]);
+  it('counts only the failed entries for the given lane', () => {
+    expect(countLaneFailures(history, 'l0')).toBe(2);
+    expect(countLaneFailures(history, 'l1')).toBe(1);
+    expect(countLaneFailures(history, 'lX')).toBe(0);
+  });
+  it('returns 0 for empty/null/malformed history', () => {
+    expect(countLaneFailures(null, 'l0')).toBe(0);
+    expect(countLaneFailures('', 'l0')).toBe(0);
+    expect(countLaneFailures('not json', 'l0')).toBe(0);
+    expect(countLaneFailures(history, null)).toBe(0);
+  });
+});
+
 const ALL_STATES: TicketLifecycle[] = [
   'queued',
   'awaiting_gate',
+  'awaiting_workflow',
   'stage_running',
   'stage_completed',
   'advancing',
@@ -63,6 +98,13 @@ describe('canTransitionTicket', () => {
   it('allows the gate path stage_completed -> awaiting_gate -> advancing', () => {
     expect(canTransitionTicket('stage_completed', 'awaiting_gate')).toBe(true);
     expect(canTransitionTicket('awaiting_gate', 'advancing')).toBe(true);
+  });
+
+  it('allows the run_workflow gate path stage_completed -> awaiting_workflow -> advancing | done | needs_attention', () => {
+    expect(canTransitionTicket('stage_completed', 'awaiting_workflow')).toBe(true);
+    expect(canTransitionTicket('awaiting_workflow', 'advancing')).toBe(true);
+    expect(canTransitionTicket('awaiting_workflow', 'done')).toBe(true);
+    expect(canTransitionTicket('awaiting_workflow', 'needs_attention')).toBe(true);
   });
 
   it('allows recovery from needs_attention via retry (stage_running) or manual (advancing)', () => {
@@ -153,6 +195,17 @@ describe('resolveStageAction', () => {
     const plan = resolveStageAction({ ...base, actionType: 'run_workflow', actionTarget: 'wf-1' });
     expect(plan.lifecycle).toBe('advancing');
     expect(plan.runWorkflowId).toBe('wf-1');
+  });
+
+  it('do_nothing → stage_completed: ticket rests in its lane, no move/workflow target', () => {
+    const plan = resolveStageAction({ ...base, actionType: 'do_nothing' });
+    expect(plan.lifecycle).toBe('stage_completed');
+    expect(plan.moveToLaneKey).toBeUndefined();
+    expect(plan.runWorkflowId).toBeUndefined();
+    // Even on a terminal lane, do_nothing stays put rather than auto-completing.
+    expect(resolveStageAction({ ...base, isTerminalLane: true, actionType: 'do_nothing' }).lifecycle).toBe('stage_completed');
+    // The coordinator reaches it directly from stage_running (no stage_completed intermediate).
+    expect(canTransitionTicket('stage_running', plan.lifecycle)).toBe(true);
   });
 
   it('every resolved lifecycle is a transition the lifecycle allows from stage_completed', () => {

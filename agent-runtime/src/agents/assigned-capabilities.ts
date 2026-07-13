@@ -8,12 +8,19 @@
  *
  * This module turns that state into prompt text so the running agent actually
  * adopts what was assigned — the single source shared by both engines:
- *   • V1 (pi-embedded) injects {@link buildAssignedPersonaPrompt} as a system-prompt
+ *   • V1 (embedded) injects {@link buildAssignedPersonaPrompt} as a system-prompt
  *     section (skills + workspace content are already injected by the run path).
  *   • V2 (Claude Agent SDK) prepends {@link buildAssignedCapabilityAppend} as a
  *     guidance preamble to the SDK prompt (its run path injects nothing otherwise).
  */
 import { buildPersonaSystemBlock, globalPersonaRegistry } from "../builderforce/personas.js";
+import {
+  getRoleProfile,
+  mergeExecParams,
+  type PsychometricExecParams,
+} from "../builderforce/psychometrics.js";
+import { buildLimbicBlock, mergeLimbicWithPsychometric } from "../builderforce/limbic.js";
+import { getLimbicSystemService } from "../infra/limbic-system-service.js";
 import { logDebug } from "../logger.js";
 
 export type AssignedArtifactSlugs = {
@@ -63,6 +70,62 @@ export function buildAssignedPersonaPrompt(): string {
 }
 
 /**
+ * Resolve the execution-param overrides contributed by the psychometric profiles
+ * of the personas currently active on this agent. Empty object when none carry a
+ * profile. These are *defaults* — an explicit per-request thinkLevel/temperature
+ * always wins. This is the second half of "execute under the persona": it lets a
+ * trait vector change how the agent reasons (think depth, sampling), not just its
+ * prompt text.
+ */
+export function resolveActivePsychometricParams(): PsychometricExecParams {
+  const active = globalPersonaRegistry.listActive();
+  const profiles = active.map(getRoleProfile).filter((p): p is NonNullable<typeof p> => Boolean(p));
+  if (profiles.length === 0) return {};
+  const params = mergeExecParams(profiles);
+  if (params.thinkLevel || params.reasoningLevel || params.temperature !== undefined) {
+    logDebug(
+      `[capabilities] psychometric exec params: think=${params.thinkLevel ?? "-"} reasoning=${params.reasoningLevel ?? "-"} temp=${params.temperature ?? "-"}`,
+    );
+  }
+  return params;
+}
+
+/**
+ * Build the system-prompt block describing the agent's *current affective state*
+ * (the dynamic limbic layer). Returns '' when no limbic system is running or the
+ * state is at rest. Injected alongside the persona block.
+ */
+export function buildActiveLimbicPrompt(): string {
+  const svc = getLimbicSystemService();
+  if (!svc) return "";
+  const block = buildLimbicBlock(svc.snapshot());
+  if (block) logDebug("[capabilities] injecting limbic affective state into system prompt");
+  return block;
+}
+
+/**
+ * Resolve the combined cognitive execution params: the personas' static
+ * psychometric params with the live limbic dynamics composed on top
+ * ("personality = setpoints, limbic = dynamics"). Falls back to the
+ * psychometric-only params when no limbic system is running, so this is a safe
+ * drop-in for {@link resolveActivePsychometricParams}. Still a *default* —
+ * an explicit per-request thinkLevel/temperature always wins downstream.
+ */
+export function resolveCognitiveExecParams(): PsychometricExecParams {
+  const psych = resolveActivePsychometricParams();
+  const svc = getLimbicSystemService();
+  if (!svc) return psych;
+  const limbic = svc.compile().params;
+  const merged = mergeLimbicWithPsychometric(psych, limbic);
+  if (merged.thinkLevel || merged.reasoningLevel || merged.temperature !== undefined) {
+    logDebug(
+      `[capabilities] cognitive exec params (personality+limbic): think=${merged.thinkLevel ?? "-"} reasoning=${merged.reasoningLevel ?? "-"} temp=${merged.temperature ?? "-"}`,
+    );
+  }
+  return merged;
+}
+
+/**
  * Build the combined capability block appended to the V2 SDK system prompt:
  * the full persona definition plus assigned skill/content references (the SDK
  * agent reads the referenced SKILL.md via its Read tool). '' when nothing assigned.
@@ -72,6 +135,12 @@ export async function buildAssignedCapabilityAppend(root?: string): Promise<stri
 
   const persona = buildAssignedPersonaPrompt();
   if (persona) sections.push("## Persona (mandatory)\n" + persona);
+
+  // The dynamic affective state rides alongside the (static) persona on the V2
+  // SDK path too, so the SDK-driven coding agent executes under the same limbic
+  // layer as the embedded runner.
+  const limbic = buildActiveLimbicPrompt();
+  if (limbic) sections.push("## Affective state\n" + limbic);
 
   const { skills, content } = await readAssignedArtifactSlugs(root);
   if (skills.length > 0) {

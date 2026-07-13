@@ -1,12 +1,38 @@
 'use client';
 
-import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { BLOG_POSTS } from '@/lib/blogData';
 import JsonLd from '@/components/JsonLd';
 import { blogIndexSchema } from '@/lib/structured-data';
 import { ArticleCardGrid } from '@/components/blog/ArticleCard';
 
+/** Articles per page on the /blog index. */
+const PAGE_SIZE = 9;
+
 export default function BlogPageClient() {
+  const t = useTranslations('blog');
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const totalPages = Math.max(1, Math.ceil(BLOG_POSTS.length / PAGE_SIZE));
+  // The active page is derived from the URL (`?page=N`), so the pagination state
+  // is shareable, bookmarkable, and survives back/forward navigation [1596].
+  const parsed = parseInt(searchParams.get('page') ?? '1', 10);
+  const current = Math.min(Math.max(Number.isFinite(parsed) ? parsed : 1, 1), totalPages);
+  const start = (current - 1) * PAGE_SIZE;
+  const visible = BLOG_POSTS.slice(start, start + PAGE_SIZE);
+
+  const goTo = (p: number) => {
+    const next = Math.min(Math.max(p, 1), totalPages);
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === 1) params.delete('page');
+    else params.set('page', String(next));
+    const query = params.toString();
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
     <>
       <style>{`
@@ -76,43 +102,41 @@ export default function BlogPageClient() {
         }
         /* Card + grid styles live in components/blog/ArticleCard.tsx */
 
-        /* ── FOOTER ── */
-        .blog-footer {
-          border-top: 1px solid var(--border-subtle);
-          padding: 36px 24px;
-          text-align: center;
-        }
-        .blog-footer-inner {
-          max-width: 1100px;
-          margin: 0 auto;
+        /* ── PAGINATION ── */
+        .blog-pagination {
           display: flex;
-          flex-direction: column;
           align-items: center;
-          gap: 16px;
-        }
-        .blog-footer-links {
-          display: flex;
-          flex-wrap: wrap;
           justify-content: center;
-          gap: 2px;
-          list-style: none;
+          gap: 8px;
+          flex-wrap: wrap;
+          margin-top: 48px;
         }
-        .blog-footer-links a {
-          font-size: 0.82rem;
-          color: var(--text-muted);
-          text-decoration: none;
-          padding: 4px 10px;
-          border-radius: 6px;
-          transition: color 0.2s;
+        .blog-page-btn {
+          min-width: 40px;
+          height: 40px;
+          padding: 0 12px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 10px;
+          border: 1px solid var(--border-subtle);
+          background: var(--surface-card);
+          color: var(--text-secondary);
+          font-family: var(--font-display);
+          font-size: 0.9rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
         }
-        .blog-footer-links a:hover { color: var(--text-secondary); }
-        .blog-footer-copy {
-          font-size: 0.78rem;
-          color: var(--text-muted);
+        .blog-page-btn:hover:not(:disabled) {
+          border-color: var(--border-accent);
+          color: var(--text-primary);
         }
-        .blog-footer-copy a {
-          color: var(--coral-bright);
-          text-decoration: none;
+        .blog-page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .blog-page-btn.is-active {
+          background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark));
+          border-color: transparent;
+          color: #fff;
         }
 
         @media (max-width: 640px) {
@@ -126,39 +150,52 @@ export default function BlogPageClient() {
       <div className="blog-page">
         {/* ── Hero ── */}
         <div className="blog-hero">
-          <div className="blog-hero-badge">📝 Latest Articles</div>
+          <div className="blog-hero-badge">📝 {t('badge')}</div>
           <h1 className="blog-hero-title">Builderforce Blog</h1>
-          <p className="blog-hero-desc">
-            Deep dives, tutorials, and best practices for building and deploying
-            AI agents — from WebGPU LoRA training to multi-agent orchestration.
-          </p>
+          <p className="blog-hero-desc">{t('desc')}</p>
         </div>
 
         {/* ── Post grid ── */}
         <main className="blog-main">
-          <ArticleCardGrid posts={BLOG_POSTS} />
+          <ArticleCardGrid posts={visible} />
+
+          {totalPages > 1 && (
+            <nav className="blog-pagination" aria-label={t('paginationLabel')}>
+              <button
+                type="button"
+                className="blog-page-btn"
+                onClick={() => goTo(current - 1)}
+                disabled={current === 1}
+                aria-label={t('prevPage')}
+              >
+                ←
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  className={`blog-page-btn${p === current ? ' is-active' : ''}`}
+                  onClick={() => goTo(p)}
+                  aria-current={p === current ? 'page' : undefined}
+                  aria-label={t('pageN', { n: p })}
+                >
+                  {p}
+                </button>
+              ))}
+              <button
+                type="button"
+                className="blog-page-btn"
+                onClick={() => goTo(current + 1)}
+                disabled={current === totalPages}
+                aria-label={t('nextPage')}
+              >
+                →
+              </button>
+            </nav>
+          )}
         </main>
 
-        {/* ── Footer ── */}
-        <footer className="blog-footer">
-          <div className="blog-footer-inner">
-            <ul className="blog-footer-links">
-              <li><Link href="/">Home</Link></li>
-              <li><Link href="/workforce">Workforce Registry</Link></li>
-              <li><Link href="/blog">Blog</Link></li>
-              <li><Link href="/login">Sign In</Link></li>
-              <li><Link href="/register">Get Started</Link></li>
-              <li><a href="https://builderforce.ai" target="_blank" rel="noopener">BuilderForce Agents</a></li>
-            </ul>
-            <p className="blog-footer-copy">
-              Built by{' '}
-              <a href="https://myvideoresu.me/resumes/seanhogg" target="_blank" rel="noopener">
-                Sean Hogg
-              </a>
-              {' '}· Builderforce.ai © 2026
-            </p>
-          </div>
-        </footer>
+        {/* Footer is the canonical <AppFooter variant="full"> rendered by PublicShell. */}
       </div>
     </>
   );

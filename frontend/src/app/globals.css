@@ -113,6 +113,10 @@
   --chat-input-disabled-icon: var(--text-muted);
   --chat-input-disabled-send-bg: var(--surface-interactive);
   --chat-input-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  /* Focused / non-empty composer: highlight the whole box in accent (blue),
+     matching the VS Code composer's activated state across every modality. */
+  --chat-input-active-border: var(--accent);
+  --chat-input-active-ring: 0 0 0 1px var(--accent);
 
   /* Semantic: error / success (contrast-safe in both themes) */
   --error: #f87171;
@@ -122,7 +126,38 @@
   --success: #22c55e;
   --success-text: #86efac;
   --success-bg: rgba(34, 197, 94, 0.15);
+  --warning: #f59e0b;
+  --warning-text: #fcd34d;
+  --warning-bg: rgba(245, 158, 11, 0.16);
+  /* Opaque panel surfaces — theme-aware aliases that flip via the tokens they
+     reference (bg-elevated / surface-interactive are overridden per theme). Many
+     components reference these intuitive names; defining them here keeps them
+     readable in BOTH light and dark instead of falling back to a dark literal. */
+  --surface: var(--bg-elevated);
+  --surface-2: var(--surface-interactive);
   --text-on-accent: #fff;
+
+  /* Shared Brain UI (@seanhogg/builderforce-brain-ui) theme bridge. The
+     <BrainTimeline> transcript reads `--bf-*`; we map them to the app's
+     theme-aware tokens so the SAME component (also used in the VS Code webview,
+     where these map to --vscode-* instead) inherits light/dark automatically. */
+  --bf-text: var(--text-primary);
+  --bf-text-muted: var(--text-muted);
+  --bf-surface: var(--bg-elevated);
+  --bf-surface-2: var(--surface-interactive);
+  --bf-border: var(--border-subtle);
+  --bf-border-strong: var(--border-accent);
+  --bf-accent: var(--coral-bright);
+  --bf-accent-soft: var(--surface-coral-soft);
+  --bf-link: var(--cyan-bright);
+  --bf-error: var(--error);
+  --bf-error-text: var(--error-text);
+  --bf-error-bg: var(--error-bg);
+  --bf-success: var(--success);
+  --bf-success-bg: var(--success-bg);
+  --bf-warning: var(--warning);
+  --bf-warning-bg: var(--warning-bg);
+  --bf-font-mono: var(--font-mono);
 }
 
 /* ── Light theme overrides ── */
@@ -191,6 +226,9 @@ html[data-theme='light'] {
   --success: #16a34a;
   --success-text: #15803d;
   --success-bg: rgba(34, 197, 94, 0.12);
+  --warning: #d97706;
+  --warning-text: #b45309;
+  --warning-bg: rgba(245, 158, 11, 0.14);
   --text-on-accent: #fff;
 }
 
@@ -639,6 +677,17 @@ html[data-theme='light'] .nebula {
   }
 }
 
+/* Gentle floating bob for the AgentHost mascot (footer + auth screens). */
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
 .fade-in-up {
   animation: fadeInUp 0.8s ease-out both;
 }
@@ -838,6 +887,22 @@ html[data-theme='light'] .nebula {
   color: var(--text);
   cursor: pointer;
   text-decoration: none;
+  /* Never wrap to a second line in the fixed-height topbar; the project label
+     truncates instead when space is tight (see .tenant-chip__project). */
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* The chevron + separator stay their natural size; only the labels shrink. */
+.tenant-chip > svg {
+  flex-shrink: 0;
+}
+
+.tenant-chip__project {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .tenant-chip:hover {
@@ -861,11 +926,12 @@ html[data-theme='light'] .nebula {
   max-width: 1200px;
   margin: 0 auto;
   min-height: 44px;
-  padding: 0 14px;
+  padding: 0 24px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-end;
+  gap: 12px 18px;
   color: var(--muted);
   font-size: 12px;
 }
@@ -891,6 +957,147 @@ html[data-theme='light'] .nebula {
 .global-footer-links button.global-footer-link:hover {
   color: var(--accent);
   text-decoration: underline;
+}
+
+/* ── Full (marketing) footer: brand block + grouped link columns ──
+   Desktop: a full-width row — brand on the left, link columns on the right.
+   Tablet/mobile: the grid collapses to stacked rows. */
+.global-footer-full {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 48px 24px 28px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(0, 2.2fr);
+  gap: 48px;
+  align-items: start;
+}
+
+/* Brand column — mascot wordmark + SEO summary + credit. */
+.global-footer-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 420px;
+}
+.global-footer-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text);
+  text-decoration: none;
+}
+.global-footer-mascot {
+  width: 32px;
+  height: auto;
+  animation: float 4s ease-in-out infinite;
+  filter: drop-shadow(0 0 12px var(--logo-glow));
+  transition: filter 0.3s ease;
+}
+.global-footer-brand-mark:hover .global-footer-mascot {
+  animation-play-state: paused;
+  filter: drop-shadow(0 0 28px var(--logo-glow-hover));
+}
+@media (prefers-reduced-motion: reduce) {
+  .global-footer-mascot {
+    animation: none;
+  }
+}
+
+.global-footer-summary {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.global-footer-credit {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: 0;
+}
+.global-footer-credit a {
+  color: var(--coral-bright);
+  text-decoration: none;
+}
+.global-footer-credit a:hover {
+  text-decoration: underline;
+}
+
+/* Link columns. */
+.global-footer-cols {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+.global-footer-col h3 {
+  margin: 0 0 12px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.global-footer-col ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.global-footer-col a {
+  font-size: 0.84rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+.global-footer-col a:hover {
+  color: var(--accent);
+}
+
+/* Tablet: drop the brand beside the columns; let columns take the full width. */
+@media (max-width: 860px) {
+  .global-footer-full {
+    grid-template-columns: 1fr;
+    gap: 32px;
+    padding: 40px 20px 24px;
+  }
+  .global-footer-brand {
+    max-width: none;
+  }
+}
+
+/* Mobile: keep the three link columns side by side (don't stack to rows);
+   just tighten the gap and type so they fit the narrow viewport. */
+@media (max-width: 520px) {
+  .global-footer-cols {
+    gap: 12px;
+  }
+  .global-footer-col h3 {
+    font-size: 0.66rem;
+    letter-spacing: 0.04em;
+  }
+  .global-footer-col a {
+    font-size: 0.78rem;
+  }
+}
+
+/* Stack the version + legal strip on small screens so it never squishes. */
+@media (max-width: 540px) {
+  .global-footer-inner {
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 14px;
+    text-align: center;
+  }
+  .global-footer-links {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
 }
 
 /* Nav (slide-out sidebar) */
@@ -930,6 +1137,54 @@ html[data-theme='light'] .nebula {
   border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
+}
+
+/* Sidebar consumption meter (UsageMeter) — sits above the legal menu. */
+.usage-meter {
+  margin-bottom: 10px;
+}
+/* Collapsible "USAGE" section header — full-width toggle with a chevron. */
+.usage-meter .usage-meter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 10px 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  text-align: left;
+}
+.usage-meter .usage-meter-head:hover,
+.usage-meter .usage-meter-head:focus-visible {
+  color: var(--text-primary, var(--fg));
+  outline: none;
+}
+/* A card's title routes to that resource's configuration / key entry point. */
+.usage-meter .usage-meter-title-link:hover,
+.usage-meter .usage-meter-title-link:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+.usage-meter .usage-meter-link {
+  text-decoration: none;
+}
+.usage-meter .usage-meter-link:hover {
+  text-decoration: underline;
+}
+/* Clicking a meter's trend chart drills into its Insights report. */
+.usage-meter .usage-meter-chart-link {
+  border-radius: 6px;
+  opacity: 0.92;
+  transition: opacity 0.2s, background 0.2s;
+}
+.usage-meter .usage-meter-chart-link:hover,
+.usage-meter .usage-meter-chart-link:focus-visible {
+  opacity: 1;
+  background: var(--bg-elevated, rgba(255, 255, 255, 0.06));
+  outline: none;
 }
 
 /* Version + Terms/Privacy block in the sidebar footer (relocated from the old
@@ -1121,8 +1376,45 @@ html[data-theme='light'] .nebula {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 12px;
+  /* Exposed as vars so the full-bleed section-tab bar can cancel them out and
+     run flush/edge-to-edge without hardcoding (and drifting from) these values. */
+  --content-pad-x: 12px;
+  --content-pad-y: 12px;
+  padding: var(--content-pad-y) var(--content-pad-x);
   background: transparent;
+}
+
+/* The one section tab bar (SectionTabs.tsx). Breaks out of .content's padding so
+   it sits flush against the top bar and spans the full content width; the inline
+   scrollbar is hidden (it stays scrollable on narrow screens via touch/trackpad). */
+.section-tabs {
+  display: flex;
+  gap: 2px;
+  margin: calc(var(--content-pad-y) * -1) calc(var(--content-pad-x) * -1) 0;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-base);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Firefox */
+}
+.section-tabs::-webkit-scrollbar { display: none; } /* Chrome/Safari/Edge */
+.section-tabs__inner {
+  display: flex;
+  gap: 2px;
+  width: 100%;
+}
+
+/* Canonical authenticated-page padding (set by PageContainer). Generous on
+   desktop; trimmed on mobile so data/card pages run closer to full width
+   instead of leaving a wide side gutter. */
+.page-container {
+  padding: 24px;
+}
+@media (max-width: 767px) {
+  .page-container {
+    padding: 12px 8px;
+  }
 }
 
 /* Full-bleed content pages (IDE project page, workflow builder): no padding,
@@ -1133,6 +1425,16 @@ html[data-theme='light'] .nebula {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+/* On phones the fixed .mobile-bottom-nav (56px + safe-area) would overlap the
+   bottom of a full-bleed IDE/project page, whose padding is 0 above. Reserve
+   exactly that clearance so the child fills the area ABOVE the bottom bar. */
+@media (max-width: 767px) {
+  .content:has(.ide-full-height),
+  .content:has(.app-full-height) {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 /* Page title / sub (Settings, Security, Admin, etc.) */
@@ -1149,18 +1451,137 @@ html[data-theme='light'] .nebula {
   margin: 0 0 24px;
 }
 
+/* ============================================================
+   Shared app component primitives
+   ------------------------------------------------------------
+   Canonical button / input / badge / header / card / empty-state
+   chrome used across the marketplace-style pages (Skills,
+   Personas, Content Manager, Prompts, Workforce, …) and the 145+
+   `.btn` call-sites across the app. Previously these base classes
+   were referenced everywhere but never defined, so each page
+   either fell back to native chrome or re-invented the look with
+   inline styles (only /prompts looked finished). This block is the
+   single source of truth; tokens resolve in both dark + light.
+   ============================================================ */
+
+/* Page header — title block (left) + action (right) */
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* Buttons */
+.btn {
+  -webkit-appearance: none;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+}
+.btn:hover { opacity: 0.88; }
+.btn:active { transform: translateY(0.5px); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-secondary { background: transparent; color: var(--text-primary); border-color: var(--border-subtle); }
+.btn-secondary:hover { background: var(--bg-elevated); opacity: 1; }
+.btn-ghost { background: transparent; color: var(--text-secondary); border-color: transparent; }
+.btn-ghost:hover { background: var(--bg-elevated); color: var(--text-primary); opacity: 1; }
+.btn-danger { background: transparent; color: var(--error); border-color: var(--border-subtle); }
+.btn-danger:hover { background: var(--error-bg); border-color: var(--error-border); opacity: 1; }
+
+.btn-sm { padding: 5px 10px; font-size: 12px; border-radius: var(--radius-sm, 7px); }
+
+/* Inputs / labels */
+.input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  transition: border-color 0.15s ease;
+}
+.input:focus { outline: none; border-color: var(--border-accent); }
+.input::placeholder { color: var(--text-muted); }
+textarea.input { resize: vertical; line-height: 1.5; }
+
+.label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* Cards */
+.card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.card-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+/* Modal title */
+.modal-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* Badge base — the .badge-* colour variants below own bg/colour */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/* Empty-state container (icon + title + sub live below) */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 48px 24px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
 /* Admin page (inside shell) */
 .admin-page {
   flex: 1;
   width: 100%;
   color: var(--text);
-}
-
-.admin-tabs {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
 }
 
 .admin-tab {
@@ -1187,10 +1608,6 @@ html[data-theme='light'] .nebula {
   border-color: rgba(77, 158, 255, 0.2);
 }
 
-.admin-content {
-  min-height: 200px;
-}
-
 /* Alerts */
 .alert {
   padding: 12px 14px;
@@ -1206,37 +1623,41 @@ html[data-theme='light'] .nebula {
 }
 
 /* Admin data tables (same shell style) */
-.admin-page .table-wrap {
+/* Table chrome is shared, not admin-only: any page using .table-wrap /
+   .data-table (e.g. the Workforce → Approvals tab) gets the same scrollable,
+   styled table. overflow-x:auto is what lets wide tables scroll left/right
+   instead of clipping on mobile. */
+.table-wrap {
   overflow-x: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-elevated);
 }
 
-.admin-page .data-table {
+.data-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
 }
 
-.admin-page .data-table th,
-.admin-page .data-table td {
+.data-table th,
+.data-table td {
   padding: 10px 12px;
   text-align: left;
   border-bottom: 1px solid var(--border);
 }
 
-.admin-page .data-table thead tr {
+.data-table thead tr {
   border-bottom: 2px solid var(--border);
   background: var(--bg-muted);
 }
 
-.admin-page .data-table tbody tr:last-child td {
+.data-table tbody tr:last-child td {
   border-bottom: none;
 }
 
-.admin-page .text-muted,
-.admin-page .data-table .text-muted {
+.text-muted,
+.data-table .text-muted {
   color: var(--text-muted);
 }
 
@@ -1366,6 +1787,25 @@ html[data-theme='light'] .nebula {
 /* Modal content: fully solid (same as slide-out drawer) so the background is not visible through the modal */
 .modal-overlay > div {
   background: var(--panel-drawer-bg) !important;
+  /* Cap the height to the viewport (minus the overlay's 24px padding top+bottom)
+     and scroll internally. Without this a tall modal — e.g. New Persona — centers
+     and clips its top/bottom (including the Save/Cancel actions) off-screen with
+     no way to reach them, which made tall modals unusable on phones. 100dvh tracks
+     the dynamic viewport so mobile browser chrome doesn't hide the bottom. */
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+}
+
+/* On phones, pin tall modals to the top and scroll, and trim the overlay padding
+   so the modal uses the full width / height available. */
+@media (max-width: 767px) {
+  .modal-overlay {
+    padding: 12px;
+    align-items: flex-start;
+  }
+  .modal-overlay > div {
+    max-height: calc(100dvh - 24px);
+  }
 }
 
 /* Admin modal (impersonate) */
@@ -1388,6 +1828,10 @@ html[data-theme='light'] .nebula {
   padding: 24px;
   max-width: 420px;
   width: 90%;
+  /* Same viewport cap + internal scroll as the standard modal so it can't clip
+     its actions off-screen on short / mobile viewports. */
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
 }
 
@@ -1395,7 +1839,12 @@ html[data-theme='light'] .nebula {
 .bs-shell {
   display: grid;
   grid-template-columns: 280px 1fr;
-  height: clamp(500px, calc(100dvh - 190px), 900px);
+  /* Fill the content cell exactly (it has a definite height from the shell's
+     `1fr` row), so the panel reaches the footer instead of capping short and
+     leaving a whitespace gap below it. Internal regions (.bs-chat-list,
+     .bs-messages) own their scroll. */
+  height: 100%;
+  min-height: 0;
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
@@ -1482,8 +1931,15 @@ html[data-theme='light'] .nebula {
 }
 
 .bs-bubble-user {
-  background: var(--accent);
-  color: var(--text-on-accent);
+  /* A subtle accent-tinted surface with primary text — NOT a saturated accent
+     fill. The message body (ChatMessageContent) hardcodes --text-primary on
+     headings/bold and accent on code, so a solid accent background renders that
+     content dark-on-blue and unreadable in light mode. Tint + --text-primary
+     keeps a pasted markdown message legible in both themes; the row-reverse
+     layout and accent avatar still mark it as the user's turn. */
+  background: var(--accent-subtle);
+  color: var(--text-primary);
+  border: 1px solid var(--border-accent);
 }
 
 .bs-bubble-ai {
@@ -1590,6 +2046,26 @@ html[data-theme='light'] .nebula {
   font-size: 11px;
   font-weight: 600;
 }
+/* "Attention needed" — distinct from yellow (in-review) and red (blocked).
+   Used for GAP task-type badges minted by the Validator. */
+.badge-amber {
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 6px);
+  font-size: 11px;
+  font-weight: 600;
+}
+/* "Live / urgent" — used for INCIDENT task-type + severity accents. Distinct from
+   red (blocked/security) and amber (gap/in-review); reads in both themes. */
+.badge-orange {
+  background: rgba(249, 115, 22, 0.2);
+  color: #fb923c;
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 6px);
+  font-size: 11px;
+  font-weight: 600;
+}
 /* Muted/"off" counterpart to .badge-green (DRAFT, OFFLINE, inactive states).
    Previously re-inlined as a style object everywhere a non-green badge was needed. */
 .badge-muted {
@@ -1647,10 +2123,6 @@ html[data-theme='light'] .nebula {
 .mobile-bottom-nav {
   display: none;
 }
-/* Auth chips are direct topbar flex items on desktop; hidden on mobile. */
-.topbar-auth-cta {
-  display: contents;
-}
 
 /* Mobile bottom-bar item styling (only visible when the bar is shown <768px) */
 .mbn-item {
@@ -1668,9 +2140,29 @@ html[data-theme='light'] .nebula {
 }
 .mbn-item:hover { color: var(--text); }
 .mbn-item.active { color: var(--accent, #4d9eff); }
-.mbn-accent { color: var(--coral-bright); font-weight: 700; }
 .mbn-icon { font-size: 1.25rem; line-height: 1; }
 .mbn-label { font-size: 10px; line-height: 1; }
+
+/* Sign In (logged-out) gets a raised, filled CTA pill so it's unmistakably the
+   primary action — not just blue text like the .active state. The gradient +
+   ring + glow read as a button in BOTH light and dark mode (the ring uses the
+   bar background so it carves the badge out of whatever surface it sits on). */
+.mbn-accent { color: var(--accent); font-weight: 700; }
+.mbn-accent:hover { color: var(--accent); }
+.mbn-accent .mbn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  margin-top: -6px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--coral-bright), var(--coral-mid));
+  color: #fff;
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--coral-bright) 45%, transparent);
+  border: 2px solid color-mix(in srgb, var(--bg) 88%, transparent);
+}
+.mbn-accent .mbn-label { font-weight: 700; }
 
 @media (max-width: 767px) {
   /* Marketplace chip lives in the bottom bar / drawer on mobile */
@@ -1692,10 +2184,21 @@ html[data-theme='light'] .nebula {
     cursor: pointer;
   }
   .topbar-hamburger:hover { background: var(--bg-hover); }
-  .topbar-auth-cta { display: none; }
 
-  /* The docked rail column collapses to zero — the sidebar becomes a drawer. */
-  :root { --shell-nav-width: 0px; }
+  /* The docked rail column collapses to zero — the sidebar becomes a drawer.
+     BOTH width vars must zero out: the shell keeps the `nav-collapsed` class on
+     mobile when the user's desktop preference is "collapsed", and that variant
+     reads --shell-nav-width-collapsed. Leaving it at 52px left a dead rail
+     column (the "wide left gap") on mobile. The off-canvas drawer doesn't use
+     the grid column at all, so both go to 0 and content runs full width. */
+  :root {
+    --shell-nav-width: 0px;
+    --shell-nav-width-collapsed: 0px;
+    /* Docked slide-out panels (Projects, IDE settings) anchor their bottom to
+       --footer-height. On mobile the global footer is replaced by the fixed
+       bottom nav, so point this at the bottom-nav height to keep panels clear. */
+    --footer-height: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
 
   .nav {
     position: fixed;
@@ -1749,6 +2252,22 @@ html[data-theme='light'] .nebula {
   .nav-item { padding: 10px 12px; justify-content: flex-start; gap: 10px; }
   .nav-item-label { display: inline; }
 
+  /* The drawer is ALWAYS full (labels + section headers), even when the user's
+     desktop preference is the collapsed icon rail. The <nav> still carries the
+     `.collapsed` class on mobile, so undo every collapsed-rail rule here at
+     matching specificity — otherwise the drawer renders as a bare icon strip. */
+  .nav.collapsed { padding: 0; }
+  .nav.collapsed .nav-section { margin-bottom: 16px; }
+  .nav.collapsed .nav-section-label {
+    opacity: 1;
+    pointer-events: auto;
+    height: auto;
+    margin: 0 0 6px;
+    padding: 0 10px;
+  }
+  .nav.collapsed .nav-item { padding: 10px 12px; justify-content: flex-start; gap: 10px; }
+  .nav.collapsed .nav-item-label { display: inline; }
+
   /* Hide the desktop collapse chevron in the drawer — the X closes it */
   .nav-collapse-toggle { display: none; }
 
@@ -1783,7 +2302,9 @@ html[data-theme='light'] .nebula {
 
   /* Tighter content padding + clearance for the bottom bar */
   .content {
-    padding: 8px 6px calc(64px + env(safe-area-inset-bottom, 0px));
+    --content-pad-x: 6px;
+    --content-pad-y: 8px;
+    padding: var(--content-pad-y) var(--content-pad-x) calc(64px + env(safe-area-inset-bottom, 0px));
   }
 
   .page-inner { padding: 12px 8px; max-width: 100%; margin: 0; }
@@ -1791,7 +2312,35 @@ html[data-theme='light'] .nebula {
   .bs-shell { grid-template-columns: 1fr; height: auto; min-height: 0; }
   .bs-sidebar { max-height: 200px; border-right: none; border-bottom: 1px solid var(--border); }
 
-  .brand-name { font-size: 14px; }
+  /* Slide-out drawers go full-width on mobile so they don't leave a thin sliver
+     of the page showing through on the left (the inline `width: min(…, 96vw)`
+     needs !important to be overridden). Matches the Brain drawer's behavior. */
+  .slide-panel-drawer,
+  .project-panel-drawer,
+  .projects-panel-drawer {
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    border-left: none !important;
+  }
+
+  /* Mobile: hide the "Builderforce.ai" wordmark; keep the mascot + BETA badge */
+  .brand-name { display: none; }
+
+  /* Tighten the topbar so all the right-side actions fit on one row instead of
+     wrapping / clipping off the right edge on a phone. */
+  .topbar { gap: 6px; padding: 0 8px; }
+  .topbar-left { flex-shrink: 0; }
+  .topbar-right { gap: 2px; min-width: 0; }
+
+  /* The tenant→project chip drops the redundant workspace name + separator on
+     mobile (the workspace is one tap away in the chip's menu, and the brand
+     mascot already anchors context) and shows just the project scope, capped so
+     a long project name truncates instead of pushing the actions off-screen. */
+  .tenant-chip__workspace,
+  .tenant-chip__sep { display: none; }
+  .tenant-chip { max-width: 46vw; padding: 4px 8px; }
 }
 
 /* On desktop: hide the mobile-only sidebar items (Marketplace is in topbar) */
@@ -2144,3 +2693,421 @@ html[data-theme='light'] .nebula {
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ============================================================
+   Marketing chrome — top header nav (logged-out) + wave hero
+   ============================================================
+   Logged-out visitors browse marketing/public pages in MarketingShell: a
+   horizontal top header (MarketingHeader) instead of the left Sidebar, which
+   is reserved for authenticated users. The homepage hero sits over WaveBackdrop
+   (a flight through the solar system — "see the future, clearly").
+   ------------------------------------------------------------ */
+
+/* Marketing shell layout */
+.marketing-frame {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+.marketing-content {
+  flex: 1 1 auto;
+  width: 100%;
+}
+
+/* Top header */
+.mh {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  width: 100%;
+  background: var(--chrome);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+}
+.mh-inner {
+  max-width: 1320px;
+  margin: 0 auto;
+  height: 66px;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.mh-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.mh-brand-logo { filter: drop-shadow(0 0 8px var(--logo-glow)); }
+.mh-brand-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.08rem;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+.mh-brand-badge {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--coral-bright);
+  background: var(--surface-coral-soft);
+  border: 1px solid var(--border-accent);
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+
+/* Nav */
+.mh-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1 1 auto;
+  justify-content: center;
+}
+.mh-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 9px 13px;
+  border-radius: 10px;
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-decoration: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color 0.18s ease, background 0.18s ease;
+}
+.mh-link:hover { color: var(--text-primary); background: var(--surface-interactive); }
+.mh-link.active { color: var(--coral-bright); }
+.mh-caret { transition: transform 0.2s ease; opacity: 0.7; }
+.mh-item { position: relative; display: inline-flex; }
+.mh-item.has-menu:hover .mh-caret,
+.mh-item.has-menu:focus-within .mh-caret { transform: rotate(180deg); }
+
+/* Dropdown panels */
+.mh-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 220px;
+  padding: 8px;
+  background: var(--chrome-strong);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px);
+  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s;
+  z-index: 60;
+}
+.mh-panel-wide {
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  width: min(900px, 92vw);
+}
+.mh-item.has-menu:hover .mh-panel:not(.mh-panel-wide),
+.mh-item.has-menu:focus-within .mh-panel:not(.mh-panel-wide) {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+.mh-item.has-menu:hover .mh-panel-wide,
+.mh-item.has-menu:focus-within .mh-panel-wide {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+.mh-panel-link {
+  display: block;
+  padding: 9px 11px;
+  border-radius: 9px;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.16s ease, background 0.16s ease;
+}
+.mh-panel-link:hover { color: var(--text-primary); background: var(--surface-interactive); }
+
+/* Product mega-menu */
+.mh-mega {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 6px;
+}
+.mh-mega-col { display: flex; flex-direction: column; }
+.mh-mega-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 9px 9px;
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-decoration: none;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 4px;
+}
+.mh-mega-head:hover { color: var(--coral-bright); }
+.mh-mega-link {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: 9px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.16s ease, background 0.16s ease;
+}
+.mh-mega-link:hover { color: var(--text-primary); background: var(--surface-interactive); }
+.mh-mega-link-icon { width: 18px; text-align: center; flex-shrink: 0; }
+
+/* Right cluster */
+.mh-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-left: auto; }
+.mh-signin {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-decoration: none;
+  padding: 8px 12px;
+  border-radius: 10px;
+  transition: background 0.18s ease;
+}
+.mh-signin:hover { background: var(--surface-interactive); }
+.mh-cta {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #fff;
+  text-decoration: none;
+  padding: 9px 18px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, var(--coral-bright), var(--coral-dark));
+  box-shadow: 0 6px 18px var(--shadow-coral-mid);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  white-space: nowrap;
+}
+.mh-cta:hover { transform: translateY(-2px); box-shadow: 0 10px 26px var(--shadow-coral-strong); }
+.mh-hamburger {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 6px;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Mobile drawer */
+.mh-drawer {
+  position: fixed;
+  top: 66px;
+  left: 0;
+  right: 0;
+  max-height: calc(100dvh - 66px);
+  overflow-y: auto;
+  padding: 14px 18px 28px;
+  background: var(--chrome-strong);
+  border-bottom: 1px solid var(--border);
+  transform: translateY(-12px);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
+  z-index: 49;
+}
+.mh-drawer.open { opacity: 1; visibility: visible; transform: translateY(0); }
+.mh-drawer-backdrop {
+  position: fixed;
+  inset: 66px 0 0 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 48;
+}
+.mh-drawer-link {
+  display: block;
+  padding: 12px 10px;
+  border-radius: 10px;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+.mh-drawer-link:hover, .mh-drawer-link.active { background: var(--surface-interactive); color: var(--coral-bright); }
+.mh-drawer-sub { padding-left: 18px; font-size: 0.92rem; color: var(--text-secondary); font-weight: 400; }
+.mh-drawer-group { margin: 6px 0; }
+.mh-drawer-group-label {
+  padding: 10px 10px 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.mh-drawer-cta { display: flex; gap: 10px; margin-top: 16px; padding: 0 6px; }
+.mh-drawer-cta .mh-signin { flex: 1; text-align: center; border: 1px solid var(--border); }
+.mh-drawer-cta .mh-cta { flex: 1; text-align: center; }
+
+/* Header responsive: collapse inline nav + CTAs into the hamburger drawer */
+@media (max-width: 900px) {
+  .mh-nav, .mh-right .mh-signin, .mh-right .mh-cta { display: none; }
+  .mh-hamburger { display: inline-flex; }
+}
+
+/* Brain hero backdrop (Evermind neural scene; .wb-* names kept for the single import site) */
+.wb-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+/* The canvas render loop owns all colour + motion (theme-reactive, DPR-aware);
+   it is NOT gated by prefers-reduced-motion, so the scene animates on load for
+   everyone — the same always-on approach as the contextqa.com hero. */
+.wb-canvas { width: 100%; height: 100%; display: block; }
+/* Centre vignette — keeps the hero copy readable over the neural mesh by dimming
+   the middle of the scene while letting the brain glow show through at the edges. */
+.wb-veil {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 62% 58% at 50% 44%,
+    rgba(5, 8, 15, 0.86) 0%,
+    rgba(5, 8, 15, 0.6) 34%,
+    rgba(5, 8, 15, 0.2) 58%,
+    transparent 75%
+  );
+}
+.wb-fade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 150px;
+  background: linear-gradient(to bottom, transparent, var(--bg));
+}
+
+/* Blog post body images / diagrams — keep SVGs and screenshots responsive within
+   the article column (the .bpost-* classes carry no width of their own). */
+.bpost-content img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 28px auto;
+  border-radius: 12px;
+}
+
+/* Document-scale Markdown typography (see DocumentMarkdown.tsx). Shared by every
+   long-form surface — knowledge/SOP viewer, legal Terms/Privacy — so a document
+   reads at document scale, not chat scale. All colours come from theme tokens so
+   it works in both light and dark; sizes use rem so it stays fluid on mobile. */
+.markdown-body {
+  color: var(--text-primary, #e5e7eb);
+  font-size: 0.95rem;
+  line-height: 1.7;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.markdown-body > :first-child { margin-top: 0; }
+.markdown-body > :last-child { margin-bottom: 0; }
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  color: var(--text-primary, #f3f4f6);
+  font-family: var(--font-display, inherit);
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 1.8em 0 0.6em;
+}
+.markdown-body h1 { font-size: 1.7rem; }
+.markdown-body h2 {
+  font-size: 1.35rem;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border, #333);
+}
+.markdown-body h3 { font-size: 1.15rem; }
+.markdown-body h4 { font-size: 1rem; }
+.markdown-body h5,
+.markdown-body h6 { font-size: 0.9rem; color: var(--text-muted, #9ca3af); }
+.markdown-body p { margin: 0.9em 0; }
+.markdown-body a {
+  color: var(--coral-bright, #ff6b5e);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.markdown-body a:hover { opacity: 0.85; }
+.markdown-body ul,
+.markdown-body ol { margin: 0.9em 0; padding-left: 1.6em; }
+.markdown-body li { margin: 0.35em 0; }
+.markdown-body li > ul,
+.markdown-body li > ol { margin: 0.35em 0; }
+.markdown-body blockquote {
+  margin: 1.1em 0;
+  padding: 0.4em 1em;
+  border-left: 3px solid var(--border, #444);
+  color: var(--text-muted, #9ca3af);
+  background: var(--surface, rgba(127, 127, 127, 0.06));
+  border-radius: 0 8px 8px 0;
+}
+.markdown-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  padding: 0.15em 0.4em;
+  border-radius: 5px;
+  background: var(--surface, rgba(127, 127, 127, 0.12));
+  border: 1px solid var(--border-subtle, var(--border, #333));
+}
+.markdown-body pre {
+  margin: 1.1em 0;
+  padding: 1em;
+  overflow-x: auto;
+  border-radius: 10px;
+  background: var(--surface, #111827);
+  border: 1px solid var(--border, #333);
+}
+.markdown-body pre code {
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+.markdown-body hr {
+  margin: 2em 0;
+  border: none;
+  border-top: 1px solid var(--border, #333);
+}
+.markdown-body img { max-width: 100%; height: auto; border-radius: 10px; }
+.markdown-body table {
+  width: 100%;
+  margin: 1.1em 0;
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+.markdown-body th,
+.markdown-body td {
+  padding: 0.5em 0.8em;
+  border: 1px solid var(--border, #333);
+  text-align: left;
+}
+.markdown-body th { background: var(--surface, rgba(127, 127, 127, 0.08)); font-weight: 600; }

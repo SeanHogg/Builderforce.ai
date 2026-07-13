@@ -23,7 +23,6 @@ import {
   repoAnalysisEvidence,
   repoAnalysisRuns,
   llmUsageLog,
-  agentAssignments,
   specs,
   tasks,
   executions,
@@ -36,8 +35,9 @@ import {
   selectEvidence,
 } from '../../application/repos/sources/RepoSource';
 import { ArchitectAnalysisService, ArtifactGenerationError } from '../../application/repoanalysis/ArchitectAnalysisService';
+import { ToolService, ARCHITECTURE_DIAGNOSTIC_ID } from '../../application/tools/ToolService';
+import { deriveArchitectureResult } from '../../application/tools/auditScanners';
 import { linkSpecToTask } from '../../application/prd/taskPrd';
-import { resolveAssignedAgent, type AgentKind } from '../../application/swimlane/resolveAssignedAgent';
 import {
   ARTIFACT_KINDS,
   FREE_ARTIFACT_KINDS,
@@ -111,38 +111,6 @@ export class AnalysisRunnerDO implements DurableObject {
   private readonly db: Db;
   constructor(private readonly state: DurableObjectState, private readonly env: Env) {
     this.db = buildDatabase(env);
-  }
-
-  /**
-   * The concrete model of the agent assigned to architecture analysis for this
-   * project (canonical agent-assignment model, scope='architecture'), so the run
-   * executes AS that agent. Resolves the agent's real `base_model` via the shared
-   * resolveAssignedAgent (workforce → its base_model; registered agents are
-   * endpoint-based with no gateway model, so they yield null → default cascade).
-   * Returns undefined when nothing is assigned.
-   */
-  private async resolveArchitectAgentModel(tenantId: number, projectId: number): Promise<string | undefined> {
-    const [a] = await this.db
-      .select({ agentKind: agentAssignments.agentKind, agentRef: agentAssignments.agentRef })
-      .from(agentAssignments)
-      .where(
-        and(
-          eq(agentAssignments.tenantId, tenantId),
-          eq(agentAssignments.scope, 'architecture'),
-          eq(agentAssignments.scopeId, String(projectId)),
-        ),
-      )
-      .limit(1);
-    if (!a) return undefined;
-    try {
-      const resolved = await resolveAssignedAgent(this.db, tenantId, {
-        agentKind: a.agentKind as AgentKind,
-        agentRef: a.agentRef,
-      });
-      return resolved.model ?? undefined;
-    } catch {
-      return undefined;
-    }
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -304,7 +272,7 @@ export class AnalysisRunnerDO implements DurableObject {
       .where(and(eq(integrationCredentials.id, credentialId), eq(integrationCredentials.tenantId, tenantId)));
     if (!row) return { token: '', username: null };
     const secret = this.env.INTEGRATION_ENCRYPTION_SECRET ?? this.env.JWT_SECRET ?? '';
-    const creds = await decryptCredentials(row.credentialsEnc, row.iv, secret);
+    const creds = await decryptCredentials(row.credentialsEnc, row.iv, secret, tenantId);
     const token = String(creds?.accessToken ?? creds?.apiToken ?? creds?.token ?? '');
     const username = creds?.username ? String(creds.username) : creds?.email ? String(creds.email) : null;
     return { token, username };
@@ -335,8 +303,7 @@ export class AnalysisRunnerDO implements DurableObject {
     }
     const bundle = await this.loadEvidenceBundle(cursor);
     const priors = await this.loadPriorArtifacts(cursor.runId);
-    const preferredModel = await this.resolveArchitectAgentModel(cursor.tenantId, cursor.projectId);
-    const svc = new ArchitectAnalysisService(this.env, preferredModel);
+    const svc = new ArchitectAnalysisService(this.env);
 
     try {
       const art = await svc.generate(kind, bundle, priors);
@@ -558,8 +525,52 @@ export class AnalysisRunnerDO implements DurableObject {
     const ok = status !== 'failed';
     await this.closeTaskAndExecution(cursor, ok ? 'completed' : 'failed', ok ? 'done' : 'todo');
 
+    // Record the run as a tracked project diagnostic so it contributes to the
+    // project's rating (which rolls up to the tenant). Best-effort — a scoring
+    // failure must not fail the analysis run.
+    if (ok) await this.recordArchitectureDiagnostic(cursor).catch(() => {});
+
     await this.state.storage.delete(CURSOR_KEY);
     await this.state.storage.deleteAlarm();
+  }
+
+  /**
+   * Derive a 1–5 diagnostic score from the design-principles artifact (DRY,
+   * SOLID, DDD, Patterns each 0–10 → averaged → halved) and record it as a
+   * project-scoped tool_run under the architecture-analysis diagnostic id. This
+   * is what makes the Architect a tracked project diagnostic.
+   */
+  private async recordArchitectureDiagnostic(cursor: Cursor): Promise<void> {
+    const [row] = await this.db
+      .select({ dataJson: repoAnalysisArtifacts.dataJson })
+      .from(repoAnalysisArtifacts)
+      .where(and(
+        eq(repoAnalysisArtifacts.runId, cursor.runId),
+        eq(repoAnalysisArtifacts.kind, 'principles'),
+        eq(repoAnalysisArtifacts.status, 'complete'),
+      ))
+      .limit(1);
+    if (!row) return;
+    const data = safeJson<Record<string, { score?: number; notes?: string }>>(row.dataJson ?? '{}');
+    if (!data) return;
+
+    // Shared 1–5 derivation (the same scorer the deterministic architecture audit
+    // uses) — one source of truth for the principle→score math.
+    const result = deriveArchitectureResult([
+      { key: 'dry', label: 'DRY', score: data.dry?.score, notes: data.dry?.notes },
+      { key: 'solid', label: 'SOLID', score: data.solid?.score, notes: data.solid?.notes },
+      { key: 'ddd', label: 'DDD', score: data.ddd?.score, notes: data.ddd?.notes },
+      { key: 'patterns', label: 'Patterns', score: data.patterns?.score, notes: data.patterns?.notes },
+    ]);
+    if (!result) return;
+
+    await new ToolService(this.db).recordExternalRun(this.env, {
+      tenantId: cursor.tenantId,
+      projectId: cursor.projectId,
+      toolId: ARCHITECTURE_DIAGNOSTIC_ID,
+      result,
+      createdBy: cursor.triggeredBy ?? null,
+    });
   }
 
   /** Mark the linked execution row terminal and move the task to its final lane. */

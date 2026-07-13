@@ -4,7 +4,7 @@ import { loadConfig } from "../../config/config.js";
 import { resolveSessionFilePath } from "../../config/sessions.js";
 import { callGateway } from "../../gateway/call.js";
 import { resolveAgentIdFromSessionKey } from "../../routing/session-key.js";
-import type { AnyAgentTool } from "./common.js";
+import type { AgentToolResult, AnyAgentTool } from "./common.js";
 import { jsonResult, readStringArrayParam } from "./common.js";
 import {
   createSessionVisibilityGuard,
@@ -26,16 +26,17 @@ const SessionsListToolSchema = Type.Object({
   messageLimit: Type.Optional(Type.Number({ minimum: 0 })),
 });
 
-export function createSessionsListTool(opts?: {
+export interface SessionsListDeps {
   agentSessionKey?: string;
   sandboxed?: boolean;
-}): AnyAgentTool {
-  return {
-    label: "Sessions",
-    name: "sessions_list",
-    description: "List sessions with optional filters and last messages.",
-    parameters: SessionsListToolSchema,
-    execute: async (_toolCallId, args) => {
+}
+
+/** Shared implementation — pi wrapper + native ToolDefinition both delegate here (DRY). */
+export async function runSessionsList(
+  opts: SessionsListDeps | undefined,
+  args: Record<string, unknown>,
+): Promise<AgentToolResult<unknown>> {
+  {
       const params = args as Record<string, unknown>;
       const cfg = loadConfig();
       const { mainKey, alias, requesterInternalKey, restrictToSpawned } =
@@ -238,6 +239,15 @@ export function createSessionsListTool(opts?: {
         count: rows.length,
         sessions: rows,
       });
-    },
+  }
+}
+
+export function createSessionsListTool(opts?: SessionsListDeps): AnyAgentTool {
+  return {
+    label: "Sessions",
+    name: "sessions_list",
+    description: "List sessions with optional filters and last messages.",
+    parameters: SessionsListToolSchema,
+    execute: async (_toolCallId, args) => runSessionsList(opts, args as Record<string, unknown>),
   };
 }

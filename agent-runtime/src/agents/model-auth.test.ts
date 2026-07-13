@@ -3,7 +3,7 @@ import type { AuthProfileStore } from "./auth-profiles.js";
 import { requireApiKey, resolveAwsSdkEnvVarName, resolveModelAuthMode } from "./model-auth.js";
 
 describe("resolveAwsSdkEnvVarName", () => {
-  it("prefers bearer token over access keys and profile", () => {
+  it("prefers bearer token over access keys and profile", async () => {
     const env = {
       AWS_BEARER_TOKEN_BEDROCK: "bearer",
       AWS_ACCESS_KEY_ID: "access",
@@ -14,7 +14,7 @@ describe("resolveAwsSdkEnvVarName", () => {
     expect(resolveAwsSdkEnvVarName(env)).toBe("AWS_BEARER_TOKEN_BEDROCK");
   });
 
-  it("uses access keys when bearer token is missing", () => {
+  it("uses access keys when bearer token is missing", async () => {
     const env = {
       AWS_ACCESS_KEY_ID: "access",
       AWS_SECRET_ACCESS_KEY: "secret",
@@ -24,7 +24,7 @@ describe("resolveAwsSdkEnvVarName", () => {
     expect(resolveAwsSdkEnvVarName(env)).toBe("AWS_ACCESS_KEY_ID");
   });
 
-  it("uses profile when no bearer token or access keys exist", () => {
+  it("uses profile when no bearer token or access keys exist", async () => {
     const env = {
       AWS_PROFILE: "default",
     } as NodeJS.ProcessEnv;
@@ -32,13 +32,13 @@ describe("resolveAwsSdkEnvVarName", () => {
     expect(resolveAwsSdkEnvVarName(env)).toBe("AWS_PROFILE");
   });
 
-  it("returns undefined when no AWS auth env is set", () => {
+  it("returns undefined when no AWS auth env is set", async () => {
     expect(resolveAwsSdkEnvVarName({} as NodeJS.ProcessEnv)).toBeUndefined();
   });
 });
 
 describe("resolveModelAuthMode", () => {
-  it("returns mixed when provider has both token and api key profiles", () => {
+  it("returns mixed when provider has both token and api key profiles", async () => {
     const store: AuthProfileStore = {
       version: 1,
       profiles: {
@@ -55,12 +55,12 @@ describe("resolveModelAuthMode", () => {
       },
     };
 
-    expect(resolveModelAuthMode("openai", undefined, store)).toBe("mixed");
+    expect(await resolveModelAuthMode("openai", undefined, store)).toBe("mixed");
   });
 
-  it("returns aws-sdk when provider auth is overridden", () => {
+  it("returns aws-sdk when provider auth is overridden", async () => {
     expect(
-      resolveModelAuthMode(
+      await resolveModelAuthMode(
         "amazon-bedrock",
         {
           models: {
@@ -80,7 +80,7 @@ describe("resolveModelAuthMode", () => {
 });
 
 describe("requireApiKey", () => {
-  it("normalizes line breaks in resolved API keys", () => {
+  it("normalizes line breaks in resolved API keys", async () => {
     const key = requireApiKey(
       {
         apiKey: "\n sk-test-abc\r\n",
@@ -93,7 +93,7 @@ describe("requireApiKey", () => {
     expect(key).toBe("sk-test-abc");
   });
 
-  it("throws when no API key is present", () => {
+  it("throws when no API key is present", async () => {
     expect(() =>
       requireApiKey(
         {

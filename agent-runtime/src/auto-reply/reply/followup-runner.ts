@@ -3,7 +3,7 @@ import { resolveAgentModelFallbacksOverride } from "../../agents/agent-scope.js"
 import { lookupContextTokens } from "../../agents/context.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../../agents/defaults.js";
 import { runWithModelFallback } from "../../agents/model-fallback.js";
-import { runEmbeddedPiAgent } from "../../agents/pi-embedded.js";
+import { runEmbeddedAgent } from "../../agents/embedded.js";
 import { resolveAgentIdFromSessionKey, type SessionEntry } from "../../config/sessions.js";
 import type { TypingMode } from "../../config/types.js";
 import { logVerbose } from "../../globals.js";
@@ -122,7 +122,7 @@ export function createFollowupRunner(params: {
         });
       }
       let autoCompactionCompleted = false;
-      let runResult: Awaited<ReturnType<typeof runEmbeddedPiAgent>>;
+      let runResult: Awaited<ReturnType<typeof runEmbeddedAgent>>;
       let fallbackProvider = queued.run.provider;
       let fallbackModel = queued.run.model;
       try {
@@ -137,7 +137,7 @@ export function createFollowupRunner(params: {
           ),
           run: (provider, model) => {
             const authProfile = resolveRunAuthProfile(queued.run, provider);
-            return runEmbeddedPiAgent({
+            return runEmbeddedAgent({
               sessionId: queued.run.sessionId,
               sessionKey: queued.run.sessionKey,
               agentId: queued.run.agentId,

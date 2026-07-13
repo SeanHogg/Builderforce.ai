@@ -17,6 +17,7 @@
 
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { cosineSimilarity } from './vectorMath';
 
 /** One stored association. `e` = embedding, `r` = response, `t` = stored-at ms. */
 interface SemanticEntry { e: number[]; r: string; t: number }
@@ -30,19 +31,8 @@ function partitionKey(tenantId: number, namespace: string): string {
   return `semcache:${tenantId}:${namespace}`;
 }
 
-/** Cosine similarity, 0 for a zero vector. Local copy — the Worker bundle must
- *  not pull the WebGPU engine just for this; kept in sync with the library's. */
-function cosineSimilarity(a: number[], b: number[]): number {
-  const n = Math.min(a.length, b.length);
-  let dot = 0, na = 0, nb = 0;
-  for (let i = 0; i < n; i++) {
-    dot += a[i]! * b[i]!;
-    na  += a[i]! * a[i]!;
-    nb  += b[i]! * b[i]!;
-  }
-  const denom = Math.sqrt(na) * Math.sqrt(nb);
-  return denom === 0 ? 0 : dot / denom;
-}
+// cosineSimilarity now lives in the zero-dep ./vectorMath (one tested copy — the
+// Worker bundle still can't pull @builderforce/memory's WebGPU engine for it).
 
 /** Reads a partition's entries through the L1+L2 read-through cache. */
 async function readPartition(env: Env, tenantId: number, namespace: string): Promise<SemanticEntry[]> {

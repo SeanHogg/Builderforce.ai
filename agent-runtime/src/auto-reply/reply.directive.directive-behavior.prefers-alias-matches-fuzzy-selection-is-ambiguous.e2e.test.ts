@@ -11,7 +11,7 @@ import {
   MAIN_SESSION_KEY,
   makeWhatsAppDirectiveConfig,
   replyText,
-  runEmbeddedPiAgent,
+  runEmbeddedAgent,
   sessionStorePath,
   withTempHome,
 } from "./reply.directive.directive-behavior.e2e-harness.js";
@@ -88,7 +88,7 @@ describe("directive behavior", () => {
         provider: "moonshot",
         model: "kimi-k2-0905-preview",
       });
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("stores auth profile overrides on /model directive", async () => {
@@ -125,7 +125,7 @@ describe("directive behavior", () => {
       const store = loadSessionStore(storePath);
       const entry = store["agent:main:main"];
       expect(entry.authProfileOverride).toBe("anthropic:work");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("queues a system event when switching models", async () => {
@@ -139,7 +139,7 @@ describe("directive behavior", () => {
 
       const events = drainSystemEvents(MAIN_SESSION_KEY);
       expect(events).toContain("Model switched to Opus (anthropic/claude-opus-4-5).");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("queues a system event when toggling elevated", async () => {

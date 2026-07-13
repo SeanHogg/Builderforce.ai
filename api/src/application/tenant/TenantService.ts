@@ -8,6 +8,7 @@ import {
   asTenantId,
 } from '../../domain/shared/types';
 import { NotFoundError, ConflictError, ValidationError } from '../../domain/shared/errors';
+import { trialDaysRemaining } from '../../domain/tenant/effectivePlan';
 import type { PaymentProvider, WebhookEvent } from '../../infrastructure/payment/PaymentProvider';
 
 export interface CreateTenantDto {
@@ -56,6 +57,8 @@ export class TenantService {
     plan: TenantPlan;
     effectivePlan: TenantPlan;
     billingStatus: TenantBillingStatus;
+    trialEndsAt: Date | null;
+    trialDaysRemaining: number | null;
   }>> {
     const userTenants = await this.tenants.findByUserId(userId);
     return userTenants.map(t => {
@@ -70,6 +73,8 @@ export class TenantService {
         plan: t.plan,
         effectivePlan: t.effectivePlan(),
         billingStatus: t.billingStatus,
+        trialEndsAt: t.trialEndsAt,
+        trialDaysRemaining: trialDaysRemaining(t.billingStatus, t.trialEndsAt),
       };
     });
   }
@@ -122,6 +127,17 @@ export class TenantService {
     return this.tenants.update(updated);
   }
 
+  async changeMemberRole(
+    tenantId: number,
+    actorUserId: string,
+    targetUserId: string,
+    role: TenantRole,
+  ): Promise<Tenant> {
+    const tenant = await this.getTenant(tenantId);
+    const updated = tenant.changeMemberRole(actorUserId, targetUserId, role);
+    return this.tenants.update(updated);
+  }
+
   async deleteTenant(id: number): Promise<void> {
     await this.getTenant(id);
     await this.tenants.delete(asTenantId(id));
@@ -144,6 +160,8 @@ export class TenantService {
     externalCustomerId: string | null;
     externalSubscriptionId: string | null;
     seatCount: number | null;
+    trialEndsAt: Date | null;
+    trialDaysRemaining: number | null;
     pricing: typeof TenantService.PRICING;
     paymentProvider: string;
   }> {
@@ -160,6 +178,8 @@ export class TenantService {
       externalCustomerId: tenant.externalCustomerId,
       externalSubscriptionId: tenant.externalSubscriptionId,
       seatCount: tenant.seatCount,
+      trialEndsAt: tenant.trialEndsAt,
+      trialDaysRemaining: trialDaysRemaining(tenant.billingStatus, tenant.trialEndsAt),
       pricing: TenantService.PRICING,
       paymentProvider: this.payment.name,
     };

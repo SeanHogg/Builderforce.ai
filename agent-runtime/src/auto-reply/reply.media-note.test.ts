@@ -2,7 +2,7 @@ import path from "node:path";
 import "./reply.directive.directive-behavior.e2e-mocks.js";
 import { describe, expect, it, vi } from "vitest";
 import { withTempHome as withTempHomeBase } from "../../test/helpers/temp-home.js";
-import { runEmbeddedPiAgent } from "../agents/pi-embedded.js";
+import { runEmbeddedAgent } from "../agents/embedded.js";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import { getReplyFromConfig } from "./reply.js";
 
@@ -19,7 +19,7 @@ function makeResult(text: string) {
 async function withTempHome<T>(fn: (home: string) => Promise<T>): Promise<T> {
   return withTempHomeBase(
     async (home) => {
-      vi.mocked(runEmbeddedPiAgent).mockReset();
+      vi.mocked(runEmbeddedAgent).mockReset();
       return await fn(home);
     },
     {
@@ -48,7 +48,7 @@ describe("getReplyFromConfig media note plumbing", () => {
   it("includes all MediaPaths in the agent prompt", async () => {
     await withTempHome(async (home) => {
       let seenPrompt: string | undefined;
-      vi.mocked(runEmbeddedPiAgent).mockImplementation(async (params) => {
+      vi.mocked(runEmbeddedAgent).mockImplementation(async (params) => {
         seenPrompt = params.prompt;
         return makeResult("ok");
       });

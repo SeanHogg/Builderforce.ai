@@ -6,6 +6,16 @@ import { detectPackageManager as detectPackageManagerImpl } from "./detect-packa
 import { parseSemver } from "./runtime-guard.js";
 import { channelToNpmTag, type UpdateChannel } from "./update-channels.js";
 
+/**
+ * Argv for the working-tree dirty check used by the update subsystem.
+ * Ignores built control-ui assets (`dist/control-ui/`) so a rebuilt UI does not
+ * register as uncommitted changes. Shared by update-check and update-runner so
+ * the exact command stays in one place.
+ */
+export function gitWorkingTreeStatusArgs(root: string): string[] {
+  return ["git", "-C", root, "status", "--porcelain", "--", ":!dist/control-ui/"];
+}
+
 export type PackageManager = "pnpm" | "bun" | "npm" | "unknown";
 
 export type GitUpdateStatus = {
@@ -134,10 +144,9 @@ export async function checkGitUpdateStatus(params: {
   ).catch(() => null);
   const upstream = upstreamRes && upstreamRes.code === 0 ? upstreamRes.stdout.trim() : null;
 
-  const dirtyRes = await runCommandWithTimeout(
-    ["git", "-C", root, "status", "--porcelain", "--", ":!dist/control-ui/"],
-    { timeoutMs },
-  ).catch(() => null);
+  const dirtyRes = await runCommandWithTimeout(gitWorkingTreeStatusArgs(root), {
+    timeoutMs,
+  }).catch(() => null);
   const dirty = dirtyRes && dirtyRes.code === 0 ? dirtyRes.stdout.trim().length > 0 : null;
 
   const fetchOk = params.fetch

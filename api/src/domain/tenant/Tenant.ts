@@ -7,6 +7,7 @@ import {
   TenantBillingStatus,
 } from '../shared/types';
 import { ValidationError, ForbiddenError } from '../shared/errors';
+import { resolveEffectivePlan, TRIAL_DURATION_DAYS } from './effectivePlan';
 
 export interface TenantMemberProps {
   userId: string;
@@ -34,6 +35,8 @@ export interface TenantProps {
   externalSubscriptionId: string | null;
   /** Number of paid seats for Teams plan; null for Free/Pro */
   seatCount: number | null;
+  /** When the introductory Pro trial ends; null when not (and never) trialing. */
+  trialEndsAt: Date | null;
   members: TenantMemberProps[];
   createdAt: Date;
   updatedAt: Date;
@@ -60,6 +63,10 @@ export class Tenant {
 
     const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
     const now = new Date();
+    // Every new workspace starts on a 14-day Pro trial: plan=Pro + status=trialing
+    // + trial_ends_at = now + 14d. effectivePlan() yields Pro limits until it lapses,
+    // then falls back to Free automatically (resolveEffectivePlan is time-based).
+    const trialEndsAt = new Date(now.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000);
 
     return new Tenant({
       id: 0 as TenantId,
@@ -67,9 +74,9 @@ export class Tenant {
       slug,
       status: TenantStatus.ACTIVE,
       defaultAgentHostId: null,
-      plan: TenantPlan.FREE,
+      plan: TenantPlan.PRO,
       billingCycle: null,
-      billingStatus: TenantBillingStatus.NONE,
+      billingStatus: TenantBillingStatus.TRIALING,
       billingEmail: null,
       billingPaymentBrand: null,
       billingPaymentLast4: null,
@@ -77,6 +84,7 @@ export class Tenant {
       externalCustomerId: null,
       externalSubscriptionId: null,
       seatCount: null,
+      trialEndsAt,
       members: [
         { userId: ownerUserId, role: TenantRole.OWNER, isActive: true, joinedAt: now },
       ],
@@ -108,6 +116,7 @@ export class Tenant {
   get externalCustomerId(): string | null { return this.props.externalCustomerId; }
   get externalSubscriptionId(): string | null { return this.props.externalSubscriptionId; }
   get seatCount(): number | null { return this.props.seatCount; }
+  get trialEndsAt(): Date | null { return this.props.trialEndsAt; }
   get members(): readonly TenantMemberProps[] { return this.props.members; }
   get createdAt(): Date { return this.props.createdAt; }
   get updatedAt(): Date { return this.props.updatedAt; }
@@ -156,6 +165,41 @@ export class Tenant {
   }
 
   /**
+   * Change an existing active member's role. Owners and managers may manage
+   * roles, but only an owner may grant or alter the OWNER role, and the last
+   * remaining owner can never be demoted (the workspace must always have one).
+   */
+  changeMemberRole(actorUserId: string, targetUserId: string, role: TenantRole): Tenant {
+    if (!this.canManageMembers(actorUserId)) {
+      throw new ForbiddenError('Only owners and managers can change member roles');
+    }
+    const actor  = this.getMember(actorUserId);
+    const target = this.getMember(targetUserId);
+    if (!target) throw new ValidationError(`User '${targetUserId}' is not an active member`);
+
+    // Granting OWNER, or touching an existing owner's role, is owner-only.
+    if ((role === TenantRole.OWNER || target.role === TenantRole.OWNER) && actor?.role !== TenantRole.OWNER) {
+      throw new ForbiddenError('Only an owner can assign or change the owner role');
+    }
+    // The workspace must always retain at least one owner.
+    if (target.role === TenantRole.OWNER && role !== TenantRole.OWNER) {
+      const owners = this.props.members.filter(m => m.isActive && m.role === TenantRole.OWNER);
+      if (owners.length <= 1) {
+        throw new ValidationError('Cannot demote the last owner — promote another member to owner first');
+      }
+    }
+    if (target.role === role) return this;
+
+    return new Tenant({
+      ...this.props,
+      members: this.props.members.map(m =>
+        m.userId === targetUserId && m.isActive ? { ...m, role } : m,
+      ),
+      updatedAt: new Date(),
+    });
+  }
+
+  /**
    * Rename the workspace. Only owners and managers may do so.
    * The slug is intentionally left unchanged so existing URLs / references stay stable.
    */
@@ -185,11 +229,16 @@ export class Tenant {
     return this.props.billingStatus === TenantBillingStatus.ACTIVE;
   }
 
-  effectivePlan(): TenantPlan {
-    if (!this.hasActiveBilling()) return TenantPlan.FREE;
-    if (this.props.plan === TenantPlan.TEAMS) return TenantPlan.TEAMS;
-    if (this.props.plan === TenantPlan.PRO) return TenantPlan.PRO;
-    return TenantPlan.FREE;
+  /**
+   * The plan whose limits this tenant is entitled to right now — paid `active`,
+   * an unexpired Pro trial, or Free once the trial lapses. Delegates to the one
+   * shared resolver so the gateway + plan-limits guard never drift from this.
+   */
+  effectivePlan(now: Date = new Date()): TenantPlan {
+    return resolveEffectivePlan(
+      { plan: this.props.plan, billingStatus: this.props.billingStatus, trialEndsAt: this.props.trialEndsAt },
+      now,
+    );
   }
 
   activateProSubscription(input: {
@@ -220,6 +269,8 @@ export class Tenant {
       billingUpdatedAt: new Date(),
       externalCustomerId: input.externalCustomerId ?? this.props.externalCustomerId,
       externalSubscriptionId: input.externalSubscriptionId ?? this.props.externalSubscriptionId,
+      // Converting from trial → paid: the trial is consumed.
+      trialEndsAt: null,
       updatedAt: new Date(),
     });
   }
@@ -252,6 +303,8 @@ export class Tenant {
       seatCount: input.seats,
       externalCustomerId: input.externalCustomerId ?? this.props.externalCustomerId,
       externalSubscriptionId: input.externalSubscriptionId ?? this.props.externalSubscriptionId,
+      // Converting from trial → paid: the trial is consumed.
+      trialEndsAt: null,
       updatedAt: new Date(),
     });
   }
@@ -285,6 +338,8 @@ export class Tenant {
       billingStatus: TenantBillingStatus.NONE,
       billingUpdatedAt: new Date(),
       seatCount: null,
+      // The trial (if any) is over once explicitly downgraded.
+      trialEndsAt: null,
       updatedAt: new Date(),
     });
   }

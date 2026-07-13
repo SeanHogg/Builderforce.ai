@@ -25,7 +25,7 @@ import {
 } from "../../shared/subagents-format.js";
 import { INTERNAL_MESSAGE_CHANNEL } from "../../utils/message-channel.js";
 import { AGENT_LANE_SUBAGENT } from "../lanes.js";
-import { abortEmbeddedPiRun } from "../pi-embedded.js";
+import { abortEmbeddedRun } from "../embedded.js";
 import { optionalStringEnum } from "../schema/typebox.js";
 import { getSubagentDepthFromSessionStore } from "../subagent-depth.js";
 import {
@@ -36,7 +36,7 @@ import {
   replaceSubagentRunAfterSteer,
   type SubagentRunRecord,
 } from "../subagent-registry.js";
-import type { AnyAgentTool } from "./common.js";
+import type { AgentToolResult, AnyAgentTool } from "./common.js";
 import { jsonResult, readNumberParam, readStringParam } from "./common.js";
 import { resolveInternalSessionKey, resolveMainSessionAlias } from "./sessions-helpers.js";
 
@@ -240,7 +240,7 @@ async function killSubagentRun(params: {
     cache: params.cache,
   });
   const sessionId = resolved.entry?.sessionId;
-  const aborted = sessionId ? abortEmbeddedPiRun(sessionId) : false;
+  const aborted = sessionId ? abortEmbeddedRun(sessionId) : false;
   const cleared = clearSessionQueues([childSessionKey, sessionId]);
   if (cleared.followupCleared > 0 || cleared.laneCleared > 0) {
     logVerbose(
@@ -258,7 +258,7 @@ async function killSubagentRun(params: {
       store[childSessionKey] = current;
     });
   }
-  const marked = markSubagentRunTerminated({
+  const marked = await markSubagentRunTerminated({
     runId: params.entry.runId,
     childSessionKey,
     reason: "killed",
@@ -337,14 +337,16 @@ function buildListText(params: {
   return lines.join("\n");
 }
 
-export function createSubagentsTool(opts?: { agentSessionKey?: string }): AnyAgentTool {
-  return {
-    label: "Subagents",
-    name: "subagents",
-    description:
-      "List, kill, or steer spawned sub-agents for this requester session. Use this for sub-agent orchestration.",
-    parameters: SubagentsToolSchema,
-    execute: async (_toolCallId, args) => {
+export interface SubagentsDeps {
+  agentSessionKey?: string;
+}
+
+/** Shared implementation — pi wrapper + native ToolDefinition both delegate here (DRY). */
+export async function runSubagents(
+  opts: SubagentsDeps | undefined,
+  args: Record<string, unknown>,
+): Promise<AgentToolResult<unknown>> {
+  {
       const params = args as Record<string, unknown>;
       const action = (readStringParam(params, "action") ?? "list") as SubagentAction;
       const cfg = loadConfig();
@@ -590,7 +592,7 @@ export function createSubagentsTool(opts?: { agentSessionKey?: string }): AnyAge
 
         // Interrupt current work first so steer takes precedence immediately.
         if (sessionId) {
-          abortEmbeddedPiRun(sessionId);
+          abortEmbeddedRun(sessionId);
         }
         const cleared = clearSessionQueues([resolved.entry.childSessionKey, sessionId]);
         if (cleared.followupCleared > 0 || cleared.laneCleared > 0) {
@@ -673,6 +675,16 @@ export function createSubagentsTool(opts?: { agentSessionKey?: string }): AnyAge
         status: "error",
         error: "Unsupported action.",
       });
-    },
+  }
+}
+
+export function createSubagentsTool(opts?: SubagentsDeps): AnyAgentTool {
+  return {
+    label: "Subagents",
+    name: "subagents",
+    description:
+      "List, kill, or steer spawned sub-agents for this requester session. Use this for sub-agent orchestration.",
+    parameters: SubagentsToolSchema,
+    execute: async (_toolCallId, args) => runSubagents(opts, args as Record<string, unknown>),
   };
 }

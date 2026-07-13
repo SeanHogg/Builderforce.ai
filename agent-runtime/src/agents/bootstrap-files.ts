@@ -1,11 +1,11 @@
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import { applyBootstrapHookOverrides } from "./bootstrap-hooks.js";
-import type { EmbeddedContextFile } from "./pi-embedded-helpers.js";
+import type { EmbeddedContextFile } from "./embedded-helpers.js";
 import {
   buildBootstrapContextFiles,
   resolveBootstrapMaxChars,
   resolveBootstrapTotalMaxChars,
-} from "./pi-embedded-helpers.js";
+} from "./embedded-helpers.js";
 import {
   filterBootstrapFilesForSession,
   loadWorkspaceBootstrapFiles,

@@ -15,7 +15,7 @@ import {
 async function main() {
   const projectRoot = process.cwd() + "/test-project";
 
-  console.log("🦞 builderForceAgents Project Initialization Example\n");
+  console.log("🤖 BuilderForce Agents Project Initialization Example\n");
 
   // Check if already initialized
   const isInitialized = await isBuilderForceAgentsProject(projectRoot);

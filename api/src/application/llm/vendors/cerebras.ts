@@ -4,81 +4,37 @@
  *
  * Quotas (2026-05): llama3.1-8b — 30 req/min, 60K tok/min, 14.4K req/day, 1M tok/day.
  *                  qwen-3-235b — 1 req/min, 30K tok/min, 14.4K req/day, 1M tok/day.
+ *
+ * Cerebras is OpenAI-compatible, so it's built from the shared
+ * {@link createOpenAICompatibleVendor} factory — with two quirks threaded through:
+ *   - `max_completion_tokens` (Cerebras's preferred output-token field), and
+ *   - a draft-07 JSON-Schema sanitize on the `extraBody` passthrough (its strict
+ *     validator rejects `maxLength`/`format`/`pattern`/… that Zod's `toJSONSchema()`
+ *     emits — see jsonSchemaSanitize.ts).
+ * Unlike the commercial OpenAI-compatible vendors, Cerebras is FREE-tier and
+ * `autoRoute: true` — it stays in the auto-selected FREE pool exactly as before.
  */
 
-import {
-  executeChatCompletion,
-  executeChatCompletionStream,
-  type AiModelTier,
-  type VendorCallParams,
-  type VendorCallResult,
-  type VendorModelEntry,
-  type VendorModule,
-  type VendorStreamResult,
-} from './types';
-import { sanitizeExtraBodyForVendor } from '../jsonSchemaSanitize';
-
-const ENDPOINT = 'https://api.cerebras.ai/v1/chat/completions';
+import { createOpenAICompatibleVendor } from './openaiCompatible';
+import type { VendorModelEntry } from './types';
+import { CEREBRAS_STRICT_KEYWORDS, sanitizeExtraBodyForVendor } from '../jsonSchemaSanitize';
 
 const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'llama3.1-8b',                      tier: 'FREE', label: 'Llama 3.1 8B (Cerebras · Fast)',   brand: 'Cerebras' },
   { id: 'qwen-3-235b-a22b-instruct-2507',   tier: 'FREE', label: 'Qwen 3 235B (Cerebras · Preview)', brand: 'Cerebras' },
 ];
 
-const CATALOG_BY_ID = new Map(CATALOG.map((m) => [m.id, m]));
-
-function tierForCerebrasModel(modelId: string): AiModelTier {
-  return CATALOG_BY_ID.get(modelId)?.tier ?? 'FREE';
-}
-
-function buildBody(params: VendorCallParams): Record<string, unknown> {
-  const { model, messages, tools, toolChoice, maxTokens, temperature, topP, extraBody } = params;
-  // Strip draft-07 JSON-Schema keywords Cerebras's strict validator rejects
-  // (`maxLength` / `minLength` / `format` / `pattern` / etc. — see
-  // jsonSchemaSanitize.ts). Without this, any consumer that ran their Zod
-  // schema through `z.toJSONSchema()` gets a 400 back from Cerebras the moment
-  // they include a `.max(N)` on a string field.
-  const safeExtra = sanitizeExtraBodyForVendor('cerebras', extraBody);
-  return {
-    model,
-    messages,
-    ...(tools ? { tools } : {}),
-    ...(toolChoice ? { tool_choice: toolChoice } : {}),
-    // Cerebras prefers `max_completion_tokens` (newer field name).
-    ...(maxTokens != null ? { max_completion_tokens: maxTokens } : {}),
-    ...(temperature != null ? { temperature } : {}),
-    ...(topP != null ? { top_p: topP } : {}),
-    ...(safeExtra ?? {}),
-  };
-}
-
-export const cerebrasModule: VendorModule = {
+export const cerebrasModule = createOpenAICompatibleVendor({
   id: 'cerebras',
+  baseUrl: 'https://api.cerebras.ai/v1/chat/completions',
+  apiKeyEnv: 'CEREBRAS_API_KEY',
   catalog: CATALOG,
-  tierFor: tierForCerebrasModel,
-  apiKeyFrom(env) { return env.CEREBRAS_API_KEY ?? null; },
-  async call(params: VendorCallParams): Promise<VendorCallResult> {
-    return executeChatCompletion({
-      vendorId: 'cerebras',
-      endpoint: ENDPOINT,
-      apiKey: params.apiKey,
-      model: params.model,
-      body: { ...buildBody(params), stream: false },
-      ...(params.title ? { title: params.title } : {}),
-      ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
-      ...(params.signal ? { signal: params.signal } : {}),
-    });
-  },
-  async callStream(params: VendorCallParams): Promise<VendorStreamResult> {
-    return executeChatCompletionStream({
-      vendorId: 'cerebras',
-      endpoint: ENDPOINT,
-      apiKey: params.apiKey,
-      model: params.model,
-      body: buildBody(params),
-      ...(params.title ? { title: params.title } : {}),
-      ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
-      ...(params.signal ? { signal: params.signal } : {}),
-    });
-  },
-};
+  defaultTier: 'FREE',
+  autoRoute: true,
+  maxTokensField: 'max_completion_tokens',
+  // Declares the strict-mode strip set so the sanitizer is metadata-driven
+  // (no hardcoded vendor-id list). `transformExtra` reads it back via the
+  // registry-wired resolver.
+  schemaDialect: { stripKeywords: CEREBRAS_STRICT_KEYWORDS },
+  transformExtra: (extra) => sanitizeExtraBodyForVendor('cerebras', extra),
+});

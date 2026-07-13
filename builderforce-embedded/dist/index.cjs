@@ -110,6 +110,9 @@ var EMBED_VIEWS = {
   "feature-flags": { key: "feature-flags", label: "Feature Flags", pillar: "product", available: true },
   "feature-roi": { key: "feature-roi", label: "Feature ROI", pillar: "product", available: true },
   "business-value": { key: "business-value", label: "Business-Value Models", pillar: "product", available: true },
+  "dependency-graph": { key: "dependency-graph", label: "Dependency Graph", pillar: "product", available: true },
+  "rice-matrix": { key: "rice-matrix", label: "RICE Matrix", pillar: "product", available: true },
+  "roi-dashboard": { key: "roi-dashboard", label: "ROI Dashboard", pillar: "product", available: true },
   // Agile Survival (CTO)
   kanban: { key: "kanban", label: "Kanban", pillar: "agile", available: true },
   poker: { key: "poker", label: "Planning Poker", pillar: "agile", available: true },
@@ -119,6 +122,7 @@ var EMBED_VIEWS = {
   capacity: { key: "capacity", label: "Capacity & Risk", pillar: "agile", available: true },
   cost: { key: "cost", label: "Cost / Runway", pillar: "agile", available: true },
   "feature-scoring": { key: "feature-scoring", label: "Feature Scoring", pillar: "agile", available: true },
+  workforce: { key: "workforce", label: "Workforce", pillar: "agile", available: true },
   // Governance & Security — POSTURE ONLY (governance ⇒ 'security' capability)
   soc2: { key: "soc2", label: "SOC 2 Tracker", pillar: "governance", available: true },
   vendors: { key: "vendors", label: "Vendor Register", pillar: "governance", available: true },

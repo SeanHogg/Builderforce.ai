@@ -1,19 +1,19 @@
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import * as piCodingAgent from "@mariozechner/pi-coding-agent";
+import type { AgentMessage } from "../builderforce/model/agent-types.js";
+import type { ExtensionContext } from "./agent-extensions/types.js";
+import * as agentLoop from "../builderforce/agent-loop/index.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { retryAsync } from "../infra/retry.js";
 
 // Mock the external generateSummary function
-vi.mock("@mariozechner/pi-coding-agent", async (importOriginal) => {
-  const actual = await importOriginal<typeof piCodingAgent>();
+vi.mock("../builderforce/agent-loop/index.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof agentLoop>();
   return {
     ...actual,
     generateSummary: vi.fn(),
   };
 });
 
-const mockGenerateSummary = vi.mocked(piCodingAgent.generateSummary);
+const mockGenerateSummary = vi.mocked(agentLoop.generateSummary);
 
 describe("compaction retry integration", () => {
   beforeEach(() => {

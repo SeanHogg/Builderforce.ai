@@ -24,10 +24,10 @@ import {
   resolveQueueAnnounceId,
 } from "./announce-idempotency.js";
 import {
-  isEmbeddedPiRunActive,
-  queueEmbeddedPiMessage,
-  waitForEmbeddedPiRunEnd,
-} from "./pi-embedded.js";
+  isEmbeddedRunActive,
+  queueEmbeddedMessage,
+  waitForEmbeddedRunEnd,
+} from "./embedded.js";
 import { type AnnounceQueueItem, enqueueAnnounce } from "./subagent-announce-queue.js";
 import { getSubagentDepthFromSessionStore } from "./subagent-depth.js";
 import { sanitizeTextContent, extractAssistantText } from "./tools/sessions-helpers.js";
@@ -372,11 +372,11 @@ async function maybeQueueSubagentAnnounce(params: {
     channel: entry?.channel ?? entry?.lastChannel,
     sessionEntry: entry,
   });
-  const isActive = isEmbeddedPiRunActive(sessionId);
+  const isActive = isEmbeddedRunActive(sessionId);
 
   const shouldSteer = queueSettings.mode === "steer" || queueSettings.mode === "steer-backlog";
   if (shouldSteer) {
-    const steered = queueEmbeddedPiMessage(sessionId, params.triggerMessage);
+    const steered = queueEmbeddedMessage(sessionId, params.triggerMessage);
     if (steered) {
       return "steered";
     }
@@ -742,9 +742,9 @@ export async function runSubagentAnnounceFlow(params: {
     let outcome: SubagentRunOutcome | undefined = params.outcome;
     // Lifecycle "end" can arrive before auto-compaction retries finish. If the
     // subagent is still active, wait for the embedded run to fully settle.
-    if (!expectsCompletionMessage && childSessionId && isEmbeddedPiRunActive(childSessionId)) {
-      const settled = await waitForEmbeddedPiRunEnd(childSessionId, settleTimeoutMs);
-      if (!settled && isEmbeddedPiRunActive(childSessionId)) {
+    if (!expectsCompletionMessage && childSessionId && isEmbeddedRunActive(childSessionId)) {
+      const settled = await waitForEmbeddedRunEnd(childSessionId, settleTimeoutMs);
+      if (!settled && isEmbeddedRunActive(childSessionId)) {
         // The child run is still active (e.g., compaction retry still in progress).
         // Defer announcement so we don't report stale/partial output.
         // Keep the child session so output is not lost while the run is still active.
@@ -805,7 +805,7 @@ export async function runSubagentAnnounceFlow(params: {
       !expectsCompletionMessage &&
       !reply?.trim() &&
       childSessionId &&
-      isEmbeddedPiRunActive(childSessionId)
+      isEmbeddedRunActive(childSessionId)
     ) {
       // Avoid announcing "(no output)" while the child run is still producing output.
       shouldDeleteChildSession = false;
@@ -819,7 +819,7 @@ export async function runSubagentAnnounceFlow(params: {
     let activeChildDescendantRuns = 0;
     try {
       const { countActiveDescendantRuns } = await import("./subagent-registry.js");
-      activeChildDescendantRuns = Math.max(0, countActiveDescendantRuns(params.childSessionKey));
+      activeChildDescendantRuns = Math.max(0, await countActiveDescendantRuns(params.childSessionKey));
     } catch {
       // Best-effort only; fall back to direct announce behavior when unavailable.
     }
@@ -870,7 +870,7 @@ export async function runSubagentAnnounceFlow(params: {
 
         if (!parentSessionAlive) {
           // Parent session is truly gone — fallback to grandparent
-          const fallback = resolveRequesterForChildSession(targetRequesterSessionKey);
+          const fallback = await resolveRequesterForChildSession(targetRequesterSessionKey);
           if (!fallback?.requesterSessionKey) {
             // Without a requester fallback we cannot safely deliver this nested
             // completion. Keep cleanup retryable so a later registry restore can
@@ -894,7 +894,7 @@ export async function runSubagentAnnounceFlow(params: {
       const { countActiveDescendantRuns } = await import("./subagent-registry.js");
       remainingActiveSubagentRuns = Math.max(
         0,
-        countActiveDescendantRuns(targetRequesterSessionKey),
+        await countActiveDescendantRuns(targetRequesterSessionKey),
       );
     } catch {
       // Best-effort only; fall back to default announce instructions when unavailable.

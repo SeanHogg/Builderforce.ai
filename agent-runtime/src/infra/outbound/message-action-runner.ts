@@ -1,4 +1,4 @@
-import type { AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentToolResult } from "../../builderforce/model/agent-types.js";
 import { resolveSessionAgentId } from "../../agents/agent-scope.js";
 import {
   readNumberParam,
@@ -20,6 +20,7 @@ import {
   type GatewayClientName,
 } from "../../utils/message-channel.js";
 import { throwIfAborted } from "./abort.js";
+import { stripWhatsAppLeadingBlankLines } from "./whatsapp-text.js";
 import {
   listConfiguredMessageChannels,
   resolveMessageChannelSelection,
@@ -461,7 +462,7 @@ async function handleSendAction(ctx: ResolvedActionContext): Promise<MessageActi
 
   const mediaUrl = readStringParam(params, "media", { trim: false });
   if (channel === "whatsapp") {
-    message = message.replace(/^(?:[ \t]*\r?\n)+/, "");
+    message = stripWhatsAppLeadingBlankLines(message);
     if (!message.trim()) {
       message = "";
     }

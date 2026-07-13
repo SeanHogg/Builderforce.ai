@@ -7,14 +7,20 @@
  *   - Static assets (JS/CSS/images): cache-first, refreshed in background
  *
  * Update flow:
- *   1. On deploy, this file changes → browser detects a new SW version
+ *   1. On deploy, scripts/stamp-sw-version.js rewrites BUILD_VERSION below with a
+ *      unique per-build token → this file's bytes change → browser detects a new SW
  *   2. New SW installs but waits (does not self.skipWaiting())
  *   3. PwaUpdateBanner detects the waiting SW and shows the update toast
  *   4. User clicks "Update now" → banner posts SKIP_WAITING → SW activates
  *   5. Page reloads with the new version
+ *
+ * NOTE: __BUILD_VERSION__ is a literal placeholder. It is replaced at deploy time
+ * (cf-build) so the SW byte content differs per build — without this the file is
+ * byte-identical across deploys and the browser never surfaces an update.
  */
 
-const CACHE_NAME = 'bf-cache-v2';
+const BUILD_VERSION = '__BUILD_VERSION__';
+const CACHE_NAME = 'bf-cache-' + BUILD_VERSION;
 
 const PRECACHE_URLS = [
   '/manifest.json',
@@ -91,3 +97,6 @@ self.addEventListener('message', (event) => {
     self.skipWaiting();
   }
 });
+
+// Push / notification handlers intentionally omitted: OS-level notifications are
+// handled by the host platform (BurnRateOS.com), not by Builderforce.

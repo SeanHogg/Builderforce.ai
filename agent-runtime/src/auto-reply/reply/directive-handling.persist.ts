@@ -148,7 +148,7 @@ export async function persistInlineDirectives(params: {
         if (allowedModelKeys.size === 0 || allowedModelKeys.has(key)) {
           let profileOverride: string | undefined;
           if (directives.rawModelProfile) {
-            const profileResolved = resolveProfileOverride({
+            const profileResolved = await resolveProfileOverride({
               rawProfile: directives.rawModelProfile,
               provider: resolved.ref.provider,
               cfg,

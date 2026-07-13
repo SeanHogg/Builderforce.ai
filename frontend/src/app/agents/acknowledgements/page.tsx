@@ -37,7 +37,7 @@ const differences = [
   { title: 'Full Dev Lifecycle', body: 'PRD → Architecture → Task breakdown → Code → Review → Test → Debug → Refactor — orchestrated in a single runtime, no IDE required.' },
   { title: 'Builderforce Integration', body: 'REST API at api.builderforce.ai for multi-tenant project management, agent registration, execution tracking, and audit trails — Cloudflare Workers + Neon PostgreSQL.' },
   { title: 'Self-Hosted & Open', body: 'Your code stays on your machine. MIT-licensed. No IDE tether, no vendor cloud, no subscription ceiling.' },
-  { title: 'Channel-Agnostic', body: "Inherits all of OpenAgentHost's channel integrations — trigger coding workflows from WhatsApp, Telegram, Slack, or Discord just as easily as from the terminal." },
+  { title: 'Channel-Agnostic', body: "Inherits all of OpenClaw's channel integrations — trigger coding workflows from WhatsApp, Telegram, Slack, or Discord just as easily as from the terminal." },
 ];
 
 export default function AcknowledgementsPage() {
@@ -49,10 +49,10 @@ export default function AcknowledgementsPage() {
       </p>
 
       <section>
-        <h2>Built on OpenAgentHost</h2>
+        <h2>Built on OpenClaw</h2>
         <p>
-          BuilderForce Agents started as a fork of <a href="https://openclaw.ai" target="_blank" rel="noopener">OpenAgentHost</a> —
-          the open-source personal AI assistant built by the OpenAgentHost team. OpenAgentHost gave us a battle-tested gateway
+          BuilderForce Agents started as a fork of <a href="https://openclaw.ai" target="_blank" rel="noopener">OpenClaw</a> —
+          the open-source personal AI assistant built by the OpenClaw team. OpenClaw gave us a battle-tested gateway
           runtime, multi-channel connectivity (WhatsApp, Telegram, Slack, Discord, Signal, iMessage…), a reactive
           Lit-based dashboard UI, the plugin / skills infrastructure, and an opinionated project structure we could
           build on immediately.
@@ -65,9 +65,9 @@ export default function AcknowledgementsPage() {
       </section>
 
       <section>
-        <h2>How BuilderForce Agents Extends OpenAgentHost 🚀</h2>
+        <h2>How BuilderForce Agents Extends OpenClaw 🚀</h2>
         <p>
-          BuilderForce Agents kept everything that makes OpenAgentHost great and added a focused developer-first orchestration layer
+          BuilderForce Agents kept everything that makes OpenClaw great and added a focused developer-first orchestration layer
           on top.
         </p>
         <ul>
@@ -107,7 +107,7 @@ builderforce onboard --install-daemon</code></pre>
       <section>
         <h2>Built By 👤</h2>
         <p>
-          <a href="https://myvideoresu.me/resumes/seanhogg" target="_blank" rel="noopener">Sean Hogg</a> — Developer,
+          <a href="https://hired.video/resumes/seanhogg" target="_blank" rel="noopener">Sean Hogg</a> — Developer,
           architect, and maintainer of BuilderForce Agents and Builderforce.ai.{' '}
           <a href="https://github.com/SeanHogg" target="_blank" rel="noopener">GitHub</a> ·{' '}
           <a href="/agents/contact">Contact</a>

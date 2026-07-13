@@ -1,0 +1,7 @@
+#!/bin/sh
+# Isolation-track scope pre-commit hook (T9 · Platform · DB · CI steward).
+# Rejects a commit on a `track/<id>` branch that stages files outside the track's
+# owns paths or grabs a migration number from another band. Same guard CI runs.
+# Install once: node api/scripts/install-track-hook.mjs  (or: git config core.hooksPath api/scripts/git-hooks)
+# Bypass a single commit (rarely needed): git commit --no-verify
+node api/scripts/check-track-scope.mjs --staged

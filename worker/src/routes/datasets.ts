@@ -101,6 +101,10 @@ datasets.post('/generate', async (c) => {
       capabilityPrompt: string;
       name: string;
       exampleCount?: number;
+      /** Optional caller-chosen model id. Routed by the gateway's vendor registry —
+       *  any OpenRouter model id (bare) or an explicit `<vendor>/<id>` pin. The
+       *  frontend picker supplies this; omitted → gateway default pool. */
+      model?: string;
     }>();
 
     if (!body.projectId || !body.capabilityPrompt || !body.name) {
@@ -133,7 +137,8 @@ datasets.post('/generate', async (c) => {
             body.capabilityPrompt,
             exampleCount,
             c.env,
-            authToken
+            authToken,
+            body.model
           );
 
           emit({ type: 'chunk', content: `Generated ${generated.examples.length} examples` });

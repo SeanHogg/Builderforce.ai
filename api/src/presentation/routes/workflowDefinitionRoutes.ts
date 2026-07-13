@@ -481,5 +481,49 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ workflowId: result.workflowId, taskCount: result.taskCount }, 201);
   });
 
+  // POST /:id/fork — fork a (typically shared/global) definition into a custom,
+  // project-scoped copy. This is the "modify a shared workflow → custom workflow"
+  // path: the source template stays untouched; the fork records its lineage in
+  // `parentDefinitionId` and binds to `projectId` (defaults to the source's).
+  router.post('/:id/fork', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const segmentId = c.get('segmentId') ?? null;
+    const id = c.req.param('id');
+    const body = await c.req.json<{ name?: string; projectId?: number | null }>().catch(() => ({} as { name?: string; projectId?: number | null }));
+
+    const [src] = await db
+      .select()
+      .from(workflowDefinitions)
+      .where(and(eq(workflowDefinitions.id, id), eq(workflowDefinitions.tenantId, tenantId)));
+    if (!src) return c.json({ error: 'Workflow definition not found' }, 404);
+
+    const forkId = crypto.randomUUID();
+    const now = new Date();
+    const projectId = body.projectId !== undefined ? body.projectId : src.projectId;
+    const def = parseDefinition(src.definition);
+    await db.insert(workflowDefinitions).values({
+      id: forkId,
+      tenantId,
+      segmentId,
+      name: body.name?.trim() || `${src.name} (custom)`,
+      description: src.description,
+      projectId: projectId ?? null,
+      definition: JSON.stringify(def),
+      runTargetRuntime: src.runTargetRuntime,
+      runTargetAgentHostId: src.runTargetAgentHostId,
+      runTargetCloudAgentRef: src.runTargetCloudAgentRef,
+      executionScope: scopeFromProject(projectId, src.executionScope),
+      parentDefinitionId: src.id,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await syncDefinitionTriggers(db, {
+      definitionId: forkId, tenantId, segmentId, definition: def, target: runTargetFromDefinition(src),
+    });
+    await invalidateCached(c.env as Env, listCacheKey(tenantId));
+    const [row] = await db.select().from(workflowDefinitions).where(eq(workflowDefinitions.id, forkId));
+    return c.json({ ...row, definition: parseDefinition(row!.definition) }, 201);
+  });
+
   return router;
 }

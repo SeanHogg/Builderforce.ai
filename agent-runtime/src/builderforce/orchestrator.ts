@@ -15,6 +15,7 @@ import type {
   AgentTransportDispatchResult,
   IAgentTransport,
   IAgentMemoryService,
+  ILimbicSystem,
   ILlmService,
   IMcpService,
   ITelemetryService,
@@ -35,6 +36,28 @@ import {
 } from "./routing-rules.js";
 
 export type { SpawnSubagentContext } from "../agents/subagent-spawn.js";
+
+/**
+ * Self-healing retry policy for failed tasks. A task is re-dispatched up to
+ * `MAX_TASK_RETRIES` additional times (so `1 + MAX_TASK_RETRIES` total attempts)
+ * with a small linear backoff between attempts before it — and the workflow —
+ * is marked permanently `failed`.
+ *
+ * Overridable via env so operators can tune recovery aggressiveness without a
+ * rebuild; malformed values fall back to the defaults.
+ */
+const DEFAULT_MAX_TASK_RETRIES = 2;
+const DEFAULT_RETRY_BACKOFF_MS = 1_500;
+
+function envInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+const MAX_TASK_RETRIES = envInt("BUILDERFORCE_WORKFLOW_MAX_RETRIES", DEFAULT_MAX_TASK_RETRIES);
+const RETRY_BACKOFF_MS = envInt("BUILDERFORCE_WORKFLOW_RETRY_BACKOFF_MS", DEFAULT_RETRY_BACKOFF_MS);
 
 export type TaskStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
 
@@ -66,6 +89,10 @@ export type Task = {
   completedAt?: Date;
   dependencies: string[];
   dependents: string[];
+  /** Number of dispatch attempts so far (1 = first try; incremented on each retry). */
+  attempts?: number;
+  /** Last error message observed across attempts. Kept on the task for diagnostics. */
+  lastError?: string;
   /** Builder node kind (memory/knowledge/train/transform/…) when this task was
    *  compiled from a visual workflow definition. Drives the in-process node
    *  handler instead of agent dispatch. Undefined for plain agent tasks. */
@@ -100,6 +127,7 @@ export type OrchestratorConfig = {
   relayService?: IRelayService;
   llmService?: ILlmService | null;
   mcpService?: IMcpService | null;
+  limbicSystem?: ILimbicSystem | null;
 };
 
 /**
@@ -121,6 +149,8 @@ export class AgentOrchestrator {
   private llmService: ILlmService | null = null;
   /** Domain port: MCP / SaaS integration invocation (builder `mcp` nodes). */
   private mcpService: IMcpService | null = null;
+  /** Domain port: the agent's limbic system (dynamic affective layer). */
+  private limbicSystem: ILimbicSystem | null = null;
   /** Unified local/remote transport for task dispatch and agentNode discovery.
    *  Always wired by the gateway (local-only when no API key, composite when
    *  BUILDERFORCE_API_KEY is present). */
@@ -128,6 +158,8 @@ export class AgentOrchestrator {
   /** Per-task spawn context, exposed to local transports via `currentSpawnContext()`.
    *  Single-threaded by virtue of the orchestrator's serial executeTask loop. */
   private activeSpawnContext: SpawnSubagentContext | null = null;
+  /** Guard so {@link resumeAllIncomplete} is idempotent (no double auto-resume). */
+  private resumingInFlight = false;
 
   /** Enable disk persistence for workflows and workflow telemetry. Call at gateway startup. */
   setProjectRoot(
@@ -185,6 +217,14 @@ export class AgentOrchestrator {
     if (config.mcpService !== undefined) {
       this.mcpService = config.mcpService;
     }
+    if (config.limbicSystem !== undefined) {
+      this.limbicSystem = config.limbicSystem;
+    }
+  }
+
+  /** The configured limbic system, if any. Null when no affective layer is wired. */
+  getLimbicSystem(): ILimbicSystem | null {
+    return this.limbicSystem;
   }
 
   // ── Single-port shims (kept for backward compatibility) ──────────────────────
@@ -380,18 +420,18 @@ export class AgentOrchestrator {
         break;
       }
 
-      // Execute tasks in parallel when possible
+      // Execute tasks in parallel when possible. Each task is retried with a
+      // bounded attempt budget + backoff before it is allowed to fail the run
+      // (self-healing). `executedTasks` is only marked once a task reaches a
+      // terminal state (completed or exhausted-failed) so the dependency-order
+      // loop never spins on an in-flight retry.
       await Promise.all(
         nextTasks.map(async (task) => {
-          try {
-            const result = await this.executeTask(task, workflow, context);
+          const result = await this.executeTaskWithRetry(task, workflow, context);
+          if (result !== null) {
             results.set(task.id, result);
-            executedTasks.add(task.id);
-          } catch (error) {
-            task.status = "failed";
-            task.error = error instanceof Error ? error.message : String(error);
-            executedTasks.add(task.id);
           }
+          executedTasks.add(task.id);
         }),
       );
     }
@@ -410,6 +450,57 @@ export class AgentOrchestrator {
     this.persistWorkflow(workflow);
 
     return results;
+  }
+
+  /**
+   * Execute a single task with a bounded, backed-off retry budget (self-healing).
+   *
+   * On success returns the task output. On exhausted failure leaves the task in
+   * the `failed` state (with `attempts`/`lastError` recorded) and returns null —
+   * the caller marks the workflow `failed` in its post-loop check. Already-failed
+   * tasks restored from disk are honoured: a fresh attempt budget is applied so a
+   * resumed workflow re-tries a previously-failed step rather than giving up.
+   */
+  private async executeTaskWithRetry(
+    task: Task,
+    workflow: Workflow,
+    context: SpawnSubagentContext,
+  ): Promise<string | null> {
+    const maxAttempts = MAX_TASK_RETRIES + 1;
+    for (let attempt = (task.attempts ?? 0) + 1; attempt <= maxAttempts; attempt++) {
+      task.attempts = attempt;
+      // executeTask() flips a failing task to "failed"; reset to "pending" so the
+      // VALID_TASK_TRANSITIONS guard (failed → pending) is honoured before retry.
+      if (task.status === "failed") {
+        task.status = "pending";
+      }
+      try {
+        return await this.executeTask(task, workflow, context);
+      } catch (error) {
+        task.lastError = error instanceof Error ? error.message : String(error);
+        const isLastAttempt = attempt >= maxAttempts;
+        logDebug(
+          `[orchestrator] task ${task.id} (role=${task.agentRole}) failed on attempt ` +
+            `${attempt}/${maxAttempts}: ${task.lastError}` +
+            (isLastAttempt ? " — giving up" : " — retrying"),
+        );
+        if (isLastAttempt) {
+          // executeTask already set status=failed + persisted; record the final
+          // attempt bookkeeping and surface the accumulated error.
+          task.status = "failed";
+          task.error = task.lastError;
+          this.persistWorkflow(workflow);
+          return null;
+        }
+        // Linear backoff before the next attempt. Persist so the attempt count
+        // survives a crash mid-retry (resume picks up where we left off).
+        this.persistWorkflow(workflow);
+        if (RETRY_BACKOFF_MS > 0) {
+          await new Promise((resolve) => setTimeout(resolve, RETRY_BACKOFF_MS * attempt));
+        }
+      }
+    }
+    return null;
   }
 
   /**
@@ -924,6 +1015,8 @@ export class AgentOrchestrator {
             completedAt: task.completedAt?.toISOString(),
             dependencies: task.dependencies,
             dependents: task.dependents,
+            attempts: task.attempts,
+            lastError: task.lastError,
           } satisfies PersistedTask,
         ]),
       ),
@@ -958,6 +1051,8 @@ export class AgentOrchestrator {
         completedAt: pt.completedAt ? new Date(pt.completedAt) : undefined,
         dependencies: pt.dependencies,
         dependents: pt.dependents,
+        attempts: pt.attempts,
+        lastError: pt.lastError,
       });
     }
 
@@ -1009,6 +1104,10 @@ export class AgentOrchestrator {
   /**
    * Resume an incomplete workflow that was previously persisted to disk.
    * Already-completed tasks are skipped; pending/reset tasks are re-executed.
+   *
+   * Tasks that exhausted their retry budget before the crash/restart are reset to
+   * `pending` with a fresh attempt budget so the resumed run genuinely re-attempts
+   * them (self-healing across restarts) rather than inheriting a terminal failure.
    */
   async resumeWorkflow(
     workflowId: string,
@@ -1022,7 +1121,54 @@ export class AgentOrchestrator {
       }
       this.hydrateWorkflow(persisted);
     }
+    const workflow = this.workflows.get(workflowId);
+    if (workflow) {
+      for (const task of workflow.tasks.values()) {
+        if (task.status === "failed") {
+          task.status = "pending";
+          task.error = undefined;
+          task.attempts = 0; // fresh retry budget for this resume
+        }
+      }
+      // Re-open a terminally-failed workflow so executeWorkflow re-evaluates it.
+      if (workflow.status === "failed" || workflow.status === "cancelled") {
+        workflow.status = "pending";
+      }
+    }
     return this.executeWorkflow(workflowId, context);
+  }
+
+  /**
+   * Auto-resume every non-terminal workflow currently in memory. Intended to be
+   * called once at startup, after {@link loadPersistedWorkflows}, so in-flight
+   * work continues after a process restart.
+   *
+   * Guarded against double-invocation (idempotent): a second call while resumes
+   * are still running is a no-op. Each workflow resumes independently; a failure
+   * in one never blocks the others. Returns the IDs that were (re)started.
+   */
+  async resumeAllIncomplete(context: SpawnSubagentContext): Promise<string[]> {
+    if (this.resumingInFlight) {
+      return [];
+    }
+    this.resumingInFlight = true;
+    try {
+      const toResume = Array.from(this.workflows.values()).filter(
+        (wf) => wf.status === "pending" || wf.status === "running",
+      );
+      const resumed: string[] = [];
+      for (const wf of toResume) {
+        resumed.push(wf.id);
+        // Fire each resume independently; do not await so one slow/blocked
+        // workflow cannot stall startup or the other resumes.
+        void this.resumeWorkflow(wf.id, context).catch((err) => {
+          logDebug(`[orchestrator] auto-resume of workflow ${wf.id} failed: ${String(err)}`);
+        });
+      }
+      return resumed;
+    } finally {
+      this.resumingInFlight = false;
+    }
   }
 }
 
@@ -1146,6 +1292,74 @@ export function createSecurityAuditWorkflow(target: string): WorkflowStep[] {
       dependsOn: [
         `Produce prioritised remediation recommendations for all vulnerabilities found in: ${target}. Include concrete code examples or patches for the highest-severity issues.`,
       ],
+    },
+  ];
+}
+
+/**
+ * Quality Audit Workflow
+ *
+ * Bug Analyzer assesses test coverage / CI / build integrity, Test Generator
+ * fills the biggest gaps, and Code Reviewer signs off on the quality posture.
+ * The deterministic engine scores the report; this workflow does the deep pass.
+ */
+export function createQualityAuditWorkflow(target: string): WorkflowStep[] {
+  const assess = `Assess engineering quality for: ${target}. Evaluate automated test coverage, CI presence and gating, lint/type safety, build reproducibility (lockfiles), and error observability. List the highest-impact gaps.`;
+  const fill = `Add or strengthen automated tests and CI checks for the highest-impact gaps found in: ${target}. Prefer fast, deterministic tests around the riskiest untested paths.`;
+  return [
+    { role: "bug-analyzer", task: assess },
+    { role: "test-generator", task: fill, dependsOn: [assess] },
+    {
+      role: "code-reviewer",
+      task: `Review the quality improvements for: ${target}. Verify the new tests are meaningful (not tautological), CI is green, and produce a quality-posture sign-off with residual gaps.`,
+      dependsOn: [fill],
+    },
+  ];
+}
+
+/**
+ * Product Vision & Roadmap Audit Workflow
+ *
+ * Architecture Advisor evaluates product direction (vision, objectives, key
+ * results, roadmap sequencing) and Documentation Agent writes/updates the vision
+ * + roadmap artifacts to close the gaps.
+ */
+export function createPmVisionAuditWorkflow(target: string): WorkflowStep[] {
+  const assess = `Audit the product vision and roadmap for: ${target}. Check for a clear one-page vision (problem, users, differentiation), outcome objectives with measurable key results, and a sequenced/dated roadmap of initiatives. Identify what is missing or vague.`;
+  return [
+    { role: "architecture-advisor", task: assess },
+    {
+      role: "documentation-agent",
+      task: `Draft or update the product vision and roadmap documents for: ${target}, closing the gaps identified. Produce a concise vision doc and a sequenced roadmap outline.`,
+      dependsOn: [assess],
+    },
+  ];
+}
+
+/**
+ * Privacy & Data-Law Compliance Audit Workflow
+ *
+ * Architecture Advisor inventories personal data + data flows, Bug Analyzer
+ * checks the code for privacy-law gaps (consent gating, unsubscribe, data export
+ * / erasure, retention), Documentation Agent drafts the missing privacy policy /
+ * DPA language, and Code Reviewer signs off. Deepens the deterministic privacy
+ * scan with a content-level review.
+ */
+export function createPrivacyAuditWorkflow(target: string): WorkflowStep[] {
+  const inventory = `Inventory the personal data and data flows for: ${target}. Identify what PII is collected, where it is stored, who it is shared with (subprocessors), and the legal basis for each.`;
+  const gaps = `Audit ${target} for GDPR / CCPA·CPRA / CAN-SPAM gaps: is analytics/marketing gated behind opt-in consent; is there a working unsubscribe + List-Unsubscribe + physical address; are there self-service data export (Art. 20) and erasure (Art. 17) endpoints that truly delete; is there a documented retention/purge routine. List concrete gaps.`;
+  return [
+    { role: "architecture-advisor", task: inventory },
+    { role: "bug-analyzer", task: gaps, dependsOn: [inventory] },
+    {
+      role: "documentation-agent",
+      task: `Draft or update the privacy policy, cookie policy, and DPA/subprocessor language for: ${target}, closing the gaps found. Ensure data-subject rights and retention windows are stated plainly.`,
+      dependsOn: [gaps],
+    },
+    {
+      role: "code-reviewer",
+      task: `Review the privacy remediations for: ${target}. Verify consent actually gates trackers, export/erasure endpoints work end-to-end, and produce a compliance sign-off with residual risk.`,
+      dependsOn: [gaps],
     },
   ];
 }

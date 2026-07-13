@@ -7,11 +7,11 @@ import {
 } from "./builderforce-tools.subagents.sessions-spawn.test-harness.js";
 import { resetSubagentRegistryForTests } from "./subagent-registry.js";
 
-vi.mock("./pi-embedded.js", () => ({
-  isEmbeddedPiRunActive: () => false,
-  isEmbeddedPiRunStreaming: () => false,
-  queueEmbeddedPiMessage: () => false,
-  waitForEmbeddedPiRunEnd: async () => true,
+vi.mock("./embedded.js", () => ({
+  isEmbeddedRunActive: () => false,
+  isEmbeddedRunStreaming: () => false,
+  queueEmbeddedMessage: () => false,
+  waitForEmbeddedRunEnd: async () => true,
 }));
 
 const callGatewayMock = getCallGatewayMock();

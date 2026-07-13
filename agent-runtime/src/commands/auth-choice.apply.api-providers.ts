@@ -176,7 +176,7 @@ export async function applyAuthChoiceApiProviders(
   }
 
   if (authChoice === "litellm-api-key") {
-    const store = ensureAuthProfileStore(params.agentDir, { allowKeychainPrompt: false });
+    const store = await ensureAuthProfileStore(params.agentDir, { allowKeychainPrompt: false });
     const profileOrder = resolveAuthProfileOrder({ cfg: nextConfig, store, provider: "litellm" });
     const existingProfileId = profileOrder.find((profileId) => Boolean(store.profiles[profileId]));
     const existingCred = existingProfileId ? store.profiles[existingProfileId] : undefined;

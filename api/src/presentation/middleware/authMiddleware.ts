@@ -1,4 +1,4 @@
-import { MiddlewareHandler } from 'hono';
+import { MiddlewareHandler, type Context } from 'hono';
 import type { HonoEnv } from '../../env';
 import { TenantRole, hasMinRole } from '../../domain/shared/types';
 import { UnauthorizedError, ForbiddenError } from '../../domain/shared/errors';
@@ -58,7 +58,11 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
     }
   }
 
-  if (payload.jti) {
+  // Machine tokens (sub `agentHost:<id>`) are minted by the API-key exchange and
+  // carry a jti but intentionally have no `authTokens`/session row — their
+  // userId FK would not resolve to a real user. Skip the jti-revocation check for
+  // them; they are already bounded by a short TTL and gated on an active API key.
+  if (payload.jti && !payload.sub.startsWith('agentHost:')) {
     const db = buildDatabase(c.env);
     const [activeToken] = await db
       .select({
@@ -143,6 +147,15 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
 
   await next();
 };
+
+/**
+ * Predicate: does the request's caller hold MANAGER role or higher? The one
+ * spelling of the manager gate — use in a route body where `requireRole` (which
+ * throws) isn't the right shape, e.g. a per-field or "own-or-manager" check.
+ */
+export function isManager(c: Context<HonoEnv>): boolean {
+  return hasMinRole(c.get('role') as TenantRole, TenantRole.MANAGER);
+}
 
 /**
  * Role-gating middleware factory.

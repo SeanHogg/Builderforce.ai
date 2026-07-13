@@ -1,6 +1,6 @@
 {
   "name": "@seanhogg/builderforce-agents",
-  "version": "2026.5.31",
+  "version": "2026.7.10",
   "description": "BuilderForce Agents — distributed AI coding agent runtime with secure orchestration",
   "keywords": [
     "ai",
@@ -127,7 +127,8 @@
     "tui:dev": "BUILDERFORCE_AGENTS_PROFILE=dev node scripts/run-node.mjs --dev tui",
     "ui:build": "node scripts/ui.js build",
     "ui:dev": "node scripts/ui.js dev",
-    "ui:install": "node scripts/ui.js install"
+    "ui:install": "node scripts/ui.js install",
+    "typecheck:native": "tsgo --noEmit"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "0.14.1",
@@ -142,9 +143,6 @@
     "@larksuiteoapi/node-sdk": "^1.59.0",
     "@line/bot-sdk": "^10.6.0",
     "@lydell/node-pty": "1.2.0-beta.3",
-    "@mariozechner/pi-agent-core": "0.54.0",
-    "@mariozechner/pi-ai": "0.54.0",
-    "@mariozechner/pi-coding-agent": "0.54.0",
     "@mariozechner/pi-tui": "0.54.0",
     "@mozilla/readability": "^0.6.0",
     "@sinclair/typebox": "0.34.48",
@@ -181,7 +179,7 @@
     "sqlite-vec": "0.1.7-alpha.2",
     "tar": "7.5.9",
     "tslog": "^4.10.2",
-    "typescript": "^5.9.3",
+    "typescript": "^6.0.3",
     "undici": "^7.22.0",
     "ws": "^8.19.0",
     "yaml": "^2.8.2",
@@ -197,7 +195,7 @@
     "@types/proper-lockfile": "^4.1.4",
     "@types/qrcode-terminal": "^0.12.2",
     "@types/ws": "^8.18.1",
-    "@typescript/native-preview": "7.0.0-dev.20260217.1",
+    "@typescript/native-preview": "7.0.0-dev.20260627.2",
     "@vitest/coverage-v8": "^4.0.18",
     "lit": "^3.3.2",
     "ollama": "^0.6.3",
@@ -213,12 +211,20 @@
     "@napi-rs/canvas": "^0.1.89",
     "node-llama-cpp": "3.15.1"
   },
+  "optionalDependencies": {
+    "@seanhogg/builderforce-memory": "^2026.7.11",
+    "@seanhogg/builderforce-memory-engine": "^2026.7.11"
+  },
   "engines": {
     "node": ">=22.12.0"
   },
   "packageManager": "pnpm@10.23.0",
   "pnpm": {
     "minimumReleaseAge": 2880,
+    "minimumReleaseAgeExclude": [
+      "@seanhogg/builderforce-memory",
+      "@seanhogg/builderforce-memory-engine"
+    ],
     "overrides": {
       "hono": "4.11.10",
       "rolldown": "1.0.0-rc.5",

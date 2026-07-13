@@ -8,13 +8,13 @@ import {
   mockEmbeddedTextResult,
   replyText,
   replyTexts,
-  runEmbeddedPiAgent,
+  runEmbeddedAgent,
   withTempHome,
 } from "./reply.directive.directive-behavior.e2e-harness.js";
 import { getReplyFromConfig } from "./reply.js";
 
 async function runReplyToCurrentCase(home: string, text: string) {
-  vi.mocked(runEmbeddedPiAgent).mockResolvedValue(makeEmbeddedTextResult(text));
+  vi.mocked(runEmbeddedAgent).mockResolvedValue(makeEmbeddedTextResult(text));
 
   const res = await getReplyFromConfig(
     {
@@ -53,7 +53,7 @@ describe("directive behavior", () => {
       const text = replyText(res);
       expect(text).toContain("Current thinking level: low");
       expect(text).toContain("Options: off, minimal, low, medium, high.");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   it("shows off when /think has no argument and model lacks reasoning", async () => {
@@ -76,7 +76,7 @@ describe("directive behavior", () => {
       const text = replyText(res);
       expect(text).toContain("Current thinking level: off");
       expect(text).toContain("Options: off, minimal, low, medium, high.");
-      expect(runEmbeddedPiAgent).not.toHaveBeenCalled();
+      expect(runEmbeddedAgent).not.toHaveBeenCalled();
     });
   });
   for (const replyTag of ["[[reply_to_current]]", "[[ reply_to_current ]]"]) {
@@ -90,7 +90,7 @@ describe("directive behavior", () => {
   }
   it("prefers explicit reply_to id over reply_to_current", async () => {
     await withTempHome(async (home) => {
-      vi.mocked(runEmbeddedPiAgent).mockResolvedValue(
+      vi.mocked(runEmbeddedAgent).mockResolvedValue(
         makeEmbeddedTextResult("hi [[reply_to_current]] [[reply_to:abc-456]]"),
       );
 
@@ -126,7 +126,7 @@ describe("directive behavior", () => {
 
       const texts = replyTexts(res);
       expect(texts).toContain("done");
-      expect(runEmbeddedPiAgent).toHaveBeenCalledOnce();
+      expect(runEmbeddedAgent).toHaveBeenCalledOnce();
     });
   });
 });

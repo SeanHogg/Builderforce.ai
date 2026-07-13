@@ -123,7 +123,7 @@ export async function spawnSubagentDirect(
   }
 
   const maxChildren = cfg.agents?.defaults?.subagents?.maxChildrenPerAgent ?? 5;
-  const activeChildren = countActiveRunsForSession(requesterInternalKey);
+  const activeChildren = await countActiveRunsForSession(requesterInternalKey);
   if (activeChildren >= maxChildren) {
     return {
       status: "forbidden",

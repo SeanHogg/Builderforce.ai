@@ -14,58 +14,30 @@ import { eq, and, sql, desc } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import * as schema from '../../infrastructure/database/schema';
 import { signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
+import { hashPassword, verifyPassword } from '../../infrastructure/auth/HashService';
 import { invalidateCapabilityCache } from '../../application/artifact/capabilityContext';
-import type { HonoEnv } from '../../env';
+import { getOrSetCached, invalidateCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
+import type { Env, HonoEnv } from '../../env';
 
-// ---------------------------------------------------------------------------
-// Password hashing (PBKDF2 via Web Crypto – works in CF Workers)
-// ---------------------------------------------------------------------------
+/** Read-through cache key for a single published skill's SEO/SSR payload. */
+const skillSeoCacheKey = (slug: string): string => `mp:skill:seo:${slug}`;
 
-async function hashPassword(password: string): Promise<string> {
-  const saltBytes = crypto.getRandomValues(new Uint8Array(16));
-  const saltHex = Array.from(saltBytes)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-  const keyMat = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(password),
-    'PBKDF2',
-    false,
-    ['deriveBits'],
-  );
-  const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt: saltBytes, iterations: 100_000, hash: 'SHA-256' },
-    keyMat,
-    256,
-  );
-  const hashHex = Array.from(new Uint8Array(bits))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-  return `${saltHex}:${hashHex}`;
+/** Version token for the public skills-list keyspace. The list is searchable +
+ *  paginated (q/category/page/limit) → an unbounded keyspace, so we fold this
+ *  token into each cache key and bump it on any publish/update/delete; every
+ *  cached query variant orphans at once (mirrors personaRoutes.ts / 'personas:public'). */
+const SKILLS_LIST_VERSION_KEY = 'marketplace:skills:list';
+const SKILLS_LIST_CACHE_TTL_SECONDS = 120;
+
+/** Drop every cached skills-list variant by bumping the version token. Called
+ *  from every skill write (create / update / publish toggle). */
+async function invalidateSkillsList(env: Env): Promise<void> {
+  await bumpCacheVersion(env, SKILLS_LIST_VERSION_KEY);
 }
 
-async function verifyPassword(input: string, stored: string): Promise<boolean> {
-  const [saltHex, hashHex] = stored.split(':');
-  const saltBytes = new Uint8Array(
-    (saltHex ?? '').match(/../g)?.map((h) => parseInt(h, 16)) ?? [],
-  );
-  const keyMat = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(input),
-    'PBKDF2',
-    false,
-    ['deriveBits'],
-  );
-  const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt: saltBytes, iterations: 100_000, hash: 'SHA-256' },
-    keyMat,
-    256,
-  );
-  const inputHash = Array.from(new Uint8Array(bits))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-  return inputHash === hashHex;
-}
+// Password hashing (PBKDF2 via Web Crypto) uses the canonical HashService — the
+// SAME salt:hash format + params as every other web/marketplace user hash, so the
+// two must never drift. `hashPassword` / `verifyPassword` are imported above.
 
 // ---------------------------------------------------------------------------
 // Marketplace-specific auth middleware
@@ -92,6 +64,40 @@ const requireMarketplaceAuth: MiddlewareHandler<HonoEnv> = async (c, next) => {
 
 export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
+
+  /** Load one published skill + its author for the public detail/SSR surface. */
+  async function loadPublishedSkill(slug: string) {
+    const [row] = await db
+      .select({
+        id:              schema.marketplaceSkills.id,
+        name:            schema.marketplaceSkills.name,
+        slug:            schema.marketplaceSkills.slug,
+        description:     schema.marketplaceSkills.description,
+        category:        schema.marketplaceSkills.category,
+        tags:            schema.marketplaceSkills.tags,
+        version:         schema.marketplaceSkills.version,
+        readme:          schema.marketplaceSkills.readme,
+        icon_url:        schema.marketplaceSkills.iconUrl,
+        repo_url:        schema.marketplaceSkills.repoUrl,
+        downloads:       schema.marketplaceSkills.downloads,
+        likes:           schema.marketplaceSkills.likes,
+        created_at:      schema.marketplaceSkills.createdAt,
+        updated_at:      schema.marketplaceSkills.updatedAt,
+        author_username: schema.users.username,
+        author_display_name: schema.users.displayName,
+        author_avatar_url:   schema.users.avatarUrl,
+      })
+      .from(schema.marketplaceSkills)
+      .innerJoin(schema.users, eq(schema.marketplaceSkills.authorId, schema.users.id))
+      .where(
+        and(
+          eq(schema.marketplaceSkills.slug, slug),
+          eq(schema.marketplaceSkills.published, true),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
 
   // ── Auth ────────────────────────────────────────────────────────────────
 
@@ -297,6 +303,33 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
     const limitNum = Math.min(100, Math.max(1, Number(limit)));
     const offset   = (pageNum - 1) * limitNum;
 
+    // World-readable + read-heavy over a searchable/paginated (unbounded) keyspace
+    // → served through the read-through cache, keyed by a version token that any
+    // skill write bumps (see invalidateSkillsList). [perf]
+    const version = await getCacheVersion(c.env as Env, SKILLS_LIST_VERSION_KEY);
+    const cacheKey = `mp:skills:list:v:${version}:c=${category ?? ''}:q=${q ?? ''}:p=${pageNum}:l=${limitNum}`;
+
+    const payload = await getOrSetCached(
+      c.env as Env,
+      cacheKey,
+      () => loadSkillsList({ category, q, limitNum, offset, pageNum }),
+      { kvTtlSeconds: SKILLS_LIST_CACHE_TTL_SECONDS },
+    );
+
+    return c.json(payload);
+  });
+
+  /** The live skills-list query, factored out so the route body just wraps it in
+   *  the read-through cache. */
+  async function loadSkillsList(args: {
+    category?: string;
+    q?: string;
+    limitNum: number;
+    offset: number;
+    pageNum: number;
+  }): Promise<{ skills: unknown[]; total: number; page: number; limit: number }> {
+    const { category, q, limitNum, offset, pageNum } = args;
+
     // Build base conditions
     const conditions = [eq(schema.marketplaceSkills.published, true)];
     if (category) {
@@ -371,43 +404,27 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
       .where(and(...conditions));
     const count = countRow?.count ?? 0;
 
-    return c.json({ skills: rows, total: Number(count), page: pageNum, limit: limitNum });
-  });
+    return { skills: rows, total: Number(count), page: pageNum, limit: limitNum };
+  }
 
   /**
    * GET /marketplace/skills/:slug
    */
   router.get('/skills/:slug', async (c) => {
     const slug = c.req.param('slug');
-    const [row] = await db
-      .select({
-        id:              schema.marketplaceSkills.id,
-        name:            schema.marketplaceSkills.name,
-        slug:            schema.marketplaceSkills.slug,
-        description:     schema.marketplaceSkills.description,
-        category:        schema.marketplaceSkills.category,
-        tags:            schema.marketplaceSkills.tags,
-        version:         schema.marketplaceSkills.version,
-        readme:          schema.marketplaceSkills.readme,
-        icon_url:        schema.marketplaceSkills.iconUrl,
-        repo_url:        schema.marketplaceSkills.repoUrl,
-        downloads:       schema.marketplaceSkills.downloads,
-        likes:           schema.marketplaceSkills.likes,
-        created_at:      schema.marketplaceSkills.createdAt,
-        updated_at:      schema.marketplaceSkills.updatedAt,
-        author_username: schema.users.username,
-        author_display_name: schema.users.displayName,
-        author_avatar_url:   schema.users.avatarUrl,
-      })
-      .from(schema.marketplaceSkills)
-      .innerJoin(schema.users, eq(schema.marketplaceSkills.authorId, schema.users.id))
-      .where(
-        and(
-          eq(schema.marketplaceSkills.slug, slug),
-          eq(schema.marketplaceSkills.published, true),
-        ),
-      )
-      .limit(1);
+    // `?seo=1` is the indexable detail-page / sitemap read: served through the
+    // read-through cache and WITHOUT the download-counter increment, so crawler
+    // and SSR renders don't inflate downloads (invalidated on PUT). [1333]
+    const seo = c.req.query('seo') === '1';
+    if (seo) {
+      const skill = await getOrSetCached(c.env as Env, skillSeoCacheKey(slug), () =>
+        loadPublishedSkill(slug),
+      );
+      if (!skill) return c.json({ error: 'Skill not found' }, 404);
+      return c.json({ skill });
+    }
+
+    const row = await loadPublishedSkill(slug);
     if (!row) return c.json({ error: 'Skill not found' }, 404);
 
     // Fire-and-forget download counter increment
@@ -464,6 +481,8 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
           priceUnit:    body.price_unit ?? null,
         })
         .returning();
+      // A new published skill enters the list keyspace → orphan cached variants.
+      await invalidateSkillsList(c.env as Env);
       return c.json({ skill }, 201);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -514,6 +533,12 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
     // Invalidate the cloud capability cache so the next cloud run re-reads the
     // edited skill body (name/description/readme).
     await invalidateCapabilityCache(c.env, 'skill', slug);
+    // Invalidate the public SEO/SSR read-through cache so the detail page + its
+    // metadata reflect the edit (and publish/unpublish) on next render. [1333]
+    await invalidateCached(c.env as Env, skillSeoCacheKey(slug));
+    // Edits / publish-unpublish change the list rows + ordering → bump the
+    // version token so every cached list variant re-loads.
+    await invalidateSkillsList(c.env as Env);
     return c.json({ skill: updated });
   });
 

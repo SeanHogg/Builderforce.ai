@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import { createServer } from "node:net";
 import os from "node:os";
 import path from "node:path";
-import type { Api, Model } from "@mariozechner/pi-ai";
+import type { Api, Model } from "../builderforce/model/types.js";
 import { describe, it } from "vitest";
 import { resolveBuilderForceAgentsAgentDir } from "../agents/agent-paths.js";
 import { resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
@@ -20,7 +20,7 @@ import {
 import { isModernModelRef } from "../agents/live-model-filter.js";
 import { getApiKeyForModel } from "../agents/model-auth.js";
 import { ensureBuilderForceAgentsModelsJson } from "../agents/models-config.js";
-import { discoverAuthStorage, discoverModels } from "../agents/pi-model-discovery.js";
+import { discoverAuthStorage, discoverModels } from "../agents/model-discovery.js";
 import { loadConfig } from "../config/config.js";
 import type { ModelsConfig, BuilderForceAgentsConfig, ModelProviderConfig } from "../config/types.js";
 import { isTruthyEnvValue } from "../infra/env.js";
@@ -426,15 +426,15 @@ function buildLiveGatewayConfig(params: {
   };
 }
 
-function sanitizeAuthConfig(params: {
+async function sanitizeAuthConfig(params: {
   cfg: BuilderForceAgentsConfig;
   agentDir: string;
-}): BuilderForceAgentsConfig["auth"] | undefined {
+}): Promise<BuilderForceAgentsConfig["auth"] | undefined> {
   const auth = params.cfg.auth;
   if (!auth) {
     return auth;
   }
-  const store = ensureAuthProfileStore(params.agentDir, {
+  const store = await ensureAuthProfileStore(params.agentDir, {
     allowKeychainPrompt: false,
   });
 
@@ -502,7 +502,7 @@ async function runGatewayModelSuite(params: GatewayModelSuiteParams) {
     skipCron: process.env.BUILDERFORCE_AGENTS_SKIP_CRON,
     skipCanvas: process.env.BUILDERFORCE_AGENTS_SKIP_CANVAS_HOST,
     agentDir: process.env.BUILDERFORCE_AGENTS_AGENT_DIR,
-    piAgentDir: process.env.PI_CODING_AGENT_DIR,
+    codingAgentDir: process.env.PI_CODING_AGENT_DIR,
     stateDir: process.env.BUILDERFORCE_AGENTS_STATE_DIR,
   };
   let tempAgentDir: string | undefined;
@@ -518,7 +518,7 @@ async function runGatewayModelSuite(params: GatewayModelSuiteParams) {
   const agentId = "dev";
 
   const hostAgentDir = resolveBuilderForceAgentsAgentDir();
-  const hostStore = ensureAuthProfileStore(hostAgentDir, {
+  const hostStore = await ensureAuthProfileStore(hostAgentDir, {
     allowKeychainPrompt: false,
   });
   const sanitizedStore: AuthProfileStore = {
@@ -533,10 +533,10 @@ async function runGatewayModelSuite(params: GatewayModelSuiteParams) {
   tempStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "builderforce-live-state-"));
   process.env.BUILDERFORCE_AGENTS_STATE_DIR = tempStateDir;
   tempAgentDir = path.join(tempStateDir, "agents", DEFAULT_AGENT_ID, "agent");
-  saveAuthProfileStore(sanitizedStore, tempAgentDir);
+  await saveAuthProfileStore(sanitizedStore, tempAgentDir);
   const tempSessionAgentDir = path.join(tempStateDir, "agents", agentId, "agent");
   if (tempSessionAgentDir !== tempAgentDir) {
-    saveAuthProfileStore(sanitizedStore, tempSessionAgentDir);
+    await saveAuthProfileStore(sanitizedStore, tempSessionAgentDir);
   }
   process.env.BUILDERFORCE_AGENTS_AGENT_DIR = tempAgentDir;
   process.env.PI_CODING_AGENT_DIR = tempAgentDir;
@@ -551,7 +551,7 @@ async function runGatewayModelSuite(params: GatewayModelSuiteParams) {
   const agentDir = resolveBuilderForceAgentsAgentDir();
   const sanitizedCfg: BuilderForceAgentsConfig = {
     ...params.cfg,
-    auth: sanitizeAuthConfig({ cfg: params.cfg, agentDir }),
+    auth: await sanitizeAuthConfig({ cfg: params.cfg, agentDir }),
   };
   const nextCfg = buildLiveGatewayConfig({
     cfg: sanitizedCfg,
@@ -1008,7 +1008,7 @@ async function runGatewayModelSuite(params: GatewayModelSuiteParams) {
     process.env.BUILDERFORCE_AGENTS_SKIP_CRON = previous.skipCron;
     process.env.BUILDERFORCE_AGENTS_SKIP_CANVAS_HOST = previous.skipCanvas;
     process.env.BUILDERFORCE_AGENTS_AGENT_DIR = previous.agentDir;
-    process.env.PI_CODING_AGENT_DIR = previous.piAgentDir;
+    process.env.PI_CODING_AGENT_DIR = previous.codingAgentDir;
     process.env.BUILDERFORCE_AGENTS_STATE_DIR = previous.stateDir;
   }
 }
@@ -1021,7 +1021,7 @@ describeLive("gateway live (dev agent, profile keys)", () => {
       await ensureBuilderForceAgentsModelsJson(cfg);
 
       const agentDir = resolveBuilderForceAgentsAgentDir();
-      const authStore = ensureAuthProfileStore(agentDir, {
+      const authStore = await ensureAuthProfileStore(agentDir, {
         allowKeychainPrompt: false,
       });
       const authStorage = discoverAuthStorage(agentDir);

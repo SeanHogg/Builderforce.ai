@@ -1,25 +1,33 @@
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
+import { getTranslations } from 'next-intl/server';
+import { pageMetadata } from '@/lib/seo';
 import BlogPageClient from './BlogPageClient';
 
-export const metadata: Metadata = {
-  title: 'Blog — AI Agent Training Guides & Tutorials',
-  description:
-    'Deep dives, tutorials, and best practices for building and deploying AI agents. WebGPU LoRA training, dataset generation, multi-agent orchestration, and more.',
-  alternates: { canonical: '/blog' },
-  openGraph: {
-    title: 'Builderforce Blog — AI Agent Training Guides',
-    description:
-      'Tutorials and best practices for building AI agents with WebGPU LoRA training, dataset generation, and multi-agent orchestration.',
-    url: 'https://builderforce.ai/blog',
-    type: 'website',
-  },
-  twitter: {
-    title: 'Builderforce Blog — AI Agent Training Guides',
-    description:
-      'Tutorials and best practices for building AI agents with WebGPU LoRA, dataset generation, and orchestration.',
-  },
-};
+// next-on-pages requires every non-static route to opt into the Edge Runtime.
+export const runtime = 'edge';
+
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations('blog.seo');
+  const base = pageMetadata({
+    title: t('title'),
+    description: t('description'),
+    path: '/blog',
+    ogTitle: t('ogTitle'),
+  });
+  return {
+    ...base,
+    openGraph: { ...base.openGraph, description: t('ogDescription') },
+    twitter: { ...base.twitter, title: t('ogTitle'), description: t('twitterDescription') },
+  };
+}
 
 export default function BlogPage() {
-  return <BlogPageClient />;
+  // BlogPageClient reads `?page=` via useSearchParams, which Next requires to sit
+  // under a Suspense boundary.
+  return (
+    <Suspense>
+      <BlogPageClient />
+    </Suspense>
+  );
 }

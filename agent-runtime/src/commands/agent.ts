@@ -22,7 +22,7 @@ import {
   resolveConfiguredModelRef,
   resolveThinkingDefault,
 } from "../agents/model-selection.js";
-import { runEmbeddedPiAgent } from "../agents/pi-embedded.js";
+import { runEmbeddedAgent } from "../agents/embedded.js";
 import { buildWorkspaceSkillSnapshot } from "../agents/skills.js";
 import { getSkillsSnapshotVersion } from "../agents/skills/refresh.js";
 import { resolveAgentTimeoutMs } from "../agents/timeout.js";
@@ -139,7 +139,7 @@ function runAgentAttempt(params: {
     params.providerOverride === params.primaryProvider
       ? params.sessionEntry?.authProfileOverride
       : undefined;
-  return runEmbeddedPiAgent({
+  return runEmbeddedAgent({
     sessionId: params.sessionId,
     sessionKey: params.sessionKey,
     agentId: params.sessionAgentId,
@@ -462,7 +462,7 @@ export async function agentCommand(
       const authProfileId = sessionEntry.authProfileOverride;
       if (authProfileId) {
         const entry = sessionEntry;
-        const store = ensureAuthProfileStore();
+        const store = await ensureAuthProfileStore();
         const profile = store.profiles[authProfileId];
         if (!profile || profile.provider !== provider) {
           if (sessionStore && sessionKey) {
@@ -515,7 +515,7 @@ export async function agentCommand(
     const startedAt = Date.now();
     let lifecycleEnded = false;
 
-    let result: Awaited<ReturnType<typeof runEmbeddedPiAgent>>;
+    let result: Awaited<ReturnType<typeof runEmbeddedAgent>>;
     let fallbackProvider = provider;
     let fallbackModel = model;
     try {

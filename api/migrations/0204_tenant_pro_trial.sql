@@ -1,0 +1,22 @@
+-- Migration 0204: 14-day Pro trial on tenant creation.
+--
+-- The public marketing claim ("14-day Pro trial") was previously fiction —
+-- register created only a users row and tenant creation started every tenant on
+-- the Free plan with billing_status='none'. This makes the trial real:
+--
+--   * billing_status carries a new 'trialing' value — the status a tenant holds
+--     while inside its introductory trial window. (billing_status is a plain
+--     VARCHAR(16) column, added in 0008 — NOT a Postgres enum — so no type
+--     alteration is needed; the value is just written by Tenant.create().)
+--   * tenants.trial_ends_at — when the trial ends (creation + 14 days). While
+--     billing_status='trialing' AND trial_ends_at > now() the tenant is entitled
+--     to Pro limits (see domain/tenant/effectivePlan.ts: resolveEffectivePlan).
+--     Once it passes, the effective plan falls back to Free automatically — no
+--     sweeper needed (the resolver is time-based).
+--
+-- New tenants are stamped plan='pro', billing_status='trialing',
+-- trial_ends_at=now()+14d by Tenant.create(); the paid 'active' path is unchanged.
+-- Existing tenants are left as-is (trial_ends_at NULL → treated as not trialing).
+
+-- Trial expiry timestamp (NULL = never trialing / pre-0204 tenant).
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMPTZ;

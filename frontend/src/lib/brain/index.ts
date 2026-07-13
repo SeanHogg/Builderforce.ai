@@ -24,6 +24,11 @@ export {
   BrainProvider,
   useBrainConfig,
   useMcpExtensions,
+  buildBrainTriageReport,
+  isFailedToolResult,
+  isStepMessage,
+  mentionRecipient,
+  resolveRecipient,
 } from '@seanhogg/builderforce-brain-embedded';
 
 export type {
@@ -49,10 +54,15 @@ export type {
   BrainMessage,
   BrainModality,
   ChatInputAttachment,
+  BrainTraceEvent,
+  BuildBrainTriageOptions,
+  DirectedRecipient,
+  RecipientChoice,
 } from '@seanhogg/builderforce-brain-embedded';
 
 // App-specific brain pieces (not part of the portable package).
 export { brainConfig } from './runtime';
+export { guestBrainConfig } from './guestRuntime';
 export {
   generatePrd,
   savePrd,
@@ -65,9 +75,18 @@ export {
 // the platform co-pilot persona that drives it.
 export {
   buildPlatformActions,
-  buildPlatformCapabilities,
-  focusDomainsForPath,
-  type PlatformCapability,
   type PlatformActionContext,
 } from './platformActions';
-export { PLATFORM_BRAIN_SYSTEM_PROMPT } from './platformPrompt';
+export { PLATFORM_BRAIN_SYSTEM_PROMPT, BRAIN_AUTO_APPROVE_DIRECTIVE, buildComposerDirectives, type BrainEffort } from './platformPrompt';
+
+// Model-authored "next step" buttons parsed out of a Brain reply.
+export { parseSuggestedActions, type SuggestedAction, type ParsedSuggestedActions } from './suggestedActions';
+
+// Brain → data-view refresh bus: mutating platform actions announce writes here
+// so the page rendering that data (e.g. the Tasks board) can refetch live.
+export {
+  BRAIN_DATA_CHANGED_EVENT,
+  dispatchBrainDataChanged,
+  onBrainDataChanged,
+  type BrainDataChangedEvent,
+} from './brainDataEvent';

@@ -46,6 +46,13 @@ worker/test-output/
 
 # Ignore local secrets
 worker/secrets.json
+# Cloudflare Workers local secrets (NEON_DATABASE_URL etc.) — never commit
+.dev.vars
+**/.dev.vars
+# Wrangler build/deploy artifacts — never commit
+**/.wrangler/
+# Operator-only security findings / leak disclosures — never commit
+*.local.md
 
 # Runtime workspace/session data (transient)
 .builderforce/sessions/

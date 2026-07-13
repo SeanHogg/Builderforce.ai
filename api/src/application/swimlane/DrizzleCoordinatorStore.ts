@@ -9,6 +9,8 @@ import {
   boards,
   swimlanes,
   swimlaneAgentAssignments,
+  swimlaneRequirements,
+  ticketRoleSignoffs,
   ticketRuns,
   swimlaneTransitions,
   agentDispatches,
@@ -38,7 +40,6 @@ export class DrizzleCoordinatorStore implements CoordinatorStore {
     return {
       id: b.id,
       tenantId: b.tenantId,
-      autonomous: b.autonomous,
       maxConcurrentTickets: b.maxConcurrentTickets,
       needsAttentionLane: b.needsAttentionLane,
     };
@@ -135,7 +136,13 @@ export class DrizzleCoordinatorStore implements CoordinatorStore {
   async updateTicketRun(
     id: string,
     tenantId: number,
-    patch: { lifecycle: string; currentSwimlaneId: string | null; stageHistory: string; error: string | null },
+    patch: {
+      lifecycle: string;
+      currentSwimlaneId: string | null;
+      stageHistory: string;
+      error: string | null;
+      awaitingWorkflowId?: string | null;
+    },
   ): Promise<TicketRunLite | null> {
     const [run] = await this.db
       .update(ticketRuns)
@@ -144,10 +151,26 @@ export class DrizzleCoordinatorStore implements CoordinatorStore {
         currentSwimlaneId: patch.currentSwimlaneId,
         stageHistory: patch.stageHistory,
         error: patch.error,
+        // Only touch the parked-on link when the caller explicitly set it.
+        ...('awaitingWorkflowId' in patch ? { awaitingWorkflowId: patch.awaitingWorkflowId } : {}),
         updatedAt: new Date(),
       })
       .where(and(eq(ticketRuns.id, id), eq(ticketRuns.tenantId, tenantId)))
       .returning();
+    return run ? toRun(run) : null;
+  }
+
+  async findAwaitingWorkflowRun(workflowId: string): Promise<TicketRunLite | null> {
+    const [run] = await this.db
+      .select()
+      .from(ticketRuns)
+      .where(
+        and(
+          eq(ticketRuns.awaitingWorkflowId, workflowId),
+          eq(ticketRuns.lifecycle, 'awaiting_workflow'),
+        ),
+      )
+      .limit(1);
     return run ? toRun(run) : null;
   }
 
@@ -226,6 +249,23 @@ export class DrizzleCoordinatorStore implements CoordinatorStore {
       .limit(1);
     return row?.stageSeq ?? 0;
   }
+
+  async hasUnmetRequiredReviewers(taskId: number, swimlaneId: string, tenantId: number): Promise<boolean> {
+    // Required reviewer checks on THIS lane (a 'review', or a 'role' the reviewer owns).
+    const reqs = await this.db
+      .select({ kind: swimlaneRequirements.kind, ref: swimlaneRequirements.ref, responsibility: swimlaneRequirements.responsibility })
+      .from(swimlaneRequirements)
+      .where(and(eq(swimlaneRequirements.swimlaneId, swimlaneId), eq(swimlaneRequirements.tenantId, tenantId), eq(swimlaneRequirements.isRequired, true)));
+    const required = reqs.filter((r) => r.kind === 'review' || (r.kind === 'role' && r.responsibility === 'reviewer'));
+    if (required.length === 0) return false;
+    // Which reviewer roles carry an APPROVED sign-off for the ticket.
+    const signoffs = await this.db
+      .select({ roleKey: ticketRoleSignoffs.roleKey, verdict: ticketRoleSignoffs.verdict })
+      .from(ticketRoleSignoffs)
+      .where(and(eq(ticketRoleSignoffs.taskId, taskId), eq(ticketRoleSignoffs.tenantId, tenantId)));
+    const approved = new Set(signoffs.filter((s) => s.verdict === 'approved').map((s) => s.roleKey));
+    return required.some((r) => !approved.has(r.ref));
+  }
 }
 
 type LaneRow = typeof swimlanes.$inferSelect;
@@ -245,6 +285,8 @@ function toLane(l: LaneRow): LaneLite {
     actionTarget: l.actionTarget,
     successPolicy: l.successPolicy,
     successThreshold: l.successThreshold,
+    failurePolicy: l.failurePolicy,
+    requirementGate: l.requirementGate,
   };
 }
 
@@ -257,6 +299,7 @@ function toRun(r: RunRow): TicketRunLite {
     currentSwimlaneId: r.currentSwimlaneId,
     lifecycle: r.lifecycle,
     currentWorkflowId: r.currentWorkflowId,
+    awaitingWorkflowId: r.awaitingWorkflowId,
     stageHistory: r.stageHistory,
     error: r.error,
   };

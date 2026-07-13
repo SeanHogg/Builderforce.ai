@@ -1,6 +1,7 @@
 import path from "node:path";
-import { type Api, type Context, complete, type Model } from "@mariozechner/pi-ai";
 import { Type } from "@sinclair/typebox";
+import { nativeComplete } from "../../builderforce/model/native-llm.js";
+import type { Api, AssistantMessage, Context, Model } from "../../builderforce/model/types.js";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import { resolveUserPath } from "../../utils.js";
 import { getDefaultLocalRoots, loadWebMedia } from "../../web/media.js";
@@ -11,10 +12,10 @@ import { getApiKeyForModel, requireApiKey, resolveEnvApiKey } from "../model-aut
 import { runWithImageModelFallback } from "../model-fallback.js";
 import { resolveConfiguredModelRef } from "../model-selection.js";
 import { ensureBuilderForceAgentsModelsJson } from "../models-config.js";
-import { discoverAuthStorage, discoverModels } from "../pi-model-discovery.js";
+import { discoverAuthStorage, discoverModels } from "../model-discovery.js";
 import type { SandboxFsBridge } from "../sandbox/fs-bridge.js";
 import { normalizeWorkspaceDir } from "../workspace-dir.js";
-import type { AnyAgentTool } from "./common.js";
+import type { AgentToolResult, AnyAgentTool } from "./common.js";
 import {
   coerceImageAssistantText,
   coerceImageModelConfig,
@@ -60,11 +61,14 @@ function resolveDefaultModelRef(cfg?: BuilderForceAgentsConfig): {
   return { provider: DEFAULT_PROVIDER, model: DEFAULT_MODEL };
 }
 
-function hasAuthForProvider(params: { provider: string; agentDir: string }): boolean {
+async function hasAuthForProvider(params: {
+  provider: string;
+  agentDir: string;
+}): Promise<boolean> {
   if (resolveEnvApiKey(params.provider)?.apiKey) {
     return true;
   }
-  const store = ensureAuthProfileStore(params.agentDir, {
+  const store = await ensureAuthProfileStore(params.agentDir, {
     allowKeychainPrompt: false,
   });
   return listProfilesForProvider(store, params.provider).length > 0;
@@ -78,10 +82,10 @@ function hasAuthForProvider(params: { provider: string; agentDir: string }): boo
  *   - same provider (best effort)
  *   - fall back to OpenAI/Anthropic when available
  */
-export function resolveImageModelConfigForTool(params: {
+export async function resolveImageModelConfigForTool(params: {
   cfg?: BuilderForceAgentsConfig;
   agentDir: string;
-}): ImageModelConfig | null {
+}): Promise<ImageModelConfig | null> {
   // Note: We intentionally do NOT gate based on primarySupportsImages here.
   // Even when the primary model supports images, we keep the tool available
   // because images are auto-injected into prompts (see attempt.ts detectAndLoadPromptImages).
@@ -92,11 +96,11 @@ export function resolveImageModelConfigForTool(params: {
   }
 
   const primary = resolveDefaultModelRef(params.cfg);
-  const openaiOk = hasAuthForProvider({
+  const openaiOk = await hasAuthForProvider({
     provider: "openai",
     agentDir: params.agentDir,
   });
-  const anthropicOk = hasAuthForProvider({
+  const anthropicOk = await hasAuthForProvider({
     provider: "anthropic",
     agentDir: params.agentDir,
   });
@@ -117,7 +121,7 @@ export function resolveImageModelConfigForTool(params: {
     cfg: params.cfg,
     provider: primary.provider,
   });
-  const providerOk = hasAuthForProvider({
+  const providerOk = await hasAuthForProvider({
     provider: primary.provider,
     agentDir: params.agentDir,
   });
@@ -306,10 +310,45 @@ async function runImagePrompt(params: {
       }
 
       const context = buildImageContext(params.prompt, params.images);
-      const message = await complete(model, context, {
-        apiKey,
-        maxTokens: resolveImageToolMaxTokens(model.maxTokens),
-      });
+      // Map pi vision content -> OpenAI image_url wire format for the gateway.
+      const visionMessages = context.messages.map((m) => ({
+        role: m.role as "user",
+        content: Array.isArray(m.content)
+          ? m.content.map((c) =>
+              c.type === "image"
+                ? {
+                    type: "image_url" as const,
+                    image_url: { url: `data:${c.mimeType};base64,${c.data}` },
+                  }
+                : { type: "text" as const, text: (c as { text: string }).text },
+            )
+          : (m.content as string),
+      }));
+      const res = await nativeComplete(
+        { baseUrl: model.baseUrl, apiKey, defaultModel: model.id },
+        {
+          model: model.id,
+          messages: visionMessages,
+          extra: { max_tokens: resolveImageToolMaxTokens(model.maxTokens) },
+        },
+      );
+      const message: AssistantMessage = {
+        role: "assistant",
+        content: [{ type: "text", text: res.content }],
+        api: model.api,
+        provider: model.provider,
+        model: model.id,
+        usage: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: res.finishReason === "error" ? "error" : "stop",
+        timestamp: Date.now(),
+      };
       const text = coerceImageAssistantText({
         message,
         provider: model.provider,
@@ -331,14 +370,24 @@ async function runImagePrompt(params: {
   };
 }
 
-export function createImageTool(options?: {
+export interface ImageDeps {
   config?: BuilderForceAgentsConfig;
   agentDir?: string;
   workspaceDir?: string;
   sandbox?: ImageSandboxConfig;
   /** If true, the model has native vision capability and images in the prompt are auto-injected */
   modelHasVision?: boolean;
-}): AnyAgentTool | null {
+}
+
+interface ImageToolDescriptor {
+  agentDir: string;
+  description: string;
+  localRoots: readonly string[];
+}
+
+/** Resolve whether the image tool is enabled for these deps (parity with the legacy
+ *  factory's `null`/throw), plus the description + local roots the body needs. */
+function imageToolDescriptor(options?: ImageDeps): ImageToolDescriptor | null {
   const agentDir = options?.agentDir?.trim();
   if (!agentDir) {
     const explicit = coerceImageModelConfig(options?.config);
@@ -347,20 +396,11 @@ export function createImageTool(options?: {
     }
     return null;
   }
-  const imageModelConfig = resolveImageModelConfigForTool({
-    cfg: options?.config,
-    agentDir,
-  });
-  if (!imageModelConfig) {
-    return null;
-  }
-
   // If model has native vision, images in the prompt are auto-injected
   // so this tool is only needed when image wasn't provided in the prompt
   const description = options?.modelHasVision
     ? "Analyze one or more images with a vision model. Use image for a single path/URL, or images for multiple (up to 20). Only use this tool when images were NOT already provided in the user's message. Images mentioned in the prompt are automatically visible to you."
     : "Analyze one or more images with the configured image model (agents.defaults.imageModel). Use image for a single path/URL, or images for multiple (up to 20). Provide a prompt describing what to analyze.";
-
   const localRoots = (() => {
     const roots = getDefaultLocalRoots();
     const workspaceDir = normalizeWorkspaceDir(options?.workspaceDir);
@@ -369,24 +409,33 @@ export function createImageTool(options?: {
     }
     return Array.from(new Set([...roots, workspaceDir]));
   })();
+  return { agentDir, description, localRoots };
+}
 
-  return {
-    label: "Image",
-    name: "image",
-    description,
-    parameters: Type.Object({
-      prompt: Type.Optional(Type.String()),
-      image: Type.Optional(Type.String({ description: "Single image path or URL." })),
-      images: Type.Optional(
-        Type.Array(Type.String(), {
-          description: "Multiple image paths or URLs (up to maxImages, default 20).",
-        }),
-      ),
-      model: Type.Optional(Type.String()),
-      maxBytesMb: Type.Optional(Type.Number()),
-      maxImages: Type.Optional(Type.Number()),
+const ImageToolSchema = Type.Object({
+  prompt: Type.Optional(Type.String()),
+  image: Type.Optional(Type.String({ description: "Single image path or URL." })),
+  images: Type.Optional(
+    Type.Array(Type.String(), {
+      description: "Multiple image paths or URLs (up to maxImages, default 20).",
     }),
-    execute: async (_toolCallId, args) => {
+  ),
+  model: Type.Optional(Type.String()),
+  maxBytesMb: Type.Optional(Type.Number()),
+  maxImages: Type.Optional(Type.Number()),
+});
+
+/** Shared implementation — pi wrapper + native ToolDefinition both delegate here (DRY).
+ *  The effective image-model config depends on async auth resolution, so it is resolved
+ *  lazily inside the body (below). */
+export async function runImage(
+  options: ImageDeps | undefined,
+  descriptor: ImageToolDescriptor,
+  args: Record<string, unknown>,
+): Promise<AgentToolResult<unknown>> {
+  const { agentDir, localRoots } = descriptor;
+  {
+    {
       const record = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
 
       // MARK: - Normalize image + images input and dedupe while preserving order
@@ -546,6 +595,20 @@ export function createImageTool(options?: {
         });
       }
 
+      // MARK: - Resolve the image-model config (async auth check) at call time.
+      const imageModelConfig = await resolveImageModelConfigForTool({
+        cfg: options?.config,
+        agentDir,
+      });
+      if (!imageModelConfig) {
+        return {
+          content: [
+            { type: "text", text: "No image-capable model is configured or authenticated." },
+          ],
+          details: { error: "no_image_model" },
+        };
+      }
+
       // MARK: - Run image prompt with all loaded images
       const result = await runImagePrompt({
         cfg: options?.config,
@@ -579,6 +642,19 @@ export function createImageTool(options?: {
           attempts: result.attempts,
         },
       };
-    },
+    }
+  }
+}
+
+export function createImageTool(options?: ImageDeps): AnyAgentTool | null {
+  const descriptor = imageToolDescriptor(options);
+  if (!descriptor) return null;
+  return {
+    label: "Image",
+    name: "image",
+    description: descriptor.description,
+    parameters: ImageToolSchema,
+    execute: async (_toolCallId, args) =>
+      runImage(options, descriptor, args as Record<string, unknown>),
   };
 }

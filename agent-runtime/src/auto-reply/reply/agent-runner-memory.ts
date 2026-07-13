@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { runWithModelFallback } from "../../agents/model-fallback.js";
 import { isCliProvider } from "../../agents/model-selection.js";
-import { runEmbeddedPiAgent } from "../../agents/pi-embedded.js";
+import { runEmbeddedAgent } from "../../agents/embedded.js";
 import { resolveSandboxConfigForAgent, resolveSandboxRuntimeStatus } from "../../agents/sandbox.js";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import { type SessionEntry, updateSessionStoreEntry } from "../../config/sessions.js";
@@ -112,7 +112,7 @@ export async function runMemoryFlushIfNeeded(params: {
           runId: flushRunId,
           authProfile,
         });
-        return runEmbeddedPiAgent({
+        return runEmbeddedAgent({
           ...embeddedContext,
           ...senderContext,
           ...runBaseParams,

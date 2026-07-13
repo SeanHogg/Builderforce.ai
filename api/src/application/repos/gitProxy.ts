@@ -66,9 +66,11 @@ export function buildGitAuthHeader(provider: string, token: string): string {
 }
 
 /**
- * Build the provider REST API base URL for a repo's host. github.com uses the
- * dedicated api.github.com origin; a GitHub Enterprise host uses `/api/v3` on
- * the same host. Only GitHub is mapped today (callers gate on provider first).
+ * Build the provider REST API base URL for a repo's host.
+ *   - GitHub: api.github.com (cloud) or `https://<host>/api/v3` (Enterprise).
+ *   - GitLab: `https://<host||gitlab.com>/api/v4` (cloud + self-managed).
+ *   - Bitbucket: `https://api.bitbucket.org/2.0` (Cloud). Bitbucket *Server*
+ *     (self-hosted, `/rest/api/1.0`) is a different API and not mapped here.
  */
 export function buildGitApiBaseUrl(provider: string, host: string | null): string {
   const h = (host ?? '').trim();
@@ -76,7 +78,14 @@ export function buildGitApiBaseUrl(provider: string, host: string | null): strin
     if (!h || h === 'github.com') return 'https://api.github.com';
     return `https://${h}/api/v3`;
   }
-  // Non-GitHub providers are not yet supported for REST operations.
+  if (provider === 'gitlab') {
+    return `https://${!h || h === 'gitlab.com' ? 'gitlab.com' : h}/api/v4`;
+  }
+  if (provider === 'bitbucket') {
+    // Bitbucket Cloud only; a custom host implies Bitbucket Server (unsupported).
+    if (!h || h === 'bitbucket.org') return 'https://api.bitbucket.org/2.0';
+    throw new Error('Bitbucket Server (self-hosted) REST API is not supported');
+  }
   throw new Error(`No REST API base for provider '${provider}'`);
 }
 

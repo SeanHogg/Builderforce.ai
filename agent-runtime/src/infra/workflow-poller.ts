@@ -17,6 +17,7 @@
 import { globalOrchestrator, type SpawnSubagentContext } from "../builderforce/orchestrator.js";
 import { logDebug, logWarn } from "../logger.js";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
+import { isOfflineMode } from "./env-file.js";
 
 type WorkflowPollerOptions = {
   baseUrl: string;
@@ -72,6 +73,11 @@ export class WorkflowPollerService {
   constructor(private readonly opts: WorkflowPollerOptions) {}
 
   start(): void {
+    // Offline / air-gapped: never claim or report workflows upstream.
+    if (isOfflineMode()) {
+      logDebug("[workflow-poller] offline mode — skipping control-plane polling");
+      return;
+    }
     const interval = this.opts.intervalMs ?? 15_000;
     // Fire one claim immediately, then on the interval.
     void this.tick();
@@ -166,7 +172,7 @@ export class WorkflowPollerService {
         }))
       : [];
     const status: "completed" | "failed" =
-      failed || (wf?.status === "failed") ? "failed" : "completed";
+      failed || wf?.status === "failed" ? "failed" : "completed";
 
     await this.reportResult(workflowId, reportTasks, status);
   }

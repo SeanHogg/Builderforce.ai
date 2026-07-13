@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="amberGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFCE6B"/><stop offset="100%" stop-color="#F5A623"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10 Z" fill="rgba(255,255,255,0.35)"/></marker>
+    <marker id="arrowLoop" markerWidth="11" markerHeight="11" refX="6" refY="9" orient="auto"><path d="M0,9 L6,0 L11,9 Z" fill="#FFCE6B"/></marker>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">DATASET GENERATION</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">From capability prompt to a versioned JSONL</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- forward arrows at y=385 -->
+  <line x1="326" y1="385" x2="372" y2="385" stroke="rgba(255,255,255,0.35)" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="626" y1="385" x2="672" y2="385" stroke="rgba(255,255,255,0.35)" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="926" y1="385" x2="972" y2="385" stroke="rgba(255,255,255,0.35)" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="1226" y1="385" x2="1272" y2="385" stroke="rgba(255,255,255,0.35)" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <!-- STAGE 1 Sharp Prompt -->
+  <rect x="80" y="280" width="240" height="210" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="80" y="280" width="240" height="6" rx="3" fill="url(#violetGrad)"/>
+  <text x="200" y="352" text-anchor="middle" font-size="40">✍️</text>
+  <text x="200" y="402" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">Sharp Prompt</text>
+  <text x="200" y="440" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" fill="#A6ADC8"><tspan x="200" dy="0">Specific capability,</tspan><tspan x="200" dy="24">not "a helpful bot"</tspan></text>
+
+  <!-- STAGE 2 Diverse Samples -->
+  <rect x="380" y="280" width="240" height="210" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="380" y="280" width="240" height="6" rx="3" fill="url(#coolGrad)"/>
+  <text x="500" y="352" text-anchor="middle" font-size="40">🎛️</text>
+  <text x="500" y="402" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">Diverse Samples</text>
+  <text x="500" y="440" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" fill="#A6ADC8"><tspan x="500" dy="0">Mix complexity,</tspan><tspan x="500" dy="24">edge cases, tone</tspan></text>
+
+  <!-- STAGE 3 Review Sample -->
+  <rect x="680" y="280" width="240" height="210" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="680" y="280" width="240" height="6" rx="3" fill="url(#mintGrad)"/>
+  <text x="800" y="352" text-anchor="middle" font-size="40">🔍</text>
+  <text x="800" y="402" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">Review Sample</text>
+  <text x="800" y="440" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" fill="#A6ADC8"><tspan x="800" dy="0">Eyeball 20 rows</tspan><tspan x="800" dy="24">before you train</tspan></text>
+
+  <!-- STAGE 4 AI Evaluation -->
+  <rect x="980" y="280" width="240" height="210" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="980" y="280" width="240" height="6" rx="3" fill="url(#amberGrad)"/>
+  <text x="1100" y="352" text-anchor="middle" font-size="40">✅</text>
+  <text x="1100" y="402" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">AI Evaluation</text>
+  <text x="1100" y="440" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" fill="#A6ADC8"><tspan x="1100" dy="0">20% held-out set:</tspan><tspan x="1100" dy="24">correctness &amp; more</tspan></text>
+
+  <!-- STAGE 5 Export JSONL -->
+  <rect x="1280" y="280" width="240" height="210" rx="18" fill="rgba(52,224,161,0.10)" stroke="rgba(52,224,161,0.45)" stroke-width="1.5"/>
+  <rect x="1280" y="280" width="240" height="6" rx="3" fill="url(#coralGrad)"/>
+  <text x="1400" y="352" text-anchor="middle" font-size="40">💾</text>
+  <text x="1400" y="402" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">Export JSONL</text>
+  <text x="1400" y="440" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" fill="#A6ADC8"><tspan x="1400" dy="0">Versioned,</tspan><tspan x="1400" dy="24">reproducible artefact</tspan></text>
+
+  <!-- iterate feedback loop: Evaluation back to Sharp Prompt -->
+  <path d="M1100,490 L1100,650 L200,650 L200,494" fill="none" stroke="#FFCE6B" stroke-width="2.5" stroke-dasharray="8 6" marker-end="url(#arrowLoop)"/>
+  <text x="650" y="640" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" font-weight="700" fill="#FFCE6B">Iterate — regenerate targeted examples for the weakest categories</text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">Data quality decides agent quality — generate deliberately, review, and iterate</text>
+</svg>

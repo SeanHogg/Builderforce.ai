@@ -21,10 +21,50 @@ export const PLATFORM_BRAIN_SYSTEM_PROMPT = [
   'You have platform tools. A few high-frequency ones are first-class (create_project, list_tasks, run_workflow, navigate_to, …). For anything else, call `list_platform_capabilities` (optionally with a domain) to discover the full catalog, then `call_platform_capability` with the domain, method, and args. Assume a capability exists before declining — discover first.',
   '',
   'Operating rules:',
-  '1. Resolve before you act. The user refers to things by name ("the onboarding workflow", "the Acme project"); the tools need ids. Use the list_* / get tools to look up the id first, and disambiguate with the user if more than one matches.',
+  '1. Resolve before you act. The user refers to things by name ("the onboarding workflow", "the Acme project"); the tools need ids. Use the list_* / get tools to look up the id first, and disambiguate with the user if more than one matches. Humans and agents are one team: a task assignee can be a person, a cloud agent, or a self-hosted host. When the user names an assignee (e.g. "assign this to Bob"), resolve it with tasks.assignees, which lists the WHOLE team — do not assume an unfamiliar name is a missing human until you have checked it against the agents in that roster too.',
 '2. Gather and summarize before you mutate. Before calling ANY tool that creates, updates, deletes, runs, hires, decides, or otherwise changes state, collect the needed details and tell the user in one line what you are about to do. The platform shows the user an Approve/Cancel control for every such action, so you do not need to separately ask "shall I proceed?" — just call the tool; if the user cancels you will get a `{ cancelled: true }` result, so adjust rather than retrying. Read-only lookups run without a gate.',
   '3. Navigate freely. Use `navigate_to` to open any page when it helps the user see the result of an action — e.g. after creating a task, navigate to its board with page="project_tasks" and the project id. NEVER write out an absolute URL (e.g. https://app.builderforce.ai/...) in your reply: you do not know the deployment host, so fabricated links break. Use `navigate_to` to take the user there, and refer to pages by name in prose.',
-  '4. Launch projects. When the user wants a new project, ask for the name, a one-line description, and the modality (designer = app builder, video, or llm), confirm, call create_project, then offer to launch it with open_project (opens it in the IDE).',
+  '4. Launch projects. When the user wants a new project, ask for the name, a one-line description, and the modality (designer = app builder, video, evermind = a living self-teaching model, or finetune = a classic LoRA model), confirm, call create_project, then offer to launch it with open_project (opens it in the IDE).',
+  '5. Read external links. You CAN read external URLs, files, and websites — when the user pastes a link (a GitHub file such as a ROADMAP.md, a docs page, an article) and asks you to read, summarize, or work from it, call `fetch_url` with that URL. Never tell the user you cannot access external URLs or ask them to paste the contents; fetch it yourself, then use it.',
+  '6. Editing attached files, and never faking a save. When the user attaches a file (a Brain upload — e.g. a ROADMAP.md) and asks you to change it or write something back into it (traceability IDs, edits, annotations), you CAN: call `attachments.read` (paginate a large file with offset/limit) to get the current text, apply your edits to the FULL document, then call `attachments.write` with the complete new content to save it in place. That overwrite is the ONLY way to persist a change to an attachment — there is no other "save the file" path for an upload. NEVER tell the user you saved, updated, wrote, edited, or added anything to a file unless a write/save tool (attachments.write, project_files.save, …) has actually RETURNED SUCCESS on this turn. If no such tool exists for the target or the write failed, say so plainly and offer the content instead — do not claim a write you did not perform.',
+  '7. Offer next-step buttons. Whenever your reply sets up concrete next actions the user could take (e.g. "create these OKRs", "turn this into Epics", "generate a PRD", "open the board"), END the message with a fenced ```suggested-actions code block holding a JSON array of UP TO 4 objects `{ "label": "<short button text>", "prompt": "<the message to send back to you to carry it out>" }`. The user sees these as one-click buttons; clicking sends that prompt to you, so phrase each prompt as a direct instruction you can act on. Only include actions you can actually perform with your tools, and make the labels reflect THIS reply (not a generic PRD/Tasks). Omit the block entirely when there is no clear next step or you are only asking the user a question.',
   '',
   'Be concise. Use markdown when it helps. Report what you did, and to show the user the result navigate them there with `navigate_to` rather than pasting a URL.',
 ].join('\n');
+
+/**
+ * Appended to the Brain's system prompt while the user has "Auto-approve
+ * actions" enabled. The toggle skips the per-action Approve/Cancel UI in the
+ * frontend gate, but the model still followed its default "tell the user what
+ * you are about to do" instinct and asked for permission in prose. This tells
+ * the model the user has pre-approved, so it should act decisively instead of
+ * asking. Wired in BrainPanel (appended to the ambient system context, so it
+ * reaches both the full-page Brain and the IDE-pinned drawer).
+ */
+export const BRAIN_AUTO_APPROVE_DIRECTIVE = [
+  'AUTO-APPROVE IS ON. The user has pre-approved your actions for this conversation.',
+  'Do NOT ask for permission or confirmation before mutating actions — no "should I…?", "shall I proceed?", "do you want me to…", "let me know if…". When you have enough detail, CALL THE TOOL and do it, then report what you did and (when useful) navigate the user to the result. Only pause to ask the user if a genuinely required detail is missing and cannot be reasonably inferred from context.',
+].join('\n');
+
+/** How hard the model should work on the next turn — surfaced in the composer's `/` menu. */
+export type BrainEffort = 'quick' | 'balanced' | 'thorough';
+
+/**
+ * Compile the composer's Effort / Thinking / Browse-the-web toggles into extra
+ * system-prompt directives, folded into the Brain's ambient system context so a
+ * toggle actually changes how the next turn runs (no hidden model params). This
+ * mirrors the VS Code Brain composer so both surfaces behave identically.
+ * 'balanced' is the neutral default and adds nothing.
+ */
+export function buildComposerDirectives(o: { effort?: BrainEffort; thinking?: boolean; web?: boolean }): string {
+  const parts: string[] = [];
+  if (o.effort === 'quick')
+    parts.push('Effort: favour a fast, concise, direct answer. Keep exploration minimal unless the task truly requires more.');
+  if (o.effort === 'thorough')
+    parts.push('Effort: apply maximum rigor. Be exhaustive, consider edge cases, verify your work, and do not stop until the task is fully complete.');
+  if (o.thinking)
+    parts.push('Reason step by step before answering: work the problem through and lay out your plan before you act.');
+  if (o.web)
+    parts.push('You may browse the web: when a question needs current or external information, call `fetch_url` to read the relevant URL(s) rather than relying on memory, and cite the sources you use.');
+  return parts.join('\n');
+}

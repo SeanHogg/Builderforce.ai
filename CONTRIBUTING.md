@@ -3,7 +3,7 @@
 ## Quick Links
 
 - **GitHub:** https://github.com/SeanHogg/Builderforce.ai
-- **Documentation:** [builderforce.ai/docs](https://builderforce.ai/docs) — Builderforce.ai core docs. For the orchestration/API layer (auth, tenants, projects, tasks, claws, runtime, marketplace) that Builderforce.ai’s API follows, see [builderforce.ai/docs/link/](https://builderforce.ai/docs/link/) (getting started, architecture, API reference, multi-agent, pricing).
+- **Documentation:** [builderforce.ai/docs](https://builderforce.ai/docs) — Builderforce.ai core docs. For the orchestration/API layer (auth, tenants, projects, tasks, agents, runtime, marketplace) that Builderforce.ai’s API follows, see [builderforce.ai/docs/link/](https://builderforce.ai/docs/link/) (getting started, architecture, API reference, multi-agent, pricing).
 - **Cloudflare Workers documentation:** https://developers.cloudflare.com/workers/
 - **Discord:** https://discord.gg/qkhbAGHRBT (use #setup-help for questions)
 
@@ -78,6 +78,7 @@ Versions are simple date‑based strings (e.g. `2026.3.7`). Before deploying bum
 
     ```bash
     wrangler secret put NEON_DATABASE_URL
+    wrangler secret put NEON_TRANSACTIONAL_DATABASE_URL
     ```
 
 2. Authenticate Wrangler (`wrangler whoami` should return your account).

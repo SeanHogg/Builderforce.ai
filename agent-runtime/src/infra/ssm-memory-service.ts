@@ -1,5 +1,5 @@
 /**
- * SsmMemoryService – loads/manages the @builderforce/memory runtime and SSMAgent
+ * SsmMemoryService – loads/manages the @seanhogg/builderforce-memory runtime and SSMAgent
  * for BuilderForceAgents's local hippocampus memory layer.
  *
  * GPU initialisation is optional: if @webgpu/node is unavailable or the GPU
@@ -25,7 +25,7 @@ export interface SsmMemoryServiceOptions {
   /** Anthropic API key forwarded to an optional bridge (unused in memory-only mode). */
   anthropicApiKey?: string;
   /**
-   * MambaKit model size preset.
+   * SSM model size preset.
    * Default: 'small'
    */
   modelSize?: "nano" | "small" | "medium" | "large";
@@ -114,7 +114,7 @@ async function fetchCheckpointToDisk(url: string, destPath: string): Promise<Buf
 }
 
 // ── Lazy module imports ───────────────────────────────────────────────────────
-// We import @builderforce/memory types dynamically so that a missing package does not prevent
+// We import @seanhogg/builderforce-memory types dynamically so that a missing package does not prevent
 // the rest of the gateway from starting.
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -125,6 +125,8 @@ type SSMAgent = any;
 type MemoryStore = any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SemanticCache = any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Cognition = any;
 
 // ── SsmMemoryService ──────────────────────────────────────────────────────────
 
@@ -132,6 +134,13 @@ export class SsmMemoryService {
   readonly runtime: SSMRuntime;
   readonly agent: SSMAgent;
   readonly memory: MemoryStore;
+  /**
+   * Write-Through Cognition (Evermind). Routes belief writes through an
+   * evidence-gated, replace-on-write pipeline (supersede/augment/confirm/reject)
+   * keyed by a STABLE subject key, so re-learned facts replace the incumbent
+   * instead of accumulating. `null` only when the package predates the export.
+   */
+  readonly cognition: Cognition | null;
   /**
    * Embedding-keyed read-through cache for cortex completions: L1 = on-device
    * SSM embeddings (free), L2 = the BuilderForce.ai gateway (shared with the web
@@ -156,6 +165,7 @@ export class SsmMemoryService {
     gpuAvailable: boolean,
     checkpointPath: string,
     saveEveryLearns: number,
+    cognition: Cognition | null,
   ) {
     this.runtime = runtime;
     this.agent = agent;
@@ -164,6 +174,7 @@ export class SsmMemoryService {
     this.gpuAvailable = gpuAvailable;
     this.checkpointPath = checkpointPath;
     this.saveEveryLearns = saveEveryLearns;
+    this.cognition = cognition;
   }
 
   /**
@@ -171,7 +182,7 @@ export class SsmMemoryService {
    *
    * GPU init is attempted first; if it fails (no @webgpu/node or no GPU),
    * the service falls back to memory-only operation (gpuAvailable = false).
-   * Never throws — returns null if the @builderforce/memory package itself is missing.
+   * Never throws — returns null if the @seanhogg/builderforce-memory package itself is missing.
    */
   static async create(opts: SsmMemoryServiceOptions = {}): Promise<SsmMemoryService | null> {
     const checkpointPath = resolveCheckpointPath(opts.checkpointPath);
@@ -191,14 +202,14 @@ export class SsmMemoryService {
     let memoryMod: any;
     try {
       // Dynamic import so a missing package is a runtime no-op
-      memoryMod = await _import("@builderforce/memory");
+      memoryMod = await _import("@seanhogg/builderforce-memory");
     } catch {
-      logDebug("[ssm-memory] @builderforce/memory not available — skipping SSM memory layer");
+      logDebug("[ssm-memory] @seanhogg/builderforce-memory not available — skipping SSM memory layer");
       return null;
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
-    const { SSMRuntime, MemoryStore, SSMAgent, SemanticCache, FetchSemanticCacheBackend } =
+    const { SSMRuntime, MemoryStore, SSMAgent, SemanticCache, FetchSemanticCacheBackend, EvermindCognition } =
       memoryMod as Record<string, any>;
 
     // IDBFactory — always available via fake-indexeddb
@@ -301,6 +312,14 @@ export class SsmMemoryService {
     // IndexedDB is in-memory (fake-indexeddb) and would not survive a restart.
     const memory = new MemoryStore({ idbFactory });
 
+    // Write-Through Cognition (Evermind) over the same store. Belief writes go
+    // through this so a re-learned fact replaces its incumbent under a stable
+    // subject key instead of accumulating. Guarded for older package builds.
+    const cognition =
+      typeof EvermindCognition === "function"
+        ? new EvermindCognition({ store: memory, runtime })
+        : null;
+
     // Agent
     const agent = new SSMAgent({ runtime, memory, persistHistory: true });
     try {
@@ -340,6 +359,7 @@ export class SsmMemoryService {
       gpuAvailable,
       checkpointPath,
       saveEveryLearns,
+      cognition,
     );
 
     // First-run seeding: persist the freshly-initialised weights so that the next
@@ -364,6 +384,34 @@ export class SsmMemoryService {
     opts?: { ttlMs?: number; tags?: string[]; importance?: number },
   ): Promise<void> {
     await this.memory.remember(key, content, opts);
+  }
+
+  /**
+   * Write-through belief commit (Evermind Write-Through Cognition).
+   *
+   * Unlike {@link remember} (a raw keyed put, used for the append-style activity
+   * event log), this routes a *belief* through the cognition pipeline: a fact
+   * about the same `key` (subject) supersedes its incumbent instead of being
+   * stored blindly, with optional evidence-gating. Falls back to a plain keyed
+   * remember when the cognition layer is unavailable (older package). Returns the
+   * verdict (`augment | confirm | supersede | reject`) for the caller to surface.
+   */
+  async commitFact(
+    key: string,
+    content: string,
+    opts?: { tags?: string[]; importance?: number },
+  ): Promise<{ verdict: string }> {
+    if (!this.cognition) {
+      await this.memory.remember(key, content, opts);
+      return { verdict: "augment" };
+    }
+    const r = await this.cognition.commit({
+      subjectKey: key,
+      content,
+      tags: opts?.tags,
+      importance: opts?.importance,
+    });
+    return { verdict: String(r.verdict) };
   }
 
   /**
@@ -403,6 +451,21 @@ export class SsmMemoryService {
       return entries as Array<{ key: string; content: string }>;
     } catch {
       return [];
+    }
+  }
+
+  /**
+   * Pooled, L2-normalised SSM embedding of `text` (the hippocampus representation
+   * the limbic model learns from). Returns null when the GPU/embedder is
+   * unavailable so callers fall back to a hashed embedding. Never throws.
+   */
+  async embed(text: string): Promise<Float32Array | null> {
+    if (!this.gpuAvailable) return null;
+    try {
+      const v = (await this.runtime.embed(text)) as ArrayLike<number> | null | undefined;
+      return v ? Float32Array.from(v as ArrayLike<number>) : null;
+    } catch {
+      return null;
     }
   }
 

@@ -32,7 +32,12 @@ import { CoherenceControls } from './CoherenceControls';
 import { VideoPreview } from './VideoPreview';
 import { ProgressFeedback } from './ProgressFeedback';
 import { DebugCopyButton } from './DebugCopyButton';
-import { QualityTierPicker, resolveQualityTier } from './QualityTierPicker';
+import {
+  QualityTierPicker,
+  resolveEffectiveChain,
+  EffectiveChainBadge,
+  CustomRefinementPicker,
+} from './QualityTierPicker';
 import { StoryboardEditor } from './StoryboardEditor';
 import { useEngineStatus } from './useEngineStatus';
 
@@ -49,8 +54,13 @@ export interface VideoVersionParams {
   /** Resolved primary model (tier.primary in simple mode, or the explicit
    *  Advanced override). NOT the stale picker default. */
   model: DiffusionModelId;
-  /** Resolved refinement model for the two-pass tier, else null. */
+  /** Resolved refinement model for the two-pass tier OR the Advanced custom
+   *  draft→refine pair, else null. */
   refinementModel: DiffusionModelId | null;
+  /** True when this version's chain came from the Advanced model override (so
+   *  `refinementModel` is a CUSTOM pair, not a tier-derived one). Optional for
+   *  legacy sidecars that predate the custom-chain control. */
+  advanced?: boolean;
   width: number;
   height: number;
   frames: number;
@@ -72,6 +82,8 @@ export interface VideoVersionParams {
   coherenceStrength: number;
   motionAmount: number;
   imgToImgStrength: number;
+  /** Anchor-refresh interval used (0 = never) to bound img2img recursion drift. */
+  anchorRefreshInterval: number;
   cameraMotion: { dx: number; dy: number } | null;
   mambaState: MambaStateSnapshot;
   elapsedMs: number;
@@ -168,6 +180,11 @@ export function StudioPanel({
   // user picks "Refined" without knowing it means lcm-tiny-sd → dreamshaper.
   const [quality, setQuality] = useState<QualityMode>('fast');
   const [model, setModel] = useState<DiffusionModelId>(defaultModel);
+  // Advanced-only custom refinement override. null = single pass. When set (and
+  // Advanced is open) it builds an arbitrary draft → refine pair on top of the
+  // Advanced `model`, generalising the fixed "Refined" tier. Resolved through
+  // resolveEffectiveChain so the engine, badge, and saved params all agree.
+  const [refinementOverride, setRefinementOverride] = useState<DiffusionModelId | null>(null);
   // Whether to expose the Advanced controls (model picker, sliders, coherence
   // mode, camera motion). Collapsed by default to deliver the "user just enters
   // a prompt" experience.
@@ -186,6 +203,10 @@ export function StudioPanel({
   // wobbling" — anchor-walk alone can't deliver "walking forward through a
   // forest path" because the model has no temporal training.
   const [imgToImgStrength, setImgToImgStrength] = useState(0);
+  // Anchor-refresh interval — only meaningful with img2img recursion on. 0 =
+  // never refresh (carry content forward indefinitely, may blur past ~30 frames);
+  // N = restart from fresh noise every N keyframes to bound the accumulated drift.
+  const [anchorRefreshInterval, setAnchorRefreshInterval] = useState(0);
   const [cameraDx, setCameraDx] = useState(0);
   const [cameraDy, setCameraDy] = useState(0);
   const [frames, setFrames] = useState(defaultFrames);
@@ -211,14 +232,16 @@ export function StudioPanel({
   const [interpolationBackend, setInterpolationBackend] =
     useState<InterpolationBackend>('latent-slerp');
 
-  // Changing quality OR resolution invalidates the cached engine — the engine
-  // is bound to both at create time. Dispose the old engine (releases
-  // multi-GB ORT sessions + GPUDevice) so the next generate re-creates with
-  // the new params. Weights stay in IndexedDB so re-init is fast.
+  // Changing the resolved model chain OR resolution invalidates the cached
+  // engine — the engine is bound to (primary, refinement, resolution) at create
+  // time. Dispose the old engine (releases multi-GB ORT sessions + GPUDevice) so
+  // the next generate re-creates with the new params. Weights stay in IndexedDB
+  // so re-init is fast. `model`/`showAdvanced`/`refinementOverride` are inputs to
+  // resolveEffectiveChain, so a change to any of them must rebuild the engine.
   useEffect(() => {
     disposeEngineAndOutputs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quality, resolution]);
+  }, [quality, resolution, model, showAdvanced, refinementOverride]);
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [progressLabel, setProgressLabel] = useState('');
@@ -309,12 +332,17 @@ export function StudioPanel({
   // Source of truth for tier → model id lives in QualityTierPicker.
   const ensureEngine = useCallback(async (): Promise<VideoEngine> => {
     if (engineRef.current) return engineRef.current;
-    const tier = resolveQualityTier(quality);
+    const chain = resolveEffectiveChain({
+      showAdvanced,
+      advancedModel: model,
+      quality,
+      customRefinement: refinementOverride,
+    });
     const engine = await VideoEngine.create({
       apiKey: token,
       baseUrl,
-      model: showAdvanced ? model : tier.primary,
-      refinementModel: showAdvanced ? undefined : tier.refinement,
+      model: chain.primary,
+      refinementModel: chain.refinement ?? undefined,
       mambaState: initialMambaState,
       width: resolution,
       height: resolution,
@@ -323,7 +351,7 @@ export function StudioPanel({
     if (!engine) throw new Error('Engine refused to start on this device.');
     engineRef.current = engine;
     return engine;
-  }, [token, baseUrl, quality, showAdvanced, model, initialMambaState, resolution, handleProgress]);
+  }, [token, baseUrl, quality, showAdvanced, model, refinementOverride, initialMambaState, resolution, handleProgress]);
 
   // Single post-generation sink (DRY across single-clip + storyboard paths):
   // publish the video, reconcile previewFrames onto the canonical final set,
@@ -344,13 +372,20 @@ export function StudioPanel({
 
       if (onSaveVersion) {
         try {
-          // Record the RESOLVED model pair (not the stale picker default).
-          const tier = resolveQualityTier(quality);
+          // Record the RESOLVED model pair (not the stale picker default) via
+          // the same chain resolver the engine used.
+          const chain = resolveEffectiveChain({
+            showAdvanced,
+            advancedModel: model,
+            quality,
+            customRefinement: refinementOverride,
+          });
           const params: VideoVersionParams = {
             prompt,
             quality,
-            model: showAdvanced ? model : tier.primary,
-            refinementModel: showAdvanced ? null : tier.refinement ?? null,
+            model: chain.primary,
+            refinementModel: chain.refinement,
+            advanced: showAdvanced,
             width: resolution,
             height: resolution,
             frames,
@@ -366,6 +401,7 @@ export function StudioPanel({
             coherenceStrength,
             motionAmount,
             imgToImgStrength,
+            anchorRefreshInterval,
             cameraMotion: imgToImgStrength > 0 && (cameraDx !== 0 || cameraDy !== 0)
               ? { dx: cameraDx, dy: cameraDy }
               : null,
@@ -385,9 +421,10 @@ export function StudioPanel({
       );
     },
     [
-      onVideoGenerated, onSaveVersion, quality, showAdvanced, model, resolution, prompt,
+      onVideoGenerated, onSaveVersion, quality, showAdvanced, model, refinementOverride, resolution, prompt,
       frames, fps, interpolationFactor, interpolationBackend, coherenceMode, coherenceStrength,
-      motionAmount, imgToImgStrength, cameraDx, cameraDy, currentVersionId, storyboard, validate,
+      motionAmount, imgToImgStrength, anchorRefreshInterval, cameraDx, cameraDy, currentVersionId,
+      storyboard, validate,
     ],
   );
 
@@ -528,6 +565,7 @@ export function StudioPanel({
           coherenceStrength,
           motionAmount,
           imgToImgStrength,
+          anchorRefreshInterval,
           interpolationFactor,
           interpolationBackend,
           cameraMotion:
@@ -543,8 +581,8 @@ export function StudioPanel({
     );
   }, [
     cinematic, handlePlan, prompt, runGeneration, frames, fps, coherenceMode,
-    coherenceStrength, motionAmount, imgToImgStrength, interpolationFactor,
-    interpolationBackend, cameraDx, cameraDy, handleProgress, handleFrame,
+    coherenceStrength, motionAmount, imgToImgStrength, anchorRefreshInterval,
+    interpolationFactor, interpolationBackend, cameraDx, cameraDy, handleProgress, handleFrame,
   ]);
 
   const handleCancel = useCallback(() => {
@@ -614,6 +652,12 @@ export function StudioPanel({
       const p = entry.params;
       setPrompt(p.prompt);
       setModel(p.model);
+      // Restore the Advanced disclosure + custom refinement pair so an
+      // Advanced-chain version reloads with the exact (primary, refinement) pair
+      // it ran. For tier-derived versions (`advanced` falsy) the refinement came
+      // from the tier, so the override stays null and the tier drives the chain.
+      setShowAdvanced(p.advanced ?? false);
+      setRefinementOverride(p.advanced ? (p.refinementModel ?? null) : null);
       // Fields added after the first release — guard for legacy sidecars that
       // predate them (`?? default`), so loading an old version doesn't crash.
       if (p.quality) setQuality(p.quality);
@@ -633,6 +677,8 @@ export function StudioPanel({
       setCoherenceStrength(p.coherenceStrength);
       setMotionAmount(p.motionAmount);
       setImgToImgStrength(p.imgToImgStrength);
+      // Field added after the first release — guard legacy sidecars.
+      setAnchorRefreshInterval(p.anchorRefreshInterval ?? 0);
       setCameraDx(p.cameraMotion?.dx ?? 0);
       setCameraDy(p.cameraMotion?.dy ?? 0);
       setCurrentVersionId(entry.id);
@@ -666,6 +712,14 @@ export function StudioPanel({
   }
 
   const device = status.device;
+  // The model chain that will actually run — shared by the debug snapshot and
+  // (internally) the EffectiveChainBadge, so every readout agrees.
+  const effectiveChain = resolveEffectiveChain({
+    showAdvanced,
+    advancedModel: model,
+    quality,
+    customRefinement: refinementOverride,
+  });
 
   return (
     <div className="bfs-root">
@@ -727,8 +781,22 @@ export function StudioPanel({
 
           {/* Simple mode: Quality preset is the only required choice. The user
               picks "Fast / Balanced / Refined" and the engine resolves it to a
-              concrete model (or two for the Refined two-pass chain). */}
-          <QualityTierPicker value={quality} onChange={setQuality} disabled={isGenerating} />
+              concrete model (or two for the Refined two-pass chain). Disabled
+              while an Advanced model override is in effect so the two surfaces
+              can't silently contradict — the badge below states what runs. */}
+          <QualityTierPicker
+            value={quality}
+            onChange={setQuality}
+            disabled={isGenerating || showAdvanced}
+          />
+          {/* Single authoritative readout of the model chain that will actually
+              run, flagging when Advanced has overridden the Quality tier. */}
+          <EffectiveChainBadge
+            showAdvanced={showAdvanced}
+            advancedModel={model}
+            quality={quality}
+            customRefinement={refinementOverride}
+          />
 
           {/* Cinematic mode — routes the prompt through the Director / Shot-
               Planner (planScene) into a multi-shot storyboard with per-shot
@@ -799,8 +867,21 @@ export function StudioPanel({
               <ModelPicker value={model} onChange={setModel} disabled={isGenerating} />
               <p className="bfs-hint">
                 Overrides the Quality preset above. When this is set, the engine
-                uses this model directly (no refinement pass).
+                uses this model directly — add a refinement model below for a
+                custom two-pass chain.
               </p>
+            </div>
+
+            {/* Custom two-pass override — build an arbitrary draft → refine pair
+                on top of the Advanced model, generalising the fixed "Refined"
+                tier (lcm-tiny-sd → lcm-dreamshaper-v7). "None" = single pass. */}
+            <div style={{ marginTop: 12 }}>
+              <CustomRefinementPicker
+                primary={model}
+                value={refinementOverride}
+                onChange={setRefinementOverride}
+                disabled={isGenerating}
+              />
             </div>
 
             <div className="bfs-field" style={{ marginTop: 12 }}>
@@ -979,6 +1060,34 @@ export function StudioPanel({
               onCameraDyChange={setCameraDy}
               disabled={isGenerating}
             />
+
+            {/* Anchor refresh — only relevant once img2img recursion is on,
+                since it bounds THAT path's accumulating blur. Hidden otherwise
+                to keep the simple cases uncluttered. */}
+            {imgToImgStrength > 0 && (
+              <div className="bfs-field" style={{ marginTop: 12 }}>
+                <label className="bfs-label" htmlFor="bfs-anchor-refresh">
+                  Anchor refresh (img2img drift bound)
+                </label>
+                <input
+                  id="bfs-anchor-refresh"
+                  type="number"
+                  className="bfs-input"
+                  min={0}
+                  max={120}
+                  value={anchorRefreshInterval}
+                  onChange={(e) =>
+                    setAnchorRefreshInterval(Math.max(0, Math.min(120, Number(e.target.value) || 0)))
+                  }
+                  disabled={isGenerating}
+                />
+                <p className="bfs-hint">
+                  Restart from fresh noise every N keyframes so long clips don't progressively
+                  blur as img2img recursion accumulates VAE round-trip error. 0 = never refresh
+                  (carry content forward indefinitely). Try 8–12 for clips past ~30 frames.
+                </p>
+              </div>
+            )}
           </details>
 
           <div className="bfs-actions">
@@ -1046,14 +1155,18 @@ export function StudioPanel({
             <DebugCopyButton
               prompt={prompt}
               expandedPrompt={expandedPrompt}
-              model={model}
+              quality={quality}
+              model={effectiveChain.primary}
+              refinementModel={effectiveChain.refinement}
               resolution={resolution}
               frames={frames}
               fps={fps}
+              interpolationFactor={interpolationFactor}
               coherenceMode={coherenceMode}
               coherenceStrength={coherenceStrength}
               motionAmount={motionAmount}
               imgToImgStrength={imgToImgStrength}
+              anchorRefreshInterval={anchorRefreshInterval}
               cameraMotion={
                 imgToImgStrength > 0 && (cameraDx !== 0 || cameraDy !== 0)
                   ? { dx: cameraDx, dy: cameraDy }

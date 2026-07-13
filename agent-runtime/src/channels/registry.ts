@@ -118,6 +118,71 @@ export const CHAT_CHANNEL_ALIASES: Record<string, ChatChannelId> = {
   gchat: "googlechat",
 };
 
+// Channels that ship with a real, connect/receive/reply implementation.
+//
+// The eight entries in CHAT_CHANNEL_ORDER above are the "core" channels whose
+// onboarding/selection metadata is owned here in the registry. In addition, a
+// number of channels ship as bundled extensions under `extensions/<id>/` with
+// their own `src/channel.ts` (or `src/plugin.ts`) implementation and inline
+// meta — they are discovered through the plugin catalog at runtime and so must
+// NOT have their metadata re-declared here (that would create a second source
+// of truth). This list is the registry's canonical enumeration of every
+// channel that has a genuine transport implementation, so callers/tests can
+// assert the real implemented-channel surface without loading heavy plugins.
+//
+// Keep this in sync with the bundled `extensions/<id>` packages that call
+// `api.registerChannel(...)`.
+export const BUNDLED_CHANNEL_IDS = [
+  "matrix",
+  "mattermost",
+  "msteams",
+  "line",
+  "feishu",
+  "nostr",
+  "twitch",
+  "bluebubbles",
+  "tlon",
+  "nextcloud-talk",
+  "zalo",
+  "zalouser",
+] as const;
+
+export type BundledChannelId = (typeof BUNDLED_CHANNEL_IDS)[number];
+
+// Aliases for bundled channels (mirrors the inline aliases declared by each
+// extension's ChannelMeta; kept here so light-weight callers can normalize
+// without importing the heavy channel plugins).
+const BUNDLED_CHANNEL_ALIASES: Record<string, BundledChannelId> = {
+  teams: "msteams",
+  "twitch-chat": "twitch",
+  bb: "bluebubbles",
+};
+
+// Every channel with a real implementation: core (rich-meta, registry-owned)
+// plus bundled extensions (meta owned by the extension). This is the source of
+// truth for "how many real channels do we ship?".
+export const IMPLEMENTED_CHANNEL_IDS = [...CHAT_CHANNEL_ORDER, ...BUNDLED_CHANNEL_IDS] as const;
+
+export type ImplementedChannelId = (typeof IMPLEMENTED_CHANNEL_IDS)[number];
+
+export function listImplementedChannelIds(): ImplementedChannelId[] {
+  return [...IMPLEMENTED_CHANNEL_IDS];
+}
+
+export function getImplementedChannelCount(): number {
+  return IMPLEMENTED_CHANNEL_IDS.length;
+}
+
+export function isImplementedChannelId(raw?: string | null): boolean {
+  const normalized = raw?.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  const resolved =
+    CHAT_CHANNEL_ALIASES[normalized] ?? BUNDLED_CHANNEL_ALIASES[normalized] ?? normalized;
+  return (IMPLEMENTED_CHANNEL_IDS as readonly string[]).includes(resolved);
+}
+
 const normalizeChannelKey = (raw?: string | null): string | undefined => {
   const normalized = raw?.trim().toLowerCase();
   return normalized || undefined;

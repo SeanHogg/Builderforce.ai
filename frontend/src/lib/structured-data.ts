@@ -13,6 +13,8 @@ import {
   REGISTER_FAQ,
   BLOG_FAQ,
   COMPARE_FAQ,
+  EVERMIND,
+  EVERMIND_FAQ,
   COMPARE,
   COMPETITIVE_COMPARISON,
   DEFINED_TERMS,
@@ -20,6 +22,8 @@ import {
   PRODUCT_SECTIONS,
   PROJECTS_TASKS_FAQ,
   type FaqItem,
+  type CompetitorSeo,
+  type IntegrationSeo,
 } from './content';
 
 /* ════════ Helpers ════════ */
@@ -89,7 +93,7 @@ export function homepageSchema() {
         '@id': `${BRAND.url}/#app`,
         name: BRAND.name,
         description:
-          'AI agent training platform. Build, train, and deploy custom AI agents with WebGPU LoRA fine-tuning in the browser, skills marketplace, personas, and publish to the Workforce Registry.',
+          'A human-in-the-loop, fully agentic cloud. Train your own AI agents and use them inside your own agent, manage your workforce on a Kanban board, and review and approve every action without leaving VS Code. WebGPU LoRA fine-tuning in the browser, skills marketplace, personas, and the Workforce Registry.',
         url: BRAND.url,
         applicationCategory: 'DeveloperApplication',
         operatingSystem: 'Web',
@@ -156,7 +160,10 @@ export function blogIndexSchema(posts: { slug: string; title: string; date: stri
       },
       {
         '@type': 'ItemList',
-        itemListElement: posts.slice(0, 20).map((post, i) => ({
+        // Emit every published post (the index has 40+; a former 20-item cap
+        // dropped over half of them from the crawlable graph) [1596].
+        numberOfItems: posts.length,
+        itemListElement: posts.map((post, i) => ({
           '@type': 'ListItem',
           position: i + 1,
           url: `${BRAND.url}/blog/${post.slug}`,
@@ -167,6 +174,82 @@ export function blogIndexSchema(posts: { slug: string; title: string; date: stri
       breadcrumbs(
         { name: 'Home', url: BRAND.url },
         { name: 'Blog', url: `${BRAND.url}/blog` },
+      ),
+    ],
+  };
+}
+
+/** Workforce marketplace: CollectionPage + ItemList of published agents, each a
+ *  SoftwareApplication carrying its discovery tags as `keywords` so search/LLM
+ *  crawlers can find published agents by tag (server-rendered) [1241]. */
+export function marketplaceAgentsSchema(
+  agents: { id: string | number; name: string; description?: string | null; skills?: string[] | null }[],
+) {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'CollectionPage',
+        name: 'Workforce Marketplace',
+        description: 'Browse and hire published AI agents, skills, and personas on the Builderforce.ai Workforce Registry.',
+        url: `${BRAND.url}/marketplace`,
+        publisher: { '@id': `${BRAND.url}/#organization` },
+      },
+      {
+        '@type': 'ItemList',
+        itemListElement: agents.slice(0, 100).map((a, i) => ({
+          '@type': 'ListItem',
+          position: i + 1,
+          item: {
+            '@type': 'SoftwareApplication',
+            name: a.name,
+            applicationCategory: 'BusinessApplication',
+            url: `${BRAND.url}/marketplace?agent=${encodeURIComponent(String(a.id))}`,
+            ...(a.description ? { description: a.description } : {}),
+            ...(a.skills && a.skills.length > 0 ? { keywords: a.skills.join(', ') } : {}),
+          },
+        })),
+      },
+      breadcrumbs(
+        { name: 'Home', url: BRAND.url },
+        { name: 'Marketplace', url: `${BRAND.url}/marketplace` },
+      ),
+    ],
+  };
+}
+
+/** Talent marketplace: CollectionPage + an ItemList of for-hire freelancers. */
+export function talentMarketplaceSchema(
+  freelancers: { userId: string; displayName?: string | null; headline?: string | null; discipline?: string | null; skills?: string[] | null }[],
+) {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'CollectionPage',
+        name: 'Talent Marketplace',
+        description: 'Hire vetted freelance developers, DBAs, designers and other specialists on Builderforce.ai — with résumés, skills and hourly rates.',
+        url: `${BRAND.url}/marketplace?category=talent`,
+        publisher: { '@id': `${BRAND.url}/#organization` },
+      },
+      {
+        '@type': 'ItemList',
+        itemListElement: freelancers.slice(0, 100).map((f, i) => ({
+          '@type': 'ListItem',
+          position: i + 1,
+          item: {
+            '@type': 'Person',
+            name: f.displayName ?? 'Freelancer',
+            url: `${BRAND.url}/talent/${encodeURIComponent(f.userId)}`,
+            ...(f.headline ? { description: f.headline } : {}),
+            ...(f.discipline ? { jobTitle: f.discipline } : {}),
+            ...(f.skills && f.skills.length > 0 ? { knowsAbout: f.skills.join(', ') } : {}),
+          },
+        })),
+      },
+      breadcrumbs(
+        { name: 'Home', url: BRAND.url },
+        { name: 'Talent', url: `${BRAND.url}/marketplace?category=talent` },
       ),
     ],
   };
@@ -250,6 +333,109 @@ export function productSchema() {
       breadcrumbs(
         { name: 'Home', url: BRAND.url },
         { name: 'Product', url: `${BRAND.url}/product` },
+      ),
+    ],
+  };
+}
+
+/** Evermind page: the Builderforce.ai LLM as a SoftwareApplication + ItemList of its layers + FAQ + DefinedTerms + BreadcrumbList */
+export function evermindSchema() {
+  const url = `${BRAND.url}/evermind`;
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      organization,
+      {
+        '@type': 'SoftwareApplication',
+        '@id': `${BRAND.url}/#evermind`,
+        name: `${EVERMIND.name} — the ${BRAND.name} LLM`,
+        alternateName: [EVERMIND.name, `${BRAND.name} LLM`, 'Builderforce LLM'],
+        description: EVERMIND.seo.description,
+        url,
+        applicationCategory: 'DeveloperApplication',
+        operatingSystem: 'Web (WebGPU)',
+        author: { '@id': `${BRAND.url}/#organization` },
+        dateModified: BRAND.dateModified,
+        featureList: EVERMIND.pillars.map((p) => p.title),
+      },
+      {
+        '@type': 'ItemList',
+        name: 'Evermind architecture',
+        itemListElement: EVERMIND.pillars.map((p, i) => ({
+          '@type': 'ListItem',
+          position: i + 1,
+          name: p.title,
+          description: p.desc,
+          url,
+        })),
+      },
+      faqSchema(EVERMIND_FAQ),
+      {
+        '@type': 'DefinedTermSet',
+        name: 'Evermind concepts',
+        url,
+        hasDefinedTerm: DEFINED_TERMS.filter((t) => t.name === 'Evermind' || t.name === 'Write-Through Cognition').map((term) => ({
+          '@type': 'DefinedTerm',
+          name: term.name,
+          description: term.description,
+          inDefinedTermSet: `${url}#concepts`,
+        })),
+      },
+      breadcrumbs(
+        { name: 'Home', url: BRAND.url },
+        { name: 'Evermind', url },
+      ),
+    ],
+  };
+}
+
+/** SOC 2 / System Audits page: SoftwareApplication + ItemList of the audit types + FAQ + BreadcrumbList */
+export function soc2Schema() {
+  const url = `${BRAND.url}/soc2`;
+  const audits = [
+    { name: 'SOC 2 Readiness Audit', description: 'Scans your repositories and controls against the SOC 2 Common Criteria (CC1–CC9) and produces a prioritized readiness report.' },
+    { name: 'Architecture Analysis', description: 'Rates design-principle adherence (DRY, SOLID, DDD, patterns) across your codebase.' },
+    { name: 'Quality Audit', description: 'Checks testing, CI, and build-integrity signals across your repositories.' },
+    { name: 'Product Vision & Roadmap Audit', description: 'Measures product direction: objectives, key results, roadmap, and a documented vision.' },
+    { name: 'Privacy & Data-Law Compliance', description: 'Scans for GDPR, CCPA/CPRA, and CAN-SPAM readiness — privacy policy, cookie consent, unsubscribe, data export & erasure, and retention.' },
+  ];
+  const faq = [
+    { question: 'Is the SOC 2 audit a certification?', answer: 'No. It is a readiness audit: an automated, evidence-backed report that maps your repositories and controls to the SOC 2 Common Criteria (CC1–CC9) and tells you exactly what to close before a formal Type I/II examination.' },
+    { question: 'How does the audit run during signup?', answer: 'The onboarding wizard creates a project, connects your ticket system and repositories, then files a ticket for the security agent. The audit scores an instant report and dispatches the agent to open a remediation pull request. You are notified when the report is ready.' },
+    { question: 'Which repositories can it scan?', answer: 'GitHub, GitLab, Bitbucket, and Azure DevOps — one or many per project. Tokens stay server-side; the audit reads the repository tree to derive its signals.' },
+    { question: 'What other system audits are included?', answer: 'The same one-click flow runs an Architecture analysis, a Quality audit, a Product Vision & Roadmap audit, and a Privacy & Data-Law (GDPR/CCPA/CAN-SPAM) audit — each producing a scored project report.' },
+  ];
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      organization,
+      {
+        '@type': 'SoftwareApplication',
+        '@id': `${BRAND.url}/#soc2`,
+        name: `${BRAND.name} System Audits — SOC 2, Architecture, Quality, Privacy`,
+        description: 'Automated system-level audits that run during onboarding: SOC 2 readiness, architecture, quality, product vision, and privacy/data-law — each scored into a project report with an agent-opened remediation PR.',
+        url,
+        applicationCategory: 'DeveloperApplication',
+        operatingSystem: 'Web',
+        author: { '@id': `${BRAND.url}/#organization` },
+        dateModified: BRAND.dateModified,
+        featureList: audits.map((a) => a.name),
+      },
+      {
+        '@type': 'ItemList',
+        name: 'Builderforce system audits',
+        itemListElement: audits.map((a, i) => ({
+          '@type': 'ListItem',
+          position: i + 1,
+          name: a.name,
+          description: a.description,
+          url,
+        })),
+      },
+      faqSchema(faq),
+      breadcrumbs(
+        { name: 'Home', url: BRAND.url },
+        { name: 'SOC 2 & System Audits', url },
       ),
     ],
   };
@@ -412,6 +598,153 @@ export function registerSchema() {
       breadcrumbs(
         { name: 'Home', url: BRAND.url },
         { name: 'Create Account', url: `${BRAND.url}/register` },
+      ),
+    ],
+  };
+}
+
+
+/* ════════ Programmatic SEO — competitor & integration leaf pages ════════ */
+
+/**
+ * Per-competitor `/compare/{slug}` JSON-LD: a WebPage scoped to the rivalry, the
+ * Builderforce SoftwareApplication entity, the competitor-intent FAQ, and a
+ * breadcrumb trail. Mirrors `compareSchema()` but narrowed to a single rival so
+ * each leaf page carries its own structured data.
+ */
+export function competitorCompareSchema(seo: CompetitorSeo) {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'WebPage',
+        name: `Builderforce.ai vs ${seo.name}`,
+        description: seo.summary,
+        url: `${BRAND.url}/compare/${seo.slug}`,
+        dateModified: BRAND.dateModified,
+        about: { '@type': 'Thing', name: seo.name },
+      },
+      {
+        '@type': 'SoftwareApplication',
+        name: BRAND.name,
+        applicationCategory: 'DeveloperApplication',
+        operatingSystem: 'Web, Self-hosted',
+        description: seo.verdict,
+        offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+      },
+      faqSchema(COMPARE_FAQ),
+      breadcrumbs(
+        { name: 'Home', url: BRAND.url },
+        { name: 'Compare', url: `${BRAND.url}/compare` },
+        { name: `vs ${seo.name}`, url: `${BRAND.url}/compare/${seo.slug}` },
+      ),
+    ],
+  };
+}
+
+/**
+ * Per-integration `/integrations/{slug}` JSON-LD: a WebPage describing the
+ * integration plus the Builderforce SoftwareApplication entity and a breadcrumb.
+ */
+export function integrationSchema(seo: IntegrationSeo) {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'WebPage',
+        name: `Builderforce.ai + ${seo.name} integration`,
+        description: seo.summary,
+        url: `${BRAND.url}/integrations/${seo.slug}`,
+        dateModified: BRAND.dateModified,
+        about: { '@type': 'Thing', name: seo.name },
+      },
+      {
+        '@type': 'SoftwareApplication',
+        name: BRAND.name,
+        applicationCategory: 'DeveloperApplication',
+        operatingSystem: 'Web, Self-hosted',
+        description: seo.tagline,
+        offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+      },
+      breadcrumbs(
+        { name: 'Home', url: BRAND.url },
+        { name: 'Integrations', url: `${BRAND.url}/integrations` },
+        { name: seo.name, url: `${BRAND.url}/integrations/${seo.slug}` },
+      ),
+    ],
+  };
+}
+
+/** Standalone BreadcrumbList graph for simple index/leaf pages. */
+export function breadcrumbSchema(items: { name: string; url: string }[]) {
+  return { '@context': 'https://schema.org', '@graph': [breadcrumbs(...items)] };
+}
+
+/**
+ * JSON-LD for a logged-out feature route teaser (RouteMarketing): the
+ * Builderforce SoftwareApplication scoped to that feature, an optional FAQPage,
+ * and a breadcrumb. Gives the per-feature marketing pages (/brainstorm,
+ * /training, /ide, …) real structured data for SEO/GEO even though they render
+ * client-side. `path` is the route (e.g. '/brainstorm').
+ */
+export function routeMarketingSchema(opts: {
+  path: string;
+  title: string;
+  description: string;
+  faq?: FaqItem[];
+}) {
+  const url = `${BRAND.url}${opts.path}`;
+  const graph: object[] = [
+    organization,
+    {
+      '@type': 'SoftwareApplication',
+      name: `${BRAND.name} — ${opts.title}`,
+      description: opts.description,
+      url,
+      applicationCategory: 'DeveloperApplication',
+      operatingSystem: 'Web, Self-hosted',
+      author: { '@id': `${BRAND.url}/#organization` },
+      dateModified: BRAND.dateModified,
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+    },
+  ];
+  if (opts.faq && opts.faq.length) graph.push(faqSchema(opts.faq));
+  graph.push(
+    breadcrumbs(
+      { name: 'Home', url: BRAND.url },
+      { name: opts.title, url },
+    ),
+  );
+  return { '@context': 'https://schema.org', '@graph': graph };
+}
+
+/** Individual published marketplace skill detail (`/marketplace/[slug]`). */
+export function marketplaceSkillSchema(skill: {
+  name: string;
+  slug: string;
+  description: string;
+  category?: string | null;
+  author_display_name?: string | null;
+  tags?: string[];
+}) {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'SoftwareApplication',
+        name: skill.name,
+        description: skill.description,
+        applicationCategory: skill.category || 'BusinessApplication',
+        url: `${BRAND.url}/marketplace/${skill.slug}`,
+        operatingSystem: 'Web, Self-hosted',
+        offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+        ...(skill.author_display_name ? { author: { '@type': 'Person', name: skill.author_display_name } } : {}),
+        ...(skill.tags && skill.tags.length ? { keywords: skill.tags.join(', ') } : {}),
+      },
+      breadcrumbs(
+        { name: 'Home', url: BRAND.url },
+        { name: 'Marketplace', url: `${BRAND.url}/marketplace` },
+        { name: skill.name, url: `${BRAND.url}/marketplace/${skill.slug}` },
       ),
     ],
   };

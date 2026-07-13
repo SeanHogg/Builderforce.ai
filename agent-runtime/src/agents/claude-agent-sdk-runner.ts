@@ -1,6 +1,10 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { renderPolicyDirectives, type PolicyGate } from "@builderforce/agent-tools";
 import { logDebug, logWarn } from "../logger.js";
 import { mapSdkMessage } from "./claude-agent-v2-events.js";
+
+/** The on-prem SDK tool vocabulary — the names a `block` gate can remove. */
+const SDK_TOOLS = ["Read", "Write", "Edit", "Bash", "Glob", "Grep"] as const;
 
 /**
  * BuilderForce-V2 engine: runs a task with the Claude Agent SDK
@@ -36,7 +40,21 @@ export interface V2RunParams {
    * when nothing is assigned.
    */
   appendSystemPrompt?: string;
+  /** Compiled governance gates (compile-primitive policy modality). `block` gates
+   *  whose tool names a real SDK tool remove it from `allowedTools` (a hard block);
+   *  all gates render as binding directives into the system preamble — the same
+   *  rendering the cloud lowering uses, so governance reads identically on-prem. */
+  policyGates?: PolicyGate[];
   abortController?: AbortController;
+}
+
+/** Tools the SDK may use after `block` gates are applied (case-insensitive match on
+ *  the SDK tool vocabulary; `*`/no-tool block gates remove every tool). Pure. */
+export function allowedToolsAfterGates(gates: readonly PolicyGate[] | undefined): string[] {
+  const blocked = (gates ?? []).filter((g) => g.effect === "block");
+  if (blocked.some((g) => !g.tool || g.tool === "*")) return [];
+  const blockedNames = new Set(blocked.map((g) => (g.tool ?? "").toLowerCase()));
+  return SDK_TOOLS.filter((t) => !blockedNames.has(t.toLowerCase()));
 }
 
 export async function runClaudeAgentSdkV2(
@@ -47,20 +65,22 @@ export async function runClaudeAgentSdkV2(
   let ok = true;
   let sawResult = false;
 
+  // Governance: prepend gate directives to the preamble and remove blocked tools.
+  const governance = renderPolicyDirectives(params.policyGates);
+  const preamble = [governance, params.appendSystemPrompt?.trim()].filter(Boolean).join("\n\n");
+
   try {
     const stream = query({
-      // Prepend the assigned Skills/Personas/Content as a guidance preamble. The
-      // SDK's default system prompt is empty, so injecting via the prompt (rather
-      // than switching to the claude_code preset) adds the capabilities without
-      // changing the V2 agent's base behavior.
-      prompt: params.appendSystemPrompt?.trim()
-        ? `${params.appendSystemPrompt.trim()}\n\n---\n\n${params.prompt}`
-        : params.prompt,
+      // Prepend the assigned Skills/Personas/Content (+ governance) as a guidance
+      // preamble. The SDK's default system prompt is empty, so injecting via the
+      // prompt (rather than switching to the claude_code preset) adds the
+      // capabilities without changing the V2 agent's base behavior.
+      prompt: preamble ? `${preamble}\n\n---\n\n${params.prompt}` : params.prompt,
       options: {
         ...(params.model ? { model: params.model } : {}),
         cwd: params.cwd,
         permissionMode: "bypassPermissions",
-        allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+        allowedTools: allowedToolsAfterGates(params.policyGates),
         ...(params.abortController ? { abortController: params.abortController } : {}),
         env: {
           ...process.env,

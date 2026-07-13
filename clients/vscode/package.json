@@ -1,0 +1,706 @@
+{
+  "name": "builderforce-ai",
+  "displayName": "BuilderForce.ai",
+  "description": "%extension.description%",
+  "version": "2026.7.78",
+  "publisher": "builderforce",
+  "license": "MIT",
+  "author": "Sean Hogg",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "AI",
+    "Chat",
+    "Machine Learning",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "ai",
+    "agent",
+    "chat",
+    "coding assistant",
+    "builderforce",
+    "copilot"
+  ],
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#0b1220",
+    "theme": "dark"
+  },
+  "homepage": "https://builderforce.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SeanHogg/Builderforce.ai.git",
+    "directory": "clients/vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/SeanHogg/Builderforce.ai/issues"
+  },
+  "main": "./out/extension.js",
+  "l10n": "./l10n",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "builderforce",
+          "title": "BuilderForce",
+          "icon": "media/icon.png"
+        }
+      ]
+    },
+    "views": {
+      "builderforce": [
+        {
+          "id": "builderforce.sessions",
+          "name": "%view.sessions%"
+        },
+        {
+          "id": "builderforce.project",
+          "name": "%view.project%"
+        },
+        {
+          "id": "builderforce.inbox",
+          "name": "%view.inbox%"
+        },
+        {
+          "id": "builderforce.insights",
+          "name": "%view.insights%"
+        },
+        {
+          "id": "builderforce.evermind",
+          "type": "webview",
+          "name": "%view.evermind%"
+        },
+        {
+          "id": "builderforce.diagnostics",
+          "name": "%view.diagnostics%"
+        },
+        {
+          "id": "builderforce.meetings",
+          "name": "%view.meetings%"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "builderforce.sessions",
+        "contents": "%welcome.sessions%"
+      },
+      {
+        "view": "builderforce.insights",
+        "contents": "%welcome.insights%"
+      },
+      {
+        "view": "builderforce.diagnostics",
+        "contents": "%welcome.diagnostics%"
+      }
+    ],
+    "commands": [
+      {
+        "command": "builderforce.openChat",
+        "title": "%command.openChat%",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "builderforce.refreshMeetings",
+        "title": "%command.refreshMeetings%",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "builderforce.scheduleMeeting",
+        "title": "%command.scheduleMeeting%",
+        "category": "BuilderForce",
+        "icon": "$(add)"
+      },
+      {
+        "command": "builderforce.joinMeetingBrowser",
+        "title": "%command.joinMeetingBrowser%",
+        "category": "BuilderForce",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "builderforce.joinMeetingNative",
+        "title": "%command.joinMeetingNative%",
+        "category": "BuilderForce",
+        "icon": "$(device-camera-video)"
+      },
+      {
+        "command": "builderforce.logMeeting",
+        "title": "Log Meeting as Paid Time",
+        "category": "BuilderForce",
+        "icon": "$(calendar)"
+      },
+      {
+        "command": "builderforce.refreshInsights",
+        "title": "%command.refreshInsights%",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "builderforce.refreshEvermind",
+        "title": "%command.refreshEvermind%",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "builderforce.signIn",
+        "title": "%command.signIn%",
+        "icon": "$(sign-in)"
+      },
+      {
+        "command": "builderforce.signOut",
+        "title": "%command.signOut%",
+        "icon": "$(sign-out)"
+      },
+      {
+        "command": "builderforce.newSession",
+        "title": "%command.newSession%",
+        "icon": "$(add)"
+      },
+      {
+        "command": "builderforce.openSession",
+        "title": "%command.openSession%"
+      },
+      {
+        "command": "builderforce.renameSession",
+        "title": "%command.renameSession%",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "builderforce.deleteSession",
+        "title": "%command.deleteSession%",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "builderforce.selectProject",
+        "title": "%command.selectProject%",
+        "icon": "$(folder)"
+      },
+      {
+        "command": "builderforce.createProject",
+        "title": "%command.createProject%",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "builderforce.createWorkspace",
+        "title": "%command.createWorkspace%",
+        "icon": "$(organization)"
+      },
+      {
+        "command": "builderforce.refreshProjects",
+        "title": "%command.refreshProjects%",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "builderforce.hideDoneTasks",
+        "title": "%command.hideDoneTasks%",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "builderforce.showDoneTasks",
+        "title": "%command.showDoneTasks%",
+        "icon": "$(eye-closed)"
+      },
+      {
+        "command": "builderforce.projectViewHierarchy",
+        "title": "%command.projectViewHierarchy%",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "builderforce.projectViewFlat",
+        "title": "%command.projectViewFlat%",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "builderforce.projectGroupBy",
+        "title": "%command.projectGroupBy%",
+        "icon": "$(group-by-ref-type)"
+      },
+      {
+        "command": "builderforce.projectSortBy",
+        "title": "%command.projectSortBy%",
+        "icon": "$(sort-precedence)"
+      },
+      {
+        "command": "builderforce.projectFilterStatus",
+        "title": "%command.projectFilterStatus%",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "builderforce.projectFilterAttentionOn",
+        "title": "%command.projectFilterAttentionOn%",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "builderforce.projectFilterAttentionOff",
+        "title": "%command.projectFilterAttentionOff%",
+        "icon": "$(filter-filled)"
+      },
+      {
+        "command": "builderforce.projectFilterMineOn",
+        "title": "%command.projectFilterMineOn%",
+        "icon": "$(account)"
+      },
+      {
+        "command": "builderforce.projectFilterMineOff",
+        "title": "%command.projectFilterMineOff%",
+        "icon": "$(account)"
+      },
+      {
+        "command": "builderforce.convertTaskType",
+        "title": "%command.convertTaskType%",
+        "icon": "$(type-hierarchy-sub)"
+      },
+      {
+        "command": "builderforce.startTaskSession",
+        "title": "%command.startTaskSession%",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "builderforce.setTaskStatus",
+        "title": "%command.setTaskStatus%",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "builderforce.runTask",
+        "title": "%command.runTask%",
+        "icon": "$(play)"
+      },
+      {
+        "command": "builderforce.humanRequests",
+        "title": "%command.humanRequests%",
+        "icon": "$(verified)"
+      },
+      {
+        "command": "builderforce.openProject360",
+        "title": "%command.openProject360%",
+        "icon": "$(pie-chart)"
+      },
+      {
+        "command": "builderforce.openBoard",
+        "title": "%command.openBoard%",
+        "icon": "$(layout)"
+      },
+      {
+        "command": "builderforce.openPage",
+        "title": "%command.openPage%",
+        "icon": "$(browser)"
+      },
+      {
+        "command": "builderforce.diagnose",
+        "title": "%command.diagnose%",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "builderforce.rescanCodebase",
+        "title": "%command.rescanCodebase%",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "builderforce.pickModel",
+        "title": "%command.pickModel%",
+        "icon": "$(list-selection)"
+      },
+      {
+        "command": "builderforce.openSettings",
+        "title": "%command.openSettings%",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "builderforce.editorChat",
+        "title": "%command.editorChat%",
+        "icon": {
+          "light": "media/icon.png",
+          "dark": "media/icon.png"
+        }
+      },
+      {
+        "command": "builderforce.openBrain",
+        "title": "%command.openBrain%",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "builderforce.reviewPullRequests",
+        "title": "%command.reviewPullRequests%",
+        "icon": "$(git-pull-request)"
+      },
+      {
+        "command": "builderforce.fixErrors",
+        "title": "%command.fixErrors%",
+        "icon": "$(bug)"
+      },
+      {
+        "command": "builderforce.openPullRequest",
+        "title": "%command.openPullRequest%",
+        "icon": "$(git-commit)"
+      },
+      {
+        "command": "builderforce.reviewChanges",
+        "title": "%command.reviewChanges%",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "builderforce.refreshInbox",
+        "title": "%command.refreshInbox%",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "builderforce.refreshDiagnostics",
+        "title": "%command.refreshDiagnostics%",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "builderforce.runDiagnostic",
+        "title": "%command.runDiagnostic%",
+        "icon": "$(play)"
+      },
+      {
+        "command": "builderforce.openDiagnosticReport",
+        "title": "%command.openDiagnosticReport%",
+        "icon": "$(output)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "builderforce.editorChat",
+          "group": "navigation@-1"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "builderforce.scheduleMeeting",
+          "when": "view == builderforce.meetings",
+          "group": "navigation@1"
+        },
+        {
+          "command": "builderforce.refreshMeetings",
+          "when": "view == builderforce.meetings",
+          "group": "navigation@2"
+        },
+        {
+          "command": "builderforce.refreshInsights",
+          "when": "view == builderforce.insights",
+          "group": "navigation@1"
+        },
+        {
+          "command": "builderforce.refreshEvermind",
+          "when": "view == builderforce.evermind",
+          "group": "navigation@1"
+        },
+        {
+          "command": "builderforce.newSession",
+          "when": "view == builderforce.sessions",
+          "group": "navigation@1"
+        },
+        {
+          "command": "builderforce.rescanCodebase",
+          "when": "view == builderforce.sessions",
+          "group": "navigation@2"
+        },
+        {
+          "command": "builderforce.pickModel",
+          "when": "view == builderforce.sessions",
+          "group": "overflow@1"
+        },
+        {
+          "command": "builderforce.signIn",
+          "when": "view == builderforce.sessions",
+          "group": "overflow@2"
+        },
+        {
+          "command": "builderforce.signOut",
+          "when": "view == builderforce.sessions",
+          "group": "overflow@3"
+        },
+        {
+          "command": "builderforce.openSettings",
+          "when": "view == builderforce.sessions",
+          "group": "overflow@4"
+        },
+        {
+          "command": "builderforce.createProject",
+          "when": "view == builderforce.project",
+          "group": "navigation@0"
+        },
+        {
+          "command": "builderforce.selectProject",
+          "when": "view == builderforce.project",
+          "group": "navigation@1"
+        },
+        {
+          "command": "builderforce.createWorkspace",
+          "when": "view == builderforce.project",
+          "group": "1_workspace@1"
+        },
+        {
+          "command": "builderforce.openProject360",
+          "when": "view == builderforce.project",
+          "group": "navigation@2"
+        },
+        {
+          "command": "builderforce.openBoard",
+          "when": "view == builderforce.project",
+          "group": "navigation@3"
+        },
+        {
+          "command": "builderforce.openPage",
+          "when": "view == builderforce.project",
+          "group": "navigation@4"
+        },
+        {
+          "command": "builderforce.humanRequests",
+          "when": "view == builderforce.project",
+          "group": "navigation@5"
+        },
+        {
+          "command": "builderforce.refreshProjects",
+          "when": "view == builderforce.project",
+          "group": "navigation@6"
+        },
+        {
+          "command": "builderforce.hideDoneTasks",
+          "when": "view == builderforce.project && !builderforce.hideDoneTasks",
+          "group": "navigation@7"
+        },
+        {
+          "command": "builderforce.showDoneTasks",
+          "when": "view == builderforce.project && builderforce.hideDoneTasks",
+          "group": "navigation@7"
+        },
+        {
+          "command": "builderforce.projectViewHierarchy",
+          "when": "view == builderforce.project && !builderforce.projectHierarchy",
+          "group": "navigation@8"
+        },
+        {
+          "command": "builderforce.projectViewFlat",
+          "when": "view == builderforce.project && builderforce.projectHierarchy",
+          "group": "navigation@8"
+        },
+        {
+          "command": "builderforce.projectGroupBy",
+          "when": "view == builderforce.project",
+          "group": "1_arrange@1"
+        },
+        {
+          "command": "builderforce.projectSortBy",
+          "when": "view == builderforce.project",
+          "group": "1_arrange@2"
+        },
+        {
+          "command": "builderforce.projectFilterStatus",
+          "when": "view == builderforce.project",
+          "group": "1_arrange@3"
+        },
+        {
+          "command": "builderforce.projectFilterAttentionOn",
+          "when": "view == builderforce.project && !builderforce.projectNeedsAttention",
+          "group": "1_arrange@4"
+        },
+        {
+          "command": "builderforce.projectFilterAttentionOff",
+          "when": "view == builderforce.project && builderforce.projectNeedsAttention",
+          "group": "1_arrange@4"
+        },
+        {
+          "command": "builderforce.projectFilterMineOn",
+          "when": "view == builderforce.project && !builderforce.projectAssignedToMe",
+          "group": "1_arrange@5"
+        },
+        {
+          "command": "builderforce.projectFilterMineOff",
+          "when": "view == builderforce.project && builderforce.projectAssignedToMe",
+          "group": "1_arrange@5"
+        },
+        {
+          "command": "builderforce.refreshInbox",
+          "when": "view == builderforce.inbox",
+          "group": "navigation@1"
+        },
+        {
+          "command": "builderforce.refreshDiagnostics",
+          "when": "view == builderforce.diagnostics",
+          "group": "navigation@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "builderforce.joinMeetingNative",
+          "when": "view == builderforce.meetings && viewItem == bfMeeting",
+          "group": "inline@1"
+        },
+        {
+          "command": "builderforce.joinMeetingBrowser",
+          "when": "view == builderforce.meetings && viewItem == bfMeeting",
+          "group": "inline@2"
+        },
+        {
+          "command": "builderforce.renameSession",
+          "when": "view == builderforce.sessions && viewItem == builderforceSession",
+          "group": "inline@1"
+        },
+        {
+          "command": "builderforce.deleteSession",
+          "when": "view == builderforce.sessions && viewItem == builderforceSession",
+          "group": "inline@2"
+        },
+        {
+          "command": "builderforce.runTask",
+          "when": "view == builderforce.project && viewItem == builderforceTask",
+          "group": "inline@1"
+        },
+        {
+          "command": "builderforce.startTaskSession",
+          "when": "view == builderforce.project && viewItem == builderforceTask",
+          "group": "inline@2"
+        },
+        {
+          "command": "builderforce.setTaskStatus",
+          "when": "view == builderforce.project && viewItem == builderforceTask",
+          "group": "inline@3"
+        },
+        {
+          "command": "builderforce.convertTaskType",
+          "when": "view == builderforce.project && viewItem == builderforceTask",
+          "group": "9_modify@1"
+        },
+        {
+          "command": "builderforce.runDiagnostic",
+          "when": "view == builderforce.diagnostics && viewItem == builderforceDiagnostic",
+          "group": "inline@1"
+        },
+        {
+          "command": "builderforce.openDiagnosticReport",
+          "when": "view == builderforce.diagnostics && viewItem == builderforceDiagnostic",
+          "group": "inline@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "builderforce.openSession",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.deleteSession",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.renameSession",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.startTaskSession",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.setTaskStatus",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.convertTaskType",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.runTask",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.editorChat",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.refreshInbox",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.runDiagnostic",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.openDiagnosticReport",
+          "when": "false"
+        }
+      ]
+    },
+    "chatParticipants": [
+      {
+        "id": "builderforce.agent",
+        "name": "builderforce",
+        "fullName": "BuilderForce",
+        "description": "%chatParticipant.description%",
+        "isSticky": true
+      }
+    ],
+    "configuration": {
+      "title": "BuilderForce",
+      "properties": {
+        "builderforce.baseUrl": {
+          "type": "string",
+          "default": "https://builderforce.ai/gateway",
+          "markdownDescription": "%config.baseUrl.desc%"
+        },
+        "builderforce.webUrl": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "%config.webUrl.desc%"
+        },
+        "builderforce.defaultModel": {
+          "type": "string",
+          "default": "",
+          "description": "%config.defaultModel.desc%"
+        },
+        "builderforce.permissionMode": {
+          "type": "string",
+          "enum": [
+            "ask",
+            "acceptEdits"
+          ],
+          "default": "ask",
+          "markdownEnumDescriptions": [
+            "%config.permissionMode.ask%",
+            "%config.permissionMode.acceptEdits%"
+          ],
+          "description": "%config.permissionMode.desc%"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "node esbuild.mjs --production && tsc -p ./ && pnpm run build:webview",
+    "compile": "node esbuild.mjs && tsc -p ./ && pnpm run build:webview",
+    "build:webview": "vite build --config webview/vite.config.ts",
+    "watch": "node esbuild.mjs --watch",
+    "watch:webview": "vite build --watch --config webview/vite.config.ts",
+    "typecheck": "tsc -p ./ && tsc -p webview/tsconfig.json",
+    "package": "vsce package --no-dependencies",
+    "publish:marketplace": "vsce publish --no-dependencies",
+    "publish:openvsx": "ovsx publish",
+    "typecheck:native": "tsgo --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@seanhogg/builderforce-brain-embedded": "link:../../brain-embedded",
+    "@seanhogg/builderforce-brain-ui": "link:../../packages/brain-ui",
+    "@types/node": "^20.14.0",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "@types/vscode": "^1.95.0",
+    "@typescript/native-preview": "7.0.0-dev.20260627.2",
+    "@vitejs/plugin-react": "^4.3.4",
+    "@vscode/vsce": "^3.2.0",
+    "autoprefixer": "^10.4.20",
+    "esbuild": "^0.24.0",
+    "ovsx": "^0.10.0",
+    "postcss": "^8.4.49",
+    "react": "^18",
+    "react-dom": "^18",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^6.0.3",
+    "vite": "^6.0.7"
+  }
+}

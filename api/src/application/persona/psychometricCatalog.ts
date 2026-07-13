@@ -1,0 +1,452 @@
+/**
+ * Psychometric persona catalog (Pro feature) — the source of truth the UI renders.
+ *
+ * This is the `api`-side half of the system. It owns the human-facing catalog
+ * (framework names, dimension labels, the questionnaire bank) and server-side
+ * scoring; agent-runtime owns the behavioural compiler. The dimension-id strings
+ * both sides key on now come from ONE shared map (`@builderforce/agent-tools`
+ * PSYCH_DIM), re-exported here as `DIM` so existing api consumers are unchanged.
+ */
+import { PSYCH_DIM, type LimbicPsychProfile } from '@builderforce/agent-tools';
+import { clampScore } from '../../domain/shared/numbers';
+
+// Dimension ids — the single shared map (was duplicated here + in agent-runtime).
+export const DIM = PSYCH_DIM;
+
+export type CatalogDimension = {
+  id: string;
+  name: string;
+  /** label for a score near 0 */
+  low: string;
+  /** label for a score near 100 */
+  high: string;
+  description: string;
+};
+
+export type CatalogFramework = {
+  id: string;
+  name: string;
+  summary: string;
+  dimensions: CatalogDimension[];
+};
+
+const d = (
+  id: string,
+  name: string,
+  low: string,
+  high: string,
+  description: string,
+): CatalogDimension => ({ id, name, low, high, description });
+
+/** The full framework suite. Each dimension is scored 0..100; 50 = neutral. */
+export const PSYCHOMETRIC_CATALOG: CatalogFramework[] = [
+  {
+    id: 'hexaco',
+    name: 'HEXACO personality',
+    summary: 'The validated six-factor spine — Big Five plus Honesty-Humility.',
+    dimensions: [
+      d(DIM.honesty, 'Honesty-Humility', 'Pragmatic', 'Sincere & humble', 'Sincerity, fairness, and resistance to sycophancy. High = never overstates, admits uncertainty.'),
+      d(DIM.emotionality, 'Emotionality', 'Unflappable', 'Sensitive to risk', 'Sensitivity to risk and uncertainty. High = surfaces and escalates concerns early.'),
+      d(DIM.extraversion, 'Extraversion', 'Reserved', 'Outgoing', 'Social energy and proactivity. High = communicative, volunteers updates.'),
+      d(DIM.agreeableness, 'Agreeableness', 'Challenging', 'Accommodating', 'Tendency to defer vs. challenge. High = seeks consensus; low = pushes back.'),
+      d(DIM.conscientiousness, 'Conscientiousness', 'Spontaneous', 'Methodical', 'Thoroughness and planning. High = plans, tests, double-checks before done.'),
+      d(DIM.openness, 'Openness', 'Conventional', 'Inventive', 'Appetite for novelty. High = explores new approaches; low = proven patterns.'),
+    ],
+  },
+  {
+    id: 'regfocus',
+    name: 'Regulatory focus',
+    summary: 'Promotion (opportunity-seeking) vs. prevention (error-avoiding).',
+    dimensions: [
+      d(DIM.regulatoryFocus, 'Orientation', 'Prevention', 'Promotion', 'High = optimise for speed and upside; low = optimise for safety and correctness.'),
+    ],
+  },
+  {
+    id: 'cognition',
+    name: 'Cognition (dual-process)',
+    summary: 'How much the agent deliberates vs. trusts intuition.',
+    dimensions: [
+      d(DIM.needForCognition, 'Need for cognition', 'Intuitive (System 1)', 'Deliberate (System 2)', 'High = reasons step-by-step and analyses deeply; low = acts on pattern-matching.'),
+      d(DIM.reflection, 'Reflection', 'Acts on first answer', 'Verifies reasoning', 'High = distrusts the first intuitive answer and checks before acting.'),
+    ],
+  },
+  {
+    id: 'decision',
+    name: 'Decision style',
+    summary: 'How decisions get made (GDMS) and how thoroughly options are weighed.',
+    dimensions: [
+      d(DIM.decisionRational, 'Rational', 'Low', 'High', 'Decides analytically, making trade-offs explicit.'),
+      d(DIM.decisionIntuitive, 'Intuitive', 'Low', 'High', 'Trusts well-earned intuition when evidence is thin.'),
+      d(DIM.decisionDependent, 'Dependent', 'Low', 'High', 'Seeks input/confirmation from a human or peer before committing.'),
+      d(DIM.decisionSpontaneous, 'Spontaneous', 'Low', 'High', 'Decides quickly and keeps momentum on reversible calls.'),
+      d(DIM.maximizing, 'Maximizing vs. satisficing', 'Satisficer', 'Maximizer', 'High = optimises for the best option; low = stops at good-enough.'),
+    ],
+  },
+  {
+    id: 'moral',
+    name: 'Moral foundations',
+    summary: 'The values lens used to resolve trade-offs (feeds governance).',
+    dimensions: [
+      d(DIM.moralCare, 'Care', 'Low', 'High', 'Prioritise user wellbeing and avoiding harm.'),
+      d(DIM.moralFairness, 'Fairness', 'Low', 'High', 'Treat stakeholders equitably and proportionately.'),
+      d(DIM.moralLoyalty, 'Loyalty', 'Low', 'High', "Protect the team's and project's interests."),
+      d(DIM.moralAuthority, 'Authority', 'Low', 'High', 'Respect established policy and ownership boundaries.'),
+      d(DIM.moralSanctity, 'Sanctity', 'Low', 'High', 'Uphold code, data, and process integrity.'),
+      d(DIM.moralLiberty, 'Liberty', 'Low', 'High', 'Preserve user autonomy; avoid over-constraining.'),
+    ],
+  },
+  {
+    id: 'conflict',
+    name: 'Conflict style (Thomas-Kilmann)',
+    summary: 'Two axes whose combination yields the conflict mode.',
+    dimensions: [
+      d(DIM.conflictAssertiveness, 'Assertiveness', 'Yielding', 'Assertive', 'Degree to which the agent pursues its own position in disagreement.'),
+      d(DIM.conflictCooperativeness, 'Cooperativeness', 'Independent', 'Cooperative', "Degree to which the agent accommodates others' concerns."),
+    ],
+  },
+  {
+    id: 'values',
+    name: 'Schwartz basic values',
+    summary: 'Universal value priorities used when goals conflict.',
+    dimensions: [
+      d(DIM.valSelfDirection, 'Self-direction', 'Low', 'High', 'Independent thought and action.'),
+      d(DIM.valStimulation, 'Stimulation', 'Low', 'High', 'Novelty and challenge.'),
+      d(DIM.valHedonism, 'Hedonism', 'Low', 'High', 'Pleasure and enjoyment.'),
+      d(DIM.valAchievement, 'Achievement', 'Low', 'High', 'Visible success and competence.'),
+      d(DIM.valPower, 'Power', 'Low', 'High', 'Control, status, and ownership.'),
+      d(DIM.valSecurity, 'Security', 'Low', 'High', 'Safety, stability, and order.'),
+      d(DIM.valConformity, 'Conformity', 'Low', 'High', 'Adherence to norms and expectations.'),
+      d(DIM.valTradition, 'Tradition', 'Low', 'High', 'Respect for established conventions.'),
+      d(DIM.valBenevolence, 'Benevolence', 'Low', 'High', 'Care for close others and the team.'),
+      d(DIM.valUniversalism, 'Universalism', 'Low', 'High', 'Concern for the wider good.'),
+    ],
+  },
+  {
+    id: 'disposition',
+    name: 'Disposition',
+    summary: 'Persistence, ownership, and risk appetite.',
+    dimensions: [
+      d(DIM.grit, 'Grit', 'Escalates early', 'Persists', 'High = retries intelligently and exhausts approaches before giving up.'),
+      d(DIM.locusInternal, 'Locus of control', 'External', 'Internal', 'High = owns outcomes and drives failures to resolution.'),
+      d(DIM.riskTolerance, 'Risk tolerance', 'Risk-averse', 'Risk-seeking', 'High = accepts calculated risk for speed; low = prefers safe, reversible steps.'),
+    ],
+  },
+];
+
+/** Enneagram is typological (a category, not a scale) — offered separately. */
+export const ENNEAGRAM_TYPES: Array<{ type: number; name: string; motivation: string }> = [
+  { type: 1, name: 'Reformer', motivation: 'be correct and principled' },
+  { type: 2, name: 'Helper', motivation: 'be helpful and needed' },
+  { type: 3, name: 'Achiever', motivation: 'achieve and be effective' },
+  { type: 4, name: 'Individualist', motivation: 'be authentic and distinctive' },
+  { type: 5, name: 'Investigator', motivation: 'understand deeply' },
+  { type: 6, name: 'Loyalist', motivation: 'be secure and prepared' },
+  { type: 7, name: 'Enthusiast', motivation: 'explore options and keep momentum' },
+  { type: 8, name: 'Challenger', motivation: 'take charge and protect' },
+  { type: 9, name: 'Peacemaker', motivation: 'keep things stable and harmonious' },
+];
+
+// ---------------------------------------------------------------------------
+// Questionnaire intake + scoring
+// ---------------------------------------------------------------------------
+
+/**
+ * A questionnaire item.
+ *  - `kind: 'dimension'` (default) scores a 0..100 trait onto {@link CatalogDimension}
+ *    `dimension` (a DIM id).
+ *  - `kind: 'mbti'` contributes to one MBTI dichotomy ({@link mbtiAxis}); agreement
+ *    points to {@link mbtiAgreePole}. It does NOT touch the trait vector.
+ *  - `kind: 'enneagram'` is a typing item for {@link enneagramType} (1..9); high
+ *    agreement raises the likelihood of that type. It does NOT touch the vector.
+ *
+ * `tier` splits the bank into a quick free BASIC test (the Big-Five/HEXACO spine +
+ * a few dispositional items, ~2 min) and the full ADVANCED battery (everything).
+ */
+export type CatalogQuestion = {
+  id: string;
+  /** DIM id for `dimension` items; a descriptive non-DIM token for mbti/enneagram. */
+  dimension: string;
+  text: string;
+  /** When true, a high agreement maps to a LOW score (or the OPPOSITE pole/type). */
+  reverse?: boolean;
+  /** Which test the item belongs to. Basic = quick free spine; advanced = full battery. */
+  tier: 'basic' | 'advanced';
+  /** Item family. Absent ⇒ a normal `'dimension'` trait item. */
+  kind?: 'dimension' | 'mbti' | 'enneagram';
+  /** For `kind: 'mbti'` — the dichotomy this item loads on. */
+  mbtiAxis?: MbtiAxis;
+  /** For `kind: 'mbti'` — the pole a high agreement points to (the other pole is its partner). */
+  mbtiAgreePole?: string;
+  /** For `kind: 'enneagram'` — the type (1..9) this item is diagnostic of. */
+  enneagramType?: number;
+};
+
+/** The four MBTI dichotomies and their pole pairs (first pole = the scoring reference). */
+export type MbtiAxis = 'EI' | 'SN' | 'TF' | 'JP';
+const MBTI_AXES: Array<{ axis: MbtiAxis; poles: [string, string] }> = [
+  { axis: 'EI', poles: ['E', 'I'] },
+  { axis: 'SN', poles: ['S', 'N'] },
+  { axis: 'TF', poles: ['T', 'F'] },
+  { axis: 'JP', poles: ['J', 'P'] },
+];
+
+const q = (
+  id: string,
+  dimension: string,
+  text: string,
+  reverse = false,
+  tier: 'basic' | 'advanced' = 'advanced',
+): CatalogQuestion => ({ id, dimension, text, reverse, tier, kind: 'dimension' });
+
+/** An MBTI dichotomy item. `agreePole` is the letter a "strongly agree" points to. */
+const qm = (id: string, axis: MbtiAxis, agreePole: string, text: string): CatalogQuestion => ({
+  id,
+  dimension: `mbti.${axis.toLowerCase()}`,
+  text,
+  reverse: false,
+  tier: 'advanced',
+  kind: 'mbti',
+  mbtiAxis: axis,
+  mbtiAgreePole: agreePole,
+});
+
+/** An Enneagram typing item — agreement raises the likelihood of `type` (1..9). */
+const qe = (id: string, type: number, text: string): CatalogQuestion => ({
+  id,
+  dimension: 'enneagram.type',
+  text,
+  reverse: false,
+  tier: 'advanced',
+  kind: 'enneagram',
+  enneagramType: type,
+});
+
+/**
+ * A validated-style intake. Each item is a 1..5 Likert (Strongly disagree → Strongly
+ * agree). The BASIC tier (`tier: 'basic'`) is a quick, free, high-signal spine —
+ * one item per HEXACO factor plus a few dispositional/orientation items — that any
+ * user can finish in ~2 minutes. Everything else is the full ADVANCED battery:
+ * decision style, moral foundations, conflict, the ten Schwartz values, and the
+ * categorical MBTI + Enneagram typing items.
+ */
+export const PSYCHOMETRIC_QUESTIONS: CatalogQuestion[] = [
+  // ── BASIC spine — Big-Five/HEXACO (one per factor) + core dispositional ──────
+  q('c1', DIM.conscientiousness, 'I plan my work carefully and check it before calling it done.', false, 'basic'),
+  q('o1', DIM.openness, 'I enjoy trying unconventional approaches to a problem.', false, 'basic'),
+  q('e1', DIM.emotionality, 'I tend to worry about what could go wrong.', false, 'basic'),
+  q('x1', DIM.extraversion, 'I proactively share updates and options without being asked.', false, 'basic'),
+  q('a1', DIM.agreeableness, 'I would rather find consensus than argue my point.', false, 'basic'),
+  q('h1', DIM.honesty, "I will admit uncertainty even when it's not what people want to hear.", false, 'basic'),
+  q('r1', DIM.regulatoryFocus, 'I focus more on seizing opportunities than on avoiding mistakes.', false, 'basic'),
+  q('n1', DIM.needForCognition, 'I enjoy working through complex problems step by step.', false, 'basic'),
+  q('g1', DIM.grit, 'I keep going on hard problems long after others would quit.', false, 'basic'),
+  q('lc1', DIM.locusInternal, 'When something fails, I focus on what I can do to fix it.', false, 'basic'),
+  q('rt1', DIM.riskTolerance, 'I am comfortable taking calculated risks to move faster.', false, 'basic'),
+
+  // ── ADVANCED — second HEXACO items + full framework coverage ─────────────────
+  q('c2', DIM.conscientiousness, 'I often dive in and figure things out as I go.', true),
+  q('o2', DIM.openness, 'I prefer sticking to proven, familiar methods.', true),
+  q('a2', DIM.agreeableness, 'I push back directly when I think someone is wrong.', true),
+  q('n2', DIM.needForCognition, 'I prefer quick answers over lengthy analysis.', true),
+  q('rf1', DIM.reflection, 'I double-check my first instinct before acting on it.'),
+  q('dr1', DIM.decisionRational, 'I weigh the trade-offs explicitly before deciding.'),
+  q('di1', DIM.decisionIntuitive, 'I often trust my gut when the data is thin.'),
+  q('dd1', DIM.decisionDependent, 'I like to confirm consequential decisions with someone first.'),
+  q('ds1', DIM.decisionSpontaneous, 'I make reversible decisions quickly to keep momentum.'),
+  q('mx1', DIM.maximizing, 'I keep looking for a better option even after I find a workable one.'),
+  q('mc1', DIM.moralCare, 'Avoiding harm to users matters more to me than almost anything.'),
+  q('mf1', DIM.moralFairness, 'Treating everyone fairly is a core principle for me.'),
+  q('ml1', DIM.moralLoyalty, 'I feel a strong duty to protect my team.'),
+  q('ma1', DIM.moralAuthority, 'Respecting established rules and ownership is important to me.'),
+  q('msa1', DIM.moralSanctity, 'Keeping things clean and well-ordered matters to me.'),
+  q('mli1', DIM.moralLiberty, 'I dislike imposing unnecessary constraints on people.'),
+  q('ca1', DIM.conflictAssertiveness, 'In a disagreement I push hard for the outcome I believe in.'),
+  q('cc1', DIM.conflictCooperativeness, "In a disagreement I work to satisfy everyone's concerns."),
+
+  // ── ADVANCED — Schwartz basic values (one item per value) ────────────────────
+  q('vsd1', DIM.valSelfDirection, 'Thinking up my own ideas and being creative is important to me.'),
+  q('vst1', DIM.valStimulation, 'I look for adventure and welcome new and exciting experiences.'),
+  q('vhe1', DIM.valHedonism, "Enjoying life's pleasures and having a good time is important to me."),
+  q('vac1', DIM.valAchievement, 'Being very successful and having others recognise my achievements matters to me.'),
+  q('vpo1', DIM.valPower, 'Being in charge and having control over people and resources matters to me.'),
+  q('vse1', DIM.valSecurity, 'Living in safe, stable, and orderly surroundings is important to me.'),
+  q('vco1', DIM.valConformity, 'I believe people should follow the rules even when no one is watching.'),
+  q('vtr1', DIM.valTradition, 'Upholding traditions and established customs is important to me.'),
+  q('vbe1', DIM.valBenevolence, 'Caring for the wellbeing of the people close to me is important to me.'),
+  q('vun1', DIM.valUniversalism, 'I believe everyone should be treated equally and the environment protected.'),
+
+  // ── ADVANCED — MBTI dichotomies (derive a 4-letter type) ─────────────────────
+  qm('mbti_ei', 'EI', 'E', 'I gain energy from being around other people rather than from time alone.'),
+  qm('mbti_sn', 'SN', 'S', 'I focus more on concrete facts and details than on patterns and possibilities.'),
+  qm('mbti_tf', 'TF', 'T', 'I make decisions based on logic and consistency rather than personal values.'),
+  qm('mbti_jp', 'JP', 'J', 'I prefer to have things planned and settled rather than open-ended.'),
+
+  // ── ADVANCED — Enneagram typing (derive the most-likely core type) ───────────
+  qe('enn1', 1, 'I strive to be principled and correct, and it bothers me when things are done sloppily.'),
+  qe('enn2', 2, "I focus on being helpful and attending to other people's needs."),
+  qe('enn3', 3, 'I am driven to achieve, succeed, and be seen as effective.'),
+  qe('enn4', 4, 'I want to be authentic and express what makes me different from everyone else.'),
+  qe('enn5', 5, 'I prefer to observe and understand things deeply before I get involved.'),
+  qe('enn6', 6, 'I stay alert to what could go wrong and value being secure and prepared.'),
+  qe('enn7', 7, 'I seek variety and new experiences and like to keep my options open.'),
+  qe('enn8', 8, 'I take charge, assert myself, and protect the people I care about.'),
+  qe('enn9', 9, 'I try to keep the peace and avoid conflict wherever I can.'),
+];
+
+/** The richer questionnaire result: a trait vector plus derived categorical skins. */
+export interface QuestionnaireResult {
+  vector: Record<string, number>;
+  /** A full 4-letter MBTI type — present only when all four dichotomies are answered. */
+  mbti?: string;
+  /** The most-likely Enneagram core type (1..9) — present when any typing item is answered. */
+  enneagramType?: number;
+}
+
+const mean = (values: number[]): number => values.reduce((a, b) => a + b, 0) / values.length;
+
+/**
+ * Score a set of Likert answers (questionId -> 1..5) into a trait vector plus the
+ * derived MBTI / Enneagram skins. Only dimensions with at least one answer appear in
+ * `vector`; `mbti` is emitted only when all four dichotomies are answered; `enneagramType`
+ * is the highest-agreement type (ties → lowest type number). Pure, reverse-key aware.
+ */
+export function scoreQuestionnaire(answers: Record<string, number>): QuestionnaireResult {
+  const byDimension = new Map<string, number[]>();
+  // Per MBTI axis: agreement toward the FIRST pole (0..100), so multiple items combine.
+  const byMbtiAxis = new Map<MbtiAxis, number[]>();
+  const byEnneagram = new Map<number, number[]>();
+  const questionById = new Map(PSYCHOMETRIC_QUESTIONS.map((item) => [item.id, item]));
+
+  for (const [id, raw] of Object.entries(answers)) {
+    const item = questionById.get(id);
+    if (!item) continue;
+    const likert = Math.max(1, Math.min(5, Number(raw)));
+    if (Number.isNaN(likert)) continue;
+    let pct = ((likert - 1) / 4) * 100;
+    if (item.reverse) pct = 100 - pct;
+
+    if (item.kind === 'mbti' && item.mbtiAxis) {
+      const spec = MBTI_AXES.find((a) => a.axis === item.mbtiAxis);
+      if (!spec) continue;
+      // Normalise every item on the axis to "agreement toward the first pole".
+      const towardFirst = item.mbtiAgreePole === spec.poles[0] ? pct : 100 - pct;
+      const list = byMbtiAxis.get(item.mbtiAxis) ?? [];
+      list.push(towardFirst);
+      byMbtiAxis.set(item.mbtiAxis, list);
+    } else if (item.kind === 'enneagram' && typeof item.enneagramType === 'number') {
+      const list = byEnneagram.get(item.enneagramType) ?? [];
+      list.push(pct);
+      byEnneagram.set(item.enneagramType, list);
+    } else {
+      const list = byDimension.get(item.dimension) ?? [];
+      list.push(pct);
+      byDimension.set(item.dimension, list);
+    }
+  }
+
+  const vector: Record<string, number> = {};
+  for (const [dimension, values] of byDimension) {
+    vector[dimension] = Math.round(mean(values));
+  }
+
+  const result: QuestionnaireResult = { vector };
+
+  // MBTI — only a COMPLETE 4-letter type (every dichotomy answered) is meaningful.
+  if (MBTI_AXES.every(({ axis }) => byMbtiAxis.has(axis))) {
+    result.mbti = MBTI_AXES.map(({ axis, poles }) => {
+      const towardFirst = mean(byMbtiAxis.get(axis)!);
+      return towardFirst >= 50 ? poles[0] : poles[1];
+    }).join('');
+  }
+
+  // Enneagram — the highest-agreement type; ties resolve to the lowest type number.
+  if (byEnneagram.size > 0) {
+    let best = { type: 0, score: -1 };
+    for (const type of [...byEnneagram.keys()].sort((a, b) => a - b)) {
+      const s = mean(byEnneagram.get(type)!);
+      if (s > best.score) best = { type, score: s };
+    }
+    if (best.type > 0) result.enneagramType = best.type;
+  }
+
+  return result;
+}
+
+/** Every valid dimension id (for validating imported vectors). */
+export const VALID_DIMENSION_IDS = new Set<string>(Object.values(DIM));
+
+/**
+ * Sanitise an externally-supplied vector (e.g. a human's imported test results):
+ * keep only known dimension ids and clamp values to 0..100.
+ */
+export function sanitizeVector(raw: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!VALID_DIMENSION_IDS.has(key)) continue;
+    const n = Number(value);
+    if (Number.isNaN(n)) continue;
+    out[key] = clampScore(Math.round(n));
+  }
+  return out;
+}
+
+/**
+ * Mean-average a set of psychometric profiles into ONE aggregate profile — the
+ * collective resting temperament of a group (e.g. the agents assigned to a project),
+ * used as the neutral-replacing setpoint for a project Evermind that carries no
+ * personality of its own.
+ *
+ * Each dimension is averaged only over the profiles that ACTUALLY carry it: an absent
+ * dimension is ignored (never counted as a neutral 50), so a partial profile still
+ * contributes exactly the traits it defines. Profiles with no usable trait signal
+ * (empty/absent/traitless vector — a "neutral-only" agent) drop out via
+ * {@link sanitizeVector}. Returns `undefined` when NO profile carries any trait, so a
+ * caller's neutral fallback holds and no dead/unset signal is fabricated.
+ *
+ * Pure. Dimension ids are never hardcoded — {@link sanitizeVector} whitelists them
+ * from the shared {@link DIM}/`PSYCH_DIM` map, so this tracks the catalog automatically.
+ */
+export function aggregateProjectPsychometric(
+  profiles: Array<LimbicPsychProfile | undefined | null>,
+): LimbicPsychProfile | undefined {
+  const acc = new Map<string, { total: number; count: number }>();
+  for (const profile of profiles) {
+    if (!profile) continue;
+    const vector = sanitizeVector(profile.vector);
+    for (const [dim, value] of Object.entries(vector)) {
+      const cur = acc.get(dim) ?? { total: 0, count: 0 };
+      cur.total += value;
+      cur.count += 1;
+      acc.set(dim, cur);
+    }
+  }
+  if (acc.size === 0) return undefined;
+  const vector: Record<string, number> = {};
+  for (const [dim, { total, count }] of acc) vector[dim] = Math.round(total / count);
+  return { vector };
+}
+
+/**
+ * Sanitize a full PsychometricProfile before persisting: clamp/whitelist the trait
+ * vector (drops unknown dimensions via {@link sanitizeVector}), keep the typological
+ * skins (enneagram 1..9, MBTI), and coerce provenance. Returns a JSON string ready
+ * for a `psychometric` column, or null when there is no usable profile. THE single
+ * sanitizer — shared by the persona publish route AND the per-agent Workforce route
+ * so a stored profile is always the exact shape the runtime compiler consumes.
+ */
+export function sanitizePsychometricProfile(v: unknown): string | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  const vector = sanitizeVector(o.vector);
+  if (Object.keys(vector).length === 0 && typeof o.enneagramType !== 'number') return null;
+  const profile: Record<string, unknown> = { vector };
+  if (typeof o.enneagramType === 'number' && o.enneagramType >= 1 && o.enneagramType <= 9) {
+    profile.enneagramType = Math.round(o.enneagramType);
+  }
+  if (typeof o.mbti === 'string' && o.mbti.trim()) profile.mbti = o.mbti.trim().toUpperCase().slice(0, 4);
+  if (Array.isArray(o.frameworks)) profile.frameworks = o.frameworks.map(String).filter(Boolean);
+  if (o.source === 'sliders' || o.source === 'questionnaire' || o.source === 'imported') profile.source = o.source;
+  if (typeof o.notes === 'string' && o.notes.trim()) profile.notes = o.notes.trim().slice(0, 2000);
+  return JSON.stringify(profile);
+}

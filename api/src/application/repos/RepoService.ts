@@ -11,7 +11,7 @@
  * Every query is tenant-scoped. JSON payload columns (matchHints) are stored as
  * text → JSON.stringify on write.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import {
   projectRepositories,
   repoBranches,
@@ -70,6 +70,9 @@ export class RepoService {
   }
 
   /** Associate a new repo with a project. */
+  /** Insert a repo binding. Returns the new row, or `null` when it duplicates an
+   *  existing `(project_id, provider, owner, repo)` (migration 0067 UNIQUE) — the
+   *  route maps null to a friendly 409 instead of surfacing a raw DB error [1397]. */
   async addRepo(input: AddRepoInput, tenantId: number) {
     const now = new Date();
     const [row] = await this.db
@@ -90,8 +93,9 @@ export class RepoService {
         createdAt: now,
         updatedAt: now,
       })
+      .onConflictDoNothing()
       .returning();
-    return row;
+    return row ?? null;
   }
 
   /**
@@ -100,7 +104,13 @@ export class RepoService {
    * row. Returns a discriminated result so the route maps it to HTTP codes
    * (e.g. no_agent_host → 409, no_repo → 409, task_not_found → 404).
    */
-  async dispatchPrCreation(taskId: number, tenantId: number): Promise<DispatchPrResult> {
+  async dispatchPrCreation(
+    taskId: number,
+    tenantId: number,
+    /** Optional caller overrides (request body): pin a specific repo or pass board
+     *  labels for hint matching, since `tasks` has no labels column of its own. */
+    opts?: { explicitRepoId?: string | null; labels?: string[] | null },
+  ): Promise<DispatchPrResult> {
     // Load the task scoped through its project to the tenant.
     const [taskRow] = await this.db
       .select({
@@ -111,6 +121,7 @@ export class RepoService {
         status: tasks.status,
         source: tasks.source,
         assignedAgentHostId: tasks.assignedAgentHostId,
+        explicitRepoId: tasks.explicitRepoId,
       })
       .from(tasks)
       .innerJoin(projects, eq(projects.id, tasks.projectId))
@@ -129,11 +140,14 @@ export class RepoService {
     }
 
     const repos = await this.listRepos(taskRow.projectId, tenantId);
+    // Precedence for the explicit pin: an explicit caller override (request body)
+    // beats the task's sticky `explicit_repo_id` column. Labels come only from the
+    // caller (no labels column on tasks) and feed the inferred-by-hints tier.
     const resolution = resolveRepoForTask(
       {
-        labels: undefined,
+        labels: opts?.labels ?? undefined,
         description: taskRow.description ?? undefined,
-        explicitRepoId: undefined,
+        explicitRepoId: opts?.explicitRepoId?.trim() || taskRow.explicitRepoId || undefined,
       },
       repos.map((r) => ({ id: r.id, isDefault: r.isDefault, matchHints: r.matchHints })),
     );
@@ -191,6 +205,22 @@ export class RepoService {
       createdAt: now,
     });
 
+    // Re-dispatch hygiene (ROADMAP #74): a prior dispatch for THIS (task, branch)
+    // whose host callback never arrived left a placeholder row with number=null.
+    // Drop those stale placeholders before recording the new one so a never-acked
+    // dispatch can't accumulate orphan numberless rows. Only null-number rows are
+    // removed — a real PR (number set) is never touched, and the GET already prefers
+    // number-bearing rows, so this is belt-and-suspenders for the re-dispatch path.
+    await this.db
+      .delete(pullRequests)
+      .where(and(
+        eq(pullRequests.tenantId, tenantId),
+        eq(pullRequests.taskId, taskRow.id),
+        eq(pullRequests.branchName, message.branchName),
+        isNull(pullRequests.number),
+      ))
+      .catch(() => { /* best-effort cleanup — never block the new dispatch record */ });
+
     // Record the pull request as 'open' (the agentHost later calls recordPrResult).
     const [prRow] = await this.db
       .insert(pullRequests)
@@ -243,7 +273,25 @@ export class RepoService {
       })
       .where(and(eq(pullRequests.id, prId), eq(pullRequests.tenantId, tenantId)))
       .returning();
-    return row ?? null;
+    if (!row) return null;
+
+    // Surface the PR on the task so the kanban card / Details tab link to it
+    // without a human pasting the URL. The pullRequests row is already
+    // tenant-scoped; we additionally pin the update to its projectId so a forged
+    // taskId can't write across projects. Only writes the columns we actually have
+    // (a status-only callback before the URL is known leaves the link untouched).
+    if (row.taskId != null && (result.url != null || result.number != null)) {
+      await this.db
+        .update(tasks)
+        .set({
+          ...(result.url != null ? { githubPrUrl: result.url } : {}),
+          ...(result.number != null ? { githubPrNumber: result.number } : {}),
+          updatedAt: new Date(),
+        })
+        .where(and(eq(tasks.id, row.taskId), eq(tasks.projectId, row.projectId)));
+    }
+
+    return row;
   }
 }
 

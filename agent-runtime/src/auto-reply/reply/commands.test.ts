@@ -73,20 +73,20 @@ vi.mock("../../agents/model-catalog.js", () => ({
   ]),
 }));
 
-vi.mock("../../agents/pi-embedded.js", () => {
+vi.mock("../../agents/embedded.js", () => {
   const resolveEmbeddedSessionLane = (key: string) => {
     const cleaned = key.trim() || "main";
     return cleaned.startsWith("session:") ? cleaned : `session:${cleaned}`;
   };
   return {
-    abortEmbeddedPiRun: vi.fn(),
-    compactEmbeddedPiSession: vi.fn(),
-    isEmbeddedPiRunActive: vi.fn().mockReturnValue(false),
-    isEmbeddedPiRunStreaming: vi.fn().mockReturnValue(false),
-    queueEmbeddedPiMessage: vi.fn().mockReturnValue(false),
+    abortEmbeddedRun: vi.fn(),
+    compactEmbeddedSession: vi.fn(),
+    isEmbeddedRunActive: vi.fn().mockReturnValue(false),
+    isEmbeddedRunStreaming: vi.fn().mockReturnValue(false),
+    queueEmbeddedMessage: vi.fn().mockReturnValue(false),
     resolveEmbeddedSessionLane,
-    runEmbeddedPiAgent: vi.fn(),
-    waitForEmbeddedPiRunEnd: vi.fn().mockResolvedValue(undefined),
+    runEmbeddedAgent: vi.fn(),
+    waitForEmbeddedRunEnd: vi.fn().mockResolvedValue(undefined),
   };
 });
 
@@ -304,7 +304,7 @@ describe("/compact command", () => {
   });
 
   it("returns null when command is not /compact", async () => {
-    const { compactEmbeddedPiSession } = await import("../../agents/pi-embedded.js");
+    const { compactEmbeddedSession } = await import("../../agents/embedded.js");
     const cfg = {
       commands: { text: true },
       channels: { whatsapp: { allowFrom: ["*"] } },
@@ -319,11 +319,11 @@ describe("/compact command", () => {
     );
 
     expect(result).toBeNull();
-    expect(vi.mocked(compactEmbeddedPiSession)).not.toHaveBeenCalled();
+    expect(vi.mocked(compactEmbeddedSession)).not.toHaveBeenCalled();
   });
 
   it("rejects unauthorized /compact commands", async () => {
-    const { compactEmbeddedPiSession } = await import("../../agents/pi-embedded.js");
+    const { compactEmbeddedSession } = await import("../../agents/embedded.js");
     const cfg = {
       commands: { text: true },
       channels: { whatsapp: { allowFrom: ["*"] } },
@@ -343,11 +343,11 @@ describe("/compact command", () => {
     );
 
     expect(result).toEqual({ shouldContinue: false });
-    expect(vi.mocked(compactEmbeddedPiSession)).not.toHaveBeenCalled();
+    expect(vi.mocked(compactEmbeddedSession)).not.toHaveBeenCalled();
   });
 
   it("routes manual compaction with explicit trigger and context metadata", async () => {
-    const { compactEmbeddedPiSession } = await import("../../agents/pi-embedded.js");
+    const { compactEmbeddedSession } = await import("../../agents/embedded.js");
     const cfg = {
       commands: { text: true },
       channels: { whatsapp: { allowFrom: ["*"] } },
@@ -357,7 +357,7 @@ describe("/compact command", () => {
       From: "+15550001",
       To: "+15550002",
     });
-    vi.mocked(compactEmbeddedPiSession).mockResolvedValueOnce({
+    vi.mocked(compactEmbeddedSession).mockResolvedValueOnce({
       ok: true,
       compacted: false,
     });
@@ -379,8 +379,8 @@ describe("/compact command", () => {
     );
 
     expect(result?.shouldContinue).toBe(false);
-    expect(vi.mocked(compactEmbeddedPiSession)).toHaveBeenCalledOnce();
-    expect(vi.mocked(compactEmbeddedPiSession)).toHaveBeenCalledWith(
+    expect(vi.mocked(compactEmbeddedSession)).toHaveBeenCalledOnce();
+    expect(vi.mocked(compactEmbeddedSession)).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: "session-1",
         sessionKey: "agent:main:main",

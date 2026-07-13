@@ -6,6 +6,15 @@ import {
   imageProxyForPlan,
   type ImageProxyEnv,
 } from './ImageProxyService';
+import { _resetMemoryCooldowns, recordFailure } from '../../infrastructure/auth/cooldownStore';
+import { FREE_IMAGE_MODEL_POOL, _resetImageCursor } from './ImageProxyService';
+import type { VendorId } from './vendors';
+
+// The image cascade now consults/writes the shared cooldown store [1438]; with
+// no AUTH_CACHE_KV in tests it uses the module-global in-memory backend, so reset
+// it between tests to keep cases isolated (a prior cascade's failures must not
+// leave models cooled for the next test).
+beforeEach(() => { _resetMemoryCooldowns(); _resetImageCursor(); });
 
 // ---------------------------------------------------------------------------
 // ImageProxyService — exercises the 2-free-then-premium cascade end-to-end.
@@ -75,6 +84,18 @@ describe('plan → image product/pool wiring', () => {
     const proxy = imageProxyForPlan(env, 'free');
     expect(proxy).toBeInstanceOf(ImageProxyService);
   });
+
+  it('pool ids are VENDOR-PREFIXED so the dispatcher resolves by prefix (id-clash safe)', () => {
+    // Every pool entry must carry an explicit `<vendor>/<id>` prefix — a bare id
+    // would force an ambiguous catalog lookup that breaks the moment two vendors
+    // register the same model id.
+    for (const m of imageModelPoolForPlan('free')) {
+      expect(m).toMatch(/^(together|fluxapi)\//);
+    }
+    for (const m of imageModelPoolForPlan('pro')) {
+      expect(m).toMatch(/^(together|fluxapi)\//);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -112,6 +133,23 @@ describe('ImageProxyService.generate — cascade', () => {
     // FREE_IMAGE_ATTEMPT_BUDGET = 2 Together attempts → retries === 2 failovers recorded
     expect(result.retries).toBe(2);
     expect(result.failovers.map((f) => f.vendor)).toEqual(['together', 'together']);
+  });
+
+  it('skips models cooled by a recent failure and falls through to premium [1438]', async () => {
+    // Pre-cool every free (Together) model in the shared store, as a prior
+    // request's 429s would. The next request must NOT re-fire them.
+    for (const m of FREE_IMAGE_MODEL_POOL) {
+      await recordFailure(env, 'image:together' as unknown as VendorId, m, 429);
+    }
+    const requests: string[] = [];
+    installFetchRouter({
+      [TOGETHER_ENDPOINT]: () => { requests.push(TOGETHER_ENDPOINT); return new Response(JSON.stringify({ data: [{ url: 't' }] }), { status: 200 }); },
+      [FLUXAPI_ENDPOINT]:  () => new Response(JSON.stringify({ data: { url: 'https://flux/r.jpg' } }), { status: 200 }),
+    });
+    const proxy = new ImageProxyService(env);
+    const result = await proxy.generate({ prompt: 'a duck' });
+    expect(requests).toEqual([]);                  // cooled Together models skipped — no RTT wasted
+    expect(result.resolvedVendor).toBe('fluxapi'); // fell through to the premium fallback
   });
 
   it('skips Together entirely when TOGETHER_API_KEY is unbound', async () => {
@@ -206,5 +244,56 @@ describe('ImageProxyService — FREE cap enforcement', () => {
     await proxy.generate({ prompt: 'a duck' });
     expect(togetherCalls).toBe(2);
     expect(fluxCalls).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Funded paid-overflow classification + cap (migration 0130, image side)
+// ---------------------------------------------------------------------------
+
+describe('ImageProxyService — paid-overflow classification & cap', () => {
+  it('marks paidOverflow=false when a FREE (Together) model serves the request', async () => {
+    installFetchRouter({
+      [TOGETHER_ENDPOINT]: () => new Response(JSON.stringify({
+        created: 1, data: [{ url: 'https://together/img.png' }],
+      }), { status: 200 }),
+    });
+    const result = await new ImageProxyService(env).generate({ prompt: 'a duck' });
+    expect(result.resolvedVendor).toBe('together');
+    expect(result.paidOverflow).toBe(false);
+  });
+
+  it('marks paidOverflow=true when the funded premium fallback (FluxAPI) serves it', async () => {
+    installFetchRouter({
+      [TOGETHER_ENDPOINT]: () => new Response('{"error":"throttle"}', { status: 429 }),
+      [FLUXAPI_ENDPOINT]:  () => new Response(JSON.stringify({ data: { url: 'https://flux/r.jpg' } }), { status: 200 }),
+    });
+    const result = await new ImageProxyService(env).generate({ prompt: 'a duck' });
+    expect(result.resolvedModel).toBe('fluxapi/flux-kontext-pro');
+    expect(result.paidOverflow).toBe(true);
+  });
+
+  it('disablePaidOverflow drops the funded fallback — a saturated free pool exhausts instead of billing us', async () => {
+    let fluxCalls = 0;
+    installFetchRouter({
+      [TOGETHER_ENDPOINT]: () => new Response('{"error":"429"}', { status: 429 }),
+      [FLUXAPI_ENDPOINT]:  () => { fluxCalls++; return new Response(JSON.stringify({ data: { url: 'x' } }), { status: 200 }); },
+    });
+    const proxy = new ImageProxyService(env, { disablePaidOverflow: true });
+    const result = await proxy.generate({ prompt: 'a duck' });
+    expect(fluxCalls).toBe(0);               // funded fallback never attempted
+    expect(result.body.data).toEqual([]);    // cascade exhausted on free-only
+    expect(result.paidOverflow).toBe(false);
+  });
+
+  it('imageProxyForPlan threads disablePaidOverflow into the cascade', async () => {
+    let fluxCalls = 0;
+    installFetchRouter({
+      [TOGETHER_ENDPOINT]: () => new Response('{"error":"429"}', { status: 429 }),
+      [FLUXAPI_ENDPOINT]:  () => { fluxCalls++; return new Response(JSON.stringify({ data: { url: 'x' } }), { status: 200 }); },
+    });
+    const proxy = imageProxyForPlan(env, 'free', false, { disablePaidOverflow: true });
+    await proxy.generate({ prompt: 'a duck' });
+    expect(fluxCalls).toBe(0);
   });
 });

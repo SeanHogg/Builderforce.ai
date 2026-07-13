@@ -6,13 +6,30 @@ author-url: https://builderforce.ai
 metadata:
   {
     "builderforce":
-      { "emoji": "🧩", "requires": { "anyBins": ["claude", "codex", "opencode", "pi"] } },
+      {
+        "emoji": "🧩",
+        "requires":
+          { "anyBins": ["claude", "codex", "opencode", "pi"], "skills": ["github"] },
+      },
   }
 ---
 
 # Coding Agent (bash-first)
 
 Use **bash** (with optional background mode) for all coding agent work. Simple and effective.
+
+## Dependencies
+
+This skill **depends on the [github](https://builderforce.ai/skills/github) skill** (declared via `requires.skills: ["github"]`). The runtime auto-includes `github` whenever `coding-agent` is active, and will mark `coding-agent` unavailable if `github`'s own requirement (`gh` CLI) is not satisfied. Use the github skill for PR/issue/CI operations — this skill drives the code edits.
+
+## Repo Preparation (managed — do not hand-roll)
+
+> **Note:** When a coding agent runs against a repo-bound ticket or dispatch, the runtime prepares the workspace for you through a single modular **repo-sync strategy** (`src/infra/repo-sync.ts`) — you do **not** clone or "check if it's the latest code" by hand:
+>
+> - **Per-dispatch** runs get a fresh shallow clone of the latest default branch on a new working branch.
+> - **Per-ticket** runs reuse one shared workspace: it is cloned once, then refreshed to the latest default branch on reuse **only when the tree is clean** (uncommitted WIP from a prior agent is preserved, never clobbered), and the ticket branch is checked out idempotently.
+>
+> Only fall back to manual `git clone` / `mktemp -d && git init` for **scratch/one-shot** work that is NOT tied to a ticket or dispatch (see Quick Start below).
 
 ## ⚠️ PTY Mode Required!
 
@@ -284,4 +301,4 @@ This triggers an immediate wake event — Skippy gets pinged in seconds, not 10 
 - **Git repo required:** Codex won't run outside a git directory. Use `mktemp -d && git init` for scratch work.
 - **exec is your friend:** `codex exec "prompt"` runs and exits cleanly - perfect for one-shots.
 - **submit vs write:** Use `submit` to send input + Enter, `write` for raw data without newline.
-- **Sass works:** Codex responds well to playful prompts. Asked it to write a haiku about being second fiddle to a space lobster, got: _"Second chair, I code / Space lobster sets the tempo / Keys glow, I follow"_ 🦞
+- **Sass works:** Codex responds well to playful prompts. Asked it to write a haiku about being second fiddle to a space droid, got: _"Second chair, I code / Space droid sets the tempo / Keys glow, I follow"_ 🤖

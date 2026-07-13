@@ -19,6 +19,9 @@ export interface ExecutionChipProps {
   onRerun?: () => void;
   /** True while this chip's re-run request is in flight. */
   rerunning?: boolean;
+  /** Name of the agent that ran this execution — shown as a hover tooltip so the
+   *  per-run agent is discoverable across the whole list, not just the selected run. */
+  agentName?: string;
 }
 
 const ICON: Record<RerunAffordance, { path: string; title: string }> = {
@@ -28,7 +31,7 @@ const ICON: Record<RerunAffordance, { path: string; title: string }> = {
   resume: { path: 'M8 5v14l11-7z', title: 'Resume this run' },
 };
 
-export function ExecutionChip({ id, status, selected, onSelect, onRerun, rerunning }: ExecutionChipProps) {
+export function ExecutionChip({ id, status, selected, onSelect, onRerun, rerunning, agentName }: ExecutionChipProps) {
   const color = EXECUTION_STATUS_COLOR[status] ?? 'var(--text-secondary)';
   const affordance = onRerun ? rerunAffordance(status) : null;
 
@@ -46,6 +49,7 @@ export function ExecutionChip({ id, status, selected, onSelect, onRerun, rerunni
       <button
         type="button"
         onClick={onSelect}
+        title={agentName ? `Ran by ${agentName}` : undefined}
         style={{
           padding: '6px 10px', fontSize: 12, cursor: 'pointer',
           border: 'none', background: 'none', color,

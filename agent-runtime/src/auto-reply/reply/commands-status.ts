@@ -137,7 +137,7 @@ export async function buildStatusReply(params: {
     ? (normalizeGroupActivation(sessionEntry?.groupActivation) ?? defaultGroupActivation())
     : undefined;
   const agentDefaults = cfg.agents?.defaults ?? {};
-  const statusText = buildStatusMessage({
+  const statusText = await buildStatusMessage({
     config: cfg,
     agent: {
       ...agentDefaults,
@@ -160,7 +160,7 @@ export async function buildStatusReply(params: {
     resolvedVerbose: resolvedVerboseLevel,
     resolvedReasoning: resolvedReasoningLevel,
     resolvedElevated: resolvedElevatedLevel,
-    modelAuth: resolveModelAuthLabel({
+    modelAuth: await resolveModelAuthLabel({
       provider,
       cfg,
       sessionEntry,

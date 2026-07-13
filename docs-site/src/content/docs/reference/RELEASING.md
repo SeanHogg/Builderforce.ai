@@ -108,7 +108,6 @@ Current npm plugin list (update as needed):
 - @builderforce/diagnostics-otel
 - @builderforce/discord
 - @builderforce/feishu
-- @builderforce/lobster
 - @builderforce/matrix
 - @builderforce/msteams
 - @builderforce/nextcloud-talk

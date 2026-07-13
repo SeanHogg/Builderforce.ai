@@ -14,13 +14,17 @@
   "bin": {
     "webdit-convert": "./dist/cli.js"
   },
-  "files": ["dist", "src"],
+  "files": [
+    "dist",
+    "src"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "convert": "tsx src/cli.ts"
+    "convert": "tsx src/cli.ts",
+    "typecheck:native": "tsgo --noEmit"
   },
   "dependencies": {
     "@webdit/shared": "*"
@@ -28,7 +32,8 @@
   "devDependencies": {
     "@types/node": "^20.12.0",
     "tsx": "^4.7.0",
-    "typescript": "^5.4.0",
-    "vitest": "^2.1.0"
+    "typescript": "^6.0.3",
+    "vitest": "^2.1.0",
+    "@typescript/native-preview": "7.0.0-dev.20260627.2"
   }
 }

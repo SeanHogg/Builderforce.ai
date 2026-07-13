@@ -1,0 +1,11 @@
+{
+  "name": "builderforce-agent-container",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Long-lived Cloudflare Container executor for a Cloud Agent (Node/Container) run.",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}

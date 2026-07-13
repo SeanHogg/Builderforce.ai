@@ -7,7 +7,7 @@
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#0f0f14",
-  "theme_color": "#f4726e",
+  "theme_color": "#2563eb",
   "categories": ["productivity", "developer-tools"],
   "icons": [
     {

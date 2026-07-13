@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, vi } from "vitest";
 import { __setModelCatalogImportForTest, resetModelCatalogCacheForTest } from "./model-catalog.js";
 
-export type PiSdkModule = typeof import("./pi-model-discovery.js");
+export type ModelSdkModule = typeof import("./model-discovery.js");
 
 vi.mock("./models-config.js", () => ({
   ensureBuilderForceAgentsModelsJson: vi.fn().mockResolvedValue({ agentDir: "/tmp", wrote: false }),
@@ -37,7 +37,7 @@ export function mockCatalogImportFailThenRecover() {
           return [{ id: "gpt-4.1", name: "GPT-4.1", provider: "openai" }];
         }
       },
-    } as unknown as PiSdkModule;
+    } as unknown as ModelSdkModule;
   });
   return () => call;
 }

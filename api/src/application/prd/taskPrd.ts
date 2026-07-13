@@ -8,7 +8,8 @@
  * primary PRD (the canonical one the agent reads/writes for that task).
  */
 import { and, desc, eq } from 'drizzle-orm';
-import { ideProxy } from '../llm/LlmProxyService';
+import { completeForTenant } from '../llm/tenantProxy';
+import { readProxyChoice } from '../llm/LlmProxyService';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { specs, taskSpecs } from '../../infrastructure/database/schema';
@@ -20,26 +21,40 @@ const PRD_SYSTEM_PROMPT =
   'requirements, Acceptance criteria, and Out of scope. Output ONLY the PRD markdown — no preamble and ' +
   'no bracketed placeholders.';
 
-/** Draft a PRD body for a task via the gateway. Returns trimmed markdown, or '' on failure. Never throws. */
+/**
+ * Despite the "Output ONLY the PRD markdown" instruction, models sometimes wrap
+ * the whole document in a ```markdown … ``` fence. Stored verbatim, that renders
+ * as a single raw "MARKDOWN" code box instead of formatted prose. Normalize on
+ * WRITE here so every consumer (render, export, repo commit, Copy) gets clean
+ * markdown — the frontend `unwrapMarkdownFence` stays the render-time safety net
+ * for rows written before this. Idempotent: clean markdown passes through.
+ */
+export function stripPrdMarkdownFence(content: string): string {
+  const text = content.trim();
+  // Whole-document fence: ```[markdown|md] … ``` with nothing but the block.
+  const m = /^```[ \t]*(markdown|md)?[ \t]*\r?\n([\s\S]*?)\r?\n?```$/i.exec(text);
+  return m ? (m[2] ?? '').trim() : text;
+}
+
+/** Draft a PRD body for a task via the gateway, on the tenant's connected BYO account
+ *  when they have one (the compiled/agent `model` is honored only when it preempts the
+ *  BYO seed). Returns trimmed markdown, or '' on failure. Never throws. */
 export async function draftTaskPrd(
   env: Env,
+  tenantId: number,
   task: { title: string; description: string | null },
   model?: string,
 ): Promise<string> {
   try {
-    const gen = await ideProxy(env).complete({
+    const gen = await completeForTenant(env, tenantId, {
       messages: [
         { role: 'system', content: PRD_SYSTEM_PROMPT },
         { role: 'user', content: `Task: ${task.title}\n\n${task.description ?? ''}`.trim() },
       ],
-      ...(model ? { model } : {}),
       useCase: 'prd_generation',
-    });
+    }, { meterUseCase: 'prd_generation', explicitModel: model });
     if (gen.response.status < 400) {
-      const raw = await gen.response.json().catch(() => null);
-      const content = (raw as { choices?: Array<{ message?: { content?: unknown } }> } | null)
-        ?.choices?.[0]?.message?.content;
-      return (typeof content === 'string' ? content : '').trim();
+      return stripPrdMarkdownFence((await readProxyChoice(gen)).content);
     }
   } catch { /* generation failed — caller treats '' as "no PRD" */ }
   return '';
@@ -48,6 +63,22 @@ export async function draftTaskPrd(
 /** Prepend the agent-attribution header so PRD authorship is auditable. */
 export function buildPrdWithAttribution(prdBody: string, agentLabel: string, taskId: number): string {
   return `> **PRD** — drafted by ${agentLabel} · task #${taskId}\n> _Each agent that updates this PRD signs its change below._\n\n${prdBody}`;
+}
+
+/**
+ * Append a signed revision block to a PRD body — the "Each agent that updates this
+ * PRD signs its change below" contract, made real. `isoTimestamp` is passed in
+ * (callers stamp `new Date().toISOString()`) so this stays a pure, testable string
+ * builder. The new directive lands as its own dated, attributed section so the PRD
+ * evolves per run instead of being frozen at first draft.
+ */
+export function appendPrdRevision(
+  currentPrd: string,
+  args: { agentLabel: string; directive: string; executionId?: number | null; isoTimestamp: string },
+): string {
+  const ref = args.executionId != null ? ` · execution #${args.executionId}` : '';
+  const block = `### Update — ${args.agentLabel} · ${args.isoTimestamp}${ref}\n\n${args.directive.trim()}`;
+  return `${currentPrd.trimEnd()}\n\n---\n\n${block}`;
 }
 
 /** Resolve the task's canonical PRD: the primary link, else the most recent. Null if none. */
@@ -79,17 +110,24 @@ export async function linkSpecToTask(
   params: { taskId: number; specId: string; tenantId: number; isPrimary?: boolean },
 ): Promise<void> {
   const { taskId, specId, tenantId, isPrimary = false } = params;
+  const upsert = db
+    .insert(taskSpecs)
+    .values({ taskId, specId, tenantId, isPrimary })
+    .onConflictDoUpdate({ target: [taskSpecs.taskId, taskSpecs.specId], set: { isPrimary } });
   try {
     if (isPrimary) {
-      await db
+      // Atomic demote-then-upsert in ONE transaction (db.batch — the neon-http
+      // driver's transaction primitive) so a racing concurrent set-primary
+      // can't slip between the two writes and silently lose its primary intent
+      // to the partial-unique `uq_task_specs_primary` index [1278].
+      const demote = db
         .update(taskSpecs)
         .set({ isPrimary: false })
         .where(and(eq(taskSpecs.taskId, taskId), eq(taskSpecs.isPrimary, true)));
+      await db.batch([demote, upsert]);
+    } else {
+      await upsert;
     }
-    await db
-      .insert(taskSpecs)
-      .values({ taskId, specId, tenantId, isPrimary })
-      .onConflictDoUpdate({ target: [taskSpecs.taskId, taskSpecs.specId], set: { isPrimary } });
   } catch { /* best-effort */ }
 }
 
@@ -103,6 +141,28 @@ export type EnsureTaskPrdResult = { specId: string; prd: string; status: 'reused
  * the cloud-execution wrapper, the on-demand "Generate PRD" endpoint, and the
  * swimlane auto-PRD gate. Never throws.
  */
+/** The anchored per-role hand-off sections of a task PRD (PRD §5.7). Each role authors
+ *  its section; a section's presence is part of verifying that role participated. */
+export const PRD_ROLE_SECTIONS: ReadonlyArray<{ heading: string; role: string }> = [
+  { heading: 'Requirements', role: 'business-analyst' },
+  { heading: 'Design', role: 'architect' },
+  { heading: 'Implementation Notes', role: 'developer' },
+  { heading: 'Review', role: 'code-reviewer' },
+  { heading: 'Test Evidence', role: 'qa-tester' },
+  { heading: 'Acceptance', role: 'validator' },
+];
+
+/** Ensure the PRD carries the per-role hand-off sections. Idempotent — only appends a
+ *  section header that's missing, so re-running never duplicates or clobbers content. */
+export function scaffoldPrdSections(prd: string): string {
+  let out = prd.trimEnd();
+  for (const s of PRD_ROLE_SECTIONS) {
+    const re = new RegExp(`^##\\s+${s.heading}\\b`, 'im');
+    if (!re.test(out)) out += `\n\n## ${s.heading}\n\n_Owned by the ${s.role} — to be authored._`;
+  }
+  return out;
+}
+
 export async function ensureTaskPrdRecord(
   db: Db,
   env: Env,
@@ -119,9 +179,11 @@ export async function ensureTaskPrdRecord(
   const existing = await findTaskPrimarySpec(db, args.taskId);
   if (existing?.prd?.trim()) return { specId: existing.id, prd: existing.prd.trim(), status: 'reused' };
 
-  const body = await draftTaskPrd(env, { title: args.title, description: args.description }, args.model);
+  const body = await draftTaskPrd(env, args.tenantId, { title: args.title, description: args.description }, args.model);
   if (!body) return null;
-  const prd = buildPrdWithAttribution(body, args.agentLabel, args.taskId);
+  // Scaffold the per-role hand-off sections so every task PRD carries the role
+  // structure each participant fills (§5.7) — the shared hand-off contract.
+  const prd = scaffoldPrdSections(buildPrdWithAttribution(body, args.agentLabel, args.taskId));
 
   const specId = existing?.id ?? crypto.randomUUID();
   const now = new Date();
@@ -134,4 +196,51 @@ export async function ensureTaskPrdRecord(
 
   await linkSpecToTask(db, { taskId: args.taskId, specId, tenantId: args.tenantId, isPrimary: true });
   return { specId, prd, status: existing?.id ? 'updated' : 'created' };
+}
+
+export interface AppendPrdRevisionResult { specId: string; prd: string }
+
+/**
+ * Append a signed directive revision to a task's PRD and persist it — closing the
+ * "PRD is never updated per run" gap. A steer or follow-up directive becomes a
+ * dated, attributed section on the task's primary PRD, so the spec evolves with the
+ * work instead of being frozen at first draft. Creates a PRD shell if the task has
+ * none yet (a directive before any draft still gets recorded). Never throws —
+ * returns null only if persistence is impossible. Pure string assembly lives in
+ * {@link appendPrdRevision}; this owns the DB read/write.
+ */
+export async function appendTaskPrdRevision(
+  db: Db,
+  args: {
+    taskId: number;
+    tenantId: number;
+    projectId: number;
+    agentLabel: string;
+    directive: string;
+    executionId?: number | null;
+    isoTimestamp: string;
+  },
+): Promise<AppendPrdRevisionResult | null> {
+  const directive = args.directive.trim();
+  if (!directive) return null;
+  const existing = await findTaskPrimarySpec(db, args.taskId);
+  const base = existing?.prd?.trim()
+    ? existing.prd.trim()
+    : buildPrdWithAttribution('_(PRD drafted from a follow-up directive — see the revisions below.)_', args.agentLabel, args.taskId);
+  const prd = appendPrdRevision(base, { agentLabel: args.agentLabel, directive, executionId: args.executionId ?? null, isoTimestamp: args.isoTimestamp });
+
+  const specId = existing?.id ?? crypto.randomUUID();
+  const now = new Date();
+  try {
+    await db
+      .insert(specs)
+      .values({ id: specId, tenantId: args.tenantId, projectId: args.projectId, goal: 'Task PRD', status: 'draft', prd, createdAt: now, updatedAt: now })
+      .onConflictDoUpdate({ target: [specs.id], set: { prd, updatedAt: now } });
+  } catch {
+    return null;
+  }
+  if (!existing?.id) {
+    await linkSpecToTask(db, { taskId: args.taskId, specId, tenantId: args.tenantId, isPrimary: true });
+  }
+  return { specId, prd };
 }

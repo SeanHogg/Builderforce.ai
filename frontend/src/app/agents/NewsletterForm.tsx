@@ -1,12 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 
 const AUTH_API_URL = process.env.NEXT_PUBLIC_AUTH_API_URL || 'https://api.builderforce.ai';
 
 type Status = 'idle' | 'sending' | 'ok' | 'error';
 
 export default function NewsletterForm({ source = 'agents' }: { source?: string }) {
+  const t = useTranslations('newsletter');
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<Status>('idle');
 
@@ -29,8 +31,8 @@ export default function NewsletterForm({ source = 'agents' }: { source?: string 
 
   return (
     <section className="cc-newsletter">
-      <h2 className="cc-h2"><span className="cc-agentHost-accent">⟩</span> Stay in the Loop</h2>
-      <p className="cc-prose">Get updates on new features, integrations, and agent wisdom. No spam, unsubscribe anytime.</p>
+      <h2 className="cc-h2"><span className="cc-agentHost-accent">⟩</span> {t('heading')}</h2>
+      <p className="cc-prose">{t('lead')}</p>
       <form className="cc-nl-form" onSubmit={handleSubmit}>
         <input
           type="email"
@@ -39,7 +41,7 @@ export default function NewsletterForm({ source = 'agents' }: { source?: string 
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           disabled={status === 'sending' || status === 'ok'}
-          aria-label="Email address"
+          aria-label={t('emailAria')}
           className="cc-nl-input"
         />
         <button
@@ -47,11 +49,11 @@ export default function NewsletterForm({ source = 'agents' }: { source?: string 
           className="cc-nl-btn"
           disabled={status === 'sending' || status === 'ok'}
         >
-          {status === 'ok' ? 'Subscribed ✓' : status === 'sending' ? 'Subscribing…' : 'Subscribe'}
+          {status === 'ok' ? t('subscribed') : status === 'sending' ? t('subscribing') : t('subscribe')}
         </button>
       </form>
-      {status === 'error' && <p className="cc-nl-status cc-error">Unable to subscribe right now. Please try again.</p>}
-      {status === 'ok' && <p className="cc-nl-status cc-ok">Thanks — you&apos;re on the list.</p>}
+      {status === 'error' && <p className="cc-nl-status cc-error">{t('error')}</p>}
+      {status === 'ok' && <p className="cc-nl-status cc-ok">{t('success')}</p>}
       <style>{`
         .cc-newsletter {
           max-width: 720px;

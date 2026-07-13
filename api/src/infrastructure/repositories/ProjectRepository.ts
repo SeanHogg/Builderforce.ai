@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { IProjectRepository } from '../../domain/project/IProjectRepository';
 import { Project, ProjectProps } from '../../domain/project/Project';
 import { ProjectId, ProjectStatus, TenantId, asProjectId, asTenantId } from '../../domain/shared/types';
@@ -15,10 +15,12 @@ export class ProjectRepository implements IProjectRepository {
   constructor(private readonly db: Db) {}
 
   async findByTenant(tenantId: TenantId): Promise<Project[]> {
+    // Exclude rows that exist purely as an ide_project's storage backing (0224) —
+    // those are managed from the IDE dashboard, not the board/PMO project list.
     const rows = await this.db
       .select()
       .from(projectsTable)
-      .where(eq(projectsTable.tenantId, tenantId));
+      .where(and(eq(projectsTable.tenantId, tenantId), eq(projectsTable.isIdeStorage, false)));
     return rows.map(toDomain);
   }
 
@@ -70,6 +72,9 @@ export class ProjectRepository implements IProjectRepository {
         githubRepoName:  plain.githubRepoName ?? undefined,
         governance:     plain.governance ?? undefined,
         modality:        plain.modality ?? undefined,
+        origin:          plain.origin ?? undefined,
+        initiativeId:    plain.initiativeId ?? undefined,
+        dueDate:         plain.dueDate ?? undefined,
       })
       .returning();
     if (!inserted) throw new Error('Insert returned no rows');
@@ -81,6 +86,7 @@ export class ProjectRepository implements IProjectRepository {
     const [updated] = await this.db
       .update(projectsTable)
       .set({
+        key:             plain.key,
         name:            plain.name,
         description:     plain.description ?? undefined,
         template:        plain.template ?? undefined,
@@ -95,6 +101,13 @@ export class ProjectRepository implements IProjectRepository {
         githubRepoName:  plain.githubRepoName ?? undefined,
         governance:     plain.governance ?? undefined,
         modality:        plain.modality ?? undefined,
+        // Written directly (not `?? undefined`): null must persist so a project
+        // can be UNassigned from its initiative. Drizzle still skips `undefined`,
+        // so omitting initiativeId from the update DTO leaves the link unchanged.
+        initiativeId:    plain.initiativeId,
+        // Written directly too: null must persist so a PM can CLEAR the explicit
+        // deadline (falling back to the derived task-based one).
+        dueDate:         plain.dueDate,
         updatedAt:       plain.updatedAt,
       })
       .where(eq(projectsTable.id, plain.id))
@@ -134,6 +147,9 @@ function toDomain(row: Row): Project {
     githubRepoName:  row.githubRepoName ?? null,
     governance:      row.governance ?? null,
     modality:        row.modality ?? 'designer',
+    origin:          row.origin ?? null,
+    initiativeId:    row.initiativeId ?? null,
+    dueDate:         row.dueDate ?? null,
     createdAt:       row.createdAt,
     updatedAt:       row.updatedAt,
   });

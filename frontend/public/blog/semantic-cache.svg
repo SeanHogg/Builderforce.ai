@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+    <marker id="arw" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8891AE"/></marker>
+    <marker id="arwMint" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#5BF0BC"/></marker>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">SEMANTIC RESPONSE CACHE</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">Never pay twice for the same answer</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- prompts -->
+  <text x="80" y="230" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" letter-spacing="2" font-weight="700" fill="#A98BFF">TWO PROMPTS, ONE MEANING</text>
+  <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif">
+    <rect x="80" y="250" width="360" height="76" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="82" y="252" width="6" height="72" rx="3" fill="url(#violetGrad)"/>
+    <text x="108" y="284" font-size="18" font-weight="700" fill="#EEF0FA">&#8220;Summarize this PR&#8221;</text>
+    <text x="108" y="308" font-size="14" fill="#8891AE">new prompt</text>
+    <rect x="80" y="342" width="360" height="76" rx="14" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="82" y="344" width="6" height="72" rx="3" fill="url(#violetGrad)"/>
+    <text x="108" y="374" font-size="18" font-weight="700" fill="#EEF0FA">&#8220;Give me a summary of this</text>
+    <text x="108" y="398" font-size="18" font-weight="700" fill="#EEF0FA">pull request&#8221;</text>
+  </g>
+
+  <!-- prompts -> embedding -->
+  <g fill="none" stroke="#8891AE" stroke-width="2.5">
+    <path d="M440 288 H478 Q500 288 500 320 V332" marker-end="url(#arw)"/>
+    <path d="M440 380 H478 Q500 380 500 348 V336" marker-end="url(#arw)"/>
+  </g>
+
+  <!-- embedding node -->
+  <rect x="500" y="288" width="220" height="94" rx="16" fill="rgba(61,214,245,0.10)" stroke="url(#coolGrad)" stroke-width="2"/>
+  <text x="610" y="326" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" font-weight="800" fill="#EEF0FA">Embedding vector</text>
+  <text x="610" y="352" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#A6ADC8">on-device SSM &#8212; no API call</text>
+  <text x="610" y="372" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#8891AE">match by cosine similarity</text>
+
+  <!-- embedding -> L1 -->
+  <line x1="720" y1="335" x2="816" y2="305" fill="none" stroke="#8891AE" stroke-width="2.5" marker-end="url(#arw)"/>
+
+  <!-- tier cascade -->
+  <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif">
+    <!-- L1 -->
+    <rect x="820" y="250" width="320" height="112" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="822" y="252" width="6" height="108" rx="3" fill="url(#mintGrad)"/>
+    <text x="850" y="292" font-size="21" font-weight="800" fill="#EEF0FA">L1 &#8212; on-device SSM</text>
+    <text x="850" y="322" font-size="15" fill="#A6ADC8">In-process cosine match in the</text>
+    <text x="850" y="344" font-size="15" fill="#A6ADC8">browser IDE and inside each agent.</text>
+    <!-- L2 -->
+    <rect x="820" y="410" width="320" height="112" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="822" y="412" width="6" height="108" rx="3" fill="url(#coolGrad)"/>
+    <text x="850" y="452" font-size="21" font-weight="800" fill="#EEF0FA">L2 &#8212; shared gateway</text>
+    <text x="850" y="482" font-size="15" fill="#A6ADC8">Tenant-scoped, KV-backed layer.</text>
+    <text x="850" y="504" font-size="15" fill="#A6ADC8">Shared across every surface.</text>
+    <!-- Frontier -->
+    <rect x="820" y="570" width="320" height="112" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+    <rect x="822" y="572" width="6" height="108" rx="3" fill="url(#coralGrad)"/>
+    <text x="850" y="612" font-size="21" font-weight="800" fill="#EEF0FA">Frontier model</text>
+    <text x="850" y="642" font-size="15" fill="#A6ADC8">Billed &#8212; called only on a full miss,</text>
+    <text x="850" y="664" font-size="15" fill="#A6ADC8">then its answer is stored back.</text>
+  </g>
+
+  <!-- miss arrows down -->
+  <g fill="none" stroke="#8891AE" stroke-width="2.5">
+    <line x1="900" y1="362" x2="900" y2="406" marker-end="url(#arw)"/>
+    <line x1="900" y1="522" x2="900" y2="566" marker-end="url(#arw)"/>
+  </g>
+  <text x="912" y="390" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" font-weight="700" fill="#8891AE">miss</text>
+  <text x="912" y="550" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" font-weight="700" fill="#8891AE">miss</text>
+
+  <!-- hit branches -->
+  <g fill="none" stroke="#5BF0BC" stroke-width="2.5">
+    <line x1="1140" y1="306" x2="1196" y2="306" marker-end="url(#arwMint)"/>
+    <line x1="1140" y1="466" x2="1196" y2="466" marker-end="url(#arwMint)"/>
+  </g>
+  <g font-family="Segoe UI, Helvetica Neue, Arial, sans-serif">
+    <rect x="1200" y="276" width="320" height="60" rx="14" fill="rgba(91,240,188,0.12)" stroke="rgba(91,240,188,0.45)"/>
+    <text x="1224" y="303" font-size="17" font-weight="800" fill="#5BF0BC">Hit &#8594; reuse, $0</text>
+    <text x="1224" y="325" font-size="13.5" fill="#A6ADC8">on-device, no per-lookup cost</text>
+    <rect x="1200" y="436" width="320" height="60" rx="14" fill="rgba(91,240,188,0.12)" stroke="rgba(91,240,188,0.45)"/>
+    <text x="1224" y="463" font-size="17" font-weight="800" fill="#5BF0BC">Hit &#8594; reuse, no model call</text>
+    <text x="1224" y="485" font-size="13.5" fill="#A6ADC8">a web-app answer reused by an agent</text>
+  </g>
+
+  <!-- store-back loop -->
+  <path d="M1140 626 H1470 Q1490 626 1490 606 V244 Q1490 224 1470 224 H992 V246" fill="none" stroke="#8891AE" stroke-width="2.5" stroke-dasharray="7 6" marker-end="url(#arw)"/>
+  <text x="1230" y="216" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" font-weight="700" fill="#8891AE">store answer in L1 + L2</text>
+
+  <!-- cross-surface note -->
+  <rect x="80" y="470" width="360" height="212" rx="16" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)"/>
+  <rect x="82" y="472" width="6" height="208" rx="3" fill="url(#coolGrad)"/>
+  <text x="108" y="512" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" font-weight="800" fill="#EEF0FA">One portable cache</text>
+  <text x="108" y="546" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#A6ADC8">A paraphrase answered in the web app is</text>
+  <text x="108" y="568" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#A6ADC8">reusable by an agent later, and vice versa.</text>
+  <text x="108" y="602" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#8891AE">One SemanticCache from @builderforce/memory;</text>
+  <text x="108" y="624" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#8891AE">the embedder and L2 backend are injected, so</text>
+  <text x="108" y="646" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#8891AE">there is no browser / Node fork to drift apart.</text>
+  <text x="108" y="672" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#8891AE">A hit behaves the same everywhere.</text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">Every cache hit is a frontier-model call you didn&#8217;t make &#8212; the biggest cost lever in the stack.</text>
+</svg>

@@ -21,6 +21,10 @@ import {
   persistSession,
   persistTenantSession,
   register as apiRegister,
+  verifyEmailCode as apiVerifyEmailCode,
+  selectAccountType as apiSelectAccountType,
+  setAvailableForHire as apiSetAvailableForHire,
+  type AuthStepResult,
 } from './auth';
 
 // ---------------------------------------------------------------------------
@@ -34,8 +38,20 @@ interface AuthContextValue {
   tenantToken: string | null;
   isAuthenticated: boolean;
   hasTenant: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string | undefined, agreeToTerms: boolean) => Promise<void>;
+  /** Resolves to `{ needsVerification: true, email }` when the account's email must
+   *  be verified first — the caller flips to the code-entry step. Otherwise the
+   *  session is set and it resolves to `{ needsVerification: false, ... }`. */
+  login: (email: string, password: string) => Promise<AuthStepResult>;
+  register: (email: string, password: string, name: string | undefined, agreeToTerms: boolean, accountType?: 'standard' | 'freelancer') => Promise<AuthStepResult>;
+  /** Exchange the emailed OTP for a session (sets the session in place). `trustDevice`
+   *  keeps the user signed in on this device for 30 days. */
+  verifyEmail: (email: string, code: string, trustDevice: boolean) => Promise<void>;
+  /** One-time account-type choice (Build vs Hired) for an OAuth/magic-link account
+   *  that hasn't picked a role yet. Updates the stored user in place. */
+  selectAccountType: (accountType: 'standard' | 'freelancer') => Promise<void>;
+  /** Opt IN/OUT of being hired talent (independent of account type — the builder
+   *  shell is unaffected). Updates the stored user in place. */
+  setAvailableForHire: (available: boolean) => Promise<void>;
   selectTenant: (tenant: Tenant) => Promise<void>;
   fetchTenants: () => Promise<Tenant[]>;
   logout: () => void;
@@ -64,21 +80,63 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setInitialized(true);
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string): Promise<AuthStepResult> => {
     const res = await apiLogin(email, password);
-    setWebToken(res.token);
-    setUser(res.user);
-    persistSession(res.token, res.user);
+    if (!res.needsVerification) {
+      setWebToken(res.token);
+      setUser(res.user);
+      persistSession(res.token, res.user);
+    }
+    return res;
   }, []);
 
   const register = useCallback(
-    async (email: string, password: string, name: string | undefined, agreeToTerms: boolean) => {
-      const res = await apiRegister(email, password, name, agreeToTerms);
+    async (email: string, password: string, name: string | undefined, agreeToTerms: boolean, accountType?: 'standard' | 'freelancer'): Promise<AuthStepResult> => {
+      const res = await apiRegister(email, password, name, agreeToTerms, accountType);
+      // Registration returns no session — the email must be verified first — but keep
+      // the session-setting branch for forward-compat if that ever changes.
+      if (!res.needsVerification) {
+        setWebToken(res.token);
+        setUser(res.user);
+        persistSession(res.token, res.user);
+      }
+      return res;
+    },
+    []
+  );
+
+  const verifyEmail = useCallback(
+    async (email: string, code: string, trustDevice: boolean) => {
+      const res = await apiVerifyEmailCode(email, code, trustDevice);
       setWebToken(res.token);
       setUser(res.user);
       persistSession(res.token, res.user);
     },
     []
+  );
+
+  const selectAccountType = useCallback(
+    async (accountType: 'standard' | 'freelancer') => {
+      if (!webToken) throw new Error('Not authenticated');
+      const updated = await apiSelectAccountType(webToken, accountType);
+      setUser(updated);
+      persistSession(webToken, updated);
+    },
+    [webToken],
+  );
+
+  const setAvailableForHire = useCallback(
+    async (available: boolean) => {
+      if (!webToken) throw new Error('Not authenticated');
+      const next = await apiSetAvailableForHire(webToken, available);
+      setUser((prev) => {
+        if (!prev) return prev;
+        const updated = { ...prev, availableForHire: next };
+        persistSession(webToken, updated);
+        return updated;
+      });
+    },
+    [webToken],
   );
 
   const fetchTenants = useCallback(async (): Promise<Tenant[]> => {
@@ -115,6 +173,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       hasTenant: !!tenantToken,
       login,
       register,
+      verifyEmail,
+      selectAccountType,
+      setAvailableForHire,
       selectTenant,
       fetchTenants,
       logout,
@@ -126,6 +187,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       tenantToken,
       login,
       register,
+      verifyEmail,
+      selectAccountType,
+      setAvailableForHire,
       selectTenant,
       fetchTenants,
       logout,
@@ -141,4 +205,13 @@ export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within an AuthProvider');
   return ctx;
+}
+
+/**
+ * Non-throwing variant: returns null when there is no AuthProvider above. For
+ * shared components (e.g. RoleGate) that may render outside the provider (tests,
+ * isolated previews) and must degrade gracefully instead of crashing the tree.
+ */
+export function useOptionalAuth(): AuthContextValue | null {
+  return useContext(AuthContext);
 }

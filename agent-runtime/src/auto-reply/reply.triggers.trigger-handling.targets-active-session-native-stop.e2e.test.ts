@@ -4,8 +4,8 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { BuilderForceAgentsConfig } from "../config/config.js";
 import { loadSessionStore } from "../config/sessions.js";
 import {
-  getAbortEmbeddedPiRunMock,
-  getRunEmbeddedPiAgentMock,
+  getAbortEmbeddedRunMock,
+  getRunEmbeddedAgentMock,
   installTriggerHandlingE2eTestHooks,
   MAIN_SESSION_KEY,
   makeCfg,
@@ -89,7 +89,7 @@ describe("trigger handling", () => {
 
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
       expect(text).toBe("⚙️ Agent was aborted.");
-      expect(getAbortEmbeddedPiRunMock()).toHaveBeenCalledWith(targetSessionId);
+      expect(getAbortEmbeddedRunMock()).toHaveBeenCalledWith(targetSessionId);
       const store = loadSessionStore(storePath);
       expect(store[targetSessionKey]?.abortedLastRun).toBe(true);
       expect(getFollowupQueueDepth(targetSessionKey)).toBe(0);
@@ -145,7 +145,7 @@ describe("trigger handling", () => {
       expect(store[targetSessionKey]?.modelOverride).toBe("gpt-4.1-mini");
       expect(store[slashSessionKey]).toBeUndefined();
 
-      getRunEmbeddedPiAgentMock().mockResolvedValue({
+      getRunEmbeddedAgentMock().mockResolvedValue({
         payloads: [{ text: "ok" }],
         meta: {
           durationMs: 5,
@@ -166,8 +166,8 @@ describe("trigger handling", () => {
         cfg,
       );
 
-      expect(getRunEmbeddedPiAgentMock()).toHaveBeenCalledOnce();
-      expect(getRunEmbeddedPiAgentMock().mock.calls[0]?.[0]).toEqual(
+      expect(getRunEmbeddedAgentMock()).toHaveBeenCalledOnce();
+      expect(getRunEmbeddedAgentMock().mock.calls[0]?.[0]).toEqual(
         expect.objectContaining({
           provider: "openai",
           model: "gpt-4.1-mini",

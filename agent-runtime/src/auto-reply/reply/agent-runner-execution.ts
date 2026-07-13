@@ -10,8 +10,8 @@ import {
   isLikelyContextOverflowError,
   isTransientHttpError,
   sanitizeUserFacingText,
-} from "../../agents/pi-embedded-helpers.js";
-import { runEmbeddedPiAgent } from "../../agents/pi-embedded.js";
+} from "../../agents/embedded-helpers.js";
+import { runEmbeddedAgent } from "../../agents/embedded.js";
 import {
   resolveGroupSessionKey,
   resolveSessionTranscriptPath,
@@ -43,7 +43,7 @@ import type { TypingSignaler } from "./typing-mode.js";
 export type AgentRunLoopResult =
   | {
       kind: "success";
-      runResult: Awaited<ReturnType<typeof runEmbeddedPiAgent>>;
+      runResult: Awaited<ReturnType<typeof runEmbeddedAgent>>;
       fallbackProvider?: string;
       fallbackModel?: string;
       didLogHeartbeatStrip: boolean;
@@ -94,9 +94,12 @@ export async function runAgentTurnWithFallback(params: {
       sessionKey: params.sessionKey,
       verboseLevel: params.resolvedVerboseLevel,
       isHeartbeat: params.isHeartbeat,
+      // The initiating user prompt (the "ticket") — threaded to the project-Evermind
+      // teacher so on-prem distils (task → answer), matching cloud + IDE.
+      ...(params.commandBody ? { prompt: params.commandBody } : {}),
     });
   }
-  let runResult: Awaited<ReturnType<typeof runEmbeddedPiAgent>>;
+  let runResult: Awaited<ReturnType<typeof runEmbeddedAgent>>;
   let fallbackProvider = params.followupRun.run.provider;
   let fallbackModel = params.followupRun.run.model;
   let didResetAfterCompactionFailure = false;
@@ -265,7 +268,7 @@ export async function runAgentTurnWithFallback(params: {
             runId,
             authProfile,
           });
-          return runEmbeddedPiAgent({
+          return runEmbeddedAgent({
             ...embeddedContext,
             groupId: resolveGroupSessionKey(params.sessionCtx)?.id,
             groupChannel:
@@ -365,7 +368,7 @@ export async function runAgentTurnWithFallback(params: {
             shouldEmitToolOutput: params.shouldEmitToolOutput,
             onToolResult: onToolResult
               ? (payload) => {
-                  // `subscribeEmbeddedPiSession` may invoke tool callbacks without awaiting them.
+                  // `subscribeEmbeddedSession` may invoke tool callbacks without awaiting them.
                   // If a tool callback starts typing after the run finalized, we can end up with
                   // a typing loop that never sees a matching markRunComplete(). Track and drain.
                   const task = (async () => {

@@ -1,0 +1,462 @@
+import type { StreamFn } from "../../builderforce/agent-loop/index.js";
+import { nativeStreamSimple } from "../../builderforce/agent-loop/index.js";
+import type { SimpleStreamOptions } from "../../builderforce/model/types.js";
+import type { BuilderForceAgentsConfig } from "../../config/config.js";
+import { log } from "./logger.js";
+
+const OPENROUTER_APP_HEADERS: Record<string, string> = {
+  "HTTP-Referer": "https://builderforce.ai",
+  "X-Title": "BuilderForceAgents",
+};
+const ANTHROPIC_CONTEXT_1M_BETA = "context-1m-2025-08-07";
+const ANTHROPIC_1M_MODEL_PREFIXES = ["claude-opus-4", "claude-sonnet-4"] as const;
+// NOTE: We only force `store=true` for *direct* OpenAI Responses.
+// Codex responses (chatgpt.com/backend-api/codex/responses) require `store=false`.
+const OPENAI_RESPONSES_APIS = new Set(["openai-responses"]);
+const OPENAI_RESPONSES_PROVIDERS = new Set(["openai"]);
+
+/**
+ * Resolve provider-specific extra params from model config.
+ * Used to pass through stream params like temperature/maxTokens.
+ *
+ * @internal Exported for testing only
+ */
+export function resolveExtraParams(params: {
+  cfg: BuilderForceAgentsConfig | undefined;
+  provider: string;
+  modelId: string;
+}): Record<string, unknown> | undefined {
+  const modelKey = `${params.provider}/${params.modelId}`;
+  const modelConfig = params.cfg?.agents?.defaults?.models?.[modelKey];
+  return modelConfig?.params ? { ...modelConfig.params } : undefined;
+}
+
+type CacheRetention = "none" | "short" | "long";
+type CacheRetentionStreamOptions = Partial<SimpleStreamOptions> & {
+  cacheRetention?: CacheRetention;
+};
+
+/**
+ * Resolve cacheRetention from extraParams, supporting both new `cacheRetention`
+ * and legacy `cacheControlTtl` values for backwards compatibility.
+ *
+ * Mapping: "5m" → "short", "1h" → "long"
+ *
+ * Only applies to Anthropic provider (OpenRouter uses openai-completions API
+ * with hardcoded cache_control, not the cacheRetention stream option).
+ */
+function resolveCacheRetention(
+  extraParams: Record<string, unknown> | undefined,
+  provider: string,
+): CacheRetention | undefined {
+  if (provider !== "anthropic") {
+    return undefined;
+  }
+
+  // Prefer new cacheRetention if present
+  const newVal = extraParams?.cacheRetention;
+  if (newVal === "none" || newVal === "short" || newVal === "long") {
+    return newVal;
+  }
+
+  // Fall back to legacy cacheControlTtl with mapping
+  const legacy = extraParams?.cacheControlTtl;
+  if (legacy === "5m") {
+    return "short";
+  }
+  if (legacy === "1h") {
+    return "long";
+  }
+  return undefined;
+}
+
+function createStreamFnWithExtraParams(
+  baseStreamFn: StreamFn | undefined,
+  extraParams: Record<string, unknown> | undefined,
+  provider: string,
+): StreamFn | undefined {
+  if (!extraParams || Object.keys(extraParams).length === 0) {
+    return undefined;
+  }
+
+  const streamParams: CacheRetentionStreamOptions = {};
+  if (typeof extraParams.temperature === "number") {
+    streamParams.temperature = extraParams.temperature;
+  }
+  if (typeof extraParams.maxTokens === "number") {
+    streamParams.maxTokens = extraParams.maxTokens;
+  }
+  const cacheRetention = resolveCacheRetention(extraParams, provider);
+  if (cacheRetention) {
+    streamParams.cacheRetention = cacheRetention;
+  }
+
+  if (Object.keys(streamParams).length === 0) {
+    return undefined;
+  }
+
+  log.debug(`creating streamFn wrapper with params: ${JSON.stringify(streamParams)}`);
+
+  const underlying = baseStreamFn ?? nativeStreamSimple;
+  const wrappedStreamFn: StreamFn = (model, context, options) =>
+    underlying(model, context, {
+      ...streamParams,
+      ...options,
+    });
+
+  return wrappedStreamFn;
+}
+
+function isDirectOpenAIBaseUrl(baseUrl: unknown): boolean {
+  if (typeof baseUrl !== "string" || !baseUrl.trim()) {
+    return true;
+  }
+
+  try {
+    const host = new URL(baseUrl).hostname.toLowerCase();
+    return host === "api.openai.com" || host === "chatgpt.com";
+  } catch {
+    const normalized = baseUrl.toLowerCase();
+    return normalized.includes("api.openai.com") || normalized.includes("chatgpt.com");
+  }
+}
+
+function shouldForceResponsesStore(model: {
+  api?: unknown;
+  provider?: unknown;
+  baseUrl?: unknown;
+}): boolean {
+  if (typeof model.api !== "string" || typeof model.provider !== "string") {
+    return false;
+  }
+  if (!OPENAI_RESPONSES_APIS.has(model.api)) {
+    return false;
+  }
+  if (!OPENAI_RESPONSES_PROVIDERS.has(model.provider)) {
+    return false;
+  }
+  return isDirectOpenAIBaseUrl(model.baseUrl);
+}
+
+function createOpenAIResponsesStoreWrapper(baseStreamFn: StreamFn | undefined): StreamFn {
+  const underlying = baseStreamFn ?? nativeStreamSimple;
+  return (model, context, options) => {
+    if (!shouldForceResponsesStore(model)) {
+      return underlying(model, context, options);
+    }
+
+    const originalOnPayload = options?.onPayload;
+    return underlying(model, context, {
+      ...options,
+      onPayload: (payload) => {
+        if (payload && typeof payload === "object") {
+          (payload as { store?: unknown }).store = true;
+        }
+        originalOnPayload?.(payload);
+      },
+    });
+  };
+}
+
+function isAnthropic1MModel(modelId: string): boolean {
+  const normalized = modelId.trim().toLowerCase();
+  return ANTHROPIC_1M_MODEL_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+}
+
+function parseHeaderList(value: unknown): string[] {
+  if (typeof value !== "string") {
+    return [];
+  }
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function resolveAnthropicBetas(
+  extraParams: Record<string, unknown> | undefined,
+  provider: string,
+  modelId: string,
+): string[] | undefined {
+  if (provider !== "anthropic") {
+    return undefined;
+  }
+
+  const betas = new Set<string>();
+  const configured = extraParams?.anthropicBeta;
+  if (typeof configured === "string" && configured.trim()) {
+    betas.add(configured.trim());
+  } else if (Array.isArray(configured)) {
+    for (const beta of configured) {
+      if (typeof beta === "string" && beta.trim()) {
+        betas.add(beta.trim());
+      }
+    }
+  }
+
+  if (extraParams?.context1m === true) {
+    if (isAnthropic1MModel(modelId)) {
+      betas.add(ANTHROPIC_CONTEXT_1M_BETA);
+    } else {
+      log.warn(`ignoring context1m for non-opus/sonnet model: ${provider}/${modelId}`);
+    }
+  }
+
+  return betas.size > 0 ? [...betas] : undefined;
+}
+
+function mergeAnthropicBetaHeader(
+  headers: Record<string, string> | undefined,
+  betas: string[],
+): Record<string, string> {
+  const merged = { ...headers };
+  const existingKey = Object.keys(merged).find((key) => key.toLowerCase() === "anthropic-beta");
+  const existing = existingKey ? parseHeaderList(merged[existingKey]) : [];
+  const values = Array.from(new Set([...existing, ...betas]));
+  const key = existingKey ?? "anthropic-beta";
+  merged[key] = values.join(",");
+  return merged;
+}
+
+function createAnthropicBetaHeadersWrapper(
+  baseStreamFn: StreamFn | undefined,
+  betas: string[],
+): StreamFn {
+  const underlying = baseStreamFn ?? nativeStreamSimple;
+  return (model, context, options) =>
+    underlying(model, context, {
+      ...options,
+      headers: mergeAnthropicBetaHeader(options?.headers, betas),
+    });
+}
+
+const ANTHROPIC_EPHEMERAL_CACHE = { type: "ephemeral" } as const;
+const ANTHROPIC_EPHEMERAL_CACHE_1H = { type: "ephemeral", ttl: "1h" } as const;
+
+/**
+ * Resolve whether the OpenRouter/Anthropic system-cache breakpoint should use the
+ * 1-hour retention (`{ type:'ephemeral', ttl:'1h' }`) instead of the default 5-min
+ * ephemeral. Mirrors {@link resolveCacheRetention}'s mapping but is provider-agnostic
+ * (OpenRouter routes Anthropic models via the openai-completions API, so the `ttl`
+ * must be baked into the body's `cache_control` marker, not passed as a stream option).
+ *
+ * Honours `cacheRetention: 'long'` (new) or `cacheControlTtl: '1h'` (legacy) — the SAME
+ * hint the direct-Anthropic path reads — so a `_builderforce.cacheTtl:'1h'` /
+ * per-useCase profile flips the marker on BOTH surfaces. Anything else → 5-min.
+ */
+function wantsLongCacheTtl(extraParams: Record<string, unknown> | undefined): boolean {
+  return extraParams?.cacheRetention === "long" || extraParams?.cacheControlTtl === "1h";
+}
+
+/**
+ * Add an Anthropic prompt-cache breakpoint to the system prompt of an
+ * OpenAI-format request payload, in place.
+ *
+ * pi-ai's openai-completions provider (`maybeAddOpenRouterAnthropicCacheControl`)
+ * marks only the last user/assistant message for `openrouter` + `anthropic/*`
+ * models — it leaves the `system` message uncached. The system prompt is the
+ * largest stable prefix (tooling / skills / identity sections), so caching it is
+ * the single biggest win. String content is promoted to a cache-marked text
+ * block; array content gets the marker on its last text part. Idempotent: a
+ * system block that already carries a breakpoint is left untouched, keeping the
+ * total at two breakpoints (system here + history from the SDK), within
+ * Anthropic's cap of four.
+ *
+ * `longTtl` opts into the 1-hour retention marker (`ttl:'1h'`, ~2x write cost) so a
+ * bursty high-prefix tenant keeps the prefix warm across idle gaps >5 min — the
+ * OpenRouter twin of the direct-Anthropic `cacheRetention:'long'` path.
+ *
+ * @internal Exported for testing
+ */
+export function addAnthropicSystemCacheControl(payload: unknown, longTtl = false): void {
+  if (!payload || typeof payload !== "object") {
+    return;
+  }
+  const marker = longTtl ? ANTHROPIC_EPHEMERAL_CACHE_1H : ANTHROPIC_EPHEMERAL_CACHE;
+  const messages = (payload as { messages?: unknown }).messages;
+  if (!Array.isArray(messages)) {
+    return;
+  }
+  const system = messages.find(
+    (m) => m && typeof m === "object" && (m as { role?: unknown }).role === "system",
+  ) as { content?: unknown } | undefined;
+  if (!system) {
+    return;
+  }
+
+  const content = system.content;
+  if (typeof content === "string") {
+    if (content.length === 0) {
+      return;
+    }
+    system.content = [{ type: "text", text: content, cache_control: marker }];
+    return;
+  }
+  if (!Array.isArray(content)) {
+    return;
+  }
+  // Already marked anywhere in the system block — leave it (no duplicate breakpoint).
+  if (content.some((p) => p && typeof p === "object" && "cache_control" in (p as object))) {
+    return;
+  }
+  for (let i = content.length - 1; i >= 0; i--) {
+    const part = content[i];
+    if (part && typeof part === "object" && (part as { type?: unknown }).type === "text") {
+      (part as Record<string, unknown>).cache_control = marker;
+      return;
+    }
+  }
+}
+
+/**
+ * Create a streamFn wrapper that caches the system prompt for OpenRouter-routed
+ * Anthropic models. Scoped to `anthropic/*` ids because direct-Anthropic already
+ * caches the system block via the SDK's cacheRetention default, and other
+ * OpenRouter providers either auto-cache (OpenAI/Grok) or would reject the
+ * marker. Injects via the `onPayload` seam — the same mechanism the store /
+ * tool_stream wrappers use to mutate the exact body sent upstream.
+ *
+ * `longTtl` flips the breakpoint to the 1-hour retention marker (the OpenRouter
+ * surface of the `cacheTtl:'1h'` opt-in).
+ */
+function createOpenRouterAnthropicSystemCacheWrapper(
+  baseStreamFn: StreamFn | undefined,
+  modelId: string,
+  longTtl: boolean,
+): StreamFn {
+  const underlying = baseStreamFn ?? nativeStreamSimple;
+  const isAnthropic = modelId.trim().toLowerCase().startsWith("anthropic/");
+  return (model, context, options) => {
+    if (!isAnthropic) {
+      return underlying(model, context, options);
+    }
+    const originalOnPayload = options?.onPayload;
+    return underlying(model, context, {
+      ...options,
+      onPayload: (payload) => {
+        addAnthropicSystemCacheControl(payload, longTtl);
+        originalOnPayload?.(payload);
+      },
+    });
+  };
+}
+
+/**
+ * Create a streamFn wrapper that adds OpenRouter app attribution headers.
+ * These headers allow BuilderForceAgents to appear on OpenRouter's leaderboard.
+ */
+function createOpenRouterHeadersWrapper(baseStreamFn: StreamFn | undefined): StreamFn {
+  const underlying = baseStreamFn ?? nativeStreamSimple;
+  return (model, context, options) =>
+    underlying(model, context, {
+      ...options,
+      headers: {
+        ...OPENROUTER_APP_HEADERS,
+        ...options?.headers,
+      },
+    });
+}
+
+/**
+ * Create a streamFn wrapper that injects tool_stream=true for Z.AI providers.
+ *
+ * Z.AI's API supports the `tool_stream` parameter to enable real-time streaming
+ * of tool call arguments and reasoning content. When enabled, the API returns
+ * progressive tool_call deltas, allowing users to see tool execution in real-time.
+ *
+ * @see https://docs.z.ai/api-reference#streaming
+ */
+function createZaiToolStreamWrapper(
+  baseStreamFn: StreamFn | undefined,
+  enabled: boolean,
+): StreamFn {
+  const underlying = baseStreamFn ?? nativeStreamSimple;
+  return (model, context, options) => {
+    if (!enabled) {
+      return underlying(model, context, options);
+    }
+
+    const originalOnPayload = options?.onPayload;
+    return underlying(model, context, {
+      ...options,
+      onPayload: (payload) => {
+        if (payload && typeof payload === "object") {
+          // Inject tool_stream: true for Z.AI API
+          (payload as Record<string, unknown>).tool_stream = true;
+        }
+        originalOnPayload?.(payload);
+      },
+    });
+  };
+}
+
+/**
+ * Apply extra params (like temperature) to an agent's streamFn.
+ * Also adds OpenRouter app attribution headers when using the OpenRouter provider.
+ *
+ * @internal Exported for testing
+ */
+export function applyExtraParamsToAgent(
+  agent: { streamFn?: StreamFn },
+  cfg: BuilderForceAgentsConfig | undefined,
+  provider: string,
+  modelId: string,
+  extraParamsOverride?: Record<string, unknown>,
+): void {
+  const extraParams = resolveExtraParams({
+    cfg,
+    provider,
+    modelId,
+  });
+  const override =
+    extraParamsOverride && Object.keys(extraParamsOverride).length > 0
+      ? Object.fromEntries(
+          Object.entries(extraParamsOverride).filter(([, value]) => value !== undefined),
+        )
+      : undefined;
+  const merged = Object.assign({}, extraParams, override);
+  const wrappedStreamFn = createStreamFnWithExtraParams(agent.streamFn, merged, provider);
+
+  if (wrappedStreamFn) {
+    log.debug(`applying extraParams to agent streamFn for ${provider}/${modelId}`);
+    agent.streamFn = wrappedStreamFn;
+  }
+
+  const anthropicBetas = resolveAnthropicBetas(merged, provider, modelId);
+  if (anthropicBetas?.length) {
+    log.debug(
+      `applying Anthropic beta header for ${provider}/${modelId}: ${anthropicBetas.join(",")}`,
+    );
+    agent.streamFn = createAnthropicBetaHeadersWrapper(agent.streamFn, anthropicBetas);
+  }
+
+  if (provider === "openrouter") {
+    log.debug(`applying OpenRouter app attribution headers for ${provider}/${modelId}`);
+    agent.streamFn = createOpenRouterHeadersWrapper(agent.streamFn);
+    // pi-ai caches only the last message for openrouter/anthropic; also cache
+    // the system prompt — the biggest stable prefix — via the onPayload seam.
+    // A `cacheTtl:'1h'` / `cacheRetention:'long'` hint flips the breakpoint to the
+    // 1-hour retention marker so a high-prefix tenant keeps the prefix warm across
+    // multi-minute idle gaps (the OpenRouter twin of the direct-Anthropic long path).
+    agent.streamFn = createOpenRouterAnthropicSystemCacheWrapper(
+      agent.streamFn,
+      modelId,
+      wantsLongCacheTtl(merged),
+    );
+  }
+
+  // Enable Z.AI tool_stream for real-time tool call streaming.
+  // Enabled by default for Z.AI provider, can be disabled via params.tool_stream: false
+  if (provider === "zai" || provider === "z-ai") {
+    const toolStreamEnabled = merged?.tool_stream !== false;
+    if (toolStreamEnabled) {
+      log.debug(`enabling Z.AI tool_stream for ${provider}/${modelId}`);
+      agent.streamFn = createZaiToolStreamWrapper(agent.streamFn, true);
+    }
+  }
+
+  // Work around upstream pi-ai hardcoding `store: false` for Responses API.
+  // Force `store=true` for direct OpenAI/OpenAI Codex providers so multi-turn
+  // server-side conversation state is preserved.
+  agent.streamFn = createOpenAIResponsesStoreWrapper(agent.streamFn);
+}

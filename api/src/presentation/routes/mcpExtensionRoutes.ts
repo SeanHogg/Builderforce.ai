@@ -17,6 +17,7 @@ import {
   listMcpExtensions,
   updateMcpExtension,
   deleteMcpExtension,
+  invalidateMcpToolsCache,
 } from '../../application/llm/mcpExtensionService';
 
 export function createMcpExtensionRoutes(db: Db): Hono<HonoEnv> {
@@ -56,6 +57,7 @@ export function createMcpExtensionRoutes(db: Db): Hono<HonoEnv> {
         createdByUserId: userId,
         keyMaterial: c.env.JWT_SECRET,
       });
+      await invalidateMcpToolsCache(c.env, tenantId);
       return c.json(ext, 201);
     } catch (e) {
       return c.json({ error: e instanceof Error ? e.message : 'Failed to create extension' }, 400);
@@ -87,6 +89,7 @@ export function createMcpExtensionRoutes(db: Db): Hono<HonoEnv> {
         keyMaterial: c.env.JWT_SECRET,
       });
       if (!updated) return c.json({ error: 'Extension not found or no fields to update' }, 404);
+      await invalidateMcpToolsCache(c.env, tenantId);
       return c.json({ extension: updated });
     } catch (e) {
       return c.json({ error: e instanceof Error ? e.message : 'Failed to update extension' }, 400);
@@ -99,6 +102,7 @@ export function createMcpExtensionRoutes(db: Db): Hono<HonoEnv> {
     const id = c.req.param('id');
     const ok = await deleteMcpExtension(db, { tenantId, id });
     if (!ok) return c.json({ error: 'Extension not found' }, 404);
+    await invalidateMcpToolsCache(c.env, tenantId);
     return c.json({ ok: true });
   });
 

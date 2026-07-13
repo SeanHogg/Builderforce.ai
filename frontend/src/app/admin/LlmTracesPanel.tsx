@@ -9,6 +9,7 @@
  * This data lives only on the builder side; callers only ever receive the trace
  * id. Rendered both at /admin/llm-traces and as the "LLM Traces" admin tab.
  */
+import { useTranslations } from 'next-intl';
 import { useCallback, useEffect, useState } from 'react';
 import { adminApi } from '@/lib/adminApi';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
@@ -65,9 +66,9 @@ interface TraceDetail extends TraceSummary {
   callerMetadata: unknown;
 }
 
-const ok = '#00e5cc';
-const bad = '#ff6b6b';
-const muted = '#8a93a6';
+const ok = 'var(--cyan-bright)';
+const bad = 'var(--error)';
+const muted = 'var(--text-muted)';
 
 function pill(text: string, color: string) {
   return (
@@ -89,9 +90,9 @@ function Json({ value }: { value: unknown }) {
   return (
     <pre
       style={{
-        margin: 0, padding: 12, background: '#05080f', border: '1px solid #1b2436',
+        margin: 0, padding: 12, background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)',
         borderRadius: 8, fontSize: 12, lineHeight: 1.5, overflow: 'auto',
-        maxHeight: 360, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#cdd6e6',
+        maxHeight: 360, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: 'var(--text-secondary)',
       }}
     >
       {text}
@@ -103,12 +104,13 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return (
     <div style={{ display: 'flex', gap: 10, fontSize: 13, padding: '3px 0' }}>
       <div style={{ width: 150, color: muted, flexShrink: 0 }}>{label}</div>
-      <div style={{ color: '#e6ebf5', wordBreak: 'break-word' }}>{children ?? '—'}</div>
+      <div style={{ color: 'var(--text-primary)', wordBreak: 'break-word' }}>{children ?? '—'}</div>
     </div>
   );
 }
 
 export function LlmTracesPanel() {
+  const t = useTranslations('admin');
   const [query, setQuery] = useState('');
   const [traces, setTraces] = useState<TraceSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -125,7 +127,7 @@ export function LlmTracesPanel() {
       const data = await adminApi.listLlmTraces({ q: q.trim() || undefined, limit: 100 });
       setTraces(data.traces ?? []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load traces');
+      setError(e instanceof Error ? e.message : t('traces.loadTracesFailed'));
     } finally {
       setLoading(false);
     }
@@ -140,19 +142,18 @@ export function LlmTracesPanel() {
       const data = await adminApi.getLlmTrace(traceId);
       setSelected(data.trace);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load trace');
+      setError(e instanceof Error ? e.message : t('traces.loadTraceFailed'));
     } finally {
       setDetailLoading(false);
     }
   }, []);
 
   return (
-    <div style={{ color: '#e6ebf5' }}>
+    <div style={{ color: 'var(--text-primary)' }}>
       <div style={{ marginBottom: 14 }}>
-        <h2 style={{ margin: '0 0 4px', fontSize: 18 }}>LLM Diagnostics</h2>
+        <h2 style={{ margin: '0 0 4px', fontSize: 18 }}>{t('traces.heading')}</h2>
         <p style={{ margin: 0, color: muted, fontSize: 13 }}>
-          Paste a trace / correlation id (<code>llm-…</code>) a customer reported, or browse recent calls.
-          Full request detail is recorded builder-side only.
+          {t('traces.introBefore')}<code>llm-…</code>{t('traces.introAfter')}
         </p>
       </div>
 
@@ -163,20 +164,20 @@ export function LlmTracesPanel() {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Trace ID, correlation ID, or model…"
+          placeholder={t('traces.searchPlaceholder')}
           style={{
-            flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid #1b2436',
-            background: '#080c14', color: '#e6ebf5', fontSize: 13,
+            flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+            background: 'var(--bg-deep)', color: 'var(--text-primary)', fontSize: 13,
           }}
         />
         <button
           type="submit"
           style={{
-            padding: '8px 18px', borderRadius: 8, border: '1px solid #2a3a55',
-            background: '#142033', color: '#e6ebf5', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+            padding: '8px 18px', borderRadius: 8, border: '1px solid var(--border-accent)',
+            background: 'var(--bg-elevated)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 13, fontWeight: 600,
           }}
         >
-          Search
+          {t('traces.search')}
         </button>
         <ViewToggle value={viewMode} onChange={setViewMode} />
       </form>
@@ -188,31 +189,31 @@ export function LlmTracesPanel() {
       <div style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 1fr' : '1fr', gap: 16 }}>
         {/* List */}
         {viewMode === 'table' ? (
-        <div style={{ border: '1px solid #1b2436', borderRadius: 10, overflow: 'hidden' }}>
+        <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 10, overflowX: 'auto', overflowY: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
             <thead>
-              <tr style={{ background: '#0a0f1a', color: muted, textAlign: 'left' }}>
-                <th style={{ padding: '8px 10px' }}>Time</th>
-                <th style={{ padding: '8px 10px' }}>Trace</th>
-                <th style={{ padding: '8px 10px' }}>Model</th>
-                <th style={{ padding: '8px 10px' }}>Status</th>
-                <th style={{ padding: '8px 10px' }}>ms</th>
+              <tr style={{ background: 'var(--bg-base)', color: muted, textAlign: 'left' }}>
+                <th style={{ padding: '8px 10px' }}>{t('traces.colTime')}</th>
+                <th style={{ padding: '8px 10px' }}>{t('traces.colTrace')}</th>
+                <th style={{ padding: '8px 10px' }}>{t('traces.colModel')}</th>
+                <th style={{ padding: '8px 10px' }}>{t('traces.colStatus')}</th>
+                <th style={{ padding: '8px 10px' }}>{t('traces.colMs')}</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={5} style={{ padding: 16, color: muted }}>Loading…</td></tr>
+                <tr><td colSpan={5} style={{ padding: 16, color: muted }}>{t('common.loading')}</td></tr>
               )}
               {!loading && traces.length === 0 && (
-                <tr><td colSpan={5} style={{ padding: 16, color: muted }}>No traces found.</td></tr>
+                <tr><td colSpan={5} style={{ padding: 16, color: muted }}>{t('traces.noTraces')}</td></tr>
               )}
               {traces.map((t) => (
                 <tr
                   key={t.traceId}
                   onClick={() => void openTrace(t.traceId)}
                   style={{
-                    cursor: 'pointer', borderTop: '1px solid #131b2a',
-                    background: selected?.traceId === t.traceId ? '#101826' : 'transparent',
+                    cursor: 'pointer', borderTop: '1px solid var(--border-subtle)',
+                    background: selected?.traceId === t.traceId ? 'var(--surface-interactive)' : 'transparent',
                   }}
                 >
                   <td style={{ padding: '7px 10px', color: muted, whiteSpace: 'nowrap' }}>
@@ -232,22 +233,22 @@ export function LlmTracesPanel() {
           </table>
         </div>
         ) : loading ? (
-          <div style={{ padding: 16, color: muted, fontSize: 13 }}>Loading…</div>
+          <div style={{ padding: 16, color: muted, fontSize: 13 }}>{t('common.loading')}</div>
         ) : traces.length === 0 ? (
-          <div style={{ padding: 16, color: muted, fontSize: 13 }}>No traces found.</div>
+          <div style={{ padding: 16, color: muted, fontSize: 13 }}>{t('traces.noTraces')}</div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-            {traces.map((t) => (
+            {traces.map((tr) => (
               <div
-                key={t.traceId}
+                key={tr.traceId}
                 role="button"
                 tabIndex={0}
-                onClick={() => void openTrace(t.traceId)}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void openTrace(t.traceId); } }}
+                onClick={() => void openTrace(tr.traceId)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void openTrace(tr.traceId); } }}
                 style={{
                   cursor: 'pointer',
-                  background: 'var(--bg-elevated, #0a0f1a)',
-                  border: `1px solid ${selected?.traceId === t.traceId ? '#2a3a55' : 'var(--border-subtle, #1b2436)'}`,
+                  background: 'var(--bg-elevated, var(--bg-base))',
+                  border: `1px solid ${selected?.traceId === tr.traceId ? 'var(--border-accent)' : 'var(--border-subtle, var(--border-subtle))'}`,
                   borderRadius: 12,
                   padding: 16,
                   display: 'flex',
@@ -256,15 +257,15 @@ export function LlmTracesPanel() {
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                  <code style={{ fontFamily: 'monospace', fontSize: 11, color: '#9fb0cc' }}>
-                    {t.traceId.replace(/^llm-/, '').slice(0, 8)}…
+                  <code style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--text-secondary)' }}>
+                    {tr.traceId.replace(/^llm-/, '').slice(0, 8)}…
                   </code>
-                  {pill(`${t.status ?? '—'}`, t.success ? ok : bad)}
+                  {pill(`${tr.status ?? '—'}`, tr.success ? ok : bad)}
                 </div>
-                <div style={{ fontSize: 13, color: '#e6ebf5', wordBreak: 'break-word' }}>{t.resolvedModel ?? '—'}</div>
+                <div style={{ fontSize: 13, color: 'var(--text-primary)', wordBreak: 'break-word' }}>{tr.resolvedModel ?? '—'}</div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: muted }}>
-                  <span>{t.createdAt ? new Date(t.createdAt).toLocaleString() : '—'}</span>
-                  <span>{t.durationMs} ms</span>
+                  <span>{tr.createdAt ? new Date(tr.createdAt).toLocaleString() : '—'}</span>
+                  <span>{t('traces.msValue', { value: tr.durationMs })}</span>
                 </div>
               </div>
             ))}
@@ -273,9 +274,9 @@ export function LlmTracesPanel() {
 
         {/* Detail */}
         {selected && (
-          <div style={{ border: '1px solid #1b2436', borderRadius: 10, padding: 16, maxHeight: 700, overflow: 'auto' }}>
+          <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 16, maxHeight: 700, overflow: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <code style={{ fontSize: 12, color: '#9fb0cc' }}>{selected.traceId}</code>
+              <code style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{selected.traceId}</code>
               <button
                 onClick={() => setSelected(null)}
                 style={{ background: 'none', border: 'none', color: muted, cursor: 'pointer', fontSize: 18 }}
@@ -285,52 +286,53 @@ export function LlmTracesPanel() {
             </div>
 
             {detailLoading ? (
-              <div style={{ color: muted }}>Loading…</div>
+              <div style={{ color: muted }}>{t('common.loading')}</div>
             ) : (
               <>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-                  {pill(selected.success ? 'SUCCESS' : 'FAILED', selected.success ? ok : bad)}
+                  {pill(selected.success ? t('traces.pillSuccess') : t('traces.pillFailed'), selected.success ? ok : bad)}
                   {selected.outcome && pill(selected.outcome, muted)}
                   {selected.classification && selected.classification !== 'none' && pill(selected.classification, bad)}
-                  {selected.streamed && pill('streamed', muted)}
+                  {selected.streamed && pill(t('traces.pillStreamed'), muted)}
                 </div>
 
-                <Field label="Status">{selected.status}</Field>
-                <Field label="Duration">{selected.durationMs} ms</Field>
-                <Field label="Surface">{selected.surface}</Field>
-                <Field label="Product / Plan">{selected.llmProduct} / {selected.effectivePlan}{selected.premiumOverride ? ' (premium)' : ''}</Field>
-                <Field label="Resolved model">{selected.resolvedModel} {selected.resolvedVendor ? `(${selected.resolvedVendor})` : ''}</Field>
-                <Field label="Tenant / User">{selected.tenantId ?? '—'} / {selected.userId ?? '—'}</Field>
-                <Field label="AgentHost / API key">{selected.agentHostId ?? '—'} / {selected.tenantApiKeyId ?? '—'}</Field>
-                <Field label="Tokens">{selected.promptTokens} in / {selected.completionTokens} out / {selected.totalTokens} total</Field>
-                <Field label="Attempts / retries">{selected.attemptCount} / {selected.retries}{selected.schemaRetries ? ` (+${selected.schemaRetries} schema)` : ''}</Field>
-                <Field label="Use case">{selected.useCase}</Field>
-                <Field label="Consumer req id">{selected.consumerRequestId}</Field>
-                <Field label="Request IP">{selected.requestIp}</Field>
-                <Field label="Origin">{selected.origin}</Field>
+                <Field label={t('traces.fieldStatus')}>{selected.status}</Field>
+                <Field label={t('traces.fieldDuration')}>{t('traces.msValue', { value: selected.durationMs })}</Field>
+                <Field label={t('traces.fieldSurface')}>{selected.surface}</Field>
+                <Field label={t('traces.fieldProductPlan')}>{selected.llmProduct} / {selected.effectivePlan}{selected.premiumOverride ? t('traces.premiumSuffix') : ''}</Field>
+                <Field label={t('traces.fieldResolvedModel')}>{selected.resolvedModel} {selected.resolvedVendor ? `(${selected.resolvedVendor})` : ''}</Field>
+                <Field label={t('traces.fieldTenantUser')}>{selected.tenantId ?? '—'} / {selected.userId ?? '—'}</Field>
+                <Field label={t('traces.fieldAgentHostApiKey')}>{selected.agentHostId ?? '—'} / {selected.tenantApiKeyId ?? '—'}</Field>
+                <Field label={t('traces.fieldTokens')}>{t('traces.tokensValue', { in: selected.promptTokens, out: selected.completionTokens, total: selected.totalTokens })}</Field>
+                <Field label={t('traces.fieldAttemptsRetries')}>{selected.attemptCount} / {selected.retries}{selected.schemaRetries ? t('traces.schemaRetriesSuffix', { count: selected.schemaRetries }) : ''}</Field>
+                <Field label={t('traces.fieldUseCase')}>{selected.useCase}</Field>
+                <Field label={t('traces.fieldConsumerReqId')}>{selected.consumerRequestId}</Field>
+                <Field label={t('traces.fieldRequestIp')}>{selected.requestIp}</Field>
+                <Field label={t('traces.fieldOrigin')}>{selected.origin}</Field>
                 {selected.errorMessage && (
-                  <Field label="Error"><span style={{ color: bad }}>{selected.errorMessage}</span></Field>
+                  <Field label={t('traces.fieldError')}><span style={{ color: bad }}>{selected.errorMessage}</span></Field>
                 )}
 
-                <h4 style={{ margin: '16px 0 6px', fontSize: 13, color: muted }}>Candidate chain</h4>
+                <h4 style={{ margin: '16px 0 6px', fontSize: 13, color: muted }}>{t('traces.candidateChain')}</h4>
                 <Json value={selected.candidateChain} />
 
-                <h4 style={{ margin: '16px 0 6px', fontSize: 13, color: muted }}>Attempts (every model tried, every exception)</h4>
+                <h4 style={{ margin: '16px 0 6px', fontSize: 13, color: muted }}>{t('traces.attemptsHeading')}</h4>
                 {Array.isArray(selected.attempts) && selected.attempts.length > 0 ? (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 480 }}>
                     <thead>
                       <tr style={{ color: muted, textAlign: 'left' }}>
-                        <th style={{ padding: '4px 6px' }}>Model</th>
-                        <th style={{ padding: '4px 6px' }}>Vendor</th>
-                        <th style={{ padding: '4px 6px' }}>Status</th>
-                        <th style={{ padding: '4px 6px' }}>Kind</th>
-                        <th style={{ padding: '4px 6px' }}>ms</th>
-                        <th style={{ padding: '4px 6px' }}>Error</th>
+                        <th style={{ padding: '4px 6px' }}>{t('traces.attemptColModel')}</th>
+                        <th style={{ padding: '4px 6px' }}>{t('traces.attemptColVendor')}</th>
+                        <th style={{ padding: '4px 6px' }}>{t('traces.attemptColStatus')}</th>
+                        <th style={{ padding: '4px 6px' }}>{t('traces.attemptColKind')}</th>
+                        <th style={{ padding: '4px 6px' }}>{t('traces.attemptColMs')}</th>
+                        <th style={{ padding: '4px 6px' }}>{t('traces.attemptColError')}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {selected.attempts.map((a, i) => (
-                        <tr key={i} style={{ borderTop: '1px solid #131b2a' }}>
+                        <tr key={i} style={{ borderTop: '1px solid var(--border-subtle)' }}>
                           <td style={{ padding: '4px 6px' }}>{a.model}</td>
                           <td style={{ padding: '4px 6px', color: muted }}>{a.vendor}</td>
                           <td style={{ padding: '4px 6px' }}>{a.status}</td>
@@ -341,22 +343,23 @@ export function LlmTracesPanel() {
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 ) : (
-                  <div style={{ color: muted, fontSize: 12 }}>No failed attempts — first model answered.</div>
+                  <div style={{ color: muted, fontSize: 12 }}>{t('traces.noFailedAttempts')}</div>
                 )}
 
-                <h4 style={{ margin: '16px 0 6px', fontSize: 13, color: muted }}>Request shape</h4>
+                <h4 style={{ margin: '16px 0 6px', fontSize: 13, color: muted }}>{t('traces.requestShape')}</h4>
                 <Json value={selected.requestShape} />
 
-                <h4 style={{ margin: '16px 0 6px', fontSize: 13, color: muted }}>Request body</h4>
+                <h4 style={{ margin: '16px 0 6px', fontSize: 13, color: muted }}>{t('traces.requestBody')}</h4>
                 <Json value={selected.requestBody} />
 
-                <h4 style={{ margin: '16px 0 6px', fontSize: 13, color: muted }}>Response body</h4>
+                <h4 style={{ margin: '16px 0 6px', fontSize: 13, color: muted }}>{t('traces.responseBody')}</h4>
                 <Json value={selected.responseBody} />
 
                 {selected.callerMetadata != null && (
                   <>
-                    <h4 style={{ margin: '16px 0 6px', fontSize: 13, color: muted }}>Caller metadata</h4>
+                    <h4 style={{ margin: '16px 0 6px', fontSize: 13, color: muted }}>{t('traces.callerMetadata')}</h4>
                     <Json value={selected.callerMetadata} />
                   </>
                 )}

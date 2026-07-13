@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 440" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+  <defs>
+    <linearGradient id="fd-coral" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FF6B5C"/>
+      <stop offset="1" stop-color="#E8472F"/>
+    </linearGradient>
+    <marker id="fd-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#8FA0BD"/>
+    </marker>
+  </defs>
+  <rect width="880" height="440" fill="#0E1525"/>
+  <text x="440" y="44" fill="#FFFFFF" font-size="24" font-weight="700" text-anchor="middle">Four front doors, rehomed onto one spine</text>
+  <text x="440" y="70" fill="#8FA0BD" font-size="13.5" text-anchor="middle">Each existing tool becomes a compile() adapter — no path thrown away</text>
+
+  <!-- four doors -->
+  <g font-size="13">
+    <rect x="40" y="104" width="180" height="70" rx="10" fill="#15203A" stroke="#26324f"/>
+    <text x="56" y="130" fill="#fff" font-weight="700">Train + publish</text>
+    <text x="56" y="152" fill="#8FA0BD" font-size="11.5">dataset → compileFromDataset</text>
+
+    <rect x="40" y="194" width="180" height="70" rx="10" fill="#15203A" stroke="#26324f"/>
+    <text x="56" y="220" fill="#fff" font-weight="700">Workflow builder</text>
+    <text x="56" y="242" fill="#8FA0BD" font-size="11.5">chart → compileFromGraph</text>
+
+    <rect x="40" y="284" width="180" height="70" rx="10" fill="#15203A" stroke="#26324f"/>
+    <text x="56" y="310" fill="#fff" font-weight="700">Persona builder</text>
+    <text x="56" y="332" fill="#8FA0BD" font-size="11.5">traits → compileFromPersona</text>
+  </g>
+  <!-- the new door, highlighted -->
+  <rect x="40" y="14" width="180" height="74" rx="10" fill="#241019" stroke="url(#fd-coral)" stroke-width="2"/>
+  <text x="56" y="40" fill="#fff" font-weight="700" font-size="13">Plain language ★ new</text>
+  <text x="56" y="60" fill="#FFD9D2" font-size="11.5">prose → compileFromProse</text>
+  <text x="56" y="78" fill="#8FA0BD" font-size="11">+ diagnostic, + policy</text>
+
+  <!-- arrows to spine -->
+  <g stroke="#8FA0BD" stroke-width="1.5" fill="none">
+    <path d="M220 51  Q330 51 360 150" marker-end="url(#fd-arrow)"/>
+    <path d="M220 139 Q330 139 370 170" marker-end="url(#fd-arrow)"/>
+    <path d="M220 229 H360" marker-end="url(#fd-arrow)"/>
+    <path d="M220 319 Q330 319 370 230" marker-end="url(#fd-arrow)"/>
+  </g>
+
+  <!-- spine -->
+  <rect x="370" y="150" width="160" height="120" rx="12" fill="#13233f" stroke="url(#fd-coral)" stroke-width="2"/>
+  <text x="450" y="200" fill="#fff" font-size="15" font-weight="700" text-anchor="middle">AgentSpec</text>
+  <text x="450" y="222" fill="#8FA0BD" font-size="11.5" text-anchor="middle">one canonical IR</text>
+  <text x="450" y="244" fill="#8FA0BD" font-size="11.5" text-anchor="middle">lowerAgentSpec()</text>
+
+  <!-- surfaces out -->
+  <line x1="530" y1="210" x2="568" y2="210" stroke="#8FA0BD" stroke-width="1.5" marker-end="url(#fd-arrow)"/>
+  <g font-size="13">
+    <rect x="572" y="120" width="270" height="44" rx="9" fill="#15203A" stroke="#26324f"/>
+    <text x="590" y="147" fill="#DCE6F7">IDE · same agent, relocated</text>
+    <rect x="572" y="172" width="270" height="44" rx="9" fill="#15203A" stroke="#26324f"/>
+    <text x="590" y="199" fill="#DCE6F7">Cloud · durable + container</text>
+    <rect x="572" y="224" width="270" height="44" rx="9" fill="#15203A" stroke="#26324f"/>
+    <text x="590" y="251" fill="#DCE6F7">Workflow node · runs the steps</text>
+    <rect x="572" y="276" width="270" height="44" rx="9" fill="#15203A" stroke="#26324f"/>
+    <text x="590" y="303" fill="#DCE6F7">Desktop · on-premise</text>
+  </g>
+
+  <text x="440" y="392" fill="#8FA0BD" font-size="13" text-anchor="middle">Stack adapters: a process chart with a persona with a trained model with a policy</text>
+  <text x="440" y="414" fill="#FFD9D2" font-size="13" text-anchor="middle" font-weight="700">— is still one agent.</text>
+</svg>

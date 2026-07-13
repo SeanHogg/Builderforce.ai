@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
-  getRunEmbeddedPiAgentMock,
+  getRunEmbeddedAgentMock,
   installTriggerHandlingE2eTestHooks,
   MAIN_SESSION_KEY,
   makeCfg,
@@ -23,15 +23,15 @@ const BASE_MESSAGE = {
 } as const;
 
 function mockEmbeddedOkPayload() {
-  const runEmbeddedPiAgentMock = getRunEmbeddedPiAgentMock();
-  runEmbeddedPiAgentMock.mockResolvedValue({
+  const runEmbeddedAgentMock = getRunEmbeddedAgentMock();
+  runEmbeddedAgentMock.mockResolvedValue({
     payloads: [{ text: "ok" }],
     meta: {
       durationMs: 1,
       agentMeta: { sessionId: "s", provider: "p", model: "m" },
     },
   });
-  return runEmbeddedPiAgentMock;
+  return runEmbeddedAgentMock;
 }
 
 function requireSessionStorePath(cfg: { session?: { store?: string } }): string {
@@ -60,8 +60,8 @@ async function writeStoredModelOverride(cfg: ReturnType<typeof makeCfg>): Promis
 describe("trigger handling", () => {
   it("includes the error cause when the embedded agent throws", async () => {
     await withTempHome(async (home) => {
-      const runEmbeddedPiAgentMock = getRunEmbeddedPiAgentMock();
-      runEmbeddedPiAgentMock.mockRejectedValue(new Error("sandbox is not defined."));
+      const runEmbeddedAgentMock = getRunEmbeddedAgentMock();
+      runEmbeddedAgentMock.mockRejectedValue(new Error("sandbox is not defined."));
 
       const res = await getReplyFromConfig(BASE_MESSAGE, {}, makeCfg(home));
 
@@ -69,13 +69,13 @@ describe("trigger handling", () => {
       expect(text).toBe(
         "⚠️ Agent failed before reply: sandbox is not defined.\nLogs: builderforce logs --follow",
       );
-      expect(runEmbeddedPiAgentMock).toHaveBeenCalledOnce();
+      expect(runEmbeddedAgentMock).toHaveBeenCalledOnce();
     });
   });
 
   it("uses heartbeat model override for heartbeat runs", async () => {
     await withTempHome(async (home) => {
-      const runEmbeddedPiAgentMock = mockEmbeddedOkPayload();
+      const runEmbeddedAgentMock = mockEmbeddedOkPayload();
       const cfg = makeCfg(home);
       await writeStoredModelOverride(cfg);
       cfg.agents = {
@@ -88,7 +88,7 @@ describe("trigger handling", () => {
 
       await getReplyFromConfig(BASE_MESSAGE, { isHeartbeat: true }, cfg);
 
-      const call = runEmbeddedPiAgentMock.mock.calls[0]?.[0];
+      const call = runEmbeddedAgentMock.mock.calls[0]?.[0];
       expect(call?.provider).toBe("anthropic");
       expect(call?.model).toBe("claude-haiku-4-5-20251001");
     });
@@ -96,12 +96,12 @@ describe("trigger handling", () => {
 
   it("keeps stored model override for heartbeat runs when heartbeat model is not configured", async () => {
     await withTempHome(async (home) => {
-      const runEmbeddedPiAgentMock = mockEmbeddedOkPayload();
+      const runEmbeddedAgentMock = mockEmbeddedOkPayload();
       const cfg = makeCfg(home);
       await writeStoredModelOverride(cfg);
       await getReplyFromConfig(BASE_MESSAGE, { isHeartbeat: true }, cfg);
 
-      const call = runEmbeddedPiAgentMock.mock.calls[0]?.[0];
+      const call = runEmbeddedAgentMock.mock.calls[0]?.[0];
       expect(call?.provider).toBe("openai");
       expect(call?.model).toBe("gpt-5.2");
     });
@@ -109,8 +109,8 @@ describe("trigger handling", () => {
 
   it("suppresses HEARTBEAT_OK replies outside heartbeat runs", async () => {
     await withTempHome(async (home) => {
-      const runEmbeddedPiAgentMock = getRunEmbeddedPiAgentMock();
-      runEmbeddedPiAgentMock.mockResolvedValue({
+      const runEmbeddedAgentMock = getRunEmbeddedAgentMock();
+      runEmbeddedAgentMock.mockResolvedValue({
         payloads: [{ text: HEARTBEAT_TOKEN }],
         meta: {
           durationMs: 1,
@@ -121,14 +121,14 @@ describe("trigger handling", () => {
       const res = await getReplyFromConfig(BASE_MESSAGE, {}, makeCfg(home));
 
       expect(res).toBeUndefined();
-      expect(runEmbeddedPiAgentMock).toHaveBeenCalledOnce();
+      expect(runEmbeddedAgentMock).toHaveBeenCalledOnce();
     });
   });
 
   it("strips HEARTBEAT_OK at edges outside heartbeat runs", async () => {
     await withTempHome(async (home) => {
-      const runEmbeddedPiAgentMock = getRunEmbeddedPiAgentMock();
-      runEmbeddedPiAgentMock.mockResolvedValue({
+      const runEmbeddedAgentMock = getRunEmbeddedAgentMock();
+      runEmbeddedAgentMock.mockResolvedValue({
         payloads: [{ text: `${HEARTBEAT_TOKEN} hello` }],
         meta: {
           durationMs: 1,
@@ -145,7 +145,7 @@ describe("trigger handling", () => {
 
   it("updates group activation when the owner sends /activation", async () => {
     await withTempHome(async (home) => {
-      const runEmbeddedPiAgentMock = getRunEmbeddedPiAgentMock();
+      const runEmbeddedAgentMock = getRunEmbeddedAgentMock();
       const cfg = makeCfg(home);
       const res = await getReplyFromConfig(
         {
@@ -167,7 +167,7 @@ describe("trigger handling", () => {
         { groupActivation?: string }
       >;
       expect(store["agent:main:whatsapp:group:123@g.us"]?.groupActivation).toBe("always");
-      expect(runEmbeddedPiAgentMock).not.toHaveBeenCalled();
+      expect(runEmbeddedAgentMock).not.toHaveBeenCalled();
     });
   });
 });

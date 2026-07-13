@@ -196,10 +196,24 @@ interface GenerateOptions {
      *   0.5 → start halfway through the schedule (strong continuity, slow evolution)
      *   0.7 → start at 30 %  (moderate continuity, more evolution)
      *   1.0 → start at the beginning  (≈ pure anchor walk, same as 0)
-     * Long clips (~30+ frames) drift / blur — refresh by setting back to 0 on
-     * a periodic frame, or split into multiple short calls.
+     * Long clips (~30+ frames) drift / blur — bound this automatically with
+     * `anchorRefreshInterval`, or split into multiple short calls.
      */
     imgToImgStrength?: number;
+    /**
+     * Bound img2img-recursion drift by restarting from a fresh full-noise anchor
+     * every N generated keyframes. img2img recursion (`imgToImgStrength > 0`)
+     * carries each frame's clean latent into the next, but every VAE round-trip
+     * adds a little error, so frames ~30+ progressively blur / lose detail. With
+     * `anchorRefreshInterval = N`, keyframes N, 2N, … skip the carry-forward and
+     * re-sample fresh noise (a full denoise pass), capping accumulated drift at N
+     * keyframes while keeping continuity within each segment.
+     *   0 / omitted (default) → never refresh (carry forward indefinitely)
+     *   8                     → refresh every 8 keyframes
+     * Only consulted when `imgToImgStrength > 0`. Counts GENERATED keyframes, not
+     * interpolated tweens (drift accrues per denoise, not per output frame).
+     */
+    anchorRefreshInterval?: number;
     /**
      * Per-frame camera transform applied to the prior latent BEFORE re-noising.
      * `dx`/`dy` are a directional shift in latent-pixel units (1 latent pixel =
@@ -886,4 +900,422 @@ declare function estimateBlockMotion(a: Float32Array, b: Float32Array, width: nu
  */
 declare function interpolateFrames(a: Float32Array, b: Float32Array, width: number, height: number, t: number, field: MotionField): Float32Array;
 
-export { type ActiveDevice, CAMERA_MOVES, type CameraMove, type CharacterBible, type CoherenceMode, type DeviceTarget, type DiffusionModelId, type FrameIssueKind, type FrameValidation, type FrameValidationIssue, type GenerateOptions, type GenerateResult, type InterpolatedSlot, type InterpolationBackend, type Keyframe, MODEL_REGISTRY, type MambaStateSnapshot, type ModelDescriptor, type MotionField, type MotionOptions, type OnnxFile, type OnnxRuntimeConfigOptions, type OrtInputSpec, type OrtTensorDtype, type PlannedShot, type ProbedDevice, type QualityMode, type ScenePlanOptions, type ShotValidation, type Storyboard, type StoryboardGenerateOptions, type StoryboardGenerateResult, type ValidateFrameOptions, VideoEngine, type VideoEngineOptions, type WeightSource, buildInterpolatedSequence, cameraMoveToMotion, composeShotPrompt, configureOnnxRuntime, directorPass, estimateBlockMotion, hasWebGPUSupport, interpolateFrames, luma, normaliseShotBudget, planKeyframeIndices, planScene, probeDevice, shotPlannerPass, slerp, storyboardFrameCount, validateFrame };
+interface MelConfig {
+    sampleRate: number;
+    frameLength: number;
+    hopLength: number;
+    numMels: number;
+}
+interface MelSpectrogram {
+    /** One log-mel vector (length `numMels`) per analysis frame. */
+    frames: Float32Array[];
+    numMels: number;
+    hopLength: number;
+    frameLength: number;
+    sampleRate: number;
+}
+/** PCM waveform → log-mel spectrogram. The single entry point both the speaker
+ *  encoder and the codec analysis path call. */
+declare function melSpectrogram(pcm: Float32Array, overrides?: Partial<MelConfig>): MelSpectrogram;
+/**
+ * Mel spectrogram → PCM waveform (the vocoder inversion the acoustic model's
+ * output rides through).
+ *
+ * This is an honest, deterministic, weight-free inversion — NOT a trained neural
+ * vocoder. Steps: undo the log; map mel energies back to a linear magnitude
+ * spectrum through the transposed filterbank; pair the magnitude with a
+ * zero-phase spectrum; inverse-FFT each frame; overlap-add with the synthesis
+ * window. It reconstructs pitch/formant structure (so a cloned timbre is
+ * audibly present and round-trips in tests) but is band-limited and phase-naive
+ * compared to a trained HiFi-GAN. Phase 2's training pipeline replaces this body
+ * with learned vocoder weights behind the same signature — logged in the Gap
+ * Register, not hidden.
+ */
+declare function melToWaveform(mel: MelSpectrogram): Float32Array;
+/** Cosine similarity of two equal-length vectors. Shared by speaker-identity
+ *  verification and codebook nearest-neighbour search. */
+declare function cosineSimilarity(a: ArrayLike<number>, b: ArrayLike<number>): number;
+
+/**
+ * Public types for the studio voice-cloning stack (Phase 1 + Phase 2).
+ *
+ * The pipeline is: reference PCM ──speaker-encoder──▶ SpeakerEmbedding, and
+ * text ──tokenizer──▶ tokens ──SSM acoustic model (conditioned on the
+ * embedding)──▶ CodecTokens ──neural-codec.decode──▶ PCM. CloneSynthesisResult
+ * is deliberately shaped to match the server's `studio_voiceovers` row
+ * (audio + wordTimestamps + durationMs) so cloned audio flows into captions,
+ * the AvatarWidget, and the timeline with zero new plumbing.
+ */
+
+/** Mono PCM as Float32 samples in [-1, 1] plus its sample rate. The lingua
+ *  franca between every stage — no Buffers, no base64, browser-native. */
+interface PcmAudio {
+    samples: Float32Array;
+    sampleRate: number;
+}
+/**
+ * A speaker identity vector — the zero-shot conditioning signal extracted from a
+ * reference sample. L2-normalised so two clips of the same voice compare with
+ * high cosine similarity. `data` is a plain number array for JSON/IDB/R2
+ * portability, mirroring {@link MambaStateSnapshot}.
+ */
+interface SpeakerEmbedding {
+    data: number[];
+    dim: number;
+    /** Sample rate the reference was analysed at — guards mismatched re-use. */
+    sampleRate: number;
+}
+/** A discrete, compressed acoustic representation: `numFrames` time steps, each
+ *  with `numQuantizers` residual-codebook token ids in [0, codebookSize). This
+ *  is exactly what the SSM acoustic model predicts and what the codec decodes. */
+interface CodecTokens {
+    /** `[frame][quantizer]` token ids. */
+    tokens: number[][];
+    numFrames: number;
+    numQuantizers: number;
+    codebookSize: number;
+    hopLength: number;
+    frameLength: number;
+    sampleRate: number;
+}
+/** One word's playback span in the synthesized audio — drives caption alignment
+ *  and the AvatarWidget's `onBoundary`. */
+interface WordTimestamp {
+    word: string;
+    startMs: number;
+    endMs: number;
+}
+/** The provider seam: a swappable clone-synthesis backend. The studio ships the
+ *  built-in `ssm-webgpu` provider; the npm package can register a `tts-server`
+ *  provider that calls the gateway. Consumers resolve a provider, never branch
+ *  on the id themselves (DRY — mirrors the device-router pattern). */
+type VoiceProviderId = 'ssm-webgpu' | 'tts-server';
+interface SpeakerEncoderOptions {
+    /** Output embedding dimensionality. Default 256. */
+    embeddingDim?: number;
+    sampleRate?: number;
+    numMels?: number;
+}
+interface NeuralCodecOptions {
+    /** Residual quantizer depth. More stages → finer reconstruction. Default 4. */
+    numQuantizers?: number;
+    /** Entries per codebook. Default 256 (1 byte per token). */
+    codebookSize?: number;
+    sampleRate?: number;
+    numMels?: number;
+    frameLength?: number;
+    hopLength?: number;
+    /** Optional trained codebooks: `[quantizer][entry] = mel-dim centroid`. When
+     *  omitted, deterministic seeded codebooks stand in (weight-free reference). */
+    codebooks?: Float32Array[][];
+}
+interface AcousticModelOptions {
+    sampleRate?: number;
+    numMels?: number;
+    hopLength?: number;
+    frameLength?: number;
+    numQuantizers?: number;
+    codebookSize?: number;
+    /** Characters spoken per second — sets how many mel frames a text spans.
+     *  Default 14 (≈ natural English narration pace). */
+    charsPerSecond?: number;
+    /** SSM hidden dimension for the acoustic recurrence. Default 256. */
+    hiddenDim?: number;
+}
+interface SynthesizeOptions {
+    /** Text to speak. */
+    text: string;
+    /** The voice identity to speak it in. */
+    speaker: SpeakerEmbedding;
+    /** Playback speed multiplier (1 = natural). Scales predicted duration. */
+    speed?: number;
+    /** Forwarded to the device router; `cpu` forces the weight-free JS path. */
+    device?: ActiveDevice;
+    signal?: AbortSignal;
+}
+interface CloneSynthesisResult {
+    /** Synthesized mono PCM in [-1, 1]. */
+    pcm: Float32Array;
+    sampleRate: number;
+    durationMs: number;
+    /** Per-word spans, aligned to the synthesized audio. */
+    wordTimestamps: WordTimestamp[];
+    /** The discrete tokens the audio was decoded from — persisted for the cache
+     *  key and for re-vocoding with a better codec later without re-running the
+     *  acoustic model. */
+    codecTokens: CodecTokens;
+    /** Which hardware path actually ran. */
+    activeDevice: ActiveDevice;
+}
+/** A clone-synthesis backend. The engine and the npm package both consume this
+ *  interface so a new model is a registry entry, not a call-site rewrite. */
+interface VoiceProvider {
+    readonly id: VoiceProviderId;
+    /** Whether this backend can run in the current environment right now. The
+     *  single source of truth for the honesty/fallback contract. */
+    isAvailable(): Promise<boolean>;
+    /** Human-readable reason when `isAvailable()` is false (shown to the user
+     *  before any silent fallback). Null when available. */
+    unavailableReason(): Promise<string | null>;
+    synthesize(options: SynthesizeOptions): Promise<CloneSynthesisResult>;
+}
+
+/**
+ * speaker-encoder (Phase 1) — reference audio ▶ a fixed-dim speaker identity
+ * vector.
+ *
+ * This is the cheap, reusable half of the foundation: the conditioning signal
+ * every later stage (the SSM acoustic model) reads to clone a voice. It is an
+ * x-vector-style encoder — statistics pooling (mean + standard deviation of the
+ * log-mel features across time) is exactly the pooling layer that turns a
+ * variable-length utterance into a single utterance-level identity vector in the
+ * x-vector / ECAPA-TDNN family. Mean captures the average spectral envelope
+ * (formant/timbre fingerprint); std captures how that envelope moves (prosodic
+ * texture). The pooled statistics are projected to `embeddingDim` and
+ * L2-normalised so identity compares by cosine.
+ *
+ * Weight-free and deterministic, consistent with the rest of the studio engine
+ * (see mamba-coherence's `projectState`): the projection is a fixed hashed
+ * mixing matrix, not learned weights. Phase 2's training pipeline replaces the
+ * projection with a trained encoder behind this exact signature; the contract
+ * (mel stats → unit vector) is what downstream code depends on, not the weights.
+ */
+
+/**
+ * Extract a speaker embedding from a reference sample. Empty/near-silent audio
+ * yields a zero vector (every downstream conditioning step degrades to
+ * "speaker-neutral" rather than throwing).
+ */
+declare function encodeSpeaker(reference: PcmAudio, options?: SpeakerEncoderOptions): SpeakerEmbedding;
+/**
+ * Verify two embeddings plausibly belong to the same speaker. Cosine ≥
+ * `threshold` (default 0.75) → same voice. Used by the server publish/consent
+ * gate (re-uploading must match the enrolled identity) and by tests.
+ */
+declare function verifySpeaker(a: SpeakerEmbedding, b: SpeakerEmbedding, threshold?: number): {
+    same: boolean;
+    similarity: number;
+};
+
+/**
+ * neural-codec (Phase 1) — the discrete acoustic representation everything else
+ * speaks.
+ *
+ * A Residual Vector Quantizer (RVQ) over log-mel frames: encode maps each mel
+ * frame to `numQuantizers` codebook token ids by repeatedly subtracting the
+ * nearest centroid and re-quantizing the residual (the EnCodec/DAC/SoundStream
+ * scheme); decode sums the chosen centroids back into a mel frame and inverts it
+ * to PCM through the shared vocoder in audio-frames. Discretising audio this way
+ * is what lets the SSM acoustic model (Phase 2) *predict* speech as a sequence of
+ * tokens — an autoregressive model over a small vocabulary — instead of
+ * regressing raw samples.
+ *
+ * The codebooks here are deterministic, seeded placeholders (weight-free, like
+ * the rest of the engine). A trained codec drops its learned codebooks in via
+ * `NeuralCodecOptions.codebooks` behind the identical interface; round-trip
+ * fidelity improves, call sites don't change. RVQ already gives graceful
+ * degradation — fewer quantizers = coarser audio, never broken.
+ */
+
+declare class NeuralCodec {
+    private readonly config;
+    private readonly numQuantizers;
+    private readonly codebookSize;
+    /** `[quantizer][entry] = mel-dim centroid`. */
+    private readonly codebooks;
+    constructor(options?: NeuralCodecOptions);
+    get quantizers(): number;
+    get vocabSize(): number;
+    get sampleRate(): number;
+    /** PCM ▶ discrete tokens. */
+    encode(audio: PcmAudio): CodecTokens;
+    /** log-mel spectrogram ▶ discrete tokens. The acoustic model and the analysis
+     *  path share this so quantisation lives in one place. */
+    encodeMel(mel: MelSpectrogram): CodecTokens;
+    /** Discrete tokens ▶ reconstructed log-mel spectrogram (sum of chosen
+     *  centroids per frame). */
+    decodeMel(codec: CodecTokens): MelSpectrogram;
+    /** Discrete tokens ▶ PCM waveform (mel reconstruction → shared vocoder). */
+    decode(codec: CodecTokens): PcmAudio;
+}
+
+/**
+ * text-tokenizer (Phase 2) — text ▶ acoustic-model input tokens + word spans.
+ *
+ * A character-level tokenizer (the same grapheme-level granularity the host
+ * frontend's mamba-engine uses for its character embeddings). Real TTS front-ends
+ * run a grapheme-to-phoneme step here; a phonemizer drops in behind
+ * `tokenizeText` without changing the acoustic model, and is tracked as a Gap
+ * Register follow-up. Alongside the token ids we emit word boundaries so the
+ * engine can turn predicted frame counts into `wordTimestamps` for captions.
+ */
+/** Vocabulary size including the reserved 0 token. */
+declare const TEXT_VOCAB_SIZE: number;
+interface TokenizedText {
+    /** Per-character token ids (unknown chars → 0). */
+    tokens: number[];
+    /** Words in order, each with its [startChar, endChar) span over `tokens`. */
+    words: {
+        word: string;
+        startChar: number;
+        endChar: number;
+    }[];
+}
+/** Normalise + tokenize. Collapses whitespace runs to single spaces so timing
+ *  isn't thrown off by formatting. */
+declare function tokenizeText(text: string): TokenizedText;
+
+/**
+ * ssm-acoustic-model (Phase 2) — the heart of the clone: (text tokens + speaker
+ * embedding) ▶ a sequence of neural-codec tokens, generated autoregressively by
+ * a selective state-space recurrence.
+ *
+ * This is the same architectural bet Cartesia's Sonic makes — an SSM backbone,
+ * not a transformer, over discrete audio codec tokens — which is why it slots
+ * onto the studio's existing Mamba substrate (mamba-coherence's `advanceState`
+ * is the same `h_{t+1} = A·h_t + B·x_t` recurrence, here widened to a hidden
+ * vector and conditioned on the voice). SSMs are linear-time and streaming, the
+ * property that makes the $0-infra in-browser clone path viable where a
+ * transformer's quadratic attention would not be.
+ *
+ * Conditioning is what makes it a *clone*: the speaker embedding is mixed into
+ * every input step AND biases the per-quantizer output projection, so the same
+ * text produces a different token stream — hence a different timbre after the
+ * codec decodes it — per voice.
+ *
+ * The projections are deterministic seeded matrices (weight-free, like every
+ * other studio engine module). With placeholder weights the output is
+ * structured, voice- and text-dependent acoustic texture, not intelligible
+ * speech — intelligibility is what the Phase 2 *training* run buys, dropping
+ * trained matrices in behind this identical interface (`AcousticWeights`). The
+ * inference architecture, shapes, conditioning, and streaming recurrence are
+ * what's built here.
+ */
+
+interface AcousticGenerateResult {
+    codec: CodecTokens;
+    wordTimestamps: WordTimestamp[];
+}
+declare class SSMAcousticModel {
+    private readonly cfg;
+    /** Hashed character-embedding table [vocab][hiddenDim]. */
+    private readonly charEmbed;
+    /** Speaker-embedding → hidden projection (sign matrix), built lazily per
+     *  speaker-dim so a mismatched embedding can't silently mis-multiply. */
+    private speakerProj;
+    /** Per-quantizer output projection: hidden → codebookSize logits. */
+    private readonly outProj;
+    /** SSM per-channel decay (diagonal A), stable in [0.5, 0.99). */
+    private readonly decay;
+    constructor(options?: AcousticModelOptions);
+    /**
+     * Generate codec tokens for `text` in the voice described by `speaker`.
+     * `speed` (>0, default 1) scales the predicted duration: 1.5 ≈ 50 % faster.
+     */
+    generate(text: TokenizedText, speaker: SpeakerEmbedding, speed?: number): AcousticGenerateResult;
+    /** hidden state → one token id per quantizer (argmax of speaker-biased logits). */
+    private project;
+    /** Project a speaker embedding to the hidden dim with a cached sign matrix. */
+    private projectSpeaker;
+}
+
+/**
+ * voice-clone-engine (Phase 2) — the one object that turns "speak this text in
+ * this voice" into audio, wiring the Phase 1 + Phase 2 parts together:
+ *
+ *   reference PCM ─encodeSpeaker──▶ SpeakerEmbedding   (enrol, once per voice)
+ *   text ─tokenizeText─▶ tokens ─SSMAcousticModel(speaker)─▶ codec tokens
+ *   codec tokens ─NeuralCodec.decode──▶ PCM
+ *
+ * It picks a hardware path via the studio's shared device-router (never its own
+ * WebGPU probe) and reports which path ran. The heavy SSM scan is intended to
+ * ride the WebGPU Mamba kernel when present; the weight-free CPU recurrence in
+ * SSMAcousticModel is the guaranteed-everywhere fallback. The output shape
+ * (pcm + wordTimestamps + durationMs) is the server's `studio_voiceovers` row,
+ * so cloned audio reaches captions / the AvatarWidget / the timeline unchanged.
+ */
+
+interface VoiceCloneEngineOptions {
+    speaker?: SpeakerEncoderOptions;
+    codec?: NeuralCodecOptions;
+    acoustic?: AcousticModelOptions;
+}
+declare class VoiceCloneEngine {
+    private readonly codec;
+    private readonly acoustic;
+    private readonly speakerOptions;
+    private readonly sampleRate;
+    constructor(options?: VoiceCloneEngineOptions);
+    /** Enrol a voice: reference sample ▶ reusable speaker embedding. Run once and
+     *  persist the embedding (it's just numbers) — synthesis takes the embedding,
+     *  not the raw audio, so the reference never has to be re-fetched per clip. */
+    enroll(reference: PcmAudio): SpeakerEmbedding;
+    /** Speak `text` in `speaker`'s voice. */
+    synthesize(options: SynthesizeOptions): Promise<CloneSynthesisResult>;
+    /** Honour an explicit device, else probe (WebGPU preferred for the SSM scan,
+     *  CPU always works). Never throws on probe failure — degrades to CPU. */
+    private resolveDevice;
+}
+
+/**
+ * provider — the swappable clone-synthesis backend seam (PRD §3's capability
+ * rename: a `clone` engine with a pluggable provider, not the hardcoded
+ * `vibevoice` flag).
+ *
+ * The studio ships one provider: `ssm-webgpu`, the in-browser SSM engine above.
+ * The npm package registers a second, `tts-server`, that calls the gateway for
+ * devices without WebGPU. Both satisfy {@link VoiceProvider}; callers resolve a
+ * provider through {@link resolveVoiceProvider} and never branch on the id
+ * themselves — the same DRY discipline as the device-router. `resolve` is also
+ * the single source of truth for the honesty/fallback contract: it returns the
+ * chosen provider AND, when nothing is available, the reason to show the user
+ * *before* any silent fallback.
+ */
+
+/**
+ * The built-in client-side provider: runs the full Phase 1 + Phase 2 pipeline on
+ * the user's device. Always "available" because the SSM recurrence has a
+ * weight-free CPU fallback — WebGPU only makes it faster. ($0 marginal infra,
+ * per project_nle_decision.md.)
+ */
+declare class SSMVoiceProvider implements VoiceProvider {
+    readonly id: "ssm-webgpu";
+    private readonly engine;
+    constructor(options?: VoiceCloneEngineOptions);
+    /** Expose the engine for enrolment (`provider.engine.enroll(...)`). */
+    get cloneEngine(): VoiceCloneEngine;
+    isAvailable(): Promise<boolean>;
+    unavailableReason(): Promise<string | null>;
+    synthesize(options: SynthesizeOptions): Promise<CloneSynthesisResult>;
+}
+interface ResolveProviderResult {
+    /** The chosen provider, or null when none is available. */
+    provider: VoiceProvider | null;
+    /** Why none was available (null when one was). Surface this BEFORE falling
+     *  back to a non-cloned voice — never swap silently. */
+    reason: string | null;
+}
+/**
+ * Pick the first available provider from `providers`, in preference order.
+ * Prefers `ssm-webgpu` when the device has WebGPU (free + private), otherwise
+ * falls through to a server provider. This is the one place "which clone backend
+ * runs right now" is decided.
+ */
+declare function resolveVoiceProvider(providers: VoiceProvider[]): Promise<ResolveProviderResult>;
+
+/**
+ * wav — encode mono Float32 PCM to a 16-bit WAV container.
+ *
+ * The clone engine emits raw Float32 samples (the studio's in-memory contract);
+ * consumers that need a file/Blob — download, R2 upload, <audio src> — get a
+ * standard 16-bit PCM WAV here. Kept dependency-free and browser/Node-portable
+ * (returns an ArrayBuffer; `encodeWavBlob` wraps it as a Blob only where the DOM
+ * type exists).
+ */
+
+/** Float32 PCM [-1, 1] → 16-bit little-endian WAV bytes. */
+declare function encodeWav(audio: PcmAudio): ArrayBuffer;
+/** Same as {@link encodeWav} but wrapped as a `Blob` (browser/worker only). */
+declare function encodeWavBlob(audio: PcmAudio): Blob;
+
+export { type AcousticGenerateResult, type AcousticModelOptions, type ActiveDevice, CAMERA_MOVES, type CameraMove, type CharacterBible, type CloneSynthesisResult, type CodecTokens, type CoherenceMode, type DeviceTarget, type DiffusionModelId, type FrameIssueKind, type FrameValidation, type FrameValidationIssue, type GenerateOptions, type GenerateResult, type InterpolatedSlot, type InterpolationBackend, type Keyframe, MODEL_REGISTRY, type MambaStateSnapshot, type MelConfig, type MelSpectrogram, type ModelDescriptor, type MotionField, type MotionOptions, NeuralCodec, type NeuralCodecOptions, type OnnxFile, type OnnxRuntimeConfigOptions, type OrtInputSpec, type OrtTensorDtype, type PcmAudio, type PlannedShot, type ProbedDevice, type QualityMode, type ResolveProviderResult, SSMAcousticModel, SSMVoiceProvider, type ScenePlanOptions, type ShotValidation, type SpeakerEmbedding, type SpeakerEncoderOptions, type Storyboard, type StoryboardGenerateOptions, type StoryboardGenerateResult, type SynthesizeOptions, TEXT_VOCAB_SIZE, type TokenizedText, type ValidateFrameOptions, VideoEngine, type VideoEngineOptions, VoiceCloneEngine, type VoiceCloneEngineOptions, type VoiceProvider, type VoiceProviderId, type WeightSource, type WordTimestamp, buildInterpolatedSequence, cameraMoveToMotion, composeShotPrompt, configureOnnxRuntime, cosineSimilarity, directorPass, encodeSpeaker, encodeWav, encodeWavBlob, estimateBlockMotion, hasWebGPUSupport, interpolateFrames, luma, melSpectrogram, melToWaveform, normaliseShotBudget, planKeyframeIndices, planScene, probeDevice, resolveVoiceProvider, shotPlannerPass, slerp, storyboardFrameCount, tokenizeText, validateFrame, verifySpeaker };

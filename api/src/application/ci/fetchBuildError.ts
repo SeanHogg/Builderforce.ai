@@ -72,7 +72,7 @@ async function fetchUncached(coords: BuildErrorCoords): Promise<BuildError> {
     lines.push(`• Job "${jobName}" failed${failedSteps.length ? ` at step(s): ${failedSteps.join('; ')}` : ''}.`);
   }
   const summary = [
-    `The post-merge build failed. Failing jobs/steps:`,
+    `The CI build failed. Failing jobs/steps:`,
     ...lines,
     coords.runUrl ? `\nFull run: ${coords.runUrl}` : '',
   ].filter(Boolean).join('\n');

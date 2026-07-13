@@ -7,8 +7,10 @@
  */
 
 import {
+  buildOpenAIChatBody,
   executeChatCompletion,
   executeChatCompletionStream,
+  forwardCallOpts,
   type AiModelTier,
   type VendorCallParams,
   type VendorCallResult,
@@ -16,55 +18,13 @@ import {
   type VendorModule,
   type VendorStreamResult,
 } from './types';
-import { sanitizeExtraBodyForVendor } from '../jsonSchemaSanitize';
-import { applyPromptCaching } from '../promptCaching';
+import { CEREBRAS_STRICT_KEYWORDS, sanitizeExtraBodyForVendor } from '../jsonSchemaSanitize';
 
 const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
-const EMBEDDINGS_ENDPOINT = 'https://openrouter.ai/api/v1/embeddings';
 
-/**
- * Default embedding model. NVIDIA's free Nemotron embed model is competitive
- * with OpenAI's small for English-only use cases, and is the model BurnRateOS
- * already calibrated against. Caller can override per-call via `body.model`.
- */
-export const DEFAULT_EMBEDDING_MODEL = 'nvidia/llama-nemotron-embed-vl-1b-v2:free';
-
-export interface EmbeddingsCallParams {
-  apiKey: string;
-  model?: string;
-  input: string | string[];
-  /** Caller-supplied opaque pass-through (e.g. `dimensions`). */
-  extraBody?: Record<string, unknown>;
-}
-
-export interface EmbeddingsCallResult {
-  status: number;
-  body: unknown;
-}
-
-/**
- * Call OpenRouter's OpenAI-compatible /embeddings. Single vendor for now —
- * if a second embeddings vendor lands, lift this into a vendor-module shape
- * mirroring `executeChatCompletion` and add a registry entry.
- */
-export async function callOpenRouterEmbeddings(params: EmbeddingsCallParams): Promise<EmbeddingsCallResult> {
-  const body: Record<string, unknown> = {
-    model: params.model ?? DEFAULT_EMBEDDING_MODEL,
-    input: params.input,
-    ...(params.extraBody ?? {}),
-  };
-  const res = await fetch(EMBEDDINGS_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${params.apiKey}`,
-      'Content-Type': 'application/json',
-      ...HEADERS,
-    },
-    body: JSON.stringify(body),
-  });
-  const json = await res.json().catch(() => ({}));
-  return { status: res.status, body: json };
-}
+// Embeddings live in their own multi-vendor surface (`../embeddingVendors/`)
+// with OpenRouter→Voyage failover — see `openRouterEmbeddingModule`. This chat
+// module is chat-completions only.
 
 const CATALOG: ReadonlyArray<VendorModelEntry> = [
   // ── FREE tier — drive builderforceLLM (free plan) and prefix the Pro fallback chain
@@ -93,9 +53,11 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'liquid/lfm-2.5-1.2b-instruct:free',         tier: 'FREE', label: 'LFM 2.5 1.2B Instruct (Free)',       brand: 'Liquid'    },
   { id: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free', tier: 'FREE', label: 'Dolphin Mistral 24B Venice (Free)', brand: 'CognitiveComputations' },
   { id: 'openrouter/owl-alpha',                      tier: 'FREE', label: 'OpenRouter Owl Alpha (Free)',          brand: 'OpenRouter' },
-  { id: 'deepseek/deepseek-v4-flash:free',           tier: 'FREE', label: 'DeepSeek V4 Flash (Free)',             brand: 'DeepSeek'  },
   { id: 'arcee-ai/trinity-large-thinking:free',      tier: 'FREE', label: 'Arcee Trinity Large Thinking (Free)',  brand: 'Arcee'     },
   { id: 'openai/gpt-oss-20b:free',                   tier: 'FREE', label: 'GPT-OSS 20B (Free)',                   brand: 'OpenAI'    },
+  // Strong FREE agentic coders (verified live on OpenRouter /models, tool-capable).
+  { id: 'nex-agi/nex-n2-pro:free',                   tier: 'FREE', label: 'Nex-N2-Pro (Free · agentic)',         brand: 'Nex AGI'   },
+  { id: 'nvidia/nemotron-3-ultra-550b-a55b:free',    tier: 'FREE', label: 'Nemotron 3 Ultra 550B (Free)',        brand: 'NVIDIA'    },
 
   // ── STANDARD tier — paid low-cost models, prefixed in the paid pool so
   //    Pro/Teams tenants land on cheap models before reaching PREMIUM/ULTRA.
@@ -105,6 +67,9 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'qwen/qwen3.5-9b',                           tier: 'STANDARD', label: 'Qwen 3.5 9B',              brand: 'Qwen'      },
   { id: 'z-ai/glm-4-32b',                            tier: 'STANDARD', label: 'GLM 4 32B',                brand: 'Z.AI'      },
   { id: 'openai/gpt-5-nano',                         tier: 'STANDARD', label: 'GPT-5 Nano',               brand: 'OpenAI'    },
+  // Cheap, top-ranked agentic coders (verified live; cost ~$0.1-0.3/M).
+  { id: 'xiaomi/mimo-v2.5',                          tier: 'STANDARD', label: 'MiMo-V2.5 (Programming #1)', brand: 'Xiaomi'  },
+  { id: 'deepseek/deepseek-v4-flash',                tier: 'STANDARD', label: 'DeepSeek V4 Flash',        brand: 'DeepSeek'  },
 
   // ── STANDARD tier (cont.) — cheap current-gen frontier for routing/short tasks
   { id: 'anthropic/claude-haiku-4.5',                tier: 'STANDARD', label: 'Claude Haiku 4.5',     brand: 'Anthropic' },
@@ -116,6 +81,7 @@ const CATALOG: ReadonlyArray<VendorModelEntry> = [
   { id: 'openai/gpt-4.1',                            tier: 'PREMIUM', label: 'GPT-4.1',               brand: 'OpenAI'    },
   { id: 'openai/o4-mini',                            tier: 'PREMIUM', label: 'o4-mini (reasoning)',   brand: 'OpenAI'    },
   { id: 'google/gemini-2.5-pro',                     tier: 'PREMIUM', label: 'Gemini 2.5 Pro',        brand: 'Google'    },
+  { id: 'qwen/qwen3.7-plus',                         tier: 'PREMIUM', label: 'Qwen3.7 Plus (agentic + vision)', brand: 'Qwen' },
   { id: 'x-ai/grok-3-mini',                          tier: 'PREMIUM', label: 'Grok 3 Mini',           brand: 'xAI'       },
   { id: 'alibaba/qwen3.5-397b-a17b',                 tier: 'PREMIUM', label: 'Qwen 3.5 397B (MoE)',   brand: 'Alibaba'   },
 
@@ -142,28 +108,14 @@ function tierForOpenRouterModel(modelId: string): AiModelTier {
 }
 
 function buildBody(params: VendorCallParams): Record<string, unknown> {
-  const { model, messages, tools, toolChoice, maxTokens, temperature, topP, extraBody } = params;
-  // OpenRouter routes many free-tier model ids (`qwen/qwen3-coder:free`,
-  // `qwen/qwen3-next-80b-a3b-instruct:free`, etc.) to Cerebras as the upstream
-  // provider. Cerebras's strict JSON-Schema validator rejects draft-07
-  // keywords like `maxLength` that Zod's `toJSONSchema()` emits by default —
-  // strip them here so the call doesn't bounce with `[cerebras] 400` embedded
-  // in the OpenRouter response. See jsonSchemaSanitize.ts for the keyword set.
-  const safeExtra = sanitizeExtraBodyForVendor('openrouter', extraBody);
-  // Inject Anthropic prompt-cache breakpoints on the stable prefix for
-  // caching-capable models. No-op for non-Anthropic ids and caller-managed
-  // caching; non-destructive so the shared `messages` array stays clean for the
-  // next cascade candidate. See ../promptCaching.ts.
-  return {
-    model,
-    messages: applyPromptCaching(messages, model),
-    ...(tools ? { tools } : {}),
-    ...(toolChoice ? { tool_choice: toolChoice } : {}),
-    ...(maxTokens != null ? { max_tokens: maxTokens } : {}),
-    ...(temperature != null ? { temperature } : {}),
-    ...(topP != null ? { top_p: topP } : {}),
-    ...(safeExtra ?? {}),
-  };
+  // Prompt-cache breakpoints are injected by the shared builder (caching ON for every
+  // call). OpenRouter-specific tweak: it routes many `:free` ids to Cerebras, whose
+  // strict validator rejects draft-07 JSON-Schema keywords Zod's `toJSONSchema()`
+  // emits — strip them so the call doesn't bounce with `[cerebras] 400`. See
+  // jsonSchemaSanitize.ts.
+  return buildOpenAIChatBody(params, {
+    transformExtra: (extra) => sanitizeExtraBodyForVendor('openrouter', extra),
+  });
 }
 
 const HEADERS = { 'HTTP-Referer': 'https://builderforce.ai' };
@@ -171,6 +123,9 @@ const HEADERS = { 'HTTP-Referer': 'https://builderforce.ai' };
 export const openRouterModule: VendorModule = {
   id: 'openrouter',
   catalog: CATALOG,
+  // OpenRouter routes many `:free` ids to Cerebras as upstream, so it inherits
+  // Cerebras's strict-mode strip set (metadata-driven — see jsonSchemaSanitize.ts).
+  schemaDialect: { stripKeywords: CEREBRAS_STRICT_KEYWORDS },
   tierFor: tierForOpenRouterModel,
   apiKeyFrom(env) { return env.OPENROUTER_API_KEY ?? null; },
   async call(params: VendorCallParams): Promise<VendorCallResult> {
@@ -181,9 +136,7 @@ export const openRouterModule: VendorModule = {
       model: params.model,
       body: buildBody(params),
       headers: HEADERS,
-      ...(params.title ? { title: params.title } : {}),
-      ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
-      ...(params.signal ? { signal: params.signal } : {}),
+      ...forwardCallOpts(params),
     });
   },
   async callStream(params: VendorCallParams): Promise<VendorStreamResult> {
@@ -194,9 +147,7 @@ export const openRouterModule: VendorModule = {
       model: params.model,
       body: buildBody(params),
       headers: HEADERS,
-      ...(params.title ? { title: params.title } : {}),
-      ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
-      ...(params.signal ? { signal: params.signal } : {}),
+      ...forwardCallOpts(params),
     });
   },
 };

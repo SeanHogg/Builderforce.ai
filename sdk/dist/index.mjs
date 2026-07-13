@@ -133,8 +133,49 @@ var ModelsApi = class {
   constructor(http) {
     this.http = http;
   }
+  /** Raw `/llm/v1/models` response — pool status, capabilities, plan, cooldowns. */
   list() {
     return this.http.getJson("/llm/v1/models");
+  }
+  /**
+   * Models in the tenant's plan pool, as structured entries. Empty when the
+   * gateway is unconfigured for this tenant (no `data` branch — nothing servable).
+   */
+  async listInfo() {
+    const res = await this.list();
+    return res.data ?? [];
+  }
+  /**
+   * Models whose `capabilities` include `capability`. By default only
+   * currently-servable models are returned (`available: true`); pass
+   * `{ includeUnavailable: true }` to include cooled / key-unbound ones too.
+   */
+  async listByCapability(capability, opts) {
+    const includeUnavailable = opts?.includeUnavailable ?? false;
+    const all = await this.listInfo();
+    return all.filter(
+      (m) => (m.capabilities?.includes(capability) ?? false) && (includeUnavailable || m.available)
+    );
+  }
+  /**
+   * Models that can read images and (page-rasterized) PDFs — i.e. those with the
+   * `vision` OR `ocr` capability. This is the set a consumer that needs to ingest
+   * images / documents (e.g. hired.video) should pick from.
+   */
+  async listImageCapable(opts) {
+    const includeUnavailable = opts?.includeUnavailable ?? false;
+    const all = await this.listInfo();
+    return all.filter(
+      (m) => ((m.capabilities?.includes("vision") ?? false) || (m.capabilities?.includes("ocr") ?? false)) && (includeUnavailable || m.available)
+    );
+  }
+  /** Models tuned for text extraction from images / documents (`ocr` capability). */
+  listOcr(opts) {
+    return this.listByCapability("ocr", opts);
+  }
+  /** Models that accept image content blocks (`vision` capability). */
+  listVision(opts) {
+    return this.listByCapability("vision", opts);
   }
 };
 
@@ -217,7 +258,9 @@ var BuilderforceApiError = class extends Error {
                 vendor: e.vendor,
                 code: e.code,
                 ...typeof ev.durationMs === "number" ? { durationMs: ev.durationMs } : {},
-                ...typeof ev.kind === "string" ? { kind: ev.kind } : {}
+                ...typeof ev.kind === "string" ? { kind: ev.kind } : {},
+                ...typeof ev.reason === "string" ? { reason: ev.reason } : {},
+                ...typeof ev.upstreamStatus === "number" ? { upstreamStatus: ev.upstreamStatus } : {}
               });
             }
           }
@@ -396,11 +439,173 @@ var BuilderforceClient = class {
     this.usage = new UsageApi(http);
   }
 };
+
+// src/application/classifyError.ts
+var TOKEN_CAP_CODES = /* @__PURE__ */ new Set([
+  "plan_token_limit_exceeded",
+  "plan_monthly_token_limit_exceeded",
+  "agent_host_token_limit_exceeded",
+  "claw_token_limit_exceeded",
+  "image_credit_limit_exceeded"
+]);
+function classifyError(err) {
+  if (!(err instanceof BuilderforceApiError)) {
+    const name = err?.name;
+    const message2 = err instanceof Error ? err.message : String(err);
+    if (name === "AbortError") {
+      return { kind: "aborted", terminal: true, retryable: false, message: message2 };
+    }
+    if (err instanceof TypeError) {
+      return { kind: "network", terminal: false, retryable: true, message: message2 };
+    }
+    return { kind: "unknown", terminal: false, retryable: false, message: message2 };
+  }
+  const { status, code, terminal, retryAfter, message } = err;
+  const base = {
+    ...retryAfter !== void 0 ? { retryAfter } : {},
+    ...status !== void 0 ? { status } : {},
+    ...code !== void 0 ? { code } : {},
+    message
+  };
+  if (code === "schema_too_complex" || lastFailoverReason(err) === "schema_too_complex") {
+    return { kind: "schema_too_complex", terminal: terminal ?? true, retryable: false, ...base };
+  }
+  if (code && TOKEN_CAP_CODES.has(code)) {
+    return { kind: "token_cap", terminal: terminal ?? true, retryable: false, ...base };
+  }
+  if (code === "model_unavailable") {
+    return { kind: "model_unavailable", terminal: terminal ?? false, retryable: false, ...base };
+  }
+  if (code === "worker_subrequest_exhausted") {
+    return { kind: "service_unavailable", terminal: false, retryable: true, ...base };
+  }
+  if (code === "aborted") {
+    return { kind: "aborted", terminal: true, retryable: false, ...base };
+  }
+  if (code === "content_filter") {
+    return { kind: "content_filter", terminal: terminal ?? true, retryable: false, ...base };
+  }
+  if (status === 408 || code === "timeout") {
+    return { kind: "timeout", terminal: false, retryable: true, ...base };
+  }
+  if (status === 401 || status === 403) {
+    return { kind: "auth", terminal: terminal ?? true, retryable: false, ...base };
+  }
+  if (status === 429) {
+    return { kind: "rate_limit", terminal: terminal ?? false, retryable: !(terminal ?? false), ...base };
+  }
+  if (status === 400 || status === 422) {
+    return { kind: "invalid_request", terminal: terminal ?? true, retryable: false, ...base };
+  }
+  if (status === 503) {
+    return { kind: "service_unavailable", terminal: false, retryable: true, ...base };
+  }
+  if (status !== void 0 && status >= 500) {
+    return { kind: "service_unavailable", terminal: false, retryable: true, ...base };
+  }
+  return { kind: "unknown", terminal: terminal ?? false, retryable: false, ...base };
+}
+function lastFailoverReason(err) {
+  const f = err.failovers;
+  if (!f || f.length === 0) return void 0;
+  return f[f.length - 1]?.reason;
+}
+
+// src/application/deriveResponseFormat.ts
+var DEFAULT_SCHEMA_COMPLEXITY_CEILING = 80;
+var VENDOR_SCHEMA_CEILINGS = {
+  // Low constrained-decoding ceiling — the vendor that motivated this guard.
+  googleai: 60,
+  google: 60,
+  gemini: 60,
+  // High-ceiling, robust strict-schema vendors.
+  openai: 600,
+  anthropic: 600,
+  cerebras: 300,
+  nvidia: 300,
+  openrouter: 200
+};
+var MAX_SCHEMA_WALK_DEPTH = 64;
+function estimateSchemaComplexity(schema) {
+  let nodes = 0;
+  let totalEnumValues = 0;
+  let maxDepth = 0;
+  const walk = (node, depth) => {
+    if (depth > MAX_SCHEMA_WALK_DEPTH || node === null || typeof node !== "object") return;
+    if (depth > maxDepth) maxDepth = depth;
+    const s = node;
+    const enumVals = s["enum"];
+    if (Array.isArray(enumVals)) totalEnumValues += enumVals.length;
+    const props = s["properties"];
+    if (props && typeof props === "object") {
+      for (const key of Object.keys(props)) {
+        nodes += 1;
+        walk(props[key], depth + 1);
+      }
+    }
+    const items = s["items"];
+    if (Array.isArray(items)) items.forEach((it) => {
+      nodes += 1;
+      walk(it, depth + 1);
+    });
+    else if (items && typeof items === "object") {
+      nodes += 1;
+      walk(items, depth + 1);
+    }
+    for (const comb of ["anyOf", "oneOf", "allOf"]) {
+      const arr = s[comb];
+      if (Array.isArray(arr)) arr.forEach((sub) => {
+        nodes += 1;
+        walk(sub, depth + 1);
+      });
+    }
+    for (const defsKey of ["$defs", "definitions"]) {
+      const defs = s[defsKey];
+      if (defs && typeof defs === "object") {
+        for (const key of Object.keys(defs)) walk(defs[key], depth + 1);
+      }
+    }
+  };
+  walk(schema, 0);
+  return { nodes, maxDepth, totalEnumValues, score: nodes + totalEnumValues };
+}
+function ceilingFor(opts) {
+  if (opts?.maxComplexity != null && opts.maxComplexity >= 0) return opts.maxComplexity;
+  if (opts?.vendor) {
+    const v = opts.vendor.toLowerCase();
+    if (v in VENDOR_SCHEMA_CEILINGS) return VENDOR_SCHEMA_CEILINGS[v];
+  }
+  return DEFAULT_SCHEMA_COMPLEXITY_CEILING;
+}
+function canUseStrictSchema(schema, opts) {
+  const ceiling = ceilingFor(opts);
+  if (ceiling === 0) return false;
+  return estimateSchemaComplexity(schema).score <= ceiling;
+}
+function deriveResponseFormat(schema, opts) {
+  if (!canUseStrictSchema(schema, opts)) {
+    return { type: "json_object" };
+  }
+  return {
+    type: "json_schema",
+    json_schema: {
+      name: opts?.name ?? "response",
+      schema,
+      strict: opts?.strict ?? true
+    }
+  };
+}
 export {
   BuilderforceApiError,
   BuilderforceClient,
   ChatCompletionStream,
+  DEFAULT_SCHEMA_COMPLEXITY_CEILING,
   EmbeddingsApi,
-  ImagesApi
+  ImagesApi,
+  ModelsApi,
+  canUseStrictSchema,
+  classifyError,
+  deriveResponseFormat,
+  estimateSchemaComplexity
 };
 //# sourceMappingURL=index.mjs.map

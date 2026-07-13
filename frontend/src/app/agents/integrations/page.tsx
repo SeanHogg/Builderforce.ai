@@ -43,7 +43,7 @@ const minimaxIcon: CustomSvg = {
 };
 
 const chatProviders: IntegrationItem[] = [
-  { name: 'WhatsApp', icon: si(siWhatsapp), color: '#25D366', desc: 'QR pairing via Baileys', docs: '/agents/skills/wacli' },
+  { name: 'WhatsApp', icon: si(siWhatsapp), color: '#25D366', desc: 'QR pairing via Baileys', docs: '/agents/skills' },
   { name: 'Telegram', icon: si(siTelegram), color: '#26A5E4', desc: 'Bot API via grammY', docs: '/docs/telegram' },
   { name: 'Discord', icon: si(siDiscord), color: '#5865F2', desc: 'Servers, channels & DMs', docs: '/agents/skills/discord' },
   { name: 'Slack', icon: lc('hash'), color: '#E01E5A', desc: 'Workspace apps via Bolt', docs: '/agents/skills/slack' },
@@ -73,9 +73,9 @@ const modelProviders: IntegrationItem[] = [
 ];
 
 const productivityApps: IntegrationItem[] = [
-  { name: 'Apple Notes', icon: lc('sticky-note'), color: '#FFCC00', desc: 'Native macOS/iOS notes', docs: '/agents/skills/apple-notes' },
-  { name: 'Apple Reminders', icon: lc('check-square'), color: '#FF9500', desc: 'Task management', docs: '/agents/skills/apple-reminders' },
-  { name: 'Things 3', icon: lc('list-todo'), color: '#4A90D9', desc: 'GTD task manager', docs: '/agents/skills/things-mac' },
+  { name: 'Apple Notes', icon: lc('sticky-note'), color: '#FFCC00', desc: 'Native macOS/iOS notes', docs: '/agents/skills' },
+  { name: 'Apple Reminders', icon: lc('check-square'), color: '#FF9500', desc: 'Task management', docs: '/agents/skills' },
+  { name: 'Things 3', icon: lc('list-todo'), color: '#4A90D9', desc: 'GTD task manager', docs: '/agents/skills' },
   { name: 'Notion', icon: si(siNotion), color: '#FFFFFF', desc: 'Workspace & databases', docs: '/agents/skills' },
   { name: 'Obsidian', icon: si(siObsidian), color: '#7C3AED', desc: 'Knowledge graph notes', docs: '/agents/skills/obsidian' },
   { name: 'Bear Notes', icon: lc('pen-tool'), color: '#DD4C4F', desc: 'Markdown notes', docs: '/agents/skills' },
@@ -85,20 +85,20 @@ const productivityApps: IntegrationItem[] = [
 
 const musicAudio: IntegrationItem[] = [
   { name: 'Spotify', icon: si(siSpotify), color: '#1DB954', desc: 'Music playback control', docs: '/agents/skills/spotify-player' },
-  { name: 'Sonos', icon: si(siSonos), color: '#FFFFFF', desc: 'Multi-room audio', docs: '/agents/skills/sonoscli' },
-  { name: 'Shazam', icon: si(siShazam), color: '#0088FF', desc: 'Song recognition', docs: '/agents/skills/songsee' },
+  { name: 'Sonos', icon: si(siSonos), color: '#FFFFFF', desc: 'Multi-room audio', docs: '/agents/skills' },
+  { name: 'Shazam', icon: si(siShazam), color: '#0088FF', desc: 'Song recognition', docs: '/agents/skills' },
 ];
 
 const smartHome: IntegrationItem[] = [
   { name: 'Philips Hue', icon: si(siPhilipshue), color: '#0065D3', desc: 'Smart lighting', docs: '/agents/skills/openhue' },
-  { name: '8Sleep', icon: lc('bed'), color: '#00B4D8', desc: 'Smart mattress', docs: '/agents/skills/eightctl' },
-  { name: 'Home Assistant', icon: si(siHomeassistant), color: '#41BDF5', desc: 'Home automation hub', docs: '/agents/skills/homeassistant' },
+  { name: '8Sleep', icon: lc('bed'), color: '#00B4D8', desc: 'Smart mattress', docs: '/agents/skills' },
+  { name: 'Home Assistant', icon: si(siHomeassistant), color: '#41BDF5', desc: 'Home automation hub', docs: '/agents/skills' },
 ];
 
 const tools: IntegrationItem[] = [
-  { name: 'Browser', icon: si(siGooglechrome), color: '#4285F4', desc: 'Chrome/Chromium control', docs: '/agents/skills/verify-on-browser' },
+  { name: 'Browser', icon: si(siGooglechrome), color: '#4285F4', desc: 'Chrome/Chromium control', docs: '/agents/skills' },
   { name: 'Canvas', icon: lc('monitor-smartphone'), color: '#FF4500', desc: 'Visual workspace + A2UI', docs: '/docs/mac/canvas' },
-  { name: 'Voice', icon: lc('mic'), color: '#9B59B6', desc: 'Voice Wake + Talk Mode', docs: '/agents/skills/voice-transcribe' },
+  { name: 'Voice', icon: lc('mic'), color: '#9B59B6', desc: 'Voice Wake + Talk Mode', docs: '/agents/skills/voice-call' },
   { name: 'Gmail', icon: si(siGmail), color: '#EA4335', desc: 'Pub/Sub email triggers', docs: '/docs/gmail-pubsub' },
   { name: 'Cron', icon: lc('clock'), color: '#F39C12', desc: 'Scheduled tasks', docs: '/docs/cron' },
   { name: 'Webhooks', icon: lc('webhook'), color: '#1ABC9C', desc: 'External triggers', docs: '/docs/webhook' },
@@ -108,14 +108,14 @@ const tools: IntegrationItem[] = [
 
 const mediaCreative: IntegrationItem[] = [
   { name: 'Image Gen', icon: lc('image'), color: '#E91E63', desc: 'AI image generation', docs: '/agents/skills' },
-  { name: 'GIF Search', icon: lc('search'), color: '#00DCDC', desc: 'Find the perfect GIF', docs: '/agents/skills/gifgrep' },
-  { name: 'Peekaboo', icon: lc('eye'), color: '#FF6B6B', desc: 'Screen capture & control', docs: '/agents/skills/peekaboo' },
+  { name: 'GIF Search', icon: lc('search'), color: '#00DCDC', desc: 'Find the perfect GIF', docs: '/agents/skills' },
+  { name: 'Peekaboo', icon: lc('eye'), color: '#FF6B6B', desc: 'Screen capture & control', docs: '/agents/skills' },
   { name: 'Camera', icon: lc('camera'), color: '#607D8B', desc: 'Photo/video capture', docs: '/agents/skills' },
 ];
 
 const socialComms: IntegrationItem[] = [
-  { name: 'Twitter/X', icon: si(siX), color: '#FFFFFF', desc: 'Tweet, reply, search', docs: '/agents/skills/bird' },
-  { name: 'Email', icon: lc('mail'), color: '#D44638', desc: 'Send & read emails', docs: '/agents/skills/himalaya' },
+  { name: 'Twitter/X', icon: si(siX), color: '#FFFFFF', desc: 'Tweet, reply, search', docs: '/agents/skills' },
+  { name: 'Email', icon: lc('mail'), color: '#D44638', desc: 'Send & read emails', docs: '/agents/skills' },
 ];
 
 const companionApps: IntegrationItem[] = [

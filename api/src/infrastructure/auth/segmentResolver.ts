@@ -15,14 +15,25 @@ import { segments } from '../database/schema';
  * the isolate to avoid a DB round-trip on every request. The cache is:
  *  - BOUNDED (FIFO eviction past MAX_CACHE_ENTRIES) so a long-lived isolate seeing
  *    many federated (account, company) pairs can't grow it without limit;
- *  - INVALIDATED on segment mutate/delete (see invalidateSegment / invalidateTenant)
- *    so a suspended/archived/erased segment stops resolving inside a warm isolate.
+ *  - INVALIDATED on segment mutate/delete (see invalidateSegment) so a
+ *    suspended/archived/erased segment stops resolving inside the ORIGINATING
+ *    isolate at once;
+ *  - TTL-BACKSTOPPED (CACHE_TTL_MS): invalidateSegment only reaches the isolate
+ *    it runs on, so a warm SIBLING isolate would otherwise serve a deleted
+ *    segment's id forever. The per-entry TTL bounds that cross-isolate staleness
+ *    to a few minutes while keeping the hot auth path fully in-isolate (no KV
+ *    round-trip). A stale entry simply re-resolves against the DB after it lapses.
  */
 
 /** Cap on cached (tenant, account, company) → segmentId entries per isolate. */
 const MAX_CACHE_ENTRIES = 10_000;
 
-const cache = new Map<string, string>();
+/** Max age of a cached mapping — the cross-isolate invalidation backstop. */
+const CACHE_TTL_MS = 300_000; // 5 minutes
+
+type CacheEntry = { segmentId: string; expiresAt: number };
+
+const cache = new Map<string, CacheEntry>();
 
 function keyFor(tenantId: number, accountId?: string, companyId?: string): string {
   return `${tenantId}|${accountId ?? ''}|${companyId ?? ''}`;
@@ -34,25 +45,18 @@ function cacheSet(key: string, segmentId: string): void {
     const oldest = cache.keys().next().value;
     if (oldest !== undefined) cache.delete(oldest);
   }
-  cache.set(key, segmentId);
+  cache.set(key, { segmentId, expiresAt: Date.now() + CACHE_TTL_MS });
 }
 
 /**
  * Drop every cached mapping that resolves to `segmentId`. Call after any change
  * that alters or removes a segment (status flip, plan change, deletion) so the
- * isolate stops serving a stale id without waiting for a recycle.
+ * originating isolate stops serving a stale id without waiting for a recycle.
+ * Sibling isolates are covered by {@link CACHE_TTL_MS}.
  */
 export function invalidateSegment(segmentId: string): void {
   for (const [key, value] of cache) {
-    if (value === segmentId) cache.delete(key);
-  }
-}
-
-/** Drop every cached mapping for a tenant (e.g. tenant-wide erasure). */
-export function invalidateTenant(tenantId: number): void {
-  const prefix = `${tenantId}|`;
-  for (const key of cache.keys()) {
-    if (key.startsWith(prefix)) cache.delete(key);
+    if (value.segmentId === segmentId) cache.delete(key);
   }
 }
 
@@ -69,7 +73,8 @@ export async function resolveSegment(
   const { accountId, companyId } = claims;
   const cacheKey = keyFor(tenantId, accountId, companyId);
   const cached = cache.get(cacheKey);
-  if (cached) return cached;
+  if (cached && cached.expiresAt > Date.now()) return cached.segmentId;
+  if (cached) cache.delete(cacheKey);
 
   const id = accountId && companyId
     ? await resolveFederated(db, tenantId, accountId, companyId)

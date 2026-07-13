@@ -1,14 +1,23 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import type { Project } from '@/lib/types';
+import type { ProjectDiagnosticSummary } from '@/lib/tools';
+import { ProjectOriginBadge } from './ProjectOriginBadge';
+import { ProjectHealthBadge } from './ProjectHealth';
 import type { ProjectPanelTab } from './ProjectDetailsPanel';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
-import { ArchitectureAnalysisButton } from './ArchitectureAnalysisButton';
+import { RunDiagnosticsButton } from './RunDiagnosticsButton';
+import { ProjectDiagnosticsStrip } from './ProjectDiagnosticsStrip';
+import { tableWrapStyle, tableStyle } from './dataTableStyles';
 
 export interface ProjectTableProps {
   projects: Project[];
+  /** Per-project latest diagnostic scores (SOC 2, Quality, …), keyed by project
+   *  id, from the workspace rollup. Rendered as a compact strip; empty hides it. */
+  diagnosticsByProject?: Map<number, ProjectDiagnosticSummary[]>;
   /** Open the project Information panel. The Details button opens the default tab;
    *  the Architecture button opens 'prds' / 'integrations'. A row that can open
    *  details gets the Architecture button — same rule as {@link ProjectCard}. */
@@ -46,30 +55,55 @@ const iconButtonStyle: React.CSSProperties = {
  */
 export function ProjectTable({
   projects,
+  diagnosticsByProject,
   onDetailsClick,
   onOpenIde,
   onAssignedAgentClick,
   onDelete,
 }: ProjectTableProps) {
+  const t = useTranslations('projectTable');
   const router = useRouter();
   const [confirmProject, setConfirmProject] = useState<Project | null>(null);
   const openIde = onOpenIde ?? ((p: Project) => { window.location.href = `/ide/${p.publicId ?? p.id}`; });
 
   return (
-    <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+    <div style={tableWrapStyle}>
+      <table style={tableStyle}>
         <thead>
           <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
-            <th style={headStyle}>Name</th>
-            <th style={headStyle}>Description</th>
-            <th style={headStyle}>Agent</th>
-            <th style={headStyle}>Actions</th>
+            <th style={headStyle}>{t('name')}</th>
+            <th style={headStyle}>{t('health')}</th>
+            <th style={headStyle}>{t('diagnostics')}</th>
+            <th style={headStyle}>{t('description')}</th>
+            <th style={headStyle}>{t('agent')}</th>
+            <th style={headStyle}>{t('actions')}</th>
           </tr>
         </thead>
         <tbody>
           {projects.map((project) => (
             <tr key={project.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-              <td style={{ ...cellStyle, fontWeight: 500, color: 'var(--text-primary)' }}>{project.name}</td>
+              <td style={{ ...cellStyle, fontWeight: 500, color: 'var(--text-primary)' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  {project.name}
+                  <ProjectOriginBadge origin={project.origin} />
+                </span>
+              </td>
+              <td style={cellStyle}>
+                <ProjectHealthBadge project={project} />
+              </td>
+              <td style={cellStyle}>
+                {(() => {
+                  const diags = diagnosticsByProject?.get(project.id) ?? [];
+                  return diags.length > 0 ? (
+                    <ProjectDiagnosticsStrip
+                      diagnostics={diags}
+                      onOpen={onDetailsClick ? () => onDetailsClick(project, 'diagnostics') : undefined}
+                    />
+                  ) : (
+                    <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
+                  );
+                })()}
+              </td>
               <td style={{ ...cellStyle, color: 'var(--text-secondary)', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {project.description ?? '—'}
               </td>
@@ -101,7 +135,8 @@ export function ProjectTable({
                     <button
                       type="button"
                       onClick={() => onDetailsClick(project)}
-                      aria-label="Details"
+                      aria-label={t('details')}
+                      title={t('details')}
                       style={iconButtonStyle}
                     >
                       <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
@@ -114,8 +149,8 @@ export function ProjectTable({
                   <button
                     type="button"
                     onClick={() => router.push(`/projects?tab=tasks&project=${project.id}`)}
-                    aria-label="Task board"
-                    title="Task board"
+                    aria-label={t('taskBoard')}
+                    title={t('taskBoard')}
                     style={iconButtonStyle}
                   >
                     <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
@@ -126,9 +161,9 @@ export function ProjectTable({
                   </button>
                   <button
                     type="button"
-                    onClick={() => router.push(`/workflows?projectId=${project.id}`)}
-                    aria-label="View workflows"
-                    title={`Workflows${project.workflowCount != null ? ` (${project.workflowCount})` : ''}`}
+                    onClick={() => router.push(`/workflows?project=${project.id}`)}
+                    aria-label={t('viewWorkflows')}
+                    title={project.workflowCount != null ? t('workflowsWithCount', { count: project.workflowCount }) : t('workflows')}
                     style={iconButtonStyle}
                   >
                     <span style={{ fontSize: 16 }} aria-hidden>🔀</span>
@@ -136,16 +171,16 @@ export function ProjectTable({
                   <button
                     type="button"
                     onClick={() => openIde(project)}
-                    aria-label="Open in IDE"
+                    aria-label={t('openIde')}
+                    title={t('openIde')}
                     style={iconButtonStyle}
                   >
                     <span style={{ fontSize: 18 }} aria-hidden>💻</span>
                   </button>
                   {onDetailsClick && (
-                    <ArchitectureAnalysisButton
+                    <RunDiagnosticsButton
                       project={project}
-                      onView={(p) => onDetailsClick(p, 'prds')}
-                      onConfigureRepo={(p) => onDetailsClick(p, 'integrations')}
+                      onOpen={(p) => onDetailsClick(p, 'diagnostics')}
                     />
                   )}
                   {onDelete && (
@@ -163,7 +198,7 @@ export function ProjectTable({
                         cursor: 'pointer',
                       }}
                     >
-                      Delete
+                      {t('delete')}
                     </button>
                   )}
                 </div>

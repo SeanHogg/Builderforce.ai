@@ -1,5 +1,5 @@
-import type { AgentToolResult } from "@mariozechner/pi-agent-core";
-import type { ImageContent } from "@mariozechner/pi-ai";
+import type { AgentToolResult } from "../builderforce/model/agent-types.js";
+import type { ImageContent } from "../builderforce/model/types.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import {
   buildImageResizeSideGrid,

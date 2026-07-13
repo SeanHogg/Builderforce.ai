@@ -1,25 +1,33 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import JsonLd from '@/components/JsonLd';
 import { homepageSchema } from '@/lib/structured-data';
-import { HOMEPAGE_FAQ, FOOTER_LINKS, COMPARE } from '@/lib/content';
+import { FEATURES, EVERMIND } from '@/lib/content';
 import { savePendingPrompt } from '@/lib/brain';
+import { pendingPromptsApi } from '@/lib/builderforceApi';
 import { BLOG_POSTS } from '@/lib/blogData';
 import { ArticleCardGrid } from '@/components/blog/ArticleCard';
 import QuickStart from '@/components/QuickStart';
+import BrainBackdrop from '@/components/BrainBackdrop';
 
-const HERO_PROMPT_EXAMPLES = [
-  'Audit my repo for security issues',
-  'Connect Jira and summarize this sprint',
-  'Build & train a customer-support agent',
-];
+// Visible copy is sourced from the `home`, `features`, `compare` and `evermind`
+// catalog namespaces (localized in all 5 locales). `content.ts` (EVERMIND,
+// FEATURES, HOMEPAGE_FAQ, COMPARE) stays canonical English for the crawler-facing
+// JSON-LD (homepageSchema) — only non-translatable ICONS are read from it here,
+// paired with the translated arrays by index, so the arrays stay length/order-aligned.
+type TitleDesc = { title: string; desc: string };
+type RoleDesc = { role: string; desc: string };
+type StatLabel = { label: string };
+type FaqItem = { question: string; answer: string };
+type PricingTeaser = { name: string; price: string; perks: string[] };
 
 export default function LandingPage() {
   const router = useRouter();
+  const t = useTranslations();
   const [prompt, setPrompt] = useState('');
   const [nlEmail, setNlEmail] = useState('');
   const [nlStatus, setNlStatus] = useState<'idle'|'sending'|'ok'|'error'>('idle');
@@ -28,10 +36,13 @@ export default function LandingPage() {
     e.preventDefault();
     const text = prompt.trim();
     if (!text) return;
-    // Stash the prompt, send the visitor through auth; the Brain replays it
-    // once they're inside the app (see lib/brain/pendingPrompt + FloatingBrain).
+    // Answer the prompt immediately as a GUEST — no login wall. /brainstorm renders
+    // the guest chat for logged-out visitors and auto-sends ?prompt=. We still stash
+    // it (durable, cross-device) so if they later sign up mid-thought the authed
+    // Brain can replay it. See GuestBrainstormPage + lib/brain/pendingPrompt.
     savePendingPrompt(text);
-    router.push('/register');
+    pendingPromptsApi.save(text, '/');
+    router.push(`/brainstorm?prompt=${encodeURIComponent(text)}`);
   }
 
   async function handleNewsletterSubmit(e: React.FormEvent) {
@@ -65,54 +76,70 @@ export default function LandingPage() {
 
         /* ════════════════════ HERO ════════════════════ */
         .lp-hero {
+          position: relative;
+          overflow: hidden;
           display: flex;
           flex-direction: column;
           align-items: center;
+          justify-content: center;
           text-align: center;
-          padding: 40px 24px 64px;
+          min-height: 84vh;
+          padding: 56px 24px 170px;
           gap: 0;
+          isolation: isolate; /* own stacking context so the wave sits behind content only */
+        }
+        /* Hero content rides above the Evermind brain backdrop. */
+        .lp-hero-content {
+          position: relative;
+          z-index: 1;
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+        }
+        /* Hero headline — the single dominant line (bolt.new-clean). */
+        .lp-hero-title {
+          font-family: var(--font-display);
+          font-size: clamp(2.4rem, 6vw, 4rem);
+          font-weight: 700;
+          line-height: 1.04;
+          letter-spacing: -0.02em;
+          color: rgba(236, 242, 255, 0.98);
+          margin: 0 0 14px;
+          max-width: 16ch;
+          animation: fadeInUp 0.8s ease-out both;
+        }
+        .lp-hero-title em {
+          font-style: italic;
+          background: linear-gradient(135deg, var(--coral-bright), var(--cyan-bright));
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }
+        .lp-hero-sub {
+          font-size: clamp(1rem, 2.2vw, 1.2rem);
+          color: rgba(214, 224, 244, 0.78);
+          line-height: 1.55;
+          max-width: 540px;
+          margin: 0 0 34px;
+          animation: fadeInUp 0.9s ease-out 0.15s both;
         }
 
-        /* Prompt + mascot row. The prompt is the left column; the agentHost mascot
-           sits in a right column on tablet/desktop and is hidden on mobile. */
+        /* Prompt row — the prompt sits centred (the mascot now lives below it,
+           centred on the page, rather than in a right-hand column). */
         .lp-prompt-row {
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          gap: 32px;
           width: 100%;
         }
         .lp-prompt-col {
           display: flex;
           flex-direction: column;
           align-items: center;
-          flex: 1 1 auto;
           width: 100%;
           max-width: 640px;
-        }
-
-        /* AgentHost mascot — hidden on mobile, shown as the right column ≥820px */
-        .lp-hero-mascot {
-          display: none;
-          width: clamp(180px, 22vw, 260px);
-          height: auto;
-          flex: 0 0 auto;
-          animation: float 4s ease-in-out infinite;
-          filter: drop-shadow(0 0 28px var(--logo-glow));
-          transition: filter 0.3s ease;
-        }
-        .lp-hero-mascot:hover {
-          animation-play-state: paused;
-          filter: drop-shadow(0 0 44px var(--logo-glow-hover));
-        }
-        @media (min-width: 820px) {
-          .lp-prompt-row { flex-direction: row; align-items: center; gap: 48px; }
-          .lp-hero-mascot { display: block; }
-        }
-        @keyframes float {
-          0%, 100% { transform: translateY(0); }
-          50%       { transform: translateY(-10px); }
         }
 
         /* Badge */
@@ -146,55 +173,9 @@ export default function LandingPage() {
           50%       { transform: scale(0.75); opacity: 0.55; }
         }
 
-        /* Title */
-        .lp-title {
-          font-family: var(--font-display);
-          font-size: clamp(2.6rem, 7.5vw, 5rem);
-          font-weight: 700;
-          letter-spacing: -0.035em;
-          line-height: 1.05;
-          margin-bottom: 20px;
-          background: linear-gradient(
-            135deg,
-            var(--hero-title-start) 0%,
-            var(--coral-bright)     46%,
-            var(--hero-title-end)   100%
-          );
-          background-size: 200% 200%;
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-          animation: gradientShift 7s ease infinite, fadeInUp 0.9s ease-out both;
-        }
-        @keyframes gradientShift {
-          0%, 100% { background-position: 0% 50%; }
-          50%       { background-position: 100% 50%; }
-        }
         @keyframes fadeInUp {
           from { opacity: 0; transform: translateY(22px); }
           to   { opacity: 1; transform: translateY(0); }
-        }
-
-        /* Sub-tagline */
-        .lp-tagline {
-          font-family: var(--font-display);
-          font-size: clamp(0.8rem, 2vw, 0.95rem);
-          font-weight: 600;
-          color: var(--coral-bright);
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          margin-bottom: 20px;
-          animation: fadeInUp 0.9s ease-out 0.15s both;
-        }
-
-        /* Description */
-        .lp-desc {
-          font-size: clamp(0.95rem, 2vw, 1.1rem);
-          color: var(--text-secondary);
-          max-width: 620px;
-          line-height: 1.75;
-          margin-bottom: 44px;
-          animation: fadeInUp 0.9s ease-out 0.3s both;
         }
 
         /* CTA buttons */
@@ -378,6 +359,51 @@ export default function LandingPage() {
           line-height: 1.3;
         }
 
+        /* ════════ EVERMIND ════════ */
+        .lp-evermind-eyebrow {
+          display: inline-block;
+          font-family: var(--font-display);
+          font-size: 0.72rem;
+          font-weight: 600;
+          letter-spacing: 0.18em;
+          text-transform: uppercase;
+          color: var(--cyan-bright);
+          margin-bottom: 10px;
+        }
+        .lp-evermind-edges {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 14px;
+          margin-top: 22px;
+        }
+        @media (max-width: 640px) {
+          .lp-evermind-edges { grid-template-columns: 1fr; }
+        }
+        .lp-evermind-edge {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          padding: 16px 18px;
+          border-radius: 14px;
+          border: 1px solid var(--border-subtle);
+          background: var(--surface-card);
+          backdrop-filter: blur(12px);
+        }
+        .lp-evermind-edge-label {
+          font-family: var(--font-display);
+          font-weight: 700;
+          font-size: 0.9rem;
+          background: linear-gradient(135deg, var(--coral-bright), var(--cyan-bright));
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }
+        .lp-evermind-edge-desc {
+          font-size: 0.82rem;
+          color: var(--text-secondary);
+          line-height: 1.55;
+        }
+
         /* ════════ FEATURES ════════ */
         .lp-features {
           max-width: 1200px;
@@ -462,45 +488,6 @@ export default function LandingPage() {
           line-height: 1.65;
         }
 
-        /* ════════ FOOTER ════════ */
-        .lp-footer {
-          border-top: 1px solid var(--border-subtle);
-          padding: 36px 24px;
-          text-align: center;
-        }
-        .lp-footer-inner {
-          max-width: 1200px;
-          margin: 0 auto;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 16px;
-        }
-        .lp-footer-links {
-          display: flex;
-          flex-wrap: wrap;
-          justify-content: center;
-          gap: 2px;
-          list-style: none;
-        }
-        .lp-footer-links a {
-          font-size: 0.82rem;
-          color: var(--text-muted);
-          text-decoration: none;
-          padding: 4px 10px;
-          border-radius: 6px;
-          transition: color 0.2s;
-        }
-        .lp-footer-links a:hover { color: var(--text-secondary); }
-        .lp-footer-copy {
-          font-size: 0.78rem;
-          color: var(--text-muted);
-        }
-        .lp-footer-copy a {
-          color: var(--coral-bright);
-          text-decoration: none;
-        }
-
         @media (max-width: 640px) {
           .lp-cta-box { padding: 40px 24px; }
           .lp-hero { padding: 28px 20px 48px; }
@@ -513,24 +500,23 @@ export default function LandingPage() {
         <main>
         {/* ── Hero ── */}
         <section className="lp-hero">
+          {/* Evermind — the platform's brain — behind the hero: information
+              packets travel the synapses, hubs stand for the key aspects of the
+              platform. Pure backdrop; content sits above via .lp-hero-content. */}
+          <BrainBackdrop className="lp-hero-wave" />
+          <div className="lp-hero-content">
           <div className="lp-badge">
             <span className="lp-badge-dot" />
-            AI CTO · CIO · Security Officer
+            {t('home.heroBadge')}
           </div>
 
-          <h1 className="lp-title">Builderforce.ai</h1>
+          {/* One dominant headline + one subline, then the prompt — the hero's
+              single primary action (bolt.new-clean; no competing paragraphs). */}
+          <h1 className="lp-hero-title">
+            {t.rich('home.heroTitle', { em: (c) => <em>{c}</em> })}
+          </h1>
+          <p className="lp-hero-sub">{t('home.heroSub')}</p>
 
-          <p className="lp-tagline">Your AI CTO, CIO &amp; Security Officer</p>
-
-          <p className="lp-desc">
-            One AI brain that runs your technology like an executive team —
-            it builds, trains and deploys your AI agent workforce, connects to
-            your systems and data, and governs every action with approvals and
-            an audit trail. Tell it what you need; it gets to work.
-          </p>
-
-          {/* Prompt input (primary action) + agentHost mascot as a right-hand
-              column on tablet/desktop; the mascot is hidden on mobile. */}
           <div className="lp-prompt-row">
             <div className="lp-prompt-col">
               <form onSubmit={handlePromptSubmit} className="lp-prompt">
@@ -541,40 +527,94 @@ export default function LandingPage() {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handlePromptSubmit(e); }
                   }}
-                  placeholder="Describe what you want your AI workforce to do…"
+                  placeholder={t('home.heroPromptPlaceholder')}
                   rows={3}
-                  aria-label="Describe what you want your AI workforce to do"
+                  aria-label={t('home.heroPromptAria')}
                 />
                 <button type="submit" className="lp-prompt-send" disabled={!prompt.trim()}>
-                  Get started →
+                  {t('home.heroGetStarted')} →
                 </button>
               </form>
               <div className="lp-prompt-examples">
-                {HERO_PROMPT_EXAMPLES.map((ex) => (
+                {(t.raw('home.heroExamples') as string[]).map((ex) => (
                   <button key={ex} type="button" className="lp-chip" onClick={() => setPrompt(ex)}>
                     {ex}
                   </button>
                 ))}
               </div>
             </div>
-
-            <Image
-              src="/agentHost.png"
-              alt="Builderforce AI"
-              width={240}
-              height={240}
-              priority
-              className="lp-hero-mascot"
-            />
           </div>
+          </div>
+        </section>
 
-          <div className="lp-actions">
-            <Link href="/register" className="lp-btn-secondary">
-              🚀 Start Building Free
-            </Link>
-            <Link href="/marketplace" className="lp-btn-secondary">
-              🤖 Browse Agents
-            </Link>
+        {/* ── Evermind: the brain behind the platform (what the hero animation depicts) ── */}
+        <section className="lp-features" id="evermind" style={{ paddingTop: 0, scrollMarginTop: '90px' }}>
+          <div className="lp-evermind">
+            <span className="lp-evermind-eyebrow">{t('evermind.eyebrow')}</span>
+            <h2 className="section-title" style={{ marginBottom: 8 }}>
+              <span className="agentHost-accent">⟩</span> Evermind — {t('evermind.tagline')}
+            </h2>
+            <p style={{ maxWidth: '780px', margin: '0 0 28px', color: 'var(--text-secondary)' }}>
+              {t('evermind.blurb')}
+            </p>
+            <div className="lp-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))' }}>
+              {(t.raw('evermind.architecture.pillars') as TitleDesc[]).map((p, i) => (
+                <div key={p.title} className="lp-card">
+                  <span className="lp-card-icon">{EVERMIND.pillars[i]?.icon}</span>
+                  <h3 className="lp-card-title">{p.title}</h3>
+                  <p className="lp-card-desc">{p.desc}</p>
+                </div>
+              ))}
+            </div>
+            <div className="lp-evermind-edges">
+              {(t.raw('evermind.edges.items') as { label: string; desc: string }[]).map((e) => (
+                <div key={e.label} className="lp-evermind-edge">
+                  <span className="lp-evermind-edge-label">{e.label}</span>
+                  <span className="lp-evermind-edge-desc">{e.desc}</span>
+                </div>
+              ))}
+            </div>
+            <div className="lp-actions" style={{ marginTop: 24 }}>
+              <Link href="/evermind" className="lp-btn-primary">🧠 {t('evermind.exploreCta')} →</Link>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Pillars: the human-in-the-loop, fully agentic framing ── */}
+        <section className="lp-features" style={{ paddingTop: 0 }}>
+          <h2 className="section-title">
+            <span className="agentHost-accent">⟩</span> {t('home.pillarsHeading')}
+          </h2>
+          <p style={{ maxWidth: 'none', margin: '0 0 32px', color: 'var(--text-secondary)' }}>
+            {t('home.pillarsLead')}
+          </p>
+          <div className="lp-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))' }}>
+            {(t.raw('home.pillars') as TitleDesc[]).map((p, i) => (
+              <div key={p.title} className="lp-card">
+                <span className="lp-card-icon">{['🔁', '▦', '🧩'][i]}</span>
+                <h3 className="lp-card-title">{p.title}</h3>
+                <p className="lp-card-desc">{p.desc}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ── Enterprise framing: one instrumented system → every role's operating picture ── */}
+        <section className="lp-features" style={{ paddingTop: 0 }}>
+          <h2 className="section-title">
+            <span className="agentHost-accent">⟩</span> {t('home.rolesHeading')}
+          </h2>
+          <p style={{ maxWidth: 'none', margin: '0 0 32px', color: 'var(--text-secondary)' }}>
+            {t('home.rolesLead')}
+          </p>
+          <div className="lp-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))' }}>
+            {(t.raw('home.roles') as RoleDesc[]).map((p, i) => (
+              <div key={p.role} className="lp-card">
+                <span className="lp-card-icon">{['🧭', '⚙️', '💰', '🗂️', '🛡️', '👥'][i]}</span>
+                <h3 className="lp-card-title">{p.role}</h3>
+                <p className="lp-card-desc">{p.desc}</p>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -583,15 +623,10 @@ export default function LandingPage() {
 
         {/* ── Stats ── */}
         <div className="lp-stats">
-          {[
-            { n: '2B+', l: 'Parameters\nin-browser' },
-            { n: '<30s', l: 'Dataset\ngeneration' },
-            { n: 'WebGPU', l: 'Hardware\naccelerated' },
-            { n: '100%', l: 'Private — runs\nin your browser' },
-          ].map(s => (
-            <div key={s.l} className="lp-stat">
-              <div className="lp-stat-number">{s.n}</div>
-              <div className="lp-stat-label" style={{ whiteSpace: 'pre-line' }}>{s.l}</div>
+          {(t.raw('home.stats') as StatLabel[]).map((s, i) => (
+            <div key={i} className="lp-stat">
+              <div className="lp-stat-number">{['2B+', '<30s', 'WebGPU', '100%'][i]}</div>
+              <div className="lp-stat-label" style={{ whiteSpace: 'pre-line' }}>{s.label}</div>
             </div>
           ))}
         </div>
@@ -600,37 +635,32 @@ export default function LandingPage() {
         <section className="lp-section" style={{ background: 'var(--surface-card-strong)' }}>
           <div className="lp-features">
             <h2 className="section-title">
-              <span className="agentHost-accent">⟩</span> Builderforce vs. Conventional Workflows
+              <span className="agentHost-accent">⟩</span> {t('home.comparisonHeading')}
             </h2>
             <p style={{maxWidth:'none',margin:'0 0 32px',color:'var(--text-secondary)'}}>
-              Purpose‑built for AI agents from the ground up — not another cloud notebook or plugin.
+              {t('home.comparisonLead')}
             </p>
             <div style={{overflowX:'auto'}}>
               <table style={{width:'100%',borderCollapse:'collapse',fontSize:'13px',minWidth:'560px'}}>
                 <thead>
                   <tr>
-                    <th style={{textAlign:'left',padding:'10px 14px',color:'var(--muted)',fontWeight:600,borderBottom:'2px solid var(--border)'}}>Feature</th>
-                    <th style={{textAlign:'center',padding:'10px 14px',color:'var(--accent)',fontWeight:700,borderBottom:'2px solid var(--accent)'}}>Builderforce</th>
-                    <th style={{textAlign:'center',padding:'10px 14px',color:'var(--muted)',fontWeight:600,borderBottom:'2px solid var(--border)'}}>Generic notebooks</th>
-                    <th style={{textAlign:'center',padding:'10px 14px',color:'var(--muted)',fontWeight:600,borderBottom:'2px solid var(--border)'}}>Cloud training</th>
+                    <th style={{textAlign:'left',padding:'10px 14px',color:'var(--muted)',fontWeight:600,borderBottom:'2px solid var(--border)'}}>{t('home.comparisonColFeature')}</th>
+                    <th style={{textAlign:'center',padding:'10px 14px',color:'var(--accent)',fontWeight:700,borderBottom:'2px solid var(--accent)'}}>{t('home.comparisonColBuilderforce')}</th>
+                    <th style={{textAlign:'center',padding:'10px 14px',color:'var(--muted)',fontWeight:600,borderBottom:'2px solid var(--border)'}}>{t('home.comparisonColNotebooks')}</th>
+                    <th style={{textAlign:'center',padding:'10px 14px',color:'var(--muted)',fontWeight:600,borderBottom:'2px solid var(--border)'}}>{t('home.comparisonColCloud')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {[
-                    ['In‑browser LoRA training', '✅','❌','⚠️'],
-                    ['Dataset generation wizard', '✅','⚠️','❌'],
-                    ['AI evaluation engine', '✅','❌','❌'],
-                    ['Agent registry & skills', '✅','❌','❌'],
-                    ['Global Workforce marketplace', '✅','❌','❌'],
-                    ['Zero GPU bills', '✅','❌','⚠️'],
-                  ].map((row,i)=>(
+                  {(t.raw('home.comparisonRows') as string[]).map((feature,i)=>{
+                    const marks = [['✅','❌','⚠️'],['✅','⚠️','❌'],['✅','❌','❌'],['✅','❌','❌'],['✅','❌','❌'],['✅','❌','⚠️']][i];
+                    return (
                     <tr key={i} style={{background:i%2===0?'transparent':'var(--surface-2)'}}>
-                      <td style={{padding:'9px 14px',borderBottom:'1px solid var(--border)'}}>{row[0]}</td>
-                      <td style={{textAlign:'center',padding:'9px 14px',borderBottom:'1px solid var(--border)',fontWeight:600,color:'var(--accent)'}}>{row[1]}</td>
-                      <td style={{textAlign:'center',padding:'9px 14px',borderBottom:'1px solid var(--border)',color:'var(--muted)'}}>{row[2]}</td>
-                      <td style={{textAlign:'center',padding:'9px 14px',borderBottom:'1px solid var(--border)',color:'var(--muted)'}}>{row[3]}</td>
+                      <td style={{padding:'9px 14px',borderBottom:'1px solid var(--border)'}}>{feature}</td>
+                      <td style={{textAlign:'center',padding:'9px 14px',borderBottom:'1px solid var(--border)',fontWeight:600,color:'var(--accent)'}}>{marks[0]}</td>
+                      <td style={{textAlign:'center',padding:'9px 14px',borderBottom:'1px solid var(--border)',color:'var(--muted)'}}>{marks[1]}</td>
+                      <td style={{textAlign:'center',padding:'9px 14px',borderBottom:'1px solid var(--border)',color:'var(--muted)'}}>{marks[2]}</td>
                     </tr>
-                  ))}
+                  );})}
                 </tbody>
               </table>
             </div>
@@ -641,13 +671,13 @@ export default function LandingPage() {
         <section className="lp-section">
           <div className="lp-features" style={{textAlign:'center'}}>
             <h2 className="section-title">
-              <span className="agentHost-accent">⟩</span> {COMPARE.teaser.title}
+              <span className="agentHost-accent">⟩</span> {t('compare.teaser.title')}
             </h2>
             <p style={{maxWidth:'none',margin:'0 auto 28px',color:'var(--text-secondary)'}}>
-              {COMPARE.teaser.blurb}
+              {t('compare.teaser.blurb')}
             </p>
             <div className="lp-grid" style={{gap:'14px',gridTemplateColumns:'repeat(auto-fit,minmax(210px,1fr))'}}>
-              {COMPARE.teaser.highlightFeatures.map((f)=>(
+              {(t.raw('compare.teaser.highlightFeatures') as string[]).map((f)=>(
                 <div key={f} className="lp-card" style={{display:'flex',gap:'10px',alignItems:'flex-start',textAlign:'left'}}>
                   <span aria-hidden style={{color:'var(--accent)',fontWeight:700,lineHeight:1.4}}>✅</span>
                   <span style={{fontSize:'0.88rem',color:'var(--text-primary)',lineHeight:1.45}}>{f}</span>
@@ -655,7 +685,7 @@ export default function LandingPage() {
               ))}
             </div>
             <div style={{marginTop:'28px'}}>
-              <Link href="/compare" className="lp-btn-primary">{COMPARE.teaser.ctaLabel} →</Link>
+              <Link href="/compare" className="lp-btn-primary">{t('compare.teaser.ctaLabel')} →</Link>
             </div>
           </div>
         </section>
@@ -664,16 +694,12 @@ export default function LandingPage() {
         <section className="lp-section">
           <div className="lp-features">
             <h2 className="section-title">
-              <span className="agentHost-accent">⟩</span> Up and running in three steps
+              <span className="agentHost-accent">⟩</span> {t('home.stepsHeading')}
             </h2>
             <div className="lp-grid" style={{gap:'24px'}}>
-              {[
-                { num:'01', title:'Create an account', desc:'Sign up with your email and start a free workspace. 14‑day Pro trial, no credit card required.' },
-                { num:'02', title:'Generate a dataset', desc:'Use the wizard to author an instruction‑tuning dataset from a single capability prompt.' },
-                { num:'03', title:'Train & publish', desc:'Run LoRA training in your browser, evaluate results, and publish your agent to the Workforce Registry.' },
-              ].map(s=>(
-                <div key={s.num} className="lp-card" style={{textAlign:'center'}}>
-                  <div style={{fontSize:'2rem',fontWeight:700,color:'var(--accent)',marginBottom:'8px'}}>{s.num}</div>
+              {(t.raw('home.steps') as TitleDesc[]).map((s,i)=>(
+                <div key={i} className="lp-card" style={{textAlign:'center'}}>
+                  <div style={{fontSize:'2rem',fontWeight:700,color:'var(--accent)',marginBottom:'8px'}}>{['01','02','03'][i]}</div>
                   <h3 className="lp-card-title">{s.title}</h3>
                   <p className="lp-card-desc">{s.desc}</p>
                 </div>
@@ -685,26 +711,14 @@ export default function LandingPage() {
         {/* ── Features ── */}
         <section className="lp-features" id="features">
           <h2 className="section-title">
-            <span className="agentHost-accent">⟩</span> Your AI executive team
+            <span className="agentHost-accent">⟩</span> {t('home.featuresHeading')}
           </h2>
           <div className="lp-grid">
-            {[
-              { icon: '🧠', title: 'AI CTO', desc: 'Builds, trains and deploys your AI agent workforce — in-browser WebGPU LoRA fine-tuning, evaluation, and one-click publish to the Workforce Registry.' },
-              { icon: '🔗', title: 'AI CIO', desc: 'Connects to your systems — GitHub, Jira, Confluence and more via encrypted credentials — and orchestrates work through the Brain’s tool registry.' },
-              { icon: '🛡️', title: 'AI Security Officer', desc: 'Governs every action: human-in-the-loop approval gates, a full audit trail, per-tenant isolation, and AES-256-GCM encrypted secrets.' },
-              { icon: '🗂️', title: 'AI Dataset Generation', desc: 'Generate instruction-tuning datasets from a single capability prompt using any OpenRouter model. Export as JSONL, stored in R2.' },
-              { icon: '🧠', title: 'In-Browser LoRA Training', desc: 'Fine-tune models up to 2B parameters directly in Chrome with WebGPU. No cloud GPU bills, zero round-trips, total privacy.' },
-              { icon: '🔬', title: 'AI Evaluation Engine', desc: 'Score your model outputs with an independent AI judge. Get structured quality metrics: correctness, reasoning, hallucination rate.' },
-              { icon: '🤖', title: 'Agent Registry', desc: 'Publish your trained agent to the public Workforce Registry with a profile, skills, and eval score. Others can hire it instantly.' },
-              { icon: '💾', title: 'R2 Artifact Storage', desc: 'LoRA adapter weights are serialised from WebGPU buffers and automatically persisted to Cloudflare R2 with signed URLs.' },
-              { icon: '⚡', title: 'Full IDE Workspace', desc: 'Monaco editor, terminal, AI chat, file explorer — everything you need in one collaborative project workspace.' },
-              { icon: '🔐', title: 'Secure Multi-Tenant', desc: 'JWT auth with tenant isolation. Projects, datasets, models, and agents are private and scoped per tenant by default.' },
-              { icon: '🌐', title: 'Cloudflare Edge', desc: 'Zero cold-start Worker API with global distribution. COOP/COEP headers enable SharedArrayBuffer for Transformers.js.' },
-            ].map(f => (
+            {(t.raw('features') as { title: string; longDesc: string }[]).map((f, i) => (
               <div key={f.title} className="lp-card">
-                <span className="lp-card-icon">{f.icon}</span>
+                <span className="lp-card-icon">{FEATURES[i]?.icon}</span>
                 <h3 className="lp-card-title">{f.title}</h3>
-                <p className="lp-card-desc">{f.desc}</p>
+                <p className="lp-card-desc">{f.longDesc}</p>
               </div>
             ))}
           </div>
@@ -714,13 +728,10 @@ export default function LandingPage() {
         <section className="lp-section" id="pricing" style={{background:'var(--surface-2)'}}>
           <div className="lp-features">
             <h2 className="section-title">
-              <span className="agentHost-accent">⟩</span> Pricing
+              <span className="agentHost-accent">⟩</span> {t('home.pricingHeading')}
             </h2>
             <div className="lp-grid" style={{gap:'18px',marginTop:'24px'}}>
-              {[
-                { name:'Free', price:'$0', perks:['WebGPU training','Workforce browse','Community support'] },
-                { name:'Pro', price:'$29/seat', perks:['Unlimited agents','Private models','Priority support'] },
-              ].map(p=>(
+              {(t.raw('home.pricingTeaser') as PricingTeaser[]).map(p=>(
                 <div key={p.name} className="lp-card">
                   <h3 className="lp-card-title">{p.name}</h3>
                   <div style={{fontSize:'1.6rem',fontWeight:700,margin:'12px 0'}}>{p.price}</div>
@@ -737,15 +748,14 @@ export default function LandingPage() {
         <section className="lp-section" id="blog">
           <div className="lp-features">
             <h2 className="section-title">
-              <span className="agentHost-accent">⟩</span> Latest from the blog
+              <span className="agentHost-accent">⟩</span> {t('home.blogHeading')}
             </h2>
             <p style={{maxWidth:'none',width:'100%',margin:'0 auto 32px',color:'var(--text-secondary)',textAlign:'center'}}>
-              Deep dives, tutorials, and best practices for building and deploying
-              AI agents — from WebGPU LoRA training to multi-agent orchestration.
+              {t('home.blogLead')}
             </p>
             <ArticleCardGrid posts={BLOG_POSTS} limit={3} />
             <div style={{marginTop:'32px',textAlign:'center'}}>
-              <Link href="/blog" className="lp-btn-secondary">📝 Read all articles →</Link>
+              <Link href="/blog" className="lp-btn-secondary">📝 {t('home.blogReadAll')} →</Link>
             </div>
           </div>
         </section>
@@ -754,9 +764,9 @@ export default function LandingPage() {
         <section className="lp-section">
           <div className="lp-features" style={{maxWidth:'700px',margin:'0 auto'}}>
             <h2 className="section-title">
-              <span className="agentHost-accent">⟩</span> Stay in the loop
+              <span className="agentHost-accent">⟩</span> {t('home.newsletterHeading')}
             </h2>
-            <p style={{color:'var(--text-secondary)',marginBottom:'24px'}}>Get updates on new features, agents, and platform improvements. No spam, unsubscribe anytime.</p>
+            <p style={{color:'var(--text-secondary)',marginBottom:'24px'}}>{t('home.newsletterLead')}</p>
             <form onSubmit={handleNewsletterSubmit} style={{display:'flex',gap:'6px',flexWrap:'wrap',justifyContent:'center'}}>
               <input
                 type="email"
@@ -772,11 +782,11 @@ export default function LandingPage() {
                 disabled={nlStatus==='sending' || nlStatus==='ok'}
                 className="lp-btn-primary"
               >
-                {nlStatus==='sending'? 'Subscribing…' : nlStatus==='ok'? 'Subscribed' : 'Subscribe'}
+                {nlStatus==='sending'? t('home.newsletterSubscribing') : nlStatus==='ok'? t('home.newsletterSubscribed') : t('home.newsletterSubscribe')}
               </button>
             </form>
-            {nlStatus==='ok' && <p style={{color:'var(--accent)',marginTop:'12px'}}>Subscribed ✓</p>}
-            {nlStatus==='error' && <p style={{color:'var(--error)',marginTop:'12px'}}>Unable to subscribe. Try again.</p>}
+            {nlStatus==='ok' && <p style={{color:'var(--accent)',marginTop:'12px'}}>{t('home.newsletterSubscribedConfirm')}</p>}
+            {nlStatus==='error' && <p style={{color:'var(--error)',marginTop:'12px'}}>{t('home.newsletterError')}</p>}
           </div>
         </section>
 
@@ -784,9 +794,9 @@ export default function LandingPage() {
         <section className="lp-section" style={{background:'var(--surface-card-strong)'}}>
           <div className="lp-features" style={{maxWidth:'800px',margin:'0 auto'}}>
             <h2 className="section-title">
-              <span className="agentHost-accent">⟩</span> Frequently asked questions
+              <span className="agentHost-accent">⟩</span> {t('home.faqHeading')}
             </h2>
-            {HOMEPAGE_FAQ.map((faq) => (
+            {(t.raw('home.faq') as FaqItem[]).map((faq) => (
               <details key={faq.question}><summary>{faq.question}</summary>
                 <p>{faq.answer}</p>
               </details>
@@ -797,37 +807,16 @@ export default function LandingPage() {
         {/* ── Bottom CTA ── */}
         <section className="lp-cta-section">
           <div className="lp-cta-box">
-            <h2 className="lp-cta-title">Put your AI CTO to work</h2>
-            <p className="lp-cta-desc">
-              Describe what you need, sign in, and your AI brain gets to work —
-              building agents, connecting your systems, and governing every
-              action. No credit card required.
-            </p>
+            <h2 className="lp-cta-title">{t('home.ctaTitle')}</h2>
+            <p className="lp-cta-desc">{t('home.ctaDesc')}</p>
             <div className="lp-actions">
-              <Link href="/register" className="lp-btn-primary">⚡ Get Started Free</Link>
-              <Link href="/marketplace" className="lp-btn-secondary">👀 See Live Agents</Link>
+              <Link href="/register" className="lp-btn-primary">⚡ {t('marketing.ctaGetStartedFree')}</Link>
+              <Link href="/marketplace" className="lp-btn-secondary">👀 {t('home.ctaSeeLiveAgents')}</Link>
             </div>
           </div>
         </section>
         </main>
-
-        {/* ── Footer ── */}
-        <footer className="lp-footer">
-          <div className="lp-footer-inner">
-            <ul className="lp-footer-links">
-              {FOOTER_LINKS.map((l) => (
-                <li key={l.href}><Link href={l.href}>{l.label}</Link></li>
-              ))}
-            </ul>
-            <p className="lp-footer-copy">
-              Built by{' '}
-              <a href="https://myvideoresu.me/resumes/seanhogg" target="_blank" rel="noopener">
-                Sean Hogg
-              </a>
-              {' '}· Builderforce.ai © 2026
-            </p>
-          </div>
-        </footer>
+        {/* Footer is the canonical <AppFooter variant="full"> rendered by PublicShell. */}
 
       </div>
     </>

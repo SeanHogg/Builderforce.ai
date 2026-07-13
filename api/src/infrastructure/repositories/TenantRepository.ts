@@ -80,6 +80,8 @@ export class TenantRepository implements ITenantRepository {
         billingUpdatedAt: plain.billingUpdatedAt,
         externalCustomerId: plain.externalCustomerId,
         externalSubscriptionId: plain.externalSubscriptionId,
+        seatCount: plain.seatCount,
+        trialEndsAt: plain.trialEndsAt,
       })
       .returning();
     if (!inserted) throw new Error('Insert returned no rows');
@@ -137,6 +139,8 @@ export class TenantRepository implements ITenantRepository {
         billingUpdatedAt: plain.billingUpdatedAt,
         externalCustomerId: plain.externalCustomerId,
         externalSubscriptionId: plain.externalSubscriptionId,
+        seatCount: plain.seatCount,
+        trialEndsAt: plain.trialEndsAt,
         updatedAt: plain.updatedAt,
       })
       .where(eq(tenantsTable.id, plain.id));
@@ -198,6 +202,7 @@ export class TenantRepository implements ITenantRepository {
       externalCustomerId: row.externalCustomerId ?? null,
       externalSubscriptionId: row.externalSubscriptionId ?? null,
       seatCount: row.seatCount ?? null,
+      trialEndsAt: row.trialEndsAt ?? null,
       members,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,

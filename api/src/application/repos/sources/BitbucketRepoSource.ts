@@ -2,8 +2,8 @@
  * BitbucketRepoSource — read a Bitbucket Cloud repo via the REST API 2.0.
  * Auth: Bearer <access-token>, or HTTP Basic (username + app password) when the
  * stored credential carries a username. Bitbucket has no languages API, so
- * language weighting is left to the caller (derived from file extensions).
- * `owner` is the workspace, `repo` is the repo slug.
+ * `getLanguages` derives a {language: bytes} proxy from the file tree's
+ * extensions ([1553]). `owner` is the workspace, `repo` is the repo slug.
  */
 import {
   type FetchLike,
@@ -13,6 +13,7 @@ import {
   type RepoTreeEntry,
   RepoSourceError,
 } from './repoSourceBase';
+import { deriveLanguagesFromTree } from './languageWeighting';
 
 interface BbRepo { mainbranch?: { name?: string } }
 interface BbSrcNode { path?: string; type?: string; size?: number }
@@ -49,7 +50,17 @@ export class BitbucketRepoSource implements RepoSource {
   }
 
   async getLanguages(): Promise<Record<string, number>> {
-    return {}; // Bitbucket exposes no languages API.
+    // Bitbucket has no languages API — derive a {language: bytes} proxy from the
+    // file tree's extensions, for parity with GitHub/GitLab's language signal in
+    // the evidence bundle. Best-effort: a fetch failure yields {} (no signal)
+    // rather than throwing the whole diagnostic. [1553]
+    try {
+      const branch = await this.getDefaultBranch();
+      const { entries } = await this.getTree(branch);
+      return deriveLanguagesFromTree(entries);
+    } catch {
+      return {};
+    }
   }
 
   async getTree(ref: string): Promise<{ entries: RepoTreeEntry[]; truncated: boolean }> {

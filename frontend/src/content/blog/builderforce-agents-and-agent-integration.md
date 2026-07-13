@@ -12,6 +12,8 @@ One of the most powerful ideas in Builderforce is that **agents are not isolated
 
 This post explains what BuilderForce Agents is, how agent marketplace integration works, and how to build multi-agent workflows that accomplish far more than any single model could on its own.
 
+![Four-step marketplace loop showing train a specialist, publish to the Workforce Registry, hire into a project, and call agent-to-agent, with a return arrow for retraining and republishing as the network compounds](/blog/agent-integration.svg)
+
 ---
 
 ## What Is BuilderForce Agents?

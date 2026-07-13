@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/>
+      <stop offset="55%" stop-color="#13152F"/>
+      <stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/>
+    </linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/>
+    </linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/>
+    </linearGradient>
+    <linearGradient id="legacyGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#7A8099"/><stop offset="100%" stop-color="#474C63"/>
+    </linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="rgba(139,108,255,0)"/>
+      <stop offset="50%" stop-color="rgba(139,108,255,0.55)"/>
+      <stop offset="100%" stop-color="rgba(61,214,245,0)"/>
+    </linearGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="14" result="b"/><feMerge>
+      <feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <rect width="1600" height="900" fill="none"/>
+  
+    <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">THE PLATFORM</text>
+    <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">One owned stack, from brain to editor</text>
+    <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+  <rect x="200" y="236" width="1200" height="116" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.09)" stroke-width="1.5"/><rect x="200" y="236" width="10" height="116" rx="5" fill="url(#coolGrad)"/><text x="246" y="292" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="26" letter-spacing="2" font-weight="900" fill="#EEF0FA">SURFACES</text><text x="246" y="330" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" fill="#A6ADC8">VS Code · Kanban board · Cloud agents · Brain assistant · API</text><defs><marker id="ah3594" markerWidth="10" markerHeight="10" refX="7" refY="5" orient="auto">
+    <path d="M0,0 L9,5 L0,10 Z" fill="rgba(255,255,255,0.25)"/></marker></defs>
+    <line x1="1436" y1="294" x2="1436" y2="428" stroke="rgba(255,255,255,0.25)" stroke-width="2" marker-end="url(#ah3594)"/><rect x="200" y="370" width="1200" height="116" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.09)" stroke-width="1.5"/><rect x="200" y="370" width="10" height="116" rx="5" fill="url(#violetGrad)"/><text x="246" y="426" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="26" letter-spacing="2" font-weight="900" fill="#EEF0FA">ORCHESTRATION</text><text x="246" y="464" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" fill="#A6ADC8">Builderforce.ai — compose, route, meter, govern, audit</text><defs><marker id="ah3862" markerWidth="10" markerHeight="10" refX="7" refY="5" orient="auto">
+    <path d="M0,0 L9,5 L0,10 Z" fill="rgba(255,255,255,0.25)"/></marker></defs>
+    <line x1="1436" y1="428" x2="1436" y2="562" stroke="rgba(255,255,255,0.25)" stroke-width="2" marker-end="url(#ah3862)"/><rect x="200" y="504" width="1200" height="116" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.09)" stroke-width="1.5"/><rect x="200" y="504" width="10" height="116" rx="5" fill="rgba(139,108,255,0.5)"/><text x="246" y="560" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="26" letter-spacing="2" font-weight="900" fill="#EEF0FA">AGENT RUNTIME</text><text x="246" y="598" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" fill="#A6ADC8">Claude Agent SDK runners · tools · human-in-the-loop · memory</text><defs><marker id="ah4130" markerWidth="10" markerHeight="10" refX="7" refY="5" orient="auto">
+    <path d="M0,0 L9,5 L0,10 Z" fill="rgba(255,255,255,0.25)"/></marker></defs>
+    <line x1="1436" y1="562" x2="1436" y2="696" stroke="rgba(255,255,255,0.25)" stroke-width="2" marker-end="url(#ah4130)"/><rect x="200" y="638" width="1200" height="116" rx="18" fill="rgba(52,224,161,0.10)" stroke="rgba(52,224,161,0.5)" stroke-width="1.5"/><rect x="200" y="638" width="10" height="116" rx="5" fill="url(#mintGrad)"/><text x="246" y="694" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="26" letter-spacing="2" font-weight="900" fill="#EEF0FA">EVERMIND</text><text x="246" y="732" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" fill="#A6ADC8">Self-updating SSM brain — Write-Through Cognition, WebGPU</text><text x="1460" y="300" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">you ship</text><text x="1460" y="738" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#34E0A1">the brain</text><text x="800" y="790" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" fill="#A6ADC8">One stack you own end to end — brain, runtime, orchestration, and the surfaces your team already uses.</text>
+  <g opacity="0.85">
+    <circle cx="1336" cy="838" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="845" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="844" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">The innovation platform for the agentic era</text>
+</svg>

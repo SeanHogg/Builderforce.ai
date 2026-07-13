@@ -10,7 +10,7 @@ import { normalizeProviderId } from "../model-selection.js";
 function isProfileForProvider(params: {
   provider: string;
   profileId: string;
-  store: ReturnType<typeof ensureAuthProfileStore>;
+  store: Awaited<ReturnType<typeof ensureAuthProfileStore>>;
 }): boolean {
   const entry = params.store.profiles[params.profileId];
   if (!entry?.provider) {
@@ -62,7 +62,7 @@ export async function resolveSessionAuthProfileOverride(params: {
     return sessionEntry?.authProfileOverride;
   }
 
-  const store = ensureAuthProfileStore(agentDir, { allowKeychainPrompt: false });
+  const store = await ensureAuthProfileStore(agentDir, { allowKeychainPrompt: false });
   const order = resolveAuthProfileOrder({ cfg, store, provider });
   let current = sessionEntry.authProfileOverride?.trim();
 

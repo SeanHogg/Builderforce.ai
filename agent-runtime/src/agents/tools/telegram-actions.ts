@@ -1,4 +1,4 @@
-import type { AgentToolResult } from "@mariozechner/pi-agent-core";
+import type { AgentToolResult } from "../../builderforce/model/agent-types.js";
 import type { BuilderForceAgentsConfig } from "../../config/config.js";
 import { createTelegramActionGate } from "../../telegram/accounts.js";
 import type { TelegramButtonStyle, TelegramInlineButtons } from "../../telegram/button-types.js";
@@ -322,7 +322,7 @@ export async function handleTelegramAction(
     }
     const query = readStringParam(params, "query", { required: true });
     const limit = readNumberParam(params, "limit", { integer: true }) ?? 5;
-    const results = searchStickers(query, limit);
+    const results = await searchStickers(query, limit);
     return jsonResult({
       ok: true,
       count: results.length,

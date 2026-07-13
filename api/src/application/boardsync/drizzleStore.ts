@@ -11,6 +11,7 @@ import {
   boardConnections,
   externalTicketLinks,
   boardSyncOutbox,
+  boardTypeMappings,
   integrationSyncLogs,
   integrationCredentials,
   tasks,
@@ -23,17 +24,28 @@ import type {
   UpsertLinkInput,
   UpsertTaskInput,
   OutboxRow,
+  TypeMapping,
 } from './SyncEngine';
 import type { SyncState } from './reconciler';
 import type { ChangeSet } from './providers';
+import { parseJsonObject } from '../../domain/shared/json';
 
-function parseFields(raw: string | null): Record<string, unknown> | null {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    return null;
+/**
+ * Coerce a stored `fields` jsonb value back into a plain object. The driver may
+ * hand back an already-parsed object (neon-http) or a JSON string; both resolve
+ * to the same bag. Non-object/empty values become null.
+ */
+function normalizeFields(raw: unknown): Record<string, unknown> | null {
+  if (raw == null) return null;
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
   }
+  return typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
 }
 
 export function createDrizzleStore(db: Db): BoardSyncStore {
@@ -74,8 +86,20 @@ export function createDrizzleStore(db: Db): BoardSyncStore {
         externalVersion: row.externalVersion,
         contentHash: row.contentHash,
         syncState: row.syncState as SyncState,
-        fields: parseFields(null), // fields are reconstructed from task; not stored as column
+        fields: normalizeFields(row.fields),
       };
+    },
+
+    async listTypeMappings(connectionId: string): Promise<TypeMapping[]> {
+      const rows = await db
+        .select({
+          externalType: boardTypeMappings.externalType,
+          targetTaskType: boardTypeMappings.targetTaskType,
+          targetStatus: boardTypeMappings.targetStatus,
+        })
+        .from(boardTypeMappings)
+        .where(eq(boardTypeMappings.connectionId, connectionId));
+      return rows.map((r) => ({ externalType: r.externalType, targetTaskType: r.targetTaskType, targetStatus: r.targetStatus ?? null }));
     },
 
     async upsertLink(input: UpsertLinkInput): Promise<StoredLink> {
@@ -92,6 +116,7 @@ export function createDrizzleStore(db: Db): BoardSyncStore {
           externalUrl: input.externalUrl,
           externalVersion: input.externalVersion,
           contentHash: input.contentHash,
+          fields: input.fields,
           syncState: input.syncState,
           lastInboundAt: now,
           createdAt: now,
@@ -104,6 +129,7 @@ export function createDrizzleStore(db: Db): BoardSyncStore {
             externalUrl: input.externalUrl,
             externalVersion: input.externalVersion,
             contentHash: input.contentHash,
+            fields: input.fields,
             syncState: input.syncState,
             lastInboundAt: now,
             updatedAt: now,
@@ -128,7 +154,12 @@ export function createDrizzleStore(db: Db): BoardSyncStore {
       if (input.existingTaskId != null) {
         await db
           .update(tasks)
-          .set({ title: input.title, description: input.description, source: input.provider, updatedAt: now })
+          .set({
+            title: input.title, description: input.description, source: input.provider, updatedAt: now,
+            // Only write the estimate when the provider supplied one — never clobber
+            // a manual estimate with null (EMP-4).
+            ...(input.storyPoints != null ? { storyPoints: input.storyPoints } : {}),
+          })
           .where(eq(tasks.id, input.existingTaskId));
         return input.existingTaskId;
       }
@@ -141,9 +172,13 @@ export function createDrizzleStore(db: Db): BoardSyncStore {
           key,
           title: input.title,
           description: input.description,
-          status: 'backlog',
+          // Type/status from the persistent board_type_mapping (migration 0256) when
+          // present; otherwise the original backlog/task defaults.
+          status: input.status ?? 'backlog',
           priority: 'medium',
+          taskType: (input.taskType === 'epic' ? 'epic' : 'task'),
           source: input.provider,
+          storyPoints: input.storyPoints ?? undefined,
           createdAt: now,
           updatedAt: now,
         })
@@ -191,9 +226,26 @@ export function createDrizzleStore(db: Db): BoardSyncStore {
     },
 
     async listPendingOutbox(connectionId: string, now: Date, limit: number): Promise<OutboxRow[]> {
+      // Resolve each row's target externalId from its link (connection+task) in one
+      // join — drainOutbox needs it to address the provider, and a missing link
+      // makes the drain dead-letter the row (rather than guessing).
       const rows = await db
-        .select()
+        .select({
+          id: boardSyncOutbox.id,
+          connectionId: boardSyncOutbox.connectionId,
+          taskId: boardSyncOutbox.taskId,
+          changeSet: boardSyncOutbox.changeSet,
+          attempts: boardSyncOutbox.attempts,
+          externalId: externalTicketLinks.externalId,
+        })
         .from(boardSyncOutbox)
+        .leftJoin(
+          externalTicketLinks,
+          and(
+            eq(externalTicketLinks.connectionId, boardSyncOutbox.connectionId),
+            eq(externalTicketLinks.taskId, boardSyncOutbox.taskId),
+          ),
+        )
         .where(
           and(
             eq(boardSyncOutbox.connectionId, connectionId),
@@ -205,7 +257,7 @@ export function createDrizzleStore(db: Db): BoardSyncStore {
       return rows.map((r) => ({
         id: r.id,
         connectionId: r.connectionId,
-        externalId: null,
+        externalId: r.externalId ?? null,
         taskId: r.taskId,
         changeSet: (r.changeSet ? safeParse(r.changeSet) : {}) as ChangeSet,
         attempts: r.attempts,
@@ -230,47 +282,19 @@ export function createDrizzleStore(db: Db): BoardSyncStore {
 }
 
 function safeParse(raw: string): Record<string, unknown> {
-  try {
-    return JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    return {};
-  }
+  return parseJsonObject(raw);
 }
 
 // ---------------------------------------------------------------------------
-// Credential decryption (mirrors integrationRoutes AES-256-GCM scheme)
+// Credential decryption — delegates to the canonical per-tenant AES-256-GCM
+// helper so boardsync/repo consumers honor the SAME versioned key scheme the
+// integrations CRUD writes (v2 per-tenant, with legacy v1 global-key fallback).
+// Re-exported here for the existing import paths; pass the owning tenantId so a
+// v2 row decrypts (a legacy v1 row decrypts with or without it).
 // ---------------------------------------------------------------------------
 
-async function deriveKey(passphrase: string): Promise<CryptoKey> {
-  const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(passphrase), 'PBKDF2', false, ['deriveKey']);
-  return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt: enc.encode('builderforce-integrations'), iterations: 100_000, hash: 'SHA-256' },
-    keyMaterial,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt'],
-  );
-}
-
-export async function decryptCredentials(
-  encB64: string,
-  ivHex: string,
-  secret: string,
-): Promise<Record<string, unknown> | null> {
-  try {
-    const key = await deriveKey(secret);
-    const iv = new Uint8Array(ivHex.match(/.{2}/g)!.map((h) => parseInt(h, 16)));
-    const dec = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv },
-      key,
-      Uint8Array.from(atob(encB64), (c) => c.charCodeAt(0)),
-    );
-    return JSON.parse(new TextDecoder().decode(dec)) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
+export { decryptCredentials } from '../integrations/credentialCrypto';
+import { decryptCredentials } from '../integrations/credentialCrypto';
 
 /** Load + decrypt a board connection's provider credentials. Tenant-scoped. */
 export async function loadConnectionCredentials(
@@ -286,7 +310,7 @@ export async function loadConnectionCredentials(
     .where(and(eq(integrationCredentials.id, credentialId), eq(integrationCredentials.tenantId, tenantId)))
     .limit(1);
   if (!row) return null;
-  const creds = await decryptCredentials(row.credentialsEnc, row.iv, secret);
+  const creds = await decryptCredentials(row.credentialsEnc, row.iv, secret, tenantId);
   if (!creds) return null;
   return { credentials: creds, baseUrl: row.baseUrl };
 }
