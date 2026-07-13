@@ -204,8 +204,9 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
   router.use('*', authMiddleware);
 
   // GET /api/approvals?status=&agentHostId=&projectId=
-  // Each row is enriched with `projectId` (via execution → task) so the caller can
-  // scope/group the queue by project without a second round-trip; null when the
+  // Each row is enriched with `taskId` and `projectId` (via execution → task) so
+  // callers can show the work item that caused the request and scope/group the
+  // queue by project without a second round-trip; null when the
   // approval isn't tied to a task (e.g. a self-hosted host gate). An explicit
   // `?projectId=` narrows server-side.
   router.get('/', async (c) => {
@@ -218,7 +219,7 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
       : null;
 
     let rows = await db
-      .select({ ...getTableColumns(approvals), projectId: tasks.projectId })
+      .select({ ...getTableColumns(approvals), taskId: tasks.id, projectId: tasks.projectId })
       .from(approvals)
       .leftJoin(executions, eq(approvals.executionId, executions.id))
       .leftJoin(tasks, eq(executions.taskId, tasks.id))
