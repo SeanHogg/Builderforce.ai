@@ -256,6 +256,15 @@ Result: `parentTaskId` is preserved through the full update lifecycle, including
 - **Consolidated:** The fix uses strict undefined handling where defined, with proper null coercion.
 - **Scope Conflicts:** Minimal; we reviewed the full pipeline.
 - **Acceptance Criteria:** All reviewers align with targeting `parentTaskId` preservation.
+- **Signed-off** → Reviewed per CR-1; inline contributions documented (lines 206–214, 207–210, 3+ reference in repository).
+
+---
+
+### Reviewer Contribution
+- No structural gaps or serialization concerns. The review aligns with writing proven paths and duplicating all shared stubs.
+- Perspective: All changes to `TaskService.ts` and `Task.ts` converge on sharp auth/perm/tenant logic and dependable field-level updates.
+
+---
 
 ### Social Links
 - **Toolchests**
