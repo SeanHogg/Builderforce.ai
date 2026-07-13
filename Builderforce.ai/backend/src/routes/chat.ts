@@ -87,6 +87,15 @@ export async function GET_CHAT_ID(request: NextRequest) {
     const messages = await getMessagesByChatId(chatId);
     const chat = await getChatById(chatId);
 
+    // Check if this is a new chat without a title - auto-generate if so
+    if (chat && (!chat.title || chat.title.trim().length === 0)) {
+      const autoTitle = await autoGenerateTitleFromMessages(messages, userId);
+      if (autoTitle) {
+        const updatedChat = await updateChatTitleRecord(chatId, autoTitle);
+        return Response.json({ messages, chat: updatedChat });
+      }
+    }
+
     return Response.json({ messages, chat });
   } catch (error) {
     console.error('Error fetching messages:', error);
