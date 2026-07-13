@@ -2,7 +2,9 @@
 
 **Task:** #688 - Audit tasks.update Handler for parentTaskId Mutation
 **Repository:** seanhogg/builderforce.ai
-**Date:** 2025-06-19
+**Date:** 2025-06-23 (updated after full code audit)
+**Status:** ✅ No root cause found — parentTaskId is correctly propagated through all layers.
+**Recommendation:** Add integration tests for partial-update semantics (AC-1/AC-4) and note that this codebase does not modify/strip `parentTaskId`.
 
 ## Executive Summary
 
