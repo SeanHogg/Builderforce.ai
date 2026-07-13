@@ -23,9 +23,6 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
     const env = c.get('env') as HonoEnv;
     const tenantId = c.get('tenantId') as number;
 
-    // Debug: log to stdout (optional)
-    console.log(`[consolidate] tenant:${tenantId} target:${targetId} sources:${sourceIds.join(',')}`);
-
     const targetIdParam = c.req.param('target');
     if (!targetIdParam || targetIdParam.includes('/')) {
       return c.json({ error: 'invalid targetId' }, 400);
