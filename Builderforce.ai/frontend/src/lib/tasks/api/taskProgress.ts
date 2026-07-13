@@ -11,10 +11,12 @@
 import type {
   CompletionGateState,
   DeliverableType,
+  EventLogEntry,
   PRDiff,
   ProjectConfig,
   TaskProgress,
   TaskStatus,
+  TaskType,
 } from '@/types/Task';
 import { runProgressGate } from '@/lib/gates/ProgressGate';
 
@@ -57,14 +59,10 @@ export function validateDeliverableType(type: string | undefined): DeliverableTy
 }
 
 /**
- * Computes the final progress % and status for a task after applying
- * the ProgressGate.
+ * Implements FR-2 / FR-3 / FR-4 / FR-5 / FR-6.
+ * This is the primary entry point for applying the completion gate to a task.
  *
- * Process:
- * 1. Validate deliverableType (default 'code' for unknowns).
- * 2. Run ProgressGate.runProgressGate with PR diffs and CI state.
- * 3. Apply the recommended progress %, status, and block (if applicable).
- * 4. Return a TaskProgress-compatible result with audit metadata.
+ * FR-3 aim: progress = 100% only when not blocked (source + tests + CI green & not doc-only).
  */
 export function applyTaskProgressGate(
   taskId: string,
@@ -76,35 +74,25 @@ export function applyTaskProgressGate(
 ): GateAppliedResult {
   const validatedDeliverableType = validateDeliverableType(deliverableType);
   const projectConfig: ProjectConfig = {
-    sourceDirs: config.sourceDirs ?? [
-      'src/',
-      'lib/',
-      'app/',
-      'packages/',
-      'components/',
-      'api/',
-    ],
-    testPatterns: config.testPatterns ?? [
-      '**/*.test.*',
-      '**/*.spec.*',
-      '**/tests/**',
-      '**/__tests__/**',
-    ],
+    sourceDirs: config.sourceDirs ?? ['src/', 'lib/', 'app/', 'packages/', 'components/', 'api/'],
+    testPatterns: config.testPatterns ?? ['**/*.test.*', '**/*.spec.*', '**/tests/**', '**/__tests__/**'],
   };
 
   const output = runProgressGate({
     deliverableType: validatedDeliverableType,
+    taskType: 'coding' as TaskType, // Default from PRD FR-5; callers can pass task_type when available.
     diffs: diffs || [],
     allCiChecksPassing,
     currentStatus,
     projectConfig,
   });
 
-  // If progress is 100% and gate blocks it (e.g., doc-only PR), force back to review or clamp.
-  // This ensures a coding task never reaches done if blocked.
-  const finalProgress = output.progress === 100 && output.gateResult.isBlocked
-    ? 80 // Clamp to review progress, not done
-    : output.progress;
+  // FR-3: never apply a gateResult.isBlocked override to progress/status if recommended = 100%.
+  // This ensures the PRD's 100% condition only takes effect when (source + tests + CI green) and not blocked.
+  const finalProgress =
+    output.progress === 100 && output.gateResult.isBlocked
+      ? 80 // Clamp to review progress, not done
+      : output.progress;
 
   const finalStatus = output.status;
 
@@ -113,6 +101,40 @@ export function applyTaskProgressGate(
     status: finalStatus,
     gateResult: output.gateResult,
     audit: output.audit,
+  };
+}
+
+/**
+ * Adds a structured gap event to the audit log.
+ * This helper implements the gap event shape required by the CompletionGateState.isBlocked message.
+ */
+export function appendAuditEntryToEventLog(
+  taskAuditEvents: EventLogEntry[],
+  entry: Omit<EventLogEntry, 'timestamp'>
+): EventLogEntry[] {
+  const ts = new Date().toISOString();
+  return [...taskAuditEvents, { ...entry, timestamp: ts }];
+}
+
+/**
+ * Convert GateAppliedResult.audit into an EventLogEntry that satisfies FR-7 schema.
+ */
+export function auditToEventLogEntry(result: GateAppliedResult, type: 'progress' | 'blocked'): EventLogEntry {
+  return {
+    timestamp: result.audit.timestamp,
+    type,
+    task_id: '',
+    pr_shas: result.audit.prShas,
+    pr_classification: result.audit.prClassification,
+    deliverable_type: result.audit.deliverableType,
+    task_type: result.audit.taskType,
+    progress: result.audit.recommendedProgress,
+    previous_progress: result.audit.previousProgress,
+    status: result.audit.recommendedStatus,
+    previous_status: result.audit.previousStatus,
+    blocked_reason: result.audit.blockedReason || undefined,
+    diagnostic: result.audit.diagnosis,
+    severity: result.audit.blockedReason ? 'warning' : 'info',
   };
 }
 
