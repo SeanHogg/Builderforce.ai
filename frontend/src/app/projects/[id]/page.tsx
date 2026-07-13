@@ -38,4 +38,3 @@ export default function ProjectPage() {
       Redirecting to IDE dashboard...
     </div>
   );
-}
