@@ -4,7 +4,20 @@
  * It provides TypeScript models and a small in-memory store for tasks and their progress gate state.
  */
 
-import type { CompletionGateState, EventLogEntry, PRDiff, PRFile, TaskProgress } from '@/types/Task';
+import {
+  applyTaskProgressGate,
+  type GateAppliedResult,
+} from '@/lib/tasks/api/taskProgress';
+import {
+  classifyAllPRs,
+  type PRDiff,
+} from '@/lib/gates/ProgressGate';
+import type {
+  CompletionGateState,
+  EventLogEntry,
+  PRFile,
+  TaskProgress,
+} from '@/types/Task';
 
 /**
  * In-memory representation of a task as it exists in task memory.
