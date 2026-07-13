@@ -285,4 +285,66 @@ export async function getChatMessages(chatId: string): Promise<Message[]> {
   return getMessagesByChatId(chatId);
 }
 
+export async function autoGenerateTitleFromMessages(messages: Message[], userId: string): Promise<string> {
+  if (!messages || messages.length === 0) {
+    return format(new Date(), 'yyyy-MM-dd');
+  }
+
+  // Extract content from the first user message (the initial context)
+  const firstUserMessage = messages.find(m => m.role === 'user');
+  if (!firstUserMessage) {
+    return format(new Date(), 'yyyy-MM-dd');
+  }
+
+  const content = firstUserMessage.content;
+
+  // Helper to clean and filter words
+  const cleanWords = (text: string): string[] => {
+    const words = text.trim().split(/\s+/);
+    if (words.length <= 2) {
+      return text.trim().split(/\s+/);
+    }
+
+    const stopWords = new Set([
+      'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+      'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should',
+      'may', 'might', 'must', 'shall', 'to', 'in', 'on', 'at', 'by', 'for', 'with',
+      'about', 'against', 'between', 'into', 'through', 'during', 'before', 'after',
+      'above', 'below', 'from', 'up', 'down', 'out', 'off', 'over', 'under',
+      'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how',
+      'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such',
+      'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very',
+      's', 't', 'can', 'will', 'just', 'don', 'should', 'now', 'please', 'help', 'hi',
+      'hello', 'hey', 'thanks', 'thank', 'start', 'chat', 'message'
+    ]);
+
+    return words
+      .filter(word => {
+        const cleanWord = word
+          .replace(/[.,!?;:()«»""–—\-]/g, '')
+          .replace(/'/g, '')
+          .toLowerCase();
+        return !stopWords.has(cleanWord) && cleanWord.length > 1;
+      })
+      .slice(0, 8);
+  };
+
+  const titleWords = cleanWords(content);
+
+  if (titleWords.length === 0) {
+    // Fallback to first 10 characters if no words remain
+    return content.trim().slice(0, 50);
+  }
+
+  const title = titleWords.join(' ');
+
+  // Ensure title is between 3-10 words
+  const wordCount = title.split(/\s+/).filter(w => w.length > 0).length;
+  if (wordCount > 10) {
+    return titleWords.slice(0, 10).join(' ');
+  }
+
+  return title;
+}
+
 export { Chat, Message };
