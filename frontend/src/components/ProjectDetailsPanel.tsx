@@ -75,6 +75,18 @@ const TAB_DEFS: { id: ProjectPanelTab; key: string }[] = [
   { id: 'workspace', key: 'tabs.workspace' },
 ];
 
+/** Locale keys exposed on the projectDetails namespace. */
+export type ProjectDetailsLocaleKey =
+  | 'tabs.analytics'
+  | 'tabs.details'
+  | 'tabs.integrations'
+  | 'tabs.taskMgmt'
+  | 'tabs.prds'
+  | 'tabs.diagnostics'
+  | 'tabs.capabilities'
+  | 'tabs.brainChat'
+  | 'tabs.workspace';
+
 const PROJECT_STATUSES = ['active', 'completed', 'archived', 'on_hold'] as const;
 
 /** DOM ids of details-tab fields a "Fix" can scroll to / focus. */
