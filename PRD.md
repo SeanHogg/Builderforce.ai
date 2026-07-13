@@ -44,7 +44,8 @@ The payload MUST carry a unique identity block:
   "created_at": "<ISO-8601 UTC>",
   "agent_id": "<string>",
   "session_id": "<string | null>",
-  "parent_basis_id": "<uuid-v4 | null>"
+  "parent_basis_id": "<uuid-v4 | null>",
+  "sandbox": "<string | null>"
 }
 ```
 
