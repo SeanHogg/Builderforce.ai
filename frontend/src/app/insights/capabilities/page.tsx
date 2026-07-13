@@ -319,18 +319,6 @@ export default function CapabilitiesPage() {
     }
   }, [reloadKey]);
 
-  const createProjectLink = (): string => {
-    const parts = pathname.split('/');
-    const projectId = parts.find((p: string) => /^[0-9]+$/.test(p));
-    if (projectId) return `/projects/${projectId}/page.tsx`;
-    return '';
-  };
-
-  const openProjectPage = (): void => {
-    const link = createProjectLink();
-    if (link) router.push(link);
-  };
-
   if (!isAuthenticated) return null;
   if (!hasTenant) {
     return (
