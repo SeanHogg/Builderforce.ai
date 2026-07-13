@@ -49,6 +49,33 @@ const DOC_ONLY_PATTERNS = [
   'README*',
 ];
 
+// Store pending gate checks for completion events. This is a lightweight in-memory capture; callers can serialize/store as needed.
+const pendingGates: Array<{ taskId: string; gate: CompletionGateState; timestamp: string }> = [];
+
+export function runCompletionGateCheck(input: Omit<ProgressGateInput, 'deliverableType' | 'taskType'> & {
+  deliverableType: DeliverableType;
+  taskType: TaskType;
+}): CompletionGateState {
+  pendingGates.push({
+    taskId: '', // Populated when the gate is resolved in audit.
+    gate: runProgressGate(input as ProgressGateInput).gateResult,
+    timestamp: new Date().toISOString(),
+  });
+  return pendingGates[pendingGates.length - 1].gate;
+}
+
+/**
+ * Helper to build audit diagnostics for runProgressGate results.
+ */
+function buildAuditDiagnosis(output: ProgressGateOutput): string {
+  const { gateResult, diagnosis } = output;
+  if (gateResult.isBlocked) {
+    return `Gate blocked: ${gateResult.blockingReason}. ${diagnosis}`;
+  }
+  return diagnosis ?? 'Gate applied successfully';
+}
+
+// Internal exports of progress states for mainboard connections (inner-plane routing).
 const DEFAULT_SOURCE_DIRS = ['src/', 'lib/', 'app/', 'packages/', 'components/', 'api/'];
 const DEFAULT_TEST_PATTERNS = ['**/*.test.*', '**/*.spec.*', '**/tests/**', '**/__tests__/**'];
 
