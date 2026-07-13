@@ -38,6 +38,8 @@ import {
 import { BoardConfigPanel } from './board/BoardConfigPanel';
 import { AssigneeProfilesProvider } from './workforce/AssigneeProfilesContext';
 import AssigneeHovercard, { AssigneePersonalityInline } from './workforce/AssigneeHovercard';
+import { MemberProfileEditor } from './workforce/MemberProfileEditor';
+import type { MemberKind } from '@/lib/builderforceApi';
 import { AgentChip, ACTIVE_EXECUTION_STATUSES } from './board/AgentChip';
 import { SwimlaneTriageButton } from './board/SwimlaneTriageButton';
 import { trackActivity } from '@/lib/activity/tracker';
@@ -207,6 +209,12 @@ export function TaskMgmtContent({
   // Standup mode: pivot the board so rows = teammates/agents and columns = stages,
   // surfacing each person's in-flight work at a glance. Board-view only, session-only.
   const [groupByAssignee, setGroupByAssignee] = useState(false);
+  // Assignee swimlanes can contain hundreds of cards. Keep every row collapsed
+  // until the viewer explicitly opens it; this state is intentionally session-only.
+  const [expandedAssigneeRows, setExpandedAssigneeRows] = useState<Set<string>>(new Set());
+  const [profileAssignee, setProfileAssignee] = useState<{
+    kind: MemberKind; refId: string; name: string;
+  } | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterProject, setFilterProject] = useState<string>(projectId != null ? String(projectId) : '');
   const [filterPriority, setFilterPriority] = useState<string>('');
@@ -610,6 +618,23 @@ export function TaskMgmtContent({
       return a.name.localeCompare(b.name);
     });
   }, [filtered, taskAssigneeName]);
+
+  const openAssigneeProfile = useCallback((key: string, name: string) => {
+    if (!key) return;
+    const prefix = key.slice(0, 2);
+    const refId = key.slice(2);
+    const kind: MemberKind | null = prefix === 'u:' ? 'human' : prefix === 'c:' ? 'cloud_agent' : prefix === 'h:' ? 'host_agent' : null;
+    if (kind && refId) setProfileAssignee({ kind, refId, name });
+  }, []);
+
+  const toggleAssigneeRow = useCallback((key: string) => {
+    setExpandedAssigneeRows((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
 
   // Latest execution per task → which agent is actively running (or last ran) it.
   const latestExecByTask = useMemo(() => {
@@ -1381,49 +1406,74 @@ export function TaskMgmtContent({
                   {column.label}
                 </div>
               ))}
-              {assigneeRows.map((row) => (
-                <Fragment key={row.key || 'unassigned'}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: 'var(--text-primary)',
-                      padding: '8px 4px',
-                      borderTop: '1px solid var(--border-subtle)',
-                    }}
-                  >
-                    <AssigneeHovercard selectValue={row.key}>{row.name}</AssigneeHovercard>
-                    <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 500, color: 'var(--text-muted)' }}>
-                      {row.tasks.length}
-                    </span>
-                  </div>
-                  {boardColumns.map((column) => {
-                    const cellTasks = byManagerRank(row.tasks.filter((t) => t.status === column.status));
-                    return (
-                      <div
-                        key={column.id}
-                        onDragOver={onDragOver}
-                        onDrop={(e) => onDrop(e, column.status)}
-                        style={{
-                          background: 'var(--bg-deep)',
-                          border: '1px dashed var(--border-subtle)',
-                          borderRadius: 10,
-                          padding: 8,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: 8,
-                          minHeight: 56,
-                          borderTop: '1px solid var(--border-subtle)',
-                        }}
+              {assigneeRows.map((row) => {
+                const rowStateKey = row.key || 'unassigned';
+                const expanded = expandedAssigneeRows.has(rowStateKey);
+                return (
+                  <Fragment key={rowStateKey}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: 'var(--text-primary)',
+                        padding: '8px 4px',
+                        borderTop: '1px solid var(--border-subtle)',
+                        gridColumn: expanded ? undefined : '1 / -1',
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleAssigneeRow(rowStateKey)}
+                        aria-expanded={expanded}
+                        aria-label={tTask(expanded ? 'collapseAssigneeRow' : 'expandAssigneeRow', { name: row.name })}
+                        style={{ border: 0, padding: 2, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', lineHeight: 1 }}
                       >
-                        {cellTasks.map((task) => renderTaskCard(task))}
-                      </div>
-                    );
-                  })}
-                </Fragment>
-              ))}
+                        <span aria-hidden>{expanded ? '▾' : '▸'}</span>
+                      </button>
+                      {row.key ? (
+                        <AssigneeHovercard selectValue={row.key}>
+                          <a
+                            href={`#assignee-${encodeURIComponent(row.key)}`}
+                            onClick={(event) => { event.preventDefault(); openAssigneeProfile(row.key, row.name); }}
+                            style={{ color: 'var(--accent)', textDecoration: 'underline', textUnderlineOffset: 2 }}
+                          >
+                            {row.name}
+                          </a>
+                        </AssigneeHovercard>
+                      ) : row.name}
+                      <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)' }}>
+                        {row.tasks.length}
+                      </span>
+                    </div>
+                    {expanded && boardColumns.map((column) => {
+                      const cellTasks = byManagerRank(row.tasks.filter((t) => t.status === column.status));
+                      return (
+                        <div
+                          key={column.id}
+                          onDragOver={onDragOver}
+                          onDrop={(e) => onDrop(e, column.status)}
+                          style={{
+                            background: 'var(--bg-deep)',
+                            border: '1px dashed var(--border-subtle)',
+                            borderRadius: 10,
+                            padding: 8,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 8,
+                            minHeight: 56,
+                            borderTop: '1px solid var(--border-subtle)',
+                          }}
+                        >
+                          {cellTasks.map((task) => renderTaskCard(task))}
+                        </div>
+                      );
+                    })}
+                  </Fragment>
+                );
+              })}
             </div>
           )}
         </div>
@@ -2584,6 +2634,15 @@ export function TaskMgmtContent({
           projectId={effectiveProjectId}
           projectName={effectiveProjectName}
           initialTab={boardConfigTab}
+        />
+      )}
+
+      {profileAssignee && (
+        <MemberProfileEditor
+          kind={profileAssignee.kind}
+          refId={profileAssignee.refId}
+          name={profileAssignee.name}
+          onClose={() => setProfileAssignee(null)}
         />
       )}
 
