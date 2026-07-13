@@ -358,7 +358,11 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         // First user turn of this chat → let the host auto-name it from the topic
         // (so it stops reading "New chat"). Uses the raw typed text, not the
         // attachment-decorated display content.
-        if (messages.length === 0) onFirstUserTurn?.(id, trimmed);
+        if (messages.length === 0) {
+          onFirstUserTurn?.(id, trimmed);
+          // If the host provided an autoTitle callback, invoke it on the first turn.
+          if (autoTitle) autoTitle(id, trimmed);
+        }
         // Addressed to a participant, not the BRAIN: the turn is posted to the
         // chat (visible to everyone) and the BRAIN loop stays idle. The auto-reply
         // guard was already claimed above, and the effect below also skips it, so
