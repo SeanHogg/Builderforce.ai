@@ -1735,8 +1735,8 @@ export interface ManagerBacklogItem {
 export interface ManagerAction {
   id: string;
   taskId: number | null;
-  ticketKey: string | null;
-  ticketTitle: string | null;
+  ticketKey?: string | null;
+  ticketTitle?: string | null;
   actionType: ManagerActionType;
   summary: string;
   detail: string | null;

@@ -51,7 +51,7 @@ export async function updateRecordedPullRequestBranch(
   if (!result.ok) {
     return {
       ok: false, httpStatus: result.code === 'conflict' ? 409 : 502,
-      error: result.reason, code: result.code,
+      error: result.reason, code: result.code === 'conflict' ? 'conflict' : 'provider_error',
     };
   }
   return result;
