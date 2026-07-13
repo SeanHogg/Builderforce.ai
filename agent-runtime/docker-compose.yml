@@ -50,3 +50,25 @@ services:
     tty: true
     init: true
     entrypoint: ["node", "dist/index.js"]
+
+  builderforce-v2:
+    image: ${BUILDERFORCE_AGENTS_IMAGE:-builderforce:local}
+    environment:
+      HOME: /home/node
+      TERM: xterm-256color
+      BUILDERFORCE_AGENTS_GATEWAY_TOKEN: ${BUILDERFORCE_AGENTS_GATEWAY_TOKEN}
+      BUILDERFORCE_V2_RUNTIME: "true"
+    volumes:
+      - ${BUILDERFORCE_AGENTS_CONFIG_DIR}:/home/node/.builderforce
+      - ${BUILDERFORCE_AGENTS_WORKSPACE_DIR}:/home/node/.builderforce/workspace
+    ports:
+      - "${BUILDERFORCE_AGENTS_V2_PORT:-18791}:18791"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18791/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    command:
+      ["node", "dist/index.js", "v2-runtime"]
