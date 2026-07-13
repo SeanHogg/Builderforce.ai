@@ -23,21 +23,50 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(true);
   const [lastModified, setLastModified] = useState<Date>(new Date());
 
-  // Load chats when component mounts
+  // Load persisted titles from LocalStorage and chats on mount (FR4.1: Persistence)
   useEffect(() => {
-    loadChats();
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        const data = await chatApi.getChats();
+        // Try to restore titles from LocalStorage for each chat
+        const chatsWithRestoredTitles = data.map(chat => ({
+          ...chat,
+          title: loadTitle(chat.id) || chat.title,
+        }));
+        setChats(chatsWithRestoredTitles);
+
+        // Set current chat to the newest one if none is selected
+        if (!currentChatId && chatsWithRestoredTitles.length > 0) {
+          setCurrentChatId(chatsWithRestoredTitles[0].id);
+        }
+        // Sync new titles to storage in case they were added since last visit
+        chatsWithRestoredTitles.forEach(chat => loadTitle(chat.id));
+      } catch (error: any) {
+        console.error('Failed to load chats:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
   }, [lastModified]);
 
   const loadChats = async () => {
     try {
       setLoading(true);
       const data = await chatApi.getChats();
-      setChats(data);
+      const chatsWithRestoredTitles = data.map(chat => ({
+        ...chat,
+        title: loadTitle(chat.id) || chat.title,
+      }));
+      setChats(chatsWithRestoredTitles);
 
       // Set current chat to the newest one if none is selected
-      if (!currentChatId && data.length > 0) {
-        setCurrentChatId(data[0].id);
+      if (!currentChatId && chatsWithRestoredTitles.length > 0) {
+        setCurrentChatId(chatsWithRestoredTitles[0].id);
       }
+      // Sync new titles to storage
+      chatsWithRestoredTitles.forEach(chat => loadTitle(chat.id));
     } catch (error: any) {
       console.error('Failed to load chats:', error);
     } finally {
