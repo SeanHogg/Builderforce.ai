@@ -57,7 +57,14 @@ function fmtDate(iso: string | null | undefined): string {
   return new Date(iso).toLocaleString();
 }
 
-export default function ApiKeysContent({ embedded = false, showProviderKeys = true, search = '', externalViewMode }: { embedded?: boolean; showProviderKeys?: boolean; search?: string; externalViewMode?: ViewMode } = {}) {
+export type ApiKeysContentProps = {
+  embedded?: boolean;
+  showProviderKeys?: boolean;
+  search?: string;
+  externalViewMode?: ViewMode;
+};
+
+export function ApiKeysContent({ embedded = false, showProviderKeys = true, search = '', externalViewMode }: ApiKeysContentProps = {}) {
   const t = useTranslations('apiKeys');
   const router = useRouter();
   const confirm = useConfirm();
@@ -420,4 +427,10 @@ export default function ApiKeysContent({ embedded = false, showProviderKeys = tr
       </div>
     </PageContainer>
   );
+}
+
+/** App Router route entry. Custom presentation props belong to ApiKeysContent; the
+ * route itself must retain Next's parameterless page-component contract. */
+export default function ApiKeysPage() {
+  return <ApiKeysContent />;
 }
