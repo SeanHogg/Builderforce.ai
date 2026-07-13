@@ -1,10 +1,12 @@
-export type ExecutiveSummary = ReturnType<typeof computeExecutiveSummary>;
-export type TimelineView = ReturnType<typeof buildTimelineView>;
-export type CustomerView = ReturnType<typeof buildCustomerView>;
+// deadlinePresenter.ts
 
 // ---------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------
+
+export type ExecutiveSummary = ReturnType<typeof computeExecutiveSummary>;
+export type TimelineView = ReturnType<typeof buildTimelineView>;
+export type CustomerView = ReturnType<typeof buildCustomerView>;
 
 /** Counters per Business/Customer by status. */
 export interface StatusCounters {
@@ -124,12 +126,12 @@ export class DeadlinePresenter {
       label: formatDayLabel(day),
     });
 
-    const business30d: SparklineSegment[] = [],
-      customer30d: SparklineSegment[] = [],
-      business60d: SparklineSegment[] = [],
-      customer60d: SparklineSegment[] = [],
-      business90d: SparklineSegment[] = [],
-      customer90d: SparklineSegment[] = [];
+    const business30d: SparklineSegment[] = [];
+    const customer30d: SparklineSegment[] = [];
+    const business60d: SparklineSegment[] = [];
+    const customer60d: SparklineSegment[] = [];
+    const business90d: SparklineSegment[] = [];
+    const customer90d: SparklineSegment[] = [];
 
     for (let i = 0; i < 90; ++i) {
       const day = now.getTime() - (90 - 1 - i) * 24 * 60 * 60 * 1000;
@@ -196,7 +198,7 @@ export class DeadlinePresenter {
       priority: d.priority,
       tags: d.tags,
       dueDate: d.dueDate,
-      targetDate: d.dueDate, // placeholder; targetDate is the same for Gantt width
+      targetDate: d.dueDate, // Current behavior: target is dueDate; planner hook can diverge when available
       status: d.healthOverride || 'on_track',
       healthOverrideActive: d.healthOverride !== null,
       healthOverrideReason: d.healthOverrideReason || undefined,
@@ -271,7 +273,12 @@ export class DeadlinePresenter {
 // ---------------------------------------------------------------------
 
 type Status<'business' | 'customer'> = keyof StatusCounters[keyof StatusCounters];
-let statusLev: Record<keyof StatusCounters, number> = { on_track: 0, at_risk: 1, off_track: 2, missed: 3 };
+let statusLev: Record<keyof StatusCounters, number> = {
+  on_track: 0,
+  at_risk: 1,
+  off_track: 2,
+  missed: 3,
+};
 let statusLit: Record<string, StatusCounters[keyof StatusCounters]> = {
   on_track: 'on_track' as const,
   at_risk: 'at_risk' as const,
