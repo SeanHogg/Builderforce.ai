@@ -16,6 +16,8 @@ interface ChatDetailProps {
   onTitleChange?: (title: string) => void;
 }
 
+const MOCK_USER_ID = 'user-123';
+
 export function ChatDetail({
   chatId,
   userId,
