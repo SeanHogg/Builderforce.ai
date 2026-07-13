@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { type LLMTask } from "@builderforce/llm-agent";
 import { HenTaskCompletionNotifier, type HenTaskCompletionNotifierConfig } from "./hen-task-completion-notifier.js";
-import { type AccountUtil, type Account } from "../../../src/utils/accounts.js";
-import { type NotificationLogEntry } from "../transport/types.js";
+import { type AccountUtil } from "../../../src/utils/accounts.js";
+import type { TaskStorage } from "../../../src/transport/task-engine.js";
+import type { TaskStatus } from "../../../src/transport/types.js";
 
 /**
  * Configuration schema for the Hen Task Completion Notifier.
@@ -12,6 +13,7 @@ export const HenTaskCompletionNotifierSchema = z.object({
   resendApiKey: z.string().optional(),
   platformName: z.string().default("Builderforce"),
   platformLoginUrl: z.string().default("https://builderforce.ai"),
+  storage: z.any(), // TaskStorage instance for definitive count
 });
 
 type LLMTaskExtensionConfig = z.infer<typeof HenTaskCompletionNotifierSchema>;
@@ -31,10 +33,13 @@ export class LLMTaskTool {
   private config: LLMTaskExtensionConfig;
   private notificationService?: HenTaskCompletionNotifier;
   private accountUtil: AccountUtil;
+  private completedAccountIds = new Set<string>(); // Track notified accounts to prevent duplicates
+  private storage?: TaskStorage;
 
   constructor(config: LLMTaskExtensionConfig, accountUtil: AccountUtil) {
     this.config = HenTaskCompletionNotifierSchema.parse(config);
     this.accountUtil = accountUtil;
+    this.storage = config.storage;
 
     this.initializeNotifier();
   }
@@ -62,45 +67,123 @@ export class LLMTaskTool {
   public register(llmTask: LLMTask): void {
     console.log("[LLMTaskTool] Registering event handlers...");
 
-    // Register handler for task completion events (FR.1 - Hen task completion detection)
-    llmTask.onTaskComplete(async (event) => {
-      console.debug("[LLMTaskTool] Received TaskCompletionEvent:", event);
+    // Register handler for task status change events (FR.1 - Hen task completion detection)
+    llmTask.onTaskStatusChange(async (event) => {
+      console.debug("[LLMTaskTool] Received TaskStatusChangeEvent:", event);
 
-      if (!this.notificationService) {
-        console.warn("[LLMTaskTool] HenTaskCompletionNotifier not initialized. Cannot handle task completion.");
+      if (!this.notificationService || !this.storage) {
+        console.warn("[LLMTaskTool] HenTaskCompletionNotifier not initialized or storage unavailable. Cannot handle task completion.");
         return;
       }
 
       try {
         if (!event.accountId) {
-          console.warn("[LLMTaskTool] Task completion event missing accountId. Cannot notify account.");
+          console.warn("[LLMTaskTool] Task status change event missing accountId. Cannot notify account.");
           return;
         }
 
-        // FR.2: Retrieve account holder's primary email
-        const accountHolderEmail = await this.accountUtil.getPrimaryEmail(event.accountId);
-
-        if (!accountHolderEmail) {
-          console.warn(
-            `[LLMTaskTool] Could not retrieve email for account ${event.accountId}. Skipping email notification.`
-          );
-          console.warn(
-            `[LLMTaskTool] Ensure AccountUtil.getAccountById() returns primaryEmail for account ${event.accountId}`
-          );
-          return;
+        // Only react to completed Hen tasks
+        if (event.taskId && event.oldStatus !== "completed" && event.newStatus === "completed") {
+          await this.handleHenTaskCompletion(event.taskId, event.accountId);
         }
-
-        // Send the notification (FR.3, FR.4, FR.5)
-        await this.notificationService.notify(event.accountId, accountHolderEmail);
       } catch (error) {
-        console.error(
-          "[LLMTaskTool] Error in HenTaskCompletionNotifier during task completion:",
-          error
-        );
+        console.error("[LLMTaskTool] Error in HenTaskCompletionNotifier during task status change:", error);
       }
     });
 
     console.log("[LLMTaskTool] Event handlers registered successfully.");
+  }
+
+  /**
+   * Handles a Hen task completion event by checking if ALL Hen tasks for the account are now complete.
+   * If so, sends the notification email only once (AC.1 and AC.5).
+   */
+  private async handleHenTaskCompletion(taskId: string, accountId: string): Promise<void> {
+    const accountHolderEmail = await this.accountUtil.getPrimaryEmail(accountId);
+
+    if (!accountHolderEmail) {
+      console.warn(
+        `[LLMTaskTool] Could not retrieve email for account ${accountId}. Skipping email notification.`
+      );
+      console.warn(
+        `[LLMTaskTool] Ensure AccountUtil.getAccountById() returns primaryEmail for account ${accountId}`
+      );
+      return;
+    }
+
+    // FR.4: Check if this is the LAST Hen task for the account by verifying all Hen tasks are completed
+    const allHenTasksCompleted = await this.areAllHenTasksCompleted(accountId);
+
+    if (!allHenTasksCompleted) {
+      // Still waiting for other Hen tasks to complete - no notification
+      console.debug(
+        `[LLMTaskTool] Account ${accountId} has ${this.getPendingHenTaskCount(accountId)} Hen tasks remaining. Not sending notification yet.`
+      );
+      return;
+    }
+
+    // AC.5: Prevent duplicate notifications for the same "all tasks complete" event
+    const accountKey = `${accountId}:${this.config.platformName}`;
+    if (this.completedAccountIds.has(accountKey)) {
+      console.debug(
+        `[LLMTaskTool] Account ${accountId} already notified of all Hen tasks completion. Skipping duplicate notification.`
+      );
+      return;
+    }
+
+    // Send the notification (FR.3, FR.4, FR.5)
+    console.log(
+      `[LLMTaskTool] All Hen tasks for account ${accountId} are now complete. Sending notification email to ${accountHolderEmail}.`
+    );
+
+    const logEntry = await this.notificationService.notify(accountId, accountHolderEmail);
+
+    // Track that we've sent the notification for this account
+    this.completedAccountIds.add(accountKey);
+
+    if (logEntry.success) {
+      console.log(`[LLMTaskTool] ✅ Notification sent successfully for account ${accountId}`);
+    } else {
+      console.error(`[LLMTaskTool] ❌ Failed to send notification for account ${accountId}: ${logEntry.errorMessage}`);
+    }
+  }
+
+  /**
+   * Checks if all Hen tasks for the given account are completed.
+   */
+  private async areAllHenTasksCompleted(accountId: string): Promise<boolean> {
+    const allTasks = await this.storage?.list() ?? [];
+    
+    const accountHenTasks = allTasks.filter(
+      (t) => t.accountId === accountId && this.isHenTask(t)
+    );
+
+    // If there are no Hen tasks for this account, consider it completed (meet-the-scope)
+    if (accountHenTasks.length === 0) {
+      return true;
+    }
+
+    // Check if all found Hen tasks are completed
+    return accountHenTasks.every((t) => t.status === "completed");
+  }
+
+  /**
+   * Gets the count of pending (not completed) Hen tasks for the given account.
+   */
+  private getPendingHenTaskCount(accountId: string): number {
+    const allTasks = this.storage?.list() ?? [];
+    const accountHenTasks = allTasks.filter(
+      (t) => t.accountId === accountId && this.isHenTask(t)
+    );
+
+    return accountHenTasks.filter((t) => t.status !== "completed").length;
+  }
+
+  /**
+   * Helper to check if a task is a 'Hen' task based on taskType metadata.
+   */
+  private isHenTask(task: { taskType?: string }): boolean {
+    return task.taskType === "Hen";
   }
 
   /**
