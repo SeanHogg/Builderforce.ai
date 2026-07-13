@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
 
 /** Max line-length tiers for capped pages — all kept LEFT-aligned, never centered. */
 const READABLE_MAX = 1100;
