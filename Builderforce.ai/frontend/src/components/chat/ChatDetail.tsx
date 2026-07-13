@@ -136,6 +136,7 @@ export function ChatDetail({
       setUpdatedChat(updated);
       setEditingTitle(false);
       onTitleChange?.(editTitleText.trim());
+      syncTitleToStorage(chatId, editTitleText.trim());
     } catch (err: any) {
       alert(err.message || 'Failed to save title');
       setEditTitleText(updatedChat.title);
