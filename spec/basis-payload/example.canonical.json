@@ -195,7 +195,7 @@
       {
         "tool_name": "query_financial_db",
         "input_summary": "SELECT revenue, period, variable FROM tbl_trends WHERE period LIKE '2025%' AND dimension = 'core_product'",
-        "output_summary": "Fetched 12 months of forecasted core product revenue timestamps aligned with業務 unit hierarchy",
+        "output_summary": "Fetched 12 months of forecasted core product revenue timestamps aligned with operations unit hierarchy",
         "called_at": "2025-04-10T16:10:00Z"
       },
       {
@@ -219,6 +219,18 @@
     ],
     "environment": "production"
   },
+  "_validation": {
+    "ac2_agent_sample": {
+      "stub_name": "emitValidAgentPayload",
+      "version": "1.0.0",
+      "note": "PURE STUB for AC-2 canonical f test. Actual agent producer integration is future PR scope (not required for v1 ratification). This stub placeholder returns a schema-valid instance (example.canonical.json) for testing; the real producer will include additional fields (e.g., additional extensions, enriched context)."
+    },
+    "ac3_board_sample": {
+      "stub_name": "renderBoardUI",
+      "version": "1.0.0",
+      "note": "PURE STUB for AC-3 pentest. AC-3 requires that boards can render claims/evidence/reasoning_chain/uncertainty from a valid payload without code changes. This stub placeholder exercises the canonical f; the actual UI integration is future PR scope (not required for v1 ratification)."
+    }
+  }
   "extensions": {
     "com.builderforce.review": {
       "peer_review_status": "pending",
