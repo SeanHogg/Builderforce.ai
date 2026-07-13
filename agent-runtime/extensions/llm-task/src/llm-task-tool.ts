@@ -67,4 +67,7 @@ export class LLMTaskTool {
 }
 
 // Export the configuration schema for potential external use or validation
-export { HenTaskCompletionNotifierToolConfigSchema };
+export { HenTaskCompletionNotifierSchema };
+
+// Alias for the configuration schema type
+export type LLMTaskExtensionConfig = z.infer<typeof HenTaskCompletionNotifierSchema>;
