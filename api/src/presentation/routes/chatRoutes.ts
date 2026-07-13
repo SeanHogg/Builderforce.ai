@@ -78,9 +78,6 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
 
     const userId = c.get('userId') as string | null;
 
-    // Debug: log to stdout (optional)
-    // console.log(`[consolidate] tenant:${tenantId} target:${targetId} sources:${sourceIds.join(',')}`);
-
     const result = await ticketService.consolidate(tenantId, userId, {
       targetChatId: targetId,
       sourceChatIds: sourceIds,
