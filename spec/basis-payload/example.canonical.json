@@ -5,7 +5,6 @@
   "agent_id": "coderclaw-mock-basis-gen",
   "session_id": "sess-12345",
   "parent_basis_id": null,
-  "sandbox": "development",
   "claims": [
     {
       "claim_id": "550e8400-e29b-41d4-a716-446655440001",
