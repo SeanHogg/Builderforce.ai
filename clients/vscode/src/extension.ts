@@ -110,7 +110,7 @@ export function activate(context: vscode.ExtensionContext): void {
     managerStatus,
     vscode.commands.registerCommand(OPEN_MANAGER_CMD, () =>
       vscode.env.openExternal(vscode.Uri.parse(`${appUrl()}/projects?tab=manager`))),
-    attention.onDidChange(() => { tree.refresh(); projects.refresh(); updateManagerStatus(); }),
+    attention.onDidChange(() => { tree.refresh(); projects.refresh(); inbox.refresh(); updateManagerStatus(); }),
     // The in-webview Brain loop reports its own running / awaiting chats (the server
     // can't see them) — repaint the Sessions tree so they light up in lockstep.
     onLocalRunsChange(() => tree.refresh()),
@@ -235,9 +235,10 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("builderforce.newSession", () =>
       BrainWebview.open(context, { kind: "new" }),
     ),
-    vscode.commands.registerCommand("builderforce.openSession", (id: number | string) => {
+    vscode.commands.registerCommand("builderforce.openSession", (id: number | string, approvalId?: string) => {
       const chatId = chatIdOf(id);
       BrainWebview.open(context, chatId != null ? { kind: "focus", chatId } : { kind: "new" });
+      if (approvalId) void reviewHumanRequests(context, projects, approvalId);
     }),
     vscode.commands.registerCommand("builderforce.selectProject", () => selectProject(context, projects)),
     vscode.commands.registerCommand("builderforce.createProject", () => createProject(context, projects)),
@@ -308,8 +309,8 @@ export function activate(context: vscode.ExtensionContext): void {
       void vscode.window.showInformationMessage(`Logged a ${mins}-minute meeting as paid time.`);
     }),
     // Review the tenant's pending human-in-the-loop approvals and resolve them.
-    vscode.commands.registerCommand("builderforce.humanRequests", () =>
-      reviewHumanRequests(context, projects),
+    vscode.commands.registerCommand("builderforce.humanRequests", (approvalId?: string) =>
+      reviewHumanRequests(context, projects, approvalId),
     ),
     // The Board renders NATIVELY in a webview from bfApi data (not the embedded web
     // page) — reliable inside a VS Code webview where the /embed iframe is not.
@@ -811,6 +812,7 @@ async function runTask(
 async function reviewHumanRequests(
   context: vscode.ExtensionContext,
   projects: ProjectsTreeProvider,
+  requestedApprovalId?: string,
 ): Promise<void> {
   if (!(await ensureSignedIn(context))) return;
 
@@ -827,7 +829,10 @@ async function reviewHumanRequests(
   }
 
   const isAnswerable = (a: bfApi.BfApproval): boolean => a.kind === "question" || a.kind === "feedback";
-  const pick = await vscode.window.showQuickPick(
+  const requested = requestedApprovalId
+    ? pending.find((a) => String(a.id) === String(requestedApprovalId))
+    : undefined;
+  const pick = requested ? { approval: requested } : await vscode.window.showQuickPick(
     pending.map((a) => ({
       label: `$(${isAnswerable(a) ? "comment" : "shield"}) ${a.description?.slice(0, 70) || a.actionType || a.kind || "Approval"}`,
       description: a.kind ?? "",

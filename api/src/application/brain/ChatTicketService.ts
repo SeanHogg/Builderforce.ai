@@ -36,6 +36,7 @@ import { AgentAssignmentService } from '../agent/AgentAssignmentService';
 import { resolveChatAccess } from './chatAccess';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { broadcastBrainChatChanged } from '../../infrastructure/relay/broadcastRoom';
 
 const CHAT_SCOPE = 'chat';
 
@@ -565,26 +566,23 @@ export class ChatTicketService {
       if (!owned) return { error: `Source chat ${sid} not found` };
     }
 
-    // Current max seq on the target, so appended messages continue the sequence.
-    const [maxRow] = await this.db
-      .select({ maxSeq: sql<number>`COALESCE(MAX(${brainChatMessages.seq}), 0)` })
-      .from(brainChatMessages).where(eq(brainChatMessages.chatId, input.targetChatId));
-    let seq = Number(maxRow?.maxSeq ?? 0);
-
     // Gather source messages, ordered chronologically across all sources.
     const srcMsgs = await this.db
-      .select({ role: brainChatMessages.role, content: brainChatMessages.content, metadata: brainChatMessages.metadata, createdAt: brainChatMessages.createdAt, seq: brainChatMessages.seq })
+      .select({ role: brainChatMessages.role, content: brainChatMessages.content, metadata: brainChatMessages.metadata, eventKey: brainChatMessages.eventKey, createdAt: brainChatMessages.createdAt, seq: brainChatMessages.seq })
       .from(brainChatMessages)
       .where(inArray(brainChatMessages.chatId, sources))
       .orderBy(brainChatMessages.createdAt, brainChatMessages.seq);
 
     let messagesMoved = 0;
     for (const m of srcMsgs) {
-      seq += 1;
-      await this.db.insert(brainChatMessages).values({
-        chatId: input.targetChatId, role: m.role, content: m.content, metadata: m.metadata, seq,
-      });
-      messagesMoved += 1;
+      const [inserted] = await this.db.insert(brainChatMessages).values({
+        chatId: input.targetChatId, role: m.role, content: m.content,
+        metadata: m.metadata, eventKey: m.eventKey,
+      }).onConflictDoNothing().returning({ id: brainChatMessages.id });
+      if (inserted) {
+        await this.db.update(brainChatMessages).set({ seq: inserted.id }).where(eq(brainChatMessages.id, inserted.id));
+        messagesMoved += 1;
+      }
     }
 
     // Move ticket links to the target (skip ones already present on the target).
@@ -663,14 +661,22 @@ export class ChatTicketService {
 
   /** Append a system-authored assistant line to a chat (dispatch notices + run milestones).
    *  metadata is a JSON string column (matches BrainService's JSON.stringify convention). */
-  private async postSystemMessage(chatId: number, content: string, metadata?: Record<string, unknown>): Promise<void> {
-    const [maxRow] = await this.db
-      .select({ maxSeq: sql<number>`COALESCE(MAX(${brainChatMessages.seq}), 0)` })
-      .from(brainChatMessages).where(eq(brainChatMessages.chatId, chatId));
-    const seq = Number(maxRow?.maxSeq ?? 0) + 1;
-    await this.db.insert(brainChatMessages).values({
-      chatId, role: 'assistant', content, metadata: metadata ? JSON.stringify(metadata) : null, seq,
-    });
+  private async postSystemMessage(
+    tenantId: number,
+    chatId: number,
+    content: string,
+    metadata?: Record<string, unknown>,
+    eventKey?: string,
+  ): Promise<void> {
+    // The generated PK is the database's atomic append order. Copying it to `seq`
+    // avoids the racy MAX(seq)+1 read used by concurrent agent publishers.
+    const [inserted] = await this.db.insert(brainChatMessages).values({
+      chatId, role: 'assistant', content, metadata: metadata ? JSON.stringify(metadata) : null,
+      eventKey: eventKey ?? null,
+    }).onConflictDoNothing().returning({ id: brainChatMessages.id });
+    if (!inserted) return;
+    await this.db.update(brainChatMessages).set({ seq: inserted.id }).where(eq(brainChatMessages.id, inserted.id));
+    await broadcastBrainChatChanged(this.env.SESSION_ROOM, tenantId, chatId);
   }
 
   /**
@@ -707,6 +713,7 @@ export class ChatTicketService {
       });
       if (name === undefined) name = await this.agentDisplayName(tenantId, agentRef);
       await this.postSystemMessage(
+        tenantId,
         t.chatId,
         `🤖 **${name}** has been assigned to ${kind} #${ref}. Progress will appear here as it works.`,
         { agentDispatch: true, agentRef, ticketKind: kind, ticketRef: ref },
@@ -742,17 +749,6 @@ export class ChatTicketService {
     return `⚠️ **${name}**'s run on ${kind} #${ref} failed.${why ? ` ${why}` : ''}`;
   }
 
-  /** Has a milestone with this per-execution+phase key already been posted to the chat?
-   *  (metadata is a JSON string; `runMilestone` is written first so the LIKE is exact.) */
-  private async milestonePosted(chatId: number, key: string): Promise<boolean> {
-    const [hit] = await this.db
-      .select({ id: brainChatMessages.id })
-      .from(brainChatMessages)
-      .where(and(eq(brainChatMessages.chatId, chatId), sql`${brainChatMessages.metadata} LIKE ${`%"runMilestone":"${key}"%`}`))
-      .limit(1);
-    return !!hit;
-  }
-
   /**
    * Post a run MILESTONE for a ticket into every Brain chat it is linked to — the runtime's
    * hook so a cloud-agent run narrates its progress back into the conversation that spawned
@@ -780,13 +776,17 @@ export class ChatTicketService {
         ?? (input.agentRef ? await this.agentDisplayName(tenantId, input.agentRef) : 'The agent');
       const key = `${executionId}:${phase}`;
       const text = ChatTicketService.runMilestoneText(name, kind, ref, input);
-      for (const c of chats) {
-        if (await this.milestonePosted(c.chatId, key)) continue;
-        await this.postSystemMessage(c.chatId, text, {
+      await Promise.all(chats.map((c) => this.postSystemMessage(tenantId, c.chatId, text, {
           runMilestone: key, ticketKind: kind, ticketRef: ref, phase, executionId, agentRef: input.agentRef ?? null,
-        });
-      }
-    } catch { /* best-effort: chat narration must never break a run */ }
+        }, `run:${key}`)));
+    } catch (error) {
+      // Narration remains best-effort, but delivery failures must be observable.
+      console.error('[brain:run-milestone] publish failed', {
+        tenantId, executionId: input.executionId, phase: input.phase,
+        ticketKind: input.kind, ticketRef: input.ref,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 }
 

@@ -670,12 +670,6 @@ export class BrainService {
    *  callers must have already verified access. Shared by {@link appendMessages}
    *  and {@link agentReply} so the write path lives once. */
   private async appendRaw(chatId: number, messages: Array<{ role: string; content: string; metadata?: string | null }>) {
-    const [maxRow] = await this.db
-      .select({ maxSeq: sql<number>`COALESCE(MAX(${brainChatMessages.seq}), 0)` })
-      .from(brainChatMessages)
-      .where(eq(brainChatMessages.chatId, chatId));
-    let seq = maxRow?.maxSeq ?? 0;
-
     const inserted: Array<{
       id: number;
       role: string;
@@ -687,7 +681,6 @@ export class BrainService {
 
     for (const msg of messages) {
       if (!msg.role || typeof msg.content !== 'string') continue;
-      seq += 1;
       const [row] = await this.db
         .insert(brainChatMessages)
         .values({
@@ -695,10 +688,14 @@ export class BrainService {
           role: msg.role,
           content: msg.content,
           metadata: msg.metadata ?? null,
-          seq,
         })
         .returning(messageColumns);
-      if (row) inserted.push(row);
+      if (row) {
+        // The generated PK is an atomic database append order. A read-then-write
+        // MAX(seq)+1 races when agents and humans append concurrently.
+        await this.db.update(brainChatMessages).set({ seq: row.id }).where(eq(brainChatMessages.id, row.id));
+        inserted.push({ ...row, seq: row.id });
+      }
     }
 
     // Touch updatedAt on the chat

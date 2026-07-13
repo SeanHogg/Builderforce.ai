@@ -17,6 +17,7 @@ vi.mock('./streamChatCompletion', () => ({
 let seq = 0;
 const persistence = {
   getMessages: vi.fn(async () => []),
+  subscribeMessages: vi.fn(() => () => {}),
   // Echo each sent message back with a fresh id, as the real API does.
   sendMessages: vi.fn(async (_chatId: number, msgs: Array<{ role: string; content: string; metadata?: string }>) =>
     msgs.map((m) => ({ id: ++seq, role: m.role, content: m.content, metadata: m.metadata ?? null, seq, createdAt: '' })),
@@ -50,6 +51,8 @@ const TOOL = {
 beforeEach(() => {
   seq = 0;
   mockStream.mockReset();
+  vi.mocked(persistence.getMessages).mockReset().mockResolvedValue([]);
+  vi.mocked(persistence.subscribeMessages!).mockReset().mockImplementation(() => () => {});
   vi.mocked(persistence.sendMessages).mockClear();
   // The run engine is a module-level singleton keyed by chatId; reset it so a
   // chat's session-lived transcript doesn't leak between tests reusing chatId 1.
@@ -57,6 +60,36 @@ beforeEach(() => {
 });
 
 describe('useBrainConversation agent loop (injected transport + persistence)', () => {
+  it('streams durable messages appended by an assigned agent into the open chat', async () => {
+    let notifyChanged: (() => void) | undefined;
+    vi.mocked(persistence.subscribeMessages!).mockImplementation((_chatId, onChanged) => {
+      notifyChanged = onChanged;
+      return () => {};
+    });
+    const serverMessages: Array<{ id: number; role: string; content: string; metadata: string | null; seq: number; createdAt: string }> = [];
+    vi.mocked(persistence.getMessages).mockImplementation(async () => [...serverMessages]);
+    const { result: hook, unmount } = renderHook(
+      () => useBrainConversation({ chatId: 41, toolSpecs: [], runTool: vi.fn() }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(persistence.getMessages).toHaveBeenCalled());
+    serverMessages.push({
+      id: 9001,
+      role: 'assistant',
+      content: '▶️ **John Coder** started working on task #712.',
+      metadata: JSON.stringify({ runMilestone: '88:started', agentRef: 'john-coder' }),
+      seq: 1,
+      createdAt: '2026-07-13T00:30:00.000Z',
+    });
+    act(() => notifyChanged?.());
+
+    await waitFor(() => expect(hook.current.messages.map((m) => m.content)).toContain(
+      '▶️ **John Coder** started working on task #712.',
+    ));
+    unmount();
+  });
+
   it('text-only reply: persists user + final assistant once, no tools', async () => {
     mockStream.mockResolvedValueOnce(result({ text: 'hello there' }));
     const { rerender, result: hook } = renderHook(
