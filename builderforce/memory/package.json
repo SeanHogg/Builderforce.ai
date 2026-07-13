@@ -25,7 +25,7 @@
     "test:coverage": "vitest coverage",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
-    "prepublishOnly": "pnpm build"
+    "prepublishOnly": "pnpm run typecheck && pnpm run test && pnpm run lint"
   },
   "keywords": [
     "builderforce",
