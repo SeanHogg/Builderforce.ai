@@ -120,10 +120,9 @@ export class Sequencer {
   private steps = new Map<string, StepState>();
   /** Per-task buffer map. */
   private buffers = new Map<string, ChunkBuffer>();
-  /** Global log (mocked for this stub). */
-  private log = (msg: string, ctx?: unknown): void => {
-    // NOTE: this log stub is placeholders. Post-merge we’ll replace with proper logger.
-    // Example expectation: log('sequencer:event', { taskId, stepId, status, latency });
+  /** Minimal logging stub to avoid blocking completion while awaiting logger graft. */
+  private log = (_msg: string, _ctx?: unknown): void => {
+    // .log messages remain disabled until sequencer wireto-gateway delivered.
   };
 
   /**
