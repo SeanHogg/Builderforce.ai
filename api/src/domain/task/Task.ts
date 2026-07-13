@@ -134,10 +134,10 @@ export function createTask(raw: Omit<Task, 'createdAt' | 'updatedAt' | 'progress
     total,
     completed: raw.status === TaskStatus.COMPLETED ? 1 : 0,
     failed: (() => {
-      if (raw.status === TaskStatus.FAILED || raw.status === TaskStatus.CANCELLED) return 1;
+      if (raw.status === TaskStatus.FAILED) return 1;
       return 0;
     })(),
-    skipped: raw.status === TaskStatus.SKIPPED ? 1 : 0,
+    skipped: raw.status === TaskStatus.CANCELLED ? 1 : 0,
     pending: raw.status === TaskStatus.PENDING || raw.status === TaskStatus.IN_PROGRESS ? 1 : 0,
     percentage: total === 0 ? 100 : Math.floor((progress.completed / total) * 100),
   };
