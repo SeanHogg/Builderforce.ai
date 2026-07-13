@@ -302,8 +302,6 @@ describe("progressBreakdown integration endpoint", () => {
     // TODO: FR-3.4 FR-3.5 auth scenarios out of scope per AC-4 (integration tests focus on endpoint routes, not auth middleware).
     // These would be covered in separate auth middleware tests.
   });
-
-  describe("Edge cases FR-4", () => {
     // FR-4.4: Floating-point inputs (subtasksDone) should not cause serialization errors.
     it("handles floating-point subtasksDone value without serialization error", async () => {
       const zero: ProgressBreakdown = { basis: "manual", subtasksDone: 0, subtasksTotal: 0, codeDelivered: false, testsPassing: null, prState: null };
