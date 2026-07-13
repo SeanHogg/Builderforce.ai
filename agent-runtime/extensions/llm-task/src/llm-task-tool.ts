@@ -1,10 +1,10 @@
 import { type LLMTask } from "@builderforce/llm-agent";
 import { type TaskCompletionEvent, type TaskUpdateEvent } from "../src/types/task.js";
 import { HenTaskCompletionNotifier, HenTaskCompletionNotifierSchema } from "./hen-task-completion-notifier.js";
-import Logger from "../src/utils/logging.js";
+import { getLogger } from "../../src/logging.js";
 import notificationStorage from "./notification-storage.js";
 
-const logger = new Logger("LLMTaskTool");
+const logger = getLogger();
 
 type LLMTaskExtensionConfig = z.infer<typeof HenTaskCompletionNotifierSchema>;
 
