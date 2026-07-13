@@ -55,6 +55,7 @@ export interface UpdateTaskDto {
   priority?: TaskPriority;
   taskType?: TaskType;
   parentTaskId?: number | null;
+  gapOriginTaskId?: number | null; // Added correctly
   sprintId?: string | null;
   releaseId?: string | null;
   storyPoints?: number | null;
@@ -72,7 +73,6 @@ export interface UpdateTaskDto {
   dueDate?: string | null;
   persona?: string | null;
   archived?: boolean;
-  gapOriginTaskId?: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -231,7 +231,7 @@ export class TaskService {
     // Build updates: only include fields that are explicitly defined (or explicitly null), matching updateTask behavior.
     // This ensures omitted fields preserve the existing stored value.
     const updates: Partial<
-      Pick<TaskProps, 'title' | 'description' | 'status' | 'priority' | 'taskType' | 'parentTaskId' | 'assignedAgentType' | 'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' > &
+      Pick<TaskProps, 'title' | 'description' | 'status' | 'priority' | 'taskType' | 'parentTaskId' | 'gapOriginTaskId' | 'assignedAgentType' | 'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' >
       Pick<
         TaskProps,
         'gitBranch' | 'explicitRepoId' | 'sprintId' | 'releaseId' | 'storyPoints' | 'startDate' | 'dueDate' | 'businessValue' | 'businessValueRationale' | 'businessValueSource' | 'managerRank' | 'persona' | 'archived'
@@ -244,9 +244,13 @@ export class TaskService {
     if (dto.status !== undefined) updates.status = dto.status;
     if (dto.priority !== undefined) updates.priority = dto.priority;
     if (dto.taskType !== undefined) updates.taskType = dto.taskType;
-    // parentTaskId: Explicitly tracked to satisfy parentTaskId persistence PRD requirement.
+    parentTaskId: Explicitly tracked
     if (dto.parentTaskId !== undefined) {
       updates.parentTaskId = dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null;
+    }
+    // NEW: gapOriginTaskId
+    if (dto.gapOriginTaskId !== undefined) {
+      updates.gapOriginTaskId = dto.gapOriginTaskId != null ? asTaskId(dto.gapOriginTaskId) : null;
     }
     // Scoped metadata and numeric fields
     if (dto.sprintId !== undefined) updates.sprintId = dto.sprintId;
