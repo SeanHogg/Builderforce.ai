@@ -1,5 +1,5 @@
 /**
- * Interface for capability repository operations.
+ * Domain interface for capability repository operations.
  */
 
 export interface Capability {
