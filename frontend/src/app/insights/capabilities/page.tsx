@@ -538,14 +538,14 @@ export default function CapabilitiesPage() {
           <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
             <h2 className="mb-4 text-lg font-semibold">Status Breakdown</h2>
             <div className="flex items-center justify-center">
-              <DonutChart segments={pieSegments} size={200} ariaLabel="Status breakdown" />
+              <CanvasPieChart segments={pieSegments} size={200} thickness={40} ariaLabel="Status breakdown" />
             </div>
           </div>
 
           {/* Category Breakdown */}
           <div className="rounded-xl border border-border bg-card p-6 shadow-sm col-span-2">
             <h2 className="mb-4 text-lg font-semibold">By Category</h2>
-            <BarChart
+            <CanvasBarChart
               data={barData}
               labelWidth={120}
               yAxisExtraLabel="Capabilities"
