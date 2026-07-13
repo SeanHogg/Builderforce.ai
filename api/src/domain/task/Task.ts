@@ -216,7 +216,20 @@ export class Task {
       >
     >,
   ): Task {
-    return new Task({ ...this.props, ...updates, updatedAt: new Date() });
+    // Merge/patch semantics: a partial update only touches the fields the caller
+    // actually supplied. Any key whose value is `undefined` (i.e. omitted from the
+    // payload) is dropped BEFORE the spread, so it can never overwrite the current
+    // persisted value with `undefined`. This is the difference between "field
+    // absent → leave unchanged" and "field explicitly null → clear it": callers
+    // pass `null` to clear (e.g. detach a subtask via parentTaskId: null), which
+    // survives this filter and reaches the persistence layer. Applied uniformly to
+    // every field so no scalar (parentTaskId, status, assignees, …) can be silently
+    // dropped by an omitted key.
+    const patch: Partial<TaskProps> = {};
+    for (const [key, value] of Object.entries(updates)) {
+      if (value !== undefined) (patch as Record<string, unknown>)[key] = value;
+    }
+    return new Task({ ...this.props, ...patch, updatedAt: new Date() });
   }
 
   /**

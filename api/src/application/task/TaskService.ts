@@ -49,7 +49,9 @@ export interface UpdateTaskDto {
   priority?: TaskPriority;
   /** 'task' | 'epic'. Reclassifying to epic is normally done via decomposeEpic. */
   taskType?: TaskType;
-  /** Re-parent under an Epic (planning "drag into Epic"), or null to detach. */
+  /**
+   * Re-parent under an Epic (planning "drag into Epic"), or null to detach.
+   */
   parentTaskId?: number | null;
   /** Schedule into / out of a sprint (planning "drag onto sprint"). null = unscheduled. */
   sprintId?: string | null;
@@ -74,6 +76,25 @@ export interface UpdateTaskDto {
   persona?: string | null;
   archived?: boolean;
 }
+
+/**
+ * Subset of UpdateTaskDto containing only the fields that can be updated
+ * via the Task.update() domain method. This is used to type the internal
+ * `updatable` object in `updateTask` to ensure that updates that are passed
+ * through to the domain layer are exactly the fields that the domain layer
+ * permits change.
+ *
+ * FR-1/FR-4: parentTaskId appears here because it's explicitly handled in the
+ * build-updatable logic: if `dto.parentTaskId !== undefined` we include it,
+ * otherwise we exclude it, leaving the persisted value unchanged on the domain
+ * Task entity (which then persists exactly what it receives). When explicitly
+ * null or a value is provided, this includes it in the patch, which clears or
+ * resets parentTaskId as desired per FR-2/FR-3.
+ */
+type UpdateTaskDtoWithoutId = Pick<
+  UpdateTaskDto,
+  'title' | 'description' | 'status' | 'priority' | 'taskType' | 'parentTaskId' | 'sprintId' | 'releaseId' | 'storyPoints' | 'assignedAgentType' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'startDate' | 'dueDate' | 'businessValue' | 'businessValueRationale' | 'businessValueSource' | 'managerRank' | 'persona' | 'archived'
+>;
 
 /**
  * Application service: orchestrates Task use cases.
@@ -190,17 +211,37 @@ export class TaskService {
   async updateTask(id: number, dto: UpdateTaskDto): Promise<Task> {
     const task = await this.getTask(id);
     const wasAssignedToAgent = task.isAssignedToAgent;
-    const updated = task.update({
-      ...dto,
-      assignedAgentHostId: dto.assignedAgentHostId !== undefined
-        ? (dto.assignedAgentHostId != null ? asAgentHostId(dto.assignedAgentHostId) : null)
-        : undefined,
-      parentTaskId: dto.parentTaskId !== undefined
-        ? (dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null)
-        : undefined,
-      startDate: dto.startDate !== undefined ? (dto.startDate ? new Date(dto.startDate) : null) : undefined,
-      dueDate: dto.dueDate !== undefined ? (dto.dueDate ? new Date(dto.dueDate) : null) : undefined,
-    });
+
+    // Build updatable DTO, explicitly skipping parentTaskId when not in the input.
+    // This ensures that PUT-style payloads that omit it leave the existing value untouched.
+    // FR-1: If dto.parentTaskId !== undefined, we include it; otherwise we exclude it.
+    // FR-2/FR-3: When dto.parentTaskId is explicitly null or a value, it is included.
+    const updatable: UpdateTaskDtoWithoutId = {};
+    if (dto.title !== undefined) updatable.title = dto.title;
+    if (dto.description !== undefined) updatable.description = dto.description;
+    if (dto.status !== undefined) updatable.status = dto.status;
+    if (dto.priority !== undefined) updatable.priority = dto.priority;
+    if (dto.taskType !== undefined) updatable.taskType = dto.taskType;
+    if (dto.parentTaskId !== undefined) updatable.parentTaskId = dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null;
+    if (dto.sprintId !== undefined) updatable.sprintId = dto.sprintId;
+    if (dto.releaseId !== undefined) updatable.releaseId = dto.releaseId;
+    if (dto.storyPoints !== undefined) updatable.storyPoints = dto.storyPoints;
+    if (dto.assignedAgentType !== undefined) updatable.assignedAgentType = dto.assignedAgentType;
+    if (dto.assignedAgentHostId !== undefined) updatable.assignedAgentHostId = dto.assignedAgentHostId != null ? asAgentHostId(dto.assignedAgentHostId) : null;
+    if (dto.assignedAgentRef !== undefined) updatable.assignedAgentRef = dto.assignedAgentRef;
+    if (dto.assignedUserId !== undefined) updatable.assignedUserId = dto.assignedUserId;
+    if (dto.gitBranch !== undefined) updatable.gitBranch = dto.gitBranch;
+    if (dto.explicitRepoId !== undefined) updatable.explicitRepoId = dto.explicitRepoId;
+    if (dto.startDate !== undefined) updatable.startDate = dto.startDate ? new Date(dto.startDate) : null;
+    if (dto.dueDate !== undefined) updatable.dueDate = dto.dueDate ? new Date(dto.dueDate) : null;
+    if (dto.businessValue !== undefined) updatable.businessValue = dto.businessValue;
+    if (dto.businessValueRationale !== undefined) updatable.businessValueRationale = dto.businessValueRationale;
+    if (dto.businessValueSource !== undefined) updatable.businessValueSource = dto.businessValueSource;
+    if (dto.managerRank !== undefined) updatable.managerRank = dto.managerRank;
+    if (dto.persona !== undefined) updatable.persona = dto.persona;
+    if (dto.archived !== undefined) updatable.archived = dto.archived;
+
+    const updated = task.update(updatable);
     const saved = await this.tasks.update(updated);
     // On-assign hook: only when this update is what newly handed the task to an
     // agent (a transition into agent-ownership), and only for a plain `task`

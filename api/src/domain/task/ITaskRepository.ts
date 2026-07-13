@@ -1,46 +1,61 @@
 import { Task } from './Task';
-import { TaskId, ProjectId } from '../shared/types';
-
-/** List options shared by the task-listing queries. */
-export interface TaskListOptions {
-  /**
-   * Include archived tasks in the result. Defaults to false: archived tasks are
-   * removed from the board/backlog and the brain's list view, and are only
-   * surfaced where the archive itself is the subject (e.g. project deletion).
-   */
-  includeArchived?: boolean;
-}
+import { ProjectId } from '../shared/types';
 
 export interface ITaskRepository {
-  findAll(projectId?: ProjectId, opts?: TaskListOptions): Promise<Task[]>;
-  findByProjectIds(ids: ProjectId[], opts?: TaskListOptions): Promise<Task[]>;
-  findById(id: TaskId): Promise<Task | null>;
-  /** Direct child tasks of an Epic (parent_task_id = parentId), oldest first. */
-  findChildren(parentId: TaskId): Promise<Task[]>;
   /**
-   * Highest existing task-key sequence number in a project (0 if none). Keys are
-   * `${projectKey}-${NNN}`; the next key is this + 1. Used instead of a row count
-   * for key allocation: counts skip the gaps left by deletes/moves and would
-   * collide on the globally-unique `tasks.key`.
+   * Find a task by its unique ID.
+   */
+  findById(id: number): Promise<Task | null>;
+
+  /**
+   * Find all tasks under one or more projects (tenant-scoped).
+   * Option: includeArchived — board/backlog/brain views should not show archived items.
+   */
+  findAll(projectId?: ProjectId, opts?: { includeArchived?: boolean }): Promise<Task[]>;
+
+  /**
+   * Find tasks by project IDs (for tenant-wide queries).
+   */
+  findByProjectIds(projectIds: ProjectId[], opts?: { includeArchived?: boolean }): Promise<Task[]>;
+
+  /**
+   * Find direct children of a parent task (the tree traversal step for Epic details).
+   */
+  findChildren(parentId: number): Promise<Task[]>;
+
+  /**
+   * Find the highest key sequence number under a project (for safe key increment).
    */
   maxKeySeqByProject(projectId: ProjectId): Promise<number>;
+
   /**
-   * Re-key every task in a project onto a new project-key prefix, preserving each
-   * task's numeric sequence suffix (`<oldKey>-071` → `<newProjectKey>-071`). Run
-   * when the Project Key changes so existing tasks adopt it alongside new ones.
-   * Only rows whose suffix is purely numeric are touched (mirrors
-   * {@link maxKeySeqByProject}); legacy/odd keys are left untouched. The new
-   * prefix is globally unique, so re-keyed rows never collide. Returns the count
-   * of rows re-keyed.
+   * Re-key all tasks under a project when the board key changes.
    */
   rekeyProject(projectId: ProjectId, newProjectKey: string): Promise<number>;
-  save(task: Task): Promise<Task>;
-  update(task: Task): Promise<Task>;
-  delete(id: TaskId): Promise<void>;
+
   /**
-   * Atomically select the next `ready` task in one of the provided projects,
-   * mark it as in_progress, and return it. Operates inside a transaction so
-   * concurrent callers will skip locked rows.
+   * Create or update a task with full data.
+   */
+  save(task: Task): Promise<Task>;
+
+  /**
+   * Update a task by ID (alternatively upserting by ID + key).
+   * This is the mutation entry point for REST and command handlers.
+   */
+  saveById(id: number, task: Task): Promise<Task>;
+
+  /**
+   * Full update using a domain-managed Task (+ mutated ID on move).
+   */
+  update(task: Task): Promise<Task>;
+
+  /**
+   * Delete a task by ID.
+   */
+  delete(id: number): Promise<void>;
+
+  /**
+   * Select the next prioritized task for a worker (tenant-scoped).
    */
   dequeueNextReady(projectIds: ProjectId[]): Promise<Task | null>;
 }
