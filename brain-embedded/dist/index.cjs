@@ -86,6 +86,7 @@ __export(src_exports, {
   streamChatCompletion: () => streamChatCompletion,
   subscribeRun: () => subscribeRun,
   subscribeRunStore: () => subscribeRunStore,
+  subscribeToChatMessages: () => subscribeToChatMessages,
   takePendingPrompt: () => takePendingPrompt,
   useBrainActions: () => useBrainActions,
   useBrainChats: () => useBrainChats,
@@ -2361,6 +2362,10 @@ function useBrainConversation(options) {
     };
   }, [persistence, chatId, reloadNonce]);
   (0, import_react6.useEffect)(() => {
+    if (chatId == null || !persistence.subscribeMessages) return;
+    return persistence.subscribeMessages(chatId, reloadMessages);
+  }, [persistence, chatId, reloadMessages]);
+  (0, import_react6.useEffect)(() => {
     const appended = snapshot.appended;
     if (appended.length === 0) return;
     setMessages((prev) => {
@@ -2587,6 +2592,55 @@ ${refs}`;
   };
 }
 
+// src/chatMessageSubscription.ts
+function subscribeToChatMessages(baseUrl, getToken, chatId, onChanged) {
+  let stopped = false;
+  let socket = null;
+  let retry = null;
+  let attempt = 0;
+  const connect = () => {
+    if (stopped || typeof WebSocket === "undefined") return;
+    const token = getToken();
+    if (!token) return;
+    const url = new URL(`/api/brain/chats/${chatId}/stream`, baseUrl);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    url.searchParams.set("token", token);
+    try {
+      socket = new WebSocket(url.toString());
+    } catch {
+      scheduleReconnect();
+      return;
+    }
+    socket.onopen = () => {
+      attempt = 0;
+    };
+    socket.onmessage = (event) => {
+      try {
+        const frame = JSON.parse(String(event.data));
+        if (frame.type === "changed") onChanged();
+      } catch {
+      }
+    };
+    socket.onclose = () => scheduleReconnect();
+    socket.onerror = () => socket?.close();
+  };
+  const scheduleReconnect = () => {
+    if (stopped || retry) return;
+    const delay = Math.min(1e3 * 2 ** attempt++, 3e4);
+    retry = setTimeout(() => {
+      retry = null;
+      connect();
+    }, delay);
+  };
+  connect();
+  return () => {
+    stopped = true;
+    if (retry) clearTimeout(retry);
+    socket?.close();
+    socket = null;
+  };
+}
+
 // src/pendingPrompt.ts
 var PENDING_PROMPT_KEY = "bf_pending_prompt";
 function savePendingPrompt(text) {
@@ -2754,6 +2808,7 @@ function formatChatDiagnostics(d) {
   streamChatCompletion,
   subscribeRun,
   subscribeRunStore,
+  subscribeToChatMessages,
   takePendingPrompt,
   useBrainActions,
   useBrainChats,
