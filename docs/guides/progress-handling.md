@@ -1,185 +1,91 @@
-# Progress Tracking Guide
+# Progress Handling Guide
+
+This guide explains how to correctly handle progress updates emitted during task and job execution, particularly the transition from `progressPct=100`.
 
 ## Overview
 
-This guide describes how to consume progress events for jobs and tasks, including the canonical rules for `progressPct: 100`.
+The progress API emits a standardized event payload with a `progressPct` field (0–100). Understanding when `progressPct=100` is emitted is critical for building reliable progress indicators and properly cleaning up listeners.
 
-## Expected Event Format
+## Canonical `progressPct=100` Emission Rule
 
-Progress events are delivered as JSON objects conforming to the canonical Event Payload Schema (Draft 2020-12). For reference, see `docs/api/event-payload.schema.json`.
+### Conditions under which `progressPct=100` is emitted
 
-Key fields:
+- The value 100 is emitted **once** per task/job.
+- It MUST be emitted **after all processing steps are confirmed complete** and **no further progress updates will follow**.
+- This is the authoritative signal of task/job completion for progress-stream consumers.
 
-- `id` — Event identifier.
-- `type` — Event type (`job_status` or `progress_update`).
-- `resourceId` — The job or task ID.
-- `resourceType` — `job` or `task`.
-- `status` — Overall status (`queued`, `running`, `completed`, `failed`, `canceled`, `unknown`).
-- `progressPct` (optional) — Progress percentage, 0–100.
-- `created` — Timestamp (`date-time`).
+### Important guarantees
 
-## Canonical Rule: `progressPct: 100`
+- A value like `99` or any other value less than 100 does NOT indicate final completion.
+- Do not treat intermediate values near 100 as equivalent to `progressPct=100`.
 
-`progressPct: 100` is the authoritative terminal signal for progress-stream consumers. Important points:
+## Example: Register and Clean Up a Listener
 
-- Emission rule: emitted at most once per job/task, emitted only after all processing steps complete.
-- Ordering guarantee: no further progress events follow it.
-- Developers should check `progressPct === 100` and `status === completed` together to confirm terminal completion.
+### Correct Pattern
 
-See the PRD and API reference for full definition and rationale.
+Register a listener that:
 
-## Example: Terminal Listener Pattern
+1. Updates the UI with the received `progressPct`.
+2. Terminates (removes or disables) the listener upon receiving `progressPct=100`.
+3. Assumes the task/job is complete and does not wait for any further updates.
 
-Below is a minimal implementation using an in-progress progress-tracker pattern (based on canonical event format). Note that 99% or any other intermediate value is **not** equivalent to `progressPct: 100`. The canonical pattern registers a progress listener that terminates and tears it down when the event delivers `progressPct: 100`.
+```typescript
+type ProgressEvent = {
+  progressPct: number;
+};
 
-```python
-import json
-from typing import Callable
+function trackProgress(taskId: string): () => void {
+  const listener = (event: ProgressEvent) => {
+    if (event.progressPct < 100) {
+      // Update the UI with the current progress.
+    } else {
+      // 100 is received: cleanup and treat as final.
+      console.log('Progress complete:', taskId);
+      cleanupProgress();
+    }
+  };
 
-StreamPayload = dict[str, object]
+  subscribeToProgressUpdates(taskId, listener);
 
-class ProgressTracker:
-    """
-    Minimal progress tracker showing the canonical registration/cleanup pattern for progressPct=100.
-    """
-    def __init__(self):
-        self._listener_ended = False
-        self._callbacks: list[Callable[[dict[str, object]], None]] = []
-
-    def add_progress_listener(self, callback: Callable[[dict[str, object]], None]) -> None:
-        """
-        Register a progress callback. The callback receives the full event payload.
-        Precaution: write state-only handling code; do NOT assume idempotence.
-        """
-        self._callbacks.append(callback)
-
-    def remove_progress_listener(self, callback: Callable[[dict[str, object]], None]) -> None:
-        """Unregister a progress callback."""
-        if callback in self._callbacks:
-            self._callbacks.remove(callback)
-
-    def _process(self, payload: StreamPayload) -> None:
-        # State-only handling: don't assume the emitter guarantees idempotence.
-        rid = payload["resourceId"]
-        pct = payload.get("progressPct")
-        st = payload.get("status")
-
-        if pct is None:
-            # Progress-value absent: only update status.
-            print(f"STATUS: {rid}={st}")
-        else:
-            # Optional: validate range; emission logic in the platform enforces [0, 100].
-            if pct < 0.0 or pct > 100.0:
-                print(f"WARN: Invalid progressPct={pct} for {rid}")
-            else:
-                print(f"PROGRESS: {rid}={pct}% (status={st})")
-
-    def update(self, payload: StreamPayload) -> None:
-        """Main entry point: call _process for all listeners once per event."""
-        for cb in self._callbacks:
-            cb(payload)
-
-        # Canonical pattern: if progressPct is exactly 100, cleanup listeners and stop polling.
-        pct = payload.get("progressPct")
-        st = payload.get("status")
-        if isinstance(pct, (int, float)) and pct == 100:
-            if st == "completed":
-                self._on_completion()
-            # If status != completed but progressPct is 100, treat it as suspicious.
-            elif st != "completed":
-                print(f"WARN: Received progressPct=100 with status={st} for {payload['resourceId']}")
-
-    def _on_completion(self) -> None:
-        """
-        Terminal cleanup: poller/listener can stop. The platform emits at most one progressPct=100,
-        so this may be called once per resource.
-        """
-        self._listener_ended = True
-        # Remove all callbacks and tear down the listener.
-        self._callbacks.clear()
-        print(f"COMPLETE: Terms. Tear down listeners and stop polling.")
-
-    def terminate(self) -> None:
-        self._callbacks.clear()
-        self._listener_ended = False
-
-# Example usage
-import socket
-
-server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.bind(("127.0.0.1", 9999))
-server.listen()
-
-tracker = ProgressTracker()
-
-def progress_handler(payload: StreamPayload) -> None:
-    tracker.update(payload)
-
-tracker.add_progress_listener(progress_handler)
-
-print("Listening on :9999 for progress events...")
-while True:
-    client_sock, addr = server.accept()
-    print(f"Connection from {addr}")
-    while True:
-        data = client_sock.recv(4096)
-        if not data:
-            break
-        lines = data.decode().splitlines()
-        for line in lines:
-            if not line.strip():
-                continue
-            try:
-                tracker.update(json.loads(line))
-            except Exception as exc:
-                print(f"WARN: Failed to parse event line: {exc}")
-    client_sock.close()
-    if tracker._listener_ended:
-        print("Server: polling terminated; exiting.")
-        break
-
-tracker.terminate()
+  // Returns a cleanup function for the caller to use.
+  return () => {
+    unsubscribeFromProgressUpdates(taskId, listener);
+  };
+}
 ```
 
-## Warning: Intermediate Values Near 100
+### Using the listener
 
-```python
-# Terminal condition requires exact 100:
-if progress_pct == 100.0 and status == "completed":
-    # Cancel polling, close listeners, and clean up state.
-    pass
+```typescript
+// Register and get a cleanup function.
+const untrack = trackProgress(taskId);
 
-# Do NOT treat 99 or 99.9 as completion:
-if progress_pct in (99, 99.9):
-    # Keep polling active; check again for exact 100.
-    pass
+// If you must stop tracking early, invoke the cleanup:
+// untrack();
 ```
 
-### Common Pitfall
+### Pseudocode for integration tutorials
 
-Ignoring 100 semantics can cause UI issues:
+```text
+On subscribeToProgress(taskId):
+  Set listener = (event) ->
+    if event.progressPct < 100:
+      Update UI for this event
+    else if event.progressPct == 100:
+      Remove/complete progress listener
+      Emit 'complete' to client
 
-- Reloading prematurely.
-- Not tearing down listeners, leading to memory leaks.
-- Misrepresenting "finished" state in dashboards.
+  Attach listener
+  Return a cleanup function that:
+    Detaches the listener
+```
 
-Follow the canonical rule to avoid these issues.
+### What to avoid
 
-## Stateful vs Stateless Consumers
-
-- **Stateful listeners** should remove their callback on `progressPct == 100`.
-- **Idempotent stateless handlers** can safely process a duplicate 100 event as a no-op.
-
-The rule assures at most one terminal event, preventing duplicate side effects.
-
-## Technical Notes
-
-- The rule is enforced by the underlying job/task processing pipeline.
-- Integrators may still receive older events or older payloads; treat overlap carefully.
-- If you receive `progressPct === 100` and `status !== "completed"`, treat it as suspicious and either consider dropping the event or adding a warning.
+- Never treat a `progressPct` of 99 or any other value close to 100 as a final or complete signal.
+- Always clean up/removes the listener on `progressPct=100` to distinguish completion from ongoing updates.
 
 ## Related Documentation
 
-- PRD section FR-1…FR-5 (progressPct semantics).
-- Canonical schema: `docs/api/event-payload.schema.json`.
-- Changelog: `docs/CHANGELOG.md`.
+- API Reference: `docs/api/event-payload.schema.json`
+- Changelog: `docs/CHANGELOG.md`
