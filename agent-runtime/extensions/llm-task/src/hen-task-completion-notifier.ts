@@ -35,7 +35,9 @@ const EMAIL_BODY_TEXT = `Good news! All Hen tasks for your account are now compl
 
 const SHADED_HEADER = `
     <div class="header" style="background: #0f172a; padding: 28px 30px; text-align: center;">
-      <h1 style="color: #ffffff; margin: 0; font-size: 22px; letter-spacing: -0.5px;">{{PlatformName}}</h1>
+      <h1 style="color: #ffffff; margin: 0; font-size: 22px; letter-spacing: -0.5px;">
+        {{PlatformName}}
+      </h1>
     </div>`;
 
 const CONTENT_PADDING = `
