@@ -915,7 +915,43 @@ CoderClaw CLI
 
 ## Avatar Filter
 
-Builderforce.ai currently tracks “avatar filter” in our product backlog so it can be surfaced as a client-side user filter in derived surfaces (e.g., on-team views, role-based role dashboards). The implementation itself will depend on future platform integration of priority alignment (PriorityBadge discovered as a reference, but serializer APIs and unassigned-high-priority fetch patterns are pending). Refer to ROADMAP.md for the latest backlog items and priority key intents.
+The Avatar Filter is a user-facing feature that provides visibility into project status across multiple dimensions—primarily through a red-amber-green (RAG) status indicator per project. This feature enables stakeholders to quickly assess project health and prioritize work appropriately.
+
+### Features
+
+| Feature | Description |
+|---------|-------------|
+| **Project Status Indicators** | Projects display a color-coded status: <br>• 🟢 **Green** – Healthy, on track, or resolved  <br>• 🟡 **Amber** – At risk, delayed, or needs attention  <br>• 🔴 **Red** – Blocked, critical, or requires immediate action |
+| **Audit Trail** | Every status change is logged to the `audit_log`, providing transparency into who made changes and when |
+| **List View** | Projects can be filtered and sorted by status across list, detail, and portfolio dashboards |
+| **Portfolio Integration** | Portfolio widgets aggregate status from underlying initiatives and projects for executive visibility |
+| **Notification Support** | Status changes can trigger alerts when projects move into warning or critical states |
+
+### Use Cases
+
+- **Executive Dashboard**: Leaders view portfolio health at a glance — quickly surface projects that require management intervention
+- **Project Owners**: Teams monitor their project's status and respond to green–alternative, amber, or red transitions
+- **Cross-Project Visibility**: Compare project health across teams and initiatives without drilling into each project's details
+- **DORA Metrics**: Status is correlated with deployment success/failure and mean-time-to-resolution (MTTR) when available
+
+### Technical Foundation
+
+The Avatar Filter leverages:
+
+- **Status Fields**: Projects, initiatives, and epics carry a `status` field that resolves to RAG indicators
+- **Audit Logging**: The `audit_log` table records status changes with `entity_type`, `entity_id`, `old_status`, `new_status`, `changed_by`, and `timestamp`
+- **Portfolio Rollup**: `/api/pmo/rollup?kind=portfolio` aggregates status from child items via recursive queries
+- **Notification Backend**: Slack/Resend hooks trigger on status changes (configurable via `SLACK_APPROVAL_WEBHOOK_URL` and `RESEND_API_KEY`)
+
+### Integration Notes
+
+- Status changes can originate from board workflows, portfolio management, or manual updates
+- The avatar filter cascades through the portfolio hierarchy: a child's RAG color influences its parent's aggregated status
+- Current focus: core RAG indicator implementation; advanced filtering (by status + metadata) and custom status transitions are future enhancements
+
+### Reference
+
+Refer to [`ROADMAP.md`](./ROADMAP.md) for the latest backlog items, including planned feature refinements and priority key intents.
 
 ---
 
