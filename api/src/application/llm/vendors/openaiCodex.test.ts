@@ -18,7 +18,12 @@ describe('OpenAI Codex subscription vendor', () => {
   it('calls Codex Responses and normalizes the result', async () => {
     const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
       expect(init.headers).toMatchObject({ authorization: 'Bearer access', 'ChatGPT-Account-Id': 'acct' });
-      expect(JSON.parse(String(init.body))).toMatchObject({ model: 'gpt-5.3-codex', store: false });
+      expect(JSON.parse(String(init.body))).toMatchObject({
+        model: 'gpt-5.3-codex',
+        instructions: 'You are a helpful assistant.',
+        input: [{ role: 'user', content: [{ type: 'input_text', text: 'hi' }] }],
+        store: false,
+      });
       return new Response(JSON.stringify({ id: 'resp_1', output_text: 'done', usage: { input_tokens: 3, output_tokens: 2 } }), { status: 200 });
     });
     vi.stubGlobal('fetch', fetchMock);
