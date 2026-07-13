@@ -12,6 +12,7 @@
   overflow-x: hidden;
   /* Mobile bottom nav bottom spacing */
   padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: 72px; /* Ensure sufficient spacing for both nav and touch zones */
 }
 
 .shell {
@@ -22,6 +23,7 @@
   position: relative;
   /* Mobile bottom nav bottom spacing */
   padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: 72px; /* Ensure sufficient spacing for both nav and touch zones */
 }
 
 /* Slide-out overlay and drawer z-index rules */
