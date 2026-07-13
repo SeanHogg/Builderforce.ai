@@ -1,444 +1,218 @@
 /**
  * Business Ruleset Catalog
- * Loads and exposes the catalog loaded from business-rules.json; provides helpers to
- * resolve, build derived function maps, and apply ruleset transforms.
  *
- * PRD FR-3 — central, versioned business rules source.
+ * Functions for loading and resolving business rules definitions from
+ * business-rules.json, as required by FR‑3 (Business Rule Application).
  */
 
-import type {
-  OutputField,
-  InputContext,
-  FieldResolution,
-  CustomFunction,
-  LogEntry,
-  ValidationError,
-  Result
-} from './types';
-
-// -----------------------------------------------------------------------
-// Types
-// -----------------------------------------------------------------------
+import type { RulesetCatalog, BusinessRuleset, BusinessRule, DerivedFunction } from './types.js';
 
 /**
- * Derived function signature compatible with engine's custom functions.
+ * In-memory cache of loaded catalogs keyed by file path.
+ * This avoids repeated file reads during tests or many calls.
  */
-export type DerivedFunction = (args: {
-  context: InputContext;
-  resolved: Record<string, FieldResolution>;
-  sourcePath: string;
-}) => unknown;
+const cachedCatalogs = new Map<string, RulesetCatalog>();
 
 /**
- * Predicate function used in business rule conditions.
+ * Load the business rules catalog from the configured JSON file.
+ *
+ * @param filePath - Path to business-rules.json (default: src/payload/business-rules.json).
+ * @returns The fully parsed and validated catalog.
+ * @throws Any error from JSON parsing or schema validation is propagated.
  */
-export type Predicate = (args: {
-  context: InputContext;
-  resolved: Record<string, FieldResolution>;
-  field: string;
-  value: unknown;
-}) => boolean;
-
-/**
- * Business rule definition from catalog.
- */
-interface BusinessRule {
-  name: string;
-  description?: string;
-  appliesTo?: string[];
-  typeOrDerived: 'string' | 'number' | 'integer' | 'boolean' | 'date' | 'epoch' | 'derivedFunction';
-  nullable?: boolean;
-  coerce?: boolean;
-  enumMappings?: Record<string, string>;
-  condition?: {
-    field: string;
-    operator:
-      | 'equals'
-      | 'notEquals'
-      | 'contains'
-      | 'startsWith'
-      | 'endsWith'
-      | 'greaterThan'
-      | 'lessThan'
-      | 'exists';
-    value?: unknown;
-  };
-  fn?: string;
-  functionAliases?: string[];
-}
-
-/**
- * Business ruleset definition from catalog.
- */
-export interface BusinessRuleset {
-  name: string;
-  version: string;
-  description?: string;
-  appliesTo?: string[];
-  rules: BusinessRule[];
-}
-
-/**
- * Ruleset catalog loaded from business-rules.json.
- */
-export interface RulesetCatalog {
-  title: string;
-  version: string;
-  schema: Record<string, unknown>;
-  rulesets: BusinessRuleset[];
-}
-
-// -----------------------------------------------------------------------
-// Built-in Derived Functions
-// -----------------------------------------------------------------------
-
-/**
- * Built-in derived functions exposed by the module.
- */
-const BUILTIN_DERIVED_FUNCTIONS: Record<string, DerivedFunction> = {
-  fullName(args: { context: InputContext; resolved: Record<string, FieldResolution>; sourcePath: string }): unknown {
-    const nameParts = [
-      args.resolved.name?.value,
-      args.resolved.firstName?.value,
-      args.resolved.lastName?.value
-    ].filter((v): v is string => v != null);
-    return nameParts.join(' ');
-  },
-  identity(args: { context: InputContext; resolved: Record<string, FieldResolution>; sourcePath: string }): unknown {
-    return args.resolved[args.sourcePath]?.value;
-  },
-  upper(args: { context: InputContext; resolved: Record<string, FieldResolution>; sourcePath: string }): unknown {
-    const value = args.resolved[args.sourcePath]?.value;
-    return value != null && typeof value === 'string' ? value.toUpperCase() : value;
-  },
-  lower(args: { context: InputContext; resolved: Record<string, FieldResolution>; sourcePath: string }): unknown {
-    const value = args.resolved[args.sourcePath]?.value;
-    return value != null && typeof value === 'string' ? value.toLowerCase() : value;
+export function getBusinessRulesets(
+  filePath = 'agent-runtime/src/payload/business-rules.json'
+): RulesetCatalog {
+  // Return cached catalog if available.
+  if (cachedCatalogs.has(filePath)) {
+    return cachedCatalogs.get(filePath)!;
   }
-};
 
-// -----------------------------------------------------------------------
-// Catalog Management
-// -----------------------------------------------------------------------
-
-let CATALOG: RulesetCatalog | null = null;
-
-/**
- * Initialize the ruleset catalog by loading business-rules.json.
- * Called lazily on first access; throws if file cannot be read or parsed.
- */
-function loadCatalog(): RulesetCatalog {
-  if (CATALOG) return CATALOG;
-
+  // Load and parse the JSON file.
+  const content = import.meta.glob(filePath, { as: 'raw', eager: true });
+  if (!(filePath in content)) {
+    throw new Error(`business-rules catalog not found at ${filePath}`);
+  }
+  let parsed: unknown;
   try {
-    const module = await import('./business-rules.json');
-    if (!module.default) throw new Error('business-rules.json did not export a default object');
-    CATALOG = module.default as RulesetCatalog;
-    // Basic vetting: ensure catalog shape
-    if (!CATALOG.title || !(typeof CATALOG.title === 'string')) throw new Error('Missing or non-string catalog title');
-    if (!CATALOG.version || !(typeof CATALOG.version === 'string')) throw new Error('Missing or non-string catalog version');
-    if (!Array.isArray(CATALOG.rulesets)) throw new Error('Catalog missing rulesets array');
+    parsed = JSON.parse(content[filePath] as string);
   } catch (err) {
-    // Fail loudly: this is CATASTROPHIC for payload generation
-    throw new Error('Failed to load ruleset catalog: ' + (err as Error).message);
+    throw new Error(`Failed to parse business-rules.json at ${filePath}: ${err}`);
   }
-  return CATALOG;
-}
 
-/**
- * Get the entire ruleset catalog.
- */
-export function getBusinessRulesets(): BusinessRuleset[] {
-  return loadCatalog().rulesets;
-}
-
-/**
- * Resolve a specific ruleset by name.
- */
-export function resolveBusinessRuleset(name: string): BusinessRuleset | undefined {
-  return loadCatalog().rulesets.find((r) => r.name === name);
-}
-
-/**
- * Register a new business ruleset (for AC-8 extensible payload generation).
- * Optionally validates against catalog schema.
- */
-export function registerBusinessRuleset(ruleset: BusinessRuleset): void {
-  const catalog = loadCatalog();
-  if (!catalog.rulesets) throw new Error('Catalog rulesets is not an array');
-  // Basic sanity checks
-  if (
-    !ruleset.name ||
-    typeof ruleset.name !== 'string' ||
-    !ruleset.version ||
-    typeof ruleset.version !== 'string' ||
-    !Array.isArray(ruleset.rules)
-  ) {
-    throw new Error('Invalid ruleset definition (name, version, rules required)');
-  }
-  // Avoid duplicates; replace if exists
-  const idx = catalog.rulesets.findIndex((r) => r.name === ruleset.name);
-  if (idx >= 0) catalog.rulesets[idx] = ruleset;
-  else catalog.rulesets.push(ruleset);
-}
-
-// -----------------------------------------------------------------------
-// Derived Function Map
-// -----------------------------------------------------------------------
-
-/**
- * Build a map of derived function names to actual function implementations.
- * Merges built-in and user-provided functions; prefers user-defined overrides.
- */
-export function buildDerivedFunctionMap(ruleset?: BusinessRuleset): Record<string, DerivedFunction> {
-  const map = { ...BUILTIN_DERIVED_FUNCTIONS };
-  if (!ruleset) return map;
-  for (const rule of ruleset.rules) {
-    if (rule.typeOrDerived !== 'derivedFunction' || !rule.fn) continue;
-    // If the rule has a function defined (fn), assume a custom function provider will supply it.
-    // In real implementations, the caller would register the function before building the map.
-    // For now, we just name the entry.
-    const functionName = rule.fn;
-    if (!map[functionName]) {
-      map[functionName] = (args: { context: InputContext; resolved: Record<string, FieldResolution>; sourcePath: string }): unknown => {
-        // Place-holder: actual implementation must be registered by caller.
-        // Returning undefined preserves the "derived but not provided to generator" semantics.
-        // Builtin functions (fullName, identity, upper, lower) are covered above.
-        return undefined;
-      };
+  // Basic sanity schema checks (top-level keys and basic object shape).
+  const suspectKeys = ['nullable', 'coerce', 'transformations', 'schema'];
+  const str = (content[filePath] as string);
+  for (const reserved of suspectKeys) {
+    if (str.toLowerCase().includes(reserved)) {
+      throw new Error(`Root JSON contains stray reserved key '${reserved}'; validate schema`);
     }
   }
+
+  // Ensure required top-level properties exist.
+  const doc = parsed as Record<string, unknown>;
+  if (typeof doc.title !== 'string') {
+    throw new Error(`business-rules JSON missing or invalid 'title' (top-level string)`);
+  }
+  if (typeof doc.version !== 'string') {
+    throw new Error(`business-rules JSON missing or invalid 'version' (top-level string)`);
+  }
+  if (doc.rulesets === undefined) {
+    throw new Error(`business-rules JSON missing or invalid 'rulesets' (top-level array)`);
+  }
+
+  // Validate that each ruleset definition matches expected shape.
+  if (!Array.isArray(doc.rulesets)) {
+    throw new Error(`business-rules JSON 'rulesets' is not an array`);
+  }
+
+  for (const rs of doc.rulesets) {
+    const rsItem = rs as Record<string, unknown>;
+    if (typeof rsItem.name !== 'string') {
+      throw new Error(`ruleset missing or invalid 'name' (string)`);
+    }
+    if (typeof rsItem.version !== 'string') {
+      throw new Error(`ruleset missing or invalid 'version' (string)`);
+    }
+    if (rsItem.rules === undefined) {
+      throw new Error(`ruleset missing or invalid 'rules' (array)`);
+    }
+    if (!Array.isArray(rsItem.rules)) {
+      throw new Error(`ruleset 'rules' is not an array`);
+    }
+
+    // Validate each rule.
+    for (const rule of rsItem.rules) {
+      const r = rule as Record<string, unknown>;
+      if (typeof r.name !== 'string') {
+        throw new Error(`rule missing or invalid 'name' (string)`);
+      }
+      const typeOrDerived = r.typeOrDerived as string | undefined;
+      if (typeOrDerived === undefined) {
+        throw new Error(`rule missing or invalid 'typeOrDerived' (string: string|number|integer|boolean|date|epoch|derivedFunction)`);
+      }
+    }
+  }
+
+  // Cache the catalog and return.
+  cachedCatalogs.set(filePath, parsed as RulesetCatalog);
+  return parsed as RulesetCatalog;
+}
+
+/**
+ * Resolve the business ruleset for a given payload type name, if known.
+ *
+ * @param rulesetName - Name of the ruleset to retrieve (e.g., "user", "order").
+ * @param catalogPath - Path to the catalog (default: src/payload/business-rules.json).
+ * @returns The ruleset matching rulesetName, or undefined if not found or catalog not loaded.
+ */
+export function resolveBusinessRuleset(
+  rulesetName: string,
+  catalogPath = 'agent-runtime/src/payload/business-rules.json'
+): BusinessRuleset | undefined {
+  try {
+    const catalog = getBusinessRulesets(catalogPath);
+    return catalog.rulesets.find((rs) => rs.name.toLowerCase() === rulesetName?.toLowerCase());
+  } catch {
+    // On errors (missing catalog, parse errors), treat as not found.
+    return undefined;
+  }
+}
+
+/**
+ * Build a map of derived function names to implementation callbacks for a given ruleset.
+ *
+ * @param rulesetName - Name of the ruleset.
+ * @param provisionedFunctions - Optional map of function names to DerivedFunction callbacks.
+ * @param catalogPath - Path to the catalog (default: src/payload/business-rules.json).
+ * @returns Object mapping derived function keys to closures that compute the derived value.
+ */
+export function buildDerivedFunctionMap(
+  rulesetName: string,
+  provisionedFunctions?: Record<string, DerivedFunction>,
+  catalogPath = 'agent-runtime/src/payload/business-rules.json'
+): Record<string, DerivedFunction> {
+  const ruleset = resolveBusinessRuleset(rulesetName, catalogPath);
+  const map: Record<string, DerivedFunction> = { ...provisionedFunctions };
+
+  if (!ruleset) {
+    return map;
+  }
+
+  for (const rule of ruleset.rules) {
+    if (rule.typeOrDerived === 'derivedFunction' && rule.fn) {
+      if (!map[rule.fn]) {
+        // Warn if a derivedFunction is referenced in ruleset but not provisioned.
+        console.warn(
+          `[ruleset] derivedFunction '${rule.fn}' is referenced but not provisioned in ruleset '${rulesetName}'`
+        );
+      }
+    }
+  }
+
   return map;
 }
 
-// -----------------------------------------------------------------------
-// Rule Application Helpers
-// -----------------------------------------------------------------------
-
 /**
- * Evaluate a business rule condition; returns false if not met.
- */
-function evaluateCondition(
-  args: { context: InputContext; resolved: Record<string, FieldResolution>; field: string },
-  condition: BusinessRule['condition']
-): boolean {
-  if (!condition) return true;
-  const { field: targetField, operator, value } = condition;
-  const resolved = args.resolved[targetField];
-  const fieldExists = resolved?.exists ?? false;
-  const fieldValue = resolved?.value;
-
-  switch (operator) {
-    case 'equals':
-      return fieldValue === value;
-    case 'notEquals':
-      return fieldValue !== value;
-    case 'contains':
-      return Array.isArray(fieldValue) && fieldValue.includes(value);
-    case 'startsWith':
-      return typeof fieldValue === 'string' && fieldValue.startsWith(value);
-    case 'endsWith':
-      return typeof fieldValue === 'string' && fieldValue.endsWith(value);
-    case 'greaterThan':
-      if (typeof fieldValue !== 'number' || typeof value !== 'number') return false;
-      return fieldValue > value;
-    case 'lessThan':
-      if (typeof fieldValue !== 'number' || typeof value !== 'number') return false;
-      return fieldValue < value;
-    case 'exists':
-      return fieldExists;
-    default:
-      return false;
-  }
-}
-
-/**
- * Apply a ruleset rule to a field value.
- * - Resolves the value.
- * - Checks condition.
- * - Applies enum mapping if matching.
- * - Coerces to target typeOrDerived.
- */
-function applyRulesetTransform(
-  rule: BusinessRule,
-  sourceValue: unknown,
-  args: { context: InputContext; resolved: Record<string, FieldResolution>; loggerFn: (entry: LogEntry) => void }
-): unknown {
-  const { name, typeOrDerived, enumMappings, nullable, coerce, functionAliases, condition, fn } = rule;
-  const { context, resolved, loggerFn } = args;
-
-  // 1. Resolve value: sourceValue if provided, otherwise from resolved path
-  let value = sourceValue ?? resolved[name]?.value;
-  // 2. Check condition: run condition if defined; if result is false, the field is omitted
-  if (condition !== undefined && !evaluateCondition({ context, resolved, field: condition.field }, condition)) {
-    loggerFn({
-      timestamp: new Date().toISOString(),
-      level: 'info',
-      contextId: '',
-      field: name ?? '',
-      ruleId: name ?? '',
-      reason: `Condition not met for ${name || '<unknown-rule>'}`
-    });
-    return undefined;
-  }
-
-  // 3. Nullable control if explicit override is given
-  const nullableOverride = nullable != null ? nullable : !coerce;
-  if (value == null && !nullableOverride) {
-    // Missing required value after condition
-    loggerFn({
-      timestamp: new Date().toISOString(),
-      level: 'error',
-      contextId: '',
-      field: name ?? '',
-      ruleId: name ?? '',
-      reason: `Missing required value for rule ${name ?? '<unknown-rule>'}`
-    });
-    return undefined;
-  }
-
-  // 4. Enum mapping: only apply if value is string and mapping exists
-  if (enumMappings != null && typeof value === 'string') {
-    const mapped = enumMappings[value];
-    if (mapped != null) {
-      value = mapped;
-    }
-  }
-
-  // 5. Type coercion:
-  if (coerce !== false) {
-    // Build coercion config
-    const typeConfig: { type?: 'string' | 'number' | 'integer' | 'boolean' | 'date' | 'epoch'; nullable?: boolean } = {};
-    if (typeOrDerived !== 'derivedFunction') typeConfig.type = typeOrDerived;
-    if (value != null && value !== false) {
-      // Treat a falsey boolean-like as truthy: coerce 'false' to false, else truthy to true
-      if (typeConfig.type === 'boolean' && typeof value === 'string') {
-        value = value === 'false' ? false : true;
-      }
-    }
-    // Apply coercion
-    if (typeOrDerived !== 'derivedFunction') {
-      value = coerceValue(value, typeOrDerived, nullableOverride);
-    }
-  }
-
-  // 6. Derived function
-  if (typeOrDerived === 'derivedFunction') {
-    if (!fn) {
-      loggerFn({
-        timestamp: new Date().toISOString(),
-        level: 'error',
-        contextId: '',
-        field: name ?? '',
-        ruleId: name ?? '',
-        reason: `Missing fn for derivedFunction rule ${name ?? '<unknown-rule>'}`
-      });
-      return undefined;
-    }
-    const derivedFn = BUILTIN_DERIVED_FUNCTIONS[fn] || (functionAliases?.[0] != null ? BUILTIN_DERIVED_FUNCTIONS[functionAliases[0]] : undefined);
-    if (!derivedFn) {
-      loggerFn({
-        timestamp: new Date().toISOString(),
-        level: 'error',
-        contextId: '',
-        field: name ?? '',
-        ruleId: name ?? '',
-        reason: `Missing derivation function for rule ${name ?? '<unknown-rule>'}`
-      });
-      return undefined;
-    }
-    try {
-      const derivedResult = derivedFn({ context, resolved, sourcePath: name ?? '' });
-      if (derivedResult == null && !nullableOverride) {
-        loggerFn({
-          timestamp: new Date().toISOString(),
-          level: 'error',
-          contextId: '',
-          field: name ?? '',
-          ruleId: name ?? '',
-          reason: `Derived function returned undefined for rule ${name ?? '<unknown-rule>'}`
-        });
-        return undefined;
-      }
-      value = derivedResult;
-    } catch (e) {
-      loggerFn({
-        timestamp: new Date().toISOString(),
-        level: 'error',
-        contextId: '',
-        field: name ?? '',
-        ruleId: name ?? '',
-        reason: `Derived function error for rule ${name ?? '<unknown-rule>'}`
-      });
-      return undefined;
-    }
-  }
-
-  return value;
-}
-
-/**
- * Coerce a source value to target type.
- */
-function coerceValue(value: unknown, type: 'string' | 'number' | 'integer' | 'boolean' | 'date' | 'epoch', nullable?: boolean): unknown {
-  if (value == null) {
-    return nullable === false ? undefined : null;
-  }
-
-  switch (type) {
-    case 'string':
-      return String(value);
-    case 'integer':
-      const n = Number(value);
-      return Number.isInteger(n) ? n : typeof value === 'number' ? Math.trunc(value) : null;
-    case 'number':
-      return Number(value) || (value === 0 ? 0 : null);
-    case 'boolean':
-      if (typeof value === 'boolean') return value;
-      return value ? true : false;
-    case 'date':
-      if (!(value instanceof Date)) {
-        const d = new Date(value);
-        return isNaN(d.getTime()) ? null : d;
-      }
-      return value;
-    case 'epoch':
-      if (!(value instanceof Date)) {
-        const d = new Date(value);
-        return isNaN(d.getTime()) ? null : d.getTime();
-      }
-      return value.getTime();
-  }
-}
-
-// -----------------------------------------------------------------------
-// Annotated Derivation Wrapper
-// -----------------------------------------------------------------------
-
-/**
- * @param fieldOutputName - The output field name that this rule applies to.
- * @param sourceValue - The resolved source value before transformation.
- * @returns derivedOutcome - { outcome, appliedRule }.
+ * Unified derive() function for business ruleset derived fields.
+ * Handles fn:fnName placeholders from engine and callable functions from ruleset references.
+ *
+ * @param derivedKey - Key of the derived field (e.g., 'fullName', 'uppercase').
+ * @param args - Arguments from the engine's derive() call (context, resolved, sourcePath).
+ * @param plan - Derived function plan string (e.g., 'fn:upper', 'fn:fullName').
+ * @param provisionedFunctions - Optional map of function names to callables.
+ * @returns Resolved derived value (or undefined if not provided/provisioned).
  */
 export function derive(
-  fieldOutputName: string,
-  sourceValue: unknown,
+  derivedKey: string,
   args: {
-    context: InputContext;
-    resolved: Record<string, FieldResolution>;
-    activeRuleset?: BusinessRuleset;
-    loggerFn: (entry: LogEntry) => void;
-  }
+    context: import('./types.js').InputContext;
+    resolved: Record<string, import('./types.js').FieldResolution>;
+    sourcePath: string;
+  },
+  plan: string,
+  provisionedFunctions?: Record<string, import('./types.js').DerivedFunction>
 ): unknown {
-  let outcome = sourceValue;
-  if (args.activeRuleset == null || sourceValue == null) return outcome;
+  // Pop out the function reference from the plan.
+  const s = plan.trim();
+  const trimmed = s.startsWith('fn:') ? s.slice(3) : s;
+  const fnName = trimmed.split('[')[0].trim(); // supports fn:name[argType?]
 
-  // Find applicable rule(s) for this field.
-  // If rule.name matches fieldOutputName, we likely apply it. For simplicity, apply first match.
-  const applicable = args.activeRuleset.rules.find((r) => r.name === fieldOutputName && !r.appliesTo);
-  const rule = applicable ?? args.activeRuleset.rules.find((r) => r.appliesTo?.includes(fieldOutputName));
-  if (!rule) return outcome;
+  const f = provisionedFunctions?.[fnName] ?? (derivedKey in provisionedFunctions && derivedKey !== fnName && typeof provisionedFunctions[derivedKey] === 'function' ? provisionedFunctions[derivedKey] : undefined);
 
-  const result = applyRulesetTransform(rule, outcome, args);
-  return result;
+  if (typeof f !== 'function') {
+    // Not provisioned and no mapping to fallback; skip derive.
+    return undefined;
+  }
+
+  try {
+    return f(args);
+  } catch (err) {
+    console.warn(`[ruleset/derive] strategy '${plan}' failed for field '${derivedKey}': ${err}`);
+    return undefined;
+  }
+}
+
+/**
+ * Register a business ruleset with a fallback map of provisioned functions.
+ * This is used by the engine to extend ruleset runtime behavior for derived functions.
+ *
+ * @param rulesetName - Name of the ruleset.
+ * @param provisionedFunctions - Mapping from derived function name to implementation.
+ * @param catalogPath - Path to the catalog (default: src/payload/business-rules.json).
+ * @returns Updated function map (merged).
+ */
+export function registerBusinessRuleset(
+  rulesetName: string,
+  provisionedFunctions: Record<string, DerivedFunction>,
+  catalogPath = 'agent-runtime/src/payload/business-rules.json'
+): Record<string, DerivedFunction> {
+  const existing = provisionedFunctions;
+  const merged = { ...existing };
+  const currentMap = buildDerivedFunctionMap(rulesetName, merged, catalogPath);
+  // Merge provisioned ruleset functions into the shared map.
+  for (const [k, v] of Object.entries(currentMap)) {
+    merged[k] = v;
+  }
+  return merged;
 }
