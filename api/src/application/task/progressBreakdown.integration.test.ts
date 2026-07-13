@@ -24,8 +24,21 @@ import { computeProgressBreakdown } from "./progressBreakdown";
 import type { ProgressBreakdown } from "../../domain/task/ProgressBreakdown";
 
 // --------------------------------------------------------------------------- //
-// Test fixtures / factories (exact resets from progressBreakdown.test.ts)
+// Test fixtures / factories (FR-5.1 builder for ProgressBreakdown)
 // --------------------------------------------------------------------------- //
+
+// FR-5.1: Builder for ProgressBreakdown with sensible defaults.
+export function makeProgressBreakdown(overrides: Partial<ProgressBreakdown> = {}): ProgressBreakdown {
+  return {
+    basis: 'subtasks',
+    subtasksDone: 0,
+    subtasksTotal: 0,
+    codeDelivered: false,
+    testsPassing: null,
+    prState: null,
+    ...overrides,
+  };
+}
 
 function makeEpicTask(overrides: Partial<Task> = {}): Task {
   const baseEpic: any = {
