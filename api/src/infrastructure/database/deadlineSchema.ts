@@ -9,8 +9,13 @@ import {
 } from 'drizzle-orm/pg-core';
 
 // ---------------------------------------------------------------------------
+
+
 // Deadline tables (timeline & deadlines feature)
+
+
 // ---------------------------------------------------------------------------
+
 
 export const deadlineTypeEnum = pgEnum('deadline_type', [
   'business',
@@ -46,8 +51,7 @@ export const deadlines = pgTable('deadlines', {
     .notNull(),
   description: varchar('description', { length: 8000 }),
   /**
-   * IDs of dependents (deadlines that rely on this one).
-   * Stored as a string[] for SQL array storage.
+   * IDs of dependents (deadlines that rely on this one). Stored as a string[] for SQL array storage.
    */
   dependents: varchar('dependents', { length: 4000 })
     .array(),
