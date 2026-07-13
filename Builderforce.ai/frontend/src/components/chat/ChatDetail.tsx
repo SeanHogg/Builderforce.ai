@@ -41,6 +41,10 @@ export function ChatDetail({
   const [editTitleText, setEditTitleText] = useState('');
   const [updatedChat, setUpdatedChat] = useState(chat);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Fix missing ref for form input (should have been in earlier edit)
+  if (!inputRef.current) {
+    inputRef.current = document.querySelector('textarea') as HTMLTextAreaElement;
+  }
 
   // Update local chat state when we get a new title from the backend
   useEffect(() => {
