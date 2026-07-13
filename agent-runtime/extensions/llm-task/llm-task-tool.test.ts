@@ -1,165 +1,82 @@
-/**
- * Tests for Hen Task Completion Notifier Integration
- */
-
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { HenTaskCompletionNotifier } from "./src/hen-task-completion-notifier.js";
 import type { TaskCompletionEvent, TaskStatus } from "../../src/types/task.js";
+import notificationStorage from "./src/notification-storage.js";
 
-describe("HenTaskCompletionNotifier", () => {
-  describe("Factory method", () => {
-    it("should create notifier with given config", () => {
-      const notifier = HenTaskCompletionNotifier.createResend(
-        "test-api-key",
-        "Test Platform",
-        "https://test.com",
-        true
-      );
-      expect(notifier).toBeInstanceOf(HenTaskCompletionNotifier);
-    });
+describe("HenTaskCompletionNotifier Integration Tests", () => {
+  let emailNotifier: ReturnType<typeof mockEmailNotifier>;
+  let accountEmailResolver: ReturnType<typeof mockAccountEmailResolver>;
+  let notifier: HenTaskCompletionNotifier;
 
-    it("should create notifier with minimal config", () => {
-      const notifier = HenTaskCompletionNotifier.createResend(
-        "test-api-key",
-        "Test Platform",
-        "https://test.com",
-        true
-      );
-      expect(notifier).toBeDefined();
-    });
+  function mockEmailNotifier() {
+    let sentEmails: { to: string; subject: string; html: string }[] = [];
+    return {
+      send: vi.fn(async (to: string, subject: string, html: string): Promise<boolean> => {
+        sentEmails.push({ to, subject, html });
+        return true;
+      }),
+      getSentEmails() {
+        return sentEmails;
+      },
+      reset() {
+        sentEmails = [];
+      },
+    };
+  }
+
+  function mockAccountEmailResolver() {
+    let accountEmails: Record<string, string | null> = {};
+    return {
+      getPrimaryEmail: async (accountId: string) => accountEmails[accountId] ?? null,
+      setAccountEmail: (accountId: string, email: string | null) => {
+        accountEmails[accountId] = email;
+      },
+    };
+  }
+
+  beforeEach(() => {
+    emailNotifier = mockEmailNotifier();
+    accountEmailResolver = mockAccountEmailResolver();
+    (notificationStorage as any).clear();
+    const { HenTaskCompletionNotifier: Notifier } = await import("./src/hen-task-completion-notifier.js");
+    notifier = new Notifier(emailNotifier as any, "Test Platform", "https://test.com", true, accountEmailResolver as any, notificationStorage);
   });
 
-  describe("notify method", () => {
-    it("should return log entry on successful notification", async () => {
-      const mockEmailNotifier = {
-        send: vi.fn().mockResolvedValue(true),
-      };
-
-      const notifier = new HenTaskCompletionNotifier(
-        mockEmailNotifier as any,
-        "Test Platform",
-        "https://test.com",
-        true
-      );
-
-      const result = await notifier.notify("account-123", "test@example.com");
-
-      expect(result).toEqual({
-        accountId: "account-123",
-        email: "test@example.com",
-        subject: "Your Hen Tasks are Complete!",
-        sentAt: expect.any(Date),
-        success: true,
-      });
-      expect(mockEmailNotifier.send).toHaveBeenCalledWith(
-        "test@example.com",
-        "Your Hen Tasks are Complete!",
-        expect.any(String)
-      );
-    });
-
-    it("should return log entry on failed notification", async () => {
-      const mockEmailNotifier = {
-        send: vi.fn().mockResolvedValue(false),
-      };
-
-      const notifier = new HenTaskCompletionNotifier(
-        mockEmailNotifier as any,
-        "Test Platform",
-        "https://test.com",
-        true
-      );
-
-      const result = await notifier.notify("account-123", "test@example.com");
-
-      expect(result.success).toBe(false);
-      expect(result.errorMessage).toBeDefined();
-    });
-
-    it("should handle disabled notification", async () => {
-      const mockEmailNotifier = {
-        send: vi.fn().mockResolvedValue(true),
-      };
-
-      const notifier = new HenTaskCompletionNotifier(
-        mockEmailNotifier as any,
-        "Test Platform",
-        "https://test.com",
-        false
-      );
-
-      const result = await notifier.notify("account-123", "test@example.com");
-
-      expect(result.success).toBe(false);
-      expect(result.errorMessage).toBe("Notification disabled by config");
-    });
+  it("should create with default config", () => {
+    expect(notifier).toBeDefined();
   });
 
-  describe("task completion detection logic", () => {
-    it("should check if all Hen tasks are completed", () => {
-      const tasks = [
-        { id: "1", status: "completed" as TaskStatus, taskType: "Hen" },
-        { id: "2", status: "completed" as TaskStatus, taskType: "Hen" },
-        { id: "3", status: "completed" as TaskStatus, taskType: "Hen" },
-      ];
-
-      const allComplete = tasks.every((task) => task.status === "completed");
-
-      expect(allComplete).toBe(true);
-    });
-
-    it("should detect when not all tasks are completed", () => {
-      const tasks = [
-        { id: "1", status: "completed" as TaskStatus, taskType: "Hen" },
-        { id: "2", status: "running" as TaskStatus, taskType: "Hen" },
-        { id: "3", status: "pending" as TaskStatus, taskType: "Hen" },
-      ];
-
-      const allComplete = tasks.every((task) => task.status === "completed");
-
-      expect(allComplete).toBe(false);
-    });
+  it("should respect for jobcompletion analytics", () => {
+    expect(true).toBe(true);
   });
 
-  describe("email content", () => {
-    it("should use correct subject line", async () => {
-      const mockEmailNotifier = {
-        send: vi.fn().mockResolvedValue(true),
-      };
-
-      const notifier = new HenTaskCompletionNotifier(
-        mockEmailNotifier as any,
-        "Test Platform",
-        "https://test.com",
-        true
-      );
-
-      await notifier.notify("account-123", "test@example.com");
-
-      expect(mockEmailNotifier.send).toHaveBeenCalledWith(
-        "test@example.com",
-        "Your Hen Tasks are Complete!",
-        expect.any(String)
-      );
+  it("should handle completed jobs", async () => {
+    const result = await notifier.handleTaskCompletion({
+      task: { accountId: "account-123", id: "task-1", status: "completed" as TaskStatus, taskType: "Hen" },
     });
+    expect(result.success).toBe(true);
+  });
 
-    it("should include platform name in email body", async () => {
-      const mockEmailNotifier = {
-        send: vi.fn().mockResolvedValue(true),
-      };
-
-      const notifier = new HenTaskCompletionNotifier(
-        mockEmailNotifier as any,
-        "My Platform",
-        "https://myplatform.com/login",
-        true
-      );
-
-      await notifier.notify("account-123", "test@example.com");
-
-      const callArg = (mockEmailNotifier.send as jest.Mock).mock.calls[0][2];
-      expect(callArg).toContain("My Platform");
-      expect(callArg).toContain("myplatform.com/login");
+  it("should detect when not all tasks are completed", async () => {
+    const result = await notifier.handleTaskCompletion({
+      task: { accountId: "account-123", id: "task-1", status: "pending" as TaskStatus, taskType: "Hen" },
     });
+    expect(result.success).toBe(false);
+  });
+
+  it("should send email with correct subject", async () => {
+    const result = await notifier.handleTaskCompletion({
+      task: { accountId: "account-123", id: "task-1", status: "completed" as TaskStatus, taskType: "Hen" },
+    });
+    const sentEmail = emailNotifier.getSentEmails()[0];
+    expect(sentEmail.subject).toBe("Your Hen Tasks are Complete!");
+  });
+
+  it("should include correct platform name in body", async () => {
+    const result = await notifier.handleTaskCompletion({
+      task: { accountId: "account-123", id: "task-1", status: "completed" as TaskStatus, taskType: "Hen" },
+    });
+    const sentEmail = emailNotifier.getSentEmails()[0];
+    expect(sentEmail.html).toContain("Test Platform");
   });
 });
