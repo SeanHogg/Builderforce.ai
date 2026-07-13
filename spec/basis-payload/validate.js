@@ -29,6 +29,9 @@ const Ajv = require('ajv');
 const SCHEMA_PATH = path.join(__dirname, 'basis-payload.schema.json');
 const EXAMPLE_PATH = path.join(__dirname, 'example.canonical.json');
 
+// Ensure strict bounds for confidence/weight/overall_confidence [0.0, 1.0] as per PRD AC-4
+const CONFIDENCE_WEIGHT_UNBOUNDED_REJECT_MSG = "Reject confidence/weight/overall_confidence outside [0.0, 1.0] per AC-4.";
+
 // --- CLI Options ---
 const args = process.argv.slice(2);
 let failOnWarnings = false;
