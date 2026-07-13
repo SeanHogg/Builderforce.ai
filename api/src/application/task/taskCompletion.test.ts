@@ -453,6 +453,27 @@ describe('recordCompletion (idempotency double-complete)', () => {
 
     expect(secondWriteCount).toBe(firstWriteCount);
   });
+
+  it('when called multiple times rapidly, each call returns same completion timestamp', async () => {
+    const { db } = makeFakeDb();
+
+    vi.spyOn(db.db as any, 'findById')
+      .mockResolvedValue(createTask({ id: 91, status: TaskStatus.IN_PROGRESS }))
+      .mockResolvedValue(createTask({ id: 91, status: TaskStatus.DONE }));
+
+    const result1 = await recordCompletion(db.db, 91, {
+      deliveredArtifacts: [{ id: 'pr-91', type: 'git_commit', uri: 'https://github.com/org/repo/commit/91' }],
+    });
+
+    // Wait a small amount of time to test that rapid calls don't increment timestamps
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    const result2 = await recordCompletion(db.db, 91, {
+      deliveredArtifacts: [{ id: 'pr-91', type: 'git_commit', uri: 'https://github.com/org/repo/commit/91' }],
+    });
+
+    expect(result1.completedAt).toBe(result2.completedAt);
+  });
 });
 
 // ---------------------------------------------------------------------------
