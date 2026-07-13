@@ -191,9 +191,16 @@ export interface CapabilitiesListResponse {
 /**
  * TypeScript export for testing the type without depending on the fetch runtime.
  */
-export type CapabilitiesApi extends Pick<typeof capabilitiesApi, 'list'>;
-/** Shim for doc generation/testing purposes only. */
-export declare const capabilitiesApiShim: CapabilitiesApi;
+export type CapabilitiesApi = {
+  /**
+   * List capabilities for a project (caps list).
+   * @param projectId required — return only nodes and tags tied to this projectId.
+   */
+  list: (projectId: number) => Promise<CapabilitiesListResponse>;
+};
+
+/** stub_health(s) hook exports for future FR5 hooks to wire in. */
+export const stub_health = (..._args: unknown[]): Record<string, unknown> => ({});
 
 // Export formats supported (FR4).
 export type ExportFormat = 'png' | 'pdf' | 'json';
