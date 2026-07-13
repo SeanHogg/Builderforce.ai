@@ -1,79 +1,74 @@
-/**
- * Repository interface for task persistence abstractions.
- * Defined in: api/src/persistence/TaskRepository.ts
- */
-
-import type { Task } from '../domain/task/Task';
+import type { TaskStatus } from '../domain/task/TaskStatus';
 
 /**
- * Repository abstracting task storage.
- * Implementations may use SQL, NoSQL, or in-memory storage.
- */
-export interface ITaskRepository {
-  /**
-   * Retrieves a single task by its unique identifier.
-   * @param id Task ID to fetch
-   * @returns Task if found; otherwise throws TaskNotFoundError
-   */
-  getById(id: string): Promise<Task>;
-
-  /**
-   * Persists a task to storage, creating it if it does not exist.
-   * @param task Task to store
-   * @returns The persisted task (potentially with auto-generated IDs/timestamps)
-   */
-  save(task: Task): Promise<Task>;
-
-  /**
-   * Updates an existing task.
-   * @param task Task to update (must contain ID)
-   * @returns The updated task
-   */
-  update(task: Task): Promise<Task>;
-
-  /**
-   * Optional: Supports searching tasks by query and paging.
-   */
-  search(params: SearchParams): Promise<Task[]>;
-
-  /**
-   * Optional: Deletes a task and associated data.
-   */
-  delete(id: string): Promise<void>;
-}
-
-/**
- * Search parameters for task queries.
+ * DTO for querying tasks.
  */
 export interface SearchParams {
-  /**
-   * Optional parent task filter.
-   */
-  parentTaskId?: string;
-  /**
-   * Optional status filters.
-   */
-  status?: Array<'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled' | 'paused'>;
-  /**
-   * Optional title substring search.
-   */
+  status?: TaskStatus[];
   titleContains?: string;
-  /**
-   * Pagination offset.
-   */
+  parentTaskId?: string;
+  projectId?: string;
+  includeArchived?: boolean;
   offset?: number;
-  /**
-   * Pagination limit (max items).
-   */
   limit?: number;
 }
 
+export interface GetByProjectInput {
+  projectId: string;
+  includeArchived?: boolean;
+}
+
+export interface UpdateInput {
+  id: string;
+  title?: string;
+  status?: TaskStatus;
+  parentTaskId?: string;
+  description?: string;
+  projectId?: string;
+  progress?: { total: number; completed: number; failed: number; skipped: number };
+}
+
+export interface SaveInput {
+  title: string;
+  status: TaskStatus;
+  parentTaskId: string | null;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RemoveInput {
+  id: string;
+}
+
 /**
- * Repository error types.
+ * Task persistence interface.
  */
-export class TaskRepositoryError extends Error {
-  constructor(message: string) {
-    super(message);
-    Object.setPrototypeOf(this, TaskRepositoryError.prototype);
-  }
+export interface ITaskRepository {
+  save(input: SaveInput): Promise<{ id: string; title: string }>;
+  getById(id: string): Promise<Task | null>;
+  update(input: UpdateInput): Promise<Task | null>;
+  search(params: SearchParams): Promise<Task[]>;
+  delete(input: RemoveInput): Promise<boolean>;
+  findByProjectIds(projectIds: string[], options?: { includeArchived?: boolean }): Promise<Task[]>;
+}
+
+/**
+ * Minimal interface for drive vs in-memory reimplementation in BE—pushes ResponseEntity shape to business layer in Test-Driven style.
+ */
+
+export interface Task {
+  id: string;
+  title: string;
+  description: string | null;
+  status: TaskStatus;
+  parentTaskId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  total: number;
+  completed: number;
+  failed: number;
+  skipped: number;
+  pending: number;
+  percentage: number;
 }
