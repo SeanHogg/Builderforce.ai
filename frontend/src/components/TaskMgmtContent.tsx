@@ -1422,6 +1422,14 @@ export function TaskMgmtContent({
                         padding: '8px 4px',
                         borderTop: '1px solid var(--border-subtle)',
                         gridColumn: expanded ? undefined : '1 / -1',
+                        // An expanded assignee can own hundreds of cards. Keep the
+                        // row identity visible while its tall grid row scrolls, then
+                        // let the next assignee naturally replace it at the boundary.
+                        position: expanded ? 'sticky' : undefined,
+                        top: expanded ? 0 : undefined,
+                        alignSelf: expanded ? 'start' : undefined,
+                        zIndex: expanded ? 2 : undefined,
+                        background: expanded ? 'var(--bg-surface)' : undefined,
                       }}
                     >
                       <button
