@@ -175,13 +175,22 @@ export function AuditDashboard({ segmentId }: AuditDashboardProps) {
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="font-semibold text-lg">
-                          {typeLabels[integration.type as keyof typeof typeLabels]}
+                          {typeLabels[integration.integrationType as keyof typeof typeLabels] ||
+                            typeLabels[integration.type as keyof typeof typeLabels] ||
+                            integration.integrationType}
                         </h3>
                         <Badge className={getStatusColor(integration.status)}>
                           {integration.status}
                         </Badge>
+                        {integration.integrationType && (
+                          <span className="text-xs text-gray-500">
+                            {integration.integrationType}
+                          </span>
+                        )}
                       </div>
-                      <p className="text-sm text-gray-600 mt-1">Last sync: {integration.lastSync || 'Never'}</p>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Last sync: {integration.lastSync || 'Never'}
+                      </p>
                     </div>
                     <div className="text-right">
                       <div className={`text-2xl font-bold ${getScoreColor(integration.completenessScore)}`}>
