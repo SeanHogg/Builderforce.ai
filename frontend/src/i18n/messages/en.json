@@ -6204,6 +6204,7 @@
       "assign": "Assigned",
       "score_value": "Valued",
       "dispatch": "Dispatched",
+      "sync_pr": "Updated PR",
       "merge_pr": "Merged PR",
       "flag": "Flagged"
     },

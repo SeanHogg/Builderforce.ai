@@ -15,9 +15,50 @@ import { mergePullRequest, normalizeMergeMethod, type MergeMethod } from './merg
 import { markPullRequestMergedById } from './recordPullRequestRow';
 import { invalidatePullRequestDetail } from './getPullRequestDetail';
 import { completeTaskOnMerge } from '../task/taskLifecycle';
+import { updatePullRequestBranch } from './updatePullRequestBranch';
+
+export type UpdateRecordedPrBranchResult =
+  | { ok: true; updated: boolean }
+  | { ok: false; httpStatus: number; error: string; code: 'conflict' | 'provider_error' };
+
+/** Tenant-scoped preparation used by the manager before checking CI/merging. */
+export async function updateRecordedPullRequestBranch(
+  db: Db,
+  env: Env,
+  args: { tenantId: number; prId: string },
+): Promise<UpdateRecordedPrBranchResult> {
+  const [row] = await db.select().from(pullRequests)
+    .where(and(eq(pullRequests.id, args.prId), eq(pullRequests.tenantId, args.tenantId))).limit(1);
+  if (!row) return { ok: false, httpStatus: 404, error: 'Pull request not found', code: 'provider_error' };
+  if (!row.repoId || row.number == null) {
+    return { ok: false, httpStatus: 409, error: 'Pull request is not ready to update', code: 'provider_error' };
+  }
+  const e = env as unknown as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
+  const resolved = await resolveRepoCredential(
+    db, e.INTEGRATION_ENCRYPTION_SECRET ?? e.JWT_SECRET ?? '', args.tenantId, row.repoId,
+  );
+  if (isResolveError(resolved)) {
+    return { ok: false, httpStatus: resolved.status, error: resolved.error, code: 'provider_error' };
+  }
+  const result = await updatePullRequestBranch({
+    provider: resolved.repo.provider, host: resolved.repo.host,
+    owner: resolved.repo.owner, repo: resolved.repo.repo,
+    token: resolved.token, number: row.number,
+  });
+  // No provider endpoint means there is no preparation step; retain the existing
+  // merge behaviour instead of disabling supported Bitbucket merges.
+  if (!result.ok && result.code === 'unsupported') return { ok: true, updated: false };
+  if (!result.ok) {
+    return {
+      ok: false, httpStatus: result.code === 'conflict' ? 409 : 502,
+      error: result.reason, code: result.code,
+    };
+  }
+  return result;
+}
 
 export type MergeRecordedPrResult =
-  | { ok: true; merged: boolean; alreadyMerged?: boolean; sha: string | null; pullRequest: unknown }
+  | { ok: true; merged: boolean; alreadyMerged?: boolean; branchUpdated?: boolean; sha: string | null; pullRequest: unknown }
   | { ok: false; httpStatus: number; error: string; code?: string };
 
 /**
@@ -28,7 +69,7 @@ export type MergeRecordedPrResult =
 export async function mergeRecordedPullRequest(
   db: Db,
   env: Env,
-  args: { tenantId: number; prId: string; method?: MergeMethod | string; mergedBy?: string | null },
+  args: { tenantId: number; prId: string; method?: MergeMethod | string; mergedBy?: string | null; updateBranch?: boolean },
 ): Promise<MergeRecordedPrResult> {
   const [row] = await db
     .select()
@@ -44,6 +85,23 @@ export async function mergeRecordedPullRequest(
   const secret = e.INTEGRATION_ENCRYPTION_SECRET ?? e.JWT_SECRET ?? '';
   const resolved = await resolveRepoCredential(db, secret, args.tenantId, row.repoId);
   if (isResolveError(resolved)) return { ok: false, httpStatus: resolved.status, error: resolved.error };
+
+  let branchUpdated = false;
+  if (args.updateBranch) {
+    const update = await updatePullRequestBranch({
+      provider: resolved.repo.provider,
+      host: resolved.repo.host,
+      owner: resolved.repo.owner,
+      repo: resolved.repo.repo,
+      token: resolved.token,
+      number: row.number,
+    });
+    // Providers without a safe update endpoint retain the old merge behaviour.
+    if (!update.ok && update.code !== 'unsupported') {
+      return { ok: false, httpStatus: update.code === 'conflict' ? 409 : 502, error: update.reason, code: update.code };
+    }
+    branchUpdated = update.ok && update.updated;
+  }
 
   const result = await mergePullRequest({
     provider: resolved.repo.provider,
@@ -86,5 +144,5 @@ export async function mergeRecordedPullRequest(
     }).catch(() => { /* completion is best-effort; the merge itself succeeded */ });
   }
 
-  return { ok: true, merged: result.merged, sha: result.sha, pullRequest: updated ?? row };
+  return { ok: true, merged: result.merged, branchUpdated, sha: result.sha, pullRequest: updated ?? row };
 }
