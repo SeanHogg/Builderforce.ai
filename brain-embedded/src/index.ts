@@ -67,7 +67,7 @@ export {
 export type { BrainContextValue, BrainPageContext } from './BrainContext';
 
 // Conversation + chat-list hooks
-export { useBrainChats, deriveChatTitle, DEFAULT_CHAT_TITLE } from './useBrainChats';
+export { useBrainChats, deriveChatTitle, DEFAULT_CHAT_TITLE, MAX_CHAT_TITLE_LENGTH } from './useBrainChats';
 export type { UseBrainChats, UseBrainChatsOptions } from './useBrainChats';
 export { useBrainConversation } from './useBrainConversation';
 export type { UseBrainConversation, UseBrainConversationOptions } from './useBrainConversation';
