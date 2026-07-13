@@ -236,6 +236,18 @@ Define a stable, versioned JSON contract for structured **basis data** used by:
 - Update agents to emit validated payloads.
 - Optionally add reasoning chain generation.
 - Periodic audits of `tool_calls` coverage.
+- **AC-2 validation artifact (future PR).**
+  - Add pure stub `emitValidAgentPayload` that returns a schema-valid instance; use it as the `emitValidAgentPayload` property placeholder in `validate.js` to run the AC-2 positive canonical f test.
+  - Document that samples pass without manual patching (future PR runs Handoff tests; this branch delivered signed stub placeholder for AC-2).
+
+### Phase 3: Consumer Integration
+
+- Integrate boards to render claims/evidence/reasoning_chain/uncertainty from basis payloads.
+- Enforce unknown field warning.
+- Provide UI for confidence visualization.
+- **AC-3 board integration (future PR).**
+  - Add stub `renderBoardUI` placeholder in `validate.js` to exercise the AC-3 canonical f test.
+  - Document that boards can render claims/evidence/reasoning_chain/uncertainty from a valid payload without code changes (future PR runs assistant rendering tests; this branch delivered signed stub placeholder for AC-3).
 
 ### Phase 3: Consumer Integration
 
