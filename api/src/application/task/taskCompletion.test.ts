@@ -223,6 +223,14 @@ describe('completeTask (completion without delivered code)', () => {
     expect(completedUpdate).toBeDefined();
     const completedAt = completedUpdate!.setPayload.completedAt as string;
     expect(completedAt).toMatch(/^\d{4}-\d{2}-\d{2}T[\d:T.]*$/);
+
+    // Verify the timestamp is not just digits, includes proper ISO-8601 time separator
+    const datePart = completedAt.slice(0, 10);
+    const timePart = completedAt.slice(11);
+    expect(datePart.indexOf('-')).toBe(4);
+    expect(datePart).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(timePart.indexOf('T')).toBe(0);
+    expect(timePart).toMatch(/^[\d:T.]+Z?$/);
   });
 });
 
