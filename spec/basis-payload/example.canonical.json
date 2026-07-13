@@ -8,7 +8,7 @@
   "sandbox": "development",
   "claims": [
     {
-      "claim_id": "claim-1",
+      "claim_id": "550e8400-e29b-41d4-a716-446655440001",
       "text": "The project uses TypeScript for static type safety across the codebase",
       "confidence": 0.96,
       "confidence_method": "heuristic",
@@ -19,7 +19,7 @@
       "status": "asserted"
     },
     {
-      "claim_id": "claim-2",
+      "claim_id": "550e8400-e29b-41d4-a716-446655440002",
       "text": "All services expose RESTful APIs with OpenAPI specifications",
       "confidence": 0.91,
       "confidence_method": "empirical",
@@ -30,7 +30,7 @@
       "status": "asserted"
     },
     {
-      "claim_id": "claim-3",
+      "claim_id": "550e8400-e29b-41d4-a716-446655440003",
       "text": "Unit test coverage exceeds 85% for critical business logic paths",
       "confidence": 0.98,
       "confidence_method": "empirical",
@@ -43,9 +43,9 @@
   ],
   "evidence": [
     {
-      "evidence_id": "e1",
+      "evidence_id": "550e8400-e29b-41d4-a716-446655440010",
       "claim_ids": [
-        "claim-1"
+        "550e8400-e29b-41d4-a716-446655440001"
       ],
       "type": "document",
       "uri": "https://github.com/seanhogg/builderforce.ai/blob/main/tsconfig.json",
@@ -60,10 +60,10 @@
       }
     },
     {
-      "evidence_id": "e2",
+      "evidence_id": "550e8400-e29b-41d4-a716-446655440011",
       "claim_ids": [
-        "claim-1",
-        "claim-2"
+        "550e8400-e29b-41d4-a716-446655440001",
+        "550e8400-e29b-41d4-a716-446655440002"
       ],
       "type": "agent_output",
       "uri": null,
@@ -78,9 +78,9 @@
       }
     },
     {
-      "evidence_id": "e3",
+      "evidence_id": "550e8400-e29b-41d4-a716-446655440012",
       "claim_ids": [
-        "claim-3"
+        "550e8400-e29b-41d4-a716-446655440003"
       ],
       "type": "database_record",
       "uri": "https://app.builderforce.ai/reports/test-coverage-x/yMF67z",
@@ -95,9 +95,9 @@
       }
     },
     {
-      "evidence_id": "e4",
+      "evidence_id": "550e8400-e29b-41d4-a716-446655440013",
       "claim_ids": [
-        "claim-2"
+        "550e8400-e29b-41d4-a716-446655440002"
       ],
       "type": "document",
       "uri": "https://github.com/seanhogg/builderforce.ai/blob/main/docs/architecture.md",
@@ -108,7 +108,7 @@
       "provenance": {
         "source_system": "github.com",
         "source_version": "main",
-        "checksum": "3b/da45e9b6c7f53d9b3/af71ae4b1b21"
+        "checksum": "3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
       }
     }
   ],
