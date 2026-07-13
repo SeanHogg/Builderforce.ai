@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
-import { providerKeysApi, type ProviderAuthType, type LlmProvider } from '@/lib/builderforceApi';
+import { providerKeysApi, type ProviderAuthType, type ProviderDiagnostic, type LlmProvider } from '@/lib/builderforceApi';
 
 /**
  * BYO (bring-your-own-provider) credentials. A workspace owner connects their OWN
@@ -173,7 +173,25 @@ function ProviderConnectionCard({
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [pastedCode, setPastedCode] = useState('');
+  const [oauthState, setOauthState] = useState('');
+  const [diagnostic, setDiagnostic] = useState<ProviderDiagnostic | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [testMessage, setTestMessage] = useState<string | null>(null);
   const confirm = useConfirm();
+
+  const loadDiagnostic = () => providerKeysApi.status(config.id).then(setDiagnostic).catch((e: Error) => setError(e.message));
+  useEffect(() => { void loadDiagnostic(); }, [config.id, authType]);
+
+  const testConnection = async () => {
+    setTesting(true); setTestMessage(null); setError(null);
+    try {
+      const result = await providerKeysApi.test(config.id);
+      setTestMessage(result.ok ? `Connection verified${result.model ? ` with ${result.model}` : ''}.` : `Test failed: ${result.status}`);
+      await loadDiagnostic();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Connection test failed');
+    } finally { setTesting(false); }
+  };
 
   const configured = authType !== null;
   const blurb = t(`provider.${config.id}.blurb`);
@@ -197,7 +215,8 @@ function ProviderConnectionCard({
   const startConnect = async () => {
     setBusy(true); setError(null);
     try {
-      const { authorizeUrl } = await providerKeysApi.oauthStart(config.id);
+      const { authorizeUrl, state } = await providerKeysApi.oauthStart(config.id);
+      setOauthState(state);
       window.open(authorizeUrl, '_blank', 'noopener,noreferrer');
       setConnecting(true);
     } catch (e) {
@@ -212,10 +231,11 @@ function ProviderConnectionCard({
     if (!code) return;
     setBusy(true); setError(null);
     try {
-      await providerKeysApi.oauthComplete(config.id, code);
+      await providerKeysApi.oauthComplete(config.id, code, oauthState || undefined);
       onChange('oauth');
       setConnecting(false);
       setPastedCode('');
+      setOauthState('');
     } catch (e) {
       setError(e instanceof Error ? e.message : t('errConnectSubscription'));
     } finally {
@@ -248,6 +268,22 @@ function ProviderConnectionCard({
     <div style={cardStyle}>
       <div style={sectionTitle}>{config.label}</div>
       <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 12px' }}>{blurb}</p>
+
+      <div style={{ padding: 12, marginBottom: 14, borderRadius: 8, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: diagnostic?.usable ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)' }}>
+            Current status: {diagnostic?.status?.replaceAll('_', ' ') ?? 'checking…'}
+          </span>
+          <button type="button" onClick={testConnection} disabled={testing || !configured} style={{ ...buttonPrimary, opacity: testing || !configured ? 0.5 : 1 }}>
+            {testing ? 'Testing…' : 'Test connection'}
+          </button>
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+          Last 30 days: {(diagnostic?.usage.requests ?? 0).toLocaleString()} requests · {(diagnostic?.usage.tokens ?? 0).toLocaleString()} tokens
+          {diagnostic?.usage.lastUsedAt ? ` · Last used ${new Date(diagnostic.usage.lastUsedAt).toLocaleString()}` : ''}
+        </div>
+        {testMessage && <div style={{ fontSize: 11.5, color: 'rgba(34,197,94,0.9)', marginTop: 7 }}>{testMessage}</div>}
+      </div>
 
       {error && <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 10 }}>{t('errorPrefix', { message: error })}</div>}
 
@@ -284,7 +320,7 @@ function ProviderConnectionCard({
                 <button type="button" onClick={finishConnect} disabled={busy || !pastedCode.trim()} style={{ ...buttonPrimary, opacity: busy || !pastedCode.trim() ? 0.5 : 1, flexShrink: 0 }}>
                   {busy ? t('connecting') : t('finish')}
                 </button>
-                <button type="button" onClick={() => { setConnecting(false); setPastedCode(''); }} disabled={busy} style={{ ...buttonDanger, flexShrink: 0 }}>
+                <button type="button" onClick={() => { setConnecting(false); setPastedCode(''); setOauthState(''); }} disabled={busy} style={{ ...buttonDanger, flexShrink: 0 }}>
                   {t('cancel')}
                 </button>
               </div>
