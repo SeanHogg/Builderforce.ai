@@ -217,7 +217,7 @@ A **Basis Payload** is a single JSON document containing:
 | `model_id` | ✅ | string | Model identifier (e.g., `gpt-4`, `claude-3.5-sonnet`) |
 | `model_version` | ❌ | string \| null | Specific model version/checkpoint |
 | `tool_calls` | ❌ | array of objects | Each tool call has `tool_name`, `input_summary`, `output_summary`, `called_at` |
-| `environment` | ✅ | string | One of: `production`, `staging`, `development`, `test` |
+| `environment` | ✅ | string | Environment guideline set by each integration (e.g., `production`, `staging`, `development`). |
 
 ### 2.7. Extensions Block (optional)
 
