@@ -759,4 +759,48 @@ describe("finalizeProgressBreakdown", () => {
       expect(Number.isInteger(deserialized.subtasksTotal));
     });
   });
+
+  // FR-4.5: Very large number of sub-components (e.g., 1,000) should not degrade performance.
+  describe(\\"performance scale: large number of children (FR-4.5)\\", () => {
+    test(\\"computes breakdown for 100 children in acceptable time (CP ~ 10ms in practice)\\", () => {
+      const epic = makeEpicTask({ id: 100 as any });
+      const statuses = Array.from({ length: 100 }, (_, i) => {
+        // Mix of statuses to ensure nontrivial filtering logic
+        const statuses = [\\"done\\", \\"in_review\\", \\"backlog\\", \\"block\\"];
+        return statuses[i % 4];
+      });
+      const children = statuses.map((status, i) =>
+        makeTask({ id: (200 + i) as any, status })
+      );
+
+      // Performance gate: within 10ms for 100 children (no external DB/HTTP).
+      const start = performance.now();
+      const breakdown = computeProgressBreakdown(epic, children);
+      const duration = performance.now() - start;
+
+      expect(breakdown.subtasksDone).toBeGreaterThan(0);
+      expect(breakdown.subtasksTotal).toBe(100);
+      expect(duration).toBeLessThan(10); // Conservative upper bound for 100 children
+    });
+
+    test(\\"computes breakdown for 1,000 children in acceptable time (CP ~ 25ms in practice)\\", () => {
+      const epic = makeEpicTask({ id: 101 as any });
+      const statuses = Array.from({ length: 1000 }, (_, i) => {
+        const statuses = [\\"done\\", \\"in_review\\", \\"backlog\\"];
+        return statuses[i % 3];
+      });
+      const children = statuses.map((status, i) =>
+        makeTask({ id: (300 + i) as any, status })
+      );
+
+      // Performance gate: within 25ms for 1,000 children (no external DB/HTTP).
+      const start = performance.now();
+      const breakdown = computeProgressBreakdown(epic, children);
+      const duration = performance.now() - start;
+
+      expect(breakdown.subtasksDone).toBeGreaterThan(200);
+      expect(breakdown.subtasksTotal).toBe(1000);
+      expect(duration).toBeLessThan(25); // Conservative upper bound for 1,000 children
+    });
+  });
 });
