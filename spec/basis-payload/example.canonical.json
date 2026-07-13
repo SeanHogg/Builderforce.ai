@@ -1,124 +1,161 @@
 {
   "schema_version": "1.0.0",
-  "basis_id": "550e8400-e29b-41d4-a716-446655440000",
-  "created_at": "2025-10-14T12:00:00Z",
-  "agent_id": "coderclaw-mock-basis-gen",
-  "session_id": "sess-12345",
-  "parent_basis_id": null,
+  "basis_id": "a1b2c3d4-e5f6-47a8-b9c0-d1e2f3a4b5c6",
+  "created_at": "2025-08-24T14:32:15Z",
+  "agent_id": "code-reviewer-v2",
+  "session_id": "session_89xyz-abc123-qwe456",
+  "parent_basis_id": "00000000-0000-0000-0000-000000000001",
   "claims": [
     {
-      "claim_id": "550e8400-e29b-41d4-a716-446655440001",
-      "text": "The system processes 1,500 transactions per second on average.",
-      "confidence": 0.87,
+      "claim_id": "claim_001",
+      "text": "The proposed refactoring reduces cyclomatic complexity by an estimated 32%",
+      "confidence": 0.89,
       "confidence_method": "empirical",
-      "tags": [
-        "performance",
-        "throughput"
-      ],
+      "tags": ["complexity", "refactoring", "static-analysis"],
       "status": "asserted"
     },
     {
-      "claim_id": "550e8400-e29b-41d4-a716-446655440002",
-      "text": "Throughput is measured in the development environment.",
-      "confidence": 0.92,
+      "claim_id": "claim_002",
+      "text": "The modified code handles null input in the service layer without runtime errors",
+      "confidence": 0.95,
       "confidence_method": "heuristic",
-      "tags": [
-        "environment",
-        "verification"
-      ],
+      "tags": ["null-safety", "defense-in-depth"],
+      "status": "asserted"
+    },
+    {
+      "claim_id": "claim_003",
+      "text": "No test coverage regressions are introduced by this change",
+      "confidence": 0.76,
+      "confidence_method": "bayesian",
+      "tags": ["test-coverage", "regression"],
       "status": "asserted"
     }
   ],
   "evidence": [
     {
-      "evidence_id": "550e8400-e29b-41d4-a716-446655440010",
-      "claim_ids": [
-        "550e8400-e29b-41d4-a716-446655440001"
-      ],
-      "type": "document",
-      "uri": "https://example.com/reports/performance-2025-10.md",
-      "title": "Performance Testing Report Q3 2025",
-      "excerpt": "Average throughput measured at 1,513 TPS across 3 regions.",
-      "retrieved_at": "2025-10-14T11:55:00Z",
-      "weight": 0.92,
+      "evidence_id": "evidence_001",
+      "claim_ids": ["claim_001"],
+      "type": "api_response",
+      "uri": "https://api.analyst.example.com/complexity",
+      "title": "Static Analysis Complexity Scores",
+      "excerpt": "Before: 12 branches, After: 8 branches (4.2c reduction per SWC standard)",
+      "retrieved_at": "2025-08-24T14:30:00Z",
+      "weight": 0.89,
       "provenance": {
-        "source_system": "testing-internal",
-        "source_version": "v3.2.0",
-        "checksum": "a1b2c3d4e5f6..."
+        "source_system": "analyst-api",
+        "source_version": "v2.3.1",
+        "checksum": "7a100e1c2b3a4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0"
       }
     },
     {
-      "evidence_id": "550e8400-e29b-41d4-a716-446655440011",
-      "claim_ids": [
-        "550e8400-e29b-41d4-a716-446655440002"
-      ],
-      "type": "computed",
-      "weight": 0.75,
+      "evidence_id": "evidence_002",
+      "claim_ids": ["claim_002"],
+      "type": "document",
+      "uri": "file://src/services/payment.ts",
+      "title": "PaymentService.ts",
+      "excerpt": "Service layer now implements InputValidator before processing. Null check added at line 147.",
+      "retrieved_at": "2025-08-24T14:28:15Z",
+      "weight": 0.92,
       "provenance": {
-        "source_system": "runtime-metrics",
-        "checksum": "779988a..."
+        "source_system": "source-code-tracker",
+        "source_version": "1.7.0",
+        "checksum": "5f6e7d8c9b0a1f2e3d4c5b6a7f8e9d0c1b2a3f4e5d6c7b8a9f0e1d2c3b4a5d6e"
+      }
+    },
+    {
+      "evidence_id": "evidence_003",
+      "claim_ids": ["claim_003"],
+      "type": "database_record",
+      "uri": "https://ci.builderforce.ai/jobs/run_123456/report",
+      "title": "Test Coverage Report - Run 123456",
+      "excerpt": "Coverage: Client 94% (prev: 94%), Integration 88% (prev: 87%), System 91% (prev: 91%). No drops.",
+      "retrieved_at": "2025-08-24T14:35:22Z",
+      "weight": 0.76,
+      "provenance": {
+        "source_system": "ci-build-system",
+        "source_version": "3.1.0",
+        "checksum": "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2"
       }
     }
   ],
   "reasoning_chain": [
     {
       "step": 1,
-      "description": "Identified performance metrics from testing reports.",
-      "evidence_ids": [
-        "550e8400-e29b-41d4-a716-446655440010"
-      ],
-      "claim_ids": [
-        "550e8400-e29b-41d4-a716-446655440001"
-      ],
-      "inference_type": "deductive"
+      "description": "Analyzed source code commit to identify refactoring patterns",
+      "evidence_ids": ["evidence_002"],
+      "claim_ids": ["claim_002"],
+      "inference_type": "analytical"
     },
     {
       "step": 2,
-      "description": "Verified metrics belong to development environment testing runs.",
-      "claim_ids": [
-        "550e8400-e29b-41d4-a716-446655440002"
-      ],
-      "inference_type": "lookup"
+      "description": "Ran complexity analysis on modified branches",
+      "evidence_ids": ["evidence_001"],
+      "claim_ids": ["claim_001"],
+      "inference_type": "computational"
+    },
+    {
+      "step": 3,
+      "description": "Cross-referenced with recent CI runs to confirm test results",
+      "evidence_ids": ["evidence_003"],
+      "claim_ids": ["claim_003"],
+      "inference_type": "deductive"
     }
   ],
   "uncertainty": {
     "overall_confidence": 0.81,
     "known_unknowns": [
-      "Batch job processing time not yet measured.",
-      "Production traffic patterns estimate unknown."
+      "Detailed runtime performance metrics not captured in this analysis",
+      "Third-party library version compatibility not verified"
     ],
     "assumptions": [
-      "The test samples are representative of peak loads.",
-      "Network latency behaves similarly in staging."
+      "Static analysis complexity scores correlate with cyclomatic complexity estimate",
+      "Current CI infrastructure reflects production parity"
     ],
-    "contradictions": []
+    "contradictions": [
+      {
+        "claim_id_a": "claim_001",
+        "claim_id_b": "claim_003",
+        "description": "Reduced complexity (benefit) may correlate with increased test file count (visual), but statistical correlation is not established in this analysis"
+      }
+    ]
   },
   "context": {
-    "task_id": "TASK-674",
-    "task_description": "Define Basis Payload Structure v1.0.0 and validate canonical example.",
-    "model_id": "claude-3.5-sonnet",
-    "model_version": "2025-10-14",
+    "task_id": "T-710249",
+    "task_description": "Refactor payment service layer to improve null safety and reduce complexity",
+    "model_id": "code-reviewer-v2",
+    "model_version": "2.1.0-beta3",
     "tool_calls": [
       {
-        "tool_name": "jsonschema",
-        "input_summary": "Validate example.canonical.json against schema.",
-        "output_summary": "passes schema validation",
-        "called_at": "2025-10-14T12:00:00Z"
+        "tool_name": "lint",
+        "input_summary": "Analyzed src/services/payment.ts diff against base commit abcd1234",
+        "output_summary": "Detected 3 complexity reductions, null-safe pattern adopted",
+        "called_at": "2025-08-24T14:32:00Z"
+      },
+      {
+        "tool_name": "complexity-analyzer",
+        "input_summary": "Extract function-level branch counts from modified unit paths",
+        "output_summary": "Calculated branch reduction of 4.2 per SWC standard",
+        "called_at": "2025-08-24T14:30:15Z"
+      },
+      {
+        "tool_name": "coverage-checker",
+        "input_summary": "Ran full test suite for affected packages",
+        "output_summary": "No coverage regressions detected; baseline 91-94% maintained",
+        "called_at": "2025-08-24T14:35:00Z"
       }
     ],
-    "environment": "development"
+    "environment": "production"
   },
   "extensions": {
-    "com.builderforce.project-analysis": {
-      "project_risk_score": 0.24,
-      "dominant_risk_factors": [
-        "legacy-dependencies",
-        "testing-parity-with-runtime"
-      ]
+    "com.acme.reviewer": {
+      "reviewer_version": "2.1.0-beta3",
+      "review_type": "defense-in-depth",
+      "automatic_fixes_applied": 1
     },
-    "com.acme.security": {
-      "priority_vulns": 2,
-      "recommendation_rebuttal_threshold": 0.7
+    "com.acme.build": {
+      "build_id": "build_20250824_143200",
+      "build_number": "2874",
+      "triggered_by": "pull_request"
     }
   }
 }
