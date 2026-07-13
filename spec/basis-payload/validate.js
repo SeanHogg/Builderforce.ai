@@ -100,6 +100,13 @@ try {
   process.exit(1);
 }
 
+// --- PRD AC-4: enforce confidence/weight/overall_confidence [0.0, 1.0] before schema validation ---
+if (!checkUnbounded(example)) {
+  console.error('❌ CRITICAL: Example out-of-bounds confidence/weight/overall_confidence detected. AC-4 must be strictly enforced.');
+  process.exit(1);
+}
+console.error('✅ Confidence/weight/overall_confidence bounds verified [0.0, 1.0]');
+
 // --- Test Plan (AC-Conformant Test Cases) ---
 /* eslint-disable max-lines-per-function, complex-structures */
 async function runTests() {
