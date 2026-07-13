@@ -366,6 +366,24 @@ export function LlmUsageContent() {
           )}
 
           {/* By model */}
+          {usage.byCredential.length > 0 && (
+            <div style={cardStyle}>
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>By Integration / API Key</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {usage.byCredential.map((credential) => (
+                  <div key={`${credential.type}:${credential.id}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 10px', borderRadius: 8, background: 'var(--bg-elevated)' }}>
+                    <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{credential.name}</span>
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{credential.type === 'integration' ? 'BYO integration' : 'API key'}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{fmtNum(credential.modelCount)} models</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{fmtNum(credential.requests)} req</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--cyan-bright, #00e5cc)' }}>{fmtNum(credential.tokens)} tok</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* By model */}
           {usage.byModel && usage.byModel.length > 0 && (
             <div style={cardStyle}>
               <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>By Model</div>
