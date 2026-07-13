@@ -174,7 +174,7 @@ export {
  * @returns The updated field with applied enum mappings.
  */
 export function applyRulesetEnumMappings(
-  field: ImportOmit<import("./types.js").OutputField, "transform"> & { transform?: import("./types.js").OutputField["transform"] },
+  field: Omit<import("./types.js").OutputField, "transform"> & { transform?: import("./types.js").OutputField["transform"] },
   ruleset?: import("./types.js").BusinessRuleset,
 ): import("./types.js").OutputField {
   // If the field already has an enumMap, use it
