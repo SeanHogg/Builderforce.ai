@@ -64,6 +64,12 @@ class InMemoryTaskRepo implements ITaskRepository {
   async delete(id: TaskId): Promise<void> {
     this.store.delete(id as number);
   }
+  async saveById(id: number, task: Task): Promise<Task> {
+    return this.update(task); // Simplify for in-memory
+  }
+  async saveOrUpdate(id: number, task: Task): Promise<Task> {
+    return this.update(task); // Simplify for in-memory
+  }
   async dequeueNextReady(projectIds: ProjectId[]): Promise<Task | null> {
     return null;
   }
