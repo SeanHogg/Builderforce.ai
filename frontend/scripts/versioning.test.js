@@ -23,8 +23,8 @@ if (manifest.version && manifest.version.startsWith('2026.')) {
 // Test 2: Verify stamp-sw-version.js generates unique BUILD_ID
 console.log('\n🧪 Test 2: Checking stamp-sw-version.js functionality...');
 
-const packageJsonPath = path.join(__dirname, 'package.json');
-const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+const pkgPath = path.join(__dirname, 'package.json');
+const packageJson = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
 const pkgVersion = packageJson.version;
 
 let buildId;
@@ -40,7 +40,7 @@ console.log('Generated BUILD_ID:', buildId);
 // Pattern: const CACHE_NAME = 'bf-cache-' + __BUILD_VERSION__;
 const swPath = path.join(__dirname, 'public', 'sw.js');
 const swContent = fs.readFileSync(swPath, 'utf-8');
-const versionRegex = /constCACHE_NAME\s*\+=\s*['"]bf-cache-['"]\s*\+ __BUILD_VERSION__/;
+const versionRegex = /constCACHE_NAME\s*\+=\s*['"]bf-cache-[']+'\s*\+ __BUILD_VERSION__/;
 
 if (versionRegex.test(swContent)) {
   console.log('✅ sw.js contains __BUILD_VERSION__ placeholder');
@@ -67,10 +67,10 @@ if (fs.existsSync(pwaBannerPath)) {
 
 // Test 4: Verify package.json build scripts chain versioning
 console.log('\n🧪 Test 4: Checking package.json build scripts...');
-const packageJsonPath = path.join(__dirname, 'package.json');
-const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+const buildPath = path.join(__dirname, 'package.json');
+const buildJson = JSON.parse(fs.readFileSync(buildPath, 'utf-8'));
 
-const buildScript = packageJson.scripts.build;
+const buildScript = buildJson.scripts.build;
 if (
   buildScript.includes('node scripts/inject-sw-version.js') &&
   buildScript.includes('node scripts/stamp-sw-version.js') &&
