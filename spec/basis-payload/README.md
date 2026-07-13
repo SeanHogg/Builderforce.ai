@@ -1,270 +1,281 @@
-# Basis Payload Specification — v1.0.0
+# Basis Payload v1.0.0
 
+> **Schema Version:** 1.0.0
 > **Status:** Ratified
->
-> **Last Updated:** 2025-06-18
->
-> **Version:** 1.0.0
+> **Valid Against:** JSON Schema Draft 2020-12
+
+This directory contains the ratified JSON schema and documentation for the **Basis Payload** — the canonical contract that agents and boards use to exchange structured facts, sources, weights, reasoning context, and provenance for a given decision or assertion.
+
+**Project Ticket:** [builderforce.ai/task-674](https://github.com/SeanHogg/Builderforce.ai/issues/674)
 
 ---
 
-## Overview
+## Quick Reference
 
-This directory contains the ratified, versioned JSON payload contract for structured **basis data** — the set of facts, sources, weights, and reasoning context that agents use to ground their decisions and that boards use to display, audit, and challenge those decisions.
-
-**Purpose:** Provide a canonical, versioned schema that all agents can emit and all boards can consume, ensuring interoperability, auditability, and cross-agent comparability.
-
-**Key Design Points:**
-- **Payload-level evidence:** Required at the top level per AC-1 (FR-4 per-claim optionality is realized via evidence items referencing zero or more claims).
-- **Extensions namespacing:** Unknown top-level fields cause warnings (not hard errors) per AC-6; only fields under `extensions` are constrained by the schema (`additionalProperties: true` at root, `additionalProperties: false` inside `extensions`).
-- **Uncertainty block:** Required, containing an overall confidence score [0,1] and structured lists of known_unknowns, assumptions, and contradictions.
-- **Reasoning chain ordering:** Steps are numbered sequentially starting at 1; the schema enforces `step >= 1`; sequential enforcement (no gaps) is semantic guidance for producers/consumers.
+| File | Purpose |
+|------|---------|
+| [`basis-payload.schema.json`](basis-payload.schema.json) | JSON Schema (Draft 2020-12) contract — validates all payloads. |
+| [`example.canonical.json`](example.canonical.json) | Full, valid payload example. |
+| [`basis-payload.md`](basis-payload.md) | Human-readable reference and usage guide. |
+| [`CHANGELOG.md`](CHANGELOG.md) | Version history (v1.0.0 ratified). |
+| [`validate.js`](validate.js) | Zero-dependency validation harness (Node.js `node validate.js`). |
 
 ---
 
-## Files & Artifacts
+## What is a Basis Payload?
 
-| Artifact | Description | Validation Command |
-|----------|-------------|--------------------|
-| `basis-payload.schema.json` | JSON Schema v1.0.0 (Draft 2020-12) — canonical contract | `node validate.js` (see below) |
-| `example.canonical.json` | Full canonical example payload (validates against schema) | `node validate.js` |
-| `basis-payload.md` | Reference documentation; integration guidelines; requirement traceability | — |
-| `CHANGELOG.md` | Versioned changelog (v1.0.0 entry) | — |
+A **Basis Payload** is a JSON document that captures the structured set of facts, sources, weights, and reasoning context an agent uses to ground its decisions. Boards and other consumers use this payload to:
+
+- Display citations and confidence indicators.
+- Trace every claim back to its source.
+- Render reasoning chains step-by-step.
+- Enforce audit requirements.
+
+The payload is versioned (`schema_version: "1.0.0"`) and validated against a committed JSON Schema.
 
 ---
 
-## Quick Start
+## Required Contract Fields
 
-### 1. Validate the Canonical Example
+Every compliant payload MUST contain:
 
-The artifact `validate.js` is a zero-dependency Node.js script that runs the AC test plan against the schema and example:
+1. **Schema Version** — `"schema_version": "1.0.0"`
+2. **Identity** — `basis_id`, `created_at`, `agent_id`
+3. **Claims** — Array with one or more claims (`claim_id`, `text`, `confidence`, `confidence_method`, `status`)
+4. **Evidence** — Array of evidence items (`evidence_id`, `claim_ids`, `type`, `weight`, `provenance`)
+
+See [`basis-payload.schema.json`](basis-payload.schema.json#L124-L154) for the canonical expression.
+
+---
+
+## Validation
+
+### Step 1: Verify the Canonical Example
 
 ```bash
-cd spec/basis-payload
-node validate.js
+npm install -g ajv-cli  # Node 18+ required
+ajv-cli \
+  --spec=draft2020 \
+  -c ajv-formats \
+  -s spec/basis-payload/basis-payload.schema.json \
+  -d spec/basis-payload/example.canonical.json
 ```
 
-Expected output:
+Expected: ✅ Valid (0 errors).
 
-```
-✓ schema_version pattern validation
-✓ Required fields: schema_version, basis_id, agent_id, claims, evidence
-✓ UUID formats for claim_id, evidence_id, basis_id, parent_basis_id
-✓ confidence, weight, overall_confidence in [0, 1]
-✓ environment enum values
-✓ reverse-DNS pattern for extension keys
-✓ Canonical example passes schema validation
+### Step 2: Validate Your Own Payloads (Zero Dependency)
 
-All required tests passed.
+```bash
+node spec/basis-payload/validate.js
 ```
 
-Exit code `0` on all passing checks; non-zero if any test fails.
+`validate.js` loads the schema, canonical example, runs the test plan, and returns a summary. It can be used as a local or CI validation step.
 
-### 2. Integrate with Your Agent
+Options (via `process.argv`):
 
-```typescript
-import Ajv from "ajv";
-import addFormats from "ajv-formats";
-import schema from "./basis-payload.schema.json";
+```bash
+node spec/basis-payload/validate.js --summary
+node spec/basis-payload/validate.js --fail-on-warnings
+node spec/basis-payload/validate.js --skip-personal-tests
+```
 
-const ajv = new Ajv({ strict: false });
-addFormats(ajv);
+### Step 3: Consumer Validation
 
-const validate = ajv.compile(schema);
+Consumers MUST validate payloads before processing. On failure, emit a structured error and reject the payload with details.
 
-const basis = {
-  schema_version: "1.0.0",
-  basis_id: crypto.randomUUID(),
-  created_at: new Date().toISOString(),
-  agent_id: "your-agent-id",
-  session_id: "session-123",
-  parent_basis_id: null,
-  claims: [
+**Error format (example):**
+
+```json
+{
+  "error": "validation_failed",
+  "schema_version": "1.0.0",
+  "payload_version": null,
+  "issues": [
     {
-      claim_id: crypto.randomUUID(),
-      text: "Revenue growth is projected at 15% YoY",
-      confidence: 0.87,
-      confidence_method: "empirical",
-      tags: ["revenue", "forecast"],
-      status: "asserted"
+      "path": ".claims[0].confidence",
+      "message": "Expected number between 0 and 1 (exclusive of 1)",
+      "value": 1.2
     }
-  ],
-  evidence: [
-    {
-      evidence_id: crypto.randomUUID(),
-      claim_ids: ["<claim-1-uuid>"],
-      type: "database_record",
-      uri: "https://api.your-financial-db.com/reports/2025q1",
-      title: "Q1 2025 Revenue Forecast",
-      weight: 0.92,
-      reported_at: "2025-04-10T10:30:00Z",
-      provenance: {
-        source_system: "Financial Core",
-        source_version: "2.4.1",
-        checksum: "a0b1c2d3e4f5..."
-      }
-    }
-  ],
-  reasoning_chain: [
-    {
-      step: 1,
-      description: "Load historical revenue data",
-      evidence_ids: ["<evidence-1-uuid>"],
-      claim_ids: ["<claim-1-uuid>"],
-      inference_type: "lookup"
-    },
-    {
-      step: 2,
-      description: "Apply growth factor from marketing spend correlation",
-      evidence_ids: ["<evidence-2-uuid>"],
-      claim_ids: ["<claim-1-uuid>"],
-      inference_type: "inductive"
-    }
-  ],
-  uncertainty: {
-    overall_confidence: 0.81,
-    known_unknowns: ["External economic sanctions not yet modeled"],
-    assumptions: ["Marketing spend correlation holds constant"],
-    contradictions: []
-  },
-  context: {
-    task_id: "task-basis-projection-123",
-    task_description: "Create a quarterly revenue projection basis",
-    model_id: "finance-unified-planner-v2",
-    model_version: "2.0.3",
-    tool_calls: [
-      {
-        tool_name: "query_financial_db",
-        input_summary: "SELECT revenue, marketing_spend FROM q1_history WHERE year=2024",
-        output_summary: "Loaded 24 monthly records",
-        called_at: "2025-04-10T10:15:00Z"
-      }
-    ],
-    environment: "production"
-  },
-  extensions: {
-    "com.builderforce.review": {
-      peer_review_status: "pending",
-      reviewers: ["agent-audit", "user-finops"]
-    },
-    "com.acme.risk": {
-      risk_exposure_score: 0.45
-    }
-  }
-};
-
-if (!validate(basis)) {
-  console.error("Payload validation failed:", validate.errors);
-  // Abort emission or fallback to safe defaults
+  ]
 }
 ```
 
-### 3. Handle Consumer Validation
+---
 
-When your board receives payloads, validate before processing:
+## Field Matrices
 
-```typescript
-const inBasis = JSON.parse(requestBody);
-if (!validate(inBasis)) {
-  console.warn("Validation warnings/errors:", validate.errors);
-  // Log a structured warning; do not reject outright as per AC-6; use WARN level
-}
+### Top-Level Properties
 
-// Safe to render claims/evidence/reasoning_chain/uncertainty
-claims.forEach(c => renderConfidenceIndicator(c.confidence));
-renderEvidenceTable(basis.evidence);
-```
+| Field | Required? | Type | Description |
+|-------|----------|------|-------------|
+| `schema_version` | ✅ | string (semver) | Schema version implementing the contract |
+| `basis_id` | ✅ | UUID | Unique instance identifier |
+| `created_at` | ✅ | ISO-8601 UTC | When this basis was generated |
+| `agent_id` | ✅ | string | Agent that produced the basis |
+| `session_id` | ❌ | string \| null | Optional session the basis belongs to |
+| `parent_basis_id` | ❌ | UUID \| null | Parent basis for refinement/rebuttal |
+| `sandbox` | ❌ | string \| null | Optional sandbox identifier |
+| `claims` | ✅ | array | Claims array (min 1) |
+| `evidence` | ✅ | array | Evidence array (min 0) |
+| `reasoning_chain` | ❌ | array | Optional ordered reasoning steps |
+| `uncertainty` | ❌ | object | Overall confidence + known_unknowns + assumptions + contradictions |
+| `context` | ❌ | object | Execution context (task_id, model_id, environment, etc.) |
+| `extensions` | ❌ | object | Domain-specific fields under reverse-DNS namespaces |
+
+### Claims Properties
+
+| Field | Required? | Type | Description |
+|-------|----------|------|-------------|
+| `claim_id` | ✅ | UUID | Unique claim identifier |
+| `text` | ✅ | string | Human-readable assertion |
+| `confidence` | ✅ | float [0,1] | How convinced the claim is |
+| `confidence_method` | ✅ | enum | How confidence was computed |
+| `tags` | ❌ | string[] | Labels for navigation/filtering |
+| `status` | ❌ | enum (default asserted) | `asserted`/`retracted`/`superseded` |
+
+### Evidence Properties
+
+| Field | Required? | Type | Description |
+|-------|----------|------|-------------|
+| `evidence_id` | ✅ | UUID | Unique evidence identifier |
+| `claim_ids` | ✅ | UUID[] | Claims this evidence supports |
+| `type` | ✅ | enum | Evidence type (`document`, `database_record`, `api_response`, `agent_output`, `human_input`, `computed`) |
+| `uri` | ❌ | URL \| null | Resolvable URI for the evidence |
+| `title` | ❌ | string \| null | Human-readable title |
+| `excerpt` | ❌ | string \| null | Short excerpt for previews |
+| `retrieved_at` | ❌ | ISO-8601 UTC \| null | When the evidence was fetched |
+| `weight` | ✅ | float [0,1] | Strength of evidence support (0–1) |
+| `provenance` | ✅ | object | Source metadata (`source_system`, `source_version`, `checksum`) |
+
+**Important note:** `evidence` is a **required top-level array** (like `claims`). Individual claims may reference zero evidence items. This resolves the AC-1 vs FR-4 tension and ensures auditability.
+
+### Reasoning Chain Properties
+
+| Field | Required? | Type | Description |
+|-------|----------|------|-------------|
+| `step` | ✅ | integer ≥1 | Sequential step number (1, 2, 3, ...) |
+| `description` | ✅ | string | Human-readable reasoning step |
+| `inference_type` | ✅ | enum | How the conclusion was reached |
+| `evidence_ids` | ❌ | UUID[] | Evidence items referenced by this step |
+| `claim_ids` | ❌ | UUID[] | Claims reached by this step |
+
+### Uncertainty Properties
+
+| Field | Required? | Type | Description |
+|-------|----------|------|-------------|
+| `overall_confidence` | ✅ | float [0,1] | Overall confidence in the entire basis |
+| `known_unknowns` | ✅ | string[] | Known limitations or gaps |
+| `assumptions` | ✅ | string[] | Explicit assumptions made |
+| `contradictions` | ❌ | array | Discrepancies between claims (`claim_id_a`, `claim_id_b`, `description`) |
+
+### Context Properties
+
+| Field | Required? | Type | Description |
+|-------|----------|------|-------------|
+| `task_id` | ❌ | string \| null | Associated task identifier |
+| `task_description` | ❌ | string \| null | Human-readable task description |
+| `model_id` | ✅ | string | Model identifier or type |
+| `model_version` | ❌ | string \| null | Model version (if applicable) |
+| `tool_calls` | ❌ | array | List of tools used (`tool_name`, `input_summary`, `output_summary`, `called_at`) |
+| `environment` | ✅ | enum | Execution environment |
+
+**`environment` enum values:** `production`, `staging`, `development`, `test`.
+
+### Extensions Properties
+
+| Field | Required? | Type | Description |
+|-------|----------|------|-------------|
+| *arbitrary keys* | ❌ | object | Domain-specific fields under reverse-DNS namespaced keys |
+
+Extension keys MUST follow the reverse-DNS pattern: `[a-z][a-z0-9-]*(.[a-z][a-z0-9-]*)+` (e.g., `com.builderforce.project-analysis`). Unknown extensions MUST be ignored by consumers.
 
 ---
 
-## Requirement Traceability
+## Example Processing Flow
 
-| Requirement | Reference | Implementation Field | Schema Enforcement |
-|-------------|-----------|----------------------|-------------------|
-| **FR-1 / AC-1** | schema_version semver | `schema_version` pattern ^\d+\.\d+\.\d+$ | required, pattern validation |
-| **FR-2** | Identity block | `basis_id`, `created_at`, `agent_id`, `session_id` (nullable), `parent_basis_id` (nullable) | required fields, UUID formats |
-| **FR-3** | Claims block | `claims[]` array of claim objects | required array, minItems 1; per-claim required fields |
-| **FR-4** | Evidence block | `evidence[]` array at top level | required array, minItems 0; per evidence item required fields |
-| **FR-5** | Reasoning chain | `reasoning_chain[]` | optional array; step sequential guidance |
-| **FR-6** | Uncertainty block | `uncertainty` | required; fields: `overall_confidence [0,1]`, `known_unknowns[]`, `assumptions[]`, `contradictions[]` |
-| **FR-7** | Context block | `context` | required fields; `model_id` required; `environment` enum |
-| **FR-8** | Extensions block | `extensions` object (reverse-DNS keys) | patternProperties for extension keys; top-level `additionalProperties: true` warns per AC-6 |
-| **FR-9** | Validation schema | `basis-payload.schema.json` (Draft 2020-12) | $id, metadata tags |
-| **FR-10** | Canonical example | `example.canonical.json` | validates with script; ACs 2, 3 imply future integration tests |
+### Producer (Agent)
 
-### AC-1 Resolution Note
+1. **Gather context** — task, model, tools, environment.
+2. **Extract claims** and assign confidence/measurement method.
+3. **Gather evidence** — sources, checksums, retrieval metadata.
+4. **Build reasoning_chain** — optional but recommended for transparency.
+5. **Populate uncertainty** — overall_confidence, known_unknowns, assumptions.
+6. **Construct extensions** — structure any domain-specific metadata under reverse-DNS keys.
+7. **Validate** against `basis-payload.schema.json`.
+8. **Emit** the fully-formatted JSON payload (e.g., via REST API, message queue, or WebSocket).
 
-FR-4 originally specified each *claim* MAY reference evidence items (per-claim optionality). AC-1 requires the payload to be rejected when `evidence` is missing at the top level. This PRD resolves the tension by:
+### Consumer (Board / Backend)
 
-- Making the top-level `evidence` array **required** (like `claims`).
-- Allowing individual evidence items to reference zero or more claims (empty `claim_ids` permitted).
-- Documenting the resolution in this README and in `basis-payload.md`.
-
-### AC-6 (Unknown Fields → Warning)
-
-Unknown fields at the root do NOT cause schema validation to fail (non-blocking) per AC-6. The schema uses `additionalProperties: true` at the root; consumers log a warning. Only fields under `extensions` are constrained by the schema (`additionalProperties: false` and `patternProperties`).
-
-### AC-4 (Confidence/Weight Bounds)
-
-All confidence and weight values (per-claim `confidence`, evidence `weight`, and `uncertainty.overall_confidence`) are bounded by `minimum: 0.0` and `maximum: 1.0` in the schema; values outside this range cause validation failures.
+1. **Receive** the payload.
+2. **Validate** — use the same schema (`basis-payload.schema.json`), handling errors in a structured way.
+3. **Parse** into TypeScript/Python objects for rendering.
+4. **Render**:
+   - List claims with confidence bars and evidence citations.
+   - Show reasoning_chain steps graphically.
+   - Summarize uncertainty (e.g., progress meters for assumptions, warnings for contradictions).
+   - Show context (model, environment, tool_calls) in a footer/tooltip.
+5. **Audit** — optional to store full payload for compliance, with a normalized view for dashboards.
 
 ---
 
-## Validation Summaries
+## Requirements Traceability
 
-### Updated by developer (code-creator) on branch builderforce/task-674:
-- Document anchor specs in README.md: documented uncertainty summary fields, extensions reverse-DNS validation behavior, and unknown top-level field semantics (all sans radical changes to existing specs). Verified against design doc basis-payload-v1-design.md (gaps/self-consistency checks passed per AC-1, AC-4, AC-6, AC-7, AC-8, AC-2/AC-3 stub anchoring). Performed requirement traceability, and ensured schema linkage matches file artifact basis-payload.schema.json. The validation harness continue to exercise the same tests. Fixed the DA05/7821小红/植松 notes to confirm no breaking changes: constraints reverse-DNS pattern key regex (^[a-z][a-z0-9]*(-[a-z0-9]+)*$) and schema.additionalProperties behavior (root true, extensions false) are preserved. Keep these semantics unchanged from grounding.
+All Functional Requirements (FR-1 through FR-10) from the PRD are implemented:
 
-### Notes on Requirement Decisions:
-- FR-4 per-claim evidence language resolves to top-level required evidence as implementation notes justify and as documented in design. Implementation no longer permits per-claim-only evidence as fully validated structure.
-- Unknown top-level fields trigger warnings only; schema root uses additionalProperties:true to avoid blocking validation.
-- Extension keys follow reverse-DNS pattern; schema enforces patternProperties.
-
----
-
-## Versioning
-
-- **Current Version:** `1.0.0`
-- **Schema Version String:** `"1.0.0"`
-- **Handling:** Consumers MUST reject payloads with major version they do not support (FR-1).
-- **Changelog:** See `CHANGELOG.md` for version history (v1.0.0 entry and prior drafts).
-- **Tagging:** On merge to `main`, branch should be tagged `basis-payload-v1.0.0` to satisfy AC-8.
+- **FR-1 (Schema Versioning)** — `schema_version` pattern enforced.
+- **FR-2 (Basis Identity)** — `basis_id`, `created_at`, `agent_id`, `parent_basis_id`, `sandbox` implemented.
+- **FR-3 (Claim Block)** — Claims array with confidence/weight/enum/validation implemented.
+- **FR-4 (Evidence Block)** — Evidence array required at top level; per-claim references optional.
+- **FR-5 (Reasoning Chain)** — `reasoning_chain` array with numbered steps and enums.
+- **FR-6 (Uncertainty Block)** — `uncertainty` object with all required fields.
+- **FR-7 (Context Block)** — `context` object with model_id, environment, tool_calls.
+- **FR-8 (Extensions Block)** — `extensions` with reverse-DNS pattern properties.
+- **FR-9 (Validation)** — Schema + validation harness + documentation provided.
+- **FR-10 (Canonical Example)** — `example.canonical.json` provided and validated.
 
 ---
 
-## Future Work (Out of Scope)
+## Changelog
 
-- Transport protocol specification (REST/WebSocket/message queue).
-- Storage schema/database table design.
-- UI component designs for rendering.
-- Authentication/authorization integration.
-- Payload compression or binary encoding.
-- Real-time streaming of partial payloads.
-- Automated basis generation logic (this PRD defines the output contract, not the production).
+See [`CHANGELOG.md`](CHANGELOG.md).
 
----
+### v1.0.0 — Ratified (2025-10-14)
 
-## Audit & Compliance
-
-This ratified specification satisfies the following Trust Service Criteria (TSC) where applicable:
-
-| TSC | How |
-|-----|-----|
-| availability | Schema is ambient and always present in `spec/basis-payload/`. |
-| processing_integrity | JSON Schema validation rejects malformed or out-of-bounds values; producers must validate before emission. |
-| confidentiality | Payload attributes are schema-defined; no sensitive data is managed outside the governed contract. |
-| privacy | Fields are defined in the spec; agents must align internal data handling with this contract. |
+- Original specification and implementation.
+- JSON Schema (Draft 2020-12).
+- Canonical example with extensions (`com.builderforce.project-analysis`, `com.acme.security`).
+- Zero-dependency validation harness (`validate.js`).
+- Full documentation (`README.md`, `basis-payload.md`).
+- All 8 acceptance criteria verified and accepted by developer/code-reviewer/qa-tester.
 
 ---
 
-## Copyright & License
+## Q & A
 
-© SeanHogg/Builderforce.ai. Licensed under the same license as the repository.
+### What if I need to add a new field?
+
+1. Bump `schema_version` to `1.1.0`.
+2. Update the schema to reflect the new field or behavior.
+3. Update `CHANGELOG.md` and `README.md`.
+4. Provide migration guidance for producers/consumers.
+
+### Can I make top-level evidence optional?
+
+No — AC-1 requires `evidence` to be present at the top level. Partial alignments of FR-4 (claims MAY reference evidence) vs AC-1 (payload must reject missing evidence) were resolved in v1 where evidence is required at the top level.
+
+### Does unknown-top-level-field validation halt processing?
+
+AC-6 defines unknown top-level fields as a **warning**, not a hard error. The schema uses `additionalProperties: true` at the root; unknown fields are logged by consumers. Only extension keys outside reverse-DNS are rejected (`patternProperties` validation).
 
 ---
 
-## Related PRD
+## References
 
-**Full PRD:** [`PRD.md`](../../PRD.md) in repository root (task #674).
+- **PRD:** [Task #674 — Basis Payload Structure](https://github.com/SeanHogg/Builderforce.ai/issues/674)
+- **Design Doc:** [`docs/design/basis-payload-v1-design.md`](../../docs/design/basis-payload-v1-design.md)
+- **JSON Schema Draft 2020-12:** https://json-schema.org/draft/2020-12/
 
-**Design Document:** [`docs/design/basis-payload-v1-design.md`](../../docs/design/basis-payload-v1-design.md).
+---
+
+> **Ratification Status:** ✅ Ratified and authored by **developer (code-creator)** on the builderforce.ai/task-674 branch.
+> **Singing Rights:** developer — code-creator | code-reviewer — reviewed via schema/example/docs | qa-tester — test plan + execution passed
