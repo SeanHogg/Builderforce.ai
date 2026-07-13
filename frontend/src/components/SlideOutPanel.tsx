@@ -84,7 +84,6 @@ export function SlideOutPanel({
           maxWidth: '100%',
           borderLeft: '1px solid var(--border-subtle)',
           boxShadow: '-8px 0 24px rgba(0,0,0,0.2)',
-          zIndex: 10001,
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
