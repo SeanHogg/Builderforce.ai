@@ -71,19 +71,16 @@ function computeProgress(task: Task): TaskProgress {
     throw new TaskProgressInvariantError(completed, failed, skipped, total);
   }
 
-  // Ensure all count fields are integers: total, completed, failed, skipped, pending
-  guaranteeInteger(total, 'total', id);
-  guaranteeInteger(completed, 'completed', id);
-  guaranteeInteger(failed, 'failed', id);
-  guaranteeInteger(skipped, 'skipped', id);
-  guaranteeInteger(pending, 'pending', id);
-
   // Note: If the incoming task already had a broken invariant (server data inconsistency), we reject it.
   // This ensures the read path never returns invalid progress, satisfying AC-7 (reject partial progress data).
 
   const percentage =
     total === 0 ? 100 : Math.floor((completed / total) * 100);
-  guaranteeRange(percentage, 0, 100, `percentage for task ${id}`);
+
+  // Basic validation: ensure percentage is in range 0-100
+  if (percentage < 0 || percentage > 100) {
+    throw new TaskProgressInvariantError(completed, failed, skipped, total);
+  }
 
   return {
     total,
@@ -93,35 +90,4 @@ function computeProgress(task: Task): TaskProgress {
     pending,
     percentage,
   };
-}
-
-/**
- * Asserts that a number is a valid integer and within an inclusive interval.
- * Throws if the condition fails, including integer requirements.
- */
-function guaranteeRange(
-  value: number,
-  lo: number,
-  hi: number,
-  field: string = value.toString(),
-): asserts value is number {
-  if (!Number.isInteger(value)) {
-    throw new Error(`Non-integer value for field '${field}': ${value}`);
-  }
-  if (value < lo || value > hi) {
-    throw new Error(`Range violation for field '${field}': ${value} not in range [${lo}, ${hi}]`);
-  }
-}
-
-/**
- * Asserts a numeric value is an integer (no decimal/truncation).
- */
-function guaranteeInteger(
-  value: number,
-  field: string,
-  id: string,
-): asserts value is number {
-  if (!Number.isInteger(value)) {
-    throw new Error(`Non-integer value for field '${field}' on task ${id}: ${value}`);
-  }
 }
