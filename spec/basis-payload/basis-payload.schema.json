@@ -1,0 +1,412 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://builderforce.ai/schemas/basis-payload-1.0.0.schema.json",
+  "title": "Basis Payload v1.0.0",
+  "description": "Canonical JSON payload structure for transmitting basis data between agents and boards",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "basis_id",
+    "created_at",
+    "agent_id",
+    "claims",
+    "uncertainty",
+    "context",
+    "extensions"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "SemVer string for the schema version"
+    },
+    "basis_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp"
+    },
+    "agent_id": {
+      "type": "string"
+    },
+    "session_id": {
+      "type": ["string", "null"]
+    },
+    "parent_basis_id": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "claims": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["claim_id", "text", "confidence"],
+        "properties": {
+          "claim_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "text": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Confidence in [0.0, 1.0]"
+          },
+          "confidence_method": {
+            "type": "string",
+            "enum": ["bayesian", "heuristic", "llm-self-report", "empirical"]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": ["asserted", "retracted", "superseded"],
+            "default": "asserted"
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["evidence_id", "claim_ids", "type"],
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "claim_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "minItems": 1
+          },
+          "type": {
+            "type": "string",
+            "enum": ["document", "database_record", "api_response", "agent_output", "human_input", "computed"]
+          },
+          "uri": {
+            "type": ["string", "null"]
+          },
+          "title": {
+            "type": ["string", "null"]
+          },
+          "excerpt": {
+            "type": ["string", "null"]
+          },
+          "retrieved_at": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "weight": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Evidence support strength [0.0, 1.0]"
+          },
+          "provenance": {
+            "type": "object",
+            "properties": {
+              "source_system": {
+                "type": "string"
+              },
+              "source_version": {
+                "type": ["string", "null"]
+              },
+              "checksum": {
+                "type": ["string", "null"],
+                "pattern": "^[0-9a-fA-F]{64}$"
+              }
+            },
+            "required": ["source_system"]
+          }
+        }
+      }
+    },
+    "reasoning_chain": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["step", "description"],
+        "properties": {
+          "step": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "description": {
+            "type": "string"
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "claim_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "inference_type": {
+            "type": "string",
+            "enum": ["deductive", "inductive", "abductive", "analogical", "lookup"]
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["evidence_id", "claim_ids", "type"],
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "claim_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "minItems": 1
+          },
+          "type": {
+            "type": "string",
+            "enum": ["document", "database_record", "api_response", "agent_output", "human_input", "computed"]
+          },
+          "uri": {
+            "type": ["string", "null"]
+          },
+          "title": {
+            "type": ["string", "null"]
+          },
+          "excerpt": {
+            "type": ["string", "null"]
+          },
+          "retrieved_at": {
+            "type": ["string", "null"],
+            "format": "date-time"
+          },
+          "weight": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Evidence support strength [0.0, 1.0]"
+          },
+          "provenance": {
+            "type": "object",
+            "properties": {
+              "source_system": {
+                "type": "string"
+              },
+              "source_version": {
+                "type": ["string", "null"]
+              },
+              "checksum": {
+                "type": ["string", "null"],
+                "pattern": "^[0-9a-fA-F]{64}$"
+              }
+            },
+            "required": ["source_system"]
+          }
+        }
+      }
+    },
+    "reasoning_chain": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["step", "description"],
+        "properties": {
+          "step": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "description": {
+            "type": "string"
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "claim_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "inference_type": {
+            "type": "string",
+            "enum": ["deductive", "inductive", "abductive", "analogical", "lookup"]
+          }
+        }
+      }
+    },
+    "uncertainty": {
+      "description": "Optional top-level uncertainty summary; required for boards to render confidence-caveat blocks per PRD FR-6. v1 treats it as optional in the payload (mismatch between 'MUST carry' wording in PRD and actual examples), but consumers SHOULD enforce uncertainty presence in validation or UI rendering.",
+      "type": "object",
+      "properties": {
+        "overall_confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "known_unknowns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "contradictions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["claim_id_a", "claim_id_b", "description"],
+            "properties": {
+              "claim_id_a": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "claim_id_b": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "description": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "properties": {
+        "overall_confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+      "type": "object",
+      "properties": {
+        "overall_confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "known_unknowns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "contradictions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["claim_id_a", "claim_id_b", "description"],
+            "properties": {
+              "claim_id_a": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "claim_id_b": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "description": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "properties": {
+        "overall_confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "context": {
+      "type": "object",
+      "required": ["model_id"],
+      "properties": {
+        "task_id": {
+          "type": ["string", "null"]
+        },
+        "task_description": {
+          "type": ["string", "null"]
+        },
+        "model_id": {
+          "type": "string"
+        },
+        "model_version": {
+          "type": ["string", "null"]
+        },
+        "tool_calls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["tool_name", "called_at"],
+            "properties": {
+              "tool_name": {
+                "type": "string"
+              },
+              "input_summary": {
+                "type": "string"
+              },
+              "output_summary": {
+                "type": "string"
+              },
+              "called_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        },
+        "environment": {
+          "type": "string",
+          "enum": ["production", "staging", "development", "test"]
+        }
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "patternProperties": {
+        "^([a-z]{2,}\\.)?[a-z0-9]+(\\.[a-z]{2,})+$": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
