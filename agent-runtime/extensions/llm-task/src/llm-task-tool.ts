@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { type LLMTask } from "@builderforce/llm-agent";
 import { type TaskCompletionEvent, type TaskUpdateEvent } from "../src/types/task.js";
 import { HenTaskCompletionNotifier, HenTaskCompletionNotifierSchema } from "./hen-task-completion-notifier.js";
@@ -7,15 +6,7 @@ import notificationStorage from "./notification-storage.js";
 
 const logger = new Logger("LLMTaskTool");
 
-// Define the complete configuration schema for the Hen Task Completion Notifier tool
-export const HenTaskCompletionNotifierToolConfigSchema = z.object({
-  enabled: z.boolean().default(true),
-  platformName: z.string().min(1).default("Builderforce"),
-  platformLoginUrl: z.string().url().default("https://builderforce.ai"),
-  resendApiKey: z.string().min(1).optional(),
-});
-
-type LLMTaskExtensionConfig = z.infer<typeof HenTaskCompletionNotifierToolConfigSchema>;
+type LLMTaskExtensionConfig = z.infer<typeof HenTaskCompletionNotifierSchema>;
 
 /**
  * LLM Task Tool Extension
