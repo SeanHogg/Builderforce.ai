@@ -1,7 +1,4 @@
-import type {
-  Task,
-  ChildTaskPlan,
-} from "../../domain/task/Task";
+import type { Task } from "../../domain/task/Task";
 import { TaskType } from "../../domain/shared/types";
 import type { ProgressBreakdown } from "../../domain/task/ProgressBreakdown";
 
@@ -15,7 +12,7 @@ const DEFAULT_TESTS_PASSING: ProgressBreakdown["testsPassing"] = null;
 /**
  * Compute a task's progress breakdown based on its current state and children.
  *
- * The computation is simple and aligns with the parent epic's spec:
+ * The computation aligns with the parent epic's spec:
  * - An Epic returns breakdown derived from its direct child tasks (taskType=TASK).
  *   - basis = "subtasks"
  *   - subtasksDone = count of children that are DONE or IN_REVIEW (not BLOCKED).
@@ -34,17 +31,15 @@ const DEFAULT_TESTS_PASSING: ProgressBreakdown["testsPassing"] = null;
  */
 export function computeProgressBreakdown(
   task: Task,
-  children: ChildTaskPlan[]
+  children: Task[]
 ): ProgressBreakdown {
   if (task.taskType === TaskType.EPIC) {
-    // Count subtasks (tasks that are true task children).
     const total = children.length;
     // Done/in_review counts as "done" for progress purposes.
     const done = children.filter(
-      (c) =>
-        c.status === "done" ||
-        c.status === "in_review" ||
-        c.status === "done"
+      (child) =>
+        child.status === "done" ||
+        child.status === "in_review"
     ).length;
 
     return {
