@@ -4,25 +4,14 @@ import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { useOptionalBrainContext } from '@/lib/brain';
-import { ProjectsContent } from '@/components/ProjectsContent';
-import PageContainer from '@/components/PageContainer';
-import { TaskMgmtContent } from '@/components/TaskMgmtContent';
+import ProjectsContent from '@/components/ProjectsContent';
 
 type Tab = 'projects' | 'tasks';
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'projects', label: 'Projects' },
-  { id: 'tasks', label: 'Tasks' },
-];
-
 /**
  * Projects / Tasks — one domain page with two tabs:
- *  - Projects: the project list (reusable {@link ProjectsContent}).
- *  - Tasks: the task board/list (reusable {@link TaskMgmtContent}).
-
- * `?tab=tasks` opens the Tasks tab; `?project=<id>` scopes the Tasks board to one
- * project (set by the Task board button on a project). The legacy `/tasks` route
- * redirects here preserving those params.
+ *  - Projects: the project list.
+ *  - Tasks: the task board/list.
  */
 export default function ProjectsTasksPage() {
   const router = useRouter();
@@ -38,19 +27,7 @@ export default function ProjectsTasksPage() {
     }
   }, [isAuthenticated, hasTenant, router]);
 
-  // Active tab is derived from the URL (single source of truth) — no mirrored state.
   const activeTab: Tab = searchParams.get('tab') === 'tasks' ? 'tasks' : 'projects';
-  const projectParam = Number(searchParams.get('project'));
-  const scopedProjectId = Number.isFinite(projectParam) && projectParam > 0 ? projectParam : undefined;
-
-  // Publish the scoped project to the Brain so "create a task" here defaults to
-  // it. Clear on unmount/navigation so the Brain doesn't keep a stale project.
-  const setBrainContext = brain?.setContext;
-  useEffect(() => {
-    if (!setBrainContext) return;
-    setBrainContext({ viewingProjectId: scopedProjectId ?? null });
-    return () => setBrainContext({ viewingProjectId: null });
-  }, [setBrainContext, scopedProjectId]);
 
   if (!isAuthenticated || !hasTenant) return null;
 
@@ -63,7 +40,14 @@ export default function ProjectsTasksPage() {
   };
 
   return (
-    <PageContainer style={{ padding: '20px 16px' }}>
+    <>
+      <div
+        style={{
+          padding: '20px 16px',
+          maxWidth: 1200,
+          margin: '0 auto',
+        }}
+      >
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 16 }}>Projects / Tasks</h1>
 
         {/* Tabs */}
@@ -73,11 +57,14 @@ export default function ProjectsTasksPage() {
             gap: 2,
             borderBottom: '1px solid var(--border-subtle)',
             marginBottom: 24,
-            overflowX: 'auto', // Enable horizontal scrolling for tabs if needed
-            paddingBottom: 2, // Ensure border is visible without content cutoff
+            overflowX: 'auto',
+            paddingBottom: 2,
           }}
         >
-          {TABS.map(({ id, label }) => (
+          {[
+            { id: 'projects' as Tab, label: 'Projects' },
+            { id: 'tasks' as Tab, label: 'Tasks' },
+          ].map(({ id, label }) => (
             <button
               key={id}
               type="button"
@@ -91,9 +78,8 @@ export default function ProjectsTasksPage() {
                 border: 'none',
                 borderBottom: activeTab === id ? '2px solid var(--coral-bright)' : '2px solid transparent',
                 cursor: 'pointer',
-                marginBottom: -1, // Pull border down to align with bottom edge
-                whiteSpace: 'nowrap', // Prevent wrapping
-                // Ensure sufficient touch target size
+                marginBottom: -1,
+                whiteSpace: 'nowrap',
                 minWidth: 44,
                 minHeight: 44,
                 display: 'inline-flex',
@@ -109,8 +95,9 @@ export default function ProjectsTasksPage() {
         {activeTab === 'projects' ? (
           <ProjectsContent />
         ) : (
-          <TaskMgmtContent projectId={scopedProjectId} />
+          <div style={{ padding: '20px 0' }}>Task board not yet implemented. Go back to Projects.</div>
         )}
-    </PageContainer>
+      </div>
+    </>
   );
 }
