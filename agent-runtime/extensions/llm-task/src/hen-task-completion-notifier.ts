@@ -12,6 +12,7 @@
  */
 
 import type { EmailNotifier, AccountEmailResolver, NotificationLogEntry } from "../transport/types.js";
+import notificationStorage from "./notification-storage.js";
 
 // Re-export types from domain ports defined in agent-runtime/src/transport/types.ts
 export type { EmailNotifier, AccountEmailResolver, NotificationLogEntry };
@@ -19,6 +20,9 @@ export type { EmailNotifier, AccountEmailResolver, NotificationLogEntry };
 // Zod schema for configuring the notifier
 import { z } from "zod";
 
+/**
+ * Schema for Hen Task Completion Notifier configuration
+ */
 export const HenTaskCompletionNotifierSchema = z.object({
   enabled: z.boolean().default(true),
   platformName: z.string().min(1).default("Builderforce"),
@@ -26,18 +30,33 @@ export const HenTaskCompletionNotifierSchema = z.object({
   resendApiKey: z.string().min(1).optional(),
 });
 
-// Template string constants
-const EMAIL_BODY = `      <p>Good news! All Hen tasks for your account are now complete.
-         Log in to {{PlatformName}} to view details and next steps.
-         Thank you for using our service!</p>`;
+// Email template constants
+const EMAIL_BODY_TEXT = `Good news! All Hen tasks for your account are now complete. Log in to {{PlatformName}} to view details and next steps. Thank you for using our service!`;
+
+const SHADED_HEADER = `
+    <div class="header" style="background: #0f172a; padding: 28px 30px; text-align: center;">
+      <h1 style="color: #ffffff; margin: 0; font-size: 22px; letter-spacing: -0.5px;">{{PlatformName}}</h1>
+    </div>`;
+
+const CONTENT_PADDING = `
+    <div class="content" style="padding: 40px 30px; color: #1e293b; font-size: 15px; line-height: 1.6;">
+      <p>${EMAIL_BODY_TEXT}</p>`;
 
 const FOOTER = `
-    </div>
-    <div class="footer">
+    <div class="footer" style="background: #f8fafc; padding: 20px 30px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0;">
       <p>&copy; {{Year}} {{PlatformName}}. All rights reserved.</p>
-    </div>
-  </div>
-</body></html>`;
+    </div>`;
+
+const CSS_STYLES = `
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 0; }
+    .container { max-width: 600px; margin: 0 auto; background: #ffffff; }
+    .header { background: #0f172a; padding: 28px 30px; text-align: center; }
+    .header h1 { color: #ffffff; margin: 0; font-size: 22px; letter-spacing: -0.5px; }
+    .content { padding: 40px 30px; color: #1e293b; font-size: 15px; line-height: 1.6; }
+    .footer { background: #f8fafc; padding: 20px 30px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; }
+    p { margin: 0 0 16px; }
+  </style>`;
 
 /**
  * Concrete implementation of EmailNotifier using Resend API.
@@ -130,7 +149,14 @@ export class HenTaskCompletionNotifier {
             },
           };
 
-    return new HenTaskCompletionNotifier(emailNotifier, platformName, platformLoginUrl, enabled, accountEmailResolver, new NotificationStorage());
+    return new HenTaskCompletionNotifier(
+      emailNotifier,
+      platformName,
+      platformLoginUrl,
+      enabled,
+      accountEmailResolver,
+      notificationStorage
+    );
   }
 
   constructor(
@@ -139,7 +165,7 @@ export class HenTaskCompletionNotifier {
     platformLoginUrl: string,
     enabled: boolean,
     accountEmailResolver: AccountEmailResolver,
-    notificationStorage: NotificationStorage = new NotificationStorage()
+    notificationStorage: NotificationStorage
   ) {
     this.accountEmailResolver = accountEmailResolver;
     this.emailNotifier = emailNotifier;
@@ -161,38 +187,18 @@ export class HenTaskCompletionNotifier {
    */
   private renderEmailHTML(subject: string): string {
     const year = String(new Date().getFullYear());
-    const bodyTemplate = EMAIL_BODY
-      .replace("{{PlatformName}}", this.platformName)
-      .replace("{{PlatformLoginUrl}}", this.platformLoginUrl);
 
-    // Complete email template with header
-    return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${subject}</title>
-  <style>
-    body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 0; }
-    .container { max-width: 600px; margin: 0 auto; background: #ffffff; }
-    .header { background: #0f172a; padding: 28px 30px; text-align: center; }
-    .header h1 { color: #ffffff; margin: 0; font-size: 22px; letter-spacing: -0.5px; }
-    .content { padding: 40px 30px; color: #1e293b; font-size: 15px; line-height: 1.6; }
-    .button { display: inline-block; background: #6366f1; color: #ffffff !important;
-              padding: 13px 28px; border-radius: 6px; text-decoration: none;
-              font-weight: 600; font-size: 15px; margin: 8px 0; }
-    .footer { background: #f8fafc; padding: 20px 30px; text-align: center;
-              font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; }
-    p { margin: 0 0 16px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>${this.platformName}</h1>
-    </div>
-    <div class="content">
-${bodyTemplate}${FOOTER.replace("{{Year}}", year).replace("{{PlatformName}}", this.platformName)}`;
+    const bodyTemplate =
+      CSS_STYLES +
+      "<body>" +
+      `<div class="container">` +
+      SHADED_HEADER.replace("{{PlatformName}}", this.platformName) +
+      CONTENT_PADDING.replace("{{PlatformName}}", this.platformName) +
+      FOOTER.replace("{{Year}}", year).replace("{{PlatformName}}", this.platformName) +
+      `</div>` +
+      "</body>";
+
+    return `<!DOCTYPE html>` + bodyTemplate;
   }
 
   /**
@@ -366,67 +372,3 @@ ${bodyTemplate}${FOOTER.replace("{{Year}}", year).replace("{{PlatformName}}", th
     return logEntry;
   }
 }
-
-/**
- * Storage for tracking Hen task completion notifications.
- *
- * AC.5: Prevent duplicate notifications for the same account
- */
-class NotificationStorage {
-  private notifications = new Map<string, { notifiedAt: Date; lastTaskId: string }>();
-
-  /**
-   * Check if an account has already been notified about all tasks being complete.
-   *
-   * @param accountId - The account ID to check
-   * @returns true if already notified, false otherwise
-   */
-  hasNotified(accountId: string): boolean {
-    return this.notifications.has(accountId);
-  }
-
-  /**
-   * Mark an account as notified and store the event details.
-   *
-   * @param accountId - The account ID to mark as notified
-   * @param lastTaskId - The ID of the task that completed the batch (last Hen task)
-   * @returns true if marking was successful
-   */
-  markNotified(accountId: string, lastTaskId: string): boolean {
-    this.notifications.set(accountId, {
-      accountId,
-      notifiedAt: new Date(),
-      lastTaskId,
-    });
-    return true;
-  }
-
-  /**
-   * Get notification details for an account.
-   *
-   * @param accountId - The account ID to retrieve
-   * @returns { notifiedAt: Date; lastTaskId: string } | undefined
-   */
-  getNotification(accountId: string): { notifiedAt: Date; lastTaskId: string } | undefined {
-    return this.notifications.get(accountId);
-  }
-
-  /**
-   * Clear notification storage (useful for testing or administration).
-   */
-  clear(): void {
-    this.notifications.clear();
-  }
-
-  /**
-   * Get total count of notified accounts (useful for monitoring).
-   *
-   * @returns Number of accounts that have been notified
-   */
-  getCount(): number {
-    return this.notifications.size;
-  }
-}
-
-// Export singleton instance (for testing and backward compatibility)
-export const notificationStorage = new NotificationStorage();
