@@ -59,6 +59,37 @@ The automated backlog scan system is not intended to provide features such as:
 1. **Real-time Collaboration**: The system does not provide features to collaborate with other team members or enable feedback on identified projects or opportunities.
 2. **Advance Search**: The system does not perform advance searches in the backlog data for projects or opportunities based on user-defined criteria.
 
+## Gap Awareness (assigned to builderforce.ai Board)
+
+Below are gaps and implementation chunks that BuilderForce does not provide out of the box. They are not addressed in this PRD for BuilderForce's core runtime, but are needed to deliver the full backlog scanner outlined above.
+
+- BuilderForce does not retrieve Jira/Trello backlogs or a canonical external work-item store.
+- BuilderForce does not implement scheduling/alerting/notifications for periodic scans.
+- Jira/Trello adapters and aggregate/identification algorithms are not present; this PRD recognizes them as external integration work.
+
+To deliver this feature end-to-end, PRD packages should later be created for:
+- A Jira connector (read/write backlogs).
+- A Trello connector (read/create backlogs/boards).
+- A BuilderForce worker/API surface for periodic scan orchestration and scheduling.
+- An external work-item store (weave) and unified ETL layer to normalize work items.
+- An identification heuristic (keyword/tag/machine learning) and scan scoring.
+
+This PRD defines scope and behaviors, but points to an external implementation effort (EPIC on the builderforce.ai board).
+
+---
+
+## Implementation Assignments
+
+### Assigned Gap EPIC
+- EPIC #345-AUTOBACKLOG: Build missing backlog-scan functional chunks for BuilderForce.ai (scheduled scan, notifications, scheduling worker) and define shape for integrator adapters. Assignee to scope subwork as Jira/Trello plug-ins + external weave store strategy.
+
+### Pending Packages (to be authored separately)
+- Package #345-EI-JIRA: Jira connector – read/write backlogs; JSON/XML export.
+- Package #345-EI-TRELLO: Trello connector – read boards/backlogs; JSON/XML export.
+- Package #345-SCSW-BUILDERFORCE: BuilderForce worker for scheduled scan orchestration; audit logging; recoverable scan state; webhook-driven scheduling.
+- Package #345-INF-WEAVE: External work-item store schema (named weave) and ETL normalizer; support for merging/identifying projects from disparate sources.
+- Package #345-SVC-SCANORCHESTRATOR: Scan orchestrator – craft identification heuristics; persistence with retry; telemetry; permission enforcement.
+
 Prerequisites:
 
 The system will be developed using the following tools and technologies:
