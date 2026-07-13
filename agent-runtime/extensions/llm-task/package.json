@@ -2,11 +2,18 @@
   "name": "@builderforce/llm-task",
   "version": "2026.3.21",
   "private": true,
-  "description": "BuilderForceAgents JSON-only LLM task plugin",
+  "description": "BuilderForceAgents JSON-only LLM task plugin with Hen task completion notifications",
   "type": "module",
-  "devDependencies": {
-    "@seanhogg/builderforce-agents": "workspace:*"
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
+  "devDependencies": {
+    "@seanhogg/builderforce-agents": "workspace:*",
+    "zod": "^3.x.x"
+  },
+  "dependencies": {},
   "builderforce": {
     "extensions": [
       "./index.ts"
