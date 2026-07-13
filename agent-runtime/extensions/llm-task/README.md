@@ -1,211 +1,84 @@
 # LLM Task Extension
 
-Generic JSON-only LLM tool for structured tasks callable from workflows. Includes automatic Hen task completion notifications.
+Extends the LLM task system with Hen task completion notifications.
 
-## Overview
+## Features
 
-This extension provides a robust solution for automatically notifying account holders when all "Hen tasks" associated with their account are complete. It leverages DDD principles with clear separation of concerns and clean architecture.
+- **Automatic Email Notifications**: Sends an email when all Hen tasks for an account complete
+- **Duplicate Prevention**: Prevents multiple notifications for the same account completion
+- **Configurable Platform Branding**: Customize platform name and login URL
+- **Graceful Degradation**: Works even when email API is not configured
 
-## Architecture
+## Usage
 
-### Domain Layer (DDD Style)
+### Configuration
 
-**HenTaskCompletionNotifier**
-- Domain service responsible for:
-  - Detecting when the last Hen task completes (FR.1)
-  - Retrieving account holder's email (FR.2)
-  - Composing email content with static subject/body (FR.3)
-  - Dispatching the email (FR.4)
-  - Logging notification attempts for auditing (FR.5)
-
-**EmailNotifier Port**
-- Interface: `send(to: string, subject: string, html: string): Promise<boolean>`
-- Single Responsibility: Only email dispatch
-- Implemented by adapters like `ResendEmailNotifier`
-
-**AccountEmailResolver Port**
-- Interface: `getPrimaryEmail(accountId: string): Promise<string | null>`
-- Single Responsibility: Only account → email resolution
-- Implemented by services like `AccountUtil`
-
-### Infrastructure Layer
-
-**ResendEmailNotifier**
-- Concrete adapter for Resend API
-- Handles email sending and error logging
-- Graceful degradation when API key is missing
-
-**AccountUtil**
-- Concrete implementation of AccountEmailResolver
-- Retrieves account details from store/database
-- Returns mock data for testing
-
-## Components
-
-### 1. hen-task-completion-notifier.ts
-
-Core domain service implementing business logic for Hen task notifications.
-
-**Exports:**
-- `HenTaskCompletionNotifier` - Main notifier class
-- `HenTaskCompletionNotifierSchema` - Zod schema for configuration
-- `ResendEmailNotifier` - Email adapter
-- Port interfaces: `EmailNotifier`, `AccountEmailResolver`, `NotificationLogEntry`
-
-**Configuration via Schema:**
 ```typescript
-{
-  enabled: boolean;
-  platformName: string;
-  platformLoginUrl: string;
-  resendApiKey?: string;
-}
-```
-
-**Key Methods:**
-- `handleTaskCompletion(event)` - Process task completion with notification logic
-- `notify(accountId, accountEmail)` - Direct notification entry point
-- `createWithResend(config, accountEmailResolver)` - Factory with Resend adapter
-
-### 2. llm-task-tool.ts
-
-Integration tool for the LLM agent system.
-
-**Purpose:**
-- Registers event handlers with LLMTask instances
-- Bridges domain logic with agent system
-- Provides fallback accountEmailResolver
-
-**Configuration:**
-```typescript
-{
+const config = {
   enabled: true,
   platformName: "Builderforce",
   platformLoginUrl: "https://builderforce.ai",
-  resendApiKey?: string
-}
+  resendApiKey: "resend-api-key" // Optional, for actual email sending
+};
 ```
 
-### 3. src/types/task.ts
+### Event Handling
 
-Task-specific types for the notification system.
-
-**Exports:**
-- `BaseTask` - Base task properties
-- `TaskStatus` - Status enumeration
-- `TaskCompletionEvent` - Event when task completes
-- `TaskUpdateEvent` - Event for task updates
-- `HenTask` - Hen-specific tasks
-
-## Integration
-
-### Plugin Registration
+The extension automatically registers with the LLM task system:
 
 ```typescript
-import { LLMTaskTool } from "./llm-task-tool.js";
-import { HenTaskCompletionNotifierToolConfigSchema } from "./llm-task-tool.js";
-
-// Create configuration
-const config = HenTaskCompletionNotifierToolConfigSchema.parse({
-  enabled: true,
-  platformName: "Builderforce",
-  platformLoginUrl: "https://builderforce.ai",
-  resendApiKey: process.env.RESEND_API_KEY,
-});
-
-// Create and register tool
-const tool = new LLMTaskTool(config, accountEmailResolver);
-tool.register(llmTask);
-api.registerExtension("llmTaskTool", tool);
+const tool = new LLMTaskTool(config, accountUtil);
+tool.register(llmTaskInstance);
 ```
 
-### Using the Notifier Directly
+When a Hen task completes, the system will automatically:
+1. Detect if all Hen tasks for the account are complete
+2. Retrieve the account holder's email
+3. Send the notification email
+4. Log the notification attempt
+
+### Manual Notification
+
+For testing or manual usage:
 
 ```typescript
-import { HenTaskCompletionNotifier } from "./src/hen-task-completion-notifier.js";
-import { AccountUtil } from "../src/utils/accounts.js";
-
-// Create account resolver
-const accountUtil = new AccountUtil();
-
-// Create notifier with Resend
-const notifier = HenTaskCompletionNotifier.createWithResend(
-  {
-    enabled: true,
-    platformName: "My Platform",
-    platformLoginUrl: "https://myplatform.com/login",
-    resendApiKey: process.env.RESEND_API_KEY,
-  },
-  accountUtil
-);
-
-// Handle task completion
-const event = { task: { accountId: "123", id: "task-1", status: "completed" } };
-const result = await notifier.handleTaskCompletion(event);
-
-console.log(result);
-// { accountId: "123", email: "user@example.com", subject: "...", success: true, sentAt: Date }
+const notifier = HenTaskCompletionNotifier.createWithResend(config, accountUtil);
+await notifier.notify("account-id", "account@example.com");
 ```
 
-## Email Content
+## Email Template
 
-### Subject
-```
-Your Hen Tasks are Complete!
-```
+The notification email includes:
 
-### Body Template
-```
-Good news! All Hen tasks for your account are now complete.
-   Log in to [PlatformName] to view details and next steps.
-   Thank you for using our service!
-
-[Button: Log in to [PlatformName]]
-```
-
-### HTML Rendering
-- Professional dark header with Platform name
-- Clean white content area
-- Call-to-action button styled with brand color
-- Footer with copyright
-
-## Acceptance Criteria Compliance
-
-✅ **AC.1**: When all Hen tasks complete, exactly one email is sent
-✅ **AC.2**: Email received within 5 minutes (async notification)
-✅ **AC.3**: Subject and body match exact content
-✅ **AC.4**: No email sent if tasks remain incomplete
-✅ **AC.5**: No duplicate emails for same event
-✅ **AC.6**: Log entry created for each attempt
+- **Subject**: "Your Hen Tasks are Complete!"
+- **Body**: Personalized with platform name and login URL
+- **Branding**: Professional HTML email with header and footer
 
 ## Testing
 
-Run tests with:
+Run tests:
+
 ```bash
-npm test agent-runtime/extensions/llm-task/src/llm-task-tool.test.ts
+cd agent-runtime
+npm test
 ```
 
-## Design Principles
+## Architecture
 
-1. **Single Responsibility** - Each class has one clear purpose
-2. **Domain-Driven** - Domain layer separated from infrastructure
-3. **Dependency Inversion** - Depends on ports/interfaces, not implementations
-4. **Open/closed** - Extensible via adapters without modifying core logic
-5. **DRY** - Reused patterns and constants throughout
+### Domain Ports
 
-## Fallback Behavior
+- **EmailNotifier**: Interface for sending emails (implements with Resend API)
+- **AccountEmailResolver**: Interface for resolving account holder emails
 
-- **API key missing**: Email service gracefully degrades (logs warning, returns false)
-- **Account not found**: Returns error log entry, no email sent
-- **Email sending failed**: Logs detailed error, returns failure log entry
-- **Notification disabled**: Short-circuits early, returns disabled log entry
+### Responsibilities
 
-## Future Enhancements (Out of Scope)
+- **HenTaskCompletionNotifier**: Domain service that coordinates the notification flow
+- **NotificationStorage**: Prevents duplicate notifications
+- **LLMTaskTool**: Integrates with the LLM task system
 
-Per PRD #688:
-- Retry mechanisms for failed sends
-- Batching for multiple accounts
-- User preferences/opt-out
-- Template customization
-- SMS/in-app push notifications
-- Advanced analytics
+### DRY Principles
+
+- Reuses EmailNotifier and AccountEmailResolver interfaces
+- Consistent error handling and logging
+- Shared validation logic via Zod schemas
+- Configuration defaults for common cases
