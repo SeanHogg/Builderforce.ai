@@ -72,6 +72,14 @@ export interface ChatOptionVM {
   title: string;
 }
 
+/** A pending human question associated with one of this chat's linked tasks. */
+export interface ChatQuestionVM {
+  id: string;
+  description: string;
+  taskId: number | null;
+  createdAt?: string;
+}
+
 /**
  * Host-provided data access — the only coupling to a backend. The web app wires
  * this to its `brain.*` / `pmoApi` / `tasksApi` clients; the VS Code webview wires
@@ -99,6 +107,10 @@ export interface ChatTicketsAdapter {
   /** Tag an agent to execute a runnable (task/epic) ticket. Returns whether a run
    *  actually started + the agent's display name for the toast. */
   runTicket(kind: TicketKind, ref: string, agentRef: string): Promise<{ started: boolean; agentName: string }>;
+  /** Pending question/feedback requests for work linked to this chat. */
+  listQuestions(chatId: number): Promise<ChatQuestionVM[]>;
+  /** Deliver an answer and resume the waiting run. */
+  answerQuestion(id: string, responseText: string): Promise<void>;
 }
 
 /** Every visible string. Parametric ones are functions the host localizes. */
@@ -119,6 +131,11 @@ export interface ChatTicketsLabels {
   link: string;
   agents: string;
   merge: string;
+  questions: string;
+  noQuestions: string;
+  answerPlaceholder: string;
+  submitAnswer: string;
+  answering: string;
   linkFailed: string;
   kindLabel: string;
   pickTicket: string;
@@ -182,6 +199,11 @@ export const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels = {
   link: 'Link ticket',
   agents: 'Agents',
   merge: 'Merge',
+  questions: 'Questions',
+  noQuestions: 'No pending questions.',
+  answerPlaceholder: 'Type your answer…',
+  submitAnswer: 'Answer',
+  answering: 'Sending…',
   linkFailed: 'Could not link — check the ticket exists.',
   kindLabel: 'Ticket type',
   pickTicket: 'Choose a ticket…',

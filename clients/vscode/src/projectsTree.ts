@@ -11,7 +11,7 @@ import {
 } from "./bfApi";
 import { SECRET_KEY } from "./gateway";
 import { getSelectedProject, onProjectChange } from "./projectState";
-import { attentionFor, attentionIcon, attentionDescriptionPrefix, attentionApprovalId } from "./attention";
+import { attentionFor, attentionIcon, attentionDescriptionPrefix } from "./attention";
 
 const HIDE_DONE_KEY = "builderforce.hideDoneTasks";
 const CONFIG_KEY = "builderforce.projectTreeConfig";
@@ -298,10 +298,7 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<Node> {
           ? new vscode.ThemeIcon("pass-filled", new vscode.ThemeColor("testing.iconPassed"))
           : new vscode.ThemeIcon(iconForStatus(t.status));
     item.contextValue = "builderforceTask";
-    const approvalId = attentionApprovalId("task", t.id);
-    item.command = approvalId
-      ? { command: "builderforce.humanRequests", title: vscode.l10n.t("Answer question"), arguments: [approvalId] }
-      : { command: "builderforce.startTaskSession", title: "Start Session", arguments: [node] };
+    item.command = { command: "builderforce.startTaskSession", title: "Start Session", arguments: [node] };
     return item;
   }
 
