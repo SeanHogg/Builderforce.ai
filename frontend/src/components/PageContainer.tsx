@@ -32,14 +32,15 @@ type PageContainerProps = {
 export default function PageContainer({ width = 'full', style, className, children }: PageContainerProps) {
   // Mobile-safe bottom padding: accounts for the fixed footer nav (56px) + safe area
   const mobileBottomPadding = process.env.TARGET === 'mobile'
-    ? 'padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));'
-    : '';
-  const safeStyle = {
+    ? { padding: `0 16px calc(56px + env(safe-area-inset-bottom, 0px)) 16px` }
+    : {};
+
+  const safeStyle: CSSProperties = {
     width: '100%',
     maxWidth: width === 'readable' ? READABLE_MAX : width === 'narrow' ? NARROW_MAX : undefined,
     color: 'var(--text-primary)',
+    ...mobileBottomPadding,
     ...style,
-    ...mobileBottomPadding ? {} : {}, // Don't override inline styles
   };
 
   return (
