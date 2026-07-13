@@ -45,6 +45,7 @@ export default defineConfig({
     maxWorkers: isCI ? ciWorkers : localWorkers,
     include: [
       "src/**/*.test.ts",
+      "extensions/llm-task/**/*.test.ts",
       "extensions/**/*.test.ts",
       "test/**/*.test.ts",
       "ui/src/ui/views/usage-render-details.test.ts",
