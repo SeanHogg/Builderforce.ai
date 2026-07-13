@@ -2,6 +2,8 @@ import { Hono, type Context } from 'hono';
 import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import { TaskService, type UpdateTaskDto } from '../../application/task/TaskService';
 import { TaskPriority, AgentType, TaskStatus, TaskType } from '../../domain/shared/types';
+import { computeProgressBreakdown } from '../../application/task/progressBreakdown';
+import type { ProgressBreakdown } from '../../domain/task/ProgressBreakdown';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { projects, specs, taskSpecs, tasks, tenantMembers, users } from '../../infrastructure/database/schema';
