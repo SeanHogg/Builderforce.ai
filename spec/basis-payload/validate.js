@@ -440,8 +440,8 @@ function runTests() {
   console.error('');
 }
 
-// We'll orchestrate validation synchronously because validate.compile is synchronous.
-async function validateReturnExample(obj) {
+// The compiled validator is synchronous; returns true/false.
+function validateReturnExample(obj) {
   const valid = validate(obj);
   return valid;
 }
