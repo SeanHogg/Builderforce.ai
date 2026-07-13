@@ -975,7 +975,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
 
     // Compute the progress breakdown for the task.
     // No DB round-trip needed — this is pure composition of task-level progress data.
-    const breakdown = computeProgressBreakdown(task, { includeHidden });
+    const breakdown = computeProgressBreakdown(task, { includeHidden, testsPassing: null });
 
     return c.json(breakdown);
   });
