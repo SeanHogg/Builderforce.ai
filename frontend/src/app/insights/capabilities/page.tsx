@@ -626,6 +626,13 @@ export default function CapabilitiesPage() {
           {mode === 'table' ? 'Switch to Dashboard' : 'Switch to Table'}
         </Button>
       </div>
+
+      {/* Navigation link */}
+      <div className="mt-6 flex justify-center">
+        <Button variant="link" className="text-text-muted hover:text-text-primary" onClick={() => router.push('/insights')}>
+          ← Back to Insights hub
+        </Button>
+      </div>
     </PageContainer>
   );
 }
