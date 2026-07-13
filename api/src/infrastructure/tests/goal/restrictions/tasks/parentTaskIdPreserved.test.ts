@@ -4,7 +4,6 @@ import { fetch } from 'undici';
 import * as SyntheticTaskRepo from '@/domain/task/repositories/syntheticTaskRepo';
 import { Task } from '@/domain/task/Task';
 
-import * as TaskUpdateSideEffectMock from '@/infrastructure/side-effects/taskUpdateSideEffect';
 import { HttpMethod } from '@/infrastructure/http-client';
 
 /**
