@@ -86,7 +86,7 @@ export async function generateDailyStandupReport(
       prsOpenedLast24h: evs.filter(e => e.eventType === 'pr_opened').length,
       prsReviewedLast24h: evs.filter(e => e.eventType === 'pr_reviewed').length,
       prsMergedLast24h: evs.filter(e => e.eventType === 'pr_merged').length,
-      issuesTransitionedLast24h: evs.filter(e => e.eventType === 'jira_issue_updated' || e.eventType === 'jira_issue_transitioned').length,
+      issuesTransitionedLast24h: evs.filter(e => e.eventType === 'jira_issue_updated').length,
       issuesCommentedOnLast24h: evs.filter(e => e.eventType === 'jira_comment_added').length,
       blockersDetected: evs.filter(e => e.eventType === 'blocker_detected').length,
       activityUrl: `/activity?orgId=${orgId}`,
