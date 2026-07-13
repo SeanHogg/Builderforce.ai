@@ -155,48 +155,50 @@ export async function consolidateGroup(
   projectId: number,
   targetChatId: number,
   sourceIds: number[],
-): Promise<{
-  target: BrainSession;
-  sources: { id: number; title?: string }[];
-  mergedCount: number;
-  totalMessagesMoved: number;
-  timestamp: string;
-}> {
-  const target = {
-    sessionId: targetChatId.toString(),
-    title: 'Merged Product Chat',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    isArchived: false,
-    mergedIntoChatId: null,
-    type: 'pm_chat',
-    tags: ['merged'],
-    messageCount: 0,
-    lastMessageAt: new Date().toISOString(),
-    parentId: null,
-    sessionRef: `brain-session-${targetChatId}`,
-  };
+) {
+  // Import the real platform function
+  const { builtin_chats_consolidate } = await import('../__mock__/platform/chat');
 
-  // In production, you would call the backend route here:
-  // POST /api/brain/sessions/:target/consolidate with { sourceRefs: ["chat:123", "chat:456"] }
-  // For now, return what the consolidation signature would look like if it were settled.
-  const errors = [];
-  if (sourceIds.length < 1) {
-    errors.push('No source chat IDs provided for consolidation');
-  }
-  if (sourceIds.includes(targetChatId)) {
-    errors.push('Target chat ID should not be in source IDs for consolidation');
+  // Prepare source sessionRefs (the IDs passed to the platform function)
+  const sourceRefs = sourceIds.map((id) => `brain-session-${id}`);
+
+  // Call the real platform consolidation function
+  const result = await builtin_chats_consolidate('project:default', {
+    targetSessionId: `brain-session-${targetChatId}`,
+    sourceChatIds: sourceRefs,
+    assignedUserId: 'current-user',
+  });
+
+  if (!result.success || result.errors.length > 0) {
+    throw new Error(
+      `Consolidation failed: ${result.errors.map((e) => e.error).join(', ')}`,
+    );
   }
 
-  if (errors.length > 0) {
-    throw new Error(`Consolidation group cannot be applied: ${errors.join(', ')}`);
-  }
+  // Build detailed sources list with titles
+  const sources = sourceIds.map((id) => ({
+    id,
+    title: result.report?.itemsMerged.find((item) => item.source.includes(`brain-session-${id}`))?.notes || undefined,
+  }));
 
   return {
-    target,
-    sources: sourceIds.map((id) => ({ id, title: `Chat ${id}` })),
-    mergedCount: sourceIds.length,
-    totalMessagesMoved: 0, // Would come from backend result.content
+    target: {
+      sessionId: targetChatId.toString(),
+      title: result.report?.targetSessionId.split('-').pop() || 'Merged Product Chat',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      isArchived: false,
+      mergedIntoChatId: null,
+      type: 'pm_chat',
+      tags: ['merged'],
+      messageCount: result.report?.totalMessagesMerged || 0,
+      lastMessageAt: new Date().toISOString(),
+      parentId: null,
+      sessionRef: result.report?.targetSessionId || `brain-session-${targetChatId}`,
+    },
+    sources,
+    mergedCount: result.report?.itemsMerged.length || sourceIds.length,
+    totalMessagesMoved: result.report?.totalMessagesMerged || 0,
     timestamp: new Date().toISOString(),
   };
 }
