@@ -79,6 +79,94 @@ export function createRecommendationsRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ dismissed: recKey });
   });
 
+  // Accept or Reject a recommendation (decider)
+  router.post('/recommendations/decision', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId } = scope(c);
+    const body = await c.req.json<{ recKey: unknown; decision: unknown; rationale?: string }>()
+      .catch(() => ({} as { recKey?: unknown; decision?: unknown; rationale?: unknown }));
+
+    const recKey = typeof body.recKey === 'string' ? body.recKey.trim() : '';
+    const decision = body.decision;
+    const rationale = typeof body.rationale === 'string' ? body.rationale.trim() : undefined;
+
+    if (!recKey) return c.json({ error: 'recKey is required' }, 400);
+    if (recKey.length > 120) return c.json({ error: 'recKey too long (max 120 chars)' }, 400);
+    if (!validateDecision(decision)) return c.json({ error: 'decision must be "accepted" or "rejected"' }, 400);
+
+    const userId = (c.get('userId') as string | undefined) ?? null;
+
+    await createDecision({
+      recKey,
+      decision: decision as 'accepted' | 'rejected',
+      decidedBy: userId || 'system',
+      rationale,
+    });
+
+    return c.json({ success: true, decision, recKey });
+  });
+
+  // Bulk accept/reject multiple recommendations
+  router.post('/recommendations/decision/bulk', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId } = scope(c);
+    const body = await c.req.json<{
+      decisions: Array<{ recKey: string; decision: string; rationale?: string }>;
+    }>().catch(() => ({}));
+
+    if (!Array.isArray(body.decisions)) {
+      return c.json({ error: 'decisions must be an array' }, 400);
+    }
+
+    const decisions = body.decisions
+      .filter((d): d is { recKey: string; decision: 'accepted' | 'rejected'; rationale?: string } =>
+        typeof d.recKey === 'string' && d.recKey.length > 0 && d.recKey.length <= 120 &&
+        validateDecision(d.decision)
+      )
+      .map((d) => ({
+        recKey: d.recKey,
+        decision: d.decision,
+        decidedBy: (c.get('userId') as string | undefined) ?? 'system',
+        rationale: d.rationale || undefined,
+      }));
+
+    if (decisions.length === 0) return c.json({ error: 'no valid decisions provided' }, 400);
+
+    const createdIds = await bulkCreateDecisions(decisions);
+    return c.json({ success: true, count: createdIds.length, decision_ids: createdIds });
+  });
+
+  // Get decision history (admin only)
+  router.get('/recommendations/decisions', requireRole(TenantRole.OWNER), async (c) => {
+    const { tenantId } = scope(c);
+
+    const status = c.req.query('status') as string | undefined;
+    const limit = parseDays(c.req.query('limit') || '50', 50);
+    const offset = parseDays(c.req.query('offset') || '0', 0);
+
+    const decisions = await getDecisionHistory({
+      tenantId,
+      status,
+      limit,
+      offset,
+    });
+
+    return c.json({ decisions, total: decisions.length });
+  });
+
+  // Export decision history as CSV (admin only)
+  router.get('/recommendations/decisions/export', requireRole(TenantRole.OWNER), async (c) => {
+    const { tenantId } = scope(c);
+    const startDate = c.req.query('start_date') || undefined;
+    const endDate = c.req.query('end_date') || undefined;
+
+    const csv = await exportDecisionHistory({
+      tenantId,
+      startDate,
+      endDate,
+    });
+
+    return c.header('Content-Type', 'text/csv; charset=utf-8').text(csv);
+  });
+
   // SPACE metrics (developer+; complements DORA). Short TTL over hot tables.
   router.get('/space', requireRole(TenantRole.DEVELOPER), async (c) => {
     const { tenantId } = scope(c);
