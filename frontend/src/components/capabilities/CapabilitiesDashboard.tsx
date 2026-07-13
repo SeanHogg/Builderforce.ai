@@ -287,7 +287,7 @@ export function CapabilitiesDashboard() {
                         width: 48,
                         background: '#22c55e',
                         borderRadius: 4,
-                        minHeight: `${Math.max(20, (rollup.statusBreakdown.shipped / 30) * 180)}px`,
+                        minHeight: `${Math.max(20, (rollup.statusBreakdown.shipped / totalCapabilities) * 100)}%`,
                       }}
                     />
                     <span
@@ -297,7 +297,7 @@ export function CapabilitiesDashboard() {
                         color: 'var(--text-secondary)',
                       }}
                     >
-                      {rollup.statusBreakdown.shipped}
+                      {rollup.statusBreakdown.shipped} ({Math.round((rollup.statusBreakdown.shipped / totalCapabilities) * 100)}%)
                     </span>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Shipped</span>
                   </div>
@@ -309,7 +309,7 @@ export function CapabilitiesDashboard() {
                         width: 48,
                         background: '#f59e0b',
                         borderRadius: 4,
-                        minHeight: `${Math.max(20, (rollup.statusBreakdown.in_progress / 30) * 180)}px`,
+                        minHeight: `${Math.max(20, (rollup.statusBreakdown.in_progress / totalCapabilities) * 100)}%`,
                       }}
                     />
                     <span
@@ -319,7 +319,7 @@ export function CapabilitiesDashboard() {
                         color: 'var(--text-secondary)',
                       }}
                     >
-                      {rollup.statusBreakdown.in_progress}
+                      {rollup.statusBreakdown.in_progress} ({Math.round((rollup.statusBreakdown.in_progress / totalCapabilities) * 100)}%)
                     </span>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>In Progress</span>
                   </div>
@@ -331,7 +331,7 @@ export function CapabilitiesDashboard() {
                         width: 48,
                         background: '#ef4444',
                         borderRadius: 4,
-                        minHeight: `${Math.max(20, (rollup.statusBreakdown.planned / 30) * 180)}px`,
+                        minHeight: `${Math.max(20, (rollup.statusBreakdown.planned / totalCapabilities) * 100)}%`,
                       }}
                     />
                     <span
@@ -341,7 +341,7 @@ export function CapabilitiesDashboard() {
                         color: 'var(--text-secondary)',
                       }}
                     >
-                      {rollup.statusBreakdown.planned}
+                      {rollup.statusBreakdown.planned} ({Math.round((rollup.statusBreakdown.planned / totalCapabilities) * 100)}%)
                     </span>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Planned</span>
                   </div>
