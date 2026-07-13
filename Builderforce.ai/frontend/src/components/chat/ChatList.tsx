@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { chatApi, type Chat } from '@/lib/chatApi';
+import { createEntryKey } from '@/lib/storage';
 import type { TitleEntry } from '@/lib/storage';
 
 interface ChatListProps {
