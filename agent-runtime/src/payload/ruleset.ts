@@ -28,16 +28,17 @@ export function getBusinessRulesets(
     return cachedCatalogs.get(filePath)!;
   }
 
-  // Load and parse the JSON file.
-  const content = import.meta.glob(filePath, { as: 'raw', eager: true });
-  if (!(filePath in content)) {
-    throw new Error(`business-rules catalog not found at ${filePath}`);
-  }
-  let parsed: unknown;
+  // Synchronously load and parse the JSON file. This works in runtime (Node, Edge, Deno).
+  let parsed: RulesetCatalog;
   try {
-    parsed = JSON.parse(content[filePath] as string);
+    parsed = await import(/* @vite-ignore */ filePath).catch((err) => {
+      throw new Error(`Failed to import business-rules.json at ${filePath}: ${err}`);
+    });
   } catch (err) {
     throw new Error(`Failed to parse business-rules.json at ${filePath}: ${err}`);
+  }
+  if (!parsed) {
+    throw new Error(`business-rules catalog not found at ${filePath}`);
   }
 
   // Basic sanity schema checks (top-level keys and basic object shape).
