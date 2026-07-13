@@ -500,7 +500,7 @@ export function createPayloadGenerator(
 
       if (transformed === undefined && field.source.defaultValue !== undefined) {
         payload[outName] = field.source.defaultValue;
-      } else if (transformed !== undefined) {
+      } else if (transformed != null) {
         payload[outName] = transformed;
       }
     }
