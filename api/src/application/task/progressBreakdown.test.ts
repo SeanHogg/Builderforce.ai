@@ -1,8 +1,18 @@
 /**
  * Unit tests for computeProgressBreakdown() logic.
  *
- * Covers: FR-1 (Breakdown Calculation Logic), FR-2 (Aggregation & Normalization Helpers)
- * and FR-4 (Edge-Case & Boundary Tests) from PRD #669.
+ * Subsystem covered: Task-based breakdown calculation in TaskService (Postgres-driven);
+ * computeProgressBreakdown() in progressBreakdown.ts.
+ * Functions tested: computeProgressBreakdown() with Epic and non-Epic Tasks.
+ *
+ * FR IDs covered:
+ * - FR-1: Breakdown Calculation Logic (Epic subtask counts, non-Epic PR and status)
+ * - FR-2: (currently implemented via computeProgressBreakdown; no normalize/aggreg helpers exposed)
+ * - FR-4: Edge Cases (single-child Epic, all-0 children)
+ * - FR-3: (separate integration tests covering endpoint scenarios)
+ *
+ * AC IDs referenced in this file:
+ * - AC-6: Clear failure messages and test determinism
  */
 
 import { describe, expect, it } from 'vitest';
