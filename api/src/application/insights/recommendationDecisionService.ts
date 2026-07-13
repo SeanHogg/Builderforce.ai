@@ -455,3 +455,80 @@ export async function exportDecisionHistory(params: {
 
   return [headers, ...csvRows].join('\n');
 }
+
+/**
+ * Get workflow executions for a specific decision
+ */
+export async function getDecisionWorkflowExecutions(
+  db: any,
+  tenantId: number,
+  decisionId: number
+): Promise<any[]> {
+  return await db
+    .select()
+    .from(workflowExecutions)
+    .where(
+      and(
+        eq(workflowExecutions.tenantId, tenantId),
+        eq(workflowExecutions.decisionId, decisionId)
+      )
+    )
+    .orderBy(workflowExecutions.trigger_at);
+}
+
+/**
+ * Reopen a decision (decision amendment - FR-6)
+ * @param db Database connection
+ * @param tenantId Tenant ID
+ * @param decisionId Decision ID
+ * @param userId User ID of the actor
+ * @param rationale Optional rationale for the reopening
+ */
+export async function reopenDecision(
+  db: any,
+  tenantId: number,
+  decisionId: number,
+  userId: string,
+  rationale?: string
+): Promise<{ success: boolean; decision?: any; error?: string }> {
+  // Get the current decision
+  const [decision] = await db
+    .select()
+    .from(recommendationDecisions)
+    .where(
+      and(
+        eq(recommendationDecisions.id, decisionId),
+        eq(recommendationDecisions.tenantId, tenantId)
+      )
+    );
+
+  if (!decision) {
+    return { success: false, error: 'Decision not found' };
+  }
+
+  // Only decisions in terminal states can be reopened
+  if (decision.status === 'accepted' || decision.status === 'rejected') {
+    // Transition to pending state
+    await db
+      .update(recommendationDecisions)
+      .set({
+        status: 'pending',
+        updated_at: new Date(),
+      })
+      .where(eq(recommendationDecisions.id, decisionId));
+
+    return {
+      success: true,
+      decision: {
+        id: decision.id,
+        rec_key: decision.recKey,
+        status: 'pending',
+        reopened_by: userId,
+        reopened_at: new Date(),
+        rationale: rationale || 'Decision reopened by admin/user',
+      },
+    };
+  }
+
+  return { success: false, error: 'Decision is not in a terminal state' };
+}
