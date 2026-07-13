@@ -422,12 +422,39 @@ const chatDetailStyles = `
   cursor: not-allowed;
 }
 
+.chat-title-input {
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s ease;
+}
+
+.chat-title-input:focus {
+  border-bottom: 1px solid var(--coral-bright);
+}
+
+.chat-edit-title-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.chat-detail-header:hover .chat-edit-title-btn,
+.chat-edit-title-btn:hover {
+  opacity: 0.7;
+  color: var(--coral-bright);
+}
+
 /* Dark theme overrides */
 :global(html.dark) {
   .chat-detail-header {
     background: #2a2a2a;
   }
-  
+
   .chat-detail-input textarea {
     background: #1a1a1a;
   }
