@@ -182,6 +182,8 @@ The payload MUST include an `extensions` object for domain-specific or experimen
 - A JSON Schema (Draft 2020-12) artifact MUST be published alongside this PRD and kept in sync with every schema version bump.
 - Payload producers MUST validate against this schema before emission.
 - Payload consumers MUST validate before processing and emit a structured error if validation fails.
+- Unknown top-level fields outside `extensions` should generate a warning (not hard error) in consumer logs per AC-6.
+- For guidance on producers/consomers, see [`docs/.internal/basis-payload-integration-usage.md`](docs/.internal/basis-payload-integration-usage.md).
 
 ### FR-10 — Full Canonical Example
 A complete, valid example payload MUST be included in the documentation and kept updated with every schema version.
@@ -467,6 +469,8 @@ The payload MUST include an `extensions` object for domain-specific or experimen
 - A JSON Schema (Draft 2020-12) artifact MUST be published alongside this PRD and kept in sync with every schema version bump.
 - Payload producers MUST validate against this schema before emission.
 - Payload consumers MUST validate before processing and emit a structured error if validation fails.
+- Unknown top-level fields outside `extensions` should generate a warning (not hard error) in consumer logs per AC-6.
+- For guidance on producers/consomers, see [`docs/.internal/basis-payload-integration-usage.md`](docs/.internal/basis-payload-integration-usage.md).
 
 ### FR-10 — Full Canonical Example
 A complete, valid example payload MUST be included in the documentation and kept updated with every schema version.
