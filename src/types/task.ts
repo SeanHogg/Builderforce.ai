@@ -1,23 +1,60 @@
 /**
- * Defines the structure for task-related events.
+ * Task types specifically for the notification system and related utilities.
  */
 
-// Event when a task is successfully completed.
+/**
+ * Task status enumeration
+ */
+export type TaskStatus = "pending" | "planning" | "running" | "waiting" | "completed" | "failed" | "cancelled";
+
+/**
+ * Base task properties common to all tasks
+ */
+export interface BaseTask {
+  id: string;
+  status: TaskStatus;
+  description?: string;
+  output?: string;
+  error?: string;
+  progress?: number;
+  accountId?: string;
+  taskType?: string;
+  createdAt: Date;
+  startedAt?: Date;
+  completedAt?: Date;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Task completion event - triggered when a task reaches the completed status
+ */
 export interface TaskCompletionEvent {
-	taskId: string;
-	accountId: string;
-	completionTimestamp: Date;
-	// Add any other relevant fields, e.g., status, result, etc.
+  task: BaseTask;
 }
 
-// Event when a task's details are updated (could be status change, field update, etc.).
+/**
+ * Task update event - used for monitoring task changes
+ */
 export interface TaskUpdateEvent {
-	taskId: string;
-	accountId: string;
-	status: string; // e.g., "in_progress", "pending", "failed"
-	updatedFields: Record<string, any>; // Fields that were updated
-	updateTimestamp: Date;
-	// Add any other relevant fields
+  taskId: string;
+  status: TaskStatus;
+  timestamp: Date;
+  message?: string;
+  progress?: number;
 }
 
-// You can add more event types as needed, e.g., TaskCreatedEvent, TaskFailedEvent, etc.
+/**
+ * Hen task-specific type - tasks categorized as "Hen" types
+ */
+export interface HenTask extends BaseTask {
+  taskType: "Hen";
+}
+
+/**
+ * Filter options for listing tasks
+ */
+export interface TaskListFilter {
+  status?: TaskStatus;
+  accountId?: string;
+  taskType?: string;
+}
