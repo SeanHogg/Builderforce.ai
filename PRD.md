@@ -103,6 +103,7 @@ This PRD covers the design and implementation of the server-side payload generat
 
 _Owned by the business-analyst — to be authored._
 
+
 ## Design
 
 _Owned by the architect — to be authored._
