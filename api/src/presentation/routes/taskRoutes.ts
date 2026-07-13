@@ -2,6 +2,8 @@ import { Hono, type Context } from 'hono';
 import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import { TaskService, type UpdateTaskDto } from '../../application/task/TaskService';
 import { TaskPriority, AgentType, TaskStatus, TaskType } from '../../domain/shared/types';
+import { computeProgressBreakdown } from '../../application/task/progressBreakdown';
+import type { ProgressBreakdown } from '../../domain/task/ProgressBreakdown';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { projects, specs, taskSpecs, tasks, tenantMembers, users } from '../../infrastructure/database/schema';
@@ -956,6 +958,26 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       );
     }
     return c.json({ task: task ? task.toPlain() : null });
+  });
+
+  // GET /api/tasks/:taskId/progress/breakdown?include_hidden=true
+  // Returns the computed progress breakdown for the specified task.
+  router.get('/:taskId/progress/breakdown', async (c) => {
+    const taskId = Number(c.req.param('taskId'));
+    const tenantId = c.get('tenantId');
+
+    // Validate ownership of the task so only authorized viewers can access it.
+    const task = await loadTenantTask(taskId, tenantId);
+    if (!task) return c.json({ error: 'Task not found' }, 404);
+
+    // Optionally include hidden sub-components in the response.
+    const includeHidden = c.req.query('include_hidden') === 'true';
+
+    // Compute the progress breakdown for the task.
+    // No DB round-trip needed — this is pure composition of task-level progress data.
+    const breakdown = computeProgressBreakdown(task, { includeHidden, testsPassing: null });
+
+    return c.json(breakdown);
   });
 
   return router;

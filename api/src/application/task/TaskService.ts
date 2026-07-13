@@ -7,8 +7,8 @@ import {
 } from '../../domain/shared/types';
 import { NotFoundError, ForbiddenError } from '../../domain/shared/errors';
 import {
-  EpicDecomposer, ChildTaskPlan, heuristicEpicDecomposer,
-} from './EpicDecomposer';
+  computeProgressBreakdown,
+} from './progressBreakdown';
 
 /** Postgres unique-constraint violation (e.g. a task-key insert race). */
 function isUniqueViolation(e: unknown): boolean {
