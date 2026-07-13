@@ -1,249 +1,112 @@
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import { Type } from "@sinclair/typebox";
-import Ajv from "ajv";
-// NOTE: This extension is intended to be bundled with BuilderForceAgents.
-// When running from source (tests/dev), BuilderForceAgents internals live under src/.
-// When running from a built install, internals live under dist/ (no src/ tree).
-// So we resolve internal imports dynamically with src-first, dist-fallback.
-import type { BuilderForceAgentsPluginApi } from "../../../src/plugins/types.js";
+import { z } from "zod";
+import { type LLMTask } from "@builderforce/llm-agent";
+import { HenTaskCompletionNotifier, type HenTaskCompletionNotifierConfig } from "./hen-task-completion-notifier.js";
+import { type AccountUtil, type Account } from "../../../src/utils/accounts.js";
+import { type NotificationLogEntry } from "../transport/types.js";
 
-type RunEmbeddedAgentFn = (params: Record<string, unknown>) => Promise<unknown>;
+/**
+ * Configuration schema for the Hen Task Completion Notifier.
+ */
+export const HenTaskCompletionNotifierSchema = z.object({
+  enabled: z.boolean().default(true),
+  resendApiKey: z.string().optional(),
+  platformName: z.string().default("Builderforce"),
+  platformLoginUrl: z.string().default("https://builderforce.ai"),
+});
 
-async function loadRunEmbeddedAgent(): Promise<RunEmbeddedAgentFn> {
-  // Source checkout (tests/dev)
-  try {
-    const mod = await import("../../../src/agents/embedded-runner.js");
-    // oxlint-disable-next-line typescript/no-explicit-any
-    if (typeof (mod as any).runEmbeddedAgent === "function") {
-      // oxlint-disable-next-line typescript/no-explicit-any
-      return (mod as any).runEmbeddedAgent;
-    }
-  } catch {
-    // ignore
+type LLMTaskExtensionConfig = z.infer<typeof HenTaskCompletionNotifierSchema>;
+
+/**
+ * LLM Task Tool Extension
+ *
+ * Provides task-related functionalities like completion notification.
+ *
+ * Usage:
+ * 1. Create an AccountUtil instance
+ * 2. Create a HenTaskCompletionNotifier using a Resend adapter (if apiKey is available)
+ * 3. Register the tool with an LLMTask instance
+ */
+
+export class LLMTaskTool {
+  private config: LLMTaskExtensionConfig;
+  private notificationService?: HenTaskCompletionNotifier;
+  private accountUtil: AccountUtil;
+
+  constructor(config: LLMTaskExtensionConfig, accountUtil: AccountUtil) {
+    this.config = HenTaskCompletionNotifierSchema.parse(config);
+    this.accountUtil = accountUtil;
+
+    this.initializeNotifier();
   }
 
-  // Bundled install (built)
-  const mod = await import("../../../src/agents/embedded-runner.js");
-  if (typeof mod.runEmbeddedAgent !== "function") {
-    throw new Error("Internal error: runEmbeddedAgent not available");
+  /**
+   * Initialize the Hen task completion notifier using the domain service.
+   * Uses the Resend EmailNotifier adapter when an API key is available.
+   */
+  private initializeNotifier(): void {
+    this.notificationService = HenTaskCompletionNotifier.createResend(
+      this.config.resendApiKey ?? "",
+      this.config.platformName,
+      this.config.platformLoginUrl,
+      this.config.enabled
+    );
+
+    console.log("[LLMTaskTool] HenTaskCompletionNotifier initialized.");
   }
-  return mod.runEmbeddedAgent as RunEmbeddedAgentFn;
-}
 
-function stripCodeFences(s: string): string {
-  const trimmed = s.trim();
-  const m = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  if (m) {
-    return (m[1] ?? "").trim();
-  }
-  return trimmed;
-}
+  /**
+   * Registers the tool's event handlers on the LLMTask instance.
+   *
+   * @param llmTask - The LLMTask instance to register handlers with.
+   */
+  public register(llmTask: LLMTask): void {
+    console.log("[LLMTaskTool] Registering event handlers...");
 
-function collectText(payloads: Array<{ text?: string; isError?: boolean }> | undefined): string {
-  const texts = (payloads ?? [])
-    .filter((p) => !p.isError && typeof p.text === "string")
-    .map((p) => p.text ?? "");
-  return texts.join("\n").trim();
-}
+    // Register handler for task completion events (FR.1 - Hen task completion detection)
+    llmTask.onTaskComplete(async (event) => {
+      console.debug("[LLMTaskTool] Received TaskCompletionEvent:", event);
 
-function toModelKey(provider?: string, model?: string): string | undefined {
-  const p = provider?.trim();
-  const m = model?.trim();
-  if (!p || !m) {
-    return undefined;
-  }
-  return `${p}/${m}`;
-}
-
-type PluginCfg = {
-  defaultProvider?: string;
-  defaultModel?: string;
-  defaultAuthProfileId?: string;
-  allowedModels?: string[];
-  maxTokens?: number;
-  timeoutMs?: number;
-};
-
-export function createLlmTaskTool(api: BuilderForceAgentsPluginApi) {
-  return {
-    name: "llm-task",
-    label: "LLM Task",
-    description:
-      "Run a generic JSON-only LLM task and return schema-validated JSON. Designed for orchestration from workflow engines via builderforce.invoke.",
-    parameters: Type.Object({
-      prompt: Type.String({ description: "Task instruction for the LLM." }),
-      input: Type.Optional(Type.Unknown({ description: "Optional input payload for the task." })),
-      schema: Type.Optional(
-        Type.Unknown({ description: "Optional JSON Schema to validate the returned JSON." }),
-      ),
-      provider: Type.Optional(
-        Type.String({ description: "Provider override (e.g. openai-codex, anthropic)." }),
-      ),
-      model: Type.Optional(Type.String({ description: "Model id override." })),
-      authProfileId: Type.Optional(Type.String({ description: "Auth profile override." })),
-      temperature: Type.Optional(Type.Number({ description: "Best-effort temperature override." })),
-      maxTokens: Type.Optional(Type.Number({ description: "Best-effort maxTokens override." })),
-      timeoutMs: Type.Optional(Type.Number({ description: "Timeout for the LLM run." })),
-    }),
-
-    async execute(_id: string, params: Record<string, unknown>) {
-      const prompt = typeof params.prompt === "string" ? params.prompt : "";
-      if (!prompt.trim()) {
-        throw new Error("prompt required");
+      if (!this.notificationService) {
+        console.warn("[LLMTaskTool] HenTaskCompletionNotifier not initialized. Cannot handle task completion.");
+        return;
       }
 
-      const pluginCfg = (api.pluginConfig ?? {}) as PluginCfg;
+      try {
+        if (!event.accountId) {
+          console.warn("[LLMTaskTool] Task completion event missing accountId. Cannot notify account.");
+          return;
+        }
 
-      const primary = api.config?.agents?.defaults?.model?.primary;
-      const primaryProvider = typeof primary === "string" ? primary.split("/")[0] : undefined;
-      const primaryModel =
-        typeof primary === "string" ? primary.split("/").slice(1).join("/") : undefined;
+        // FR.2: Retrieve account holder's primary email
+        const accountHolderEmail = await this.accountUtil.getPrimaryEmail(event.accountId);
 
-      const provider =
-        (typeof params.provider === "string" && params.provider.trim()) ||
-        (typeof pluginCfg.defaultProvider === "string" && pluginCfg.defaultProvider.trim()) ||
-        primaryProvider ||
-        undefined;
+        if (!accountHolderEmail) {
+          console.warn(
+            `[LLMTaskTool] Could not retrieve email for account ${event.accountId}. Skipping email notification.`
+          );
+          console.warn(
+            `[LLMTaskTool] Ensure AccountUtil.getAccountById() returns primaryEmail for account ${event.accountId}`
+          );
+          return;
+        }
 
-      const model =
-        (typeof params.model === "string" && params.model.trim()) ||
-        (typeof pluginCfg.defaultModel === "string" && pluginCfg.defaultModel.trim()) ||
-        primaryModel ||
-        undefined;
-
-      const authProfileId =
-        // oxlint-disable-next-line typescript/no-explicit-any
-        (typeof (params as any).authProfileId === "string" &&
-          // oxlint-disable-next-line typescript/no-explicit-any
-          (params as any).authProfileId.trim()) ||
-        (typeof pluginCfg.defaultAuthProfileId === "string" &&
-          pluginCfg.defaultAuthProfileId.trim()) ||
-        undefined;
-
-      const modelKey = toModelKey(provider, model);
-      if (!provider || !model || !modelKey) {
-        throw new Error(
-          `provider/model could not be resolved (provider=${String(provider ?? "")}, model=${String(model ?? "")})`,
+        // Send the notification (FR.3, FR.4, FR.5)
+        await this.notificationService.notify(event.accountId, accountHolderEmail);
+      } catch (error) {
+        console.error(
+          "[LLMTaskTool] Error in HenTaskCompletionNotifier during task completion:",
+          error
         );
       }
+    });
 
-      const allowed = Array.isArray(pluginCfg.allowedModels) ? pluginCfg.allowedModels : undefined;
-      if (allowed && allowed.length > 0 && !allowed.includes(modelKey)) {
-        throw new Error(
-          `Model not allowed by llm-task plugin config: ${modelKey}. Allowed models: ${allowed.join(", ")}`,
-        );
-      }
+    console.log("[LLMTaskTool] Event handlers registered successfully.");
+  }
 
-      const timeoutMs =
-        (typeof params.timeoutMs === "number" && params.timeoutMs > 0
-          ? params.timeoutMs
-          : undefined) ||
-        (typeof pluginCfg.timeoutMs === "number" && pluginCfg.timeoutMs > 0
-          ? pluginCfg.timeoutMs
-          : undefined) ||
-        30_000;
-
-      const streamParams = {
-        temperature: typeof params.temperature === "number" ? params.temperature : undefined,
-        maxTokens:
-          typeof params.maxTokens === "number"
-            ? params.maxTokens
-            : typeof pluginCfg.maxTokens === "number"
-              ? pluginCfg.maxTokens
-              : undefined,
-      };
-
-      // oxlint-disable-next-line typescript/no-explicit-any
-      const input = (params as any).input as unknown;
-      let inputJson: string;
-      try {
-        inputJson = JSON.stringify(input ?? null, null, 2);
-      } catch {
-        throw new Error("input must be JSON-serializable");
-      }
-
-      const system = [
-        "You are a JSON-only function.",
-        "Return ONLY a valid JSON value.",
-        "Do not wrap in markdown fences.",
-        "Do not include commentary.",
-        "Do not call tools.",
-      ].join(" ");
-
-      const fullPrompt = `${system}\n\nTASK:\n${prompt}\n\nINPUT_JSON:\n${inputJson}\n`;
-
-      let tmpDir: string | null = null;
-      try {
-        tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "builderforce-llm-task-"));
-        const sessionId = `llm-task-${Date.now()}`;
-        const sessionFile = path.join(tmpDir, "session.json");
-
-        const runEmbeddedAgent = await loadRunEmbeddedAgent();
-
-        const result = await runEmbeddedAgent({
-          sessionId,
-          sessionFile,
-          workspaceDir: api.config?.agents?.defaults?.workspace ?? process.cwd(),
-          config: api.config,
-          prompt: fullPrompt,
-          timeoutMs,
-          runId: `llm-task-${Date.now()}`,
-          provider,
-          model,
-          authProfileId,
-          authProfileIdSource: authProfileId ? "user" : "auto",
-          streamParams,
-          disableTools: true,
-        });
-
-        // oxlint-disable-next-line typescript/no-explicit-any
-        const text = collectText((result as any).payloads);
-        if (!text) {
-          throw new Error("LLM returned empty output");
-        }
-
-        const raw = stripCodeFences(text);
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(raw);
-        } catch {
-          throw new Error("LLM returned invalid JSON");
-        }
-
-        // oxlint-disable-next-line typescript/no-explicit-any
-        const schema = (params as any).schema as unknown;
-        if (schema && typeof schema === "object" && !Array.isArray(schema)) {
-          const ajv = new Ajv.default({ allErrors: true, strict: false });
-          // oxlint-disable-next-line typescript/no-explicit-any
-          const validate = ajv.compile(schema as any);
-          const ok = validate(parsed);
-          if (!ok) {
-            const msg =
-              validate.errors
-                ?.map(
-                  (e: { instancePath?: string; message?: string }) =>
-                    `${e.instancePath || "<root>"} ${e.message || "invalid"}`,
-                )
-                .join("; ") ?? "invalid";
-            throw new Error(`LLM JSON did not match schema: ${msg}`);
-          }
-        }
-
-        return {
-          content: [{ type: "text", text: JSON.stringify(parsed, null, 2) }],
-          details: { json: parsed, provider, model },
-        };
-      } finally {
-        if (tmpDir) {
-          try {
-            await fs.rm(tmpDir, { recursive: true, force: true });
-          } catch {
-            // ignore
-          }
-        }
-      }
-    },
-  };
+  /**
+   * Get the notification service for testing or custom uses.
+   */
+  public getNotificationService(): HenTaskCompletionNotifier | undefined {
+    return this.notificationService;
+  }
 }
