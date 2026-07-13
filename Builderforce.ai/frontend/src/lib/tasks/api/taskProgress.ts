@@ -18,7 +18,11 @@ import type {
   TaskStatus,
   TaskType,
 } from '@/types/Task';
-import { runProgressGate } from '@/lib/gates/ProgressGate';
+import {
+  runProgressGate,
+  classifyAllPRs,
+  type PRDiff as GatePRDiff,
+} from '@/lib/gates/ProgressGate';
 
 /**
  * Configuration for which PR options belong to which category.
