@@ -91,7 +91,6 @@ export function getEarningsHistory(params: {
   });
 
   // Pagination
-  paginated_items = filtered.slice(offset, offset + pageSize)
   const requestedSlice = filtered.slice(offset, offset + pageSize);
 
   return requestedSlice;
