@@ -13,6 +13,7 @@
  *
  * FR IDs covered:
  * - FR-1: Breakdown Calculation Logic (Epic subtask counts, non-Epic PR and status)
+ * - FR-1.1: Weighted sum computation
  * - FR-2: Aggregation & Normalization Helpers
  * - FR-4: Edge Cases (all children done/0, single child, floating-point, large N)
  *
