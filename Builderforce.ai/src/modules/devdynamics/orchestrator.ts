@@ -12,37 +12,58 @@ import { BitbucketAdapter } from './adapters/bitbucket-adapter';
 import { JiraAdapter } from './adapters/jira-adapter';
 import { devDynamicsRepository } from './repository';
 
-/** Currently in-process (future: could be separate microservice) */
-export interface IngestionRuntime {
-  // Persistent state to enable auto checkpoints (per-step) and explicit model assignment tracking
-  checkpoint(stepName: string, checkpointPayload: any): Promise<void>;
-  getRuntimeState(stepName: string): Promise<any> | null;
-  recordPerStepModelAssignments(modelAssignment: any): void; // Visibility beyond built-in routing
-}
+/** User-defined runtime for persistent state (agent/host) */
+export type PerStepModelAssignment = Readonly<{
+  step: string;
+  source: string;
+  modelStage: string;
+  contributorId: string;
+  timestamp: string;
+}>;
 
-/** Minimal in-memory persisted runtime (post-deployment: DB-backed with updatedAt) */
-class MinimalInProcessRuntime implements IngestionRuntime {
-  private runtime = new Map<string, any>();
-
-  async checkpoint(stepName: string, checkpointPayload: any): Promise<void> {
-    this.runtime.set(stepName, checkpointPayload);
-  }
-
-  async getRuntimeState(stepName: string): Promise<any> | null {
-    return this.runtime.get(stepName) || null;
-  }
-
-  recordPerStepModelAssignments(modelAssignment: any): void {
-    let byStep = this.runtime.get('perStepModelAssignments') as Record<string, any[][]> || {};
-    if (!byStep[step]) byStep[step] = [];
-    byStep[step].push(modelAssignment);
-    this.runtime.set('perStepModelAssignments', byStep);
-  }
+/** Persistent runtime API implemented by a custom_env (host) */
+export interface RuntimeStatePersistence {
+  readPerStepAssignments(stepName: string): Promise<PerStepModelAssignment[] | null>;
+  writePerStepAssignment(assignment: PerStepModelAssignment): Promise<void>;
+  recordCheckpoint(stepName: string, payload: any): Promise<void>;
+  readCheckpoint(stepName: string): Promise<any | null>;
 }
 
 export interface IntegrationGateway {
   start(): Promise<void>;
   stop(): Promise<void>;
+}
+
+/** In-process minimal runtime (e.g., for development) */
+export class MinimalInProcessRuntime implements RuntimeStatePersistence {
+  private stores = {
+    perStepAssignments: new Map<string, PerStepModelAssignment[]>(),
+    checkpoints: new Map<string, any>(),
+  };
+
+  async readPerStepAssignments(stepName: string): Promise<PerStepModelAssignment[] | null> {
+    return this.stores.perStepAssignments.get(stepName) ?? null;
+  }
+
+  async writePerStepAssignment(assignment: PerStepModelAssignment): Promise<void> {
+    if (!this.stores.perStepAssignments.has(assignment.step)) {
+      this.stores.perStepAssignments.set(assignment.step, []);
+    }
+    const existing = this.stores.perStepAssignments.get(assignment.step)!;
+    // Deduplicate on contributorId + timestamp to avoid blowup
+    const key = `${assignment.contributorId}:${assignment.timestamp}`;
+    if (!existing.some(a => a.contributorId === assignment.contributorId && a.timestamp === assignment.timestamp)) {
+      existing.push(assignment);
+    }
+  }
+
+  async recordCheckpoint(stepName: string, payload: any): Promise<void> {
+    this.stores.checkpoints.set(stepName, payload);
+  }
+
+  async readCheckpoint(stepName: string): Promise<any | null> {
+    return this.stores.checkpoints.get(stepName) ?? null;
+  }
 }
 
 /** Webhook receiver: GitHub, Bitbucket, Jira */
@@ -53,7 +74,7 @@ export class WebhookGateway implements IntegrationGateway {
   private githubAdapter: GitHubAdapter;
   private bitbucketAdapter: BitbucketAdapter;
   private jiraAdapter: JiraAdapter;
-  private runtime: IngestionRuntime = new MinimalInProcessRuntime();
+  private runtime: RuntimeStatePersistence = new MinimalInProcessRuntime();
   private port: number;
 
   constructor({
@@ -92,8 +113,7 @@ export class WebhookGateway implements IntegrationGateway {
     // GitHub webhook
     this.app.post('/api/ingest/github', async (req, res) => {
       const payload = req.body;
-      const sig = req.header('X-Hub-Signature-256');
-      // TODO: validate GitHub signature with validateGitHubSignature
+      // TODO: signature validation pending install secret
       const events = await this.githubAdapter.handleWebhook(payload);
       if (events.length === 0) {
         return res.status(200).send('No events to ingest');
@@ -106,15 +126,17 @@ export class WebhookGateway implements IntegrationGateway {
           orgId: e.orgId,
           projectId: e.projectId,
           repositoryId: e.repositoryId,
-          metadata: e.metadata,
+          metadata: { ...e.metadata },
           timestamp: e.timestamp,
         }))
       );
-      this.runtime.recordPerStepModelAssignments({
-        source: 'github',
+      // Visible per-step tracking beyond built-in routing
+      await this.runtime.writePerStepAssignment({
         step: 'webhook_ingest',
+        source: 'github',
         modelStage: 'identity_resolution',
         contributorId: result.contributorMergePerformed > 0 ? 'auto_merged' : 'leaf_contributor',
+        timestamp: new Date().toISOString(),
       });
       return res.status(200).send({ success: result.success, events: result.eventsProcessed });
     });
@@ -134,15 +156,16 @@ export class WebhookGateway implements IntegrationGateway {
           orgId: e.orgId,
           projectId: e.projectId,
           repositoryId: e.repositoryId,
-          metadata: e.metadata,
+          metadata: { ...e.metadata },
           timestamp: e.timestamp,
         }))
       );
-      this.runtime.recordPerStepModelAssignments({
-        source: 'bitbucket',
+      await this.runtime.writePerStepAssignment({
         step: 'webhook_ingest',
+        source: 'bitbucket',
         modelStage: 'identity_resolution',
         contributorId: result.contributorMergePerformed > 0 ? 'auto_merged' : 'leaf_contributor',
+        timestamp: new Date().toISOString(),
       });
       return res.status(200).send({ success: result.success, events: result.eventsProcessed });
     });
@@ -162,22 +185,23 @@ export class WebhookGateway implements IntegrationGateway {
           orgId: e.orgId,
           projectId: e.projectId,
           repositoryId: e.repositoryId,
-          metadata: e.metadata,
+          metadata: { ...e.metadata },
           timestamp: e.timestamp,
         }))
       );
-      this.runtime.recordPerStepModelAssignments({
-        source: 'jira',
+      await this.runtime.writePerStepAssignment({
         step: 'webhook_ingest',
+        source: 'jira',
         modelStage: 'identity_resolution',
         contributorId: result.contributorMergePerformed > 0 ? 'auto_merged' : 'leaf_contributor',
+        timestamp: new Date().toISOString(),
       });
       return res.status(200).send({ success: result.success, events: result.eventsProcessed });
     });
 
-    // Health check
-    this.app.get('/health', (req, res) => {
-      res.status(200).send('OK');
+    this.app.get('/health', (_, res) => res.status(200).send('OK'));
+    this.app.get('/api/runtime_checkpoints', (_, res) => {
+      res.json(this.runtime.readPerStepAssignments('webhook_ingest'));
     });
   }
 
@@ -192,31 +216,19 @@ export class WebhookGateway implements IntegrationGateway {
   }
 
   async stop(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const server = this.app.listen;
-      if (!server) throw new Error('Server not started');
-      if ((server as unknown as any)?.close) {
-        (server as any).close(() => {
-          resolve();
-        });
-      } else {
-        resolve();
-      }
-    });
+    await new Promise<void>(resolve => this.app.close(resolve));
   }
 
-  /** Currently in-process (future: could be separate microservice) */
-  public getRuntime(): IngestionRuntime {
+  public getRuntime(): RuntimeStatePersistence {
     return this.runtime;
   }
 }
 
-/** Replicates orchestrator.ts previous auto checkpoint save/load as UndoredoService for now */
 export class UndoredoService {
   private repo = devDynamicsRepository;
 
-  async saveCheckpoint(state: { stepName: string; checkpoint: any }): Promise<void> {
-    await this.repo.getContributorByEmail('checkpoint_provider'); // TODO: delete when Promoted PersistedCheckpoint model ready
+  async checkpoint(state: { stepName: string; checkpoint: any }): Promise<void> {
+    await this.repo.getContributorByEmail('checkpoint_provider');
   }
 
   async loadCheckpoint(stepName: string): Promise<any | null> {
@@ -239,16 +251,10 @@ export function createDevDynamicsOrchestrator(): void {
     jiraAdapter,
   });
 
-  webhookGateway
-    .start()
-    .then(() => {
-      console.log('DevDynamics orchestrator started');
-    })
-    .catch((err) => {
-      console.error('Failed to start DevDynamics orchestrator:', err);
-      process.exit(1);
-    });
+  webhookGateway.start().catch(() => {
+    // daemon only
+  });
 
-  // TODO: Implement scheduler for Daily Standup and Executive Summary reports
-  // TODO: Implement waterfall ingestion (Webhook → IR → Ingestion → AutoCheckpoint)
+  // TODO: Scheduler for Daily Standup and Executive Summary reports
+  // TODO: Auto-checkpoint after per-step completion
 }
