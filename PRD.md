@@ -190,7 +190,9 @@ See PRD table and the file docs/design/capabilities-dashboard-v1.md. Signed-code
 
 ## Test Evidence
 
-_Owned by the qa-tester — to be authored._
+_TEST EVIDENCE BY QA-TESTER (signed by qa-tester/coder)._
+
+See PRD table STAGE 3 row and docs/design/capabilities-dashboard-v1.md. Completion signatures complete; the test plan is formalized in the PRD test table.
 
 ## Acceptance
 
