@@ -261,7 +261,10 @@
             }
           }
         },
-        "environment": { "$ref": "#/$defs/environment_enum" }
+        "environment": {
+          "type": "string",
+          "description": "Environment guideline set by each integration (e.g., 'production', 'staging', 'development')."
+        }
       }
     },
     "extensions": {
