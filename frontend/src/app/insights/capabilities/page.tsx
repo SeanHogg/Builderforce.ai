@@ -419,32 +419,31 @@ export default function CapabilitiesPage() {
     { value: 'desc', label: 'Descending' },
   ];
 
-  // Merge Donut segments using categoryCounts to avoid mismatch
-  const pieSegments: DonutSegment[] = [
+  // Status breakdown segments for CanvasPieChart
+  const pieSegments: PieSegment[] = [
     {
       key: 'shipped',
       label: 'Shipped',
       value: rollup.shipped || 0,
-      color: '#22c55e',
     },
     {
       key: 'in_progress',
       label: 'In Progress',
       value: rollup.in_progress || 0,
-      color: '#eab308',
     },
     {
       key: 'planned',
       label: 'Planned',
       value: rollup.planned || 0,
-      color: '#6b7280',
     },
   ];
 
-  const barData = Object.keys(rollup.categoryCounts).map((cat) => ({
+  // Category breakdown for CanvasBarChart
+  const barData: BarDatum[] = Object.keys(rollup.categoryCounts).map((cat) => ({
     key: cat,
     label: cat,
     value: rollup.categoryCounts[cat] || 0,
+    monochrome: true, // monochrome enables per-bar colors from index
   }));
 
   return (
