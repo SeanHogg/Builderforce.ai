@@ -37,7 +37,7 @@ export class TaskService {
 function computeProgress(task: Task): TaskProgress {
   const { status, parentTaskId, createdAt, updatedAt, id, title, description } = task;
 
-  const total = parentTaskId === null ? 1 : 0;
+  const total = parentTaskId === null ? 0 : 1;
   let completed = 0;
   let failed = 0;
   let skipped = 0;
