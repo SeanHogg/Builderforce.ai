@@ -5,6 +5,7 @@
   "agent_id": "finance-unified-planner-v2",
   "session_id": "finance-session-fgk841",
   "parent_basis_id": null,
+  "sandbox": null,
   "claims": [
     {
       "claim_id": "claim-1",
@@ -219,18 +220,6 @@
     ],
     "environment": "production"
   },
-  "_validation": {
-    "ac2_agent_sample": {
-      "stub_name": "emitValidAgentPayload",
-      "version": "1.0.0",
-      "note": "PURE STUB for AC-2 canonical f test. Actual agent producer integration is future PR scope (not required for v1 ratification). This stub placeholder returns a schema-valid instance (example.canonical.json) for testing; the real producer will include additional fields (e.g., additional extensions, enriched context)."
-    },
-    "ac3_board_sample": {
-      "stub_name": "renderBoardUI",
-      "version": "1.0.0",
-      "note": "PURE STUB for AC-3 pentest. AC-3 requires that boards can render claims/evidence/reasoning_chain/uncertainty from a valid payload without code changes. This stub placeholder exercises the canonical f; the actual UI integration is future PR scope (not required for v1 ratification)."
-    }
-  }
   "extensions": {
     "com.builderforce.review": {
       "peer_review_status": "pending",
@@ -246,6 +235,18 @@
       "mitigation_actions": [
         "Monitor regulatory filings and adjust forecasts Q2 if changes materialize"
       ]
+    }
+  },
+  "_validation": {
+    "ac2_agent_sample": {
+      "stub_name": "emitValidAgentPayload",
+      "version": "1.0.0",
+      "note": "PURE STUB for AC-2 canonical f test. Actual agent producer integration is future PR scope (not required for v1 ratification). This stub placeholder returns a schema-valid instance (example.canonical.json) for testing; the real producer will include additional fields (e.g., additional extensions, enriched context)."
+    },
+    "ac3_board_sample": {
+      "stub_name": "renderBoardUI",
+      "version": "1.0.0",
+      "note": "PURE STUB for AC-3 pentest. AC-3 requires that boards can render claims/evidence/reasoning_chain/uncertainty from a valid payload without code changes. This stub placeholder exercises the canonical f; the actual UI integration is future PR scope (not required for v1 ratification)."
     }
   }
 }
