@@ -193,10 +193,23 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     ensureChatId,
     onActivity,
     onFirstUserTurn,
-    autoTitle,
+    autoTitle: providedAutoTitle,
     evermind,
     augmentSystemPrompt,
   } = options;
+
+  // Optional host-provided autoTitle via config: if the host didn't pass it as an option,
+  // try reading it from anywhere in the Brain context stack for portability.
+  const autoTitle = providedAutoTitle ?? (() => {
+    try {
+      // 1: Caller-provided. If missing, short-circuit.
+      const ctx = useBrainContext();
+      return ctx?.autoTitle;
+    } catch {
+      // 2: Not inside a provider — no autoTitle available.
+      return undefined;
+    }
+  })();
 
   const [messages, setMessages] = useState<BrainMessage[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
