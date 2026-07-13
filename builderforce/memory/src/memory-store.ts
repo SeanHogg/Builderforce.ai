@@ -206,10 +206,7 @@ export class MemoryStore implements MemoryStoreAPI {
 
   async getUsage(): Promise<{ size: number; entries: number }> {
     // Placeholder for actual usage tracking
-    return { size: 0, entries: this.entries.size };
-  }
-
-  on(event: string, callback: Function): () => void {
+    
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
     }
