@@ -15,7 +15,6 @@ This directory contains the ratified JSON schema and documentation for the **Bas
 | File | Purpose |
 |------|---------|
 | [`basis-payload.schema.json`](basis-payload.schema.json) | JSON Schema (Draft 2020-12) contract — validates all payloads. |
-| [`example.canonical.json`](example.canonical.json) | Full, valid payload example. |
 | [`basis-payload.md`](basis-payload.md) | Human-readable reference and usage guide. |
 | [`CHANGELOG.md`](CHANGELOG.md) | Version history (v1.0.0 ratified). |
 | [`validate.js`](validate.js) | Zero-dependency validation harness (Node.js `node validate.js`). |
