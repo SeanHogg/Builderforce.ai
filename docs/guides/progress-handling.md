@@ -20,12 +20,11 @@ Key fields:
 
 ## Canonical Rule: `progressPct: 100`
 
-`progressPct: 100` is emitted **only when the entire processing pipeline for the job or task has finished**. Important points:
+`progressPct: 100` is the authoritative terminal signal for progress-stream consumers. Important points:
 
-- Emitted at most once per job/task.
-- Must not be emitted before all required steps complete.
-- No further progress events follow it.
-- This is the authoritative terminal signal for progress-based UI and downstream consumers.
+- Emission rule: emitted at most once per job/task, emitted only after all processing steps complete.
+- Ordering guarantee: no further progress events follow it.
+- Developers should check `progressPct === 100` and `status === completed` together to confirm terminal completion.
 
 See the PRD and API reference for full definition and rationale.
 
