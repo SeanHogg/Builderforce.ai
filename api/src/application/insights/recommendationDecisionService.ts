@@ -52,16 +52,21 @@ export async function createDecision(params: CreateDecisionParams): Promise<numb
     throw new Error(`Decision already recorded for recommendation ${recKey}`);
   }
 
+  // Determine tenantId from context (in a real app, this would come from the request context)
+  // For now, we'll default to 0 to keep the function signature simple
+  const tenantId = 0; // Will be set from context
+
   // Record the decision
   const decisionInsert = await db.insert(recommendationDecisions)
     .values({
-      tenantId: 0, // Will be set from context
+      tenantId,
       recKey,
       decision,
       decidedBy,
       rationale: rationale || null,
       status: 'pending',
       workflow_trigger_ids: null,
+      retry_count: 0,
     })
     .returning();
 
@@ -69,7 +74,7 @@ export async function createDecision(params: CreateDecisionParams): Promise<numb
 
   // Trigger bound workflows (async, don't block user response)
   try {
-    await triggerWorkflowsForDecision(decisionId, recKey, decision);
+    await triggerWorkflowsForDecision(decisionId, recKey, decision, tenantId);
   } catch (error) {
     // Log the error but don't fail the decision recording
     console.error('Failed to trigger workflows for recommendation decision:', error);
