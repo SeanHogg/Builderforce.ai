@@ -180,6 +180,7 @@
     "environment": "development"
   },
   "extensions": {
+    /* See docs/.internal/basis-payload-integration-usage.md for guidance on producers/consomers dealing with unknown fields per AC-6 */
     "com.builderforce.project-analysis": {
       "project_risk_score": 0.24,
       "dominant_risk_factors": [
