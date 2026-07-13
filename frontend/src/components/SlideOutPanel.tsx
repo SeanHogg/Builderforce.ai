@@ -25,17 +25,19 @@ export interface SlideOutPanelProps {
   width?: string;
 }
 
-// Override inline styles on drawer for correct z-index: overlay 9997, drawer 9998
-// Consistent with globals.css: overlay 9997, drawer 9998
+// Z-index layers: only use here for fallback; globals.css defines the strong rules.
+// Correct hierarchy:
+//   - Debugger/Governance: 9999
+//   - global-overlay-layer boundary: 10000
+//   - Slide-panel-drawer: 10001 (above overlay, always accessible)
 const overlayStyle: React.CSSProperties = {
   position: 'fixed',
   inset: 0,
-  zIndex: 9997, /* Above content, below mobile nav (96) and debugger (9997) */
+  zIndex: 10000, /* Above all app content, below nothing on mobile */
 };
 
-// Drawer z-index: must be below mobile nav/sidebar so buttons/inputs remain accessible
 const drawerStyle: React.CSSProperties = {
-  zIndex: 9998,
+  zIndex: 10001, /* Above overlay and debugger — always accessible on mobile */
 };
 
 export function SlideOutPanel({
