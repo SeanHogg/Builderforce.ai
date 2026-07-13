@@ -84,5 +84,15 @@ export function createChatTicketsAdapter(
       const res = await req<{ ok: boolean; executionId: number | null; agentRef: string }>(`/api/tasks/${id}/run-now`, { method: 'POST' });
       return { started: !!res.executionId, agentName: res.agentRef };
     },
+    listQuestions: async (chatId) => {
+      const [links, pending] = await Promise.all([
+        req<{ tickets: TicketLinkVM[] }>(`/api/brain/chats/${chatId}/tickets`).then((r) => r.tickets),
+        req<{ approvals: Array<{ id: string; kind: string; description: string; taskId: number | null; createdAt?: string }> }>('/api/approvals?status=pending').then((r) => r.approvals),
+      ]);
+      const taskIds = new Set(links.filter((t) => t.kind === 'task' || t.kind === 'epic' || t.kind === 'gap').map((t) => Number(t.ref)));
+      return pending.filter((q) => (q.kind === 'question' || q.kind === 'feedback') && q.taskId != null && taskIds.has(q.taskId));
+    },
+    answerQuestion: (id, responseText) =>
+      req(`/api/approvals/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ status: 'answered', responseText }) }).then(() => undefined),
   };
 }

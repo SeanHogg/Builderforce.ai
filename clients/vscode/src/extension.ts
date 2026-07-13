@@ -235,10 +235,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("builderforce.newSession", () =>
       BrainWebview.open(context, { kind: "new" }),
     ),
-    vscode.commands.registerCommand("builderforce.openSession", (id: number | string, approvalId?: string) => {
+    vscode.commands.registerCommand("builderforce.openSession", (id: number | string) => {
       const chatId = chatIdOf(id);
       BrainWebview.open(context, chatId != null ? { kind: "focus", chatId } : { kind: "new" });
-      if (approvalId) void reviewHumanRequests(context, projects, approvalId);
     }),
     vscode.commands.registerCommand("builderforce.selectProject", () => selectProject(context, projects)),
     vscode.commands.registerCommand("builderforce.createProject", () => createProject(context, projects)),

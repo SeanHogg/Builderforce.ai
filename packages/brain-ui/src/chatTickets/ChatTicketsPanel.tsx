@@ -17,7 +17,7 @@ import { HealthRing } from '../HealthRing';
 import {
   RUNNABLE_KINDS, TICKET_KINDS,
   type ChatTicketsAdapter, type ChatTicketsLabels, type TicketKind,
-  type TicketLinkVM, type ChatAgentVM, type ChatMemberVM, type AgentOptionVM, type LineageVM, type TicketOptionVM, type ChatOptionVM, type LinkType,
+  type TicketLinkVM, type ChatAgentVM, type ChatMemberVM, type AgentOptionVM, type LineageVM, type TicketOptionVM, type ChatOptionVM, type LinkType, type ChatQuestionVM,
 } from './types';
 
 export interface ChatTicketsPanelProps {
@@ -59,7 +59,8 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   const [agents, setAgents] = useState<ChatAgentVM[]>([]);
   const [members, setMembers] = useState<ChatMemberVM[]>([]);
   const [pool, setPool] = useState<AgentOptionVM[]>([]);
-  const [panel, setPanel] = useState<null | 'link' | 'agents' | 'people' | 'merge'>(null);
+  const [questions, setQuestions] = useState<ChatQuestionVM[]>([]);
+  const [panel, setPanel] = useState<null | 'link' | 'agents' | 'people' | 'merge' | 'questions'>(null);
   const [lineageKey, setLineageKey] = useState<string | null>(null);
   const [lineage, setLineage] = useState<LineageVM[]>([]);
   const [runKey, setRunKey] = useState<string | null>(null);
@@ -71,14 +72,16 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   const userCollapsed = useRef(false);
 
   const load = useCallback(async () => {
-    const [tk, ag, mem] = await Promise.all([
+    const [tk, ag, mem, qs] = await Promise.all([
       adapter.listTickets(chatId).catch(() => [] as TicketLinkVM[]),
       adapter.listAgents(chatId).catch(() => [] as ChatAgentVM[]),
       adapter.listMembers(chatId).catch(() => [] as ChatMemberVM[]),
+      adapter.listQuestions(chatId).catch(() => [] as ChatQuestionVM[]),
     ]);
     setTickets(tk);
     setAgents(ag);
     setMembers(mem);
+    setQuestions(qs);
     // Auto-collapse a long list on first load; never override a user's own choice.
     if (!userCollapsed.current) setCollapsed(tk.length > COLLAPSE_THRESHOLD);
   }, [adapter, chatId]);
@@ -211,6 +214,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         <button type="button" onClick={() => setPanel(panel === 'agents' ? null : 'agents')} style={S.pill(panel === 'agents')}>👥 {labels.agents}{agents.length ? ` (${agents.length})` : ''}</button>
         <button type="button" onClick={() => setPanel(panel === 'people' ? null : 'people')} style={S.pill(panel === 'people')}>👤 {labels.people}{members.length ? ` (${members.length})` : ''}</button>
         <button type="button" onClick={() => setPanel(panel === 'merge' ? null : 'merge')} style={S.pill(panel === 'merge')}>⧉ {labels.merge}</button>
+        {questions.length > 0 && <button type="button" onClick={() => setPanel(panel === 'questions' ? null : 'questions')} style={S.pill(panel === 'questions')}>❓ {labels.questions} ({questions.length})</button>}
         {msg && <span style={{ fontSize: 12, color: V.accent, alignSelf: 'center' }}>{msg}</span>}
       </div>
 
@@ -233,6 +237,37 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       {panel === 'merge' && <MergeSection chatId={chatId} chatList={chatList} labels={labels}
         onMerge={async (ids) => { setBusy(true); try { await adapter.consolidate(chatId, ids); flash(labels.mergedN(ids.length)); await load(); onChanged?.(); } finally { setBusy(false); } }}
         busy={busy} />}
+
+      {panel === 'questions' && <QuestionsSection questions={questions} labels={labels}
+        onAnswer={async (id, answer) => { await adapter.answerQuestion(id, answer); await load(); onChanged?.(); }} />}
+    </div>
+  );
+}
+
+function QuestionsSection({ questions, labels, onAnswer }: {
+  questions: ChatQuestionVM[];
+  labels: ChatTicketsLabels;
+  onAnswer: (id: string, answer: string) => Promise<void>;
+}) {
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [sending, setSending] = useState<string | null>(null);
+  return (
+    <div style={S.drawer}>
+      {questions.length === 0 ? <span style={S.muted}>{labels.noQuestions}</span> : questions.map((q, index) => {
+        const value = answers[q.id] ?? '';
+        return <div key={q.id} style={{ padding: '10px 0', borderBottom: index < questions.length - 1 ? `1px solid ${V.border}` : undefined }}>
+          <div style={{ color: V.text, fontSize: 13, lineHeight: 1.45, whiteSpace: 'pre-wrap', marginBottom: 8 }}>{q.description}</div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            <textarea value={value} onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
+              placeholder={labels.answerPlaceholder} rows={2} disabled={sending === q.id}
+              style={{ ...S.select, flex: 1, resize: 'vertical', minHeight: 54, fontFamily: 'inherit' }} />
+            <button type="button" disabled={!value.trim() || sending === q.id} style={S.pill(true)} onClick={() => {
+              setSending(q.id);
+              void onAnswer(q.id, value.trim()).finally(() => setSending(null));
+            }}>{sending === q.id ? labels.answering : labels.submitAnswer}</button>
+          </div>
+        </div>;
+      })}
     </div>
   );
 }

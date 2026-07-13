@@ -924,6 +924,11 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
   link: "Link ticket",
   agents: "Agents",
   merge: "Merge",
+  questions: "Questions",
+  noQuestions: "No pending questions.",
+  answerPlaceholder: "Type your answer\u2026",
+  submitAnswer: "Answer",
+  answering: "Sending\u2026",
   linkFailed: "Could not link \u2014 check the ticket exists.",
   kindLabel: "Ticket type",
   pickTicket: "Choose a ticket\u2026",
@@ -971,6 +976,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   const [agents, setAgents] = useState4([]);
   const [members, setMembers] = useState4([]);
   const [pool, setPool] = useState4([]);
+  const [questions, setQuestions] = useState4([]);
   const [panel, setPanel] = useState4(null);
   const [lineageKey, setLineageKey] = useState4(null);
   const [lineage, setLineage] = useState4([]);
@@ -980,14 +986,16 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   const [collapsed, setCollapsed] = useState4(null);
   const userCollapsed = useRef2(false);
   const load = useCallback(async () => {
-    const [tk, ag, mem] = await Promise.all([
+    const [tk, ag, mem, qs] = await Promise.all([
       adapter.listTickets(chatId).catch(() => []),
       adapter.listAgents(chatId).catch(() => []),
-      adapter.listMembers(chatId).catch(() => [])
+      adapter.listMembers(chatId).catch(() => []),
+      adapter.listQuestions(chatId).catch(() => [])
     ]);
     setTickets(tk);
     setAgents(ag);
     setMembers(mem);
+    setQuestions(qs);
     if (!userCollapsed.current) setCollapsed(tk.length > COLLAPSE_THRESHOLD);
   }, [adapter, chatId]);
   useEffect2(() => {
@@ -1130,6 +1138,13 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         "\u29C9 ",
         labels.merge
       ] }),
+      questions.length > 0 && /* @__PURE__ */ jsxs7("button", { type: "button", onClick: () => setPanel(panel === "questions" ? null : "questions"), style: S.pill(panel === "questions"), children: [
+        "\u2753 ",
+        labels.questions,
+        " (",
+        questions.length,
+        ")"
+      ] }),
       msg && /* @__PURE__ */ jsx7("span", { style: { fontSize: 12, color: V.accent, alignSelf: "center" }, children: msg })
     ] }),
     panel === "link" && /* @__PURE__ */ jsx7(LinkForm, { search: adapter.searchTickets, projectId, existing: tickets, labels, onLink: async (kind, ref, linkType) => {
@@ -1221,8 +1236,47 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         },
         busy
       }
+    ),
+    panel === "questions" && /* @__PURE__ */ jsx7(
+      QuestionsSection,
+      {
+        questions,
+        labels,
+        onAnswer: async (id, answer) => {
+          await adapter.answerQuestion(id, answer);
+          await load();
+          onChanged?.();
+        }
+      }
     )
   ] });
+}
+function QuestionsSection({ questions, labels, onAnswer }) {
+  const [answers, setAnswers] = useState4({});
+  const [sending, setSending] = useState4(null);
+  return /* @__PURE__ */ jsx7("div", { style: S.drawer, children: questions.length === 0 ? /* @__PURE__ */ jsx7("span", { style: S.muted, children: labels.noQuestions }) : questions.map((q, index) => {
+    const value = answers[q.id] ?? "";
+    return /* @__PURE__ */ jsxs7("div", { style: { padding: "10px 0", borderBottom: index < questions.length - 1 ? `1px solid ${V.border}` : void 0 }, children: [
+      /* @__PURE__ */ jsx7("div", { style: { color: V.text, fontSize: 13, lineHeight: 1.45, whiteSpace: "pre-wrap", marginBottom: 8 }, children: q.description }),
+      /* @__PURE__ */ jsxs7("div", { style: { display: "flex", gap: 8, alignItems: "flex-start" }, children: [
+        /* @__PURE__ */ jsx7(
+          "textarea",
+          {
+            value,
+            onChange: (e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value })),
+            placeholder: labels.answerPlaceholder,
+            rows: 2,
+            disabled: sending === q.id,
+            style: { ...S.select, flex: 1, resize: "vertical", minHeight: 54, fontFamily: "inherit" }
+          }
+        ),
+        /* @__PURE__ */ jsx7("button", { type: "button", disabled: !value.trim() || sending === q.id, style: S.pill(true), onClick: () => {
+          setSending(q.id);
+          void onAnswer(q.id, value.trim()).finally(() => setSending(null));
+        }, children: sending === q.id ? labels.answering : labels.submitAnswer })
+      ] })
+    ] }, q.id);
+  }) });
 }
 var SEARCH_LIMIT = 40;
 function LinkForm({ search, projectId, existing, labels, onLink }) {
