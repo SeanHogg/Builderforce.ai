@@ -71,13 +71,6 @@ export interface UseBrainChats {
   /** Create a chat (defaults project to the active filter/pin) and select it. */
   create(opts?: { title?: string; projectId?: number | null }): Promise<BrainChat | null>;
   rename(id: number, title: string): Promise<void>;
-  /**
-   * Auto-name a still-untitled chat (title === {@link DEFAULT_CHAT_TITLE}) from its
-   * first user message, so "New chat" becomes the topic once the conversation begins.
-   * No-op when the chat was already given a real title (user rename / task seed), so it
-   * never clobbers an intentional name. Wired to the conversation's first-turn hook.
-   */
-  autoTitle(id: number, firstUserText: string): Promise<void>;
   summarize(id: number): Promise<void>;
   remove(id: number): Promise<void>;
   assignToProject(id: number, projectId: number | null): Promise<void>;
