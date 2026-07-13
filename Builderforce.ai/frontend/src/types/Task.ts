@@ -11,6 +11,26 @@ export type TaskType = 'coding' | 'analysis' | 'provisioning' | 'decision' | 'do
 
 export type TaskStatus = 'todo' | 'in-progress' | 'spec-ready' | 'review' | 'done' | 'blocked' | 'changes_requested';
 
+/**
+ * FR-7: Audit event schema.
+ */
+export interface EventLogEntry {
+  timestamp: string;
+  type: 'progress' | 'blocked';
+  task_id: string;
+  pr_shas: string[];
+  pr_classification: 'none' | 'doc-only' | 'has-implementation';
+  deliverable_type: DeliverableType;
+  task_type: TaskType;
+  progress?: number;
+  previous_progress?: number;
+  status: TaskStatus;
+  previous_status: TaskStatus;
+  blocked_reason?: string;
+  diagnostic?: string;
+  severity?: 'info' | 'warning';
+}
+
 export interface PRDiff {
   sha: string;
   isModified: boolean;
