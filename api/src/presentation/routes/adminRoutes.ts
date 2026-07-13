@@ -95,6 +95,8 @@ import {
 } from '../../infrastructure/auth/MfaService';
 import { magicLinkTokens } from '../../infrastructure/database/schema';
 import { sendAdminPasswordResetEmail } from '../../infrastructure/email/EmailService';
+import { runRetentionPurge } from '../../application/maintenance/retentionPurge';
+import { API_VERSION } from '../../version';
 
 /**
  * Coerce a `platform_modules.permissions` value into `string[]`.
@@ -241,6 +243,45 @@ async function replaceRecoveryCodes(db: Db, userId: string, codes: string[]) {
     })),
   );
   await db.insert(userMfaRecoveryCodes).values(hashed);
+}
+
+type DatabaseTarget = 'primary' | 'transactional';
+
+async function inspectDatabase(db: Db, name: DatabaseTarget) {
+  const started = Date.now();
+  try {
+    const [database] = (await db.execute(sql`
+      SELECT current_database() AS "databaseName", pg_database_size(current_database())::bigint AS "totalBytes"
+    `)).rows as Array<{ databaseName: string; totalBytes: number | string }>;
+    const tables = (await db.execute(sql`
+      SELECT relname AS name,
+        pg_total_relation_size(relid)::bigint AS "totalBytes",
+        COALESCE(n_live_tup, 0)::bigint AS "estimatedRows",
+        COALESCE(n_tup_ins, 0)::bigint AS "insertsSinceStatsReset",
+        COALESCE(n_tup_upd, 0)::bigint AS "updatesSinceStatsReset",
+        COALESCE(n_tup_del, 0)::bigint AS "deletesSinceStatsReset",
+        last_autovacuum AS "lastAutovacuum",
+        last_analyze AS "lastAnalyze"
+      FROM pg_stat_user_tables
+      ORDER BY pg_total_relation_size(relid) DESC
+      LIMIT 100
+    `)).rows;
+    return {
+      name, ok: true, latencyMs: Date.now() - started,
+      databaseName: database?.databaseName ?? null,
+      totalBytes: Number(database?.totalBytes ?? 0),
+      tables,
+    };
+  } catch (error) {
+    return {
+      name, ok: false, latencyMs: Date.now() - started, databaseName: null,
+      totalBytes: 0, tables: [], error: error instanceof Error ? error.message : 'Database inspection failed',
+    };
+  }
+}
+
+function isSafeRelationName(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-z_][a-z0-9_]{0,62}$/.test(value);
 }
 
 export function createAdminRoutes(): Hono<HonoEnv> {
@@ -1441,6 +1482,84 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       },
       timestamp:    new Date().toISOString(),
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/system-health — operational infrastructure + both Neon DBs.
+  // Table mutation counters are PostgreSQL counters since the last stats reset;
+  // they make sustained growth visible without retaining a second metrics table.
+  // -------------------------------------------------------------------------
+  router.get('/system-health', async (c) => {
+    const primary = buildDatabase(c.env);
+    const transactional = buildTransactionalDatabase(c.env);
+    const [primaryDb, transactionalDb, runtime] = await Promise.all([
+      inspectDatabase(primary, 'primary'),
+      inspectDatabase(transactional, 'transactional'),
+      primary.execute(sql`
+        SELECT
+          (SELECT COUNT(*)::int FROM agent_hosts) AS "agentHosts",
+          (SELECT COUNT(*)::int FROM agent_hosts WHERE connected_at IS NOT NULL AND last_seen_at > now() - interval '5 minutes') AS "onlineAgentHosts",
+          (SELECT COUNT(*)::int FROM executions WHERE status IN ('pending', 'running')) AS "activeExecutions",
+          (SELECT COUNT(*)::int FROM executions WHERE status = 'failed' AND updated_at > now() - interval '24 hours') AS "failedExecutions24h"
+      `).catch(() => ({ rows: [] })),
+    ]);
+    const row = (runtime.rows[0] ?? {}) as Record<string, number>;
+    return c.json({
+      timestamp: new Date().toISOString(),
+      worker: {
+        version: API_VERSION,
+        environment: c.env.ENVIRONMENT ?? 'unknown',
+        bindings: {
+          analysisRunner: Boolean(c.env.ANALYSIS_RUNNER),
+          agentContainer: Boolean(c.env.AGENT_CONTAINER),
+          qaRunnerContainer: Boolean(c.env.QA_RUNNER_CONTAINER),
+          cloudRunner: Boolean(c.env.CLOUD_RUNNER),
+          cloudflareAi: Boolean(c.env.CLOUDFLARE_AI_API_TOKEN && c.env.CLOUDFLARE_ACCOUNT_ID),
+        },
+      },
+      runtime: {
+        agentHosts: Number(row.agentHosts ?? 0),
+        onlineAgentHosts: Number(row.onlineAgentHosts ?? 0),
+        activeExecutions: Number(row.activeExecutions ?? 0),
+        failedExecutions24h: Number(row.failedExecutions24h ?? 0),
+      },
+      databases: [primaryDb, transactionalDb],
+    });
+  });
+
+  // POST /api/admin/system-health/maintenance
+  // { action: 'purge_expired' } runs only the existing retention policy.
+  // { action: 'vacuum_analyze', target, table? } is intentionally limited to
+  // normal VACUUM ANALYZE (never VACUUM FULL / arbitrary SQL).
+  router.post('/system-health/maintenance', async (c) => {
+    const body = await c.req.json().catch(() => ({})) as {
+      action?: string; target?: DatabaseTarget; table?: string;
+    };
+    const actorId = c.get('userId') as string | undefined;
+    if (body.action === 'purge_expired') {
+      await runRetentionPurge(c.env as Env);
+      await writeAdminAudit(buildDatabase(c.env), 'SYSTEM_HEALTH_PURGE_EXPIRED', actorId ?? null, {
+        metadata: { target: 'both', retentionPolicy: true }, ipAddress: c.req.header('cf-connecting-ip') ?? null,
+      });
+      return c.json({ ok: true, action: body.action });
+    }
+    if (body.action !== 'vacuum_analyze' || (body.target !== 'primary' && body.target !== 'transactional')) {
+      return c.json({ error: 'Use purge_expired or vacuum_analyze with target primary|transactional.' }, 400);
+    }
+    if (body.table != null && !isSafeRelationName(body.table)) {
+      return c.json({ error: 'Invalid table name.' }, 400);
+    }
+    const db = body.target === 'primary' ? buildDatabase(c.env) : buildTransactionalDatabase(c.env);
+    const statement = body.table ? `VACUUM (ANALYZE) "${body.table}"` : 'VACUUM (ANALYZE)';
+    try {
+      await db.execute(sql.raw(statement));
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : 'VACUUM failed' }, 500);
+    }
+    await writeAdminAudit(buildDatabase(c.env), 'SYSTEM_HEALTH_VACUUM_ANALYZE', actorId ?? null, {
+      metadata: { target: body.target, table: body.table ?? null }, ipAddress: c.req.header('cf-connecting-ip') ?? null,
+    });
+    return c.json({ ok: true, action: body.action, target: body.target, table: body.table ?? null });
   });
 
   // -------------------------------------------------------------------------
