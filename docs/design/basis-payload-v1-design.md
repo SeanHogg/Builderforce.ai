@@ -169,7 +169,24 @@ Define a stable, versioned JSON contract for structured **basis data** used by:
 | `schema_version` | `string` | Semver pattern enforced; determines consumer support. |
 | `basis_id` | UUID | Schema enforced per RFC 4122; globally unique. |
 | `parent_basis_id` | UUID | Optional; used to chain bases (e.g., rebuttal/refinement). |
-| `tool_calls` | `context.tool_calls[]` | Capabilities: tool name, input/output summaries, called_at. |
+| `sandbox` | `string \| null` | Optional sandbox identifier for the target workspace/tenant; must match the platform’s environment key. |
+| `created_at` | `date-time` | ISO 8601 timestamp; emitted by producer. |
+| `agent_id` | `string` | Identifier of the agent that produced this basis. |
+| `session_id` | `string \| null` | Optional session identifier for the agent. |
+| `tools_calls` | `context.tool_calls[]` | Capabilities: tool name, input/output summaries, called_at. |
+
+Canonical layout (matches schema and example.canonical.json):
+```json
+{
+  "schema_version": "1.0.0",
+  "basis_id": "<uuid>",
+  "created_at": "<ISO-8601 UTC>",
+  "agent_id": "<string>",
+  "session_id": "<string | null>",
+  "parent_basis_id": "<uuid | null>",
+  "sandbox": "<string | null>"
+}
+```
 
 ---
 
