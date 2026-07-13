@@ -124,12 +124,44 @@ router.post('/deadlines/ingest/batch', async (req, res) => {
 });
 
 /** PATCH /deadlines/:id */
-router.patch('/deadlines/:id', async (req, res) => {
+router.patch('/deadlines/:id', async (req, res, next) => {
   const id = Number(req.params.id);
   const updates = req.body;
-
   const actor = req.user?.id || 'system';
 
+  // ---------------------------------------------------------------------
+  // Validation
+  // ---------------------------------------------------------------------
+  if (!Array.isArray(Array.from(updates))) {
+    try {
+      const validated = deadlineUpdateSchema.parse(updates);
+      // Check requirement for slipReason (depending on who checks it)
+      if (canRequireSlipReason({ ...validated, slipReason: updates.slipReason })) {
+        if (!validated.slipReason || validated.slipReason.trim().length === 0) {
+          return handleZodError(req, res, next, z.zodError({
+            issues: [{
+              code: z.ZodIssueCode.custom,
+              path: ['slipReason'],
+              message: 'slipReason is required when changing due_date or dependent deadlines',
+            }],
+          }));
+        }
+
+        const { slipReason, ...rest } = validated;
+        updates.slipReason = slipReason;
+        Object.assign(updates, rest);
+      }
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return handleZodError(req, res, next, err);
+      }
+      return next(err);
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Service call
+  // ---------------------------------------------------------------------
   try {
     const result = await deadlineService.update(id, updates, actor);
     if (!result) {
@@ -137,18 +169,21 @@ router.patch('/deadlines/:id', async (req, res) => {
     }
 
     if (updates.healthOverride === 'on_track' || updates.healthOverride === 'at_risk' || updates.healthOverride === 'off_track' || updates.healthOverride === 'missed' || updates.healthOverride === null) {
-      // Schedule health recomputation
       void deadlineService.recomputeHealth(id);
     }
 
     res.json(result);
   } catch (err) {
     if (err instanceof Error && err.message === 'slipReason is required when changing due_date or dependent deadlines') {
-      return res.status(422).json({ error: 'Invalid request', details: { code: 'missing_slip_reason' } });
+      return res.status(422).json({
+        errors: [{ code: 'MISSING_SLIP_REASON', message: 'slipReason is required when changing due_date or dependent deadlines' }],
+      });
     }
 
     if (err instanceof Error && err.message.startsWith('Invalid slip_reason:')) {
-      return res.status(422).json({ error: 'Invalid slip_reason', details: { code: 'invalid_slip_reason' }, slipReason: true });
+      return res.status(422).json({
+        errors: [{ code: 'invalid_slip_reason', message: 'Invalid slip_reason' }],
+      });
     }
 
     console.error('[deadline update] failed:', err);
