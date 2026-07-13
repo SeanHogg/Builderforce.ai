@@ -994,6 +994,11 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
   link: "Link ticket",
   agents: "Agents",
   merge: "Merge",
+  questions: "Questions",
+  noQuestions: "No pending questions.",
+  answerPlaceholder: "Type your answer\u2026",
+  submitAnswer: "Answer",
+  answering: "Sending\u2026",
   linkFailed: "Could not link \u2014 check the ticket exists.",
   kindLabel: "Ticket type",
   pickTicket: "Choose a ticket\u2026",
@@ -1041,6 +1046,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   const [agents, setAgents] = (0, import_react4.useState)([]);
   const [members, setMembers] = (0, import_react4.useState)([]);
   const [pool, setPool] = (0, import_react4.useState)([]);
+  const [questions, setQuestions] = (0, import_react4.useState)([]);
   const [panel, setPanel] = (0, import_react4.useState)(null);
   const [lineageKey, setLineageKey] = (0, import_react4.useState)(null);
   const [lineage, setLineage] = (0, import_react4.useState)([]);
@@ -1050,14 +1056,16 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   const [collapsed, setCollapsed] = (0, import_react4.useState)(null);
   const userCollapsed = (0, import_react4.useRef)(false);
   const load = (0, import_react4.useCallback)(async () => {
-    const [tk, ag, mem] = await Promise.all([
+    const [tk, ag, mem, qs] = await Promise.all([
       adapter.listTickets(chatId).catch(() => []),
       adapter.listAgents(chatId).catch(() => []),
-      adapter.listMembers(chatId).catch(() => [])
+      adapter.listMembers(chatId).catch(() => []),
+      adapter.listQuestions(chatId).catch(() => [])
     ]);
     setTickets(tk);
     setAgents(ag);
     setMembers(mem);
+    setQuestions(qs);
     if (!userCollapsed.current) setCollapsed(tk.length > COLLAPSE_THRESHOLD);
   }, [adapter, chatId]);
   (0, import_react4.useEffect)(() => {
@@ -1200,6 +1208,13 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         "\u29C9 ",
         labels.merge
       ] }),
+      questions.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("button", { type: "button", onClick: () => setPanel(panel === "questions" ? null : "questions"), style: S.pill(panel === "questions"), children: [
+        "\u2753 ",
+        labels.questions,
+        " (",
+        questions.length,
+        ")"
+      ] }),
       msg && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { style: { fontSize: 12, color: V.accent, alignSelf: "center" }, children: msg })
     ] }),
     panel === "link" && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(LinkForm, { search: adapter.searchTickets, projectId, existing: tickets, labels, onLink: async (kind, ref, linkType) => {
@@ -1291,8 +1306,47 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         },
         busy
       }
+    ),
+    panel === "questions" && /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+      QuestionsSection,
+      {
+        questions,
+        labels,
+        onAnswer: async (id, answer) => {
+          await adapter.answerQuestion(id, answer);
+          await load();
+          onChanged?.();
+        }
+      }
     )
   ] });
+}
+function QuestionsSection({ questions, labels, onAnswer }) {
+  const [answers, setAnswers] = (0, import_react4.useState)({});
+  const [sending, setSending] = (0, import_react4.useState)(null);
+  return /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { style: S.drawer, children: questions.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { style: S.muted, children: labels.noQuestions }) : questions.map((q, index) => {
+    const value = answers[q.id] ?? "";
+    return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { style: { padding: "10px 0", borderBottom: index < questions.length - 1 ? `1px solid ${V.border}` : void 0 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { style: { color: V.text, fontSize: 13, lineHeight: 1.45, whiteSpace: "pre-wrap", marginBottom: 8 }, children: q.description }),
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "flex-start" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+          "textarea",
+          {
+            value,
+            onChange: (e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value })),
+            placeholder: labels.answerPlaceholder,
+            rows: 2,
+            disabled: sending === q.id,
+            style: { ...S.select, flex: 1, resize: "vertical", minHeight: 54, fontFamily: "inherit" }
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", disabled: !value.trim() || sending === q.id, style: S.pill(true), onClick: () => {
+          setSending(q.id);
+          void onAnswer(q.id, value.trim()).finally(() => setSending(null));
+        }, children: sending === q.id ? labels.answering : labels.submitAnswer })
+      ] })
+    ] }, q.id);
+  }) });
 }
 var SEARCH_LIMIT = 40;
 function LinkForm({ search, projectId, existing, labels, onLink }) {

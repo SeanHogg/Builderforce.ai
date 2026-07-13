@@ -358,6 +358,13 @@ interface ChatOptionVM {
     id: number;
     title: string;
 }
+/** A pending human question associated with one of this chat's linked tasks. */
+interface ChatQuestionVM {
+    id: string;
+    description: string;
+    taskId: number | null;
+    createdAt?: string;
+}
 /**
  * Host-provided data access — the only coupling to a backend. The web app wires
  * this to its `brain.*` / `pmoApi` / `tasksApi` clients; the VS Code webview wires
@@ -397,6 +404,10 @@ interface ChatTicketsAdapter {
         started: boolean;
         agentName: string;
     }>;
+    /** Pending question/feedback requests for work linked to this chat. */
+    listQuestions(chatId: number): Promise<ChatQuestionVM[]>;
+    /** Deliver an answer and resume the waiting run. */
+    answerQuestion(id: string, responseText: string): Promise<void>;
 }
 /** Every visible string. Parametric ones are functions the host localizes. */
 interface ChatTicketsLabels {
@@ -416,6 +427,11 @@ interface ChatTicketsLabels {
     link: string;
     agents: string;
     merge: string;
+    questions: string;
+    noQuestions: string;
+    answerPlaceholder: string;
+    submitAnswer: string;
+    answering: string;
     linkFailed: string;
     kindLabel: string;
     pickTicket: string;
