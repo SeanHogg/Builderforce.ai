@@ -15,6 +15,8 @@ interface ChatDetailProps {
   onTitleChange?: (title: string) => void;
 }
 
+const inputRef = useRef<HTMLTextAreaElement>(null);
+
 // Sync title to LocalStorage when it changes (FR4.1: Persistence)
 const syncTitleToStorage = async (chatId: string, title: string) => {
   try {
