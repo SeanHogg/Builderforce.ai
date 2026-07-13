@@ -29,18 +29,25 @@ type PageContainerProps = {
  * their own layout and intentionally do NOT use this.
  */
 export default function PageContainer({ width = 'full', style, className, children }: PageContainerProps) {
+  // Mobile-safe bottom padding: accounts for the fixed footer nav (56px) + safe area
+  const mobileBottomPadding = process.env.TARGET === 'mobile'
+    ? 'padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));'
+    : '';
+  const safeStyle = {
+    width: '100%',
+    maxWidth: width === 'readable' ? READABLE_MAX : width === 'narrow' ? NARROW_MAX : undefined,
+    color: 'var(--text-primary)',
+    ...style,
+    ...mobileBottomPadding ? {} : {}, // Don't override inline styles
+  };
+
   return (
     <div
       // `.page-container` owns the padding so it can shrink on mobile (a media
       // query can't reach an inline `style`). A `style={{ padding }}` override
       // passed by a page still wins — inline beats the class.
       className={`page-container${className ? ` ${className}` : ''}`}
-      style={{
-        width: '100%',
-        maxWidth: width === 'readable' ? READABLE_MAX : width === 'narrow' ? NARROW_MAX : undefined,
-        color: 'var(--text-primary)',
-        ...style,
-      }}
+      style={safeStyle}
     >
       {children}
     </div>
