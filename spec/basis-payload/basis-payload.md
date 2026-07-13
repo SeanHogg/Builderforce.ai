@@ -1,395 +1,227 @@
-# Basis Payload Reference
+# Basis Payload Specification v1.0.0
 
-> **Schema Version:** 1.0.0
-> **Specification Status:** Ratified
-> **Schema URI:** `https://builderforce.ai/spec/basis-payload/basis-payload.schema.json`
+## Overview
 
-This document is the authoritative reference for the Basis Payload JSON structure — the shared contract that agents and boards use to transmit structured facts, sources, weights, reasoning context, and provenance.
+This document defines the canonical JSON payload structure for transmitting basis data between agents and boards. Basis data provides the structured set of facts, sources, weights, and reasoning context that ground agent decisions and enable board-based verification and challenge.
 
----
+## Version
 
-## 1. Overview
+**Schema Version:** `1.0.0` (SemVer)
 
-A **Basis Payload** is a single JSON document containing:
+## Scope
 
-1. **Identity block** — who/what produced it, when, and the unique identifier.
-2. **Claims** — atomic assertions the agent is making.
-3. **Evidence / Sources** — provenance-tagged data items referenced by claims.
-4. **Reasoning Chain** (optional) — ordered steps showing how the agent arrived at each conclusion.
-5. **Uncertainty Block** — overall confidence, known unknowns, assumptions, and contradictions.
-6. **Context Block** — operational context (model, task, tools used, environment).
-7. **Extensions Block** — domain-specific or experimental data under reverse-DNS namespaces.
+This specification defines:
+- The complete JSON payload schema
+- All required and optional top-level fields
+- Nested object structures with constraints
+- Validation rules and examples
+- Extension patterns for future-proofing
 
----
+## Required Top-Level Fields
 
-## 2. Full Field Reference
+| Field | Type | Required | Description |
+|------|------|----------|-------------|
+| `schema_version` | string | Yes | SemVer string (e.g., "1.0.0") |
+| `basis_id` | UUID v4 | Yes | Globally unique identifier for this basis instance |
+| `created_at` | ISO-8601 datetime | Yes | UTC timestamp of when this basis was created |
+| `agent_id` | string | Yes | Identifier of the agent that produced this basis |
+| `session_id` | string \| null | Yes | Optional session context for the agent |
+| `parent_basis_id` | UUID v4 \| null | Yes | Optional reference to a prior basis (refinement/rebuttal) |
+| `claims` | array | Yes | Array of claim objects |
+| `evidence` | array | No | Optional array of evidence items |
+| `reasoning_chain` | array | No | Optional ordered reasoning steps |
+| `uncertainty` | object | No | Top-level uncertainty summary |
+| `context` | object | Yes | Operational context of the basis generation |
+| `extensions` | object | No | Domain-specific extensions |
 
-### 2.1. Identity Block
+## Nested Structures
 
-```json
-{
-  "schema_version": "1.0.0",
-  "basis_id": "550e8400-e29b-41d4-a716-446655440000",
-  "created_at": "2025-10-14T12:00:00Z",
-  "agent_id": "coderclaw-mock-basis-gen",
-  "session_id": null,
-  "parent_basis_id": null,
-  "sandbox": "development"
-}
-```
+### Claims
 
-| Field | Required | Type | Constraints |
-|-------|----------|------|-------------|
-| `schema_version` | ✅ | string | MUST match semver pattern `^\d+\.\d+\.\d+$` |
-| `basis_id` | ✅ | string | v4 UUID |
-| `created_at` | ✅ | string | ISO-8601 UTC (`date-time` format) |
-| `agent_id` | ✅ | string | Identifier of the agent that produced this basis |
-| `session_id` | ❌ | string \| null | Optional session identifier |
-| `parent_basis_id` | ❌ | string (UUID) \| null | Links to a prior basis for refinement/rebuttal chaining |
-| `sandbox` | ❌ | string \| null | Optional sandbox/deployment identifier |
-
-### 2.2. Claims
+Each claim represents an atomic assertion made by the agent.
 
 ```json
 {
-  "claims": [
-    {
-      "claim_id": "550e8400-e29b-41d4-a716-446655440001",
-      "text": "The system processes 1,500 transactions per second on average.",
-      "confidence": 0.87,
-      "confidence_method": "empirical",
-      "tags": ["performance", "throughput"],
-      "status": "asserted"
-    }
-  ]
+  "claim_id": "<uuid-v4>",
+  "text": "<human-readable assertion>",
+  "confidence": 0.87,
+  "confidence_method": "bayesian | heuristic | llm-self-report | empirical",
+  "tags": ["<string>"],
+  "status": "asserted | retracted | superseded"
 }
 ```
 
-| Field | Required | Type | Constraints/Values |
-|-------|----------|------|-------------------|
-| `claim_id` | ✅ | string | UUID v4; globally unique within the payload |
-| `text` | ✅ | string | Human-readable assertion; min length 1 |
-| `confidence` | ✅ | float | MUST be in range `[0.0, 1.0]` (inclusive) |
-| `confidence_method` | ✅ | string | One of: `bayesian`, `heuristic`, `llm-self-report`, `empirical` |
-| `tags` | ❌ | string[] | Arbitrary labels for filtering/navigation |
-| `status` | ❌ | string | One of: `asserted` (default), `retracted`, `superseded` |
+#### Claim Constraints
 
-**Validation rules:**
-- `claims` array MUST have at least 1 item.
-- `confidence` MUST be a float between 0.0 and 1.0 inclusive.
-- `status` defaults to `"asserted"` when absent.
+- `confidence` MUST be a float in the range `[0.0, 1.0]`
+- `confidence_method` MUST be one of the permitted enum values
+- `status` defaults to `"asserted"` if not specified
 
-### 2.3. Evidence / Sources
+### Evidence
+
+Links external or computed information to one or more claims.
 
 ```json
 {
-  "evidence": [
-    {
-      "evidence_id": "550e8400-e29b-41d4-a716-446655440010",
-      "claim_ids": ["550e8400-e29b-41d4-a716-446655440001"],
-      "type": "document",
-      "uri": "https://example.com/reports/performance-2025-10.md",
-      "title": "Performance Testing Report Q3 2025",
-      "excerpt": "Average throughput measured at 1,513 TPS across 3 regions.",
-      "retrieved_at": "2025-10-14T11:55:00Z",
-      "weight": 0.92,
-      "provenance": {
-        "source_system": "testing-internal",
-        "source_version": "v3.2.0",
-        "checksum": "sha256hex..."
-      }
-    }
-  ]
+  "evidence_id": "<uuid-v4>",
+  "claim_ids": ["<uuid-v4>"],
+  "type": "document | database_record | api_response | agent_output | human_input | computed",
+  "uri": "<string | null>",
+  "title": "<string | null>",
+  "excerpt": "<string | null>",
+  "retrieved_at": "<ISO-8601 UTC | null>",
+  "weight": 0.75,
+  "provenance": {
+    "source_system": "<string>",
+    "source_version": "<string | null>",
+    "checksum": "<sha256 hex | null>"
+  }
 }
 ```
 
-| Field | Required | Type | Constraints |
-|-------|----------|------|-------------|
-| `evidence_id` | ✅ | string | UUID v4; unique within the payload |
-| `claim_ids` | ✅ | string[] | Array of UUID v4s referencing claim entries. May be empty. |
-| `type` | ✅ | string | One of: `document`, `database_record`, `api_response`, `agent_output`, `human_input`, `computed` |
-| `uri` | ❌ | string (URI)\|null | Resolvable identifier for the evidence |
-| `title` | ❌ | string \| null | Human-readable evidence title |
-| `excerpt` | ❌ | string \| null | Short excerpt for previews |
-| `retrieved_at` | ❌ | string (date-time)\|null | When evidence was fetched |
-| `weight` | ✅ | float | MUST be in range `[0.0, 1.0]`. How strongly this evidence supports linked claims. |
-| `provenance` | ✅ | object | See below |
+#### Evidence Constraints
 
-**Provenance object:**
+- `weight` MUST be a float in the range `[0.0, 1.0]`
+- `claim_ids` MUST reference valid `claim_id` values
+- `type` MUST be one of the permitted enum values
 
-| Field | Required | Type | Description |
-|-------|----------|------|-------------|
-| `source_system` | ✅ | string | The system that produced this evidence (e.g., `github.com`, `postgres-db-01`) |
-| `source_version` | ❌ | string \| null | Version of the source system |
-| `checksum` | ❌ | string \| null | SHA-256 hex hash for reproducibility |
+### Reasoning Chain
 
-**Validation rules:**
-- `evidence` array is **required at the top level** (like `claims`). It may be empty (`minItems: 0`).
-- `weight` MUST be between 0.0 and 1.0 inclusive.
-- `provenance.source_system` is **required**.
-- `uri` must be a valid URI if present (format: uri).
-
-### 2.4. Reasoning Chain (optional)
+Optional ordered steps that led to the final basis.
 
 ```json
 {
   "reasoning_chain": [
     {
       "step": 1,
-      "description": "Analyzed benchmark results from the performance testing suite.",
-      "evidence_ids": ["550e8400-e29b-41d4-a716-446655440010"],
-      "claim_ids": ["550e8400-e29b-41d4-a716-446655440001"],
-      "inference_type": "inductive"
+      "description": "<string>",
+      "evidence_ids": ["<uuid-v4>"],
+      "claim_ids": ["<uuid-v4>"],
+      "inference_type": "deductive | inductive | abductive | analogical | lookup"
     }
   ]
 }
 ```
 
-| Field | Required | Type | Constraints |
-|-------|----------|------|-------------|
-| `step` | ✅ | integer | MUST be ≥ 1; steps SHOULD be sequential |
-| `description` | ✅ | string | Human-readable reasoning step; min length 1 |
-| `inference_type` | ✅ | string | One of: `deductive`, `inductive`, `abductive`, `analogical`, `lookup` |
-| `evidence_ids` | ❌ | string[] | UUID v4 references to evidence items |
-| `claim_ids` | ❌ | string[] | UUID v4 references to claims |
+#### Reasoning Chain Constraints
 
-**Validation rules:**
-- `reasoning_chain` is optional; if absent, boards SHOULD render a notice.
-- Steps MUST be numbered starting at 1. Schema enforces `step >= 1`.
-- Producers SHOULD use sequential step numbers without gaps; consumers MAY detect gaps.
+- `step` MUST be a sequential integer starting at 1
+- `evidence_ids` and `claim_ids` MAY be empty
+- `inference_type` MUST be one of the permitted enum values
 
-### 2.5. Uncertainty Block (optional)
+### Uncertainty
+
+High-level summary of confidence limits and potential issues.
 
 ```json
 {
   "uncertainty": {
     "overall_confidence": 0.81,
-    "known_unknowns": [
-      "How consistent is system throughput during peak hours?"
-    ],
-    "assumptions": [
-      "Benchmark scenarios represent typical production workload."
-    ],
+    "known_unknowns": ["<string>"],
+    "assumptions": ["<string>"],
     "contradictions": [
       {
-        "claim_id_a": "...",
-        "claim_id_b": "...",
-        "description": "Claim A reports higher throughput than Claim B under same conditions."
+        "claim_id_a": "<uuid-v4>",
+        "claim_id_b": "<uuid-v4>",
+        "description": "<string>"
       }
     ]
   }
 }
 ```
 
-| Field | Required | Type | Constraints |
-|-------|----------|------|-------------|
-| `overall_confidence` | ✅ | float | MUST be in range `[0.0, 1.0]` |
-| `known_unknowns` | ✅ | string[] | Known limitations or gaps in the basis |
-| `assumptions` | ✅ | string[] | Explicit assumptions made when producing the basis |
-| `contradictions` | ❌ | array of objects | Discrepancies between claims. Each entry requires `claim_id_a`, `claim_id_b`, and `description`. |
+#### Uncertainty Constraints
 
-### 2.6. Context Block (optional)
+- `overall_confidence` MUST be a float in the range `[0.0, 1.0]`
+- `contradictions` MAY be empty
+
+### Context
+
+Operational metadata about how the basis was generated.
 
 ```json
 {
   "context": {
-    "task_id": "TASK-4567",
-    "task_description": "Analyze performance test results for Q3 2025",
-    "model_id": "claude-3.5-sonnet",
-    "model_version": "20250314",
+    "task_id": "<string | null>",
+    "task_description": "<string | null>",
+    "model_id": "<string>",
+    "model_version": "<string | null>",
     "tool_calls": [
       {
-        "tool_name": "fetch_benchmark",
-        "input_summary": "Fetch performance reports for Q3 2025",
-        "output_summary": "Retrieved 42 benchmark records across 3 regions",
-        "called_at": "2025-10-14T11:30:00Z"
+        "tool_name": "<string>",
+        "input_summary": "<string>",
+        "output_summary": "<string>",
+        "called_at": "<ISO-8601 UTC>"
       }
     ],
-    "environment": "development"
+    "environment": "production | staging | development | test"
   }
 }
 ```
 
-| Field | Required | Type | Constraints |
-|-------|----------|------|-------------|
-| `task_id` | ❌ | string \| null | ID of the associated task |
-| `task_description` | ❌ | string \| null | Human-readable task description |
-| `model_id` | ✅ | string | Model identifier (e.g., `gpt-4`, `claude-3.5-sonnet`) |
-| `model_version` | ❌ | string \| null | Specific model version/checkpoint |
-| `tool_calls` | ❌ | array of objects | Each tool call has `tool_name`, `input_summary`, `output_summary`, `called_at` |
-| `environment` | ✅ | string | Environment guideline set by each integration (e.g., `production`, `staging`, `development`). |
+#### Context Constraints
 
-### 2.7. Extensions Block (optional)
+- `environment` MUST be one of the permitted enum values
+- `tool_calls` MAY be empty
+
+### Extensions
+
+Domain-specific fields without polluting the core schema.
 
 ```json
 {
   "extensions": {
-    "com.builderforce.project-analysis": {
-      "project_risk_score": 0.24
-    },
-    "com.acme.security": {
-      "priority_vulns": 2
-    }
+    "<namespace>": { }
   }
 }
 ```
 
-| Field | Required | Type | Constraints |
-|-------|----------|------|-------------|
-| (arbitrary) | ❌ | object | Key MUST be reverse-DNS: `^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$` |
+#### Extension Constraints
 
-**Validation rules:**
-- Consumers MUST ignore unknown extension namespaces.
-- Extension namespaces MUST be reverse-DNS strings (e.g., `com.acme.risk`).
-- The `extensions` object uses `additionalProperties: false` — unknown keys outside reverse-DNS are rejected.
-- Unknown top-level fields outside `extensions` produce a warning (not error) in consumer logs (AC-6 behavior). See [`docs/.internal/basis-payload-integration-usage.md`](docs/.internal/basis-payload-integration-usage.md) for producer/consumer best practices.
+- Keys MUST be reverse-DNS strings (e.g., `"com.acme.risk"`)
+- Consumers MUST ignore unknown extension namespaces
 
----
+## Failure Modes
 
-## 3. Validation Rules Summary
+Consumers MUST reject payloads that violate the following rules:
 
-| Rule | Scope | Enforcement |
-|------|-------|-------------|
-| `schema_version` must match semver pattern | Top-level | Schema `pattern` |
-| `basis_id` must be a valid UUID | Top-level | Schema `format: uuid` |
-| `created_at` must be valid ISO-8601 UTC | Top-level | Schema `format: date-time` |
-| `claims` array min 1 item | Claims | Schema `minItems: 1` |
-| `claim_id` must be UUID | Per claim | `$ref` to uuid definition |
-| `confidence` in `[0.0, 1.0]` | Per claim | Schema `minimum/maximum` |
-| `weight` in `[0.0, 1.0]` | Per evidence | Schema `minimum/maximum` |
-| `evidence` array is required (min 0) | Top-level | Schema `required` |
-| `provenance.source_system` required | Per evidence | Schema `required` |
-| `reasoning_chain[].step` ≥ 1 | Per step | Schema `minimum: 1` |
-| `context.model_id` required | Context | Schema `required` |
-| `context.environment` in enum | Context | Schema `enum` |
-| Extension keys must be reverse-DNS | Extensions | Schema `patternProperties` |
-| Extensions `additionalProperties` false | Extensions | Schema |
-| Root unknown fields allowed (warning) | Top-level | `additionalProperties: true` |
+1. **Missing top-level required fields:** `schema_version`, `basis_id`, `created_at`, `agent_id`, `claims`, `context`
+2. **Invalid schema version:** Major version not supported
+3. **Out-of-bounds numeric values:** `confidence` or `weight` outside `[0.0, 1.0]`
+4. **Invalid enum values:** Enum fields not matching permitted types
+5. **Orphaned references:** `claim_ids` or `evidence_ids` that don't exist in the respective arrays
+6. **Malformed timestamps:** Timestamps not in ISO-8601 format
 
----
+Unknown fields outside the `extensions` object SHOULD generate a validation warning, not a hard error.
 
-## 4. Processing Flow
+## Versioning Strategy
 
-### 4.1. Producer Sequence
+When introducing breaking changes:
+1. Increment the major version component (e.g., `1.0.0` → `2.0.0`)
+2. Update this specification document with the new schema
+3. Update the JSON Schema artifact
+4. Update the canonical example payload
+5. Create a CHANGELOG entry
 
-1. Gather operational context (model ID, environment, task info, tool call logs).
-2. Define claims — each claim is an atomic assertion with confidence and method.
-3. Gather evidence — collect sources for each claim with provenance metadata.
-4. Optional: build a `reasoning_chain` for step-by-step transparency.
-5. Optional: populate `uncertainty` with overall confidence, known unknowns, assumptions.
-6. Optional: attach domain-specific data via `extensions` (reverse-DNS namespaces).
-7. Validate the payload against `basis-payload.schema.json` before emission.
-8. Emit the payload via the agreed transport (REST, WebSocket, message queue).
+New non-breaking changes (additional fields, new enum values) may be introduced in the next minor version.
 
-### 4.2. Consumer Sequence
+## Security Considerations
 
-1. Receive the payload.
-2. Validate against `basis-payload.schema.json` (hard error on failure).
-3. Log unknown top-level fields as warnings (AC-6).
-4. Extract identity block for auditing/tracking.
-5. Render claims with confidence bars and evidence citations.
-6. Display reasoning chain (if present) or show a notice.
-7. Show uncertainty summary (overall confidence, assumptions, contradictions).
-8. Show context block (model, environment, tool calls) in a footer/tooltip.
-9. Process extensions — ignore unknown namespaces.
+- `provenance.checksum` SHOULD be provided for all evidence to enable verification
+- `agent_id` SHOULD be cryptographically bound to the agent that produced the basis
+- `session_id` MAY be used for correlation without exposing sensitive context
+- `parent_basis_id` chains enable audit trails without exposing intermediate reasoning
 
----
+## Privacy Considerations
 
-## 5. Versioning & Changelog
+- TODO: Define whether sensitive data in `text` fields should be sanitized
+- TODO: Define PII handling in `excerpt` fields from retrieved evidence
+- TODO: Define whether `context.tool_calls.input_summary/output_summary` should be truncated
 
-- Schema version follows semver: `MAJOR.MINOR.PATCH`.
-- Major version changes require consumer updates (breaking changes to required fields or formats).
-- Minor version changes add optional fields or relax constraints.
-- Patch version changes fix typos/clarifications without changing validation semantics.
-- See [`CHANGELOG.md`](CHANGELOG.md) for history.
+## Future Extensions
 
----
-
-## 6. Custom Example: Extensions Usage
-
-```json
-{
-  "extensions": {
-    "com.builderforce.project-analysis": {
-      "project_risk_score": 0.24,
-      "dominant_risk_factors": ["legacy-dependencies", "testing-parity-with-runtime"],
-      "kanban-age-days": 18
-    },
-    "com.acme.security": {
-      "priority_vulns": 2,
-      "recommendation_rebuttal_threshold": 0.7,
-      "compliance-matrix": {
-        "soc2-tr-2": "testing",
-        "cis-l1-1.0.1": "documented"
-      }
-    }
-  }
-}
-```
-
----
-
-## 7. Error Responses (Consumer Validation)
-
-On validation failure, consumers SHOULD emit a structured error response:
-
-```json
-{
-  "error": "validation_failed",
-  "schema_version": "1.0.0",
-  "payload_version": "1.0.0",
-  "issues": [
-    {
-      "path": ".claims[0].confidence",
-      "message": "Expected number between 0 and 1",
-      "value": 1.2
-    },
-    {
-      "path": ".evidence",
-      "message": "Missing required array"
-    }
-  ]
-}
-```
-
----
-
-## 8. Integration Guidelines
-
-### For Agent Developers (Producers)
-
-- Use the schema at `basis-payload.schema.json` for validation in your build/CI pipeline.
-- Always include at least 1 claim and at least the identity block (`schema_version`, `basis_id`, `created_at`, `agent_id`).
-- Provide provenance for every evidence item (`source_system` required).
-- Use `reasoning_chain` for any non-trivial inference to aid transparency.
-- Document your extension namespaces in your integration guide.
-
-### For Board / UI Developers (Consumers)
-
-- Validate every incoming payload against the published schema before processing.
-- Treat `unknown` top-level fields as warnings — log them, do not reject.
-- Use the optional `uncertainty` block to display overall confidence, caveats, and contradictions to users.
-- Render `reasoning_chain` as steps; show a notice if absent.
-- Ignore unknown extension namespaces gracefully.
-
-### For Platform / Infra Engineers
-
-- The JSON Schema artifact published in this directory is the source of truth.
-- Version bumps require updating the schema, changelog, README, and example.
-- Support `ajv-cli` or `treblle` schema validation in your API gateway for payload-level guard.
-
----
-
-## 9. Schema URI Resolution
-
-The schema `$id` is:
-```
-https://builderforce.ai/spec/basis-payload/basis-payload.schema.json
-```
-
-Local consumers should use the committed file path (`spec/basis-payload/basis-payload.schema.json`); remote resolution is available from the repository on the `main` branch after merging.
-
----
-
-> **Ratification Status:** ✅ Ratified v1.0.0 on builderforce.ai/task-674.
-> **Maintainers:** Developer (code-creator) | Code Reviewer | QA Tester
+Potential v1.1 additions:
+- `metadata` timestamp subfields (created_at, updated_at, expires_at)
+- `result_type` discriminator for different basis purposes (diagnosis, recommendation, validation, etc.)
+- `confidence_distribution` numeric array for full uncertainty profile
+- `confidence_intervals` array for Bayesian-style uncertainty bounds
