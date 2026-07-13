@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useMemo as useMemo } from 'react';
 import { GaugeChart } from '@/components/charts/GaugeChart';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { CapabilityRow } from './CapabilityRow';
@@ -11,7 +11,9 @@ import type {
   CapabilityRollup,
 } from '@/app/insights/capabilityTypes';
 
-export function CapabilitiesDashboard({ projectId }: { projectId: string }) {
+type LaunchParams = { projectId: string };
+
+export function CapabilitiesDashboard({ projectId }: LaunchParams) {
   const [rollup, setRollup] = useState<CapabilityRollup | null>(null);
   const [capabilities, setCapabilities] = useState<Capability[]>([]);
   const [status, setStatus] = useState<'loading' | 'error' | 'success'>('loading');
