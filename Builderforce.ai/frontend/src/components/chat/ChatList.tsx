@@ -20,9 +20,22 @@ export function ChatList({ onSelectChat, currentChatId, userId, onChatsUpdated }
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
 
-  // Load chats on mount
+  // Load chats on mount and load titles from LocalStorage (FR4.1)
   useEffect(() => {
-    loadChats();
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        const data = await chatApi.getChats();
+        setChats(data);
+        syncTitlesToStorage();
+        setError(null);
+      } catch (err: any) {
+        setError(err.message || 'Failed to load chats');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
   }, [userId]);
 
   const loadChats = async () => {
@@ -30,6 +43,7 @@ export function ChatList({ onSelectChat, currentChatId, userId, onChatsUpdated }
       setLoading(true);
       const data = await chatApi.getChats();
       setChats(data);
+      syncTitlesToStorage();
       setError(null);
     } catch (err: any) {
       setError(err.message || 'Failed to load chats');
