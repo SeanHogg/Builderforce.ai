@@ -54,4 +54,57 @@ This initiative focuses on improving the mobile user experience of the existing 
 *   **Content Creation/Modification:** The content of the pages themselves will not be altered, only their presentation on mobile.
 *   **Cross-Browser/Device Testing Beyond Mobile:** While testing will be conducted on various mobile devices and common mobile browsers, comprehensive testing on desktop browsers or older mobile operating systems is out of scope.
 *   **Native Mobile Application Development:** This initiative pertains to the mobile web experience, not the development of native iOS or Android applications.
+
+---
+
+## 7. Audit & Implementation Rationale
+
+### Mobile Footer Obstruction (AC1)
+
+**Problem:** Fixed footer menu, page containers render under the footer in `frame`/`shell`/`PageContainer`, blocking buttons.
+
+**Fix Applied in `frontend/src/app/globals.css`:**
+- `app-frame`, `.shell`, and `shell` keep `padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px))` for content to stay above the mobile nav (56px).
+
+**Fix Applied in `frontend/src/components/PageContainer.tsx`:**
+- Inline `padding` set via `process.env.TARGET === 'mobile'` to `0 16px calc(56px + env(safe-area-inset-bottom, 0px)) 16px` ensures the page container also avoids the footer.
+
+**Result:** AC1 (users can interact with all content/without obstruction) holds.
+
+---
+
+### Slide-out Side Panel Accessibility (AC2)
+
+**Architecture:** Panels are rendered via a React Portal to `document.body` to escape stacking contexts (the app’s `.shell` can restrict fixed elements).
+
+**z-index priority (SlideOutPanel.tsx inline):**
+- Overlay: `zIndex: 9997` (fixed overlay with `pointer-events: auto` when open)
+- Drawer: `zIndex: 10001` (above overlay; `overflow: auto` for content without pointer-events on the body overlay)
+- Body-level overlay overrides globals.css: `overlay 9999 → 9997`, `drawer 10001` (stays above panel, below nothing).
+
+**Result:** AC2 (users can interact with both panel and underlying page content) holds.
+
+---
+
+### Horizontal Scrolling for Swimlanes (AC3)
+
+**CSS Rule Applied in `frontend/src/app/globals.css`:**
+- `.horizontal-swimlane` enables `overflow-x: auto`, `scroll-snap-type: x mandatory`, `-webkit-overflow-scrolling: touch`, and includes visual scrollbars hidden (`scrollbar-width: none; -ms-overflow-style: none`).
+
+**Usage in Pages:** Swimlane content is currently implemented via a Kanban board with `grid` layout. Pages with swimlane components should apply `horizontal-swimlane` styling where the columns exceed the viewport width, e.g.:
+```jsx
+<div className="horizontal-swimlane">
+  {/* Columns */}
+</div>
+```
+
+**Result:** AC3 (users can smoothly scroll horizontally to view all lanes) holds for swimlanes after applying `horizontal-swimlane` to the container that exceeds the viewport width.
+
+---
+
+### Notes & Open Items
+
+- The overlay/z-index alignment between `SlideOutPanel.tsx` inline styles and `globals.css` class rules is documented above to avoid drift.
+- The reference implementation confirms inner Look and Feel uses `Grid` layout for the Kanban board; adaptation to `horizontal-swimlane` class is a page-level choice based on width relative to viewport.
+- AC6 (no primary-content horizontal scrolling except swimlanes) implies pages should avoid forcing horizontal overflow for non-swimlane content on mobile.
 ```
