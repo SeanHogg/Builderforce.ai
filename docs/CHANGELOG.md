@@ -1,15 +1,11 @@
 # Changelog
 
-All notable changes to this project (new feature, fixes, breaking changes, behavioral rule clarifications) will be documented in this file.
+All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+### [Unreleased]
 
-### Behavioral Rule Clarifications — 2025-06-17
-- Clarified the canonical `progressPct=100` emission rule across API reference (`docs/api/event-payload.schema.json`) and developer guide (`docs/guides/progress-handling.md`). The rule states:
-  - `progressPct=100` is the authoritative terminal signal for progress-stream consumers.
-  - Emission rule: at most once per job/task, emitted only after all processing steps complete.
-  - Ordering guarantee: no further progress updates follow it.
-  - Developers should check `progressPct===100` and `status===completed` together to confirm terminal completion.
-- Previous ambiguity: prior descriptions conflated immediate proximity to completion (e.g., 99) with the actual terminal emission, risking premature UI state updates and missed teardown.
-- Integration impact: developers are expected to verify that progress listeners terminate on `progressPct===100` and not rely on intermediate values as completion indicators.
-- Documentation coverage: API reference (`progressPct` field description), developer guide (canonical rule heading, complete listener-cleanup pattern example), and the changelog entry are now consistent. Inline JSDoc in `api/src/application/brain/ChatTicketService.ts` and TSDoc in `packages/brain-ui/src/chatTickets/types.ts` reflect the same semantics for backend/frontend consumers (not duplicated here to preserve a single source of truth).
+- **progressPct=100 emission rule clarification**: Updated documentation to describe that `progressPct=100` is emitted once, only after all processing steps are complete and no further progress updates will follow. This is the authoritative signal of task/job completion for progress-stream consumers. See `docs/api/event-payload.schema.json` and `docs/guides/progress-handling.md`. (task #672)
+
+---
+
+*Note on AMO rules:* A change to an existing rule may qualify for an AMO. Consult the product team to decide if this change requires an AMO and adjust the title above accordingly.
