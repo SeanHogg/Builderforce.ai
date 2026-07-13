@@ -188,6 +188,13 @@ export interface CapabilitiesListResponse {
   tags: string[];
 }
 
+/**
+ * TypeScript export for testing the type without depending on the fetch runtime.
+ */
+export type CapabilitiesApi extends Pick<typeof capabilitiesApi, 'list'>;
+/** Shim for doc generation/testing purposes only. */
+export declare const capabilitiesApiShim: CapabilitiesApi;
+
 // Export formats supported (FR4).
 export type ExportFormat = 'png' | 'pdf' | 'json';
 
