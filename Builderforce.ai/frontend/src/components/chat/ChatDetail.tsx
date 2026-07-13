@@ -15,6 +15,16 @@ interface ChatDetailProps {
   onTitleChange?: (title: string) => void;
 }
 
+// Sync title to LocalStorage when it changes (FR4.1: Persistence)
+const syncTitleToStorage = async (chatId: string, title: string) => {
+  try {
+    const storage = require('@/lib/storage');
+    storage.saveTitleEntry(chatId, title);
+  } catch (err) {
+    console.warn('Failed to sync chat title to local storage:', err);
+  }
+};
+
 export function ChatDetail({
   chatId,
   userId,
