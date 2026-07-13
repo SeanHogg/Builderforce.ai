@@ -337,11 +337,32 @@ export async function retryWorkflowExecution(executionId: number): Promise<numbe
 }
 
 /**
- * Bulk accept/reject multiple recommendations
+ * Bulk accept/reject multiple recommendations (variant: with per-item rationale support)
  */
 export async function bulkCreateDecisions(
   decisions: { recKey: string; decision: DecisionType; decidedBy: string; rationale?: string }[]
 ): Promise<number[]> {
+  const executionIds: number[] = [];
+
+  // Process each decision
+  for (const decision of decisions) {
+    try {
+      const id = await createDecision(decision);
+      executionIds.push(id);
+    } catch (error) {
+      console.error(`Failed to create decision for ${decision.recKey}:`, error);
+      // Continue with other decisions even if one fails
+    }
+  }
+
+  return executionIds;
+}
+
+/**
+ * Bulk accept/reject multiple recommendations with per-item rationale support (FR-7 & CLI)
+ */
+export async function bulkCreateDecisionsWithItemRationale(params: CreateBulkDecisionsWithItemRationale): Promise<number[]> {
+  const { decisions } = params;
   const executionIds: number[] = [];
 
   // Process each decision
