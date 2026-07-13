@@ -25,12 +25,19 @@ async function loadSchema() {
     const schemaContent = await fs.readFile(SchemaPath, 'utf-8');
     const schema = JSON.parse(schemaContent);
 
-    // Compile loaded schema with AJV to ensure it's valid
+    // Validate the schema itself using AJV
     const ajv = new Ajv({ allErrors: true, strict: false, removeAdditional: false });
-    const valid = ajv.validateSchema(schema);
 
-    if (!valid) {
-      throw new Error('Schema validation failed:\n' + ajv.errorsText());
+    if (!ajv.validateSchema(schema)) {
+      console.error('❌ Schema validation FAILED:');
+      ajv.errors.forEach(err => {
+        const path = err.instancePath?.replace(/^\//, '').replace(/\//g, '.') || '<root>';
+        const message = err.message || '';
+        console.error(`  • ${path}: ${message}`);
+      });
+      console.error(`\n  Total schema errors: ${ajv.errors.length}`);
+      ajv.errors = null;
+      process.exit(1);
     }
 
     return schema;
