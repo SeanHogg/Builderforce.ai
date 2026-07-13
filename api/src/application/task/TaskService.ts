@@ -244,14 +244,9 @@ export class TaskService {
     if (dto.status !== undefined) updates.status = dto.status;
     if (dto.priority !== undefined) updates.priority = dto.priority;
     if (dto.taskType !== undefined) updates.taskType = dto.taskType;
-    // NEW: gapOriginTaskId
-    if (dto.gapOriginTaskId !== undefined) {
-      updates.gapOriginTaskId = dto.gapOriginTaskId != null ? asTaskId(dto.gapOriginTaskId) : null;
-    }
     if (dto.parentTaskId !== undefined) {
       updates.parentTaskId = dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null;
     }
-    // NEW: gapOriginTaskId
     if (dto.gapOriginTaskId !== undefined) {
       updates.gapOriginTaskId = dto.gapOriginTaskId != null ? asTaskId(dto.gapOriginTaskId) : null;
     }
