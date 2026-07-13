@@ -30,7 +30,7 @@ import { resolveTenantLlmCredentials, byoVendorIdSet, providersFromCredentials, 
 import { cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool, callBuiltinTool } from '../llm/builtinMcpService';
 import { TenantRole } from '../../domain/shared/types';
 import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
-import { recordUsageRow, clampTokenCount } from '../llm/usageLedger';
+import { recordUsageRow, clampTokenCount, normalizeByoProvider } from '../llm/usageLedger';
 import { ensureTaskPrdRecord, appendTaskPrdRevision } from '../prd/taskPrd';
 import { loadCapabilityContext, loadPersonaSetpoints } from '../artifact/capabilityContext';
 import { recordPersonalityEvent, compilePersonalityApplication } from '../persona/recordPersonalityEvent';
@@ -727,7 +727,7 @@ async function createCloudQuestion(
 export async function recordCloudUsage(
   env: Env,
   db: Db,
-  args: { tenantId: number; cloudAgentRef?: string; executionId: number; taskId: number; projectId?: number | null; model: string; inputTokens: number; outputTokens: number; byo?: boolean },
+  args: { tenantId: number; cloudAgentRef?: string; executionId: number; taskId: number; projectId?: number | null; model: string; inputTokens: number; outputTokens: number; byo?: boolean; byoProvider?: string | null },
 ): Promise<void> {
   // Clamp at the boundary so a bad-usage turn (NaN/negative tokens) can't poison the
   // snapshot's context math or the billing ledger — same shared clamp recordUsageRow uses.
@@ -759,7 +759,7 @@ export async function recordCloudUsage(
     // Cloud runs always execute on our infra: a BYO row here is $0 to us but STILL
     // counts against the tenant's token allowance (free tenants are charged for
     // cloud-agent usage), so surface is 'cloud' — never exempt. See tokenUsage.ts.
-    byo: args.byo ?? false, surface: 'cloud',
+    byo: args.byo ?? false, byoProvider: args.byoProvider ?? null, surface: 'cloud',
   });
 }
 
@@ -904,6 +904,7 @@ async function recordCloudLlmTurn(
       ...evtBase, taskId: rc.taskId, projectId: rc.projectId, model: resolvedModel,
       inputTokens: result.usage.promptTokens ?? 0, outputTokens: result.usage.completionTokens ?? 0,
       byo: result.byoFunded ?? false,
+      byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,
     });
   }
   const durationMs = Date.now() - opts.tGen0;
