@@ -39,14 +39,38 @@ export async function updatePullRequestBranch(
     return { ok: false, code: 'unsupported', reason: e instanceof Error ? e.message : 'unsupported host' };
   }
 
+  const headers = {
+    Authorization: `Bearer ${input.token}`,
+    Accept: 'application/json',
+    'User-Agent': 'BuilderForce-PR-Merge/1.0',
+    'Content-Type': 'application/json',
+  };
+
+  // Avoid repeatedly enqueueing an asynchronous GitLab rebase, and avoid relying
+  // on provider-specific 422 text to recognize an already-current GitHub branch.
+  const detailUrl = input.provider === 'gitlab'
+    ? url.replace(/\/rebase$/, '?include_diverged_commits_count=true&include_rebase_in_progress=true')
+    : url.replace(/\/update-branch$/, '');
+  const detailRes = await fetch(detailUrl, { headers }).catch(() => null);
+  if (detailRes?.ok) {
+    const detail = await detailRes.json().catch(() => null) as Record<string, unknown> | null;
+    if (input.provider === 'gitlab') {
+      if (detail?.rebase_in_progress === true) return { ok: true, updated: true };
+      if (detail?.has_conflicts === true || (typeof detail?.merge_error === 'string' && detail.merge_error.length > 0)) {
+        return { ok: false, code: 'conflict', reason: `could not rebase PR branch: ${String(detail.merge_error ?? 'merge conflicts')}` };
+      }
+      if (detail && Number(detail.diverged_commits_count) === 0) return { ok: true, updated: false };
+    } else {
+      const state = detail?.mergeable_state;
+      if (state === 'dirty') return { ok: false, code: 'conflict', reason: 'could not update PR branch from its base: merge conflicts' };
+      if (state === 'unknown' || state == null) return { ok: true, updated: true };
+      if (typeof state === 'string' && state !== 'behind') return { ok: true, updated: false };
+    }
+  }
+
   const res = await fetch(url, {
     method: 'PUT',
-    headers: {
-      Authorization: `Bearer ${input.token}`,
-      Accept: 'application/json',
-      'User-Agent': 'BuilderForce-PR-Merge/1.0',
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: '{}',
   }).catch(() => null);
   if (!res) return { ok: false, code: 'provider_error', reason: 'update branch request failed (network)' };
