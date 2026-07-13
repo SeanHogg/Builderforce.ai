@@ -162,12 +162,18 @@ The code uses Drizzle's `update().set({...})` which is a partial-update (apply o
 ## Summary: Root Cause Locations (Confirmed + Outstanding)
 
 ### Confirmed: Location(s) where parentTaskId is PROPERLY preserved
-- ✅ Route handler type definition includes `parentTaskId` (taskRoutes.ts:531)
-- ✅ DTO type definition includes `parentTaskId` (TaskService.ts:133)
-- ✅ Service updates accumulation includes `parentTaskId` (TaskService.ts:202-204)
-- ✅ Service updates accumulation includes `assignedAgentRef` (TaskService.ts:176-179)
-- ✅ Repository update statement includes `parentTaskId: plain.parentTaskId ?? null` (TaskRepository.ts:157)
+- ✅ Route handler body type includes `parentTaskId?: number | null` (taskRoutes.ts:492)
+- ✅ Route handler body type includes `assignedAgentRef?: string | null` (taskRoutes.ts:496) — same request
+- ✅ DTO type definition includes `parentTaskId?: number | null` (TaskService.ts:134)
+- ✅ Service updates accumulator picks `Pick<TaskProps, 'parentTaskId'>`, including in `Pick<TaskProps, 'title'|'description'|'status'|'priority'|'taskType'|'parentTaskId'|'assignedAgentType'|'githubPrUrl'|'githubPrNumber'|'assignedAgentHostId'|'assignedAgentRef'|'assignedUserId'>` (TaskService.ts:150-152)
+- ✅ Service updates construction conditionally includes `parentTaskId` only if defined (TaskService.ts:199-201)
+- ✅ Service updates construction conditionally includes `assignedAgentRef` only if defined (TaskService.ts:176-179)
+- ✅ Service writes `parentTaskId` to `updates` object and passes `updates.parentTaskId` to `task.update()` (TaskService.ts:203)
+- ✅ Repository update statement includes `parentTaskId: plain.parentTaskId ?? null` (TaskRepository.ts:156)
 - ✅ Repository update statement includes `assignedAgentRef: plain.assignedAgentRef ?? null` (TaskRepository.ts:161)
+- ✅ Auto-run side effects (`maybeAutoRunOnLaneEntry`) read the persisted task via `task.toPlain()` and do NOT issue a second DB write to the tasks table (taskRoutes.ts:637-740)
+- ✅ No Zod schema or `.strict()` filter found stripping the field; no tRPC wrapper in scope that would strip fields
+- ✅ No `omit` or `pick` that excludes `parentTaskId` from the DTO or updates object
 
 ### Outstanding: Evidence of actual Drop
 - ❌ No schema allowlist strip found
