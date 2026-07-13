@@ -1,5 +1,6 @@
 import type { BuilderForceAgentsPluginApi } from "../../src/plugins/types.js";
 import { LLMTaskTool } from "./src/llm-task-tool.js";
+import notificationStorage from "./src/notification-storage.js";
 
 export default function register(api: BuilderForceAgentsPluginApi): void {
   const tool = new LLMTaskTool(
