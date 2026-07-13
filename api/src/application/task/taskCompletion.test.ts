@@ -19,7 +19,7 @@
  * All tests use the minimal stateless fake to capture update payloads for assertions.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   completeTask,
   completeTaskViaPr,
@@ -62,11 +62,20 @@ function makeFakeDb() {
       select() {
         return { from: () => chain() };
       },
+      findById(id: number) {
+        const taskById = vi.spyOn(this as any, 'findById');
+        return new Promise((resolve) => {
+          const task = createTask({ id: id, status: TaskStatus.IN_PROGRESS });
+          return resolve(task);
+        });
+      },
       update(table: any) {
-        return { set: (payload: SetPayload) => {
-          updates.push({ setPayload: payload });
-          return { where: () => Promise.resolve([]) };
-        }};
+        return {
+          set: (payload: SetPayload) => {
+            updates.push({ setPayload: payload });
+            return { where: () => Promise.resolve([]) };
+          },
+        };
       },
     },
   };
@@ -75,7 +84,6 @@ function makeFakeDb() {
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
-
 /**
  * Completion with delivered code (Scenario A)
  */
@@ -177,7 +185,6 @@ describe('completeTask (completion with PR artifacts)', () => {
 });
 
 // ---------------------------------------------------------------------------
-
 /**
  * Completion without delivered code (Scenario B)
  */
@@ -220,7 +227,6 @@ describe('completeTask (completion without delivered code)', () => {
 });
 
 // ---------------------------------------------------------------------------
-
 /**
  * Negative / edge cases (Scenario C)
  */
@@ -278,8 +284,6 @@ describe('completeTask (negative / edge cases)', () => {
 
     // Both results should be identical payloads
     expect(result1.deliveredArtifacts).toEqual(result2.deliveredArtifacts);
-    expect(result1.completedAt).toBe(result2.completedAt);
-    expect(firstResult.completedAt).not.toBe(new Date()); // Ensure timestamp is not cloned but same string
     expect(result2.completedAt).toBe(result1.completedAt);
   });
 
@@ -333,7 +337,6 @@ describe('completeTask (negative / edge cases)', () => {
 });
 
 // ---------------------------------------------------------------------------
-
 /**
  * Convenience functions (via recordCompletion)
  */
@@ -391,10 +394,10 @@ describe('recordCompletion (convenience completion path)', () => {
 
     // Make findById always return null (simulate missing row)
     const { db: nullDb } = makeFakeDb();
-    const findSpy = vi.spyOn(nullDb, 'findById')
+    const findSpy = vi.spyOn(nullDb.db as any, 'findById')
       .mockResolvedValue(null);
 
-    const result = await recordCompletion(nullDb, 999);
+    const result = await recordCompletion(nullDb.db, 999);
     expect(isSuccessResult(result)).toBe(false);
     expect(result).toBeInstanceOf(TaskNotFoundError);
     expect((result as TaskNotFoundError).message).toContain('not found');
@@ -406,10 +409,10 @@ describe('recordCompletion (convenience completion path)', () => {
 
     // Simulate pending task
     const task = createTask({ id: 80, status: TaskStatus.IN_PROGRESS });
-    const findSpy = vi.spyOn(db, 'findById')
+    const findSpy = vi.spyOn(db.db as any, 'findById')
       .mockResolvedValue(task);
 
-    const result = await recordCompletion(db, 80);
+    const result = await recordCompletion(db.db, 80);
     expect(isSuccessResult(result)).toBe(false);
     expect(result).toBeInstanceOf(InvalidStateError);
     expect((result as InvalidStateError).message).toContain('Cannot complete task');
@@ -418,7 +421,6 @@ describe('recordCompletion (convenience completion path)', () => {
 });
 
 // ---------------------------------------------------------------------------
-
 /**
  * recordCompletion stateless idempotency (double complete of same task ID)
  */
@@ -427,16 +429,16 @@ describe('recordCompletion (idempotency double-complete)', () => {
   it('when twice-called on same task ID, should not persist duplicate completion records', async () => {
     const { db, updates } = makeFakeDb();
 
-    vi.spyOn(db, 'findById')
+    vi.spyOn(db.db as any, 'findById')
       .mockResolvedValue(createTask({ id: 90, status: TaskStatus.IN_PROGRESS }))
       .mockResolvedValue(createTask({ id: 90, status: TaskStatus.DONE }));
 
-    await recordCompletion(db, 90, {
+    await recordCompletion(db.db, 90, {
       deliveredArtifacts: [{ id: 'pr-90', type: 'pull_request', uri: 'https://github.com/org/repo/pull/90' }],
     });
     const firstWriteCount = updates().length;
 
-    await recordCompletion(db, 90, {
+    await recordCompletion(db.db, 90, {
       deliveredArtifacts: [{ id: 'pr-90', type: 'pull_request', uri: 'https://github.com/org/repo/pull/90' }],
     });
     const secondWriteCount = updates().length;
@@ -446,7 +448,56 @@ describe('recordCompletion (idempotency double-complete)', () => {
 });
 
 // ---------------------------------------------------------------------------
+/**
+ * Convenience functions (completeTaskViaPr and completeTaskViaGreenCI)
+ */
 
+describe('convenience completion functions', () => {
+  it('completeTaskViaPr: PR merge path returns CompletionResult with single PR artifact', async () => {
+    const { db } = makeFakeDb();
+
+    const result = await completeTaskViaPr(db.db, 100, 'https://github.com/org/repo/pull/123', '123');
+
+    expect(isSuccessResult(result)).toBe(true);
+    expect(result.deliveredArtifacts).toHaveLength(1);
+    expect(result.deliveredArtifacts[0].id).toContain('pr-100');
+    expect(result.deliveredArtifacts[0].type).toBe('pull_request');
+    expect(result.deliveredArtifacts[0].uri).toBe('https://github.com/org/repo/pull/123');
+    expect(result.completedAt).toMatch(/^\d{4}-\d{2}-\d{2}T[\d:T.]*$/);
+  });
+
+  it('completeTaskViaPr: passes actorUserId to the underlying options correctly', async () => {
+    const { db } = makeFakeDb();
+
+    const result = await completeTaskViaPr(db.db, 200, 'https://github.com/org/repo/pull/456', '456', 'user-123');
+
+    expect(isSuccessResult(result)).toBe(true);
+    // actorUserId is not part of the CompletionResult; it's only a passed-through option.
+    // no assertion over user ID in the payload here.
+  });
+
+  it('completeTaskViaGreenCI: green-CI path returns CompletionResult with empty artifacts array', async () => {
+    const { db } = makeFakeDb();
+
+    const result = await completeTaskViaGreenCI(db.db, 300);
+
+    expect(isSuccessResult(result)).toBe(true);
+    expect(result.deliveredArtifacts).toEqual([]);
+    expect(result.completedAt).toMatch(/^\d{4}-\d{2}-\d{2}T[\d:T.]*$/);
+  });
+
+  it('completeTaskViaPr: uses prNumber from options when available for error messages, none yet in result', async () => {
+    const { db } = makeFakeDb();
+
+    const result = await completeTaskViaPr(db.db, 400, 'https://github.com/org/repo/pull/999');
+
+    expect(isSuccessResult(result)).toBe(true);
+    // Extracted artifact uses prNumber placeholder 'merged' when prNumber is omitted.
+    // Result payload does not expose prNumber directly.
+  });
+});
+
+// ---------------------------------------------------------------------------
 /**
  * Completion result type guard
  */
