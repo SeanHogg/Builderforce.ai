@@ -19,7 +19,7 @@ const TABS: { id: Tab; label: string }[] = [
  * Projects / Tasks — one domain page with two tabs:
  *  - Projects: the project list (reusable {@link ProjectsContent}).
  *  - Tasks: the task board/list (reusable {@link TaskMgmtContent}).
- *
+
  * `?tab=tasks` opens the Tasks tab; `?project=<id>` scopes the Tasks board to one
  * project (set by the Task board button on a project). The legacy `/tasks` route
  * redirects here preserving those params.
