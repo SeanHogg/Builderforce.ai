@@ -109,7 +109,7 @@ console.error('✅ Confidence/weight/overall_confidence bounds verified [0.0, 1.
 
 // --- Test Plan (AC-Conformant Test Cases) ---
 /* eslint-disable max-lines-per-function, complex-structures */
-async function runTests() {
+function runTests() {
   let passed = 0;
   let failed = 0;
   let warning = 0;
