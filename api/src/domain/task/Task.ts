@@ -205,8 +205,10 @@ export class Task {
   // Behaviour
   // ------------------------------------------------------------------
 
-  // 3-layer fix: First, Task.update strips undefined keys (no overwrites),
-  // then TaskService passes only defined dto fields to avoid schema merging,
+  // 3-layer fix (transparent to caller):
+  // 1. Task.update first strips keys with value === undefined, ensuring omitted fields preserve the existing stored value.
+  // 2. TaskService then passes only defined dto fields to avoid schema merging and explicitly includes parentTaskId when not undefined.
+  // 3. TaskRepository.update writes plain.parentTaskId only when non-empty; otherwise null — ensuring partial updates never drop values.
     // and TaskRepository.update writes plain.parentTaskId(non-empty)?nonEmpty:null.
     const stripped = Object.fromEntries(
       Object.entries(updates).filter(([, v]) => v !== undefined),
