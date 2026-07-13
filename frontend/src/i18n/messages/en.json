@@ -6922,6 +6922,8 @@
     "taskCount": "{count, plural, one {# task} other {# tasks}}",
     "byStage": "By stage",
     "byAssignee": "By assignee",
+    "expandAssigneeRow": "Expand tasks assigned to {name}",
+    "collapseAssigneeRow": "Collapse tasks assigned to {name}",
     "startStandup": "Start standup",
     "startPlanning": "Start planning",
     "viewPrdAria": "View PRD",

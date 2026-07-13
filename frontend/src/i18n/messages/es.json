@@ -6920,6 +6920,8 @@
     "taskCount": "{count, plural, one {# tarea} other {# tareas}}",
     "byStage": "Por etapa",
     "byAssignee": "Por responsable",
+    "expandAssigneeRow": "Expandir las tareas asignadas a {name}",
+    "collapseAssigneeRow": "Contraer las tareas asignadas a {name}",
     "startStandup": "Iniciar standup",
     "startPlanning": "Iniciar planificación",
     "viewPrdAria": "Ver PRD",
