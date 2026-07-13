@@ -310,7 +310,7 @@ describe("progressBreakdown integration endpoint", () => {
       const B = makeProgressBreakdown({ subtasksDone: 3.75, subtasksTotal: 5, codeDelivered: false, testsPassing: null, prState: null });
       expect(() => JSON.stringify(zero)).not.toThrow();
       expect(() => JSON.stringify(B)).not.toThrow();
-      expect(JSON.stringify(Z)).toContain("3.75");
+      expect(JSON.stringify(breakdown)).toContain("3.75");
     });
 
     it("handles completion timestamp with high precision in zero-state object", async () => {
