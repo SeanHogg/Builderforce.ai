@@ -4,15 +4,15 @@
   "private": true,
   "scripts": {
     "clean": "node -e \"const fs=require('fs');const p='.next';if(fs.existsSync(p)){fs.rmSync(p,{recursive:true});console.log('Removed .next');}else{console.log('.next not found');}\"",
-    "dev": "node scripts/inject-sw-version.js && next dev",
-    "build": "node scripts/inject-sw-version.js && next build",
-    "cf-build": "node scripts/inject-sw-version.js && npm run build && npx @cloudflare/next-on-pages && echo '_worker.js' > .vercel/output/static/.assetsignore && node scripts/strip-worker-assets.js && sed -i 's/\\br\\.fetch\\b/(r||self).fetch/g' .vercel/output/static/_worker.js/index.js",
+    "dev": "node scripts/inject-sw-version.js && node scripts/stamp-sw-version.js && next dev",
+    "build": "node scripts/inject-sw-version.js && node scripts/stamp-sw-version.js && next build",
+    "cf-build": "node scripts/inject-sw-version.js && node scripts/stamp-sw-version.js && npm run build && npx @cloudflare/next-on-pages && echo '_worker.js' > .vercel/output/static/.assetsignore && node scripts/strip-worker-assets.js && sed -i 's/\\br\\.fetch\\b/(r||self).fetch/g' .vercel/output/static/_worker.js/index.js",
     "cf-deploy": "npm run cf-build && npx wrangler deploy --no-bundle",
-    "start": "node scripts/inject-sw-version.js && next start",
+    "start": "node scripts/inject-sw-version.js && node scripts/stamp-sw-version.js && next start",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prebuild": "node scripts/inject-sw-version.js"
+    "prebuild": "node scripts/inject-sw-version.js && node scripts/stamp-sw-version.js"
   },
   "dependencies": {
     "@cloudflare/next-on-pages": "^1.13.16",
