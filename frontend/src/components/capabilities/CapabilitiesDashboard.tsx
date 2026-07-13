@@ -3,10 +3,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { GaugeChart } from '@/components/charts/GaugeChart';
 import { DonutChart } from '@/components/charts/DonutChart';
-import { BarChart } from '@/components/charts/BarChart';
 import { CapabilityRow } from './CapabilityRow';
-import { getCapabilityRollup, getCapabilities } from '@/lib/capabilitiesApi';
-import type { CapabilityStatus } from '@/types/capabilities';
+import { getCapabilityRollup, getCapabilities } from '@/app/insights/capabilitiesApi';
+import type {
+  Capability,
+  CapabilityStatus,
+  CapabilityRollup,
+} from '@/app/insights/capabilityTypes';
 
 export function CapabilitiesDashboard() {
   const projectId = 'demo-project'; // Would be passed from route param in production
