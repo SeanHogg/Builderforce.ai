@@ -36,6 +36,7 @@ import {
   type ProjectEvermindContributions,
   type ProjectEvermindRecentEntry,
 } from '@/lib/projectEvermindApi';
+import { CompactListProgress, type ProgressItem } from '@/components/lists';
 
 /* ── Geometry (SVG user units; the viewBox scales to the container) ──────────── */
 const VB_W = 860;
@@ -76,6 +77,24 @@ const REGIONS: RegionMeta[] = [
 ];
 
 const LIMBIC_KEYS: RegionKey[] = ['amygdala', 'hypothalamus', 'thalamus', 'basalGanglia'];
+
+/** Demo-only: minimal progress items for Evermind region traction (not production data). */
+function DemoRegionProgress(): JSX.Element {
+  const demoItems: ProgressItem[] = [
+    { id: 'rel-1', label: 'Delta contributions', completed: 7, total: 10, status: 'in_progress' },
+    { id: 'rel-2', label: 'Text chunks read', completed: 14, total: 15, status: 'in_progress' },
+    { id: 'rel-3', label: 'Stale delta', completed: 0, total: 8, status: 'not_started' },
+  ];
+
+  return (
+    <div style={{ margin: '12px 0', padding: '12px', borderRadius: '6px', background: 'var(--surface-card)' }}>
+      <div style={{ fontSize: '0.74rem', fontWeight: 600, marginBottom: '6px', color: 'var(--text-primary)' }}>
+        Region traction (demo)
+      </div>
+      <CompactListProgress items={demoItems} />
+    </div>
+  );
+}
 
 /** Max knowledge nodes drawn per region before we summarise the remainder. */
 const MAX_NODES_PER_REGION = 14;
@@ -245,6 +264,9 @@ export function EvermindBrainMap({ projectId }: { projectId: number }) {
         <Stat label={t('statLearned')} value={loaded ? String(data?.contributions ?? 0) : '…'} />
         <Stat label={t('statQueued')} value={loaded ? String(data?.pending ?? 0) : '…'} />
       </div>
+
+      {/* Demo progress breakdown showing CompactListProgress in action */}
+      <DemoRegionProgress />
 
       <div style={{ position: 'relative', flex: '1 1 300px', minHeight: 300 }}>
         {!loaded ? (
