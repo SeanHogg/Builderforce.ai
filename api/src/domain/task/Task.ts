@@ -3,27 +3,6 @@
  * - Defined in: api/src/domain/task/Task.ts
  */
 
-/** Task statuses representing the lifecycle state of the parent task. */
-export enum TaskStatus {
-  /** Initial state when a task is created but not yet started. */
-  PENDING = 'pending',
-
-  /** Task is currently being executed (active work in progress). */
-  IN_PROGRESS = 'in_progress',
-
-  /** Task has been paused or suspended. Associated resources may remain active. */
-  PAUSED = 'paused',
-
-  /** Task has reached a terminal success state. */
-  COMPLETED = 'completed',
-
-  /** Task has reached a terminal failure state. */
-  FAILED = 'failed',
-
-  /** Task is deprecated due to expired time, duplicate, or external cancellation. */
-  CANCELLED = 'cancelled',
-}
-
 /** Summary representation of a task's progress breakdown. */
 export interface TaskProgress {
   /** Count of all sub-items (checklist items or sub-steps) belonging to this task. */
