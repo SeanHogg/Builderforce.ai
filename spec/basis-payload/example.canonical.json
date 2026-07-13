@@ -1,191 +1,169 @@
 {
+  "$schema": "https://builderforce.ai/schemas/basis-payload-v1.schema.json",
   "schema_version": "1.0.0",
-  "basis_id": "b1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5c",
-  "created_at": "2025-01-15T14:30:00Z",
-  "agent_id": "agent-code-analyzer-v1",
-  "session_id": "sess-9ed8c7b6-a5f4-3e2d-1c0b-89a7f6e5d4c3",
+  "basis_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "created_at": "2025-04-10T10:30:00Z",
+  "agent_id": "agent-finance-unified-v2",
+  "session_id": "session-abc-2025q1",
   "parent_basis_id": null,
   "claims": [
     {
-      "claim_id": "c1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5d",
-      "text": "The component under test follows the documented contract.",
-      "confidence": 0.94,
+      "claim_id": "c1a2b3c4-d5e6-f789-a01b-2c3d4e5f6789",
+      "text": "Revenue is projected to grow 15% YoY in Q1 2025 based on historical trend analysis.",
+      "confidence": 0.87,
       "confidence_method": "empirical",
-      "tags": [
-        "behavioral",
-        "high-confidence"
-      ],
+      "tags": ["revenue", "projection", "yoy"],
       "status": "asserted"
     },
     {
-      "claim_id": "c2a3b4c5-d6e7-4f8a-9b0c-1d2e3f4a5b6c",
-      "text": "Error handling paths correctly return 4xx responses for invalid input.",
-      "confidence": 0.76,
-      "confidence_method": "llm-self-report",
-      "tags": [
-        "error-handling"
-      ],
-      "status": "asserted"
-    },
-    {
-      "claim_id": "c3a4b5c6-d7e8-4f9b-0c1d-2e3f4a5b6c7d",
-      "text": "Database connection pool reaches steady state within 30s.",
-      "confidence": 0.84,
+      "claim_id": "c2b3c4d5-e6f7-8901-bc2d-3e4f5a6b7c8d",
+      "text": "Marketing spend has a measured correlation coefficient of 0.42 with revenue growth.",
+      "confidence": 0.72,
       "confidence_method": "heuristic",
-      "tags": [
-        "performance"
-      ],
+      "tags": ["marketing", "correlation"],
       "status": "asserted"
     },
     {
-      "claim_id": "c4a5b6c7-d8e9-4fa0-1d2e-3f4a5b6c7d8e",
-      "text": "The provided test coverage report indicates lines with low usage.",
-      "confidence": 1.0,
-      "confidence_method": "empirical",
-      "tags": [
-        "coverage"
-      ],
-      "status": "superseded"
+      "claim_id": "c3c4d5e6-f7a8-9012-cd3e-4f5a6b7c8d9e",
+      "text": "The external economic sanctions scenario presents a downside risk of 8% to the projection.",
+      "confidence": 0.63,
+      "confidence_method": "llm-self-report",
+      "tags": ["risk", "external", "sanctions"],
+      "status": "asserted"
     }
   ],
   "evidence": [
     {
-      "evidence_id": "e1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5e",
-      "claim_ids": [
-        "c1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5d",
-        "c2a3b4c5-d6e7-4f8a-9b0c-1d2e3f4a5b6c"
-      ],
-      "type": "api_response",
-      "uri": "http://localhost:8080/v1/api/status",
-      "title": "Health check endpoint response",
-      "excerpt": "Status: operational, version: v1.3.2, latency: 12ms, connections: 47",
-      "retrieved_at": "2025-01-15T14:29:55Z",
-      "weight": 0.85,
+      "evidence_id": "e1a2b3c4-d5e6-f789-a01b-2c3d4e5f6789",
+      "claim_ids": ["c1a2b3c4-d5e6-f789-a01b-2c3d4e5f6789"],
+      "type": "database_record",
+      "uri": "https://api.finance.example.com/reports/q1-2025-forecast",
+      "title": "Q1 2025 Revenue Forecast (Financial Core)",
+      "excerpt": "Revenue projected at $12.4M, up 15% from Q1 2024 actual $10.8M.",
+      "retrieved_at": "2025-04-10T09:45:00Z",
+      "weight": 0.92,
       "provenance": {
-        "source_system": "local-api",
-        "source_version": "1.3.2-10-gf1b6c4d",
-        "checksum": "4f2b7e3a5c1d6e8f9a0b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f"
+        "source_system": "Financial Core",
+        "source_version": "2.4.1",
+        "checksum": "a0b1c2d3e4f567890abcdef0123456789abcdef0123456789abcdef0123456789"
       }
     },
     {
-      "evidence_id": "e2a3b4c5-d6e7-4f8a-9b0c-1d2e3f4a5b6d",
-      "claim_ids": [
-        "c2a3b4c5-d6e7-4f8a-9b0c-1d2e3f4a5b6c",
-        "c3a4b5c6-d7e8-4f9b-0c1d-2e3f4a5b6c7d"
-      ],
-      "type": "document",
-      "uri": "https://docs.operator.com/guidelines/error-handling",
-      "title": "Error handling guidelines v1.1",
-      "excerpt": "All invalid input must produce 4xx responses with appropriate error codes.",
-      "retrieved_at": "2025-01-15T14:28:00Z",
-      "weight": 1.0,
-      "provenance": {
-        "source_system": "documentation-service",
-        "checksum": "5f2c7e3a5c2d6e8f9a0b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d3e4f"
-      }
-    },
-    {
-      "evidence_id": "e3a4b5c6-d7e8-4f9b-0c1d-2e3f4a5b6c8e",
-      "claim_ids": [
-        "c3a4b5c6-d7e8-4f9b-0c1d-2e3f4a5b6c7d"
-      ],
+      "evidence_id": "e2b3c4d5-e6f7-8901-bc2d-3e4f5a6b7c8d",
+      "claim_ids": ["c2b3c4d5-e6f7-8901-bc2d-3e4f5a6b7c8d", "c1a2b3c4-d5e6-f789-a01b-2c3d4e5f6789"],
       "type": "computed",
-      "title": "Database connection pool metrics (13s window)",
-      "excerpt": "Pool size stable at 15 of 20, avg wait time 4ms, reconnects 0",
-      "retrieved_at": "2025-01-15T14:31:00Z",
-      "weight": 0.97,
+      "uri": null,
+      "title": "Marketing Spend Correlation Analysis",
+      "excerpt": "Pearson correlation 0.42 (p<0.05) between quarterly marketing spend delta and revenue delta, 8 quarters of data.",
+      "retrieved_at": "2025-04-10T10:00:00Z",
+      "weight": 0.75,
       "provenance": {
-        "source_system": "observability-collector",
-        "checksum": "6f3d7e3a5d3e6f8a9b0b2c3d4e5f6a7b8c9d0e1f3a4b5c6d7e8f9a0b1c2d3e4f"
+        "source_system": "Analytics Engine",
+        "source_version": "3.1.0",
+        "checksum": "b1c2d3e4f567890abcdef0123456789abcdef0123456789abcdef0123456789a0"
+      }
+    },
+    {
+      "evidence_id": "e3c4d5e6-f7a8-9012-cd3e-4f5a6b7c8d9e",
+      "claim_ids": ["c3c4d5e6-f7a8-9012-cd3e-4f5a6b7c8d9e"],
+      "type": "document",
+      "uri": "https://docs.example.com/risk/sanctions-impact-2025.pdf",
+      "title": "Geopolitical Risk Assessment 2025 - Sanctions Impact",
+      "excerpt": "Sanctions escalation scenario estimates -8% revenue impact across EMEA region.",
+      "retrieved_at": "2025-04-09T14:20:00Z",
+      "weight": 0.60,
+      "provenance": {
+        "source_system": "Risk Document Store",
+        "source_version": "1.0.0",
+        "checksum": "c2d3e4f567890abcdef0123456789abcdef0123456789abcdef0123456789a0b1"
       }
     }
   ],
   "reasoning_chain": [
     {
       "step": 1,
-      "description": "Ran health check endpoint to verify operational status.",
-      "evidence_ids": [
-        "e1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5e"
-      ],
-      "claim_ids": [
-        "c1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5d"
-      ],
-      "inference_type": "inductive"
+      "description": "Query and validate 8-quarter historical revenue data from Financial Core.",
+      "evidence_ids": ["e1a2b3c4-d5e6-f789-a01b-2c3d4e5f6789"],
+      "claim_ids": ["c1a2b3c4-d5e6-f789-a01b-2c3d4e5f6789"],
+      "inference_type": "lookup"
     },
     {
       "step": 2,
-      "description": "Verified error response codes against documentation guidelines.",
-      "evidence_ids": [
-        "e2a3b4c5-d6e7-4f8a-9b0c-1d2e3f4a5b6d"
-      ],
-      "claim_ids": [
-        "c2a3b4c5-d6e7-4f8a-9b0c-1d2e3f4a5b6c"
-      ],
+      "description": "Compute marketing-revenue correlation from Analytics Engine.",
+      "evidence_ids": ["e2b3c4d5-e6f7-8901-bc2d-3e4f5a6b7c8d"],
+      "claim_ids": ["c2b3c4d5-e6f7-8901-bc2d-3e4f5a6b7c8d", "c1a2b3c4-d5e6-f789-a01b-2c3d4e5f6789"],
       "inference_type": "deductive"
     },
     {
       "step": 3,
-      "description": "Analyzed connection pool metrics to assess steady state timing.",
-      "evidence_ids": [
-        "e3a4b5c6-d7e8-4f9b-0c1d-2e3f4a5b6c8e"
-      ],
-      "claim_ids": [
-        "c3a4b5c6-d7e8-4f9b-0c1d-2e3f4a5b6c7d"
-      ],
-      "inference_type": "inductive"
+      "description": "Incorporate geopolitical risk from Risk Document Store.",
+      "evidence_ids": ["e3c4d5e6-f7a8-9012-cd3e-4f5a6b7c8d9e"],
+      "claim_ids": ["c3c4d5e6-f7a8-9012-cd3e-4f5a6b7c8d9e"],
+      "inference_type": "deductive"
     },
     {
       "step": 4,
-      "description": "Archived prior claim on test coverage to avoid duplication.",
-      "evidence_ids": [],
-      "claim_ids": [
-        "c4a5b6c7-d8e9-4fa0-1d2e-3f4a5b6c7d8e"
-      ],
-      "inference_type": "deductive"
+      "description": "Synthesize all evidence and reasoning into final projection.",
+      "evidence_ids": ["e1a2b3c4-d5e6-f789-a01b-2c3d4e5f6789", "e2b3c4d5-e6f7-8901-bc2d-3e4f5a6b7c8d", "e3c4d5e6-f7a8-9012-cd3e-4f5a6b7c8d9e"],
+      "claim_ids": ["c1a2b3c4-d5e6-f789-a01b-2c3d4e5f6789", "c3c4d5e6-f7a8-9012-cd3e-4f5a6b7c8d9e"],
+      "inference_type": "abductive"
     }
   ],
   "uncertainty": {
-    "overall_confidence": 0.85,
+    "overall_confidence": 0.81,
     "known_unknowns": [
-      "Impact of recent SDK upgrade (v2.8.4) on error response codes."
+      "External economic sanctions scenario not yet fully modeled",
+      "Q1 2025 actuals will not be available until April 30, 2025"
     ],
     "assumptions": [
-      "The health check endpoint reflects full system health.",
-      "Observed connection pool metrics extrapolate to future operations."
+      "Marketing spend correlation remains stable for Q1 2025",
+      "No major currency fluctuations affecting revenue",
+      "Customer churn rate stays within historical bounds (< 3%)"
     ],
-    "contradictions": []
+    "contradictions": [
+      {
+        "claim_id_a": "c2b3c4d5-e6f7-8901-bc2d-3e4f5a6b7c8d",
+        "claim_id_b": "c3c4d5e6-f7a8-9012-cd3e-4f5a6b7c8d9e",
+        "description": "Marketing spend correlation (0.42) suggests growth is partially due to spend; sanctions scenario (-8%) contradicts upside projection from marketing alone."
+      }
+    ]
   },
   "context": {
-    "task_id": "TASK-0123",
-    "task_description": "Verify automated test suite correctness and identify performance regressions",
-    "model_id": "gpt-4.1-turbo",
-    "model_version": "2024-07-06",
+    "task_id": "task-finance-projection-2025q1",
+    "task_description": "Generate quarterly revenue projection basis for Q1 2025 board review",
+    "model_id": "finance-unified-planner-v2",
+    "model_version": "2.0.3",
     "tool_calls": [
       {
-        "tool_name": "api_status_tool",
-        "input_summary": "Fetch status endpoint under /v1/api",
-        "output_summary": "Status: operational, latency: 12ms, connections: 47",
-        "called_at": "2025-01-15T14:28:30Z"
+        "tool_name": "query_financial_db",
+        "input_summary": "SELECT revenue, marketing_spend, churn FROM q1_history WHERE year BETWEEN 2023 AND 2024",
+        "output_summary": "Loaded 24 monthly records across 2 years",
+        "called_at": "2025-04-10T09:45:00Z"
       },
       {
-        "tool_name": "search_documentation_tool",
-        "input_summary": "Search for error-handling guidelines with relation to 4xx codes",
-        "output_summary": "Found guidelines doc v1.1 with exact requirements",
-        "called_at": "2025-01-15T14:29:00Z"
+        "tool_name": "run_correlation_analysis",
+        "input_summary": "Compute Pearson correlation between marketing_spend_delta and revenue_delta on loaded dataset",
+        "output_summary": "r=0.42, p<0.05, 95%CI [0.12, 0.65]",
+        "called_at": "2025-04-10T09:50:00Z"
       },
       {
-        "tool_name": "fetch_metrics_tool",
-        "input_summary": "Collect connection pool metrics (15s window)",
-        "output_summary": "Pool size stable at 15 of 20, avg wait 4ms, 0 reconnects",
-        "called_at": "2025-01-15T14:30:05Z"
+        "tool_name": "retrieve_risk_documents",
+        "input_summary": "Search for documents tagged 'sanctions' AND 'revenue impact' with date >= 2025-01-01",
+        "output_summary": "Found 2 documents; top match is 'Geopolitical Risk Assessment 2025 - Sanctions Impact'",
+        "called_at": "2025-04-10T10:05:00Z"
       }
     ],
     "environment": "production"
   },
   "extensions": {
+    "com.builderforce.review": {
+      "peer_review_status": "pending",
+      "reviewers": ["agent-audit", "user-finops"]
+    },
     "com.acme.risk": {
-      "risk_score": 0.12,
-      "risk_band": "low"
+      "risk_exposure_score": 0.45,
+      "risk_category": "geopolitical",
+      "mitigation_plan": "hedge-20percent-options"
     }
   }
 }
