@@ -29,10 +29,7 @@ export const HenTaskCompletionNotifierSchema = z.object({
 // Template string constants
 const EMAIL_BODY = `      <p>Good news! All Hen tasks for your account are now complete.
          Log in to {{PlatformName}} to view details and next steps.
-         Thank you for using our service!</p>
-      <p style="text-align:center; margin: 28px 0;">
-        <a href="{{PlatformLoginUrl}}" class="button">Log in to {{PlatformName}}</a>
-      </p>`;
+         Thank you for using our service!</p>`;
 
 const FOOTER = `
     </div>
@@ -161,8 +158,8 @@ export class HenTaskCompletionNotifier {
   private renderEmailHTML(subject: string): string {
     const year = String(new Date().getFullYear());
     const bodyTemplate = EMAIL_BODY
-      .replace(/{{PlatformName}}/g, this.platformName)
-      .replace(/{{PlatformLoginUrl}}/g, this.platformLoginUrl);
+      .replace("{{PlatformName}}", this.platformName)
+      .replace("{{PlatformLoginUrl}}", this.platformLoginUrl);
 
     // Complete email template with header
     return `<!DOCTYPE html>
@@ -191,7 +188,7 @@ export class HenTaskCompletionNotifier {
       <h1>${this.platformName}</h1>
     </div>
     <div class="content">
-${bodyTemplate}${FOOTER.replace(/{{Year}}/g, year).replace(/{{PlatformName}}/g, this.platformName)}`;
+${bodyTemplate}${FOOTER.replace("{{Year}}", year).replace("{{PlatformName}}", this.platformName)}`;
   }
 
   /**
