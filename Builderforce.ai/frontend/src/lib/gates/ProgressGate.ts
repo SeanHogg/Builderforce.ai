@@ -31,16 +31,9 @@ export interface ProgressAuditEntry {
   recommendedStatus: TaskStatus;
   previousProgress: number;
   recommendedProgress: number;
-  prShas: string[];
   prClassification: 'none' | 'doc-only' | 'has-implementation';
   deliverableType: DeliverableType;
   taskType: TaskType;
-  filesChanged: Pick<PRFile, 'path' | 'isDocumentation'>[];
-  conditions: {
-    hasImplementationCode: boolean;
-    hasTestFiles: boolean;
-    ciChecksPassing: boolean;
-  };
   blockedReason?: string;
   timestamp: string;
 }
