@@ -216,7 +216,7 @@ Canonical layout (matches schema and example.canonical.json):
 | Field | Type | Remarks |
 |-------|------|---------|
 | `model_id` | Required | Identifies model or orchestrator. |
-| `environment` | Enum | Values: `"production"`, `"staging"`, `"development"`, `"test"`. |
+| `environment` | String (guideline values) | Guideline values: `"production"`, `"staging"`, `"development"`, `"test"`. Not schema-enforced as a strict enum; producers should use one of these values. |
 | `tool_calls[]` | Tool-call objects | Captures tool execution directly relevant to the basis. |
 
 ---
