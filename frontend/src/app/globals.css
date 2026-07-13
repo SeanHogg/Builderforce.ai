@@ -13,6 +13,8 @@
   /* Mobile bottom nav bottom spacing */
   padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
   padding-bottom: 72px; /* Ensure sufficient spacing for both nav and touch zones */
+  /* Prevent 2-finger pan from interfering with page UX */
+  touch-action: pan-y;
 }
 
 .shell {
@@ -24,6 +26,8 @@
   /* Mobile bottom nav bottom spacing */
   padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
   padding-bottom: 72px; /* Ensure sufficient spacing for both nav and touch zones */
+  /* Prevent 2-finger pan from interfering with page UX */
+  touch-action: pan-y;
 }
 
 /* Slide-out overlay and drawer z-index rules */
