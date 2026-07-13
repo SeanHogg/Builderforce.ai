@@ -159,8 +159,12 @@ async function runTests() {
   console.error('');
 
   // --- 4: Payload with Empty Claims Array ---
-  console.error(`--- Test 4: Empty claims Array (${validate.schema?.properties?.claims?.minItems || 'schema verification'}), `(typeof validate.schema?.properties.claims?.minItems !== 'undefined' ? `(${validate.schema.properties.claims.minItems === 0 ? 'empty', per schema minItems: 0` : `NOT enforced`}` : 'NOT enforced')),
-  // schema enforced minItems: 1, so empty claims should be REJECTED prior to load
+  console.error(`--- Test 4: Empty claims Array (${validate.schema?.properties?.claims?.minItems || 'schema verification'})`);
+  if (typeof validate.schema?.properties?.claims?.minItems !== 'undefined') {
+    console.error(`  (schema enforces minItems: ${validate.schema.properties.claims.minItems})`);
+  } else {
+    console.error(`  (NOT enforced by schema)`);
+  }
   console.error('');
 
   // --- 9: Evidence Required ---
