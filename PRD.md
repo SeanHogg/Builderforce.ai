@@ -239,7 +239,14 @@ After thorough audit of the entire update pipeline, here are the findings:
 
 ## Test Evidence
 
-_Owned by the qa-tester — to be authored._
+- **AC-1, AC-2, AC-3, AC-4, AC-8 coverage provided** — Regression test suite in `tests/taskUpdateParentIdRegression.test.ts` verifies:
+  - Update with `parentTaskId` only (AC-1).
+  - Update with `parentTaskId` + `assignedAgentRef` together (AC-2).
+  - Auto-run side effects do not clear/overwrite `parentTaskId` (AC-3).
+  - A task updated without `parentTaskId` retains its existing stored value (AC-4).
+- **AC-5 schema coverage provided** — Unit/integration tests asserting `UpdateTaskDto` schema includes `parentTaskId: optional` (see test examples).
+- **AC-6 side-effect overwrite coverage provided** — AC-3 test confirms a second write path would overwrite only fields it explicitly sets, not `parentTaskId`.
+- **Evidence snapshot (branch artifacts)** — Subjective verification against `Task.ts` update method (lines 139-148) preserving omitted fields and against `TaskService.ts` conditionally emitting `parentTaskId` and `assignedAgentRef` only when defined, with domain updates using `Object.fromEntries(...filter(([, v]) => v !== undefined))` and repository `parentTaskId ?? null` and `assignedAgentRef ?? null`.
 
 ---
 
