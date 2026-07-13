@@ -6,13 +6,9 @@
  * enforces ownership/visibility using ChatTicketService, and calls ChatTicketService.consolidate
  * (which internally forwards to builtin_chats_consolidate tooling).
  */
-import { Hono } from 'hono';
 import { eq, and, desc } from 'drizzle-orm';
-import { chatTicketLinks, brainChats, brainChatMessages } from '../../infrastructure/database/schema';
-import authMiddleware from '../middleware/authMiddleware';
-import { ChatTicketService } from '../../application/brain/ChatTicketService';
-import type { HonoEnv } from '../../env';
-import type { Db } from '../../infrastructure/database/connection';
+import { brainChats } from '../../infrastructure/database/schema';
+import { authMiddleware } from '../middleware/authMiddleware';
 
 export function createChatRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
