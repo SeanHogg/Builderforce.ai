@@ -4,6 +4,8 @@
  * Common interface for tax form repositories with typed access.
  */
 
+import { ForeignTaxAddress } from '../../models/tax/tax_form_entity';
+
 /**
  * Generic repository interface with CRUD operations
  */
