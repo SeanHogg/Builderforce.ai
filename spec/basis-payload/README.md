@@ -62,7 +62,9 @@ ajv-cli \
 Expected: ✓ Schema compiles successfully (0 errors). Then run:
 
 ```bash
-node spec/basis-payload/validate.js
+cd spec/basis-payload
+npm install ajv@^8
+node validate.js
 ```
 
 Expected: ✅ All validation tests pass (200+ example/non-example checks).
