@@ -46,10 +46,6 @@
     "inference_type_enum": {
       "type": "string",
       "enum": ["deductive", "inductive", "abductive", "analogical", "lookup"]
-    },
-    "environment_enum": {
-      "type": "string",
-      "enum": ["production", "staging", "development", "test"]
     }
   },
   "title": "Basis Payload Schema v1.0.0",
