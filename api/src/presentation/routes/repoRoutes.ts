@@ -27,7 +27,7 @@ import {
 } from '../../infrastructure/database/schema';
 import type { HonoEnv, Env } from '../../env';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
-import type { Db } from '../../infrastructure/database/connection';
+import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { RepoService, type AgentHostDispatcher } from '../../application/repos/RepoService';
 import { resolveRepoCredential, isResolveError } from '../../application/repos/resolveRepoCredential';
@@ -356,7 +356,8 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     // data-ingestion allowance (consumption meter). Graceful backpressure: repos
     // already imported stay fully usable; only fresh pulls stop until the month
     // resets or they upgrade. 402 carries the plan-limit body the client renders.
-    const gate = await enforceIngestionCap(db, tenantId);
+    const ingestionDb = buildTransactionalDatabase(c.env as Env);
+    const gate = await enforceIngestionCap(db, tenantId, ingestionDb);
     if (!gate.allowed) {
       return c.json({
         error: `Monthly data-ingestion allowance reached (${gate.limit.toLocaleString()} bytes). Already-imported repositories stay available; upgrade or wait for the monthly reset to import more.`,
@@ -379,7 +380,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
 
     // Meter the bytes actually pulled (post-cap), attributed to the repo's project.
     const bytesIngested = result.files.reduce((sum, f) => sum + f.content.length, 0);
-    c.executionCtx.waitUntil(recordIngestion(db, {
+    c.executionCtx.waitUntil(recordIngestion(ingestionDb, {
       tenantId,
       projectId: resolved.repo.projectId ?? null,
       source: 'repo_import',

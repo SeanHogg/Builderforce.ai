@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
-    "db:migrate": "node scripts/migrate.mjs",
-    "deploy": "node scripts/migrate.mjs && npm run deploy:worker",
+    "db:migrate": "node scripts/migrate.mjs && node scripts/migrate.mjs --transactional",
+    "deploy": "npm run db:migrate && npm run deploy:worker",
     "deploy:worker": "wrangler deploy",
     "secrets:from-env": "node scripts/set-secrets-from-env.mjs",
     "db:generate": "npx drizzle-kit@0.30.6 generate",
