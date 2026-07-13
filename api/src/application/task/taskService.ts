@@ -4,6 +4,7 @@
  */
 
 import type { Task, TaskProgress } from '../../domain/task/Task';
+import { TaskProgressInvariantError } from '../../errors/TaskErrors';
 
 /**
  * Service for task operations including computed progress.
