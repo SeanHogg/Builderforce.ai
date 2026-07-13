@@ -142,7 +142,7 @@ function runTests() {
   {
     const invalid = JSON.parse(JSON.stringify(example));
     delete invalid.schema_version;
-    const valid = await validateReturnExample(invalid);
+    const valid = validateReturnExample(invalid);
     if (!valid) {
       record(2, `✓ Negative: Missing schema_version correctly rejected`, true, validate.errors);
     } else {
@@ -156,7 +156,7 @@ function runTests() {
   {
     const invalid = JSON.parse(JSON.stringify(example));
     delete invalid.claims;
-    const valid = await validateReturnExample(invalid);
+    const valid = validateReturnExample(invalid);
     if (!valid) {
       record(3, `✓ Negative: Missing claims array correctly rejected`, true, validate.errors);
     } else {
