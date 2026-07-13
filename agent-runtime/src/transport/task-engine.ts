@@ -172,9 +172,8 @@ async function areAllHenTasksCompleted(storage: TaskStorage, accountId: string):
 /**
  * Import the notification service
  */
-// NOTE: Assuming '../services/notificationService' is the correct path and export.
-// If the path is different, this import needs to be adjusted.
-import { sendHenTaskCompletionEmail } from '../services/notificationService';
+// NOTE: Notification logic delegated to domain services (HenTaskCompletionNotifier).
+// No direct import needed here.
 
 
 /**
