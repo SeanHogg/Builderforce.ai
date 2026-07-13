@@ -139,8 +139,9 @@ export function runProgressGate(input: ProgressGateInput): ProgressGateOutput {
   const prClassification = classifyAllPRs(diffs);
   const { hasImplementationCode, hasTestFiles } = computeImplementationSignals(diffs);
 
-  // FR-4: default for unspecified task_type is analysis (per PRD FR-4).
-  const effectiveTaskType = taskType ?? 'analysis';
+  // FR-10: default for unspecified task_type is coding (per PRD FR-10).
+  // Non-coding types (analysis, provisioning, decision, documentation) can complete without impl code.
+  const effectiveTaskType = taskType ?? 'coding';
 
   const previousProgress = inferProgressForStatus(currentStatus);
 
