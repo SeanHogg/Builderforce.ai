@@ -107,11 +107,17 @@ export async function POST_SEND(request: NextRequest) {
     }
 
     const result = await sendMessageToChat(chatId, userId || 'current-user', role || 'user', content);
-    
-    // Return both message and updated chat
+
+    // Check if this is the first user message - if so, need to generate title
+    // In a real app, we'd query the messages backend, but for now,
+    // we return a flag indicating title generation may be needed
+    const isNewChat = role === 'user';
+
+    // Return both message, updated chat, and flag for potential title generation
     return Response.json({
       message: result.message,
-      chat: result.chat
+      chat: result.chat,
+      isNewChat: isNewChat
     });
   } catch (error: any) {
     console.error('Error sending message:', error);
