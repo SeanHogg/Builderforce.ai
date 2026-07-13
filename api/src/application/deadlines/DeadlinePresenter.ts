@@ -1,143 +1,287 @@
-import type { Deadline } from '../../domain/deadlines/Deadline.js';
-import type { DeadlineRepository } from '../../infrastructure/repositories/DeadlineRepository.js';
-import { DeadlineStatus } from '../../domain/deadlines/Deadline.js';
+export type ExecutiveSummary = ReturnType<typeof computeExecutiveSummary>;
+export type TimelineView = ReturnType<typeof buildTimelineView>;
+export type CustomerView = ReturnType<typeof buildCustomerView>;
 
-/**
- * Deadline Presenter.
- * - aggregates deadline counts and health snapshots for dashboards
- * - supports filters by type, owner, status, priority, tenant; date-range filter reserved for future queries
- * - fetches lifecycle/dependency history for detail views
- */
+// ---------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------
+
+/** Counters per Business/Customer by status. */
+export interface StatusCounters {
+  business: { on_track: number; at_risk: number; off_track: number; missed: number };
+  customer: { on_track: number; at_risk: number; off_track: number; missed: number };
+}
+
+/** Snapshot for sparkline over N days up to now. */
+export interface SparklineSegment {
+  dayOfYear: number;
+  value: number;
+  label: string;
+}
+
+/** Executive summary for Portfolio ▸ Deadlines view. */
+export interface ExecutiveSummary {
+  counts: StatusCounters;
+  trend30d: Partial<Record<'business' | 'customer', SparklineSegment[]>>;
+  trend60d: Partial<Record<'business' | 'customer', SparklineSegment[]>>;
+  trend90d: Partial<Record<'business' | 'customer', SparklineSegment[]>>;
+  totalActive: number;
+  totalBusiness: number;
+  totalCustomer: number;
+}
+
+/** Filter criteria for Timeline View (FR-5.2). */
+export interface TimelineFilter {
+  type?: ('business' | 'customer');
+  owner?: string;
+  tag?: string;
+  priority?: ('p1' | 'p2' | 'p3');
+  dateRangeStart?: Date;
+  dateRangeEnd?: Date;
+  status?: ('on_track' | 'at_risk' | 'off_track' | 'missed');
+}
+
+/** Date filter window in days. */
+export interface DateWindow {
+  start: Date;
+  end: Date;
+}
+
+/** One row in Timeline View (user-visible Gantt entry). */
+export interface TimelineRow {
+  id: number;
+  title: string;
+  type: 'business' | 'customer';
+  owner: string;
+  priority: 'p1' | 'p2' | 'p3';
+  tags: string[];
+  dueDate: Date;
+  targetDate: Date;
+  status: 'on_track' | 'at_risk' | 'off_track' | 'missed';
+  healthOverrideReason?: string;
+  healthOverrideActive: boolean;
+  dependentDeadlineIds: number[];
+  dependents: Array<{ deadlineId: number; title: string }>;
+  startDate?: Date; // optional earliest planned start for Gantt
+}
+
+/** Customer Deadline View (FR-5.4). */
+export interface CustomerView {
+  customerId?: string;
+  count: number;
+  contracts: Array<{
+    id: number;
+    title: string;
+    type: 'business' | 'customer';
+    dueDate: Date;
+    status: 'on_track' | 'at_risk' | 'off_track' | 'missed';
+  }>;
+  slaWindows: Array<{
+    title: string;
+    dueDate: Date;
+    remainingDays: number;
+    status: 'on_track' | 'at_risk' | 'off_track' | 'missed';
+  }>;
+  nextMilestone?: TimelineRow;
+}
+
+/** Original Deadline domain properties used for view building. */
+export interface DeadlineEntity {
+  id: number;
+  tenantId: number;
+  projectId?: number;
+  title: string;
+  type: 'business' | 'customer';
+  owner: string;
+  dueDate: Date;
+  priority: 'p1' | 'p2' | 'p3';
+  tags: string[];
+  description?: string | null;
+  dependents: number[];
+  healthOverride?: 'on_track' | 'at_risk' | 'off_track' | 'missed' | null;
+  healthOverrideReason?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ---------------------------------------------------------------------
+// Presenter
+// ---------------------------------------------------------------------
+
 export class DeadlinePresenter {
-  constructor(private readonly deadlineRepo: DeadlineRepository) {}
+  /** Compute executive summary for Portfolio ▸ Deadlines view (FR-5.1). */
+  static computeExecutiveSummary(deadlines: DeadlineEntity[]): ExecutiveSummary {
+    const counts: StatusCounters = {
+      business: { on_track: 0, at_risk: 0, off_track: 0, missed: 0 },
+      customer: { on_track: 0, at_risk: 0, off_track: 0, missed: 0 },
+    };
 
-  /**
-   * Build deadline health report for the given filters.
-   * Returns JSON grouped by type and status (Executive Summary View, FR-5.1).
-   */
-  async getDashboardSummary(filters: {
-    tenantId: number;
-    type?: 'business' | 'customer';
-    owner?: string;
-    status?: 'on_track' | 'at_risk' | 'off_track' | 'missed';
-    priority?: 'p1' | 'p2' | 'p3';
-    projectId?: number;
-    weekendOnly?: boolean;
-  }): Promise<{
-    total: number;
-    byType: Record<string, number>;
-    byStatus: Record<string, number>;
-    byOwner: Record<string, number>;
-    byPriority: Record<string, number>;
-    topAtRisk: Array<Pick<Deadline, 'id' | 'title' | 'dueDate' | 'owner' | 'projectId' | 'priority' | 'type'>>;
-    atRiskCount: number;
-    missedCount: number;
-    onTrackCount: number;
-    offTrackCount: number;
-  }> {
-    // Fetch deadlines without filtering on date-range or SLA dashboard queries
-    let rows = await this.deadlineRepo.list(false);
+    const now = new Date();
 
-    if (filters.tenantId) {
-      rows = rows.filter((r) => r.tenantId === filters.tenantId);
-    }
-    if (filters.type) {
-      rows = rows.filter((r) => r.type === filters.type);
-    }
-    if (filters.owner) {
-      rows = rows.filter((r) => r.owner === filters.owner);
-    }
-    if (filters.status) {
-      rows = rows.filter((r) => r.healthOverride === filters.status);
-    }
-    if (filters.priority) {
-      rows = rows.filter((r) => r.priority === filters.priority);
-    }
-    if (filters.projectId) {
-      rows = rows.filter((r) => r.projectId === filters.projectId);
+    const toSegment = (status: StatusCounters[keyof StatusCounters], day: number): SparklineSegment => ({
+      dayOfYear: day,
+      value: status[statusLit(status)],
+      label: formatDayLabel(day),
+    });
+
+    const business30d: SparklineSegment[] = [],
+      customer30d: SparklineSegment[] = [],
+      business60d: SparklineSegment[] = [],
+      customer60d: SparklineSegment[] = [],
+      business90d: SparklineSegment[] = [],
+      customer90d: SparklineSegment[] = [];
+
+    for (let i = 0; i < 90; ++i) {
+      const day = now.getTime() - (90 - 1 - i) * 24 * 60 * 60 * 1000;
+      const d = new Date(day);
+
+      const business = counts.business as { [k in Status]: number };
+      const customer = counts.customer as { [k in Status]: number };
+      const bOnTrack = business.on_track;
+      const bAtRisk = business.at_risk;
+      const bOffTrack = business.off_track;
+      const bMissed = business.missed;
+      const cOnTrack = customer.on_track;
+      const cAtRisk = customer.at_risk;
+      const cOffTrack = customer.off_track;
+      const cMissed = customer.missed;
+
+      business30d.push(toSegment({ on_track: bOnTrack, at_risk: bAtRisk, off_track: bOffTrack, missed: bMissed }, i + 1));
+      customer30d.push(toSegment({ on_track: cOnTrack, at_risk: cAtRisk, off_track: cOffTrack, missed: cMissed }, i + 1));
+      business60d.push({ dayOfYear: i + 1, value: bOnTrack + bAtRisk + bOffTrack + bMissed, label: formatDayLabel(i + 1) });
+      customer60d.push({ dayOfYear: i + 1, value: cOnTrack + cAtRisk + cOffTrack + cMissed, label: formatDayLabel(i + 1) });
+      business90d.push({ dayOfYear: i + 1, value: bOnTrack + bAtRisk + bOffTrack + bMissed, label: formatDayLabel(i + 1) });
+      customer90d.push({ dayOfYear: i + 1, value: cOnTrack + cAtRisk + cOffTrack + cMissed, label: formatDayLabel(i + 1) });
     }
 
-    // Date range filtering placeholder: future code when DDL designates a dateRange optional column
-    if (filters.weekendOnly) {
-      rows = rows.filter((r) => r.dueDate.getDay() === 0 || r.dueDate.getDay() === 6);
+    for (const d of deadlines) {
+      if (d.healthOverride === 'on_track') {
+        if (d.type === 'business') counts.business.on_track += 1;
+        else counts.customer.on_track += 1;
+      } else if (d.healthOverride === 'at_risk') {
+        if (d.type === 'business') counts.business.at_risk += 1;
+        else counts.customer.at_risk += 1;
+      } else if (d.healthOverride === 'off_track') {
+        if (d.type === 'business') counts.business.off_track += 1;
+        else counts.customer.off_track += 1;
+      } else if (d.healthOverride === 'missed') {
+        if (d.type === 'business') counts.business.missed += 1;
+        else counts.customer.missed += 1;
+      } else if (d.healthOverride === null) {
+        // Not overridden; skip.
+      }
     }
 
-    const status = (row: { healthOverride: string | null }) => row.healthOverride || 'on_track';
-
-    // Aggregates
-    const byType = new Map<string, number>();
-    const byStatus = new Map<string, number>();
-    const byOwner = new Map<string, number>();
-    const byPriority = new Map<string, number>();
-
-    for (const row of rows) {
-      byType.set(row.type, (byType.get(row.type) ?? 0) + 1);
-      byStatus.set(status(row), (byStatus.get(status(row)) ?? 0) + 1);
-      byOwner.set(row.owner || 'Unknown', (byOwner.get(row.owner || 'Unknown') ?? 0) + 1);
-      byPriority.set(row.priority, (byPriority.get(row.priority) ?? 0) + 1);
-    }
-
-    const topAtRisk = rows
-      .filter((r) => status(r) === 'at_risk')
-      .sort((a, b) => b.dueDate.getTime() - a.dueDate.getTime())
-      .slice(0, 10);
-
-    // Return counts as numbers, keys as strings
     return {
-      total: rows.length,
-      byType: Object.fromEntries(byType.entries()),
-      byStatus: Object.fromEntries(byStatus.entries()),
-      byOwner: Object.fromEntries(byOwner.entries()),
-      byPriority: Object.fromEntries(byPriority.entries()),
-      topAtRisk: topAtRisk.slice(0, 10).map((r) => ({
-        id: r.id,
-        title: r.title,
-        dueDate: r.dueDate,
-        owner: r.owner || 'Unknown',
-        projectId: r.projectId,
-        priority: r.priority,
-        type: r.type,
-      })),
-      atRiskCount: (byStatus.get('at_risk') ?? 0) as number,
-      missedCount: (byStatus.get('missed') ?? 0) as number,
-      onTrackCount: (byStatus.get('on_track') ?? 0) as number,
-      offTrackCount: (byStatus.get('off_track') ?? 0) as number,
+      counts,
+      trend30d: { business: business30d, customer: customer30d },
+      trend60d: { business: business60d, customer: customer60d },
+      trend90d: { business: business90d, customer: customer90d },
+      totalActive: deadlines.length,
+      totalBusiness: counts.business.on_track + counts.business.at_risk + counts.business.off_track + counts.business.missed,
+      totalCustomer: counts.customer.on_track + counts.customer.at_risk + counts.customer.off_track + counts.customer.missed,
     };
   }
 
-  /**
-   * Get a deadline’s lifecycle and dependency history for the deadline detail view.
-   * Returns dependency graph and audit events (FR-5.3).
-   */
-  async getDeadlineDetail(id: number): Promise<{
-    deadline: | Deadline
-      | undefined;
-    dependencies: Array<{ id: number; upstream: number | null; downstream: number | null; weight: number | null }>;
-    audit: Array<{
-      deadlineId: number;
-      field: string;
-      oldValue: string | null;
-      newValue: string | null;
-      actor: string;
-      slipReason: string | null;
-      timestamp: Date;
-    }>;
-  }> {
-    const deadline = await this.deadlineRepo.findById(id);
-    if (!deadline) {
-      throw new Error(`Deadline ${id} not found`);
-    }
+  /** Build Timeline View list and expose dependency names per deadline (FR-5.2). */
+  static buildTimelineView(
+    deadlines: DeadlineEntity[],
+    dependentNames: ReadonlyMap<number, string>,
+  ): TimelineView {
+    const rows: TimelineRow[] = deadlines.map((d) => ({
+      id: d.id,
+      title: d.title,
+      type: d.type,
+      owner: d.owner,
+      priority: d.priority,
+      tags: d.tags,
+      dueDate: d.dueDate,
+      targetDate: d.dueDate, // placeholder; targetDate is the same for Gantt width
+      status: d.healthOverride || 'on_track',
+      healthOverrideActive: d.healthOverride !== null,
+      healthOverrideReason: d.healthOverrideReason || undefined,
+      dependentDeadlineIds: d.dependents,
+      dependents: Array.from(dependentNames.entries())
+        .filter(([id]) => d.dependents.includes(id))
+        .map(([id, title]) => ({ deadlineId: id, title })),
+      startDate: undefined, // fetch from planner or inference extension per ticket
+    }));
 
-    // Get dependencies
-    const dependencies = await this.deadlineRepo.listDependencies(id);
-
-    // Get tenant-scoped audit trail
-    const audit = await this.deadlineRepo.findAuditByTenantId(deadline.tenantId);
-
-    return {
-      deadline,
-      dependencies,
-      audit,
-    };
+    return rows;
   }
+
+  /** Build Customer Deadline View scoped to customer (FR-5.4). */
+  static buildCustomerView(
+    deadlines: ReadonlyArray<DeadlineEntity>,
+    customerId?: string,
+  ): CustomerView {
+    // Group by customer anchor: tag or owner field as placeholder for customer identity
+    const scoped: Array<{ deadline: DeadlineEntity; customerId: string }> = deadlines
+      .filter((d) => d.type === 'customer')
+      .map((d) => ({
+        deadline: d,
+        customerId: d.tags.find((t) => t.startsWith('customer:'))?.slice(10)?.replace(/-/g, '') || d.owner, // placeholder
+      }))
+      .filter((x) => x.customerId);
+
+    if (!customerId) {
+      // Show first customer or empty
+      const first = scoped.find((x) => x.customerId);
+      const count = scoped.length;
+      const contracts = scoped.map((x) => ({
+        id: x.deadline.id,
+        title: x.deadline.title,
+        type: x.deadline.type,
+        dueDate: x.deadline.dueDate,
+        status: x.deadline.healthOverride || 'on_track',
+      }));
+      const slaWindows = scoped.map((x) => ({
+        title: 'SLA Window ' + x.deadline.id,
+        dueDate: x.deadline.dueDate,
+        remainingDays: Math.max(0, Math.floor((x.deadline.dueDate.getTime() - Date.now()) / (24 * 60 * 60 * 1000))),
+        status: x.deadline.healthOverride || 'on_track',
+      }));
+      const nextMilestone = scoped.length > 0 ? scoped[0].deadline : undefined;
+      return { count, customerId: first?.customerId, contracts, slaWindows, nextMilestone };
+    } else {
+      const scopedCustomerId = customerId.replace(/-/g, '');
+      const forCustomer = scoped.filter((x) => x.customerId === scopedCustomerId);
+      const count = forCustomer.length;
+      const contracts = forCustomer.map((x) => ({
+        id: x.deadline.id,
+        title: x.deadline.title,
+        type: x.deadline.type,
+        dueDate: x.deadline.dueDate,
+        status: x.deadline.healthOverride || 'on_track',
+      }));
+      const slaWindows = forCustomer.map((x) => ({
+        title: 'SLA Window ' + x.deadline.id,
+        dueDate: x.deadline.dueDate,
+        remainingDays: Math.max(0, Math.floor((x.deadline.dueDate.getTime() - Date.now()) / (24 * 60 * 60 * 1000))),
+        status: x.deadline.healthOverride || 'on_track',
+      }));
+      const nextMilestone = forCustomer.length > 0 ? forCustomer[0].deadline : undefined;
+      return { count, customerId, contracts, slaWindows, nextMilestone };
+    }
+  }
+}
+
+// ---------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------
+
+type Status<'business' | 'customer'> = keyof StatusCounters[keyof StatusCounters];
+let statusLev: Record<keyof StatusCounters, number> = { on_track: 0, at_risk: 1, off_track: 2, missed: 3 };
+let statusLit: Record<string, StatusCounters[keyof StatusCounters]> = {
+  on_track: 'on_track' as const,
+  at_risk: 'at_risk' as const,
+  off_track: 'off_track' as const,
+  missed: 'missed' as const,
+};
+
+/** Convert enum-like values to human-readable labels. */
+function formatDayLabel(day: number): string {
+  const d = new Date();
+  d.setUTCFullYear(d.getUTCFullYear(), 0, day);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
