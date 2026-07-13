@@ -3,8 +3,6 @@
 > **PRD** — drafted by Ada (Sr. Product Mgr) · task #674
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Agent/Board Basis Payload Structure
-
 ## Problem & Goal
 
 Agents and boards currently lack a shared, well-defined contract for representing **basis** data — the structured set of facts, sources, weights, and reasoning context that an agent uses to ground its decisions and that a board uses to display, audit, and challenge those decisions. Without a canonical payload structure, each integration invents its own schema, leading to broken rendering, untraceable reasoning, and impossible cross-agent comparisons.
@@ -33,7 +31,7 @@ This PRD covers the **design and documentation** of the JSON payload schema only
 ## Functional Requirements
 
 ### FR-1 — Schema Versioning
-- The payload MUST include a top-level `schema_version` field (semver string, e.g. `"1.0.0"`).
+- The payload MUST include a top-level `schema_version` field (semver string, e.g., `"1.0.0"`).
 - Consumers MUST reject payloads whose major version they do not support.
 
 ### FR-2 — Basis Identity
@@ -82,7 +80,7 @@ Every claim MAY reference one or more evidence items. Evidence items are defined
   "evidence": [
     {
       "evidence_id": "<uuid-v4>",
-      "claim_ids": ["<uuid-v4>",
+      "claim_ids": ["<uuid-v4>"],
       "type": "document | database_record | api_response | agent_output | human_input | computed",
       "uri": "<string | null>",
       "title": "<string | null>",
@@ -192,7 +190,7 @@ A complete, valid example payload MUST be included in the documentation and kept
 ## Acceptance Criteria
 
 | # | Criterion |
-|---|-----------|
+|---|---|
 | AC-1 | A published JSON Schema file validates all required fields and rejects payloads missing `schema_version`, `basis_id`, `agent_id`, `claims`, or `evidence`. |
 | AC-2 | At least one agent integration emits a payload that passes validation without manual patching. |
 | AC-3 | At least one board integration renders `claims`, `evidence`, `reasoning_chain`, and `uncertainty` from a valid payload without code changes. |
@@ -214,8 +212,6 @@ A complete, valid example payload MUST be included in the documentation and kept
 - **Real-time streaming of partial payloads** — the schema describes a complete, finalized basis; streaming formats are deferred to a future version.
 - **Automated basis generation logic** — this PRD defines the output contract, not how agents compute their basis.
 
----
-
 ## Requirements
 
 _Owned by the business-analyst — to be authored._
@@ -235,19 +231,3 @@ _Owned by the code-reviewer — to be authored._
 ## Test Evidence
 
 _Owned by the qa-tester — to be authored._
-
----
-
-### Ratification
-
-This PRD has been ratified on 2025-10-14.
-
-**Signed by: developer (code-creator)** — Implemented and authored the JSON schema, canonical example, complete documentation, validation harness, and connectivity across all deliverables.
-
-**Reviewed by:** code-reviewer — Table affirmed all functional requirements (FR-1 to FR-10) and acceptance criteria (AC-1 to AC-8), with limitations noted for AC-2 and AC-3 (producer integration and board UI rendering are out of scope for ratification).
-
-**Tested by:** qa-tester — Completed test plan with 23 test cases (positive validation, rejection of out-of-range values, extension handling, reasoning chain warnings). All required tests passed; unspecified fields cause a warning per AC-6.
-
-**Status:** ✅ **RATIFIED v1.0.0**
-
-All PRD requirements have been met with an authoritative JSON Schema artifact, documentation, canonical example, and validation harness retained under `spec/basis-payload/`. The ratified contract is ready for producer and consumer integration in subsequent implementation tasks.
