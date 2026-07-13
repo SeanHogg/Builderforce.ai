@@ -913,6 +913,12 @@ CoderClaw CLI
 
 ---
 
+## Avatar Filter
+
+Builderforce.ai currently tracks “avatar filter” in our product backlog so it can be surfaced as a client-side user filter in derived surfaces (e.g., on-team views, role-based role dashboards). The implementation itself will depend on future platform integration of priority alignment (PriorityBadge discovered as a reference, but serializer APIs and unassigned-high-priority fetch patterns are pending). Refer to ROADMAP.md for the latest backlog items and priority key intents.
+
+---
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
