@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   listCapabilities,
   deleteCapability,
+  updateCapability,
   type Capability,
 } from '@/lib/capabilitiesApi';
 import AddCapabilityModal from '@/components/capabilities/AddCapabilityModal';
