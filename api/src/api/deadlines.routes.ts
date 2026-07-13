@@ -1,10 +1,17 @@
-import express from 'express';
-import { validate, ValidationError } from 'zod';
+import express, { Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 import { DeadlineService } from '../application/deadlines/DeadlineService.js';
 import { DeadlineNotifier } from '../application/deadlines/DeadlineNotifier.js';
 import { DeadlineExport } from '../application/deadlines/DeadlineExport.js';
 import { DeadlinePresenter } from '../application/deadlines/DeadlinePresenter.js';
-import { validateRequestDto, parseQuery } from './deadline.dto';
+import {
+  validateRequestDto,
+  parseQuery,
+  deadlineUpdateSchema,
+  canRequireSlipReason,
+  handleZodError,
+  zodErrorResponse,
+} from './deadline.dto';
 
 // ---------------------------------------------------------------------
 // Types
