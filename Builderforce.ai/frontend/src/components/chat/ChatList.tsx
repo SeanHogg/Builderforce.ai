@@ -10,7 +10,7 @@ interface ChatListProps {
   onChatsUpdated?: () => void;
 }
 
-export function ChatList({ onSelectChat, currentChatId, userId }: ChatListProps) {
+export function ChatList({ onSelectChat, currentChatId, userId, onChatsUpdated }: ChatListProps) {
   const [chats, setChats] = useState<Chat[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
