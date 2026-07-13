@@ -17,7 +17,6 @@
 import { describe, it, expect } from "vitest";
 import type { Task } from "../../domain/task/Task";
 import { TaskType } from "../../domain/shared/types";
-import { Task } from "../../domain/task/Task";
 import { computeProgressBreakdown } from "./progressBreakdown";
 import type { ProgressBreakdown } from "../../domain/task/ProgressBreakdown";
 
