@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Event Payload Schema",
-  "description": "Canonical event payload for progress tracking (Draft 2020-12)",
+  "description": "Canonical event payload for progress tracking (Draft 2020-12). Includes the FR-1 canonical progressPct=100 emission rule, ordering guarantee, and authority as the terminal completion signal.",
   "type": "object",
   "examples": [
     {
