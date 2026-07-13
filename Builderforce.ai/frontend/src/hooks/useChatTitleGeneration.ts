@@ -131,8 +131,7 @@ export function useChatTitleGeneration({
     // Mark as manually edited (FR6)
     onTitleGenerated(chat.id, newTitle);
 
-    // In a real implementation, this would persist through an API call.
-    // For now, we update the local state.
+    // In the integrated app, this would continue to an API endpoint.
   }, [chat.id, onTitleGenerated]);
 
   /**
