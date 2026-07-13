@@ -153,11 +153,14 @@
   scrollbar-width: none;
   -ms-overflow-style: none;
   min-height: 200px; /* Ensure minimum height for scrolling */
+  /* Prevent interfering gestures with page navigation */
+  touch-action: pan-x;
 }
 
 /* Task kanban container - horizontal scroll on mobile */
 .task-kanban {
   display: flex;
+  flex-wrap: nowrap;
   overflow-x: auto;
   overflow-y: auto;
   gap: 12px;
@@ -169,6 +172,7 @@
   -ms-overflow-style: none;
   min-width: 100%;
   /* Allow scrolling horizontally for swimlanes */
+  touch-action: pan-x;
 }
 
 .task-kanban::-webkit-scrollbar {
