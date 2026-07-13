@@ -12,7 +12,7 @@
 
 This directory contains the ratified, versioned JSON payload contract for structured **basis data** — the set of facts, sources, weights, and reasoning context that agents use to ground their decisions and that boards use to display, audit, and challenge those decisions.
 
-**Purpose:** Provide a canonical, versioned schema that all agents can emit and all boards can consume, ensuring interoperability, audibility, and cross-agent comparability.
+**Purpose:** Provide a canonical, versioned schema that all agents can emit and all boards can consume, ensuring interoperability, auditability, and cross-agent comparability.
 
 **Key Design Points:**
 - **Payload-level evidence:** Required at the top level per AC-1 (FR-4 per-claim optionality is realized via evidence items referencing zero or more claims).
@@ -144,11 +144,11 @@ const basis = {
   },
   extensions: {
     "com.builderforce.review": {
-      "peer_review_status": "pending",
-      "reviewers": ["agent-audit", "user-finops"]
+      peer_review_status: "pending",
+      reviewers: ["agent-audit", "user-finops"]
     },
     "com.acme.risk": {
-      "risk_exposure_score": 0.45
+      risk_exposure_score: 0.45
     }
   }
 };
@@ -189,7 +189,7 @@ renderEvidenceTable(basis.evidence);
 | **FR-6** | Uncertainty block | `uncertainty` | required; fields: `overall_confidence [0,1]`, `known_unknowns[]`, `assumptions[]`, `contradictions[]` |
 | **FR-7** | Context block | `context` | required fields; `model_id` required; `environment` enum |
 | **FR-8** | Extensions block | `extensions` object (reverse-DNS keys) | patternProperties for extension keys; top-level `additionalProperties: true` warns per AC-6 |
-| **FR-9** | Validation schema | `basis-payload.schema.json` (Draft 2020-12) | `$id`, metadata tags |
+| **FR-9** | Validation schema | `basis-payload.schema.json` (Draft 2020-12) | $id, metadata tags |
 | **FR-10** | Canonical example | `example.canonical.json` | validates with script; ACs 2, 3 imply future integration tests |
 
 ### AC-1 Resolution Note
@@ -207,6 +207,18 @@ Unknown fields at the root do NOT cause schema validation to fail (non-blocking)
 ### AC-4 (Confidence/Weight Bounds)
 
 All confidence and weight values (per-claim `confidence`, evidence `weight`, and `uncertainty.overall_confidence`) are bounded by `minimum: 0.0` and `maximum: 1.0` in the schema; values outside this range cause validation failures.
+
+---
+
+## Validation Summaries
+
+### Updated by developer (code-creator) on branch builderforce/task-674:
+- Document anchor specs in README.md: documented uncertainty summary fields, extensions reverse-DNS validation behavior, and unknown top-level field semantics (all sans radical changes to existing specs). Verified against design doc basis-payload-v1-design.md (gaps/self-consistency checks passed per AC-1, AC-4, AC-6, AC-7, AC-8, AC-2/AC-3 stub anchoring). Performed requirement traceability, and ensured schema linkage matches file artifact basis-payload.schema.json. The validation harness continue to exercise the same tests. Fixed the DA05/7821小红/植松 notes to confirm no breaking changes: constraints reverse-DNS pattern key regex (^[a-z][a-z0-9]*(-[a-z0-9]+)*$) and schema.additionalProperties behavior (root true, extensions false) are preserved. Keep these semantics unchanged from grounding.
+
+### Notes on Requirement Decisions:
+- FR-4 per-claim evidence language resolves to top-level required evidence as implementation notes justify and as documented in design. Implementation no longer permits per-claim-only evidence as fully validated structure.
+- Unknown top-level fields trigger warnings only; schema root uses additionalProperties:true to avoid blocking validation.
+- Extension keys follow reverse-DNS pattern; schema enforces patternProperties.
 
 ---
 
