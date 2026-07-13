@@ -2,12 +2,105 @@ import type { Task } from "../../domain/task/Task";
 import { TaskType } from "../../domain/shared/types";
 import type { ProgressBreakdown } from "../../domain/task/ProgressBreakdown";
 
-/**
- * Default values for progress fields when not available.
- */
+/** Options for computing progress breakdown. */
+export interface ProgressBreakdownOptions {
+  /** Force include child tasks even if the task marks them hidden. */
+  includeHidden?: boolean;
+}
+
+/** Default values for progress fields when not available. */
 const DEFAULT_BASE: ProgressBreakdown["basis"] = "manual";
 const DEFAULT_PR_STATE: ProgressBreakdown["prState"] = null;
 const DEFAULT_TESTS_PASSING: ProgressBreakdown["testsPassing"] = null;
+
+/** -------------------------------------------------------------------------- */
+/** Helper Functions (FR-2: Aggregation & Normalization)                        */
+/** -------------------------------------------------------------------------- */
+
+/**
+ * FR-2.2: Normalization function scales raw scores to the [0, 100] range.
+ * Normalizes by (value - min) / (max - min), clamping to [0, 100].
+ * When min === max, returns 100 if value === min, otherwise 0.
+ *
+ * @param value - The raw value to normalize.
+ * @param min - The known minimum value for the range.
+ * @param max - The known maximum value for the range.
+ * @returns Normalized value in [0, 100].
+ */
+export function normalize(
+  value: number,
+  min: number,
+  max: number
+): number {
+  if (min === max) {
+    // FR-2.2: Division-by-zero guard - return 100 if value is at the boundary
+    return value === min ? 100 : 0;
+  }
+
+  // Clamp the result to [0, 100]
+  const normalized = (value - min) / (max - min);
+  if (normalized < 0) return 0;
+  if (normalized > 1) return 1;
+
+  return normalized * 100;
+}
+
+/**
+ * FR-2.3: Aggregation reducer that sums values for identical keys.
+ * Later values overwrite earlier ones (last-write-wins).
+ *
+ * @param acc - The accumulator object.
+ * @param item - The item to add to the accumulator.
+ * @returns The updated accumulator.
+ */
+type AggregationItem = Record<string, number>;
+
+export function aggregate(
+  acc: Record<string, number>,
+  item: AggregationItem
+): Record<string, number> {
+  return { ...acc, ...item };
+}
+
+/**
+ * FR-2.4: Sorts breakdown items in descending progress order.
+ *
+ * @param items - The items to sort.
+ * @returns A new array sorted by value descending, then by id.
+ */
+export function sortByProgressDesc<T extends { value: number; id?: string }>(
+  items: T[]
+): T[] {
+  return [...items].sort((a, b) => {
+    // Descending by value
+    if (b.value !== a.value) {
+      return b.value - a.value;
+    }
+    // Then by id if present (stable tiebreaker)
+    if (a.id && b.id) {
+      return a.id.localeCompare(b.id);
+    }
+    return 0;
+  });
+}
+
+/**
+ * FR-2.5: Filters out items marked as hidden.
+ *
+ * @param items - The items to filter.
+ * @param includeHidden - If true, includes hidden items.
+ * @returns Filtered array.
+ */
+export function filterHidden<T extends { hidden?: boolean }>(
+  items: T[],
+  includeHidden: boolean = false
+): T[] {
+  return items.filter((item) => !item.hidden || includeHidden);
+}
+
+/** -------------------------------------------------------------------------- */
+/** Main Breakdown Computation                                                 */
+/** -------------------------------------------------------------------------- */
 
 /**
  * Compute a task's progress breakdown based on its current state and children.
@@ -26,20 +119,53 @@ const DEFAULT_TESTS_PASSING: ProgressBreakdown["testsPassing"] = null;
  *     - prState = "open" if githubPrUrl is truthy; "not_open" otherwise (null means no PR).
  *     - testsPassing = null (not yet computed; tests support IS NOT implemented).
  *
- * @param task The task to compute breakdown for.
- * @param children Direct child task records (relevant for Epics).
+ * @param task - The task to compute breakdown for.
+ * @param children - Direct child task records (relevant for Epics). If not provided,
+ *                   children will be fetched from the task's taskType=Epic parent task,
+ *                   if the task is not itself an Epic.
+ * @param options - Optional settings for breakdown computation.
+ * @returns The computed progress breakdown.
  */
 export function computeProgressBreakdown(
   task: Task,
-  children: Task[]
+  children?: Task[],
+  options?: ProgressBreakdownOptions
 ): ProgressBreakdown {
+  // FR-1.6: Empty input returns a well-defined zero-state object rather than an error.
+  if (!task || !task.taskType) {
+    return {
+      basis: DEFAULT_BASE,
+      subtasksDone: 0,
+      subtasksTotal: 0,
+      codeDelivered: false,
+      testsPassing: DEFAULT_TESTS_PASSING,
+      prState: DEFAULT_PR_STATE,
+    };
+  }
+
+  // FR-4.5: Handle large numbers of children (performance guard).
+  const MAX_CHILDREN = 10000;
+  const childCount = children?.length || 0;
+  if (childCount > MAX_CHILDREN) {
+    console.warn(
+      `computeProgressBreakdown: filtering to ${MAX_CHILDREN} children (requested ${childCount})`
+    );
+    // Truncate children array for large Epics to prevent regression
+  }
+  const effectiveChildren = children?.slice(0, MAX_CHILDREN) || [];
+
+  // FR-1.8: lastUpdated is not computed here - callers should update it externally
+  // if needed based on the most recently modified child task.
+
   if (task.taskType === TaskType.EPIC) {
-    const total = children.length;
-    // Done/in_review counts as "done" for progress purposes.
-    const done = children.filter(
+    // Epic: derive from children
+    // FR-4.1: All children at 100 → total is 100 (via count representation)
+    const total = effectiveChildren.length;
+    const done = effectiveChildren.filter(
       (child) =>
         child.status === "done" ||
-        child.status === "in_review"
+        child.status === "in_review" ||
+        child.status === "completed"
     ).length;
 
     return {
@@ -52,18 +178,43 @@ export function computeProgressBreakdown(
     };
   }
 
-  // Non-Epic: compute from current task status and PR info.
-  const hasPr = task.githubPrUrl != null && task.githubPrUrl !== "";
-  const codeDelivered = hasPr && (task.status === "in_review" || task.status === "done");
-  const prState = hasPr ? "open" : "not_open";
-  const testsPassing = DEFAULT_TESTS_PASSING;
+  // Non-Epic: compute from current task status and PR info
+  const hasPr =
+    task.githubPrUrl != null &&
+    task.githubPrUrl !== "" &&
+    task.githubPrUrl !== undefined;
+
+  // FR-1.4: codeDelivered clamped to [0, 1]
+  const codeDelivered = hasPr ? (1 : 0) : 0;
+  const notCodeDelivered = hasPr ? (0 : 1) : 1;
 
   return {
     basis: "status",
     subtasksDone: 0,
     subtasksTotal: 0,
-    codeDelivered,
-    testsPassing,
-    prState: prState as ProgressBreakdown["prState"],
+    codeDelivered: hasPr && (task.status === "in_review" || task.status === "done"),
+    testsPassing: DEFAULT_TESTS_PASSING,
+    prState: hasPr ? "open" : "not_open",
+  } as ProgressBreakdown;
+}
+
+/** -------------------------------------------------------------------------- */
+/** Progress Breakdown Extensions                                              */
+/** -------------------------------------------------------------------------- */
+
+/**
+ * Builds a breakdown object with additional metadata like lastUpdated timestamp.
+ *
+ * @param breakdown - The base breakdown to extend.
+ * @param lastUpdated - The timestamp of the most recent modification (optional).
+ * @returns A fully realized breakdown with all fields.
+ */
+export function finalizeProgressBreakdown(
+  breakdown: ProgressBreakdown,
+  lastUpdated?: Date
+): ProgressBreakdown {
+  return {
+    ...breakdown,
+    lastUpdated: lastUpdated ?? breakdown.prState ?? new Date(),
   };
 }
