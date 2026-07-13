@@ -379,15 +379,21 @@ describe('computeProgressBreakdown', () => {
       expect(breakdown.subtasksTotal).toBe(5);
     });
 
-    it('handles Epic with null children without throwing', () => {
+    it('handles empty children array without throwing', () => {
       const epic = makeEpicTask({ id: 1 as any });
-      // @ts-expect-error - test invalid input: null not allowed
-      const breakdown = computeProgressBreakdown(epic, null);
 
-      // Should still return a valid breakdown shape; actual behavior is non-deterministic
-      // based on implementation; we just test it doesn't crash.
+      // computeProgressBreakdown is designed to handle empty children arrays.
+      const breakdown = computeProgressBreakdown(epic, []);
+
       expect(breakdown).toBeDefined();
-      expect(typeof breakdown).toBe('object');
+      expect(breakdown).toEqual({
+        basis: 'subtasks',
+        subtasksDone: 0,
+        subtasksTotal: 0,
+        codeDelivered: false,
+        testsPassing: null,
+        prState: null,
+      });
     });
 
     it('handles missing task fields gracefully', () => {
