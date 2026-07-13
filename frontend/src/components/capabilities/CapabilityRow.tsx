@@ -2,6 +2,7 @@
 
 import { Capability, CapabilityStatus } from '@/app/insights/capabilityTypes';
 import { getChildStatusLabel, getChildStatusColor } from './statusHelpers';
+import type { CapabilityStatus as LegacyStatus };
 
 /**
  * Table row for a Capability.
