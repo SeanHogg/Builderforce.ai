@@ -11,6 +11,21 @@ export interface TaskListOptions {
   includeArchived?: boolean;
 }
 
+export interface UnassignedHighPriorityTaskOptions {
+  /**
+   * Optional project filter.
+   */
+  projectId?: number;
+}
+
+export interface UnassignedHighPriorityTaskResult {
+  tasks: Array<Record<string, unknown>>;
+  total: number;
+  cacheInfo: {
+    validForSeconds: number;
+  };
+}
+
 export interface ITaskRepository {
   findAll(projectId?: ProjectId, opts?: TaskListOptions): Promise<Task[]>;
   findByProjectIds(ids: ProjectId[], opts?: TaskListOptions): Promise<Task[]>;
