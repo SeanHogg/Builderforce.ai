@@ -1,246 +1,127 @@
 /**
- * Search Engine implementation with indexing and similarity ranking
+ * Search Engine - Memory search and retrieval
+ * Provides querying and ranking capabilities
  */
 
-import type { MemoryEntry, SearchResult, SearchQuery, SearchEngineConfig } from './types.js';
+import type { MemoryEntry, SearchQuery, SearchResult, SearchEngineAPI } from './types.js';
 import { MemoryStore } from './memory-store.js';
 
-/**
- * Search Engine class - implements SearchEngineAPI
- */
-export class SearchEngine {
+export class SearchEngine implements SearchEngineAPI {
   private store: MemoryStore;
-  private config: Required<SearchEngineConfig>;
-  private index: Map<string, MemoryEntry[]> = new Map();
+  private index = new Map<string, MemoryEntry[]>();
+  private config: any;
 
-  constructor(config?: SearchEngineConfig) {
-    this.config = {
-      algorithm: 'bm25',
-      similarityThreshold: 0.3,
-      embeddingModel: null,
-      vectorDimensions: 0,
-      cacheSize: 1000,
-      ...config
-    };
-
-    this.store = null as any; // Will be set by reference
-  }
-
-  /**
-   * Set the parent memory store (used internally)
-   */
-  setStore(store: MemoryStore): void {
+  constructor(store: MemoryStore, config?: any) {
     this.store = store;
+    this.config = config || {};
   }
 
-  /**
-   * Index an entry for search
-   */
-  async indexEntry(entry: MemoryEntry): Promise<void> {
-    if (!this.store) {
-      throw new Error('Store not initialized');
-    }
-
-    const indexKey = this.buildIndexKey(entry);
-
-    if (!this.index.has(indexKey)) {
-      this.index.set(indexKey, []);
-    }
-
-    this.index.set(
-      indexKey,
-      this.index.get(indexKey).concat(entry)
-    );
-  }
-
-  /**
-   * Build index key from entry metadata
-   */
-  private buildIndexKey(entry: MemoryEntry): string {
-    const { agentId, sessionId, category, tags } = entry.metadata || {};
-    const tagKey = tags?.sort().join('|') || '';
-
-    return [agentId, sessionId, category, tagKey].filter(Boolean).join('|') || 'all';
-  }
-
-  /**
-   * Remove an entry from the index
-   */
-  async removeEntry(id: string): Promise<void> {
-    for (const [key, entries] of this.index) {
-      const filtered = entries.filter(entry => entry.id !== id);
-      if (filtered.length === 0) {
-        this.index.delete(key);
-      } else {
-        this.index.set(key, filtered);
-      }
-    }
-  }
-
-  /**
-   * Perform search query
-   */
   async search(query: SearchQuery): Promise<SearchResult[]> {
-    if (!this.store) {
-      throw new Error('Store not initialized');
-    }
+    const startTime = Date.now();
+    let entries = Array.from(this.store.entries.values());
 
-    // If filters favor specific index keys, search only those keys
-    const result = await this.store.search(query);
-
-    // Create index for this search
-    await this.buildSearchIndex(result);
-
-    // Search the index
-    const indexResults = this.searchIndex(query, 10);
-
-    return indexResults;
-  }
-
-  /**
-   * Find similar entries (semantic search with text similarity)
-   */
-  async findSimilar(query: SearchQuery, limit = 10): Promise<SearchResult[]> {
-    if (!this.store) {
-      throw new Error('Store not initialized');
-    }
-
-    const textQuery = query.text;
-    const allEntries = await this.store.list(undefined, 1000);
-
-    const results: SearchResult[] = [];
-
-    // Tokenize and find similar text segments
-    const queryTokens = this.tokenize(textQuery.toLowerCase());
-    const queryPositions = this.findTextPositions(textQuery.toLowerCase());
-
-    for (const entry of allEntries) {
-      const entryTokens = this.tokenize(entry.content.toLowerCase());
-
-      let intersection = 0;
-      let maxScore = 0;
-
-      // Compute token overlap score
-      for (const qt of queryTokens) {
-        const positions = entryTokens.filter(t => t === qt);
-        const uniquePositions = new Set(positions);
-        intersection += uniquePositions.size;
-
-        const entrySimilarity =
-          uniquePositions.size / Math.max(entryTokens.length, 1);
-        maxScore = Math.max(maxScore, entrySimilarity);
-      }
-
-      // Combine overlap and metadata importance scores
-      let baseScore = 0.1;
-      baseScore += intersection * 0.02;
-
-      if (intersection > 0) {
-        const entry = entry;
-        const score = baseScore + (entry.metadata?.importance || 0) * 0.15;
-
-        results.push({
-          entry,
-          score,
-          match: {
-            text: textQuery,
-            start: 0,
-            end: textQuery.length,
-            positions: [0, textQuery.length]
-          }
-        });
-      }
-    }
-
-    // Sort and limit results
-    return results
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit);
-  }
-
-  /**
-   * Build search index asynchronously
-   */
-  private async buildSearchIndex(results: SearchResult[]): Promise<void> {
-    for (const result of results) {
-      await this.indexEntry(result.entry);
-    }
-  }
-
-  /**
-   * Search the pre-built index
-   */
-  private searchIndex(query: SearchQuery, limit: number): SearchResult[] {
-    const tokens = this.tokenize(query.text.toLowerCase());
-    const results = new Map<string, SearchResult>();
-
-    for (const token of tokens) {
-      for (const [_, entries] of this.index) {
-        for (const entry of entries) {
-          if (entry.content.toLowerCase().includes(token)) {
-            const existing = results.get(entry.id);
-            if (existing) {
-              existing.score += 0.05;
-            } else {
-              const baseScore = (entry.metadata?.importance || 0) * 0.1;
-              results.set(entry.id, {
-                entry,
-                score: baseScore,
-                match: undefined
-              });
-            }
-          }
-        }
-      }
-    }
-
-    return Array.from(results.values())
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit);
-  }
-
-  /**
-   * Tokenize text for search
-   */
-  private tokenize(text: string): string[] {
-    return text
-      .split(/\s+/)
-      .map(word => word.replace(/[^\w-]/g, ''))
-      .filter(Boolean);
-  }
-
-  /**
-   * Find positions of text in content for match highlighting
-   */
-  private findTextPositions(text: string): number[] {
-    return [];
-  }
-
-  /**
-   * Optimize the search index (can be used for aging out old entries)
-   */
-  async optimize(): Promise<void> {
-    for (const [key, entries] of this.index) {
-      const filtered = entries.filter(entry => {
-        const age = Date.now() - entry.createdAt;
-        const retentionPeriod = 30 * 24 * 60 * 60 * 1000; // 30 days
-
-        return age < retentionPeriod;
+    // Filter by text match
+    if (query.text) {
+      entries = entries.filter(entry => {
+        const text = entry.content.toLowerCase();
+        const queryText = query.text.toLowerCase();
+        return text.includes(queryText);
       });
-
-      if (filtered.length !== entries.length) {
-        this.index.set(key, filtered);
-      }
     }
+
+    // Apply query filters
+    if (query.filters) {
+      // Note: This is simplified - actual implementation would be more sophisticated
+      entries = entries.filter(entry => {
+        if (query.filters.tags) {
+          // Tag filtering will be handled by MemoryStore
+          return query.filters.tags.every(tag => entry.metadata?.tags?.includes(tag));
+        }
+        return true;
+      });
+    }
+
+    // Rank results based on query ranking method
+    const results: SearchResult[] = entries.map(entry => ({
+      entry,
+      score: this.calculateScore(query, entry)
+    }));
+
+    // Sort by score
+    results.sort((a, b) => b.score - a.score);
+
+    // Apply limit
+    if (query.limit) {
+      return results.slice(0, query.limit);
+    }
+
+    return results;
+  }
+
+  async findSimilar(query: SearchQuery, limit?: number): Promise<SearchResult[]> {
+    // Placeholder for similarity search
+    // In a real implementation, would use embeddings or other similarity algorithms
+    return this.search(query).then(results => {
+      if (limit) {
+        return results.slice(0, limit);
+      }
+      return results;
+    });
+  }
+
+  async indexEntry(entry: MemoryEntry): Promise<void> {
+    // Placeholder for indexing
+    if (!this.index.has('all')) {
+      this.index.set('all', []);
+    }
+    this.index.get('all')!.push(entry);
+  }
+
+  async removeEntry(id: string): Promise<void> {
+    const allEntries = this.index.get('all') || [];
+    this.index.set('all', allEntries.filter(entry => entry.id !== id));
+  }
+
+  async optimize(): Promise<void> {
+    // Placeholder for optimization
+    // Could rebuild index, clean up, etc.
+  }
+
+  private calculateScore(query: SearchQuery, entry: MemoryEntry): number {
+    let score = 0;
+
+    // Text relevance score (simple count of matches)
+    if (query.text) {
+      const entryText = entry.content.toLowerCase();
+      const queryText = query.text.toLowerCase();
+      const matches = (entryText.match(new RegExp(queryText.split(' ').join('.*'), 'gi')) || []).length;
+      score += matches * 10;
+    }
+
+    // Recency boost for recent entries
+    const age = Date.now() - entry.createdAt;
+    if (age < 86400000) { // Less than 24 hours
+      score += 2;
+    } else if (age < 604800000) { // Less than a week
+      score += 1;
+    }
+
+    // Importance boost
+    if (entry.metadata?.importance) {
+      score += entry.metadata.importance;
+    }
+
+    // Tag matches
+    if (query.filters?.tags && entry.metadata?.tags) {
+      score += query.filters.tags.filter(tag => entry.metadata!.tags!.includes(tag)).length * 5;
+    }
+
+    // Hybrid ranking method
+    if (query.ranking?.method === 'hybrid') {
+      // Combine multiple scores
+      score = (score * 0.6) + (1 - age / 31536000000) * 0.4;
+    }
+
+    return Math.max(0, score);
   }
 }
-
-/**
- * Factory functions from types.ts
- */
-import { SearchEngineConfig } from './types.js';
-
-export const createSearchEngine = (
-  store: MemoryStore,
-  config?: Partial<SearchEngineConfig>
-) => new SearchEngine(config);
