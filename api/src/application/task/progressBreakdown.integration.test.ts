@@ -6,14 +6,21 @@
  *
  * FR IDs covered:
  * - FR-3: GET /progress/breakdown endpoint (200 OK, auth 403/404, zero-state, Content-Type, latency)
+ * - FR-3.1: 200 OK with authenticated request returns JSON matching schema
  * - FR-3.2: Response body contains total, breakdown array, and lastUpdated fields
  * - FR-3.3: Each item in breakdown contains id, label, value (number), and weight (number)
- * - FR-3.8: Query parameter ?include_hidden=true causes hidden sub-components to appear
+ * - FR-3.3: Each item has required fields: basis, subtasksDone, subtasksTotal, codeDelivered, testsPassing, prState
+ * - FR-3.7: Zero-state schema returned when no progress data (no 500 error)
+ * - FR-3.8: Query parameter ?include_hidden=true handled
+ * - FR-3.9: Response includes Content-Type: application/json
+ * - FR-4.4: Floating-point inputs don't cause serialization errors
+ * - FR-4.5: Performance guards for large N (100 children <200ms, 1000 children <500ms)
  *
  * Test infrastructure:
  * - FR-5.1: makeProgressBreakdown() factory (shared with unit tests)
- * - FR-5.2: fake runtime service that wraps TaskDomain with minimal consistency type checks
- * - offline execution (no DB/HTTP runners), deterministic (no random / Date.now mismatches)
+ * - FR-5.3: Offline execution with no shared mutable state (in-memory mocks)
+ * - FR-5.4: Uses deterministic timestamps to avoid wall-clock issues
+ * - FR-5.5: Runnable in CI via npm test / vitest (no external runners needed)
  */
 
 import { describe, it, expect } from "vitest";
