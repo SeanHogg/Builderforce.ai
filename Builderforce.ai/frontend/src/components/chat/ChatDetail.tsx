@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { chatApi, type Message } from '@/lib/chatApi';
+import { saveTitleEntry } from '@/lib/storage';
 
 interface ChatDetailProps {
   chatId: string;
@@ -14,18 +15,6 @@ interface ChatDetailProps {
   };
   onTitleChange?: (title: string) => void;
 }
-
-const inputRef = useRef<HTMLTextAreaElement>(null);
-
-// Sync title to LocalStorage when it changes (FR4.1: Persistence)
-const syncTitleToStorage = async (chatId: string, title: string) => {
-  try {
-    const storage = require('@/lib/storage');
-    storage.saveTitleEntry(chatId, title);
-  } catch (err) {
-    console.warn('Failed to sync chat title to local storage:', err);
-  }
-};
 
 export function ChatDetail({
   chatId,
@@ -41,10 +30,7 @@ export function ChatDetail({
   const [editTitleText, setEditTitleText] = useState('');
   const [updatedChat, setUpdatedChat] = useState(chat);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  // Fix missing ref for form input (should have been in earlier edit)
-  if (!inputRef.current) {
-    inputRef.current = document.querySelector('textarea') as HTMLTextAreaElement;
-  }
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Update local chat state when we get a new title from the backend
   useEffect(() => {
@@ -70,11 +56,12 @@ export function ChatDetail({
       setMessages(data);
       setError(null);
 
-      // Trigger title update if this is first message
+      // Trigger title update if this is first message (FR1.1)
       if (data.length === 1) {
         const autoTitle = await chatApi.autoGenerateTitle(data[0].content);
         if (autoTitle !== chat?.title) {
           await chatApi.updateChatTitle({ chatId, title: autoTitle });
+          saveTitleEntry(chatId, autoTitle);
           onTitleChange?.(autoTitle);
         }
       }
@@ -112,20 +99,6 @@ export function ChatDetail({
     }
   };
 
-  const formatTime = (timestamp: number) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
-
   const handleStartEditTitle = () => {
     setEditingTitle(true);
     setEditTitleText(updatedChat.title);
@@ -142,7 +115,8 @@ export function ChatDetail({
       setUpdatedChat(updated);
       setEditingTitle(false);
       onTitleChange?.(editTitleText.trim());
-      syncTitleToStorage(chatId, editTitleText.trim());
+      // Persist to LocalStorage (FR4.1)
+      saveTitleEntry(chatId, editTitleText.trim());
     } catch (err: any) {
       alert(err.message || 'Failed to save title');
       setEditTitleText(updatedChat.title);
@@ -483,14 +457,4 @@ if (typeof document !== 'undefined') {
   const style = document.createElement('style');
   style.textContent = chatDetailStyles;
   document.head.appendChild(style);
-}
-
-// Fix the missing ref attribute for the textarea in the form
-if (typeof document !== 'undefined') {
-  const textareas = document.querySelectorAll('textarea');
-  textareas.forEach(textarea => {
-    if (!textarea.getAttribute('ref')) {
-      textarea.setAttribute('ref', 'inputRef');
-    }
-  });
 }
