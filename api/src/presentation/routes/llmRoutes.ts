@@ -923,6 +923,71 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     return c.json({ providers: details.map((d) => d.provider), details });
   });
 
+  // Credential health plus tenant-observed usage for the provider details drawer.
+  // This does not expose or transmit the stored secret.
+  router.get('/provider-keys/:provider/status', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const provider = c.req.param('provider');
+    if (!isSupportedProvider(provider)) return c.json({ error: 'unsupported provider' }, 400);
+    const [details, creds] = await Promise.all([
+      listTenantProviderKeys(c.env, access.tenantId),
+      resolveTenantLlmCredentials(c.env, access.tenantId),
+    ]);
+    const configured = details.some((d) => d.provider === provider);
+    const usable = providersFromCredentials(creds).includes(provider);
+    const db = buildDatabase(c.env);
+    const usage = await db.execute(sql`
+      SELECT COUNT(*)::int AS requests,
+             COALESCE(SUM(total_tokens), 0)::bigint AS tokens,
+             MAX(created_at) AS last_used_at
+      FROM llm_usage_log
+      WHERE tenant_id = ${access.tenantId}
+        AND byo = true
+        AND byo_provider = ${provider}
+        AND created_at >= NOW() - interval '30 days'
+    `);
+    const row = (usage.rows?.[0] ?? {}) as Record<string, unknown>;
+    return c.json({
+      provider, configured, usable,
+      status: !configured ? 'not_connected' : usable ? 'ready' : (creds.unresolvedReasons[provider] ?? 'unavailable'),
+      usage: { periodDays: 30, requests: Number(row.requests ?? 0), tokens: Number(row.tokens ?? 0), lastUsedAt: row.last_used_at ?? null },
+    });
+  });
+
+  // Make one tiny, strict-pinned request through the same routing path as chat.
+  router.post('/provider-keys/:provider/test', async (c) => {
+    let access: TenantAccess;
+    try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
+    const provider = c.req.param('provider');
+    if (!isSupportedProvider(provider)) return c.json({ error: 'unsupported provider' }, 400);
+    const creds = await resolveTenantLlmCredentials(c.env, access.tenantId);
+    if (!providersFromCredentials(creds).includes(provider)) {
+      return c.json({ ok: false, status: creds.unresolvedReasons[provider] ?? 'not_connected' }, 409);
+    }
+    const model = provider === 'openai' && creds.openaiCodexAuth
+      ? 'openai-codex/gpt-5.3-codex'
+      : byoModelsFor([provider])[0]?.id;
+    if (!model) return c.json({ ok: false, status: 'no_test_model' }, 409);
+    const body: ChatCompletionRequest = {
+      model, modelStrict: true, max_tokens: 8,
+      messages: [{ role: 'user', content: 'Reply OK.' }],
+    };
+    const service = proxyForCompletion(c.env, access, body, {
+      disablePaidOverflow: true,
+      anthropicOAuthToken: creds.anthropicOAuthToken,
+      openaiCodexAuth: creds.openaiCodexAuth,
+      tenantVendorKeys: creds.vendorKeys,
+      byoVendorPriority: creds.vendorPriority,
+    });
+    const result = await service.complete(body, undefined, newTraceId());
+    if (result.response.status >= 400) {
+      const payload = await result.response.clone().text();
+      return c.json({ ok: false, status: 'error', httpStatus: result.response.status, message: payload.slice(0, 500) }, 502);
+    }
+    return c.json({ ok: true, status: 'ready', model: result.resolvedModel, testedAt: new Date().toISOString() });
+  });
+
   // Set the BYO precedence — the ordered provider list (most-preferred first) the
   // auto-select cloud pin leads its connected flagships by (e.g. Meta first). Registered
   // BEFORE `:provider` so the literal `priority` segment isn't captured as a provider id.
