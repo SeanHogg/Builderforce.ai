@@ -237,6 +237,17 @@ export interface AccountEmailResolver {
  * Port: Sends an email notification.
  * Single Responsibility — only email dispatch.
  */
+/**
+ * Port: Sends an email notification.
+ * Single Responsibility — only email dispatch.
+ *
+ * Implementations:
+ * - ResendEmailNotifier (infrastructure adapter) in agent-runtime/extensions/llm-task/src/hen-task-completion-notifier.ts
+ * - MockEmailNotifier (for testing)
+ *
+ * Used by:
+ * - HenTaskCompletionNotifier (domain service) for email delivery
+ */
 export interface EmailNotifier {
   /**
    * Send an email notification.
@@ -247,6 +258,9 @@ export interface EmailNotifier {
 
 /**
  * Notification log entry for auditing (FR.5).
+ *
+ * Used by:
+ * - HenTaskCompletionNotifier (domain service) for logging attempts
  */
 export type NotificationLogEntry = {
   accountId: string;
