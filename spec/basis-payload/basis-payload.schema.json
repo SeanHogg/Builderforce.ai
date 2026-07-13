@@ -1,54 +1,8 @@
 {
-  "$id": "https://builderforce.ai/spec/basis-payload/basis-payload.schema.json",
-  "$schema": "http://json-schema.org/draft/2020-12/schema",
-  "$defs": {
-    "uuid": {
-      "type": "string",
-      "format": "uuid"
-    },
-    "confidence_or_weight": {
-      "type": "number",
-      "minimum": 0.0,
-      "maximum": 1.0,
-      "exclusiveMinimum": false,
-      "exclusiveMaximum": false
-    },
-    "confidence_method_enum": {
-      "type": "string",
-      "enum": ["bayesian", "heuristic", "llm-self-report", "empirical"]
-    },
-    "claim_status_enum": {
-      "type": "string",
-      "enum": ["asserted", "retracted", "superseded"]
-    },
-    "evidence_type_enum": {
-      "type": "string",
-      "enum": ["document", "database_record", "api_response", "agent_output", "human_input", "computed"]
-    },
-    "evidence_provenance": {
-      "type": "object",
-      "required": ["source_system"],
-      "properties": {
-        "source_system": {
-          "type": "string",
-          "description": "The system or service that produced this evidence."
-        },
-        "source_version": {
-          "type": "string",
-          "description": "Version identifier of the source system if applicable."
-        },
-        "checksum": {
-          "type": "string",
-          "description": "SHA-256 hex hash of the evidence content for reproducibility."
-        }
-      }
-    },
-    "inference_type_enum": {
-      "type": "string",
-      "enum": ["deductive", "inductive", "abductive", "analogical", "lookup"]
-    }
-  },
-  "title": "Basis Payload Schema v1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://builderforce.ai/schemas/basis-payload-1.0.0.schema.json",
+  "title": "Basis Payload v1.0.0",
+  "description": "Canonical JSON payload structure for transmitting basis data between agents and boards",
   "type": "object",
   "required": [
     "schema_version",
@@ -56,54 +10,59 @@
     "created_at",
     "agent_id",
     "claims",
-    "evidence"
+    "uncertainty",
+    "context",
+    "extensions"
   ],
   "properties": {
     "schema_version": {
       "type": "string",
       "pattern": "^\\d+\\.\\d+\\.\\d+$",
-      "description": "Semantic version of this schema (e.g., \"1.0.0\")."
+      "description": "SemVer string for the schema version"
     },
     "basis_id": {
-      "$ref": "#/$defs/uuid",
-      "description": "Globally unique identifier for this basis instance."
+      "type": "string",
+      "format": "uuid"
     },
     "created_at": {
       "type": "string",
       "format": "date-time",
-      "description": "ISO-8601 UTC timestamp when this basis was created."
+      "description": "ISO-8601 UTC timestamp"
     },
     "agent_id": {
-      "type": "string",
-      "description": "Identifier of the agent that produced this basis."
+      "type": "string"
     },
     "session_id": {
-      "type": ["string", "null"],
-      "description": "Optional session identifier the basis belongs to."
+      "type": ["string", "null"]
     },
     "parent_basis_id": {
-      "$ref": "#/$defs/uuid",
       "type": ["string", "null"],
-      "description": "Parent basis UUID for refinement or rebuttal chaining."
-    },
-    "sandbox": {
-      "type": ["string", "null"],
-      "description": "Optional sandbox identifier (e.g., dev/sandbox/e2e)."
+      "format": "uuid"
     },
     "claims": {
       "type": "array",
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["claim_id", "text", "confidence", "confidence_method", "status"],
+        "required": ["claim_id", "text", "confidence"],
         "properties": {
-          "claim_id": { "$ref": "#/$defs/uuid" },
-          "text": {
+          "claim_id": {
             "type": "string",
-            "minLength": 1
+            "format": "uuid"
           },
-          "confidence": { "$ref": "#/$defs/confidence_or_weight" },
-          "confidence_method": { "$ref": "#/$defs/confidence_method_enum" },
+          "text": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Confidence in [0.0, 1.0]"
+          },
+          "confidence_method": {
+            "type": "string",
+            "enum": ["bayesian", "heuristic", "llm-self-report", "empirical"]
+          },
           "tags": {
             "type": "array",
             "items": {
@@ -112,7 +71,7 @@
           },
           "status": {
             "type": "string",
-            "$ref": "#/$defs/claim_status_enum",
+            "enum": ["asserted", "retracted", "superseded"],
             "default": "asserted"
           }
         }
@@ -120,38 +79,61 @@
     },
     "evidence": {
       "type": "array",
-      "minItems": 0,
       "items": {
         "type": "object",
-        "required": ["evidence_id", "claim_ids", "type", "weight", "provenance"],
+        "required": ["evidence_id", "claim_ids", "type"],
         "properties": {
-          "evidence_id": { "$ref": "#/$defs/uuid" },
+          "evidence_id": {
+            "type": "string",
+            "format": "uuid"
+          },
           "claim_ids": {
             "type": "array",
-            "items": { "$ref": "#/$defs/uuid" },
-            "minItems": 0
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "minItems": 1
           },
-          "type": { "$ref": "#/$defs/evidence_type_enum" },
-          "uri": {
+          "type": {
             "type": "string",
-            "format": "uri",
-            "nullable": true
+            "enum": ["document", "database_record", "api_response", "agent_output", "human_input", "computed"]
+          },
+          "uri": {
+            "type": ["string", "null"]
           },
           "title": {
-            "type": "string",
-            "nullable": true
+            "type": ["string", "null"]
           },
           "excerpt": {
-            "type": "string",
-            "nullable": true
+            "type": ["string", "null"]
           },
           "retrieved_at": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
+            "type": ["string", "null"],
+            "format": "date-time"
           },
-          "weight": { "$ref": "#/$defs/confidence_or_weight" },
-          "provenance": { "$ref": "#/$defs/evidence_provenance" }
+          "weight": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Evidence support strength [0.0, 1.0]"
+          },
+          "provenance": {
+            "type": "object",
+            "properties": {
+              "source_system": {
+                "type": "string"
+              },
+              "source_version": {
+                "type": ["string", "null"]
+              },
+              "checksum": {
+                "type": ["string", "null"],
+                "pattern": "^[0-9a-fA-F]{64}$"
+              }
+            },
+            "required": ["source_system"]
+          }
         }
       }
     },
@@ -159,49 +141,56 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["step", "description", "inference_type"],
+        "required": ["step", "description"],
         "properties": {
           "step": {
             "type": "integer",
-            "minimum": 1,
-            "description": "Sequential step number (1, 2, 3, ...)."
+            "minimum": 1
           },
           "description": {
-            "type": "string",
-            "minLength": 1
+            "type": "string"
           },
           "evidence_ids": {
             "type": "array",
-            "items": { "$ref": "#/$defs/uuid" },
-            "minItems": 0
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           },
           "claim_ids": {
             "type": "array",
-            "items": { "$ref": "#/$defs/uuid" },
-            "minItems": 0
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           },
-          "inference_type": { "$ref": "#/$defs/inference_type_enum" }
+          "inference_type": {
+            "type": "string",
+            "enum": ["deductive", "inductive", "abductive", "analogical", "lookup"]
+          }
         }
       }
     },
     "uncertainty": {
       "type": "object",
-      "required": ["overall_confidence", "known_unknowns", "assumptions"],
+      "required": ["overall_confidence"],
       "properties": {
-        "overall_confidence": { "$ref": "#/$defs/confidence_or_weight" },
+        "overall_confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
         "known_unknowns": {
           "type": "array",
           "items": {
             "type": "string"
-          },
-          "minItems": 0
+          }
         },
         "assumptions": {
           "type": "array",
           "items": {
             "type": "string"
-          },
-          "minItems": 0
+          }
         },
         "contradictions": {
           "type": "array",
@@ -209,11 +198,16 @@
             "type": "object",
             "required": ["claim_id_a", "claim_id_b", "description"],
             "properties": {
-              "claim_id_a": { "$ref": "#/$defs/uuid" },
-              "claim_id_b": { "$ref": "#/$defs/uuid" },
-              "description": {
+              "claim_id_a": {
                 "type": "string",
-                "minLength": 1
+                "format": "uuid"
+              },
+              "claim_id_b": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "description": {
+                "type": "string"
               }
             }
           }
@@ -222,28 +216,25 @@
     },
     "context": {
       "type": "object",
-      "required": ["model_id", "environment"],
+      "required": ["model_id"],
       "properties": {
         "task_id": {
           "type": ["string", "null"]
         },
         "task_description": {
-          "type": "string",
-          "nullable": true
+          "type": ["string", "null"]
         },
         "model_id": {
-          "type": "string",
-          "description": "Identifier or type of the model used (e.g., \"gpt-4\", \"claude-3.5-sonnet\")."
+          "type": "string"
         },
         "model_version": {
-          "type": "string",
-          "nullable": true
+          "type": ["string", "null"]
         },
         "tool_calls": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["tool_name", "input_summary", "output_summary", "called_at"],
+            "required": ["tool_name", "called_at"],
             "properties": {
               "tool_name": {
                 "type": "string"
@@ -263,19 +254,18 @@
         },
         "environment": {
           "type": "string",
-          "description": "Environment guideline set by each integration (e.g., 'production', 'staging', 'development')."
+          "enum": ["production", "staging", "development", "test"]
         }
       }
     },
     "extensions": {
       "type": "object",
-      "additionalProperties": false,
       "patternProperties": {
-        "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$": {
+        "^([a-z]{2,}\\.)?[a-z0-9]+(\\.[a-z]{2,})+$": {
           "type": "object"
         }
       },
-      "description": "Domain-specific or experimental fields with reverse-DNS namespace keys."
+      "additionalProperties": false
     }
   }
 }
