@@ -8,6 +8,7 @@
  * - codeDelivered: true when prState is 'open' or 'pull_request'.
  * - testsPassing: derived from tests detection (or null if tests info unavailable).
  * - prState: 'open' | 'not_open' | null.
+ * - lastUpdated: integer timestamp (milliseconds) tracking the last modification time.
  */
 export interface ProgressBreakdown {
   basis: "subtasks" | "pr" | "status" | "manual";
@@ -16,4 +17,5 @@ export interface ProgressBreakdown {
   codeDelivered: boolean;
   testsPassing: boolean | null;
   prState: "open" | "not_open" | null;
+  lastUpdated?: number; // Optional timestamp for test fixtures and visualization
 }
