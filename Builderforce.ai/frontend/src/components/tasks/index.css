@@ -1,0 +1,365 @@
+/**
+ * Task Views Styles
+ * 
+ * Provides styling for all task view components with CSS variables
+ * for theming support.
+ */
+
+/* Animations for loading states */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Task List Row Hover Effect */
+.task-list-row:hover {
+  background: var(--bf-surface-hover, rgba(128,128,128,0.1)) !important;
+  border-color: var(--bf-border-hover, rgba(128,128,128,0.2)) !important;
+}
+
+/* Kanban Card Hover Effect */
+.kanban-card:hover {
+  background: var(--bf-surface-hover, rgba(128,128,128,0.1)) !important;
+  border-color: var(--bf-border-hover, rgba(128,128,128,0.3)) !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
+}
+
+/* Task Detail H1 Hover Effect */
+.task-detail h1:hover {
+  color: var(--bf-text-primary-hover, #fff) !important;
+}
+
+/* Subtask Item Hover Effect */
+.subtask-item:hover {
+  background: var(--bf-surface-hover, rgba(128,128,128,0.06)) !important;
+}
+
+/* Button Interactions */
+button {
+  transition: all 0.15s ease;
+}
+
+button:hover {
+  background: var(--bf-surface-accent, rgba(128,128,128,0.15)) !important;
+  border-color: var(--bf-border-accent, rgba(128,128,128,0.3)) !important;
+}
+
+button:active {
+  background: var(--bf-surface-active, rgba(128,128,128,0.2)) !important;
+}
+
+/* Dragging State */
+.kanban-card.dragging {
+  opacity: 0.5;
+  transform: scale(0.98);
+}
+
+.column-drag-over {
+  border-color: var(--bf-border-accent, rgba(128,128,128,0.5)) !important;
+  background: var(--bf-surface-accent, rgba(128,128,128,0.08)) !important;
+}
+
+/* Scrollbar Styling for Task Views */
+.task-list::-webkit-scrollbar,
+.task-list-body::-webkit-scrollbar,
+.task-detail-body::-webkit-scrollbar,
+.kanban-board::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.task-list::-webkit-scrollbar-track,
+.task-list-body::-webkit-scrollbar-track,
+.task-detail-body::-webkit-scrollbar-track,
+.kanban-board::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.task-list::-webkit-scrollbar-thumb,
+.task-list-body::-webkit-scrollbar-thumb,
+.task-detail-body::-webkit-scrollbar-thumb,
+.kanban-board::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: var(--bf-border, rgba(128,128,128,0.3));
+}
+
+.task-list::-webkit-scrollbar-thumb:hover,
+.task-list-body::-webkit-scrollbar-thumb:hover,
+.task-detail-body::-webkit-scrollbar-thumb:hover,
+.kanban-board::-webkit-scrollbar-thumb:hover {
+  background: var(--bf-border-accent, rgba(128,128,128,0.5));
+}
+
+/* Priority Badge Variants */
+.priority-badge-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999;
+  font-weight: 500;
+}
+
+.priority-badge-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.priority-badge-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.priority-badge-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999;
+  font-weight: 600;
+}
+
+/* Priority Scale Styling */
+.priority-badge-ring {
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));
+}
+
+.priority-badge-sparkle {
+  position: relative;
+}
+
+.priority-badge-sparkle::before {
+  content: '✨';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  font-size: 1.2em;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.priority-badge-sparkle:hover::before {
+  opacity: 1;
+}
+
+/* Error States */
+.priority-badge-error {
+  color: var(--bf-border-danger, #ef4444);
+  opacity: 0.7;
+}
+
+.priority-badge-error-bg {
+  background: var(--bf-border-danger, #ef4444);
+  opacity: 0.1;
+}
+
+/* Success States */
+.priority-badge-success {
+  color: var(--bf-border-ok, #22c55e);
+}
+
+.priority-badge-success-bg {
+  background: var(--bf-border-ok, #22c55e);
+  opacity: 0.1;
+}
+
+/* Info States */
+.priority-badge-info {
+  color: var(--bf-border-accent, #3b82f6);
+}
+
+.priority-badge-info-bg {
+  background: var(--bf-border-accent, #3b82f6);
+  opacity: 0.1;
+}
+
+/* Compact Mode */
+.priority-badge-list-compact {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.priority-badge-list-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--bf-surface-elevated, rgba(128,128,128,0.06));
+}
+
+.priority-badge-column-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .task-list {
+    padding: 8px;
+  }
+
+  .task-list-header {
+    grid-template-columns: 60px minmax(0, 1fr) !important;
+  }
+
+  .kanban-board {
+    padding: 8px !important;
+  }
+
+  .kanban-card {
+    padding: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .task-list-header {
+    display: none !important;
+  }
+
+  .task-list-row {
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+  }
+
+  .priority-badge-header {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+
+  .kanban-column {
+    flex: '0 0 200px' !important;
+  }
+
+  .kanban-card {
+    padding: 8px;
+  }
+}
+
+/* High Priority Special Styling */
+.priority-badge-high .priority-badge-dot {
+  box-shadow: 0 0 8px currentColor;
+}
+
+.priority-badge-high-text {
+  color: var(--bf-border-danger, #ef4444);
+  text-shadow: 0 0 2px rgba(239, 68, 68, 0.3);
+}
+
+/* Medium Priority Special Styling */
+.priority-badge-medium .priority-badge-dot {
+  box-shadow: 0 0 6px currentColor;
+}
+
+.priority-badge-medium-text {
+  color: var(--bf-border-warn, #f59e0b);
+  text-shadow: 0 0 2px rgba(245, 158, 11, 0.3);
+}
+
+/* Low Priority Special Styling */
+.priority-badge-low .priority-badge-dot {
+  opacity: 0.6;
+}
+
+.priority-badge-low-text {
+  opacity: 0.7;
+}
+
+/* Subtask Progress Styles */
+.task-detail-progress-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bf-surface, transparent);
+  overflow: hidden;
+}
+
+.subtask-complete-fill {
+  height: 100%;
+  transition: width 0.5s ease;
+  border-radius: 3px;
+}
+
+/* Related Tasks Empty State */
+.related-tasks-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px;
+  color: var(--bf-text-muted, #9ca3af);
+  text-align: center;
+  gap: 8px;
+}
+
+.related-tasks-empty-icon {
+  font-size: 32px;
+  opacity: 0.5;
+}
+
+/* Status Color Mappings */
+.status-toolbar {
+  background: var(--bf-surface-elevated, rgba(128,128,128,0.06));
+  border-radius: 8px;
+  padding: 4px;
+  display: flex;
+  gap: 2px;
+}
+
+.status-toolbar-item {
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.status-toolbar-item:hover {
+  background: var(--bf-surface, transparent);
+}
+
+.status-toolbar-item.active {
+  background: var(--bf-primary, rgba(59,130,246,0.8));
+  color: white;
+}
+
+/* Task Status Pills */
+.task-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 999;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 500;
+}
+
+/* Assignee Avatar Styles */
+.task-header-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--bf-text-primary, #e4e4e4);
+}
+
+.task-detail-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--bf-border, rgba(128,128,128,0.2));
+}
