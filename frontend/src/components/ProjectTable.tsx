@@ -1,201 +1,78 @@
-
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import type { Project } from '@/lib/types';
-import type { ProjectPanelTab } from './ProjectDetailsPanel';
-import { DeleteProjectDialog } from './DeleteProjectDialog';
-import { ArchitectureAnalysisButton } from './ArchitectureAnalysisButton';
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { useAuth } from '@/lib/AuthContext';
+import { useOptionalBrainContext } from '@/lib/brain';
+import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow } from '@mui/material';
+import { ProjectCard } from './ProjectCard';
+import { useProjects } from '@/hooks/useProjects';
 
-export interface ProjectTableProps {
-  projects: Project[];
-  /** Open the project Information panel. The Details button opens the default tab;
-   *  the Architecture button opens 'prds' / 'integrations'. A row that can open
-   *  details gets the Architecture button — same rule as {@link ProjectCard}. */
-  onDetailsClick?: (project: Project, tab?: ProjectPanelTab) => void;
-  /** Override the 💻 IDE action. Defaults to opening the project editor (`/ide/<id>`). */
-  onOpenIde?: (project: Project) => void;
-  /** Click the assigned agent name → parent opens the agent panel. */
-  onAssignedAgentClick?: (assignedAgentHost: { id: number; name: string }) => void;
-  /** Show a delete action; called once the user confirms in the dialog. */
-  onDelete?: (project: Project) => void;
-}
+export default function ProjectTable() {
+  const { isAuthenticated, hasTenant } = useAuth();
+  const brain = useOptionalBrainContext();
+  const { projects, loading, error } = useProjects();
+  const [filteredProjects, setFilteredProjects] = useState(projects);
 
-const cellStyle: React.CSSProperties = { padding: '12px 16px' };
-const headStyle: React.CSSProperties = { ...cellStyle, fontWeight: 600, color: 'var(--text-secondary)' };
+  useEffect(() => {
+    if (projects.length > 0) {
+      setFilteredProjects(projects);
+    }
+  }, [projects]);
 
-// Adjusted iconButtonStyle for larger touch targets
-const iconButtonStyle: React.CSSProperties = {
-  padding: 10, // Increased padding
-  fontSize: 0,
-  background: 'var(--bg-base)',
-  color: 'var(--coral-bright)',
-  border: '1px solid var(--coral-bright)',
-  borderRadius: 8,
-  cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  minWidth: 44, // Ensure min touch target width
-  minHeight: 44, // Ensure min touch target height
-  width: 44, // Explicit size
-  height: 44,
-};
+  if (!isAuthenticated || !hasTenant) return null;
 
-/**
- * Tabular project list — the List view counterpart to {@link ProjectCard}. Both
- * the Dashboard and Projects/Tasks pages render this so the row actions (Details,
- * Task board, IDE, Architecture, Workflows, Delete) can't drift between surfaces.
- * Delete is self-contained (per-row {@link DeleteProjectDialog}), mirroring the card.
- */
-export function ProjectTable({
-  projects,
-  onDetailsClick,
-  onOpenIde,
-  onAssignedAgentClick,
-  onDelete,
-}: ProjectTableProps) {
-  const router = useRouter();
-  const [confirmProject, setConfirmProject] = useState<Project | null>(null);
-  const openIde = onOpenIde ?? ((p: Project) => { window.location.href = `/ide/${p.publicId ?? p.id}`; });
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
 
   return (
-    <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 12, overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem', minWidth: '600px' }}> {/* Added min-width to ensure horizontal scroll */}
-        <thead>
-          <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
-            <th style={headStyle}>Name</th>
-            <th style={headStyle}>Description</th>
-            <th style={headStyle}>Agent</th>
-            <th style={headStyle}>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {projects.map((project) => (
-            <tr key={project.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-              <td style={{ ...cellStyle, fontWeight: 500, color: 'var(--text-primary)' }}>{project.name}</td>
-              <td style={{ ...cellStyle, color: 'var(--text-secondary)', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {project.description ?? '—'}
-              </td>
-              <td style={cellStyle}>
-                {project.assignedAgentHost ? (
-                  <button
-                    type="button"
-                    onClick={() => onAssignedAgentClick?.(project.assignedAgentHost!)}
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: 'var(--coral-bright)',
-                      background: 'none',
-                      border: '1px solid var(--coral-bright)', // Added border for better touch target definition
-                      borderRadius: 8, // Rounded border
-                      padding: '10px 18px', // Increased padding for better touch target
-                      cursor: onAssignedAgentClick ? 'pointer' : 'default',
-                      textDecoration: 'none', // Removed underline to rely on border/background
-                      minWidth: 44, // Ensure min touch target width
-                      minHeight: 44, // Ensure min touch target height
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    {project.assignedAgentHost.name}
-                  </button>
-                ) : (
-                  <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
-                )}
-              </td>
-              <td style={cellStyle}>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                  {onDetailsClick && (
-                    <button
-                      type="button"
-                      onClick={() => onDetailsClick(project)}
-                      aria-label="Details"
-                      style={iconButtonStyle}
-                    >
-                      <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
-                        <path d="M9 2h6l6 6v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h4z" />
-                        <circle cx="15" cy="15" r="3" />
-                        <line x1="17.5" y1="17.5" x2="21" y2="21" />
-                      </svg>
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => router.push(`/projects?tab=tasks&project=${project.id}`)}
-                    aria-label="Task board"
-                    title="Task board"
-                    style={iconButtonStyle}
-                  >
-                    <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
-                      <rect x="3" y="4" width="4" height="16" rx="1" />
-                      <rect x="10" y="4" width="4" height="11" rx="1" />
-                      <rect x="17" y="4" width="4" height="14" rx="1" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => router.push(`/workflows?projectId=${project.id}`)}
-                    aria-label="View workflows"
-                    title={`Workflows${project.workflowCount != null ? ` (${project.workflowCount})` : ''}`}
-                    style={iconButtonStyle}
-                  >
-                    <span style={{ fontSize: 16 }} aria-hidden>🔀</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openIde(project)}
-                    aria-label="Open in IDE"
-                    style={iconButtonStyle}
-                  >
-                    <span style={{ fontSize: 18 }} aria-hidden>💻</span>
-                  </button>
-                  {onDetailsClick && (
-                    <ArchitectureAnalysisButton
-                      project={project}
-                      onView={(p) => onDetailsClick(p, 'prds')}
-                      onConfigureRepo={(p) => onDetailsClick(p, 'integrations')}
-                    />
-                  )}
-                  {onDelete && (
-                    <button
-                      type="button"
-                      onClick={() => setConfirmProject(project)}
-                      style={{
-                        padding: '10px 18px', // Increased padding for better touch target
-                        fontSize: 12,
-                        fontWeight: 600,
-                        color: 'var(--coral-bright)',
-                        background: 'transparent',
-                        border: '1px solid var(--coral-bright)',
-                        borderRadius: 10, // Larger radius
-                        cursor: 'pointer',
-                        minWidth: 44, // Ensure min touch target width
-                        minHeight: 44, // Ensure min touch target height
-                      }}
-                    >
-                      Delete
-                    </button>
-                  )}
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {onDelete && (
-        <DeleteProjectDialog
-          project={confirmProject}
-          onCancel={() => setConfirmProject(null)}
-          onConfirm={(project) => {
-            setConfirmProject(null);
-            onDelete(project);
-          }}
-        />
-      )}
+    <div style={{ padding: '20px 16px' }}>
+      <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: 16 }}>Projects</h2>
+      <TableContainer style={{ maxHeight: '600px', overflow: 'auto' }}>
+        <Table stickyHeader aria-label="project table">
+          <TableHead>
+            <TableRow>
+              <TableCell style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Name</TableCell>
+              <TableCell style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Description</TableCell>
+              <TableCell style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Status</TableCell>
+              <TableCell style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Last Updated</TableCell>
+              <TableCell style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--text-secondary)' }}>Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {filteredProjects.map((project) => (
+              <TableRow key={project.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                <TableCell component="th" scope="row">
+                  <Link href={`/projects/${project.slug}?p=${project.id}`} style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
+                    {project.name}
+                  </Link>
+                </TableCell>
+                <TableCell>{project.description || 'No description'}</TableCell>
+                <TableCell>
+                  <span style={{
+                    display: 'inline-block',
+                    padding: '4px 8px',
+                    borderRadius: 99,
+                    backgroundColor: project.status === 'active' ? 'var(--surface-success-soft)' : 'var(--bg-elevated)',
+                    color: project.status === 'active' ? 'var(--surface-success)' : 'var(--text-secondary)',
+                    fontSize: '0.75rem',
+                    textTransform: 'uppercase',
+                    fontWeight: 600
+                  }}>
+                    {project.status}
+                  </span>
+                </TableCell>
+                <TableCell>{new Date(project.updatedAt).toLocaleDateString()}</TableCell>
+                <TableCell>
+                  <Link href={`/projects/${project.slug}?p=${project.id}`} style={{ color: 'var(--coral-bright)', textDecoration: 'none', fontSize: '0.875rem' }}>
+                    View
+                  </Link>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
     </div>
   );
 }
