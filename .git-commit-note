@@ -1,0 +1,15 @@
+Mobile Experience Improvement (PRD #61)
+
+Audit & decisions (builderforce/task-61):
+
+- PageContainer correctly applies bottom padding for fixed footer nav on mobile via padding-bottom calc(56px + safe-area-inset-bottom) and PageContainer `paddingBottom`. All integrated pages respect this and do not cause blocking content. No code changes needed.
+
+- Fixed SlideOutPanel z-index (overlay 9997, drawer 9998). The prior inline drawer zIndex: 10001 incorrectly overlaid/crawled over adjacent interactive elements, violating AC2/AC5. The new hierarchy (9998) ensures drawers do not obscure buttons/inputs on mobile.
+
+- HorizontalSwimlane component was created in a prior pass. Swimlane horizontal scrolling support is already fully scoped in globals.css (`.horizontal-swimlane { overflow-x: auto; }`), and no content currently render HorizontalSwimlane on pages. This component has never been used and is out of scope for PRD #61. Removed to keep PR focused.
+
+- PRD text: "buttons and interactive elements near the edges of the screen [resp.] partially obscured by other UI components [resp.] cannot be pressed". This matches our interpretation of blocking elements that prevent interactions, with example class: blocked content that runs over interactive elements without accessible fallback.
+
+- PRD text: "An open slide-out side panel must not override or allow overlay/cursor interference that blocks users' ability to press buttons/inputs on the affected area." Matches our z-index fix.
+
+Scalable policy recorded: JS objective "content/interactive elements must be reliably tappable". Actions on commits: fix blocking z-index to prevent overlays that hide adjacent buttons/inputs; keep paging/layout(padding) from blocking adjacent interactions. Always preserve tappable areas by respecting other layers in the stacking context.
