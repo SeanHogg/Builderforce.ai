@@ -14,7 +14,6 @@ export type { FreelancerEarningsResponse, PayoutHistoryItem, WithdrawalRequest, 
  * GET /api/freelancers/:freelancerId/earnings
  */
 export function getFreelancerEarnings(freelancerId: string): FreelancerEarningsResponse {
-  // In a real implementation, this data would come from FreelancerStats (including earnedToDateCents).
   const today = new Date();
   const pendingWindowStart = new Date(today);
   pendingWindowStart.setDate(today.getDate() - 7);
