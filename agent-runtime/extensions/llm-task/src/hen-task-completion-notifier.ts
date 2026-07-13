@@ -1,87 +1,28 @@
-import { EmailEnv } from "../../../api/src/infrastructure/email/EmailService.js";
-import type { EmailNotifier, NotificationLogEntry } from "../transport/types.js";
-
-// TODO: Replace with a proper logging mechanism (FR.5)
-function logNotification(entry: NotificationLogEntry) {
-  if (entry.success) {
-    console.log(`[HenTaskNotifier] Email sent to ${entry.email} (Account: ${entry.accountId})`);
-  } else {
-    console.error(
-      `[HenTaskNotifier] Failed to send email to ${entry.email} (Account: ${entry.accountId}): ${entry.errorMessage}`,
-    );
-  }
-}
-
 /**
- * Concrete implementation of EmailNotifier using the existing Resend EmailService.
- * This acts as an adapter for the domain's EmailNotifier port.
+ * Hen task completion email notifier.
+ *
+ * Problem: Account holders lack immediate awareness when all their associated
+ * "Hen tasks" are complete.
+ *
+ * Solution: Automatically notify account holders via email upon the successful
+ * completion of all "Hen tasks" associated with their account.
+ *
+ * Design: DDD Domain Service that uses the EmailNotifier port (defined in
+ * src/transport/types.ts) to send emails. The port is implemented by the
+ * ResendEmailNotifier adapter in the same file for simplicity.
  */
-export class ResendEmailNotifier implements EmailNotifier {
-  private readonly fromEmail: string;
 
-  constructor(
-    private readonly apiKey: string,
-    fromEmail?: string,
-  ) {
-    this.fromEmail = fromEmail ?? "Builderforce <notifications@builderforce.ai>";
-  }
+import type { EmailNotifier, AccountEmailResolver, NotificationLogEntry } from "../transport/types.js";
 
-  async send(to: string, subject: string, html: string): Promise<boolean> {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify({
-        from: this.fromEmail,
-        to: [to],
-        subject,
-        html,
-      }),
-    });
+// Re-export types from domain port defined in agent-runtime/src/transport/types.ts
+export type { EmailNotifier, AccountEmailResolver, NotificationLogEntry };
 
-    const success = res.ok;
-    if (!success) {
-      const body = await res.text().catch(() => "");
-      logNotification({
-        accountId: "unknown", // Cannot resolve accountId here, will be logged in HenTaskCompletionNotifier
-        email: to,
-        subject,
-        sentAt: new Date(),
-        success: false,
-        errorMessage: body,
-      });
-    }
-
-    return success;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Template Helpers (Copied from api/src/infrastructure/email/EmailService.ts)
-// ---------------------------------------------------------------------------
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function render(template: string, vars: Record<string, string>): string {
-  return Object.entries(vars).reduce(
-    (acc, [key, val]) => acc.replaceAll(`{{${key}}}`, escapeHtml(val)),
-    template,
-  );
-}
-
+// Template constants
 const HEADER = `<!DOCTYPE html>
 <html><head>
-  <meta charset=\"utf-8\">
-  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-  <title>{{Subject}}</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Hen Tasks are Complete!</title>
   <style>
     body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 0; }
     .container { max-width: 600px; margin: 0 auto; background: #ffffff; }
@@ -97,45 +38,77 @@ const HEADER = `<!DOCTYPE html>
   </style>
 </head>
 <body>
-  <div class=\"container\">
-    <div class=\"header\">
+  <div class="container">
+    <div class="header">
       <h1>Builderforce</h1>
     </div>
-    <div class=\"content\">`;
+    <div class="content">`;
 
 const FOOTER = `
     </div>
-    <div class=\"footer\">
+    <div class="footer">
       <p>&copy; {{Year}} Builderforce. All rights reserved.</p>
     </div>
   </div>
 </body></html>`;
 
-const HEN_TASK_COMPLETION_BODY = `
-      <p>Good news! All Hen tasks for your account are now complete.
-         Log in to Builderforce to view details and next steps.
+const BODY_TEMPLATE = `      <p>Good news! All Hen tasks for your account are now complete.
+         Log in to {{PlatformName}} to view details and next steps.
          Thank you for using our service!</p>
-      <p style=\"text-align:center; margin: 28px 0;\">
-        <a href=\"https://builderforce.ai\" class=\"button\">Log in to Builderforce</a>
-      </p>
-      <p style=\"font-size:13px; color:#64748b;\">
-        This is an automated notification. Please do not reply.
+      <p style="text-align:center; margin: 28px 0;">
+        <a href="{{PlatformLoginUrl}}" class="button">Log in to {{PlatformName}}</a>
       </p>`;
 
-export type HenTaskCompletionNotifierConfig = {
-  enabled: boolean;
-  resendApiKey?: string;
-  fromEmail?: string;
-  platformName?: string;
-  platformLoginUrl?: string;
-  // TODO: Add logging mechanism here, for now it uses console.log/error
-};
+/**
+ * Concrete implementation of EmailNotifier using the existing Resend EmailService.
+ * This acts as an adapter for the domain's EmailNotifier port.
+ */
+class ResendEmailNotifier implements EmailNotifier {
+  private readonly fromEmail: string;
+
+  constructor(private readonly apiKey: string, fromEmail?: string) {
+    this.fromEmail = fromEmail ?? "Builderforce <notifications@builderforce.ai>";
+  }
+
+  async send(to: string, subject: string, html: string): Promise<boolean> {
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          from: this.fromEmail,
+          to: [to],
+          subject,
+          html,
+        }),
+      });
+
+      const success = res.ok;
+      if (!success) {
+        const body = await res.text().catch(() => "");
+        console.error(`[HenTaskNotifier] Email failed: ${body}`);
+      }
+
+      return success;
+    } catch (error) {
+      console.error(`[HenTaskNotifier] Email send error:`, error);
+      return false;
+    }
+  }
+}
 
 /**
- * Notifier service for Hen task completion.
- * Responsible for detecting when all Hen tasks for an account are complete
- * and orchestrating the email notification.
- * This is a domain service that uses the EmailNotifier port.
+ * Hen task completion notification service.
+ *
+ * Domain service responsible for:
+ * 1. Detecting when the last Hen task for an account completes (FR.1)
+ * 2. Retrieving the account holder's email (FR.2)
+ * 3. Composing email content with static subject/body (FR.3)
+ * 4. Dispatching the email to the account holder (FR.4)
+ * 5. Logging notification attempts for auditing (FR.5)
  */
 export class HenTaskCompletionNotifier {
   private readonly emailNotifier: EmailNotifier;
@@ -143,42 +116,125 @@ export class HenTaskCompletionNotifier {
   private readonly platformLoginUrl: string;
   private readonly enabled: boolean;
 
-  constructor(
-    emailNotifier: EmailNotifier,
-    config: HenTaskCompletionNotifierConfig,
-  ) {
-    this.emailNotifier = emailNotifier;
-    this.platformName = config.platformName ?? "Builderforce";
-    this.platformLoginUrl = config.platformLoginUrl ?? "https://builderforce.ai";
-    this.enabled = config.enabled;
+  // Factory helper to create a notifier with a Resend adapter
+  static createResend(
+    apiKey: string,
+    platformName: string,
+    platformLoginUrl: string,
+    enabled: boolean = true
+  ): HenTaskCompletionNotifier {
+    const emailNotifier =
+      apiKey
+        ? new ResendEmailNotifier(apiKey)
+        : {
+            // Graceful degradation when key is missing
+            async send(to: string, subject: string, html: string): Promise<boolean> {
+              console.warn("[HenTaskNotifier] Email API key missing — skipping send");
+              return false;
+            },
+          };
+    
+    return new HenTaskCompletionNotifier(
+      emailNotifier,
+      platformName,
+      platformLoginUrl,
+      enabled
+    );
   }
 
-  async notify(accountId: string, accountEmail: string): Promise<boolean> {
+  constructor(
+    emailNotifier: EmailNotifier,
+    platformName: string,
+    platformLoginUrl: string,
+    enabled: boolean
+  ) {
+    this.emailNotifier = emailNotifier;
+    this.platformName = platformName;
+    this.platformLoginUrl = platformLoginUrl;
+    this.enabled = enabled;
+
+    if (!enabled) {
+      console.debug("[HenTaskNotifier] Notification disabled by config.");
+    }
+  }
+
+  /**
+   * Main entry point for notification on task completion.
+   *
+   * @param accountId - The account ID that the Hen task belongs to
+   * @param accountEmail - The account holder's primary email address
+   * @returns A NotificationLogEntry reflecting the send attempt and outcome
+   */
+  async notify(accountId: string, accountEmail: string): Promise<NotificationLogEntry> {
+    const subject = "Your Hen Tasks are Complete!";
+
     if (!this.enabled) {
       console.debug("[HenTaskNotifier] Notification disabled by config.");
-      return false;
+      return {
+        accountId,
+        email: accountEmail,
+        subject,
+        sentAt: new Date(),
+        success: false,
+        errorMessage: "Notification disabled by config",
+      };
     }
 
-    const subject = "Your Hen Tasks are Complete!";
-    const body = HEN_TASK_COMPLETION_BODY.replaceAll("[Platform Name]", this.platformName);
-    const html = render(HEADER + body + FOOTER, {
-      Subject: subject,
-      Year: String(new Date().getFullYear()),
-      PlatformName: this.platformName,
-      PlatformLoginUrl: this.platformLoginUrl,
-    });
+    if (!this.emailNotifier) {
+      return {
+        accountId,
+        email: accountEmail,
+        subject,
+        sentAt: new Date(),
+        success: false,
+        errorMessage: "Email notifier not configured",
+      };
+    }
 
+    // Generate HTML email content
+    const bodyHtml = BODY_TEMPLATE
+      .replace("{{PlatformName}}", this.platformName)
+      .replace("{{PlatformLoginUrl}}", this.platformLoginUrl);
+
+    const html = this.renderEmail(subject, bodyHtml);
+
+    // Attempt to send
     const success = await this.emailNotifier.send(accountEmail, subject, html);
 
-    logNotification({
+    const logEntry: NotificationLogEntry = {
       accountId,
       email: accountEmail,
       subject,
       sentAt: new Date(),
       success,
       errorMessage: success ? undefined : "Email sending failed",
-    });
+    };
 
-    return success;
+    // Log the notification attempt (FR.5)
+    this.logNotification(logEntry);
+
+    return logEntry;
+  }
+
+  /**
+   * Renders the complete HTML email with header, body, and footer.
+   */
+  private renderEmail(subject: string, body: string): string {
+    return `${HEADER}${body}${FOOTER}`.replace("{{Subject}}", subject).replace("{{Year}}", String(new Date().getFullYear()));
+  }
+
+  /**
+   * Logs notification attempt (FR.5).
+   */
+  private logNotification(entry: NotificationLogEntry): void {
+    if (entry.success) {
+      console.log(
+        `[HenTaskNotifier] Email sent to ${entry.email} (Account: ${entry.accountId})`
+      );
+    } else {
+      console.error(
+        `[HenTaskNotifier] Failed to send email to ${entry.email} (Account: ${entry.accountId}): ${entry.errorMessage || "Unknown error"}`
+      );
+    }
   }
 }
