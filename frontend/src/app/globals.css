@@ -1801,7 +1801,7 @@ html[data-theme='light'] .nebula {
 
   /* Tighter content padding + clearance for the bottom bar */
   .content {
-    padding: 8px 6px calc(64px + env(safe-area-inset-bottom, 0px));
+    padding: 8px 6px calc(64px + env(safe-area-inset-bottom, 0px)), 0; /* Remove bottom padding injected by shell; shell now handles it */
   }
 
   .page-inner { padding: 12px 8px; max-width: 100%; margin: 0; }
