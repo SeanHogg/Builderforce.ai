@@ -94,7 +94,7 @@ export async function evaluateMetric(
       const now = new Date();
       const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
       const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
-      const snap = await buildConsumptionSnapshot(db, tenantId, monthStart, monthEnd);
+      const snap = await buildConsumptionSnapshot(db, tenantId, monthStart, monthEnd, env);
       const meter = snap.meters.find((m) => m.key === 'ai_tokens');
       if (!meter || meter.unlimited) return { value: null };
       return { value: meter.percentUsed };

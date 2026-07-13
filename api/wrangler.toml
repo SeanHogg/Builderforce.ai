@@ -56,6 +56,7 @@ NOTIFICATION_EMAIL_FROM = "Builderforce <notifications@builderforce.ai>"
 #   Cloudflare (PAID_LEAD_VENDOR, free daily neurons) was dead on every call and
 #   coding overflow floored to the metered Anthropic key.
 # NEON_DATABASE_URL must be set via: wrangler secret put NEON_DATABASE_URL
+# NEON_TRANSACTIONAL_DATABASE_URL must be set via: wrangler secret put NEON_TRANSACTIONAL_DATABASE_URL
 # JWT_SECRET must be set via: wrangler secret put JWT_SECRET
 # OPENROUTER_API_KEY must be set via: wrangler secret put OPENROUTER_API_KEY
 # OPENROUTER_API_KEY_PRO must be set via: wrangler secret put OPENROUTER_API_KEY_PRO

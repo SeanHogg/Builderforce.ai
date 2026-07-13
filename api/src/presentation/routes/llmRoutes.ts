@@ -44,7 +44,7 @@ import {
   IMAGE_PRODUCT_NAMES,
   type ImageGenerationRequest,
 } from '../../application/llm/ImageProxyService';
-import { buildDatabase } from '../../infrastructure/database/connection';
+import { buildDatabase, buildTransactionalDatabase } from '../../infrastructure/database/connection';
 import { resolveTenantModel, TENANT_MODEL_REF_PREFIX } from '../../application/llm/tenantModelService';
 import { resolveProjectEvermindModelPin, PROJECT_EVERMIND_MODEL_PREFIX } from '../../application/llm/projectEvermind';
 import { recordClientRunOutcome, type OutcomeSource, type TerminalStatus } from '../../application/runtime/scoreRunOutcome';
@@ -148,7 +148,7 @@ function logFailovers(
 ): void {
   if (failovers.length === 0) return;
   ctx.waitUntil(
-    buildDatabase(env)
+    buildTransactionalDatabase(env)
       .insert(llmFailoverLog)
       .values(failovers.map(f => ({ model: f.model, errorCode: f.code })))
       .catch(() => { /* never let logging fail the request */ }),
@@ -458,7 +458,7 @@ async function isPaidOverflowExhausted(
   const cap = resolvePaidOverflowCapMillicents(access.paidOverflowDailyCap, access.effectivePlan);
   if (cap < 0) return false; // unlimited
   try {
-    const db = buildDatabase(c.env);
+    const db = buildTransactionalDatabase(c.env);
     const [row] = await db
       .select({ spent: sql<number>`COALESCE(SUM(${llmUsageLog.costUsdMillicents}), 0)` })
       .from(llmUsageLog)
@@ -490,7 +490,7 @@ async function enforceImageCreditCap(
   const limit = resolveImageCreditsDailyLimit(access.imageCreditsDailyLimit, toTenantPlan(access.effectivePlan));
   if (limit < 0) return null; // unlimited
   try {
-    const db = buildDatabase(c.env);
+    const db = buildTransactionalDatabase(c.env);
     const [row] = await db
       .select({ tokens: sql<number>`COALESCE(SUM(${llmUsageLog.totalTokens}), 0)` })
       .from(llmUsageLog)
@@ -937,7 +937,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     ]);
     const configured = details.some((d) => d.provider === provider);
     const usable = providersFromCredentials(creds).includes(provider);
-    const db = buildDatabase(c.env);
+    const db = buildTransactionalDatabase(c.env);
     const usage = await db.execute(sql`
       SELECT COUNT(*)::int AS requests,
              COALESCE(SUM(total_tokens), 0)::bigint AS tokens,
@@ -1663,7 +1663,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         } catch { /* KV miss/error → fall through to the no-op guard */ }
       }
       const tenMinAgo = new Date(Date.now() - 10 * 60_000);
-      const db = buildDatabase(c.env);
+      const db = buildTransactionalDatabase(c.env);
       const [prior] = await db
         .select({ id: llmUsageLog.id, createdAt: llmUsageLog.createdAt })
         .from(llmUsageLog)
