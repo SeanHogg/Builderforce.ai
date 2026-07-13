@@ -48,7 +48,7 @@ function buildExecution(payload: string | null, status = ExecutionStatus.RUNNING
 
 type Captured = { status: string; originLaneKey?: string } | null;
 
-function makeService(opts: { taskStatus: string; payload: string | null; nextStatus?: string | null }) {
+function makeService(opts: { taskStatus: string; payload: string | null; nextStatus?: string | null; managedToStatus?: string }) {
   let stored = buildTask(opts.taskStatus);
   const exec = buildExecution(opts.payload);
   const executions = {
@@ -72,7 +72,10 @@ function makeService(opts: { taskStatus: string; payload: string | null; nextSta
   const resolveNextStatus = opts.nextStatus !== undefined
     ? async () => opts.nextStatus ?? null
     : undefined;
-  const svc = new RuntimeService(executions, tasks, agents, audit, undefined, undefined, undefined, onLaneEntry, resolveNextStatus);
+  const onManagedRunStatus = opts.managedToStatus !== undefined
+    ? async () => ({ managed: true, toStatus: opts.managedToStatus! })
+    : undefined;
+  const svc = new RuntimeService(executions, tasks, agents, audit, undefined, undefined, undefined, onLaneEntry, resolveNextStatus, undefined, undefined, onManagedRunStatus);
   return { svc, getCaptured: () => captured, getStored: () => stored };
 }
 
@@ -151,5 +154,32 @@ describe('RuntimeService lane chaining', () => {
     });
     await svc.update(EXEC_ID, { status: ExecutionStatus.FAILED, errorMessage: 'boom' });
     expect(getCaptured()).toBeNull();
+  });
+
+  it('does not let RuntimeService move a managed ticket when the Coordinator keeps the stage blocked', async () => {
+    const { svc, getStored, getCaptured } = makeService({
+      taskStatus: 'ready', payload: JSON.stringify({ laneKey: 'ready', actAsRole: 'business-analyst' }), managedToStatus: 'ready',
+    });
+    await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'requirements drafted' });
+    expect(getStored().status).toBe('ready');
+    expect(getCaptured()).toBeNull();
+  });
+
+  it('uses the Coordinator result without invoking legacy lane chaining', async () => {
+    const { svc, getCaptured } = makeService({
+      taskStatus: 'ready', payload: JSON.stringify({ laneKey: 'ready', actAsRole: 'architect' }), managedToStatus: 'in_progress',
+    });
+    await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'design approved' });
+    // The composition-root Coordinator performs the DB move + next-role dispatch;
+    // RuntimeService must not perform a second move/trigger.
+    expect(getCaptured()).toBeNull();
+  });
+
+  it('does not move a managed ticket to in_progress merely because its role run started', async () => {
+    const { svc, getStored } = makeService({
+      taskStatus: 'ready', payload: JSON.stringify({ laneKey: 'ready', actAsRole: 'business-analyst' }), managedToStatus: 'ready',
+    });
+    await svc.update(EXEC_ID, { status: ExecutionStatus.RUNNING });
+    expect(getStored().status).toBe('ready');
   });
 });

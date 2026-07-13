@@ -20,7 +20,10 @@ vi.mock('../../infrastructure/auth/JwtService', () => ({
   verifyJwt: mocks.verifyJwt,
   signJwt: mocks.signJwt,
 }));
-vi.mock('../../infrastructure/database/connection', () => ({ buildDatabase: mocks.buildDatabase }));
+vi.mock('../../infrastructure/database/connection', () => ({
+  buildDatabase: mocks.buildDatabase,
+  buildTransactionalDatabase: (...args: unknown[]) => mocks.buildDatabase(...args),
+}));
 // Partial mock — keep every real LlmProxyService export (ChatCompletionRequest,
 // reorderPoolByShape, modelPoolForPlan, …) and override only the network call.
 vi.mock('../../application/llm/LlmProxyService', async (orig) => ({

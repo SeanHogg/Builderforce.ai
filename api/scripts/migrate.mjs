@@ -36,10 +36,12 @@ function loadDotEnv(path) {
 
 loadDotEnv(join(here, '../.env'));
 
-const NEON_DATABASE_URL = process.env.NEON_DATABASE_URL;
+const transactional = process.argv.includes('--transactional');
+const connectionKey = transactional ? 'NEON_TRANSACTIONAL_DATABASE_URL' : 'NEON_DATABASE_URL';
+const NEON_DATABASE_URL = process.env[connectionKey];
 if (!NEON_DATABASE_URL) {
-  console.error('❌  NEON_DATABASE_URL not set.');
-  console.error('   Create api/.env with: NEON_DATABASE_URL=postgresql://...');
+  console.error(`❌  ${connectionKey} not set.`);
+  console.error(`   Create api/.env with: ${connectionKey}=postgresql://...`);
   process.exit(1);
 }
 
@@ -173,7 +175,7 @@ const applied = new Set(
 // Discover & apply pending migrations
 // ---------------------------------------------------------------------------
 
-const migrationsDir = join(here, '../migrations');
+const migrationsDir = join(here, transactional ? '../transactional-migrations' : '../migrations');
 
 let files;
 try {

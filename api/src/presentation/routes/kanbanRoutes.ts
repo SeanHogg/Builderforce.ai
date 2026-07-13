@@ -269,6 +269,10 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
       // Keep the participation manifest in step with the ledger.
       await participantsService.syncStates(env(c), tenantId, taskId);
       await participantsService.invalidate(env(c), taskId);
+      // Sign-off may be the final missing requirement for this stage. Hand control
+      // back to the ticket's Coordinator, which alone verifies + advances managed
+      // tickets and dispatches the next role.
+      await coordinateTicket(env(c), db, buildRuntimeService(env(c), db), { tenantId, taskId }).catch(() => null);
 
       // Emit the accountability trail on the HTTP path too (previously MCP-only).
       const actor = memberKind === 'agent'

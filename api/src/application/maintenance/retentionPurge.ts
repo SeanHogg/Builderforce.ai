@@ -9,7 +9,7 @@
  * — one place, one policy (DRY).
  */
 import { lt } from 'drizzle-orm';
-import { buildDatabase } from '../../infrastructure/database/connection';
+import { buildDatabase, buildTransactionalDatabase } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { llmTraces, llmFailoverLog, llmHealthProbes, qaJourneyEvents, errorEvents } from '../../infrastructure/database/schema';
 
@@ -35,10 +35,11 @@ const cutoff = (now: number, days: number) => new Date(now - days * DAY_MS);
  */
 export async function runRetentionPurge(env: Env, now: number = Date.now()): Promise<void> {
   const db = buildDatabase(env);
+  const transactionalDb = buildTransactionalDatabase(env);
   const targets: Array<{ name: string; run: () => Promise<unknown> }> = [
-    { name: 'llm_traces',        run: () => db.delete(llmTraces).where(lt(llmTraces.createdAt, cutoff(now, RETENTION_DAYS.llmTraces))) },
-    { name: 'llm_failover_log',  run: () => db.delete(llmFailoverLog).where(lt(llmFailoverLog.createdAt, cutoff(now, RETENTION_DAYS.llmFailoverLog))) },
-    { name: 'llm_health_probes', run: () => db.delete(llmHealthProbes).where(lt(llmHealthProbes.createdAt, cutoff(now, RETENTION_DAYS.llmHealthProbes))) },
+    { name: 'llm_traces',        run: () => transactionalDb.delete(llmTraces).where(lt(llmTraces.createdAt, cutoff(now, RETENTION_DAYS.llmTraces))) },
+    { name: 'llm_failover_log',  run: () => transactionalDb.delete(llmFailoverLog).where(lt(llmFailoverLog.createdAt, cutoff(now, RETENTION_DAYS.llmFailoverLog))) },
+    { name: 'llm_health_probes', run: () => transactionalDb.delete(llmHealthProbes).where(lt(llmHealthProbes.createdAt, cutoff(now, RETENTION_DAYS.llmHealthProbes))) },
     { name: 'qa_journey_events', run: () => db.delete(qaJourneyEvents).where(lt(qaJourneyEvents.ts, cutoff(now, RETENTION_DAYS.qaJourneyEvents))) },
     { name: 'error_events',      run: () => db.delete(errorEvents).where(lt(errorEvents.createdAt, cutoff(now, RETENTION_DAYS.errorEvents))) },
   ];
