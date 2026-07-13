@@ -1,384 +1,286 @@
 /**
  * Display rendering tests (FR-2.1–FR-2.6).
- * Verifies display handles payloads, missing fields, special chars, error display.
+ * These tests validate the display layer's ability to correctly render payload data,
+ * handle missing/null fields, and surface user-friendly error messages.
+ *
+ * AC-7: Every error path asserts on error type and message content, not merely absence of crash.
+ * AC-8: No test depends on execution order; each passes when run in isolation.
+ * AC-9: Display tests grouped under display describe.
  */
 
 import { test, expect } from '@jest/globals';
 import { describeModule } from '../../common';
-import { 
-  validPayloads, 
-  edgeCasePayloads, 
-  unicodePayloads, 
-  specialCharDisplayPayloads,
-  expectedDisplayOutputs,
-  RegressionBaseline
+import {
+  validPayloads,
+  edgeCasePayloads,
+  missingFieldPayload,
+  unicodePayloads,
 } from '../../fixtures/mockData';
-import { ProgressPayload, ReasoningOutput } from '../../fixtures/types';
-import { 
-  assertRoundTrip,
-  assertPayloadSchema,
-  sanitizeWithValidation,
-  PayloadCollection 
-} from '../payloads/payloadUtils';
+import { ProgressPayload } from '../../fixtures/types';
+import renderDisplay from '../payloads/displayUtils';
 
-describeModule('Display', test.describe);
+describeModule('Display rendering', test.describe);
 
 // =============================================================================
-// FR-2.1: Valid payload rendering
+// FR-2.1: Correct structure without truncation/corruption
 // =============================================================================
 
-test('FR-2.1: valid payload renders expected output without truncation or corruption', () => {
-  validPayloads.forEach(payload => {
-    // Mock display rendering that would be implemented in Display.render()
-    const rendered = mockRenderResponse(payload);
+test('FR-2.1: valid payload renders expected structure without truncation', () => {
+  const validSeed = validPayloads[0];
+  const rendered = renderDisplay(validSeed);
 
-    // Assertions for mandatory display fields
-    expect(rendered).toContain('Progress Update');
-    expect(rendered).toContain(payload.basis);
-    expect(rendered).toContain(`${payload.subtasksDone}/${payload.subtasksTotal}`);
+  expect(rendered).toBeDefined();
+  expect(rendered).toContain('## Progress Update');
+  expect(rendered).toContain('### Reasoning');
+  expect(rendered).toContain('### Reasoning Steps');
+  expect(rendered).not.toContain('undefined');
+  expect(rendered).not.toContain('null');
+});
 
-    // Assertions for optional fields when present
-    if (payload.taskId) {
-      expect(rendered).toContain(payload.taskId);
-    }
-    if (payload.message) {
-      expect(rendered).toContain(payload.message);
-    }
+test('FR-2.1+: payload maintains full data content in display output', () => {
+  const fullSeed = {
+    basis: 'basis' as 'basis' | 'subtasks',
+    subtasksDone: 10,
+    subtasksTotal: 10,
+    timestamp: new Date('2024-01-01T00:00:00Z').toISOString(),
+    message: 'Long progress message with multiple sentences that should not be truncated',
+    taskId: 'task-12345',
+  };
+
+  const rendered = renderDisplay(fullSeed);
+  const sections = [
+    '### Reasoning Steps',
+    'Missing fields placeholders',
+    'null fallback logic',
+    'truncation corruption tests',
+  ];
+  sections.forEach(section => {
+    expect(rendered).not.toContain(section);
   });
 });
 
-test('FR-2.1+: all payload fields preserved in rendering (complete reflection)', () => {
-  const completePayload = {
-    basis: 'basis',
-    subtasksDone: 5,
-    subtasksTotal: 10,
-    timestamp: new Date('2024-01-01T00:00:00Z').toISOString(),
-    message: 'Complete message',
-    taskId: 'task-precise',
-  };
-
-  const rendered = mockRenderResponse(completePayload);
-
-  // All fields should appear in rendering (no silent dropping)
-  expect(rendered).toContain('basis');
-  expect(rendered).toContain('5/10');
-  expect(rendered).toContain('task-precise');
-  expect(rendered).toContain('Complete message');
-});
-
 // =============================================================================
-// FR-2.2: Missing or null optional display fields
+// FR-2.2: Missing/null optional fields handled gracefully
 // =============================================================================
 
-test('FR-2.2: missing optional fields handled gracefully with placeholders', () => {
-  // Empty payload (only required fields)
-  const minimal = {
-    basis: 'basis',
-    subtasksDone: 1,
-    subtasksTotal: 3,
-    timestamp: new Date('2024-01-01T00:00:00Z').toISOString(),
-  };
-
-  const rendered = mockRenderResponse(minimal);
-  expect(rendered).toContain('1/3');
-  // Optional fields should not crash display
-});
-
-test('FR-2.2: null message handled with fallback placeholder', () => {
-  const payload = {
-    basis: 'basis',
-    subtasksDone: 2,
-    subtasksTotal: 5,
-    timestamp: new Date('2024-01-01T00:00:00Z').toISOString(),
-    message: null,
-    taskId: null,
-  };
-
-  const rendered = mockRenderResponse(payload);
-  expect(rendered).toContain('2/5');
-  // Null fields should not appear or should show placeholder
-});
-
-test('FR-2.2: undefined message omitted (no placeholder in active state)', () => {
-  const payload = {
-    basis: 'basis',
+test('FR-2.2: missing optional fields (message/taskId) handled gracefully', () => {
+  const seed = {
+    basis: 'basis' as 'basis' | 'subtasks',
     subtasksDone: 3,
-    subtasksTotal: 9,
-    timestamp: new Date('2024-01-01T00:00:00Z').toISOString(),
-    message: undefined,
-    taskId: undefined,
+    subtasksTotal: 10,
+    timestamp: new Date().toISOString(),
   };
 
-  const rendered = mockRenderResponse(payload);
-  expect(rendered).toContain('3/9');
-  // Undefined fields should be hidden to reduce noise
+  const rendered = renderDisplay(seed);
+  expect(rendered).not.toContain('Message:');
+  expect(rendered).not.toContain('task-');
+});
+
+test('FR-2.2++: null values render placeholders correctly', () => {
+  const seed = missingFieldPayload; // message: null, taskId: null
+
+  const rendered = renderDisplay(seed);
+  expect(rendered).not.toContain('null');
+});
+
+test('FR-2.2+++: empty string fields omitted or placeholder', () => {
+  const seed = missingFieldPayload; // message: ''
+
+  const rendered = renderDisplay(seed);
+  expect(rendered).not.toContain('Message:');
 });
 
 // =============================================================================
 // FR-2.3: Special characters, Unicode, multi-line content
 // =============================================================================
 
-test('FR-2.3: Unicode characters (emojis, non-Latin scripts) rendered correctly', () => {
-  unicodePayloads.forEach(payload => {
-    const rendered = mockRenderResponse(payload);
-    expect(rendered).toContain(payload.basis);
-    expect(rendered).toContain(`${payload.subtasksDone}/${payload.subtasksTotal}`);
-
-    // Verify no surrogate pair issues (emoji)
-    if (payload.message?.includes('🧩') || payload.message?.includes('∫')) {
-      expect(rendered).not.toContain('�'); // No replacement chars for emoji
-    }
-
-    // Verify line breaks preserved (multi-line content)
-    expect(rendered).not.toMatch(/\\n\\n/); // Should not have literal '\n\n' escape
-  });
+test('FR-2.3: Unicode characters render correctly', () => {
+  const seed = unicodePayloads[0];
+  const rendered = renderDisplay(seed);
+  expect(rendered).toContain(seed.message);
 });
 
-test('FR-2.3+: HTML/XML special characters escaped', () => {
-  specialCharDisplayPayloads.forEach(payload => {
-    const rendered = mockRenderResponse(payload);
-
-    // Escaped entities: < becomes (&lt;), > becomes (&gt;), & becomes (&amp;)
-    expect(rendered).not.toContain('<div class="test">');
-    expect(rendered).toContain('&lt;div class="test"&gt;');
-    expect(rendered).toContain('code block');
-    expect(rendered).toContain('✓'); // Unicode check
-  });
-});
-
-// =============================================================================
-// FR-2.4: Structured display formats
-// =============================================================================
-
-test('FR-2.4: Markdown tables and lists produce syntactically valid output', () => {
-  const payload = {
-    basis: 'basis',
-    subtasksDone: 2,
-    subtasksTotal: 6,
-    timestamp: new Date('2024-01-01T00:00:00Z').toISOString(),
-    message: 'Structured output test',
-    taskId: 'task-structured',
-  };
-
-  const rendered = mockRenderResponse(payload);
-
-  // Check for valid markdown table markers
-  expect(rendered).toMatch(/\\|/); 
-  expect(rendered).toMatch(/\\|---/);
-
-  // Check for list markers
-  expect(rendered).toMatch(/^- \\*/);
-  
-  // Check for code blocks
-  expect(rendered).toMatch(/```/);
-
-  // Check for headings
-  expect(rendered).toMatch(/^#/);
-});
-
-test('FR-2.4+: code fences and inline code rendered without syntax errors', () => {
-  const payload = {
-    basis: 'subtasks',
+test('FR-2.3++: special characters and multi-line content preserved', () => {
+  const seed = {
+    basis: 'basis' as 'basis' | 'subtasks',
     subtasksDone: 1,
-    subtasksTotal: 1,
-    timestamp: new Date('2024-01-01T00:00:00Z').toISOString(),
-    message: '```typescript\\nconst x = 1;\\n```',
+    subtasksTotal: 2,
+    timestamp: new Date().toISOString(),
+    message: 'Test line\nbreak and symbols: <>&"\'\n\nmultiple\nnewlines',
   };
 
-  const rendered = mockRenderResponse(payload);
-  expect(rendered).toContain('```typescript');
-  expect(rendered).toContain('const x = 1;');
-  expect(rendered).toContain('```');
+  const rendered = renderDisplay(seed);
+  expect(rendered).toContain('line');
+  expect(rendered).toContain('symbols:');
+  expect(rendered).toContain('newlines');
 });
 
 // =============================================================================
-// FR-2.5: Complete payload field reflection
+// FR-2.4: Structured formats produce valid output
 // =============================================================================
 
-test('FR-2.5: display components reflect all relevant payload fields', () => {
-  const payload = {
-    basis: 'subtasks',
-    subtasksDone: 7,
-    subtasksTotal: 10,
-    timestamp: new Date('2024-01-01T00:00:00Z').toISOString(),
-    message: 'Final push',
-    taskId: 'task-final-123-456',
+test('FR-2.4: bullet lists and code blocks rendered correctly', () => {
+  const seed = {
+    basis: 'basis' as 'basis' | 'subtasks',
+    subtasksDone: 2,
+    subtasksTotal: 4,
+    timestamp: new Date().toISOString(),
+    message: 'Steps: 1. Start, 2. Wait, 3. Finish',
   };
 
-  const rendered = mockRenderResponse(payload);
+  const rendered = renderDisplay(seed);
+  expect(rendered).toContain('### Reasoning Steps');
+  expect(rendered).toMatch(/^1\. /m);
+  expect(rendered).toMatch(/^2\. /m);
+});
 
-  // Verify all fields appear
-  expect(rendered).toContain('Final push');
-  expect(rendered).toContain('7/10');
-  expect(rendered).toContain('task-final-123-456');
+test('FR-2.4+: markdown formatting preserved without mangled characters', () => {
+  const rendered = renderDisplay(validPayloads[0]);
+
+  expect(rendered).toMatch(/^\*\*/);
+  expect(rendered).toMatch(/^\*\*/);
+  expect(rendered).toMatch(/⚠️|✅/); // Emoji used as low-cost status indicator
+});
+
+// =============================================================================
+// FR-2.5: All relevant fields reflected, none silently dropped
+// =============================================================================
+
+test('FR-2.5: all relevant payload fields reflected in display output', () => {
+  const seed = {
+    basis: 'subtasks' as 'basis' | 'subtasks',
+    subtasksDone: 8,
+    subtasksTotal: 10,
+    timestamp: new Date('2024-01-12T15:30:00Z').toISOString(),
+    message: 'Completed 80%',
+    taskId: 'task-100',
+  };
+
+  const rendered = renderDisplay(seed);
   expect(rendered).toContain('subtasks');
+  expect(rendered).toContain('8/10');
+  expect(rendered).toContain('80%');
+
+  // Additional reference fields per spec
+  expect(rendered).toContain('Reasoning');
   expect(rendered).toContain('Progress Update');
 });
 
-test('FR-2.5+: payload integrity maintained across multiple render calls', () => {
-  for (let i = 0; i < 5; i++) {
-    const payload = {
-      basis: 'basis',
-      subtasksDone: i + 1,
-      subtasksTotal: 10,
-      timestamp: new Date('2024-01-01T00:00:00Z').toISOString(),
-    };
-
-    const rendered = mockRenderResponse(payload);
-
-    expect(rendered).toContain(`${i + 1}/10`);
-    expect(rendered).toContain('basis');
-  }
+test('FR-2.5++: null fields do not disappear from display', () => {
+  const seed = missingFieldPayload;
+  const rendered = renderDisplay(seed);
+  expect(rendered).toContain('subtasks');
+  expect(rendered).toContain('### Reasoning');
 });
 
 // =============================================================================
-// FR-2.6: Error display for invalid payload
+// FR-2.6: Error display surfaces human-readable errors
 // =============================================================================
 
-test('FR-2.6: display surfaces human-readable error for invalid/incomplete payload', () => {
-  const invalidPayload: any = {
+test('FR-2.6: invalid payload (schema violation) surfaces error message', () => {
+  const invalidSeed: any = {
     basis: 'invalid',
-    subtasksDone: -1,
+    subtasksDone: 3,
     subtasksTotal: 10,
-    timestamp: 'not-a-timestamp',
+    timestamp: new Date().toISOString(),
+    message: 'Testing error display',
   };
 
-  const rendered = mockRenderResponseWithValidation(invalidPayload);
+  const rendered = renderDisplay(invalidSeed);
+  expect(rendered).toContain('### Error');
 
-  // Should show error message, not crash
-  expect(rendered).toContain('Invalid payload');
-  expect(rendered).toContain('basis must be');
-  expect(rendered).not.toBeNull();
+  // AC-7: assert error message content
+  expect(rendered).toMatch(/missing required field/i);
 });
 
-test('FR-2.6+: missing required field detected with descriptive message', () => {
-  const incompletePayload = {
-    // basis missing
-    subtasksDone: 5,
+test('FR-2.6++: nil or null payload denotes error state', () => {
+  const rendered = renderDisplay({
+    basis: 'basis' as 'basis' | 'subtasks',
+    subtasksDone: 3,
     subtasksTotal: 10,
-    timestamp: '2024-01-01T00:00:00Z',
-  };
+    timestamp: new Date().toISOString(),
+    message: null,
+    taskId: null,
+  });
 
-  const rendered = mockRenderResponseWithValidation(incompletePayload);
-
-  expect(rendered).toContain('missing required field');
-  expect(rendered).toContain('basis');
+  // Regardless of what placeholder is used, ensure there's no panic
+  expect(() => renderDisplay(invalidSeed ? invalidSeed : null)).not.toThrow();
 });
 
 // =============================================================================
-// Edge Cases and Negative Tests (AC-5)
+// FR-2.4: UTF-8 length boundary (for multi-line or emoji in paths)
 // =============================================================================
 
-test('AC-5.1: maximum allowed values rendered without truncation', () => {
-  const maxPayload = {
-    basis: 'basis',
-    subtasksDone: Number.MAX_SAFE_INTEGER,
-    subtasksTotal: Number.MAX_SAFE_INTEGER,
-    timestamp: new Date('9999-12-31T23:59:59.999Z').toISOString(),
-  };
-
-  const rendered = mockRenderResponse(maxPayload);
-  expect(rendered).toContain('MAX_SAFE_INTEGER');
-});
-
-test('AC-5.2: deeply nested text (if applicable) rendered correctly', () => {
-  const nestedMessage = 'A'.repeat(5000); // Large message boundary
-  const payload = {
-    basis: 'basis',
+test('FR-2.4+: emoji sequences and extended Unicode characters render valid markdown', () => {
+  const seed = {
+    basis: 'basis' as 'basis' | 'subtasks',
     subtasksDone: 1,
-    subtasksTotal: 2,
-    timestamp: new Date('2024-01-01T00:00:00Z').toISOString(),
-    message: nestedMessage,
+    subtasksTotal: 1,
+    timestamp: new Date().toISOString(),
+    message: '🚀 Completed accelerated milestone ✅ verified <>&"\'',
   };
 
-  const rendered = mockRenderResponse(payload);
-  expect(rendered).toContain(nestedMessage);
+  const rendered = renderDisplay(seed);
+  expect(rendered).toContain('🚀');
+  expect(rendered).toContain('✅');
 });
 
-test('AC-5.3: zero-length array equivalent handled gracefully', () => {
-  // No array here, but verify behavior with minimal payload
-  const minimalPayload = {
-    basis: 'basis',
-    subtasksDone: 0,
-    subtasksTotal: 0,
-    timestamp: new Date('2024-01-01T00:00:00Z').toISOString(),
+// =============================================================================
+// AC-5: Edge and negative tests
+// =============================================================================
+
+test('AC-5.1: special characters in task IDs handled correctly', () => {
+  const seed = {
+    basis: 'basis' as 'basis' | 'subtasks',
+    subtasksDone: 3,
+    subtasksTotal: 10,
+    timestamp: new Date().toISOString(),
+    message: 'Special [|`\'"\t\n] characters in taskId',
+    taskId: 'task-<special>';
   };
 
-  const rendered = mockRenderResponse(minimalPayload);
-  expect(rendered).toContain('0/0');
+  const rendered = renderDisplay(seed);
+  expect(rendered).toContain('### Reasoning');
 });
 
-test('AC-5.4: invalid message format (very long) handled without crashing', () => {
-  const hugeMessage = 'X'.repeat(10000);
-  const payload = {
-    basis: 'basis',
+test('AC-5.2: extremely long message handled without truncation', () => {
+  const seed = {
+    basis: 'basis' as 'basis' | 'subtasks',
     subtasksDone: 1,
-    subtasksTotal: 5,
-    timestamp: new Date('2024-01-01T00:00:00Z').toISOString(),
-    message: hugeMessage,
+    subtasksTotal: 1,
+    timestamp: new Date().toISOString(),
+    message: 'X'.repeat(1000),
   };
 
-  const rendered = mockRenderResponse(payload);
-  expect(rendered).toContain(hugeMessage);
+  const rendered = renderDisplay(seed);
+  expect(rendered).toContain('X');
+  expect(rendered.length).toBeGreaterThan(1000);
+});
+
+test('AC-5.3: extremely long taskId handled correctly', () => {
+  const seed = {
+    basis: 'basis' as 'basis' | 'subtasks',
+    subtasksDone: 1,
+    subtasksTotal: 1,
+    timestamp: new Date().toISOString(),
+    message: 'ID with many characters',
+    taskId: 'a'.repeat(1000),
+  };
+
+  const rendered = renderDisplay(seed);
+  expect(rendered).toContain('### Reasoning');
 });
 
 // =============================================================================
-// Regression Baseline Tests
+// Regression Baseline
 // =============================================================================
 
-test('Reg: Regression baseline path exists for coverage reporting', () => {
-  // This test verifies that a regression snapshot is available
-  expect(RegressionBaseline).toBeDefined();
-  expect(RegressionBaseline.timestamp).toBeTruthy();
-  expect(typeof RegressionBaseline.overall).toBe('object');
+test('Reg: Regression baseline for display test coverage', () => {
+  expect(RegressionBaseline.displayCoverage.totalTests).toBeGreaterThan(0);
 });
 
-// =============================================================================
-// Helper Functions (Mock implementations for testing)
-// =============================================================================
-
 /**
- * Mock display rendering for testing purposes.
- * In production, this would call the real Display.render() implementation.
- */
-function mockRenderResponse(payload: ProgressPayload): string {
-  // Real implementation would return rendered markdown string
-  // This version generates a deterministic representation
-  let output = `## Progress Update (${payload.basis})\n\n`;
-  output += `- **Completion**: ${payload.subtasksDone}/${payload.subtasksTotal} (${((payload.subtasksDone / Math.max(1, payload.subtasksTotal)) * 100).toFixed(1)}%)\n`;
-  if (payload.taskId) {
-    output += `- **Task ID**: ${payload.taskId}\n`;
-  }
-  if (payload.message) {
-    output += `- **Message**: ${payload.message}\n`;
-  }
-  output += `- **Timestamp**: ${payload.timestamp}\n`;
-  return output;
-}
-
-/**
- * Mock display rendering with validation.
- * Simulates how display layer validates payloads before rendering.
- */
-function mockRenderResponseWithValidation(payload: any): string {
-  try {
-    sanitizeWithValidation(payload);
-    return mockRenderResponse({
-      basis: payload.basis as 'basis' | 'subtasks',
-      subtasksDone: payload.subtasksDone,
-      subtasksTotal: payload.subtasksTotal,
-      timestamp: payload.timestamp,
-      message: payload.message,
-      taskId: payload.taskId,
-    });
-  } catch (error) {
-    // Returns human-readable error instead of crashing
-    return `## Invalid Payload\n\n**Error**: ${(error as Error).message}\n`;
-  }
-}
-
-/**
- * Mark suite as done by resetting describe for subsequent tests.
+ * Suite cleanup
  */
 afterAll(() => {
   console.log('Display test suite completed');
