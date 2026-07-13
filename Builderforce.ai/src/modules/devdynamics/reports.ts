@@ -185,7 +185,7 @@ function generateDraftStandupNarrative(contributors: ReportData['contributors'],
 }
 
 function generateDraftExecutiveSummary(totalEvents: number, top: any[], runtimeAssignments: any[]): string {
-  const topContributorsStr = top.slice(0, 3).map(c => `${c.displayName} (${c.commits})`).join(', ');
+  const topContributorsStr = top.slice(0, 3).map(c => `${c.displayName} (${c.commits} commits, ${c.prsMerged} PRs merged, ${c.issuesClosed} issues closed)`).join(', ');
   const lines = ['# Weekly Executive Summary (Generated: ' + new Date().toISOString() + ')', '## Summary', `Total reported events (last 7d): ${totalEvents}`, `Top contributors by commits (last 7d): ${topContributorsStr}`, '', '## Notes', ' (Use LLM assistant for narrative and filtering; see FR-4.8).'];
   return lines.join('\n');
 }
