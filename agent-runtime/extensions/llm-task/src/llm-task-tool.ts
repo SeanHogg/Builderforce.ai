@@ -3,11 +3,7 @@ import { type TaskCompletionEvent, type TaskUpdateEvent } from "../src/types/tas
 import type { EmailNotifier, AccountEmailResolver } from "../../src/transport/notification-domain-ports.js";
 import { HenTaskCompletionNotifier, HenTaskCompletionNotifierSchema } from "./hen-task-completion-notifier.js";
 import { getLogger } from "../../src/logging.js";
-import { EmailService } from "../../../src/utils/email.js";
-import { AccountUtil } from "../../../src/utils/accounts.js";
 import notificationStorage from "./notification-storage.js";
-
-const logger = getLogger();
 
 const logger = getLogger();
 
