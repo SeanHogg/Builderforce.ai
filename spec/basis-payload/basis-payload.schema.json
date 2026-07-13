@@ -61,14 +61,8 @@
     },
     "extensions": {
       "type": "object",
-      "additionalProperties": false,
-      "patternProperties": {
-        "^[a-z][a-z0-9]*(-[a-z0-9]+)*$": {
-          "type": "object",
-          "description": "Extension namespace with reverse-DNS style keys"
-        }
-      },
-      "description": "Optional extension fields; consumers ignore unknown extension namespaces"
+      "additionalProperties": true,
+      "description": "Optional extension fields; consumers ignore unknown extension namespaces and unknown keys outside standard extensions block"
     }
   },
   "definitions": {
