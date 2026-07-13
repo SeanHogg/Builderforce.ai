@@ -68,9 +68,7 @@ function computeProgress(task: Task): TaskProgress {
 
   // Invariant check: completed + failed + skipped must never exceed total (FR-6 + AC-7)
   if (completed + failed + skipped > total) {
-    throw new Error(
-      `Progress invariant violation: completed(${completed}) + failed(${failed}) + skipped(${skipped}) must be <= total(${total}) for task ${id}`,
-    );
+    throw new TaskProgressInvariantError(completed, failed, skipped, total);
   }
 
   // Ensure all count fields are integers: total, completed, failed, skipped, pending
