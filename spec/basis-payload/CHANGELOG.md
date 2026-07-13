@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Feature Implementation
 - **FR-1** — Schema versioning (semver pattern enforced).
-- **FR-2** — Basis identity block: `schema_version`, `basis_id`, `created_at`, `agent_id`, `session_id`, `parent_basis_id`.
+- **FR-2** — Basis identity block: `schema_version`, `basis_id`, `created_at`, `agent_id`, `session_id`, `parent_basis_id`; top-level `sandbox` removed to align with ratified v1.0.0 spec (bugfix).
 - **FR-3** — Claim block with confidence (`[0,1]`), `confidence_method` enum (`bayesian`, `heuristic`, `llm-self-report`, `empirical`), `tags`, `status` (default `asserted`).
 - **FR-4** — Evidence block (required top-level array, supports per-claim references via `claim_ids`), weight (`[0,1]`), and provenance (`source_system` required, `checksum` optional).
 - **FR-5** — Reasoning chain block: step number, `inference_type` enum (`deductive`, `inductive`, `abductive`, `analogical`, `lookup`).
