@@ -319,4 +319,5 @@ Canonical layout (matches schema and example.canonical.json):
 
 | Version | Date | Author | Change |
 |---------|------|--------|--------|
-| 1.0.0 | 2025-06-18 | SeanHogg | Initial ratified design document. |
+| 1.0.0 | 2025-10-14 | SeanHogg | Ratified v1.0.0 design document with full schema, examples, and validation harness. |
+| 1.0.0-draft | 2025-06-18 | SeanHogg | Initial draft design document. |
