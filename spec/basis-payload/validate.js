@@ -64,6 +64,32 @@ const validate = ajv.compile(schema);
 console.error(`✅ Schema loaded and compiled (Draft 2020-12)`);
 console.error('');
 
+// Ensure strict bounds for confidence/weight/overall_confidence [0.0, 1.0] as per PRD AC-4
+const CONFIDENCE_WEIGHT_UNBOUNDED_REJECT_MSG = "Reject confidence/weight/overall_confidence outside [0.0, 1.0] per AC-4.";
+
+function checkUnbounded(obj) {
+  const { claims = [], evidence = [], uncertainty = {} } = obj;
+  for (const ev of evidence) {
+    if (ev.weight < 0.0 || ev.weight > 1.0) {
+      console.error(`❌ CRITICAL: Evidence weight out of bounds [0,1]: ${ev.weight} — ${CONFIDENCE_WEIGHT_UNBOUNDED_REJECT_MSG}`);
+      return false;
+    }
+  }
+  for (const c of claims) {
+    if (c.confidence < 0.0 || c.confidence > 1.0) {
+      console.error(`❌ CRITICAL: Claim confidence out of bounds [0,1]: ${c.confidence} — ${CONFIDENCE_WEIGHT_UNBOUNDED_REJECT_MSG}`);
+      return false;
+    }
+  }
+  if (uncertainty.overall_confidence !== undefined) {
+    if (uncertainty.overall_confidence < 0.0 || uncertainty.overall_confidence > 1.0) {
+      console.error(`❌ CRITICAL: overall_confidence out of bounds [0,1]: ${uncertainty.overall_confidence} — ${CONFIDENCE_WEIGHT_UNBOUNDED_REJECT_MSG}`);
+      return false;
+    }
+  }
+  return true;
+}
+
 // --- Example Loading ---
 let example;
 try {
