@@ -167,6 +167,61 @@ export function createRecommendationsRoutes(db: Db): Hono<HonoEnv> {
     return c.header('Content-Type', 'text/csv; charset=utf-8').text(csv);
   });
 
+  // Get workflow execution status for a specific decision (admin only)
+  router.get('/recommendations/workflows/:decisionId/status', requireRole(TenantRole.OWNER), async (c) => {
+    const { tenantId } = scope(c);
+    const decisionId = parseInt(c.req.param('decisionId') || '0');
+
+    if (!Number.isFinite(decisionId)) {
+      return c.json({ error: 'Invalid decisionId' }, 400);
+    }
+
+    const workflows = await getDecisionWorkflowExecutions(db, tenantId, decisionId);
+
+    return c.json({ workflows, total: workflows.length });
+  });
+
+  // Retry failed workflow execution (decider or admin only)
+  router.post('/recommendations/workflows/:executionId/retry', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId } = scope(c);
+    const executionId = c.req.param('executionId');
+
+    if (!executionId || typeof executionId !== 'string') {
+      return c.json({ error: 'executionId is required' }, 400);
+    }
+
+    const userId = (c.get('userId') as string | undefined) ?? null;
+
+    const result = await retryWorkflowExecution(db, tenantId, executionId, userId);
+
+    if (result.success) {
+      return c.json({ success: true, execution: result });
+    } else {
+      return c.json({ error: result.error }, 500);
+    }
+  });
+
+  // Reopen a decision (decider or admin only)
+  router.post('/recommendations/decisions/:decisionId/reopen', requireRole(TenantRole.OWNER), async (c) => {
+    const { tenantId } = scope(c);
+    const decisionId = parseInt(c.req.param('decisionId') || '0');
+    const body = await c.req.json<{ rationale?: string }>().catch(() => ({}));
+
+    if (!Number.isFinite(decisionId)) {
+      return c.json({ error: 'Invalid decisionId' }, 400);
+    }
+
+    const userId = (c.get('userId') as string | undefined) ?? null;
+
+    const result = await reopenDecision(db, tenantId, decisionId, userId, body.rationale);
+
+    if (result.success) {
+      return c.json({ success: true, decision: result });
+    } else {
+      return c.json({ error: result.error }, 500);
+    }
+  });
+
   // SPACE metrics (developer+; complements DORA). Short TTL over hot tables.
   router.get('/space', requireRole(TenantRole.DEVELOPER), async (c) => {
     const { tenantId } = scope(c);
