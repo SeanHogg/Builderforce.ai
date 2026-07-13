@@ -67,6 +67,7 @@ export function ChatList({ onSelectChat, currentChatId, userId, onChatsUpdated }
         setChats(prev => [chat, ...prev]);
         onSelectChat(chat.id);
       }
+      onChatsUpdated?.();
     } catch (err: any) {
       alert(err.message || 'Failed to create new chat');
     }
