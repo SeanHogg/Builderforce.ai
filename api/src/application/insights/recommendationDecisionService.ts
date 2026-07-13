@@ -6,7 +6,7 @@
  */
 
 import { db } from '../../infrastructure/database/connection';
-import { recommendationDecisions, workflowExecutions, recommendationWorkflows } from '../../infrastructure/database/schema';
+import { recommendationDecisions, workflowExecutions, recommendationWorkflows, db as db_export } from '../../infrastructure/database/schema';
 import { sql, and, eq } from 'drizzle-orm';
 import type { Recommendation } from './recommendationsEngine';
 
