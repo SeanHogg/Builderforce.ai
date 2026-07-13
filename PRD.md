@@ -128,6 +128,26 @@ Every task must carry an explicit `task_type` field. Valid values:
 | `documentation` | Pure doc work explicitly scoped as such | Style guides, tutorial docs | Yes |
 
 **Rules:**
+- `task_type` must be set at task creation by the creating agent or human; if omitted, defaults to `coding` and logs a warning.
+- `task_type` is enforced by the gate and ProgressGate.ts (defaults to `analysis` when unspecified in the gate input).
+- Only `analysis`, `provisioning`, `decision`, and `documentation` tasks may reach `done` via a `docs-only` PR (spec/documentation can also be done via impl PR).
+- `coding` tasks with a `docs-only` PR are hard-blocked from `done` (inferred spec-ready per PRD FR-3).
+
+---
+
+### FR-5b — Task Type Taxonomy
+
+Every task must carry an explicit `task_type` field. Valid values:
+
+| Value | Purpose | Example context | May complete without code? |
+|---|---|---|---|
+| `coding` | Implementation-driven work (feature/bug-fix/refactor/test authoring) | Real code deliverables | No |
+| `analysis` | Research spikes, architectural investigation | Design docs, ADRs | Yes |
+| `provisioning` | Infra, environment setup, access grants | Terraform, config files | Yes |
+| `decision` | Formal written decision or ADR | Decision records | Yes |
+| `documentation` | Pure doc work explicitly scoped as such | Style guides, tutorial docs | Yes |
+
+**Rules:**
 - `task_type` must be set at task creation by the creating agent or human; if omitted, defaults to `coding` (per PRD FR-10) and logs a warning.
 - `task_type` is enforced by the gate and ProgressGate.ts (defaults to `analysis` when unspecified in the gate input).
 - Only `analysis`, `provisioning`, `decision`, and `documentation` tasks may reach `done` via a `docs-only` PR (spec/documentation can also be done via impl PR).
