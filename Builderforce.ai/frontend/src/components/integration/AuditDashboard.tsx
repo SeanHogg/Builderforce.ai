@@ -32,6 +32,7 @@ export function AuditDashboard({ segmentId }: AuditDashboardProps) {
   const fetchHealth = async () => {
     try {
       const res = await fetch(`/api/v1/audit/health?segmentId=${segmentId}`);
+      if (!res.ok) throw new Error(res.statusText);
       const data = await res.json();
       setHealthData(data);
     } catch (error) {
