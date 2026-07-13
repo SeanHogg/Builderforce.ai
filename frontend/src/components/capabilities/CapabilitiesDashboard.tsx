@@ -104,6 +104,9 @@ export function CapabilitiesDashboard() {
     return '#ef4444';
   };
 
+  // Calculate total capabilities for bar chart calculations
+  const totalCapabilities = rollup.statusBreakdown.shipped + rollup.statusBreakdown.in_progress + rollup.statusBreakdown.planned;
+
   return (
     <div style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto' }}>
       {/* Header */}
