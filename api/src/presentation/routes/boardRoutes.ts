@@ -149,26 +149,42 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
     // Board + its default swimlanes are created separately due to the neon-http driver's lack of transaction support.
     // If the swimlane insert fails after the board insert, the board will exist without default lanes.
     // The `ensure-defaults` endpoint can be used to heal such boards.
-    const [created] = await db
-      .insert(boards)
-      .values({
-        tenantId,
-        segmentId,
-        projectId: body.projectId,
-        name: body.name.trim(),
-        // Autonomy is implicit (driven by lane agents + gate); no board toggle.
-        autonomous: true,
-        maxConcurrentTickets: body.maxConcurrentTickets ?? 5,
-        needsAttentionLane: body.needsAttentionLane ?? 'needs-attention',
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
-    
-    if(created && seedLanes) {
-      // Relying on the unique constraint (tenantId, boardId, key) to make this idempotent.
-      await db.insert(swimlanes).values(buildDefaultLaneRows(tenantId, segmentId, created.id, now))
-        .onConflictDoNothing();
+    const boardId: string = crypto.randomUUID();
+    const boardData = {
+      tenantId,
+      segmentId,
+      projectId: body.projectId,
+      name: body.name.trim(),
+      // Autonomy is implicit (driven by lane agents + gate); no board toggle.
+      autonomous: true,
+      maxConcurrentTickets: body.maxConcurrentTickets ?? 5,
+      needsAttentionLane: body.needsAttentionLane ?? 'needs-attention',
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    // Step 1: Insert the board record
+    const [created] = await db.insert(boards).values({ ...boardData, id: boardId }).returning();
+
+    if (!created) {
+      return c.json({ error: 'Failed to create board' }, 500);
+    }
+
+    // Step 2: If seeding lanes, attempt to create default swimlanes
+    if (created && seedLanes) {
+      const laneRows = buildDefaultLaneRows(tenantId, segmentId, created.id, now);
+
+      try {
+        // Relying on the unique constraint (tenantId, boardId, key) to make this idempotent.
+        await db.insert(swimlanes).values(laneRows).onConflictDoNothing();
+      } catch (laneError) {
+        // Swimlane creation failed — compensate by rolling back the board that was created.
+        // This maintains data consistency and ensures we never leave a half-created state.
+        await db.delete(boards).where(eq(boards.id, created.id));
+        throw new Error(
+          `Board created but failed to seed default swimlanes: ${laneError instanceof Error ? laneError.message : 'Unknown error'}`
+        );
+      }
     }
 
     return c.json(created, 201);
