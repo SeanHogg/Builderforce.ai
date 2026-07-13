@@ -1,5 +1,6 @@
 import { TaskId, ProjectId, TaskStatus, TaskPriority, TaskType, AgentType, AgentHostId, PRDTaskType, DeliverableType } from '../shared/types';
 import { ValidationError } from '../shared/errors';
+import { PRDTaskType as PRDTaskTypeEnum } from '../shared/types';
 
 export interface TaskProps {
   id: TaskId;
