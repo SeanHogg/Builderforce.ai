@@ -1,6 +1,6 @@
 /**
- * Capability API types and mocked fetch functions.
- * Once the backend delivers real endpoints, these will be replaced with real fetch calls.
+ * Capability API fetch functions.
+ * Fetches data from real endpoints once the backend provides them.
  */
 
 import type {
