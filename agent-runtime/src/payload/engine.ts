@@ -312,12 +312,21 @@ function validateProperty(
   }
   if (def.enum && Array.isArray(def.enum)) {
     if (!def.enum.some((ean) => ean === value)) {
-      log({
+      const err: ValidationError = {
+        field: propName,
+        schemaPath: `properties/${propName}`,
+        type: "enum",
+        message: `Value '${value}' is not in expected enum [${def.enum.join(", ")}]`,
+        input: value,
+      };
+      logFailure(logRef, logSink, {
         level: "error",
+        contextId,
         field: propName,
         reason: `enum validation failed`,
         inputState: { value, enum: def.enum },
       });
+      errors.push(err);
     }
   }
 }
