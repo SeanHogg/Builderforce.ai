@@ -977,6 +977,8 @@
     "merging": "Wird zusammengeführt…"
   },
   "memberProfile": {
+    "tabs": { "overview": "Übersicht", "timeLogs": "Zeiterfassung", "tasks": "Aufgaben" },
+    "noTasks": "Diesem Benutzer sind keine Aufgaben zugewiesen.",
     "subtitle": "{kind} · Fähigkeiten & Verfügbarkeit",
     "syncing": "Wird synchronisiert…",
     "syncFromGoogleCalendar": "Aus Google Kalender synchronisieren",

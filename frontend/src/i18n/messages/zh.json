@@ -977,6 +977,8 @@
     "merging": "正在合并…"
   },
   "memberProfile": {
+    "tabs": { "overview": "概览", "timeLogs": "时间日志", "tasks": "任务" },
+    "noTasks": "没有分配给此用户的任务。",
     "subtitle": "{kind} · 能力与可用性",
     "syncing": "正在同步…",
     "syncFromGoogleCalendar": "从 Google 日历同步",
