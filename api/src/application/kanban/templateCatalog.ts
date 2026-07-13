@@ -194,9 +194,9 @@ const STANDARD_SWE_V2: KanbanTemplate = {
       { kind: 'review', ref: 'product-owner', responsibility: 'reviewer', isRequired: true, position: 1, description: 'Product Owner signs off on value.' },
     ] }),
     lane({ key: 'blocked', name: 'Blocked', position: 6, requirementGate: 'off' }),
-    lane({ key: 'done', name: 'Done', position: 7, isTerminal: true, requirementGate: 'soft', requirements: [
-      { kind: 'review', ref: 'validator', responsibility: 'reviewer', isRequired: true, position: 0, description: 'Definition of Done: business-validated.' },
-    ] }),
+    // Validation is completed in the preceding stage. Done is a terminal state,
+    // not a new participation stage that could only be satisfied after arrival.
+    lane({ key: 'done', name: 'Done', position: 7, isTerminal: true, requirementGate: 'off' }),
   ],
 };
 

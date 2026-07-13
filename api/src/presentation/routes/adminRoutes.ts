@@ -13,7 +13,7 @@ import { Hono } from 'hono';
 import { and, desc, eq, gt, ilike, inArray, isNull, sql } from 'drizzle-orm';
 import type { Env, HonoEnv } from '../../env';
 import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
-import { buildDatabase, type Db } from '../../infrastructure/database/connection';
+import { buildDatabase, buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
 import { writeAdminAudit, type AdminAuditOpts } from '../../infrastructure/audit/adminAudit';
 import { parseJsonArray } from '../../domain/shared/json';
 import { slugify } from '../../domain/shared/strings';
@@ -1715,7 +1715,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       );
     }
     const result = await probeVendor(c.env, vendorParam as VendorId);
-    await persistProbe(buildDatabase(c.env), result, 'manual');
+    await persistProbe(buildTransactionalDatabase(c.env), result, 'manual');
     return c.json(result);
   });
 
@@ -1723,7 +1723,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   // GET /api/admin/llm-health — latest probe per vendor, for the admin UI
   // -------------------------------------------------------------------------
   router.get('/llm-health', async (c) => {
-    const db = buildDatabase(c.env);
+    const db = buildTransactionalDatabase(c.env);
     const rows = (await db.execute(sql`
       SELECT DISTINCT ON (vendor)
         vendor, status, probed_count AS "probedCount", ok_count AS "okCount",
