@@ -1,14 +1,12 @@
 'use client';
 
-/** /insights/capabilities — Capabilities Dashboard (capabilities + health breakdown) */
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import PageContainer from '@/components/PageContainer';
 import { RoleGate } from '@/components/RoleGate';
-import CapabilityCard from '@/components/insights/capabilities/CapabilityCard';
-import { Skeleton, Spinner, Alert, Button, PillBadge } from '@/apps/builderforce/ui-shadcn';
+import { Skeleton, Spinner, Alert, Button } from '@/components/dashboard';
 import type { Capability } from './capabilityTypes';
 
 /* -------------------------------------------------------------------------- */
@@ -103,7 +101,255 @@ const MOCK_ROLLUP: CapabilityRollup = {
 };
 
 /* -------------------------------------------------------------------------- */
-/* Component: CapabilityCard (reuse via CapabilityCard + Canvas charts) */
+/* Helper components for basic UI (no external shadcn dependency) */
+/* -------------------------------------------------------------------------- */
+
+function PillBadge({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold text-background ${className || ''}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function SelectControl({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (v: any) => void;
+  options: { value: any; label: string }[];
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="rounded border border-border bg-background px-3 py-1.5 text-sm"
+    >
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function InputControl({ children }: { children: React.ReactNode }) {
+  return <div className="inline-block">{children}</div>;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Mock Gauge component (replacing undefined Gauge) */
+/* -------------------------------------------------------------------------- */
+
+interface GaugeProps {
+  value: number;
+  min?: number;
+  max?: number;
+  size?: number;
+  strokeWidth?: number;
+  trackColor?: string;
+  gaugeColors?: { left: string; center: string; right: string };
+  textSize?: { fontSize: number };
+  textSizeUnit?: string;
+  showText?: boolean;
+  text?: string;
+  animate?: boolean;
+  animateSpeed?: number;
+  animateOnLoad?: boolean;
+  strokeLinecap?: string;
+}
+
+function Gauge(props: GaugeProps) {
+  const {
+    value = 0,
+    min = 0,
+    max = 100,
+    size = 120,
+    strokeWidth = 26,
+    trackColor = 'hsl(214 32% 20%)',
+    gaugeColors = { left: 'hsl(142 72% 51%)', center: '#fbbf24', right: 'hsl(0 80% 50%)' },
+    textSize = { fontSize: 64 },
+    textSizeUnit = 'px',
+    showText = false,
+    text,
+    animate = true,
+    animateSpeed = 1.5,
+    animateOnLoad = true,
+    strokeLinecap = 'round',
+  } = props;
+
+  const frac = min < max ? Math.max(0, Math.min(1, (value - min) / (max - min))) : 0;
+  const cx = size / 2;
+  const r = (size - strokeWidth) / 2;
+  const cy = r + strokeWidth / 2;
+  const angle = (1 - frac) * Math.PI; // 180° sweep, left→right
+
+  return (
+    <div
+      className="inline-flex flex-col items-center justify-center gap-4"
+      style={{ width: `${size + 40}px`, height: `${size + 60}px` }}
+    >
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Health Score">
+        <path
+          d={`M ${cx - r} ${cy} A ${r} ${r} 0 ${frac > 0.5 ? 1 : 0} 1 ${cx + r} ${cy}`}
+          fill="none"
+          stroke={trackColor}
+          strokeWidth={strokeWidth}
+          strokeLinecap={strokeLinecap}
+        />
+        {animateOnLoad && (
+          <path
+            d={`M ${cx - r} ${cy} A ${r} ${r} 0 ${frac > 0.5 ? 1 : 0} 1 ${cx + r} ${cy}`}
+            fill="none"
+            stroke={gaugeColors.left}
+            strokeWidth={strokeWidth}
+            strokeLinecap={strokeLinecap}
+            strokeDasharray={((1 - frac) * Math.PI * r * 2).toString()}
+            style={{ animation: `draw 1.5s ease-out forwards`, transformOrigin: `${cx}px ${cy}px` }}
+          />
+        )}
+      </svg>
+      {showText && text !== undefined && (
+        <span
+          style={{
+            fontSize: textSize.fontSize,
+            fontWeight: 700,
+            color: gaugeColors.center,
+            textAlign: 'center',
+          }}
+        >
+          {text}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Mock Chart Stepper/UI for pie/bar charts (replacing undefined CanvasPieChart) */
+/* -------------------------------------------------------------------------- */
+
+function PieChart({
+  segments,
+  size = 200,
+  legend = true,
+}: {
+  segments: { key: string; label: string; value: number; color: string }[];
+  size?: number;
+  legend?: boolean;
+}) {
+  const total = segments.reduce((s, x) => s + Math.max(0, x.value), 0);
+  const r = (size - 40) / 2;
+  const c = 2 * Math.PI * r;
+  const cx = size / 2;
+
+  let acc = 0;
+  const arcs = segments
+    .filter((s) => s.value > 0)
+    .map((s) => {
+      const frac = total > 0 ? s.value / total : 0;
+      const len = frac * c;
+      const dash = `${len} ${c - len}`;
+      const offset = -acc * c;
+      acc += frac;
+      return { ...s, dash, offset, frac };
+    });
+
+  return (
+    <div
+      className="flex items-center gap-4"
+      style={{ width: 'fit-content', justifyContent: 'center' }}
+    >
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Status Breakdown">
+        <g transform={`rotate(-90 ${cx} ${cx})`}>
+          {arcs.map((a) => (
+            <circle
+              key={a.key}
+              cx={cx}
+              cy={cx}
+              r={r}
+              fill="none"
+              stroke={a.color}
+              strokeWidth={20}
+              strokeDasharray={a.dash}
+              strokeDashoffset={a.offset}
+              strokeLinecap="butt"
+            />
+          ))}
+        </g>
+      </svg>
+
+      {legend && (
+        <div className="flex flex-col gap-2">
+          {arcs.map((s) => {
+            const frac = total > 0 ? s.value / total : 0;
+            return (
+              <div key={s.key} className="flex items-center gap-2 text-sm">
+                <span
+                  className="inline-block min-w-3 h-3 rounded-full bg-current"
+                  style={{ color: s.color, background: s.color }}
+                />
+                <span className="truncate text-text-secondary">{s.label}</span>
+                <span className="font-semibold">{Math.round(frac * 100)}%</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BarChart({
+  data,
+  labelWidth = 100,
+  yAxisExtraLabel,
+  tooltipSuffix,
+  ariaLabel,
+}: {
+  data: { key: string; label: string; value: number }[];
+  labelWidth?: number;
+  yAxisExtraLabel?: string;
+  tooltipSuffix?: string;
+  ariaLabel?: string;
+}) {
+  const max = Math.max(1, ...data.map((d) => d.value));
+  return (
+    <div role="img" aria-label={ariaLabel} className="flex flex-col gap-3">
+      {data.map((d) => {
+        const pct = (d.value / max) * 100;
+        const suffix = tooltipSuffix ? ' ' + tooltipSuffix : '';
+
+        return (
+          <div key={d.key} className="flex items-center gap-3">
+            <span
+              className="truncate text-sm text-text-secondary min-w-[labelWidth]"
+              style={{ width: `${labelWidth}px` }}
+              title={d.label}
+            >
+              {d.label}
+            </span>
+            <div className="flex-1 h-6 rounded bg-border-subtle overflow-hidden">
+              <div
+                className="h-full inline-block transition-[width]"
+                style={{ width: `${pct}%`, background: 'var(--chart-color)' }}
+              />
+            </div>
+            <span className="text-sm font-semibold w-14 text-right">{d.value.toLocaleString()}{suffix}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Component: CapabilitiesPage */
 /* -------------------------------------------------------------------------- */
 
 export default function CapabilitiesPage() {
@@ -129,13 +375,12 @@ export default function CapabilitiesPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   // Loading vs skeleton vs error vs empty
+  const loadedWithItems = !loading && capabilities.length > 0;
   const filtered = loadedWithItems
     ? filterCapabilities(capabilities, { status: statusFilter, category: categoryFilter, min: healthMin, max: healthMax })
     : [];
   const sorted = loadedWithItems ? sortCapabilities(filtered, { key: sortBy, order: sortOrder }) : [];
   const isEmpty = loadedWithItems && sorted.length === 0;
-
-  const loadedWithItems = !loading && capabilities.length > 0;
 
   useEffect(() => {
     if (!isAuthenticated) router.replace('/login');
@@ -155,8 +400,6 @@ export default function CapabilitiesPage() {
       // setCapabilities(cRes);
       // setRollup(rRes);
       await new Promise((resolve) => setTimeout(resolve, 800)); // mock latency
-      // On mock success:
-      // resetFilters(); // optional: clear filters on reload
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -168,9 +411,7 @@ export default function CapabilitiesPage() {
   if (!hasTenant) {
     return (
       <PageContainer>
-        <Alert variant="destructive">
-          Please select a tenant to view this page.
-        </Alert>
+        <Alert variant="destructive">Please select a tenant to view this page.</Alert>
       </PageContainer>
     );
   }
@@ -190,10 +431,16 @@ export default function CapabilitiesPage() {
 
           <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
             <Skeleton className="h-40 w-full" />
+            <Skeleton className="mt-4 h-6 w-full" />
+            <Skeleton className="h-6 w-3/4" />
+            <Skeleton className="h-6 w-2/4" />
           </div>
 
           <div className="rounded-xl border border-border bg-card p-6 shadow-sm col-span-2">
             <Skeleton className="h-40 w-full" />
+            <Skeleton className="mt-4 h-6 w-full" />
+            <Skeleton className="h-6 w-3/4 mt-2" />
+            <Skeleton className="h-6 w-2/4 mt-2" />
           </div>
         </div>
 
@@ -213,217 +460,221 @@ export default function CapabilitiesPage() {
           <span>{error}</span>
         </Alert>
         <div className="mt-6 flex justify-center">
-          <Button variant="outline" size="sm" onClick={() => setPathForReload(pathname)}>
-            重试
+          <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+            Retry
           </Button>
         </div>
       </PageContainer>
     );
   }
 
+  const statusOptions = [
+    { value: 'shipped', label: 'Shipped' },
+    { value: 'in_progress', label: 'In Progress' },
+    { value: 'planned', label: 'Planned' },
+    { value: null, label: 'All' },
+  ];
+
+  const categoryOptions = [
+    { value: 'Engineering', label: 'Engineering' },
+    { value: 'Security', label: 'Security' },
+    { value: 'Finance', label: 'Finance' },
+    { value: null, label: 'All' },
+  ];
+
+  const sortByOptions = [
+    { value: 'name', label: 'Name' },
+    { value: 'status', label: 'Status' },
+    { value: 'category', label: 'Category' },
+    { value: 'healthScore', label: 'Health Score' },
+    { value: 'lastUpdated', label: 'Last Updated' },
+  ];
+
+  const sortOrderOptions = [
+    { value: 'asc', label: 'Ascending' },
+    { value: 'desc', label: 'Descending' },
+  ];
+
   return (
     <PageContainer>
       <div className="mb-6 flex items-center justify-between gap-4">
         <h1 className="text-3xl font-bold tracking-tight">{t('title')}</h1>
-        <PillBadge className="font-semibold text-background">
-          {t('capabilityCount', { count: capabilities.length })}
-        </PillBadge>
+        <PillBadge>{t('capabilityCount', { count: capabilities.length })}</PillBadge>
       </div>
 
       {/* Filters */}
-      <div className="mb-6 flex flex-wrap gap-2">
-        <BlurBackdrop onFocusBlurb sx={{ pb: 1, mb: -1.5 }}>
-          <FieldLabel title="状态" pillWidth={100}>
-            <SelectControl
-              value={statusFilter}
-              onChange={(t) => {
-                setStatusFilter(t || null);
-              }}
-              options={[
-                { value: 'shipped', label: '已交付' },
-                { value: 'in_progress', label: '进行中' },
-                { value: 'planned', label: '计划中' },
-                { value: null, label: '全部' },
-              ]}
-            />
-          </FieldLabel>
-        </BlurBackdrop>
+      <div className="mb-6 flex flex-wrap gap-4">
+        <div>
+          <label className="text-sm font-semibold text-text-secondary">Status</label>
+          <SelectControl value={statusFilter || ''} onChange={(v) => setStatusFilter(v || null)} options={statusOptions} />
+        </div>
 
-        <BlurBackdrop onFocusBlurb sx={{ pb: 1, mb: -1.5 }}>
-          <FieldLabel title="类别" pillWidth={100}>
-            <SelectControl
-              value={categoryFilter}
-              onChange={(t) => {
-                setCategoryFilter(t || null);
-              }}
-              options={[
-                { value: 'Engineering', label: '工程' },
-                { value: 'Security', label: '安全' },
-                { value: 'Finance', label: '财务' },
-                { value: null, label: '全部' },
-              ]}
-            />
-          </FieldLabel>
-        </BlurBackdrop>
+        <div>
+          <label className="text-sm font-semibold text-text-secondary">Category</label>
+          <SelectControl value={categoryFilter || ''} onChange={(v) => setCategoryFilter(v || null)} options={categoryOptions} />
+        </div>
 
-        <BlurBackdrop onFocusBlurb sx={{ pb: 1, mb: -1.5 }}>
-          <FieldLabel title="健康分" pillWidth={100}>
-            <div className="flex gap-2">
-              <BlurBackdrop onFocusBlurb sx={{ pb: 1, mb: -1.5 }}>
-                <InputControl width={80}>
-                  <Input
-                    type="number"
-                    placeholder="最小"
-                    value={healthMin || ''}
-                    onChange={(e) => setHealthMin((e.target.valueAsNumber ?? healthMin) || null)}
-                    className="w-full"
-                  />
-                </InputControl>
-              </BlurBackdrop>
-              <BlurBackdrop onFocusBlurb sx={{ pb: 1, mb: -1.5 }}>
-                <InputControl width={80}>
-                  <Input
-                    type="number"
-                    placeholder="最大"
-                    value={healthMax || ''}
-                    onChange={(e) => setHealthMax((e.target.valueAsNumber ?? healthMax) || null)}
-                    className="w-full"
-                  />
-                </InputControl>
-              </BlurBackdrop>
-            </div>
-          </FieldLabel>
-        </BlurBackdrop>
-
-        <Bl窗户Backdrop onFocusBlurb sx={{ pb: 1, mb: -1.5 }}>
-          <FieldLabel title="排序" pillWidth={130}>
-            <SelectControl
-              value={sortBy}
-              onChange={(t) => {
-                setSortBy(t as typeof sortBy);
-              }}
-              options={[
-                { value: 'name', label: '名称' },
-                { value: 'status', label: '状态' },
-                { value: 'category', label: '类别' },
-                { value: 'healthScore', label: '健康分' },
-                { value: 'lastUpdated', label: '最后更新' },
-              ]}
+        <div>
+          <label className="text-sm font-semibold text-text-secondary">Health Score Range</label>
+          <div className="flex gap-2">
+            <input
+              type="number"
+              min={0}
+              max={100}
+              placeholder="Min"
+              value={healthMin || ''}
+              onChange={(e) => setHealthMin((e.target.valueAsNumber ?? healthMin) || null)}
+              className="rounded border border-border px-2 py-1 text-sm w-16"
             />
-          </FieldLabel>
-        </BlurBackdrop>
-
-        <BlurBackdrop onFocusBlurb sx={{ pb: 1, mb: -1.5 }}>
-          <FieldLabel title="方向" pillWidth={60}>
-            <SelectControl
-              value={sortOrder}
-              onChange={(t) => {
-                setSortOrder(t as 'asc' | 'desc');
-              }}
-              options={[{ value: 'asc', label: '升序' }, { value: 'desc', label: '降序' }]}
+            <span className="flex items-center text-text-muted">-</span>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              placeholder="Max"
+              value={healthMax || ''}
+              onChange={(e) => setHealthMax((e.target.valueAsNumber ?? healthMax) || null)}
+              className="rounded border border-border px-2 py-1 text-sm w-16"
             />
-          </FieldLabel>
-        </BlurBackdrop>
+          </div>
+        </div>
+
+        <div>
+          <label className="text-sm font-semibold text-text-secondary">Sort By</label>
+          <SelectControl value={sortBy} onChange={setSortBy} options={sortByOptions} />
+        </div>
+
+        <div>
+          <label className="text-sm font-semibold text-text-secondary">Order</label>
+          <SelectControl value={sortOrder} onChange={setSortOrder} options={sortOrderOptions} />
+        </div>
       </div>
 
+      {/* Dashboard View */}
       {(mode === 'dashboard' || mode === null) && (
         <div className="grid gap-8 sm:grid-cols-2">
           {/* Health Score Gauge */}
           <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-            <h2 className="mb-5 text-lg font-semibold">{t('healthScore')}</h2>
-            {/* TA: HealthGauge gauge */}
-            <div>
+            <h2 className="mb-4 text-lg font-semibold">Health Score</h2>
+            <div className="flex items-center justify-center">
               <Gauge
                 value={rollup.healthScore}
                 min={0}
                 max={100}
-                size={240}
-                strokeWidth={26}
-                trackColor="hsl(214 32% 20%)"
-                gaugeColors={{ left: 'hsl(142 72% 51%)', center: '#fbbf24', right: 'hsl(0 80% 50%)' }}
-                textSize={{ fontSize: 64 }}
-                textSizeUnit="px"
-                showText={true}
+                size={200}
+                strokeWidth={30}
+                gaugeColors={{ left: '#22c55e', center: '#eab308', right: '#ef4444' }}
+                textSize={{ fontSize: 72 }}
+                showText
                 text={String(rollup.healthScore)}
-                animate={true}
-                animateSpeed={1.5}
                 animateOnLoad={true}
-                strokeLinecap="round"
               />
+            </div>
+            <div className="mt-4 text-center text-text-muted text-sm">
+              A composite score based on capability delivery and health
             </div>
           </div>
 
           {/* Status Breakdown */}
           <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-            <h2 className="mb-5 text-lg font-semibold">{t('statusBreakdown')}</h2>
-            <CanvasPieChart
-              keys={['shipped', 'in_progress', 'planned']}
-              values={rollup}
-              defaultValue={0}
+            <h2 className="mb-4 text-lg font-semibold">Status Breakdown</h2>
+            <PieChart
+              segments={[
+                { key: 'shipped', label: 'Shipped', value: rollup.shipped || 0, color: '#22c55e' },
+                { key: 'in_progress', label: 'In Progress', value: rollup.in_progress || 0, color: '#eab308' },
+                { key: 'planned', label: 'Planned', value: rollup.planned || 0, color: '#6b7280' },
+              ]}
+              size={200}
             />
           </div>
 
           {/* Category Breakdown */}
           <div className="rounded-xl border border-border bg-card p-6 shadow-sm col-span-2">
-            <h2 className="mb-5 text-lg font-semibold">按类别</h2>
-            <CanvasBarChart
-              categories={Object.keys(rollup.categoryCounts)}
-              counts={Object.values(rollup.categoryCounts)}
-              yAxisExtraLabel={'能力数'}
-              tooltipSuffix={'项'}
+            <h2 className="mb-4 text-lg font-semibold">By Category</h2>
+            <BarChart
+              data={Object.keys(rollup.categoryCounts).map((cat) => ({
+                key: cat,
+                label: cat,
+                value: rollup.categoryCounts[cat] || 0,
+              }))}
+              labelWidth={120}
+              yAxisExtraLabel="Capabilities"
+              tooltipSuffix="items"
+              ariaLabel="Category breakdown"
             />
           </div>
         </div>
       )}
 
-      {/* Table view */}
+      {/* Table View */}
       {mode === 'table' && (
-        <div className="rounded-xl border border-border bg-card shadow-sm">
-          <CapabilityTable
-            capabilities={sorted}
-            onSave={(c) => {
-              setCapabilities((prev) =>
-                prev.map((item) => (item.id === c.id ? { ...item, ...c } : item))
-              );
-            }}
-          />
+        <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border bg-muted">
+                  <th className="px-4 py-3 text-left text-sm font-semibold">Name</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold">Status</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold">Category</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold">Health Score</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold">Last Updated</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {sorted.map((cap) => (
+                  <tr key={cap.id} className="hover:bg-muted/50">
+                    <td className="px-4 py-3 text-sm">{cap.name}</td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold text-background capitalize">
+                        {cap.status.replace('_', ' ')}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm">{cap.category || '-'}</td>
+                    <td className="px-4 py-3 text-sm">
+                      {cap.healthScore !== null ? `${cap.healthScore}%` : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-text-muted">{cap.lastUpdated || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {sorted.length === 0 && (
+            <div className="p-8 text-center text-text-muted">No capabilities match your filters</div>
+          )}
         </div>
       )}
 
-      {/* Empty state */}
+      {/* Empty State */}
       {isEmpty && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Alert variant="info" className="mb-4 max-w-md">
             <span className="mr-2">*</span>
             {t('noCapabilitiesFound')}
           </Alert>
-          <Button variant="outline" size="sm" onClick={() => setPathForReload(pathname)}>
-            {t('tryAnotherFilters')}
+          <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+            Clear Filters
           </Button>
         </div>
       )}
 
       {/* Footer / mode switch */}
-      <div className="mt-8 flex justify-center">
-        <div className="flex items-center gap-4">
-          <Button
-            variant={mode === 'dashboard' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setMode(mode === 'dashboard' ? null : 'dashboard')}
-          >
-            {/* TA: 当前视图: */}
-            {mode === 'dashboard' ? '返回概览' : '概览'}
-          </Button>
+      <div className="mt-8 flex justify-center gap-4">
+        <Button
+          variant={mode === 'dashboard' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setMode(mode === 'dashboard' ? null : 'dashboard')}
+        >
+          {mode === 'dashboard' ? 'Switch to Table' : 'Switch to Dashboard'}
+        </Button>
 
-          <Button
-            variant={mode === 'table' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setMode(mode === 'table' ? null : 'table')}
-          >
-            {/* TA: 切换至表格视图: */}
-            {mode === 'table' ? '返回概览' : '表格'}
-          </Button>
-        </div>
+        <Button
+          variant={mode === 'table' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setMode(mode === 'table' ? null : 'table')}
+        >
+          {mode === 'table' ? 'Switch to Dashboard' : 'Switch to Table'}
+        </Button>
       </div>
     </PageContainer>
   );
@@ -440,13 +691,10 @@ interface FilterOptions {
   max: number | null;
 }
 
-function filterCapabilities(
-  items: Capability[],
-  opts: FilterOptions
-): Capability[] {
+function filterCapabilities(items: Capability[], opts: FilterOptions): Capability[] {
   return items.filter((item) => {
     if (opts.status && item.status !== opts.status) return false;
-    if (opts.category && item.category !== opts.category) return false;
+    if (opts.category && item.category && item.category !== opts.category) return false;
     if (opts.min != null && (item.healthScore ?? 0) < opts.min) return false;
     if (opts.max != null && (item.healthScore ?? 0) > opts.max) return false;
     return true;
@@ -455,10 +703,7 @@ function filterCapabilities(
 
 function sortCapabilities(
   items: Capability[],
-  opts: {
-    key: 'name' | 'status' | 'category' | 'healthScore' | 'lastUpdated';
-    order: 'asc' | 'desc';
-  }
+  opts: { key: 'name' | 'status' | 'category' | 'healthScore' | 'lastUpdated'; order: 'asc' | 'desc' }
 ): Capability[] {
   return [...items].sort((a, b) => {
     let left: any;
@@ -489,11 +734,4 @@ function sortCapabilities(
     if (left > right) return opts.order === 'asc' ? 1 : -1;
     return 0;
   });
-}
-
-function setPathForReload(pathname: string | null): void {
-  // optional; router.replace(`/insights/capabilities`) on next call
-  if (pathname) {
-    // ToolInvocation not provided; omitted SSR-safe router.replace.
-  }
 }
