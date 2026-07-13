@@ -914,9 +914,10 @@ async function coordinatePullRequests(
           tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: 'sync_pr',
           summary: `Updated PR #${pr.number ?? '?'} with the latest base branch before merge.`,
         });
-        // Updating the head invalidates the CI verdict that was attached to its old
-        // commit. The on-green policy waits for the new head's checks next pass.
-        if (policy.prMergePolicy === 'on_green') continue;
+        // Both GitHub updates and GitLab rebases are accepted asynchronously. Never
+        // race the provider by merging the old head in this pass. The next manager
+        // pass observes the current head; on-green also polls CI for that new commit.
+        continue;
       }
       // 'on_green' waits for CI to pass. Don't depend on the inbound CI webhook — POLL
       // the provider's live status ourselves (self-trigger), persisting the verdict, so
