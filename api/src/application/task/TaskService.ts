@@ -1,6 +1,7 @@
 import { ITaskRepository } from '../../domain/task/ITaskRepository';
 import { IProjectRepository } from '../../domain/project/IProjectRepository';
 import { Task } from '../../domain/task/Task';
+import type { Db, buildDatabase } from '../../infrastructure/database/TaskRepository';
 import {
   ProjectId, TaskId, TaskStatus, TaskPriority, TaskType, AgentType, TenantId,
   asProjectId, asTaskId, asTenantId, asAgentHostId,
