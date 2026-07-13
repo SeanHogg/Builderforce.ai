@@ -128,7 +128,7 @@ export interface Task {
  * @returns Instantiated Task entity
  */
 export function createTask(raw: Omit<Task, 'createdAt' | 'updatedAt' | 'progress'>): Task {
-  const total = raw.parentTaskId === null ? 1 : 0;
+  const total = raw.parentTaskId === null ? 0 : 1;
 
   const progress: TaskProgress = {
     total,
