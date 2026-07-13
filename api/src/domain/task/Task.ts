@@ -205,19 +205,8 @@ export class Task {
   // Behaviour
   // ------------------------------------------------------------------
 
-  update(
-    updates: Partial<
-      Pick<
-        TaskProps,
-        'title' | 'description' | 'status' | 'priority' | 'taskType' | 'parentTaskId' | 'assignedAgentType'
-        | 'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'sprintId' | 'releaseId' | 'storyPoints' | 'startDate' | 'dueDate'
-        | 'businessValue' | 'businessValueRationale' | 'businessValueSource' | 'managerRank'
-        | 'persona' | 'archived'
-      >
-    >,
-  ): Task {
-    // 3-layer fix: First, Task.update strips undefined keys (no overwrites),
-    // then TaskService passes only defined dto fields to avoid schema merging,
+  // 3-layer fix: First, Task.update strips undefined keys (no overwrites),
+  // then TaskService passes only defined dto fields to avoid schema merging,
     // and TaskRepository.update writes plain.parentTaskId(non-empty)?nonEmpty:null.
     const stripped = Object.fromEntries(
       Object.entries(updates).filter(([, v]) => v !== undefined),
