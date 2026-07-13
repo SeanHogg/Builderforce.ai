@@ -1806,6 +1806,21 @@ html[data-theme='light'] .nebula {
 
   .page-inner { padding: 12px 8px; max-width: 100%; margin: 0; }
 
+  /* Ensure critical touch targets are at least 44x44px (Android default, iOS relaxed) */
+  button, a, .mbn-item {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Allow vertical scrolling past mobile bottom nav */
+  .content {
+    padding-bottom: 0;
+  }
+
+  .shell {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
+
   .bs-shell { grid-template-columns: 1fr; height: auto; min-height: 0; }
   .bs-sidebar { max-height: 200px; border-right: none; border-bottom: 1px solid var(--border); }
 
