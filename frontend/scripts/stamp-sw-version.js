@@ -61,13 +61,14 @@ console.log(`📦 Injecting PWA version: ${buildId}`);
 const swPath = path.join(__dirname, '..', 'public', 'sw.js');
 const swContent = fs.readFileSync(swPath, 'utf-8');
 
-const regex = /^const CACHE_NAME = 'bf-cache-' \+ __BUILD_VERSION__ \+ ';$/m;
+// Improved regex to handle whitespace flexibility
+const regex = /const\s+CACHE_NAME\s*=\s*'bf-cache-'\s*\+\s*__BUILD_VERSION__(?:\s+)?;/m;
 if (!regex.test(swContent)) {
   console.error(`❌ Could not find CACHE_NAME using __BUILD_VERSION__ in ${swPath}`);
   process.exit(1);
 }
 
-const newSwContent = swContent.replace(regex, `const CACHE_NAME = 'bf-cache-' + '${buildId}' + ';`);
+const newSwContent = swContent.replace(regex, `const CACHE_NAME = 'bf-cache-' + '${buildId}';`);
 
 fs.writeFileSync(swPath, newSwContent, 'utf-8');
 console.log(`✓ Updated ${swPath}: CACHE_NAME = 'bf-cache-${buildId}'`);
