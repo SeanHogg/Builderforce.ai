@@ -65,6 +65,35 @@
   /* Hide scrollbar visually but keep functionality (common across browsers) */
   scrollbar-width: none;
   -ms-overflow-style: none;
+  min-height: 200px; /* Ensure minimum height for scrolling */
+}
+
+/* Task kanban container - horizontal scroll on mobile */
+.task-kanban {
+  display: flex;
+  overflow-x: auto;
+  overflow-y: auto;
+  gap: 12px;
+  padding-bottom: 12px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  /* Hide scrollbar visually but keep functionality */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  min-width: 100%;
+  /* Allow scrolling horizontally for swimlanes */
+}
+
+.task-kanban::-webkit-scrollbar {
+  display: none;
+}
+
+/* Individual swimlane column */
+.task-kanban > div {
+  flex: 0 0 auto;
+  min-width: 200px;
+  max-width: 300px;
+  width: 100%;
 }
 
 .swimlane-item {
