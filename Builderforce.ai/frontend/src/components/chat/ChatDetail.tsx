@@ -75,12 +75,16 @@ export function ChatDetail({
         content: input,
       });
 
-      setMessages(prev => [...prev, result.message]);
+      setMessages(prev => [
+        ...prev,
+        result.message,
+        result.chat
+      ]);
       setInput('');
 
       // Wait a moment then refetch to get chat metadata updates
-      setTimeout(() => {
-        loadMessages();
+      setTimeout(async () => {
+        await loadMessages();
       }, 100);
     } catch (err: any) {
       alert(err.message || 'Failed to send message');
