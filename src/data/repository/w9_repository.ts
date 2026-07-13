@@ -5,6 +5,7 @@
  */
 
 import { W9Entity, IRepository, TaxFormStatus, TaxEntityType, TaxTINType } from '../base';
+import { ForeignTaxAddress, W8BENEntity } from '../../models/tax/tax_form_entity';
 
 /**
  * SQL query builder utilities
