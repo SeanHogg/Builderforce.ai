@@ -7,6 +7,8 @@
 
 export type DeliverableType = 'code' | 'decision' | 'spec' | 'ops';
 
+export type TaskType = 'coding' | 'analysis' | 'provisioning' | 'decision' | 'documentation';
+
 export type TaskStatus = 'todo' | 'in-progress' | 'spec-ready' | 'review' | 'done' | 'blocked' | 'changes_requested';
 
 export interface PRDiff {
@@ -58,4 +60,12 @@ export const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
 
 // Doc-only file root patterns.
 export const DOC_ROOT_PATTERNS = [
-  '**/*.md', '**/docs/**', '**/*.rst', '**/*.txt', 'CHANGELOG', 'LICENSE', 'NOTICE', 'README*'];
+  '**/*.md',
+  '**/docs/**',
+  '**/*.rst',
+  '**/*.txt',
+  'CHANGELOG',
+  'LICENSE',
+  'NOTICE',
+  'README*',
+];
