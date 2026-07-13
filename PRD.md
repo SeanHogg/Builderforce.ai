@@ -27,6 +27,11 @@ The automated backlog scan system will:
 
 1. **Data Integration**: The system will integrate with the project management tools (e.g., Jira, Trello) to access the backlog data. The system should support data import and export formats such as JSON or XML.
 
+   PRD Decision: This capability is OUT OF SCOPE for BuilderForce's core runtime. Implementation requires:
+   - Separate Jira/Trello adapter modules (installable as BuilderForce extensions)
+   - A dedicated external workload store (e.g., a second project-management connector)
+   - The builderforce.ai platform will provide the orchestrator + scheduling + API; the actual Jira/Trello integrations and other ETL/logic remain external integrations. See EPIC #XXX (to be assigned) for implementation direction.
+
 2. **Identification Algorithm**: The system will automatically identify projects or opportunities in the backlog based on predefined criteria (e.g., keywords, tags) or use machine learning algorithms to improve accuracy.
 
 3. **Visualization**: The system should provide a user-friendly interface to display identified projects or opportunities, including details such as project status, assignees, and estimated effort.
