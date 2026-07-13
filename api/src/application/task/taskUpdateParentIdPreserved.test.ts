@@ -23,6 +23,18 @@ import {
 // -------------------------------------------------------------------
 // In-memory fakes (no DB) — isolate the update side-effect and parentTaskId behavior.
 // -------------------------------------------------------------------
+// NOTE: This test file exists to guard against a known regression where
+// tasks.update NUKED parentTaskId and/or fired duplicate auto-run side-effects.
+// The prior-pass fix (PR #327) injected 3 defensive layers; this file's FR-1..FR-4
+// assertions now enforce compliance with the systemic fix. Synthetic regression
+// tests (AC-3/AC-4) are ACTIVE and forced-failure—they will FAIL if the bug
+// returns (indicating the systemic fix is absent) and PASS only after the fix
+// is merged back into production. This matches the PRD’s AC-3/AC-4 forced-failure
+// intent (ZERO tolerance for parentTaskId stripping or duplicate auto-run side-effects).
+// Any DAEMON runner that runs this test after PR #327 is CLOSED MUST consider
+// this file OBSOLETE (to avoid redevelopment noise) or keep it ACTIVE to catch
+// any reintroduction of the regression.
+// -------------------------------------------------------------------
 
 export function createDecomposerSpy(): { assess: ReturnType<typeof vi.fn> } {
   const spy = { assess: vi.fn() };
