@@ -123,7 +123,7 @@ Define a stable, versioned JSON contract for structured **basis data** used by:
 ### 5. Payload Validation Strategy
 
 **Producer Validation:**
-- MUST validate against the JSON Schema BEFORRE sending to a board (FR-9).
+- MUST validate against the JSON Schema BEFORE sending to a board (FR-9).
 - Use `ajv` with `draft-2020-12` and enforced formats (`ajv-formats`) for schema validation.
 - Emission of malformed payloads is blocked; structured error messages are returned to the producer.
 
@@ -138,7 +138,7 @@ Define a stable, versioned JSON contract for structured **basis data** used by:
 
 **SemVer Policy:**
 - `major.minor.patch` format (v1.0.0).
-- Consumers MUST reject payloads with a major version they don’t support.
+- Consumers MUST reject payloads with a major version they don't support.
 - Schema version is stored at payload root (`schema_version`) to allow runtime version negotiation.
 
 **Evolution Control:**
@@ -169,11 +169,11 @@ Define a stable, versioned JSON contract for structured **basis data** used by:
 | `schema_version` | `string` | Semver pattern enforced; determines consumer support. |
 | `basis_id` | UUID | Schema enforced per RFC 4122; globally unique. |
 | `parent_basis_id` | UUID | Optional; used to chain bases (e.g., rebuttal/refinement). |
-| `sandbox` | `string \| null` | Optional sandbox identifier for the target workspace/tenant; must match the platform’s environment key. |
+| `sandbox` | `string \| null` | Optional sandbox identifier for the target workspace/tenant; must match the platform's environment key. |
 | `created_at` | `date-time` | ISO 8601 timestamp; emitted by producer. |
 | `agent_id` | `string` | Identifier of the agent that produced this basis. |
 | `session_id` | `string \| null` | Optional session identifier for the agent. |
-| `tools_calls` | `context.tool_calls[]` | Capabilities: tool name, input/output summaries, called_at. |
+| `tool_calls` | `context.tool_calls[]` | Capabilities: tool name, input/output summaries, called_at. |
 
 Canonical layout (matches schema and example.canonical.json):
 ```json
