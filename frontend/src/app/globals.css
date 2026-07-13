@@ -1975,6 +1975,15 @@ html[data-theme='light'] .nebula {
   padding-top: 40px;
 }
 
+/* Shell bottom spacing for mobile bottom nav */
+.app-frame {
+  padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+}
+
+.shell {
+  padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+}
+
 /* =========================================================================
    Permission Gate — debugger tooltip overlay
    ========================================================================= */
