@@ -85,6 +85,74 @@ export type OutputField = {
 };
 
 /**
+ * Business ruleset definition from catalog (FR-3).
+ */
+export interface BusinessRuleset {
+  name: string;
+  version: string;
+  description?: string;
+  appliesTo?: string[];
+  rules: BusinessRule[];
+}
+
+/**
+ * Business rule definition from catalog (FR-3).
+ */
+export interface BusinessRule {
+  name: string;
+  description?: string;
+  appliesTo?: string[];
+  typeOrDerived: 'string' | 'number' | 'integer' | 'boolean' | 'date' | 'epoch' | 'derivedFunction';
+  nullable?: boolean;
+  coerce?: boolean;
+  enumMappings?: Record<string, string>;
+  condition?: {
+    field: string;
+    operator:
+      | 'equals'
+      | 'notEquals'
+      | 'contains'
+      | 'startsWith'
+      | 'endsWith'
+      | 'greaterThan'
+      | 'lessThan'
+      | 'exists';
+    value?: unknown;
+  };
+  fn?: string;
+  functionAliases?: string[];
+}
+
+/**
+ * Ruleset catalog loaded from business-rules.json (FR-3).
+ */
+export interface RulesetCatalog {
+  title: string;
+  version: string;
+  schema: Record<string, unknown>;
+  rulesets: BusinessRuleset[];
+}
+
+/**
+ * Derived function signature compatible with engine's custom functions.
+ */
+export type DerivedFunction = (args: {
+  context: InputContext;
+  resolved: Record<string, FieldResolution>;
+  sourcePath: string;
+}) => unknown;
+
+/**
+ * Predicate function used in business rule conditions.
+ */
+export type Predicate = (args: {
+  context: InputContext;
+  resolved: Record<string, FieldResolution>;
+  field: string;
+  value: unknown;
+}) => boolean;
+
+/**
  * Payload type definition.
  */
 export type PayloadDefinition = {
@@ -102,6 +170,8 @@ export type PayloadDefinition = {
   schemaVersion?: string;
   /** Defaults for fields (optional; most config is inline) */
   defaults?: Record<string, unknown>;
+  /** Optional business ruleset to apply (AC-8 extensible payload generation) */
+  rulesetName?: string;
 };
 
 /**
