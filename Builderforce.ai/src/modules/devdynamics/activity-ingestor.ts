@@ -2,16 +2,14 @@
 // Normalizes and persists activity events from platform integrations
 
 import type { ActivityEvent } from './types';
-import { validateActivityIngestionRequest } from './validate';
+import { ActivityIngestionRequest, validateActivityIngestionRequest } from './validate';
+import { devDynamicsRepository } from './repository';
 
 export interface ActivityIngestionResult {
   success: boolean;
   eventsProcessed: number;
   eventsSkipped: number;
-  errors: Array<{
-    eventId: string;
-    error: string;
-  }>;
+  errors: Array<{ eventId: string; error: string }>;
   contributorMergePerformed: number;
 }
 
@@ -67,10 +65,7 @@ export class ActivityIngestor {
         success: false,
         eventsProcessed: 0,
         eventsSkipped: 0,
-        errors: validation.errors.map((err, i) => ({
-          eventId: i.toString(),
-          error: err,
-        })),
+        errors: validation.errors.map((err, i) => ({ eventId: i.toString(), error: err })),
         contributorMergePerformed: 0,
       };
     }
@@ -78,36 +73,54 @@ export class ActivityIngestor {
     const now = new Date().toISOString();
     const errors: Array<{ eventId: string; error: string }> = [];
     let eventsSkipped = 0;
+    let contributorMergePerformed = 0;
 
     // Phase 2: Build normalized events and resolve contributors
     const normalizedEvents: ActivityEvent[] = [];
 
-    for (const event of events) {
+    for (let processed = 0; processed < events.length; processed++) {
+      // Deduplication: do not ingest if eventId already exists
+      const candidateId = crypto.randomUUID(); // We generate stable event IDs in adapters, or UUID if not.
+      const existing = await devDynamicsRepository.findActivityByEventId(candidateId);
+      if (existing) {
+        eventsSkipped++;
+        continue;
+      }
+
       try {
-        const resolved = await this.resolveAndCreateEvent(event, now);
+        const resolved = await this.resolveAndCreateEvent(events[processed], now, candidateId);
         if (resolved) {
           normalizedEvents.push(resolved);
         } else {
           eventsSkipped++;
         }
       } catch (err: any) {
-        console.error(`Failed to ingest event from ${event.source}:`, err);
+        console.error(`Failed to ingest event from ${events[processed].source}:`, err);
         errors.push({
-          eventId: event.accountId + ':' + event.timestamp,
+          eventId: events[processed].accountId + ':' + events[processed].timestamp,
           error: err.message || 'Unknown error',
         });
       }
     }
 
-    // Phase 3: Persist to repository (assumes this.identityResolver satisfies the expected interface)
-    await this.persistEvents(normalizedEvents);
+    // Phase 3: Persist to repository
+    try {
+      await devDynamicsRepository.ingestActivity(...normalizedEvents);
+    } catch (err: any) {
+      console.error('Failed to persist normalized events:', err);
+      if (errors.length === 0) {
+        errors.push({ eventId: 'ingestion', error: err.message || 'Persist failed' });
+      }
+    }
+
+    contributorMergePerformed = events.length - normalizedEvents.length - eventsSkipped;
 
     return {
       success: errors.length === 0,
       eventsProcessed: normalizedEvents.length,
       eventsSkipped,
       errors,
-      contributorMergePerformed: events.length === normalizedEvents.length ? 0 : events.length - normalizedEvents.length,
+      contributorMergePerformed,
     };
   }
 
@@ -123,30 +136,19 @@ export class ActivityIngestor {
       timestamp: string;
     },
     ts: string,
+    eventId: string
   ): Promise<ActivityEvent | null> {
     // Build unified account signals from metadata
     const accounts = this.buildUnifiedAccounts(incoming);
 
     // Resolve contributor (identity_resolver.ts)
     const resolution = await this.identityResolver.resolve(accounts, {
-      findContributorByEmail: async (email: string) => {
-        const { unified_contributors } = (await import('./schema')).DevDynamicsTables;
-        return null; // TODO: implement DB call
-      },
-      findContributorByLogin: async (login: string) => {
-        return null; // TODO: implement DB call
-      },
-      findContributorForPlatform: async (provider: string, accountId: string) => {
-        // TODO: repository method (naming convention; assure we replace this with findContributorByPlatformAccount)
-        return null;
-      },
-      upsertContributor: async (data: any) => {
-        // TODO: repository method
-        return {} as any;
-      },
-      ingestActivity: async (ev: any) => {
-        // TODO: repository method
-      },
+      findContributorByEmail: devDynamicsRepository.getContributorByEmail,
+      findContributorById: devDynamicsRepository.findContributorById,
+      findContributorForPlatform: devDynamicsRepository.findContributorForPlatform,
+      upsertContributor: devDynamicsRepository.upsertContributor,
+      createIdentityLink: devDynamicsRepository.createIdentityLink,
+      findIdentityLinks: devDynamicsRepository.findIdentityLinks,
     });
 
     if (!resolution.contributor) {
@@ -154,10 +156,13 @@ export class ActivityIngestor {
       return null;
     }
 
-    // Build normalized event
+    // Build normalized event with provider-specific eventId
+    const normalizerEventId = incoming.metadata.issueKey || incoming.metadata.commitSha || incoming.metadata.pullRequestId || incoming.accountId;
+    const finalEventId = `${normalizerEventId}:${incoming.eventType}:${ts}`;
+
     return {
       id: crypto.randomUUID(),
-      eventId: crypto.randomUUID(), // Note: Many events lack stable custom IDs; UUID per-event is safe for idempotency during ingestion
+      eventId: finalEventId,
       eventType: incoming.eventType as ActivityEvent['eventType'],
       provider: incoming.source as any,
       contributorId: resolution.contributor.id,
@@ -168,7 +173,7 @@ export class ActivityIngestor {
       metadata: incoming.metadata,
       timestamp: new Date(incoming.timestamp).toISOString(),
       processedAt: ts,
-      verifiedAt: true,
+      verifiedAt: resolution.merged || false,
     };
   }
 
@@ -176,7 +181,7 @@ export class ActivityIngestor {
     source: string;
     accountId: string;
     metadata: Record<string, any>;
-  }): Array<any> {
+  }): Array<{ id: string; provider: string; providerAccountId: string; email?: string; avatarUrl?: string; displayName?: string; linkedAt: Date }> {
     const accounts: any[] = [];
     accounts.push({
       id: crypto.randomUUID(),
@@ -184,15 +189,10 @@ export class ActivityIngestor {
       providerAccountId: incoming.accountId,
       email: incoming.metadata.email,
       avatarUrl: incoming.metadata.avatarUrl,
-      displayName: incoming.metadata.displayName,
+      displayName: incoming.metadata.displayName || incoming.accountId,
       linkedAt: new Date(),
     });
     return accounts;
-  }
-
-  private async persistEvents(events: ActivityEvent[]): Promise<void> {
-    // TODO: implement repository ingestion for normalized events
-    // await this.repository.ingestActivity(event);
   }
 }
 
