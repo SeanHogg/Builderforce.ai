@@ -100,6 +100,56 @@ export async function getDecisionByRecKey(recKey: string) {
 async function triggerWorkflowsForDecision(
   decisionId: number,
   recKey: string,
+  decision: DecisionType,
+  tenantId: number = 0
+): Promise<number[]> {
+  // Get all workflows bound for this recommendation type and event
+  const workflows = await db.select()
+    .from(recommendationWorkflows)
+    .where(
+      and(
+        eq(recommendationWorkflows.tenantId, tenantId),
+        sql`${recommendationWorkflows.recType} LIKE %${recKey}`,
+        sql`${recommendationWorkflows.eventName} IN (${decision}, 'on_either')`,
+        eq(recommendationWorkflows.isActive, true)
+      )
+    );
+
+  const executionIds: number[] = [];
+
+  // Trigger each workflow asynchronously
+  for (const workflow of workflows) {
+    const executionId = await executeWorkflow({
+      decisionId,
+      workflowId: workflow.id,
+      tenantId,
+      eventName: decision,
+      workflowName: workflow.workflowName,
+      workflowConfig: workflow.workflowConfig,
+    });
+    executionIds.push(executionId);
+  }
+
+  // Mark the decision as triggered with workflow IDs
+  if (executionIds.length > 0) {
+    await db.update(recommendationDecisions)
+      .set({
+        status: 'triggered',
+        workflow_trigger_ids: executionIds,
+        updated_at: new Date(),
+      })
+      .where(eq(recommendationDecisions.id, decisionId));
+  }
+
+  return executionIds;
+}
+
+/**
+ * Trigger workflows bound to a decision
+ */
+async function triggerWorkflowsForDecision(
+  decisionId: number,
+  recKey: string,
   decision: DecisionType
 ): Promise<number[]> {
   const tenantId = 0; // Will be set from context
