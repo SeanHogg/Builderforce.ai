@@ -13,8 +13,6 @@
   /* Mobile bottom nav bottom spacing */
   padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
   padding-bottom: 72px; /* Ensure sufficient spacing for both nav and touch zones */
-  /* Prevent 2-finger pan from interfering with page UX */
-  touch-action: pan-y;
 }
 
 .shell {
@@ -26,8 +24,6 @@
   /* Mobile bottom nav bottom spacing */
   padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
   padding-bottom: 72px; /* Ensure sufficient spacing for both nav and touch zones */
-  /* Prevent 2-finger pan from interfering with page UX */
-  touch-action: pan-y;
 }
 
 /* Slide-out overlay and drawer z-index rules */
@@ -35,14 +31,16 @@
   position: fixed;
   inset: 0;
   z-index: 10000;  /* Above all content, below mobile nav/menus */
+  /* Allow interactions with the panel itself, but not pass-through clicks */
+  touch-action: none;
 }
 
 .slide-panel-overlay::before {
   content: "";
   position: absolute;
   inset: 0;
-  /* Allow pointer-events when not dragging; set to auto in body-level portal */
-  pointer-events: auto;
+  /* Prevent pointer events from passing through to content when overlay is visible */
+  pointer-events: none;
 }
 
 .slide-panel-drawer {
