@@ -155,10 +155,12 @@ Agents MUST attach the operational context in which the basis was produced:
         "called_at": "<ISO-8601 UTC>"
       }
     ],
-    "environment": "production | staging | development | test"
+    "environment": "development"
   }
 }
 ```
+
+**Note:** `environment` is a GUIDELINE list (`production | staging | development | test`). It is not schema-enforced; the example uses `"development"` to illustrate a valid value per the guideline set.
 
 ### FR-8 — Extensions Block
 The payload MUST include an `extensions` object for domain-specific or experimental fields without polluting the core schema:
