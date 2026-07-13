@@ -7,7 +7,7 @@ import { ProviderKeysSettings } from '@/components/ProviderKeysSettings';
 import type { LlmProvider } from '@/lib/builderforceApi';
 import { IntegrationsGallery } from '@/components/integrations/IntegrationsGallery';
 import { EmbedIntegrationSettings } from '@/components/settings/EmbedIntegrationSettings';
-import ApiKeysContent from '../api-keys/page';
+import { ApiKeysContent } from '../api-keys/page';
 import { getStoredTenant } from '@/lib/auth';
 
 type Category = 'all' | 'models' | 'apps' | 'developer' | 'embed';
