@@ -11,6 +11,7 @@ import type {
 
 export interface ProgressGateInput {
   deliverableType: DeliverableType;
+  taskType: TaskType;
   diffs: PRDiff[];
   allCiChecksPassing: boolean;
   currentStatus: TaskStatus;
@@ -33,6 +34,7 @@ export interface ProgressAuditEntry {
   prShas: string[];
   prClassification: 'none' | 'doc-only' | 'has-implementation';
   deliverableType: DeliverableType;
+  taskType: TaskType;
   filesChanged: Pick<PRFile, 'path' | 'isDocumentation'>[];
   conditions: {
     hasImplementationCode: boolean;
@@ -63,27 +65,31 @@ export function classifyFile(path: string): { isDoc: boolean; isTest: boolean; i
   const isSource =
     !isDoc &&
     !isTest &&
-    (micromatch.isMatch(path, DEFAULT_SOURCE_DIRS.map(d => `${d}**`), { dot: true }) ||
+    (micromatch.isMatch(path, DEFAULT_SOURCE_DIRS.map((d) => `${d}**`), { dot: true }) ||
       // Treat any non-doc, non-config code file outside clearly non-source paths as potential source.
-      (!micromatch.isMatch(path, ['**/*.json', '**/*.yml', '**/*.yaml', '**/*.lock', '**/*.toml', '**/*.config.*', '.github/**', '.github/**/*'], { dot: true })));
+      (!micromatch.isMatch(
+        path,
+        ['**/*.json', '**/*.yml', '**/*.yaml', '**/*.lock', '**/*.toml', '**/*.config.*', '.github/**', '.github/**/*'],
+        { dot: true }
+      )));
   return { isDoc, isTest, isSource };
 }
 
 export function classifyPR(diff: PRDiff): 'doc-only' | 'has-implementation' {
   if (!diff.files || diff.files.length === 0) return 'doc-only';
-  const allDoc = diff.files.every(f => classifyFile(f.path).isDoc);
+  const allDoc = diff.files.every((f) => classifyFile(f.path).isDoc);
   return allDoc ? 'doc-only' : 'has-implementation';
 }
 
 function classifyAllPRs(diffs: PRDiff[] | undefined): 'none' | 'doc-only' | 'has-implementation' {
   if (!diffs || diffs.length === 0) return 'none';
-  const allDoc = diffs.every(d => classifyPR(d) === 'doc-only');
+  const allDoc = diffs.every((d) => classifyPR(d) === 'doc-only');
   if (allDoc) return 'doc-only';
   return 'has-implementation';
 }
 
 function computeImplementationSignals(diffs: PRDiff[]) {
-  const allFiles = diffs.flatMap(d => d.files);
+  const allFiles = diffs.flatMap((d) => d.files);
   let hasImplementationCode = false;
   let hasTestFiles = false;
   for (const file of allFiles) {
@@ -101,14 +107,20 @@ function clampProgress(n: number): number {
 /**
  * Implements FR-2 / FR-3 / FR-4 / FR-5 / FR-6.
  *
- * - Doc-only PRs on code/ops tasks are capped at 20% and routed to 'spec-ready'.
+ * - Doc-only PRs on code tasks are capped at ≤20% and routed to 'spec-ready'.
  * - Progress is earned by source files (>20%), tests (>60%), and green CI (100%).
- * - Decision/spec tasks may reach done from doc-only PRs.
+ * - Decision and spec tasks may complete via doc PR (done via doc-only or has-implementation depending on task_type).
+ * - Progress is enforced ≤49% on spec-ready to prevent 100% display.
  */
+
 export function runProgressGate(input: ProgressGateInput): ProgressGateOutput {
-  const { deliverableType, diffs, allCiChecksPassing, currentStatus } = input;
+  const { deliverableType, taskType, diffs, allCiChecksPassing, currentStatus } = input;
+
   const prClassification = classifyAllPRs(diffs);
   const { hasImplementationCode, hasTestFiles } = computeImplementationSignals(diffs);
+
+  // FR-4: default for unspecified task_type is analysis (per PRD FR-4).
+  const effectiveTaskType = taskType ?? 'analysis';
 
   const previousProgress = inferProgressForStatus(currentStatus);
 
@@ -117,31 +129,51 @@ export function runProgressGate(input: ProgressGateInput): ProgressGateOutput {
   let blockedReason = '';
   let diagnosis = '';
 
-  if (deliverableType === 'decision' || deliverableType === 'spec') {
-    // FR-5: written-decision deliverables may complete via doc PR.
+  // FR-5: non-coding task types may complete via doc-only PR (decision/documentation); spec is done via doc-only.
+  if (effectiveTaskType === 'decision') {
     if (prClassification === 'doc-only' && diffs.length > 0) {
       recommendedProgress = 100;
       recommendedStatus = 'done';
-      diagnosis = 'doc-only PR accepted for decision/spec deliverable';
+      diagnosis = 'doc-only PR accepted for decision deliverable';
     } else if (prClassification === 'has-implementation') {
       recommendedProgress = 90;
       recommendedStatus = 'review';
-      diagnosis = 'implementation present; decision/spec deliverable treated as review';
+      diagnosis = 'implementation present; decision deliverable treated as review';
     } else {
       recommendedProgress = 10;
       recommendedStatus = 'todo';
-      diagnosis = 'no PR yet for decision/spec deliverable';
+      diagnosis = 'no PR yet for decision deliverable';
+    }
+  } else if (effectiveTaskType === 'documentation') {
+    if (prClassification === 'doc-only' && diffs.length > 0) {
+      recommendedProgress = 100;
+      recommendedStatus = 'done';
+      diagnosis = 'doc-only PR accepted for documentation deliverable';
+    } else if (prClassification === 'has-implementation') {
+      recommendedProgress = 90;
+      recommendedStatus = 'review';
+      diagnosis = 'implementation present; documentation deliverable treated as review';
+    } else {
+      recommendedProgress = 5;
+      recommendedStatus = 'todo';
+      diagnosis = 'no PR yet for documentation deliverable';
     }
   } else {
-    // code / ops
+    // FR-4: coding, analysis, provisioning, spec may not complete via doc-only.
     if (prClassification === 'none') {
       recommendedProgress = 5;
       recommendedStatus = currentStatus === 'done' ? 'in-progress' : currentStatus;
       diagnosis = 'no PR opened for coding task';
     } else if (prClassification === 'doc-only') {
-      // FR-2 / FR-4
+      // FR-2: cap at 20% for coding/analysis/provisioning/spec when ALL PRs are doc-only.
+      // FR-4: move to spec-ready.
       recommendedProgress = 15;
+      // FR-3: enforce max 49% display on spec-ready to never show 100% while blocked doc-only.
+      if (currentStatus === 'spec-ready') {
+        recommendedProgress = Math.min(recommendedProgress, 49);
+      }
       if (currentStatus === 'done') {
+        // Guard block: do not allow done from doc-only for coding/analysis/provisioning/spec per FR-4.
         blockedReason = 'COMPLETION_BLOCKED: doc-only PR, no implementation detected';
       }
       recommendedStatus = 'spec-ready';
@@ -160,31 +192,30 @@ export function runProgressGate(input: ProgressGateInput): ProgressGateOutput {
           recommendedStatus = 'in-progress';
           diagnosis = 'implementation PR open, missing tests';
         } else if (!allCiChecksPassing) {
+          // FR-3: require CI green for 100%.
           recommendedProgress = 65;
           recommendedStatus = 'review';
           blockedReason = 'COMPLETION_BLOCKED: tests not passing';
           diagnosis = 'implementation + tests present, CI not green';
         } else {
+          // FR-3: commit done only when source + tests + CI green.
           recommendedProgress = 100;
           recommendedStatus = 'done';
           diagnosis = 'implementation + tests + green CI';
         }
       }
     }
+  }
 
-    if (recommendedStatus === 'done' && !allCiChecksPassing) {
-      recommendedStatus = 'review';
-      blockedReason = 'COMPLETION_BLOCKED: tests not passing';
-      diagnosis = 'CI required for 100%';
-    }
+  // FR-2/F: cap progress to 20% for code tasks while all PRs are doc-only regardless of any other signal.
+  if (
+    (effectiveTaskType === 'coding' || effectiveTaskType === 'provisioning') &&
+    prClassification === 'doc-only'
+  ) {
+    recommendedProgress = Math.min(recommendedProgress, 20);
   }
 
   recommendedProgress = clampProgress(recommendedProgress);
-
-  // Force progress cap to 20% on code/ops tasks when doc-only, regardless of any other signal.
-  if ((deliverableType === 'code' || deliverableType === 'ops') && prClassification === 'doc-only') {
-    recommendedProgress = Math.min(recommendedProgress, 20);
-  }
 
   const gateResult: CompletionGateState = {
     isBlocked: Boolean(blockedReason),
@@ -198,11 +229,12 @@ export function runProgressGate(input: ProgressGateInput): ProgressGateOutput {
     recommendedStatus,
     previousProgress,
     recommendedProgress,
-    prShas: diffs.map(d => d.sha),
+    prShas: diffs.map((d) => d.sha),
     prClassification,
     deliverableType,
-    filesChanged: diffs.flatMap(d =>
-      d.files.map(f => ({ path: f.path, isDocumentation: classifyFile(f.path).isDoc }))
+    taskType: effectiveTaskType,
+    filesChanged: diffs.flatMap((d) =>
+      d.files.map((f) => ({ path: f.path, isDocumentation: classifyFile(f.path).isDoc }))
     ),
     conditions: { hasImplementationCode, hasTestFiles, ciChecksPassing: allCiChecksPassing },
     blockedReason: blockedReason || undefined,
