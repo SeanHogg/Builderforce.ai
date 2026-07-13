@@ -111,6 +111,33 @@ export function ChatDetail({
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
+  const handleStartEditTitle = () => {
+    setEditingTitle(true);
+    setEditTitleText(updatedChat.title);
+  };
+
+  const handleSaveTitle = async () => {
+    if (!editTitleText.trim()) {
+      alert('Title cannot be empty');
+      return;
+    }
+
+    try {
+      const updated = await chatApi.updateChatTitle({ chatId, title: editTitleText.trim() });
+      setUpdatedChat(updated);
+      setEditingTitle(false);
+      onTitleChange?.(editTitleText.trim());
+    } catch (err: any) {
+      alert(err.message || 'Failed to save title');
+      setEditTitleText(updatedChat.title);
+    }
+  };
+
+  const handleCancelEditTitle = () => {
+    setEditTitleText(updatedChat.title);
+    setEditingTitle(false);
+  };
+
   const formatMessageTime = (timestamp: number) => {
     const date = new Date(timestamp);
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
