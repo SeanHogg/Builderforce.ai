@@ -76,6 +76,18 @@ export function ChatList({ onSelectChat, currentChatId, userId, onChatsUpdated }
     }
   };
 
+  // Sync titles to LocalStorage (FR4.1: Persistence across sessions)
+  const syncTitlesToStorage = async () => {
+    try {
+      const storage = require('@/lib/storage');
+      for (const chat of chats) {
+        storage.saveTitleEntry(chat.id, chat.title);
+      }
+    } catch (err) {
+      console.warn('Failed to sync chat titles to local storage:', err);
+    }
+  };
+
   const setChatTitleAsInitial = async (chat: Chat) => {
     const messages = await chatApi.getMessages(chat.id, userId);
     if (messages.length > 0) {
