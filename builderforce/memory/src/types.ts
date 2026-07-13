@@ -117,23 +117,23 @@ export interface MemoryStoreAPI {
   delete(id: string): Promise<boolean>;
   get(id: string): Promise<MemoryEntry | null>;
   list(filters?: MemoryEntry['metadata'], limit?: number): Promise<MemoryEntry[]>;
-  
+
   // Search operations
   search(query: SearchQuery): Promise<SearchResult[]>;
   searchTags(tags: string[]): Promise<MemoryEntry[]>;
   searchByAgent(agentId: string): Promise<MemoryEntry[]>;
   searchBySession(sessionId: string): Promise<MemoryEntry[]>;
-  
+
   // Storage operations
   initialize(): Promise<void>;
   save(): Promise<void>;
   load(): Promise<void>;
   clear(): Promise<void>;
-  
+
   // Statistics
   getStats(): Promise<SearchStats>;
   getUsage(): Promise<{ size: number; entries: number }>;
-  
+
   // Events
   on(event: MemoryEvent['type'], callback: EventCallback): () => void;
   off(event: MemoryEvent['type'], callback: EventCallback): void;
