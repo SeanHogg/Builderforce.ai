@@ -70,6 +70,7 @@ export type { BrainContextValue, BrainPageContext } from './BrainContext';
 export { useBrainChats, deriveChatTitle, DEFAULT_CHAT_TITLE } from './useBrainChats';
 export type { UseBrainChats, UseBrainChatsOptions } from './useBrainChats';
 export { useBrainConversation } from './useBrainConversation';
+export { subscribeToChatMessages } from './chatMessageSubscription';
 export type { UseBrainConversation, UseBrainConversationOptions } from './useBrainConversation';
 
 // Cross-chat run indicators — which chats are executing / awaiting a confirm RIGHT

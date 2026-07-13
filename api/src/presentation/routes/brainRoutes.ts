@@ -23,6 +23,8 @@ import type { BrainService, BrainTraceEventInput } from '../../application/brain
 import { learnFromPersistedTurns } from '../../application/brain/brainEvermindLearning';
 import type { Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
+import { brainChatRoomName } from '../../infrastructure/relay/broadcastRoom';
+import { relayToRoom } from './realtimeRelay';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -45,6 +47,16 @@ const traceVersionKey = (chatId: number): string => `brain-trace-version:chat:${
 export function createBrainRoutes(brainService: BrainService, db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
+
+  // One authenticated invalidation channel per chat. The relay carries no domain
+  // data; clients re-read the durable transcript after a `changed` frame.
+  router.get('/chats/:id/stream', async (c) => {
+    const id = parseId(c.req.param('id'));
+    if (!id) return c.json({ error: 'Invalid chat id' }, 400);
+    const allowed = await brainService.canAccess(id, c.get('tenantId'), c.get('userId'));
+    if (!allowed) return c.json({ error: 'Chat not found' }, 404);
+    return relayToRoom(c, c.env?.SESSION_ROOM, brainChatRoomName(c.get('tenantId'), id));
+  });
 
   // GET /chats
   router.get('/chats', async (c) => {

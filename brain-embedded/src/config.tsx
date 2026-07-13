@@ -33,6 +33,9 @@ export interface BrainPersistenceAdapter {
   deleteChat(id: number): Promise<unknown>;
   summarizeChat(id: number): Promise<{ summary: string } | { error: string }>;
   getMessages(chatId: number, limit?: number): Promise<BrainMessage[]>;
+  /** Subscribe to durable message invalidations for one chat. The callback carries
+   * no data; the hook reconciles from persistence as the source of truth. */
+  subscribeMessages?(chatId: number, onChanged: () => void): () => void;
   sendMessages(
     chatId: number,
     messages: Array<{ role: string; content: string; metadata?: string }>,

@@ -244,6 +244,13 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     return () => { cancelled = true; };
   }, [persistence, chatId, reloadNonce]);
 
+  // Agent lifecycle messages are written outside this browser's run store. Subscribe
+  // to the host's chat invalidation channel and re-read durable state on each push.
+  useEffect(() => {
+    if (chatId == null || !persistence.subscribeMessages) return;
+    return persistence.subscribeMessages(chatId, reloadMessages);
+  }, [persistence, chatId, reloadMessages]);
+
   // A run (possibly started in another, now-unmounted Brain instance) persisted
   // assistant messages — splice them in without a refetch. The store delivers
   // the FULL run-appended list (narration turns + final answer), not just the
