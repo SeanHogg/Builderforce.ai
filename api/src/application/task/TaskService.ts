@@ -49,7 +49,9 @@ export interface UpdateTaskDto {
   priority?: TaskPriority;
   /** 'task' | 'epic'. Reclassifying to epic is normally done via decomposeEpic. */
   taskType?: TaskType;
-  /** Re-parent under an Epic (planning "drag into Epic"), or null to detach. */
+  /**
+   * Re-parent under an Epic (planning "drag into Epic"), or null to detach.
+   */
   parentTaskId?: number | null;
   /** Schedule into / out of a sprint (planning "drag onto sprint"). null = unscheduled. */
   sprintId?: string | null;
@@ -74,6 +76,25 @@ export interface UpdateTaskDto {
   persona?: string | null;
   archived?: boolean;
 }
+
+/**
+ * Subset of UpdateTaskDto containing only the fields that can be updated
+ * via the Task.update() domain method. This is used to type the internal
+ * `updatable` object in `updateTask` to ensure that updates that are passed
+ * through to the domain layer are exactly the fields that the domain layer
+ * permits change.
+ *
+ * FR-1/FR-4: parentTaskId appears here because it's explicitly handled in the
+ * build-updatable logic: if `dto.parentTaskId !== undefined` we include it,
+ * otherwise we exclude it, leaving the persisted value unchanged on the domain
+ * Task entity (which then persists exactly what it receives). When explicitly
+ * null or a value is provided, this includes it in the patch, which clears or
+ * resets parentTaskId as desired per FR-2/FR-3.
+ */
+type UpdateTaskDtoWithoutId = Pick<
+  UpdateTaskDto,
+  'title' | 'description' | 'status' | 'priority' | 'taskType' | 'parentTaskId' | 'sprintId' | 'releaseId' | 'storyPoints' | 'assignedAgentType' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'startDate' | 'dueDate' | 'businessValue' | 'businessValueRationale' | 'businessValueSource' | 'managerRank' | 'persona' | 'archived'
+>;
 
 /**
  * Application service: orchestrates Task use cases.
@@ -193,7 +214,9 @@ export class TaskService {
 
     // Build updatable DTO, explicitly skipping parentTaskId when not in the input.
     // This ensures that PUT-style payloads that omit it leave the existing value untouched.
-    const updatable: Pick<TaskDtoWithoutId, 'title' | 'description' | 'status' | 'priority' | 'taskType' | 'parentTaskId' | 'sprintId' | 'releaseId' | 'storyPoints' | 'assignedAgentType' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'startDate' | 'dueDate' | 'businessValue' | 'businessValueRationale' | 'businessValueSource' | 'managerRank' | 'persona' | 'archived'> = {};
+    // FR-1: If dto.parentTaskId !== undefined, we include it; otherwise we exclude it.
+    // FR-2/FR-3: When dto.parentTaskId is explicitly null or a value, it is included.
+    const updatable: UpdateTaskDtoWithoutId = {};
     if (dto.title !== undefined) updatable.title = dto.title;
     if (dto.description !== undefined) updatable.description = dto.description;
     if (dto.status !== undefined) updatable.status = dto.status;
