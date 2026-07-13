@@ -182,6 +182,12 @@ export interface CapabilityMetrics {
   avgDurationMs: number;
 }
 
+/** Response from GET /api/capabilities?projectId=123 (nodes + summary tags). */
+export interface CapabilitiesListResponse {
+  nodes: CapabilityNode[];
+  tags: string[];
+}
+
 // Export formats supported (FR4).
 export type ExportFormat = 'png' | 'pdf' | 'json';
 
