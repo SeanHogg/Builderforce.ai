@@ -64,10 +64,12 @@ export function AuditDashboard({ segmentId }: AuditDashboardProps) {
   const filteredData =
     filter === 'all'
       ? healthData
-      : healthData.filter((item) => item.type === filter);
+      : healthData.filter((h) => h.integrationType === filter);
 
-  const typeLabels = {
-    source_control: 'Source Control',
+  const typeLabels: Record<string, string> = {
+    source-control: 'Source Control',
+    'source_control': 'Source Control',
+    issue-tracker: 'Issue Tracker',
     issue_tracker: 'Issue Tracker',
     communication: 'Communication',
     cicd: 'CI/CD',
