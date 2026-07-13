@@ -7,15 +7,21 @@
 
 The task completion logic has been updated to handle scenarios both with and without delivered code artifacts. Currently there is insufficient test coverage to verify this logic behaves correctly across all relevant scenarios, creating risk of regressions and making the codebase harder to maintain confidently. The goal is to add comprehensive unit tests that fully exercise the completion logic, document expected behavior, and provide a safety net for future changes.
 
+---
+
 ## Target Users / ICP Roles
 
 - **Backend / fullstack engineers** maintaining or extending the task completion subsystem
 - **QA / test engineers** reviewing coverage standards
 - **CI/CD pipeline** — tests must pass automatically on every pull request
 
+---
+
 ## Scope
 
 All unit tests will target the task completion logic module/service (the specific module updated in the preceding task). Tests are written at the unit level (dependencies mocked/stubbed). No end-to-end or integration tests are in scope for this work item.
+
+---
 
 ## Functional Requirements
 
@@ -57,6 +63,8 @@ All unit tests will target the task completion logic module/service (the specifi
 | FR-4.4 | Tests use the project's existing test framework (e.g., Jest, Vitest, pytest — whichever is already in use). |
 | FR-4.5 | Coverage report for the completion logic module must reach **≥ 90% line coverage** and **≥ 85% branch coverage** after this work. |
 
+---
+
 ## Acceptance Criteria
 
 1. **All new tests pass** in CI with zero failures or skipped tests (excluding intentionally pending stubs).
@@ -67,6 +75,8 @@ All unit tests will target the task completion logic module/service (the specifi
 6. **Error contracts verified**: negative-case tests (FR-3.3, FR-3.4) assert on the specific error type or message, not just that *an* error was thrown.
 7. **PR review**: a team member other than the author has approved the test file, confirming readability and adequate scenario naming.
 
+---
+
 ## Out of Scope
 
 - Integration or end-to-end tests involving real databases, queues, or HTTP calls
@@ -76,6 +86,8 @@ All unit tests will target the task completion logic module/service (the specifi
 - Migration or backfill scripts for historical task records
 - Coverage enforcement for modules other than the completion logic module
 
+---
+
 ## Requirements
 
 _Owned by the business-analyst — to be authored._
@@ -84,193 +96,53 @@ _Owned by the business-analyst — to be authored._
 
 _Owned by the architect — to be authored._
 
-**Completion Path Overview:**
-
-Completion is centralized through a single function `completeTaskOnMerge` that is invoked from three surface entry points:
-- Human approve-and-merge route (`PATCH /api/tasks/:id/status`).
-- Green-CI idle webhook (on green completion with no PR).
-- AI Manager sweep (when a PR status resolves to green).
-
-**Idempotency Behavior:**
-
-The function checks the current task status after loading the project's swimlane ordinals. If the task is already in a done-class status (i.e., `TaskStatus.DONE` or any terminal swimlane), it returns early with no writes. This guarantees idempotent completes (no duplicate completion records).
-
-**Transition Recording:**
-
-`completeTaskOnMerge` mirrors the domain state to the metrics layer by calling `recordStatusTransition`. This separate function:
-- Inserts a `taskStatusTransitions` row with `fromStatus`, `toStatus`, `actorKind`, `actorRef`, `isBackward`.
-- Updates the task row: sets `status = DONE`, `updatedAt`, and — on first entry into a done-class lane — `completedAt`.
-- Bumps workforce metrics version (best-effort).
-- Triggers Fast Validator review (best-effort).
-
-**TaskStatus Enum Usage:**
-
-The `taskLifecycle.ts` module imports `TaskStatus` from `./domain/shared/types` and uses its string values when constructing the DONE_CLASS set and status comparison. All test fixtures rely on the same enum values (`BACKLOG`, `TODO`, `IN_PROGRESS`, `DONE`, etc.).
-
-**Missing `deliveredArtifacts` Concept:**
-
-The codebase does not model a `deliveredArtifacts` collection on the completion path. Deliveries are implicitly tracked via a linked PR’s `taskId`. Consequently, the completion payload always returns `undefined` rather than a structured array. This discrepancy with the PRD is documented in the test file as an implementation mapping: `deliveredArtifacts` is treated as a non-existent field that must never appear in writes.
-
-**External Dependencies (Mocked):**
-
-All reads/writes into `tasks`, `swimlanes`, `boards`, and `taskStatusTransitions` are mocked via a `makeFakeDb` helper that captures `insert().values()` and `update().set()` calls in memory. Database connection (`Db`), event bus, and worker KV (`AUTH_CACHE_KV`) are absent in unit tests.
-
-**Cache Considerations:**
-
-The ordinal map (`swimlane-ordinals:project:X`) is read-through cached by `loadOrdinals` and cleared before each test group via `__clearL1CacheForTests()`. Tests explicitly mock the `select()` chain, so the cache layer’s effect on test results is controlled; however, clearing the L1 cache is essential to avoid cross-test leakage of cached works.
-
 ## Implementation Notes
 
 _Owned by the developer — to be authored._
 
-**File Layout:**
-
-- **Source**: `api/src/application/task/taskLifecycle.ts`
-- **Tests**: `api/src/application/task/taskLifecycle.test.ts` (co-located with the module under test)
-
-**Primary API Patterns:**
-
-- **`completeTaskOnMerge(env, db, input: { tenantId, taskId, actorUserId? })`**
-  - Performs a single-row `select({ status, projectId })` against `tasks`.
-  - Returns early without writes if the task is missing (`!t`) or already done (`if (isDoneClass(...)) return`).
-  - Writes a status update (`set({ status: DONE, updatedAt })`).
-  - Calls `recordStatusTransition(...)` for transition logging and completion stamping.
-
-- **`recordStatusTransition(env, db, input: RecordTransitionInput)`**
-  - Skips insert/update when `fromStatus === toStatus`.
-  - Loads the ordinal map (`loadOrdinals`) for all tested statuses.
-  - Computes `isBackward` by comparing lane positions.
-  - Detects first-time entry into done-class via `wasDone !== nowDone`.
-  - Patches the task row with `completedAt` (on first done), `lastWorkedAt` (on in-flight moves), `reopenCount` (on reopen), and `redoCount` (on backward moves).
-
-**Test Infrastructure in the Module:**
-
-- **Mock Database (`makeFakeDb`)**:
-  - Accepts a `rowsByTable: Map<TableRef, unknown[]>` mapping table exports to pre-seeded rows.
-  - Captures `insert(table).values(values)` in an `inserts` array.
-  - Captures `update(table).set(payload)` in an `updateSets` array.
-  - Returns a minimal `select` chain that satisfies the Drizzle ORM patterns used by the source (`from`, `where`, `limit`, `then`).
-  - Each test isolates by supplying its own `rows` map; the `__clearL1CacheForTests()` call at the group level re-establishes clean state.
-
-- **Global Test Setup**:
-  - `api/test/setup.ts` calls `__clearL1CacheForTests()` in a global `beforeEach`, which is wired via `setupFiles` in `vitest.config.ts`.
-  - Tests now rely on this global clear, but the per-describe `beforeEach(__clearL1CacheForTests())` further reduces risk if tests run in isolation; duplicates are harmless.
-
-**Mapping PRD Requirements to Test Blocks:**
-
-| PRD Requirement | Relevant Test Blocks |
-|-----------------|----------------------|
-| FR-1.1 | `completeTaskOnMerge` tests verify status becomes `DONE` and a `taskStatusTransitions` row is inserted. |
-| FR-1.2 | Status update and completion update inspect `completedAt` presence/ISO format. |
-| FR-1.3 & FR-1.4 | Documentation comment in test file notes absence of real `deliveredArtifacts`, and `completeTaskOnMerge` returns `undefined` — field is never written. |
-| FR-1.5 | Idempotency test (`FR-1.5` suite) asserts that second call does not confirm duplicate writes. |
-| FR-2.1 | Green-CI-flavored path test verifies same behavior as merge when no artifacts are associated. |
-| FR-2.2 | Asserts `deliveredArtifacts` is `undefined` on all update sets. |
-| FR-2.3 | Verifies `completedAt` timestamp is still recorded when no code is delivered. |
-| FR-3.1 | Inversion test (`FR-3.1`) checks starting status is non-DONE (no premature completion). |
-| FR-3.2 | Idempotency test block (`already DONE`) ensures no extra status update for already-done task. |
-| FR-3.3 | Edge-case test for non-done statuses like `cancelled` calls `completeTaskOnMerge` and confirms no exception is thrown (implementation permits completion from other states when ordinals permit). |
-| FR-3.4 | Missing-task test ensures early return without writes when `taskId` does not match any row. |
-| FR-3.5 | Single-requirement test confirms that artifact-delivery state does not gate completion; the function completes when done-class is satisfied. |
-| FR-4.1 | FakeDb implementation ensures no DB/IO; environment is empty (`env = {}`), KV is absent, all writes are dequeued from captured `inserts`/`updateSets`. |
-| FR-4.2 | Independent tests via fresh `rows` map per test and `__clearL1CacheForTests()` call; `beforeEach` guard handles L1 state isolation. |
-| FR-4.3 | Tests co-located in `/api/src/application/task/` directory, following existing conventions. |
-| FR-4.4 | Uses `vitest` fixtures and `import { describe, it, expect, beforeEach } from 'vitest';` already in place via package.json test script and API test setup. |
-| FR-4.5 | N/A — line/branch thresholds verified by test coverage tool in CI; this PRD is not a coverage enforcement rule. |
-
-**Dependency and Import Organization:**
-
-- Imports from `../../infrastructure/database/schema` use top-level table exports (`tasks`, `swimlanes`, `boards`); `pullRequests` import was removed as the completion path does not reference it.
-- `flushMock` pattern uses the fakeDb to infer payloads directly for assertions rather than mocking at a lower level.
-- Test does not import/downstream `taskStatusTransitions` symbol; instead, it inspects the `inserts` payloads by `table` reference and filters by presence of transition metadata.
-
 ## Review
 
-Reviewed and signed off by: **CODE-REVIEWER** — none of the test file is dead/unused; the coverage is adequate and the codebase does not have a `deliveredArtifacts` field.
-
-| Requirement | Status | Notes |
-|-------------|--------|-------|
-| FR-1..FR-3 covered | ✓ | Each requirement row has at least one matching test block whose description references the scenario. |
-| FR-4.1 (no real I/O) | ✓ | `makeFakeDb` captures insert/update/set only; no database or file I/O. |
-| FR-4.2 (independent tests) | ✓ | Tests use fresh `rows` maps and `__clearL1CacheForTests(). | |
-| FR-4.3 (co-located tests) | ✓ | `api/src/application/task/taskLifecycle.test.ts` is co-located with the implementation. | |
-| FR-4.4 (vitest framework) | ✓ | Uses `import { describe, expect, it, beforeEach } from 'vitest';` matching existing convention. | |
-| FR-4.5 (coverage thresholds) | ⚠ | Line coverage target ≥90%, branch coverage target ≥85%; to be verified by CI after merge. | |
-| AC-1 (all tests pass) | 待验证 | To be verified by CI on this PR. | |
-| AC-2 (coverage targets) | ⚠ | Must be checked by CI coverage tool after merge. | |
-| AC-3 (scenario naming) | ✓ | Test descriptions reference specific FR identifiers (e.g., "FR-1.1: marks the task DONE when the merge includes a taskId"). | |
-| AC-4 (no real I/O) | ✓ | No real database connection, file I/O, or network calls in mocks. | |
-| AC-5 (idempotency verified) | ⚠ | Two existing assertions `FR-3.2 (duplicate)` are acknowledged mock-limited; a third idempotency test on a non-DONE path has been added to the test file to properly assert completion-record count does not increase (see "Implementation Notes—FR-3.2 idempotency update" below). | |
-| AC-6 (error contracts verified) | ⚠ | FR-3.3/FR-3.4 assertions are present but limited to no-throw; the module’s best-effort pattern makes typed errors not applicable beyond standard runtime. | |
-| AC-7 (PR review) | N/A | A team member will review in-product PR and ensure readability is adequate. | |
-
-### Review Decision: APPROVED for merge
-
-The test suite grows coverage for the completion path, respects project conventions (vitest, co-located tests, mocked dependencies), and provides scenario naming aligned with FR identifiers. The only unverified items (coverage thresholds, AC-1..AC-2 passes, AC-5 true double-completion baseline) belong to CI verification, not this PR. A small idempotency fix for AC-5 has been added as an augmentation.
-
----
-
-### Implementation Notes: FR-3.2 Idempotency Update
-
-To satisfy AC-5 (“completion record count does not increase on the second call”) for a non-DONE, in-flight task scenario, a third idempotency test has been added to the existing test file:
-
-```typescript
-it('FR-3.2 (idempotent): completing an in-progress task twice does not increase the completion record count', async () => {
-  const rows = new Map<TableRef, unknown[]>([
-    [tasks, [inflightTask({ id: 600, projectId: 10 })]],
-    [swimlanes, [doneSwimlane]],
-    [boards, [{ id: 1, projectId: 10 }]],
-  ]);
-  const { db, inserts } = makeFakeDb(rows);
-
-  await completeTaskOnMerge(env, db as never, { tenantId: 5, taskId: 600 });
-  const firstCount = inserts.filter((i) => (i.values as any)?.fromStatus !== undefined).length;
-  await completeTaskOnMerge(env, db as never, { tenantId: 5, taskId: 600 });
-  const secondCount = inserts.filter((i) => (i.values as any)?.fromStatus !== undefined).length;
-
-  assert.strictEqual(firstCount, secondCount, 'transition inserts count must not increase on re-completion');
-});
-```
-
-This leverages a fresh snapshot per invocation and inspects transition inserts, providing a valid verification of AC-5 without relying on a mock that returns the original row across calls.
-
----
+_Owned by the code-reviewer — to be authored._
 
 ## Test Evidence
 
 _Owned by the qa-tester — to be authored._
 
-### Provisional Test Evidence (to be replaced/expanded after CI verification)
+---
 
-1. 可用覆盖映射:
-   - FR-1, FR-2, FR-3: 每条均有对应的 `it` 块，描述中引用特定 FR 标识符。
-   - FR-4.1: `makeFakeDb` 仅捕获 `insert()`/`update()`/`set()` 调用，无真实数据库 IO。
-   - FR-4.2: 每测试独立使用新的 `rows` 映射，并在每个 describe 块级调用 `__clearL1CacheForTests()`。
-   - FR-4.3: `api/src/application/task/taskLifecycle.test.ts` 严格与实现共置。
-   - FR-4.4: 使用已确立的 vitest 框架与导入模式。
-2. Real I/O 否认: 所有数据读写入口均被假体拦截；环境对象为空且无 KV 绑定。
-3. Idempotency 验证:
-   - 已添加 AC-5 场景下的第三次幂等测试，断言重复完成不会增加 transition 插入次数。
-   - 对已进入 done-class 的任务，`FR-3.2` 块也已验证无额外 status 写入。
-4. 错误契约:
-   - 框架为 best-effort 写模式；`FR-3.3` 和 `FR-3.4` 验证输入无效时不会报错（best-effort 声明一致性）。
-5. L1 清理:
-   - `beforeEach` 的一致使用避免跨组缓存污染。
-6. 可追溯性:
-   - 测试描述使用 FR 标识符，便于自动化审查覆盖。
-7. 剩余未验证项:
-   - 静态覆盖率目标（≥90% 行覆盖，≥85% 分支覆盖）和全测试在 CI 上的通过率，需要在 CI 运行后填写并由 QA 填写测试结果表。
+## Repository / workspace
 
-**Provisional test coverage goals (to be verified by CI after tests are implemented):**
-- Line coverage ≥ 90% for `taskLifecycle.ts`
-- Branch coverage ≥ 85% for `taskLifecycle.ts`
+Your changes run against **seanhogg/builderforce.ai** (base `main`), which currently contains 400+ file(s). Top-level entries:
 
-**Presuming full coverage and expected pass/failure states, test evidence items to be completed:**
-1. Newly implemented test assertions map to each FR-1..FR-3 requirement (asserts successes, timestamps, field absence, and edge-case early returns).
-2. No real I/O in tests: all DRILL selectors abrogate real database connections; environment object is minimal and never loads a KV binding.
-3. Idempotency of `completeTaskOnMerge` is asserted on a pre-DONE task (concrete early-return guard) and cross-checks that no extra status writes occur.
-4. Error contract checks for invalid input: missing `taskId` (`!t` early-return) and absent `env`/binding scenarios should be gracefully no-op in tests; an explicit error type is guarded against where defined in the existing API layer, but this module captures only best-effort writes and type-checks statically.
-5. L1 cache clearing is injective and test groups are order-independent (verified by `__clearL1CacheForTests()` placement).
-6. Test descriptions reference specific FR identifiers, enabling automated review of PRD coverage.
+- `.claude/`
+- `.dockerignore`
+- `.github/`
+- `.gitignore`
+- `Builderforce.ai/`
+- `CONTRIBUTING.md`
+- `DONE.md`
+- `Dockerfile.api`
+- `Dockerfile.frontend`
+- `LICENSE`
+- `README.md`
+- `ROADMAP.md`
+- `agent-runtime/`
 
-If coverage/targets are not met, follow-up tasks may be raised to increase branch coverage (e.g., test `isDoneClass` false/true branches, `isBackward` computation, first-time vs repeated done traversal), and extend `recordStatusTransition` edge-case coverage (non-DONE-to-DONE states, non-terminal lane moves).
+If these files are clearly UNRELATED to what the task asks for (e.g. the task is about a website but this repo holds none of its code), do NOT invent a conceptual answer or edit unrelated files — say so plainly in your summary, name the bound repository (seanhogg/builderforce.ai), and state that the correct repo must be bound. Explore with list_files / search_code before concluding.
+
+---
+
+## Files already on this branch from prior passes
+
+A previous run already committed these files to this task's branch. They are part of the OPEN pull request. Reconcile against this list: update what's still needed, and **delete any that are dead code** — stubs, placeholders, unreferenced files, or anything that should not ship in this PR — with the delete_file tool. Do not leave orphaned files just because a prior pass created them.
+
+- `PRD.md` (added)
+- `api/src/application/task/taskLifecycle.test.ts` (added)
+
+---
+
+## Your Task
+
+Add unit tests for completion logic
+
+Write comprehensive unit tests to verify the updated task completion logic, covering scenarios with and without delivered code.
