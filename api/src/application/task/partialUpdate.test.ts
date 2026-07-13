@@ -239,4 +239,57 @@ describe('partial-update merge/patch semantics (task.update)', () => {
     const persisted = await repo.findById(updated.id);
     expect(persisted?.assignedAgentRef).toBe('agent-123');
   });
+
+  // AC-6: cross-AC read-back — verify returned task matches persisted parentTaskId immediately
+  it('AC-6: returned task reads as persisted parentTaskId for all update operations', async () => {
+    const { service, repo } = makeService();
+
+    const parent1 = await service.createTask({
+      projectId: PROJECT_ID as number,
+      title: 'Parent-1',
+    }, TENANT as number);
+
+    // Update via assignee only
+    const updatedAssignee = await service.updateTask(parent1.id as number, {
+      assignedAgentRef: 'agent-111',
+    });
+    expect(updatedAssignee.parentTaskId).toBeNull();
+    const persistedAssignee = await repo.findById(updatedAssignee.id);
+    expect(persistedAssignee?.parentTaskId).toBeNull();
+
+    // Reparent via explicit value
+    const parent2 = await service.createTask({
+      projectId: PROJECT_ID as number,
+      title: 'Parent-2',
+    }, TENANT as number);
+
+    const child = await service.createTask({
+      projectId: PROJECT_ID as number,
+      title: 'Child',
+      parentTaskId: parent1.id,
+    }, TENANT as number);
+    expect(child.parentTaskId).toBe(parent1.id);
+
+    const updatedReparent = await service.updateTask(child.id as number, {
+      parentTaskId: parent2.id,
+    });
+    expect(updatedReparent.parentTaskId).toBe(parent2.id);
+    const persistedReparent = await repo.findById(updatedReparent.id);
+    expect(persistedReparent?.parentTaskId).toBe(parent2.id);
+
+    // Clear via explicit null
+    const independent = await service.createTask({
+      projectId: PROJECT_ID as number,
+      title: 'Independent',
+      parentTaskId: parent1.id,
+    }, TENANT as number);
+    expect(independent.parentTaskId).toBe(parent1.id);
+
+    const updatedClear = await service.updateTask(independent.id as number, {
+      parentTaskId: null,
+    });
+    expect(updatedClear.parentTaskId).toBeNull();
+    const persistedClear = await repo.findById(updatedClear.id);
+    expect(persistedClear?.parentTaskId).toBeNull();
+  });
 });
