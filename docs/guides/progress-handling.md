@@ -18,18 +18,16 @@ Key fields:
 - `progressPct` (optional) — Progress percentage, 0–100.
 - `created` — Timestamp (`date-time`).
 
-### Canonical Rule: `progressPct: 100`
+## Canonical Rule: `progressPct: 100`
 
 `progressPct: 100` is emitted **only when the entire processing pipeline for the job or task has finished**. Important points:
 
-- **Authority:** progressPct=100 is the AUTHORITATIVE terminal signal for progress-stream consumers.
-- **Frequency:** At most once per job/task (no redundancy).
-- **Ordering:** Emitted AFTER all processing steps complete and NO further progress events follow.
-- **Integrity:** Treat `progressPct==100` together with `status="completed"` to confirm terminal completion.
+- Emitted at most once per job/task.
+- Must not be emitted before all required steps complete.
+- No further progress events follow it.
+- This is the authoritative terminal signal for progress-based UI and downstream consumers.
 
-This is the rule you should consult as a source of truth for all progress API integrations.
-
-**See the PRD section FR-1 and the API reference (`docs/api/event-payload.schema.json`) for full definition and rationale.**
+See the PRD and API reference for full definition and rationale.
 
 ## Example: Terminal Listener Pattern
 
@@ -41,7 +39,10 @@ from typing import Callable
 
 StreamPayload = dict[str, object]
 
-class SimpleProgressTracker:
+class ProgressTracker:
+    """
+    Minimal progress tracker showing the canonical registration/cleanup pattern for progressPct=100.
+    """
     def __init__(self):
         self._listener_ended = False
         self._callbacks: list[Callable[[dict[str, object]], None]] = []
@@ -52,6 +53,11 @@ class SimpleProgressTracker:
         Precaution: write state-only handling code; do NOT assume idempotence.
         """
         self._callbacks.append(callback)
+
+    def remove_progress_listener(self, callback: Callable[[dict[str, object]], None]) -> None:
+        """Unregister a progress callback."""
+        if callback in self._callbacks:
+            self._callbacks.remove(callback)
 
     def _process(self, payload: StreamPayload) -> None:
         # State-only handling: don't assume the emitter guarantees idempotence.
@@ -74,7 +80,7 @@ class SimpleProgressTracker:
         for cb in self._callbacks:
             cb(payload)
 
-        # Canonical pattern on the event: if progressPct is exactly 100, stop polling.
+        # Canonical pattern: if progressPct is exactly 100, cleanup listeners and stop polling.
         pct = payload.get("progressPct")
         st = payload.get("status")
         if isinstance(pct, (int, float)) and pct == 100:
@@ -90,7 +96,9 @@ class SimpleProgressTracker:
         so this may be called once per resource.
         """
         self._listener_ended = True
-        print(f"COMPLETE: Terminal event received. Tear down listeners and stop polling.")
+        # Remove all callbacks and tear down the listener.
+        self._callbacks.clear()
+        print(f"COMPLETE: Terms. Tear down listeners and stop polling.")
 
     def terminate(self) -> None:
         self._callbacks.clear()
@@ -103,10 +111,9 @@ server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.bind(("127.0.0.1", 9999))
 server.listen()
 
-tracker = SimpleProgressTracker()
+tracker = ProgressTracker()
 
 def progress_handler(payload: StreamPayload) -> None:
-    # Example stateless EventHandler: update tracker without mutating global state.
     tracker.update(payload)
 
 tracker.add_progress_listener(progress_handler)
