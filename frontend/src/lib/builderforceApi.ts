@@ -2555,6 +2555,10 @@ export interface Approval {
   id: string;
   tenantId: number;
   agentHostId: number | null;
+  /** Ticket that caused this request, when it originated from a task execution. */
+  taskId: number | null;
+  /** Project containing the related ticket. */
+  projectId: number | null;
   requestedBy: string | null;
   kind: RequestKind;
   actionType: string;
