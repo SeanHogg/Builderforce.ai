@@ -1,0 +1,121 @@
+{
+  "$schema": "http://json-schema.org/draft-2020-12/schema",
+  "schema_version": "1.0.0",
+  "basis_id": "550e8400-e29b-41d4-a716-446655440000",
+  "created_at": "2025-04-10T10:00:00Z",
+  "agent_id": "finance-unified-planner-v2",
+  "session_id": "finance-session-a1b2c3",
+  "parent_basis_id": "4c76d011-cd7e-42e5-9656-4231ca0c3a7b",
+  "claims": [
+    {
+      "claim_id": "claim-1",
+      "text": "Revenue growth is projected at 15.2% YoY",
+      "confidence": 0.87,
+      "confidence_method": "empirical",
+      "tags": ["revenue", "forecast", "q1"],
+      "status": "asserted"
+    },
+    {
+      "claim_id": "claim-2",
+      "text": "Marketing spend correlation coefficient is 0.68",
+      "confidence": 0.72,
+      "confidence_method": "regression",
+      "tags": ["marketing", "correlation"],
+      "status": "asserted"
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "evidence-1",
+      "claim_ids": ["claim-1"],
+      "type": "database_record",
+      "uri": "https://api.finance-db.com/reports/2025q1",
+      "title": "Q1 2025 Revenue Forecast",
+      "excerpt": "Quarterly revenue projection with supporting metrics",
+      "retrieved_at": "2025-04-10T09:55:00Z",
+      "weight": 0.92,
+      "provenance": {
+        "source_system": "Financial Core",
+        "source_version": "2.0.3",
+        "checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "evidence_id": "evidence-2",
+      "claim_ids": ["claim-2"],
+      "type": "database_record",
+      "uri": "https://api.finance-db.com/metrics/marketing-spends",
+      "title": "Marketing Spend vs Revenue Correlation (2022-2024)",
+      "excerpt": "Correlation matrix excluding outlier quarters",
+      "retrieved_at": "2025-04-10T09:58:00Z",
+      "weight": 0.75,
+      "provenance": {
+        "source_system": "Analytics Core",
+        "checksum": "e4b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b856"
+      }
+    }
+  ],
+  "reasoning_chain": [
+    {
+      "step": 1,
+      "description": "Load historical revenue data and Q1 forecast metrics from the source system",
+      "evidence_ids": ["evidence-1"],
+      "claim_ids": ["claim-1"],
+      "inference_type": "lookup"
+    },
+    {
+      "step": 2,
+      "description": "Extract marketing spend correlation from the analytics repository by excluding outlier months",
+      "evidence_ids": ["evidence-2"],
+      "claim_ids": ["claim-2"],
+      "inference_type": "inference"
+    },
+    {
+      "step": 3,
+      "description": "Compute weighted average confidence from supporting evidence",
+      "evidence_ids": ["evidence-1", "evidence-2"],
+      "claim_ids": ["claim-1", "claim-2"],
+      "inference_type": "computational"
+    }
+  ],
+  "uncertainty": {
+    "overall_confidence": 0.81,
+    "known_unknowns": [
+      "External economic sanctions not yet modeled in the query scope",
+      "Late-notice changes in tax policy not yet reflected"
+    ],
+    "assumptions": [
+      "Marketing spend correlation holds constant across all quarters",
+      "Historical seasonality patterns apply to projected period"
+    ],
+    "contradictions": []
+  },
+  "context": {
+    "task_id": "task-basis-revenue-projection-123",
+    "task_description": "Create a quarterly revenue projection basis for Q1 2025",
+    "model_id": "finance-unified-planner-v2",
+    "model_version": "2.0.3",
+    "tool_calls": [
+      {
+        "tool_name": "query_financial_db",
+        "input_summary": "SELECT revenue, marketing_spend FROM q1_history WHERE year=2025; SELECT correlation, p_value FROM marketing_correlation WHERE attribute='total_spend'",
+        "output_summary": "Loaded 8 monthly records and 12 correlation coefficients",
+        "called_at": "2025-04-10T10:15:00Z"
+      }
+    ],
+    "environment": "production"
+  },
+  "extensions": {
+    "com.builderforce.review": {
+      "peer_review_status": "pending",
+      "reviewers": ["agent-audit", "user-finops"]
+    },
+    "com.acme.risk": {
+      "risk_exposure_score": 0.45
+    },
+    "com.customer-frontend.filters": {
+      "min_confidence": 0.8,
+      "visible_sources": ["database_record", "computed"]
+    }
+  }
+}
