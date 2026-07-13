@@ -7,6 +7,7 @@ interface ChatListProps {
   onSelectChat: (chatId: string) => void;
   currentChatId?: string;
   userId: string;
+  onChatsUpdated?: () => void;
 }
 
 export function ChatList({ onSelectChat, currentChatId, userId }: ChatListProps) {
