@@ -11,29 +11,13 @@ import {
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import type { IntegrationStatus } from '@/types/integration';
+import type {
+  IntegrationStatus,
+  IntegrationHealth,
+} from '@/types/integration';
 
 interface AuditDashboardProps {
   segmentId: string;
-}
-
-type IntegrationType =
-  | 'source-control'
-  | 'issue-tracker'
-  | 'communication'
-  | 'cicd'
-  | 'monitoring'
-  | 'calendar';
-
-interface IntegrationHealth {
-  id: string;
-  type: IntegrationType;
-  name: string;
-  status: 'CONNECTED' | 'PARTIAL' | 'MISSING';
-  lastSync: string | null;
-  completenessScore: number;
-  gaps: string[];
-  recommendations: string[];
 }
 
 export function AuditDashboard({ segmentId }: AuditDashboardProps) {
