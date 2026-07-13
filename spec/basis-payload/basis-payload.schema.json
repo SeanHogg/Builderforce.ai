@@ -8,7 +8,7 @@
   "properties": {
     "schema_version": {
       "type": "string",
-      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "pattern": "^\\\\\\d+\\\\\\.\\\\\\d+\\\\\\.\\\\\\d+$",
       "description": "Semantic version of the payload schema"
     },
     "basis_id": {
@@ -32,6 +32,10 @@
       "type": ["string", "null"],
       "format": "uuid",
       "description": "UUID of a parent basis if this is a refinement/rebuttal"
+    },
+    "sandbox": {
+      "type": ["string", "null"],
+      "description": "Sandbox identifier for the target workspace/tenant; must match the platform's environment key"
     },
     "claims": {
       "type": "array",
@@ -87,7 +91,12 @@
         },
         "confidence_method": {
           "type": ["string", "null"],
-          "enum": ["bayesian", "heuristic", "llm-self-report", "empirical"],
+          "enum": [
+            "bayesian",
+            "heuristic",
+            "llm-self-report",
+            "empirical"
+          ],
           "description": "Method used to compute confidence"
         },
         "tags": {
@@ -100,13 +109,22 @@
         "status": {
           "type": "string",
           "default": "asserted",
-          "enum": ["asserted", "retracted", "superseded"]
+          "enum": [
+            "asserted",
+            "retracted",
+            "superseded"
+          ]
         }
       }
     },
     "Evidence": {
       "type": "object",
-      "required": ["evidence_id", "claim_ids", "type", "weight"],
+      "required": [
+        "evidence_id",
+        "claim_ids",
+        "type",
+        "weight"
+      ],
       "properties": {
         "evidence_id": {
           "type": "string",
@@ -124,7 +142,14 @@
         },
         "type": {
           "type": "string",
-          "enum": ["document", "database_record", "api_response", "agent_output", "human_input", "computed"],
+          "enum": [
+            "document",
+            "database_record",
+            "api_response",
+            "agent_output",
+            "human_input",
+            "computed"
+          ],
           "description": "Kind of evidence source"
         },
         "uri": {
@@ -173,7 +198,13 @@
     },
     "ReasoningStep": {
       "type": "object",
-      "required": ["step", "description", "evidence_ids", "claim_ids", "inference_type"],
+      "required": [
+        "step",
+        "description",
+        "evidence_ids",
+        "claim_ids",
+        "inference_type"
+      ],
       "properties": {
         "step": {
           "type": "integer",
@@ -202,14 +233,25 @@
         },
         "inference_type": {
           "type": "string",
-          "enum": ["deductive", "inductive", "abductive", "analogical", "lookup"],
+          "enum": [
+            "deductive",
+            "inductive",
+            "abductive",
+            "analogical",
+            "lookup"
+          ],
           "description": "Type of inference made at this step"
         }
       }
     },
     "Uncertainty": {
       "type": "object",
-      "required": ["overall_confidence", "known_unknowns", "assumptions", "contradictions"],
+      "required": [
+        "overall_confidence",
+        "known_unknowns",
+        "assumptions",
+        "contradictions"
+      ],
       "properties": {
         "overall_confidence": {
           "type": "number",
@@ -235,7 +277,10 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["claim_id_a", "claim_id_b"],
+            "required": [
+              "claim_id_a",
+              "claim_id_b"
+            ],
             "properties": {
               "claim_id_a": {
                 "type": "string",
@@ -278,7 +323,10 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["tool_name", "called_at"],
+            "required": [
+              "tool_name",
+              "called_at"
+            ],
             "properties": {
               "tool_name": {
                 "type": "string",
@@ -301,7 +349,12 @@
         },
         "environment": {
           "type": "string",
-          "enum": ["production", "staging", "development", "test"],
+          "enum": [
+            "production",
+            "staging",
+            "development",
+            "test"
+          ],
           "description": "Deployment environment"
         }
       }
