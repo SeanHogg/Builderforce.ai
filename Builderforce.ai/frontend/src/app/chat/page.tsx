@@ -49,7 +49,7 @@ export default function ChatPage() {
   };
 
   const handleTitleChange = async (newTitle: string) => {
-    // Update local state immediately
+    // Update local state immediately for responsive UI (FR3.3)
     setChats(prev => prev.map(chat =>
       chat.id === currentChatId ? { ...chat, title: newTitle } : chat
     ));
@@ -71,6 +71,42 @@ export default function ChatPage() {
     );
   }
 
+  if (!currentChatId) {
+    return (
+      <div className="chat-page">
+        <ChatList
+          onSelectChat={handleSelectChat}
+          currentChatId={currentChatId}
+          userId={userId}
+          onChatsUpdated={handleChatsUpdated}
+        />
+
+        <main className="chat-page-main">
+          {chats.length === 0 ? (
+            <div className="chat-page-empty">
+              <div className="chat-empty-content">
+                <div className="chat-empty-icon">💬</div>
+                <h2>Select a chat to start messaging</h2>
+                <p>
+                  No chats yet. Click "New Chat" to start your first conversation!
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="chat-page-empty">
+              <div className="chat-empty-content">
+                <h2>Select a chat to start messaging</h2>
+                <p>
+                  Select a chat from the list to continue
+                </p>
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="chat-page">
       <ChatList
@@ -81,26 +117,12 @@ export default function ChatPage() {
       />
 
       <main className="chat-page-main">
-        {currentChatId ? (
-          <ChatDetail
-            chatId={currentChatId}
-            userId={userId}
-            chat={getCurrentChat()}
-            onTitleChange={handleTitleChange}
-          />
-        ) : (
-          <div className="chat-page-empty">
-            <div className="chat-empty-content">
-              <div className="chat-empty-icon">💬</div>
-              <h2>Select a chat to start messaging</h2>
-              <p>
-                {chats.length === 0 
-                  ? 'No chats yet. Click "New Chat" to start your first conversation!' 
-                  : 'Select a chat from the list to continue'}
-              </p>
-            </div>
-          </div>
-        )}
+        <ChatDetail
+          chatId={currentChatId}
+          userId={userId}
+          chat={getCurrentChat()}
+          onTitleChange={handleTitleChange}
+        />
       </main>
     </div>
   );
@@ -108,12 +130,6 @@ export default function ChatPage() {
 
 // CSS Styles
 const chatPageStyles = `
-.chat-page {
-  display: flex;
-  height: 100vh;
-  background: var(--bg-surface);
-}
-
 .chat-page-loading {
   display: flex;
   align-items: center;
