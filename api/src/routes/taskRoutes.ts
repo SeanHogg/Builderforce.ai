@@ -79,7 +79,8 @@ async function getTask(req: Request, res: Response): Promise<void> {
     updatedAt: task.updatedAt,
   };
 
-  if (isRetryableError(new TaskNotFoundError(id))) {
+  // Handle 404 for non-existent tasks
+  if (task === undefined) {
     res.status(404).json({
       error: 'not_found',
       message: `Task ${id} not found`,
