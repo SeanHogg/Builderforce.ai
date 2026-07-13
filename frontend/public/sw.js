@@ -15,14 +15,13 @@
  *
  * Versioning:
  *   The CACHE_NAME includes the app version and build metadata.
- *   `scripts/inject-sw-version.js` runs before every build to embed the
- *   current package.json version, date, and git SHA into this file.
- *   This ensures the service worker file changes on EVERY deployment,
- *   reliably triggering the PWA update notification.
+ *   During build, scripts/stamp-sw-version.js replaces __BUILD_VERSION__ with
+ *   a unique build token (git SHA + timestamp), ensuring sw.js changes on
+ *   every deployment and reliably triggering PWA updates.
  */
 
-/* __BUILD_TOKEN__ — replaced at build time by scripts/inject-sw-version.js */
-const CACHE_NAME = 'bf-cache-v2';
+/* __BUILD_VERSION__ — replaced at build time by scripts/stamp-sw-version.js */
+const CACHE_NAME = 'bf-cache-' + __BUILD_VERSION__;
 
 const PRECACHE_URLS = [
   '/manifest.json',
