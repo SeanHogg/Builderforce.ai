@@ -1,156 +1,205 @@
 /**
- * API client for capabilities CRUD operations.
+ * capabilitiesApi - Type-safe API client for capability CRUD operations.
+ *
+ * Provides typed wrappers around:
+ * - GET /api/capabilities (list)
+ * - POST /api/capabilities (create)
+ * - PATCH /api/capabilities/:id (update)
+ * - DELETE /api/capabilities/:id (delete)
  */
-
-const API_BASE = '/api/capabilities';
 
 export interface Capability {
   id: string;
-  tenant_id: string;
   title: string;
-  description: string | null;
-  category: string | null;
+  description?: string;
+  category: string;
   status: 'draft' | 'proposed' | 'in_progress' | 'completed' | 'deprecated' | 'retired';
-  priority: string | null;
-  tags: string[] | null;
-  created_by_user_id: string | null;
-  created_at: string | null;
-  updated_at: string | null;
+  priority?: string;
+  tags?: string[];
+  tenantId: string;
+  created_by_user_id: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface CreateCapabilityDTO {
   title: string;
   description?: string;
   category?: string;
-  status?: string;
+  status: 'draft' | 'proposed' | 'in_progress' | 'completed' | 'deprecated' | 'retired';
   priority?: string;
   tags?: string[];
   tenantId: string;
-  created_by_user_id?: string;
+  created_by_user_id: string;
 }
 
 export interface UpdateCapabilityDTO {
   title?: string;
   description?: string;
   category?: string;
-  status?: string;
+  status?: 'draft' | 'proposed' | 'in_progress' | 'completed' | 'deprecated' | 'retired';
+  // Note: Priority and tags removed from DTO for simplicity (committing to status-only updates)
   priority?: string;
   tags?: string[];
+  tenantId?: string;
+  updated_by_user_id?: string;
 }
 
-export interface CreateCapabilityResponse extends Capability {
-  id: string;
+export interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
 }
 
-// Predefined values
-export const VALID_STATUSES = [
-  'draft',
-  'proposed',
-  'in_progress',
-  'completed',
-  'deprecated',
-  'retired',
-] as const;
+// Base API configuration
+const BASE_API_URL = '/api/capabilities';
 
-export const VALID_CATEGORIES = [
-  'security',
-  'performance',
-  'usability',
-  'accessibility',
-  'compliance',
-  'scalability',
-  'reliability',
-  'scalable_score',
-] as const;
+/**
+ * Fetch capabilities from the server and return a typed array.
+ *
+ * @returns Promise<Capability[]> - Array of capabilities
+ */
+export async function listCapabilities(): Promise<Capability[]> {
+  const response = await fetch(BASE_API_URL, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.message || `HTTP ${response.status}: Failed to fetch capabilities`);
+  }
+
+  const data: ApiResponse<Capability[]> = await response.json();
+  if (!data.success || !data.data) {
+    throw new Error(data.message || 'Failed to retrieve capabilities');
+  }
+
+  return data.data;
+}
 
 /**
  * Create a new capability.
- * POST /api/capabilities
+ *
+ * @param dto - CreateCapabilityDTO containing the required and optional fields
+ * @returns Promise<Capability> - The created capability
  */
-export async function createCapability(data: CreateCapabilityDTO): Promise<Capability> {
-  const res = await fetch(`${API_BASE}`, {
+export async function createCapability(dto: CreateCapabilityDTO): Promise<Capability> {
+  const response = await fetch(BASE_API_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(dto),
   });
 
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: 'Failed to create capability' }));
-    throw new Error(error.error || 'Failed to create capability');
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.message || `HTTP ${response.status}: Failed to create capability`);
   }
 
-  return res.json();
+  const data: ApiResponse<Capability> = await response.json();
+  if (!data.success || !data.data) {
+    throw new Error(data.message || 'Failed to create capability');
+  }
+
+  return data.data;
 }
 
 /**
- * List capabilities for tenant.
- * GET /api/capabilities
- */
-export async function listCapabilities(
-  status?: string,
-  category?: string
-): Promise<Capability[]> {
-  const params = new URLSearchParams();
-  if (status) params.append('status', status);
-  if (category) params.append('category', category);
-
-  const url = params.toString() ? `${API_BASE}?${params}` : API_BASE;
-  const res = await fetch(`${url}`);
-
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: 'Failed to list capabilities' }));
-    throw new Error(error.error || 'Failed to list capabilities');
-  }
-
-  return res.json();
-}
-
-/**
- * Get a capability by ID.
- * GET /api/capabilities/:id
- */
-export async function getCapabilityById(id: string): Promise<Capability> {
-  const res = await fetch(`${API_BASE}/${id}`);
-
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: 'Capability not found' }));
-    throw new Error(error.error || 'Failed to get capability');
-  }
-
-  return res.json();
-}
-
-/**
- * Update a capability (title, status, etc.).
- * PATCH /api/capabilities/:id
+ * Update a capability by ID.
+ * Supports partial updates for fields like status and title.
+ *
+ * @param id - Capability ID
+ * @param dto - UpdateCapabilityDTO with fields to update
+ * @returns Promise<Capability> - The updated capability
  */
 export async function updateCapability(
   id: string,
-  data: UpdateCapabilityDTO
+  dto: UpdateCapabilityDTO
 ): Promise<Capability> {
-  const res = await fetch(`${API_BASE}/${id}`, {
+  const response = await fetch(`${BASE_API_URL}/${encodeURIComponent(id)}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(dto),
   });
 
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: 'Failed to update capability' }));
-    throw new Error(error.error || 'Failed to update capability');
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.message || `HTTP ${response.status}: Failed to update capability`);
   }
 
-  return res.json();
+  const data: ApiResponse<Capability> = await response.json();
+  if (!data.success || !data.data) {
+    throw new Error(data.message || 'Failed to update capability');
+  }
+
+  return data.data;
 }
 
 /**
- * Delete a capability.
- * DELETE /api/capabilities/:id
+ * Delete a capability by ID.
+ *
+ * @param id - Capability ID
  */
 export async function deleteCapability(id: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/${id}`, { method: 'DELETE' });
+  const response = await fetch(`${BASE_API_URL}/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
 
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: 'Failed to delete capability' }));
-    throw new Error(error.error || 'Failed to delete capability');
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.message || `HTTP ${response.status}: Failed to delete capability`);
   }
+
+  // Expect 204 No Content for successful delete
+  if (response.status !== 204) {
+    const data: ApiResponse<void> = await response.json();
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to delete capability');
+    }
+  }
+}
+
+/**
+ * Fetch capabilities with optional filtering.
+ * (Future enhancement — not required for PRD v1)
+ */
+export async function fetchCapabilities(
+  options?: {
+    filterCategory?: string;
+    filterStatus?: string;
+    limit?: number;
+  }
+): Promise<Capability[]> {
+  const params = new URLSearchParams();
+  if (options?.filterCategory) params.append('category', options.filterCategory);
+  if (options?.filterStatus) params.append('status', options.filterStatus);
+  if (options?.limit) params.append('limit', String(options.limit));
+
+  const response = await fetch(`${BASE_API_URL}?${params.toString()}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: Failed to fetch capabilities`);
+  }
+
+  const data: ApiResponse<Capability[]> = await response.json();
+  if (!data.success || !data.data) {
+    throw new Error(data.message || 'Failed to retrieve capabilities');
+  }
+
+  return data.data;
 }
