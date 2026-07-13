@@ -265,6 +265,9 @@ export function EvermindBrainMap({ projectId }: { projectId: number }) {
         <Stat label={t('statQueued')} value={loaded ? String(data?.pending ?? 0) : '…'} />
       </div>
 
+      {/* Demo progress breakdown showing CompactListProgress in action */}
+      <DemoRegionProgress />
+
       <div style={{ position: 'relative', flex: '1 1 300px', minHeight: 300 }}>
         {!loaded ? (
           <Centered>{t('loading')}</Centered>
