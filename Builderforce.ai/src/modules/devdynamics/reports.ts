@@ -133,13 +133,13 @@ export async function generateExecutiveSummaryReport(
   // PerStepModelAssignments (visibility beyond built-in routing)
   const runtimeAssignments = (global as any).runtime || []; // as Prior pass: PerStepModelAssignments
 
-  const top: { contributorId: string; commits: number; prsMerged: number; reviews: number }[] = [];
-  const byC = new Map<string, { commits: number; prsMerged: number; reviews: number }>();
+  const top: { contributorId: string; commits: number; prsMerged: number; issuesClosed: number }[] = [];
+  const byC = new Map<string, { commits: number; prsMerged: number; issuesClosed: number }>();
   for (const ev of events) {
-    const cur = byC.get(ev.contributorId) || { commits: 0, prsMerged: 0, reviews: 0 };
+    const cur = byC.get(ev.contributorId) || { commits: 0, prsMerged: 0, issuesClosed: 0 };
     if (ev.eventType === 'commit_push') cur.commits++;
     else if (ev.eventType === 'pr_merged') cur.prsMerged++;
-    else if (ev.eventType === 'pr_reviewed') cur.reviews++;
+    else if (ev.eventType === 'jira_issue_updated' || ev.eventType === 'jira_issue_closed') cur.issuesClosed++;
     byC.set(ev.contributorId, cur);
   }
   for (const [cId, m] of byC) {
