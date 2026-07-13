@@ -6202,6 +6202,7 @@
       "assign": "已分配",
       "score_value": "已评估",
       "dispatch": "已派发",
+      "sync_pr": "PR 已更新",
       "merge_pr": "已合并 PR",
       "flag": "已标记"
     },

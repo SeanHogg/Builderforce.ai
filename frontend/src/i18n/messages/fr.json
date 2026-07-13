@@ -6202,6 +6202,7 @@
       "assign": "Attribué",
       "score_value": "Évalué",
       "dispatch": "Envoyé",
+      "sync_pr": "PR actualisée",
       "merge_pr": "PR fusionnée",
       "flag": "Signalé"
     },
