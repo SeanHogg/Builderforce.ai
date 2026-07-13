@@ -1,58 +1,19 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Event Payload Schema",
-  "description": "Canonical event payload for progress tracking (Draft 2020-12). Includes the FR-1 canonical progressPct=100 emission rule, ordering guarantee, and authority as the terminal completion signal.",
+  "$id": "https://builderforce.ai/api/event-payload.schema.json",
+  "title": "Builderforce Progress Event Payload",
+  "description": "Standardized event payload describing task/job progress for progress-stream consumers.",
   "type": "object",
-  "examples": [
-    {
-      "id": "evt-1234567890",
-      "type": "job_status",
-      "resourceId": "job-999",
-      "resourceType": "job",
-      "status": "completed",
-      "progressPct": 100,
-      "created": "2025-06-17T10:30:00Z"
-    }
-  ],
   "properties": {
-    "id": {
-      "type": "string",
-      "description": "Event identifier"
-    },
-    "type": {
-      "type": "string",
-      "enum": ["job_status", "progress_update"]
-    },
-    "resourceId": {
-      "type": "string",
-      "description": "Job or task identifier"
-    },
-    "resourceType": {
-      "type": "string",
-      "enum": ["job", "task"]
-    },
-    "status": {
-      "type": "string",
-      "enum": ["queued", "running", "completed", "failed", "canceled", "unknown"]
-    },
     "progressPct": {
+      "description": "A 0–100 value indicating the current progress of the task or job. The value 100 MUST be emitted ONCE, after all processing steps are confirmed complete and no further progress updates will follow. This is the authoritative signal of task/job completion for progress-stream consumers. Nebular values (e.g., 99) do not indicate final completion.",
       "type": "number",
-      "description": "Optional progress percentage: 0 to 100. progressPct=100 is the authoritative terminal signal for progress-stream consumers. Emission rule: at most once per job/task, emitted only after all processing steps complete. Ordering guarantee: no further progress updates follow. Check progressPct==100 and status==completed together to confirm terminal completion.",
-      "minimum": 0,
-      "maximum": 100,
-      "examples": [
-        0,
-        25,
-        50,
-        75,
-        100
-      ]
-    },
-    "created": {
-      "type": "string",
-      "format": "date-time"
+      "minimum": 0.0,
+      "maximum": 100.0
     }
   },
-  "additionalProperties": true,
-  "required": ["id", "type", "resourceId", "resourceType", "created"]
+  "required": ["progressPct"],
+  "example": {
+    "progressPct": 100
+  }
 }
