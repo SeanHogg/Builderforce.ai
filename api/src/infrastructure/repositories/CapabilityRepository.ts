@@ -27,11 +27,12 @@ export class CapabilityRepository {
     } = dto;
 
     const id = crypto.randomUUID();
-    await this.sql({ NEON_DATABASE_URL: '' })
+    const rows = await this.sql({ NEON_DATABASE_URL: '' })
       `INSERT INTO capabilities (id, tenant_id, title, description, category, status, priority, tags, created_by_user_id)
-        VALUES (${id}, ${tenantId}, ${title}, ${description}, ${category}, ${status}, ${priority}, ${tags || null}, ${created_by_user_id || null})`;
+       VALUES (${id}, ${tenantId}, ${title}, ${description}, ${category}, ${status}, ${priority}, ${tags || null}, ${created_by_user_id || null})
+       RETURNING *`;
 
-    return this.getById(id);
+    return this.mapRow(rows[0]);
   }
 
   async getById(id: Id): Promise<Capability | null> {
@@ -45,68 +46,56 @@ export class CapabilityRepository {
     const values: unknown[] = [];
 
     if (dto.title !== undefined) {
-      fields.push('title');
-      values.push(dto.title);
+      fields.push('title = ' + String(dto.title));
     }
     if (dto.description !== undefined) {
-      fields.push('description');
-      values.push(dto.description ?? null);
+      fields.push('description = ' + String(dto.description ?? null));
     }
     if (dto.category !== undefined) {
-      fields.push('category');
-      values.push(dto.category ?? null);
+      fields.push('category = ' + String(dto.category ?? null));
     }
     if (dto.status !== undefined) {
-      fields.push('status');
-      values.push(dto.status);
+      fields.push('status = ' + String(dto.status));
     }
     if (dto.priority !== undefined) {
-      fields.push('priority');
-      values.push(dto.priority ?? null);
+      fields.push('priority = ' + String(dto.priority ?? null));
     }
     if (dto.tags !== undefined) {
-      fields.push('tags');
-      values.push(dto.tags ?? null);
+      fields.push('tags = ' + String(dto.tags ?? null));
     }
 
     if (fields.length === 0) return this.getById(id); // Nothing to update
 
-    values.push(id);
-    const sql = this.sql({ NEON_DATABASE_URL: '' })
-      `UPDATE capabilities SET ${fields.map((f) => `${f} = $${fields.indexOf(f) + 1}`).join(', ')}, updated_at = NOW() WHERE id = $${fields.length + 1} RETURNING *`;
+    const rows = await this.sql({ NEON_DATABASE_URL: '' })
+      `UPDATE capabilities SET ${fields.join(', ')}, updated_at = NOW() WHERE id = ${id} RETURNING *`;
 
-    const rows = await sql(...values.map(v => SQL` ${v}`));
     return (rows.length > 0 ? this.mapRow(rows[0]) : null);
   }
 
   async delete(id: Id): Promise<boolean> {
     const result = await this.sql({ NEON_DATABASE_URL: '' })
       `DELETE FROM capabilities WHERE id = ${id}`;
-    return result.count !== null && result.count > 0;
+    return (result.changes ?? 0) > 0;
   }
 
   async list(params: CapabilityListParams): Promise<Capability[]> {
     const { tenantId, status, category, limit = 100, offset = 0 } = params;
 
-    const conditions: string[] = [`tenant_id = ${tenantId}`];
-    const valueCount = 1;
+    let where = 'tenant_id = ' + String(tenantId);
+    const values: unknown[] = [tenantId];
 
     if (status) {
-      conditions.push(`status = $${valueCount + conditions.length}`);
+      where += ' AND status = $' + String(values.length + 1);
+      values.push(status);
     }
     if (category) {
-      conditions.push(`category = $${valueCount + conditions.length}`);
+      where += ' AND category = $' + String(values.length + 1);
+      values.push(category);
     }
 
-    const where = conditions.join(' AND ');
-    const sql = this.sql({ NEON_DATABASE_URL: '' })
+    const rows = await this.sql({ NEON_DATABASE_URL: '' })
       `SELECT * FROM capabilities WHERE ${where} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`;
 
-    const binds: unknown[] = [tenantId];
-    if (status) binds.push(status);
-    if (category) binds.push(category);
-
-    const rows = await sql(...binds);
     return rows.map((row) => this.mapRow(row));
   }
 
