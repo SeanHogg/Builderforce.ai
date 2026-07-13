@@ -1,43 +1,37 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-
-export const runtime = 'edge';
+import { useRouter, useParams } from 'next/navigation';
+import { useAuth } from '@/lib/AuthContext';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
+import { persistLastProjectId } from '@/lib/auth';
 
 /**
- * /projects/[id] no longer opens the IDE. Redirect to /ide/[id] so the IDE
- * is only reachable at /ide/{id}.
+ * Project listing page.
+ * Redirects to the IDE entry point for the selected project.
+ * (Scoped to a single project via the [id] route param)
  */
-export default function ProjectPageRedirect() {
-  const params = useParams<{ id: string }>();
+export default function ProjectPage() {
   const router = useRouter();
-  const id = params?.id ?? '';
+  const params = useParams();
+  const projectId = String(params.id);
+
+  const { isAuthenticated } = useAuth();
+  const { currentProject, setProject } = useProjectScope();
 
   useEffect(() => {
-    if (id) {
-      router.replace(`/ide/${id}`);
-    } else {
-      router.replace('/projects');
+    if (!isAuthenticated) {
+      router.replace(`/login?next=${encodeURIComponent(`/projects/${projectId}`)}`);
+      return;
     }
-  }, [id, router]);
 
-  return (
-    <div
-      style={{
-        height: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'var(--bg-deep)',
-        color: 'var(--text-secondary)',
-        gap: 16,
-        fontFamily: 'var(--font-display)',
-      }}
-    >
-      <div style={{ fontSize: '2.5rem', animation: 'pulse 1.5s ease-in-out infinite' }}>⚡</div>
-      <p>Redirecting to IDE…</p>
-    </div>
-  );
+    // Store the selected project in global scope
+    if (currentProject?.id !== Number(projectId)) {
+      setProject(Number(projectId));
+    }
+
+    persistLastProjectId(projectId);
+    router.push(`/ide/dashboard`);
+  }, [isAuthenticated, currentProject, projectId, router, setProject]);
+
+  return <div>Redirecting to IDE dashboard...</div>;
 }
