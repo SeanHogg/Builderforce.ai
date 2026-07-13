@@ -6,7 +6,7 @@
     "clean": "node -e \"const fs=require('fs');const p='.next';if(fs.existsSync(p)){fs.rmSync(p,{recursive:true});console.log('Removed .next');}else{console.log('.next not found');}\"",
     "dev": "node scripts/inject-sw-version.js && node scripts/stamp-sw-version.js && next dev",
     "build": "node scripts/inject-sw-version.js && node scripts/stamp-sw-version.js && next build",
-    "cf-build": "node scripts/inject-sw-version.js && node scripts/stamp-sw-version.js && npm run build && npx @cloudflare/next-on-pages && echo '_worker.js' > .vercel/output/static/.assetsignore && node scripts/strip-worker-assets.js && sed -i 's/\\br\\.fetch\\b/(r||self).fetch/g' .vercel/output/static/_worker.js/index.js",
+    "cf-build": "node scripts/inject-sw-version.js && node scripts/stamp-sw-version.js && BUILD_ID=$(${npm exec pnpm -s run/ stamp-sw-version 2>&1) && echo 'BUILD_ID from stamp-sw-version:' \"${BUILD_ID}\" && npm run build && npx @cloudflare/next-on-pages && BUILD_ID_OUT=$(${npm exec pnpm -s run/ stamp-sw-version 2>&1} || echo '') && echo \"${BUILD_ID_OUT}\" > .vercel/output/static/bf-build-id.txt && echo '_worker.js' > .vercel/output/static/.assetsignore && node scripts/strip-worker-assets.js && sed -i 's/\\br\\.fetch\\b/(r||self).fetch/g' .vercel/output/static/_worker.js/index.js",
     "cf-deploy": "npm run cf-build && npx wrangler deploy --no-bundle",
     "start": "node scripts/inject-sw-version.js && node scripts/stamp-sw-version.js && next start",
     "lint": "eslint .",
