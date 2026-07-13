@@ -18,7 +18,7 @@ export class SearchEngine implements SearchEngineAPI {
 
   async search(query: SearchQuery): Promise<SearchResult[]> {
     const startTime = Date.now();
-    let entries = Array.from(this.store.entries.values());
+    let entries = this.store.getAllEntries();
 
     // Filter by text match
     if (query.text) {
