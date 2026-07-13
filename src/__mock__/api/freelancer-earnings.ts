@@ -4,25 +4,26 @@
  * Purpose: provide mock backend endpoints for the Freelancer Earnings Dashboard (GAP P0-8)
  */
 
-import { FreelancerEarningsResponse, PayoutHistoryItem, WithdrawalRequest, PaginationMeta } from '../mocks/types';
+import { FreelancerEarningsResponse, PayoutHistoryItem, WithdrawalRequest, PaginationMeta } from './mocks/types';
 
 // Types reexport for forward compatibility (will align with @builderforce/earnings-storage later)
 export type { FreelancerEarningsResponse, PayoutHistoryItem, WithdrawalRequest, PaginationMeta };
 
 /**
- * Current balance (current balance) endpoint
+ * Current balance endpoint (FR1: earnedToDateCents, currentBalanceCents, pending/paid, pendingEarningIds)
  * GET /api/freelancers/:freelancerId/earnings
  */
 export function getFreelancerEarnings(freelancerId: string): FreelancerEarningsResponse {
+  // In a real implementation, this data would come from FreelancerStats (including earnedToDateCents).
   const today = new Date();
   const pendingWindowStart = new Date(today);
   pendingWindowStart.setDate(today.getDate() - 7);
 
-  // In a real implementation, those would be fetched from a persisted earnings store.
-  const samplePendingEarningIds = ['earn-123', 'earn-124'];
+  // Pending earnings (for demo; in production these IDs would come from a persistent pending set).
+  const samplePendingEarningIds: string[] = ['earn-123', 'earn-124'];
   const totalPendingCents = samplePendingEarningIds.reduce((acc, id) => acc + cents_for_earnings[id], 0);
 
-  // In a real implementation, we'd fetch from FreelancerStats.
+  // Use earnedToDateCents from FreelancerStats; for demo we hardcode a value.
   const earnedToDateCents = 125000; // $1,250.00
 
   const response: FreelancerEarningsResponse = {
@@ -39,8 +40,8 @@ export function getFreelancerEarnings(freelancerId: string): FreelancerEarningsR
 }
 
 /**
- * Payout history endpoint
- * GET /api/freelancers/:freelancerId/earnings-history?status=paid|pending&limit=50&after=YYYY-MM-DD&before=YYYY-MM-DD
+ * Payout history endpoint (FR2 filtered by status, FR3 paginated)
+ * GET /api/freelancers/:freelancerId/earnings-history?status=paid|pending&limit=50&after=YYYY-MM-DD&before=YYYY-MM-DD&[page]
  */
 export function getEarningsHistory(params: {
   freelancerId: string;
@@ -48,13 +49,18 @@ export function getEarningsHistory(params: {
   limit?: number;
   after?: string;
   before?: string;
+  page?: number;
 }): PayoutHistoryItem[] {
   const { freelancerId } = params;
+  const limit = params.limit ?? 50;
+  const page = params.page ?? 1;
+  const pageSize = 10; // Fixed per-page size for demo
+  const offset = (page - 1) * pageSize;
 
   // In a real implementation, these would be fetched from a persistent earnings transaction history store.
   const isOriginalDemoDate = new Date() < new Date('2026-04-01');
 
-  const historyItems: PayoutHistoryItem[] = [
+  const allItems: PayoutHistoryItem[] = [
     {
       id: 'hist-001',
       freelancerId,
@@ -78,16 +84,24 @@ export function getEarningsHistory(params: {
   ];
 
   // Simple filtering (in production, we'd paginate from a database)
-  if (params.status) {
-    const s = params.status.toLowerCase();
-    return historyItems.filter((item) => item.status.toLowerCase() === s);
-  }
+  // - Status filter: paid | pending
+  // - Time range filters: after, before
+  let filtered = allItems.filter((item) => {
+    const statusOk = !params.status || item.status.toLowerCase() === params.status.toLowerCase();
+    const afterOk = !params.after || new Date(item.createdAt) >= new Date(params.after);
+    const beforeOk = !params.before || new Date(item.createdAt) <= new Date(params.before);
+    return statusOk && afterOk && beforeOk;
+  });
 
-  return historyItems;
+  // Pagination
+  paginated_items = filtered.slice(offset, offset + pageSize)
+  const requestedSlice = filtered.slice(offset, offset + pageSize);
+
+  return requestedSlice;
 }
 
 /**
- * Withdrawal requests endpoint
+ * Withdrawal requests endpoint (FR4)
  * GET /api/freelancers/:freelancerId/withdrawal-requests
  */
 export function getWithdrawalRequests(freelancerId: string, limit = 10): {
@@ -98,44 +112,13 @@ export function getWithdrawalRequests(freelancerId: string, limit = 10): {
   return { requests, meta };
 }
 
-/**
- * Manual withdrawal submit (not in PRD — reserved for future use)
- * POST /api/freelancers/:freelancerId/withdrawal-requests
- */
-export function createWithdrawalRequest(params: {
-  freelancerId: string; // In a real API, we'd also ask for bank account details and verify fraud rules.
-  amountCents: number;
-}): WithdrawalRequest {
-  const { freelancerId, amountCents } = params;
-
-  if (amountCents <= 0) {
-    throw new Error('Amount must be greater than zero.');
-  }
-
-  const request: WithdrawalRequest = {
-    id: `req-${Date.now()}`,
-    freelancerId,
-    amountCents,
-    paymentMethod: 'MANUAL_WITHDRAWAL',
-    status: 'pending',
-    createdAt: new Date().toISOString(),
-    completedAt: undefined,
-    approvedAt: undefined,
-    description: 'Manual withdrawal request',
-  };
-
-  // In a real implementation, we'd store this request and validate with bank account details and fraud analysis.
-  mockDB.addWithdrawalRequest(request);
-
-  return request;
-}
-
 const cents_for_earnings = {
   'earn-123': 1850,
   'earn-124': 750,
 };
 
 const mockDB = Object.freeze({
+  allWithdrawalRequests: [] as WithdrawalRequest[],
   withdrawalRequests: (freelancerId: string, limit: number) => {
     const requests: WithdrawalRequest[] = [
       {
@@ -161,6 +144,7 @@ const mockDB = Object.freeze({
         description: 'Manual withdrawal request',
       },
     ];
+
     return {
       requests: requests.slice(0, limit),
       meta: {
@@ -172,7 +156,6 @@ const mockDB = Object.freeze({
   addWithdrawalRequest: (request: WithdrawalRequest) => {
     mockDB.allWithdrawalRequests.push(request);
   },
-  allWithdrawalRequests: [] as WithdrawalRequest[],
 });
 
 export { mockDB };
