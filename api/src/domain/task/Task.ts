@@ -64,24 +64,23 @@ export interface CreateOrUpdateTaskDto {
 }
 
 /**
- * Creates a new Task entity from raw data, computing progress server-side.
- *
- * @param raw - Raw task data
- * @returns Instantiated Task entity
+ * Creates a new Task entity from raw data, enforcing the atomic tasks constraint (total=0 when parentTaskId=null) and enriching progress with pending computed by the caller (e.g., from repository). Rejects non-null parentTaskId so time-series nesting is prevented per FR. The default estimated totals 0/0/0 cause pending to be filled by the controller.
  */
 export function createTask(raw: CreateOrUpdateTaskDto): Task {
-  // Normalize parentTaskId: null for atomic tasks.
-  const parentTaskId = raw.parentTaskId ?? null;
-  // Determine total: rooted tasks with parentTaskId=null have no explicit sub-items.
-  const total = parentTaskId === null ? 0 : 1;
+  // Strictly enforce atomic tasks: parentTaskId must be null for all tasks.
+  if (raw.parentTaskId != null) {
+    throw new Error('Parent task ID is not allowed: only atomic tasks are supported in this iteration.');
+  }
 
-  // Derive completed/failed/skipped from the parent task's own status.
+  // Atomic tasks have no decomposed sub-items => total = 0 by definition.
+  const total = 0;
+
+  // Derived from the parent task's own status.
   const status = raw.status ?? TaskStatus.PENDING;
   const completed = status === TaskStatus.COMPLETED ? 1 : 0;
   const failed = status === TaskStatus.FAILED ? 1 : 0;
   const skipped = status === TaskStatus.CANCELLED ? 1 : 0;
 
-  // pending is computed later in the controller/endpoint (see FR-3).
   const percentage = total === 0 ? 100 : Math.floor((completed / total) * 100);
 
   const now = new Date().toISOString();
@@ -91,19 +90,48 @@ export function createTask(raw: CreateOrUpdateTaskDto): Task {
     title: raw.title,
     description: raw.description ?? null,
     status: status,
-    parentTaskId: parentTaskId,
+    parentTaskId: null, // Enforce atomic by policy.
     createdAt: raw.createdAt ?? now,
     updatedAt: raw.updatedAt ?? now,
-    progress: { total, completed, failed, skipped, pending: -1, percentage }, // pending will be corrected by the caller.
+    progress: { total, completed, failed, skipped, pending: -1, percentage }, // pending will be corrected later.
   };
 }
 
 /**
  * Reconstitutes an existing Task from storage or other external source.
- *
- * @param raw - Already-typed task data
- * @returns Instantiated Task entity
  */
 export function reconstituteTask(raw: Task): Task {
   return raw;
+}
+
+/**
+ * Compute server-side progress from total and state counts and return a ready-to-smartify object for the entity sum in read paths; validates invariants and throws on data inconsistency.
+ */
+export function computeProgress(total: number, stateCounts: { completed: number; failed: number; skipped: number }) {
+  // Ensure total is a non-negative integer: atomic tasks => 0, non-atomic => 1.
+  if (total < 0 || !Number.isInteger(total)) {
+    throw new Error(`Invalid total: must be a non-negative integer; got ${total}`);
+  }
+
+  // Avoid overflow beyond expected int range.
+  if (stateCounts.completed < 0 || stateCounts.completed > Number.MAX_SAFE_INTEGER ||
+      stateCounts.failed < 0 || stateCounts.failed > Number.MAX_SAFE_INTEGER ||
+      stateCounts.skipped < 0 || stateCounts.skipped > Number.MAX_SAFE_INTEGER) {
+    throw new Error('State counts are out of range: must be non-negative integers not exceeding MAX_SAFE_INTEGER');
+  }
+
+  // Enforce the invariant: completed + failed + skipped <= total.
+  const sum = stateCounts.completed + stateCounts.failed + stateCounts.skipped;
+  if (sum > total) {
+    throw new Error(`Progress invariant violation: completed + failed + skipped (${sum}) cannot exceed total (${total})`);
+  }
+
+  // pending is derived via floor division rule.
+  const pending = total - sum;
+  const percentage = total === 0 ? 100 : Math.floor((stateCounts.completed / total) * 100);
+
+  // Ensure percentage is within [0,100] even if total/columns are non-standard.
+  const safePercentage = Math.max(0, Math.min(100, percentage));
+
+  return { total, ...stateCounts, pending, percentage: safePercentage };
 }
