@@ -14,9 +14,9 @@ interface BottomItem extends NavMatch {
   accent?: boolean;
 }
 
-// Convention (matches the reference): "Home" is always first. Five high-traffic
-// destinations; the full menu lives in the hamburger drawer. Uses the same
-// isNavItemActive matcher as the Sidebar so both surfaces agree on active state.
+// Convention: "Home" is always first. Five high-traffic destinations; the full
+// menu lives in the hamburger drawer. Uses the same isNavItemActive matcher as
+// the Sidebar so both surfaces agree on active state.
 function itemsFor(isAuthenticated: boolean, isSuperadmin: boolean): BottomItem[] {
   if (!isAuthenticated) {
     return [
@@ -42,7 +42,7 @@ function itemsFor(isAuthenticated: boolean, isSuperadmin: boolean): BottomItem[]
 /**
  * Persistent mobile-only bottom navigation (hidden ≥768px via CSS). Self-gating
  * and auth/role-aware — renders the right five destinations for the current
- * viewer with no props.
+ * viewer with no props. Enhanced with better touch feedback and accessibility.
  */
 export default function MobileBottomNav() {
   const pathname = usePathname() || '';
@@ -50,7 +50,7 @@ export default function MobileBottomNav() {
   const items = itemsFor(isAuthenticated, !!user?.isSuperadmin);
 
   return (
-    <nav className="mobile-bottom-nav" aria-label="Primary">
+    <nav className="mobile-bottom-nav" aria-label="Primary navigation">
       {items.map((item) => {
         const active = isNavItemActive(pathname, item);
         return (
