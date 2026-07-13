@@ -258,17 +258,6 @@ export class DistributedTaskEngine {
       message: `Status changed from ${oldStatus} to ${newStatus}`,
     });
 
-    // --- HEN TASK COMPLETION LOGIC ---
-    if (newStatus === "completed" && isHenTask(task) && task.accountId) {
-      const allCompleted = await areAllHenTasksCompleted(this.storage, task.accountId);
-      if (allCompleted) {
-        // All Hen tasks for this account are now complete, send notification
-        await sendHenTaskCompletionEmail(task.accountId);
-      }
-    }
-    // --- END HEN TASK COMPLETION LOGIC ---
-
-
     // Notify listeners
     this.notifyListeners(taskId, {
       taskId,
