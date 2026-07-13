@@ -2,13 +2,27 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-    <meta name="theme-color" content="#000000" />
-    <meta name="description" content="BuilderForce.ai - Mobile-friendly project management for builders" />
-    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, minimum-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="BuilderForce.ai" />
+    <meta name="theme-color" content="#0f0f14" />
+    <meta name="description" content="Build, train, and deploy custom AI agents. Mobile-friendly project management for builders and contractors." />
+    <meta name="msapplication-TileColor" content="#0f0f14" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" sizes="192x192" />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/icon.png" sizes="180x180" />
+    <link rel="icon" href="%PUBLIC_URL%/icon.png" type="image/png" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
-    <title>BuilderForce.ai</title>
+    <meta name="format-detection" content="telephone=no" />
+    <title>BuilderForce.ai — AI Agent Training Platform</title>
+    <style>
+      /* Critical mobile performance styling */
+      @media (prefers-reduced-motion: no-preference) {
+        * {
+          -webkit-tap-highlight-color: transparent;
+        }
+      }
+    </style>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
