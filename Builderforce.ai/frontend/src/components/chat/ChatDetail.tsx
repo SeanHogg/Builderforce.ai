@@ -121,8 +121,46 @@ export function ChatDetail({
       <div className="chat-detail-header">
         {chat ? (
           <>
-            <h2 className="chat-detail-title">{chat.title}</h2>
-            <span className="chat-detail-count">{chat.messageCount} messages</span>
+            {editingTitle ? (
+              <>
+                <input
+                  type="text"
+                  value={editTitleText}
+                  onChange={(e) => setEditTitleText(e.target.value)}
+                  onBlur={handleSaveTitle}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveTitle();
+                    if (e.key === 'Escape') handleCancelEditTitle();
+                  }}
+                  autoFocus
+                  maxLength={100}
+                  className="chat-title-input"
+                  style={{
+                    fontSize: '16px',
+                    fontWeight: '600',
+                    color: 'var(--text-primary)',
+                    border: 'none',
+                    outline: 'none',
+                    background: 'transparent',
+                    maxWidth: '100%'
+                  }}
+                />
+              </>
+            ) : (
+              <>
+                <h2 className="chat-detail-title">{updatedChat.title}</h2>
+                <span className="chat-detail-count">{updatedChat.messageCount} messages</span>
+                <button
+                  type="button"
+                  onClick={handleStartEditTitle}
+                  className="chat-edit-title-btn"
+                  aria-label="Edit title"
+                  title="Edit title"
+                >
+                  ✎
+                </button>
+              </>
+            )}
           </>
         ) : (
           <h2 className="chat-detail-title">Chat details loading...</h2>
