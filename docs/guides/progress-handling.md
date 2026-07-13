@@ -18,16 +18,18 @@ Key fields:
 - `progressPct` (optional) — Progress percentage, 0–100.
 - `created` — Timestamp (`date-time`).
 
-## Canonical Rule: `progressPct: 100`
+### Canonical Rule: `progressPct: 100`
 
 `progressPct: 100` is emitted **only when the entire processing pipeline for the job or task has finished**. Important points:
 
-- Emitted at most once per job/task.
-- Must not be emitted before all required steps complete.
-- No further progress events follow it.
-- This is the authoritative terminal signal for progress-based UI and downstream consumers.
+- **Authority:** progressPct=100 is the AUTHORITATIVE terminal signal for progress-stream consumers.
+- **Frequency:** At most once per job/task (no redundancy).
+- **Ordering:** Emitted AFTER all processing steps complete and NO further progress events follow.
+- **Integrity:** Treat `progressPct==100` together with `status="completed"` to confirm terminal completion.
 
-See the PRD and API reference for full definition and rationale.
+This is the rule you should consult as a source of truth for all progress API integrations.
+
+**See the PRD section FR-1 and the API reference (`docs/api/event-payload.schema.json`) for full definition and rationale.**
 
 ## Example: Terminal Listener Pattern
 
