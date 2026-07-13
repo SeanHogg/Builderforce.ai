@@ -1,14 +1,4 @@
 import React from 'react';
-import ReactDOM from 'react-dom/client';
 import './styles/global.css';
-import App from './App';
-
-const root = ReactDOM.createRoot(
-  document.getElementById('root') as HTMLElement
-);
-
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+// No App import needed: Next.js app router takes over from this point.
+// Pages live in src/app/, and the root layout in src/app/layout.tsx.
