@@ -169,17 +169,17 @@ export function useEvermindPayload(props: UseEvermindPayloadProps): UseEvermindP
         timestamp: new Date().toISOString(),
         eventId: `ev-${Date.now()}`,
         projectId,
-        payloadId: snapshot?.payloadId || 'unknown',
+        payloadId: lastValidSnapshot?.payloadId || 'unknown',
         status: 'failed',
         level: 'error',
-        payloadVersion: snapshot?.payloadVersion || 'unknown',
+        payloadVersion: lastValidSnapshot?.payloadVersion || 'unknown',
         errors: [{ message: payloadError.message }]
       };
       console.log('[useEvermindPayload]', validationEvent);
     }
     
     setLoading(false);
-  }, [enabled, projectId, snapshot]);
+  }, [enabled, projectId, lastValidSnapshot]);
 
   // Initial load
   useEffect(() => {
