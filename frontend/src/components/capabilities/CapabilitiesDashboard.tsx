@@ -11,8 +11,7 @@ import type {
   CapabilityRollup,
 } from '@/app/insights/capabilityTypes';
 
-export function CapabilitiesDashboard() {
-  const projectId = 'demo-project'; // Would be passed from route param in production
+export function CapabilitiesDashboard({ projectId }: { projectId: string }) {
   const [rollup, setRollup] = useState<CapabilityRollup | null>(null);
   const [capabilities, setCapabilities] = useState<Capability[]>([]);
   const [status, setStatus] = useState<'loading' | 'error' | 'success'>('loading');
