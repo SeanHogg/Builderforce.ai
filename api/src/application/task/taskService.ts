@@ -45,7 +45,6 @@ function computeProgress(task: Task): TaskProgress {
   switch (status) {
     case 'pending':
       completed = 0;
-      failed = 0;
       break; // default: all counts 0
     case 'in_progress':
       completed = 0;
@@ -66,23 +65,26 @@ function computeProgress(task: Task): TaskProgress {
 
   const pending = total - completed - failed - skipped;
 
-  // Invariant check: completed + failed + skipped must never exceed total.
+  // Invariant check: completed + failed + skipped must never exceed total (FR-6 + AC-7)
   if (completed + failed + skipped > total) {
     throw new Error(
       `Progress invariant violation: completed(${completed}) + failed(${failed}) + skipped(${skipped}) must be <= total(${total}) for task ${id}`,
     );
   }
 
+  // Ensure all count fields are integers: total, completed, failed, skipped, pending
+  guaranteeInteger(total, 'total', id);
+  guaranteeInteger(completed, 'completed', id);
+  guaranteeInteger(failed, 'failed', id);
+  guaranteeInteger(skipped, 'skipped', id);
+  guaranteeInteger(pending, 'pending', id);
+
+  // Note: If the incoming task already had a broken invariant (server data inconsistency), we reject it.
+  // This ensures the read path never returns invalid progress, satisfying AC-7 (reject partial progress data).
+
   const percentage =
     total === 0 ? 100 : Math.floor((completed / total) * 100);
   guaranteeRange(percentage, 0, 100, `percentage for task ${id}`);
-
-  // Ensure integer components are respected; pending should equal (total - completed - failed - skipped)
-  if (pending < 0) {
-    throw new Error(
-      `Pending count negative for task ${id}: expected >=0, got ${pending} (total=${total}, completed=${completed}, failed=${failed}, skipped=${skipped})`,
-    );
-  }
 
   return {
     total,
@@ -95,8 +97,8 @@ function computeProgress(task: Task): TaskProgress {
 }
 
 /**
- * Asserts that a numeric value lies within an inclusive interval.
- * Throws if the condition fails, including integer fields.
+ * Asserts that a number is a valid integer and within an inclusive interval.
+ * Throws if the condition fails, including integer requirements.
  */
 function guaranteeRange(
   value: number,
@@ -109,5 +111,18 @@ function guaranteeRange(
   }
   if (value < lo || value > hi) {
     throw new Error(`Range violation for field '${field}': ${value} not in range [${lo}, ${hi}]`);
+  }
+}
+
+/**
+ * Asserts a numeric value is an integer (no decimal/truncation).
+ */
+function guaranteeInteger(
+  value: number,
+  field: string,
+  id: string,
+): asserts value is number {
+  if (!Number.isInteger(value)) {
+    throw new Error(`Non-integer value for field '${field}' on task ${id}: ${value}`);
   }
 }
