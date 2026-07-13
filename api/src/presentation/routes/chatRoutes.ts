@@ -5,6 +5,8 @@
  * This endpoint validates the target and source chats against brainChats/brainChatMessages,
  * enforces ownership/visibility using ChatTicketService, and calls ChatTicketService.consolidate
  * (which internally forwards to builtin_chats_consolidate tooling).
+ *
+ * GET /api/brain/sessions/consolidated — list consolidated chats (branched view)
  */
 import { eq, and, desc } from 'drizzle-orm';
 import { brainChats } from '../../infrastructure/database/schema';
