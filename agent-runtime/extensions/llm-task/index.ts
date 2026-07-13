@@ -1,6 +1,10 @@
 import type { BuilderForceAgentsPluginApi } from "../../src/plugins/types.js";
 import { LLMTaskTool } from "./src/llm-task-tool.js";
 import notificationStorage from "./src/notification-storage.js";
+import { HenTaskCompletionNotifierSchema } from "./src/hen-task-completion-notifier.js";
+
+// Re-export schema for external use
+export { HenTaskCompletionNotifierSchema };
 
 export default function register(api: BuilderForceAgentsPluginApi): void {
   const tool = new LLMTaskTool(
