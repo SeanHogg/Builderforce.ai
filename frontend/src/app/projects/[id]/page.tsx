@@ -33,5 +33,9 @@ export default function ProjectPage() {
     router.push(`/ide/dashboard`);
   }, [isAuthenticated, currentProject, projectId, router, setProject]);
 
-  return <div>Redirecting to IDE dashboard...</div>;
+  return (
+    <div>
+      Redirecting to IDE dashboard...
+    </div>
+  );
 }
