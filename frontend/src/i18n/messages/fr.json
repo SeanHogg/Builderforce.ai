@@ -977,6 +977,8 @@
     "merging": "Fusion…"
   },
   "memberProfile": {
+    "tabs": { "overview": "Aperçu", "timeLogs": "Temps enregistrés", "tasks": "Tâches" },
+    "noTasks": "Aucune tâche n’est assignée à cet utilisateur.",
     "subtitle": "{kind} · capacité et disponibilité",
     "syncing": "Synchronisation…",
     "syncFromGoogleCalendar": "Synchroniser depuis Google Agenda",
