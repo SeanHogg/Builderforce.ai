@@ -1649,7 +1649,7 @@ export type PrMergePolicy = 'immediate' | 'on_green' | 'queue';
 
 /** The action types the manager records on each run (drives the activity feed). */
 export type ManagerActionType =
-  | 'prioritize' | 'assign' | 'score_value' | 'dispatch' | 'merge_pr' | 'flag';
+  | 'prioritize' | 'assign' | 'score_value' | 'dispatch' | 'sync_pr' | 'merge_pr' | 'flag';
 
 /** Persisted manager configuration for a project (null until first configured). */
 export interface ManagerConfig {
@@ -1735,6 +1735,8 @@ export interface ManagerBacklogItem {
 export interface ManagerAction {
   id: string;
   taskId: number | null;
+  ticketKey: string | null;
+  ticketTitle: string | null;
   actionType: ManagerActionType;
   summary: string;
   detail: string | null;
