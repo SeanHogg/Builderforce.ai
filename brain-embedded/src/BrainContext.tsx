@@ -61,12 +61,19 @@ export interface BrainPageContext {
   initialChatId?: number | null;
   /** Deep-link: one-shot prompt auto-sent when the drawer opens (e.g. the IDE
    *  `?prompt=` seed). Distinct from a pending-prompt handoff — this is published
-   *  by a page effect, not read from storage. */
+   *  by a page effect, not read from storage.
+   */
   initialPrompt?: string;
   /** Deep-link: one-shot work item to auto-link the opened chat to (the IDE
    *  `?ticket=<kind>:<ref>` seed). The docked Brain gets this as a direct prop; the
-   *  floating drawer reads it here. */
+   *  floating drawer reads it here.
+   */
   initialTicket?: { kind: string; ref: string };
+  /**
+   * Optional host-provided auto-title function (chatId, text) — invoked by the Brain
+   * when the first user turn occurs to generate and persist a title (FR1).
+   */
+  autoTitle?: (chatId: number, text: string) => void;
 }
 
 export interface BrainContextValue extends BrainPageContext {
@@ -126,7 +133,8 @@ export function BrainContextProvider({ children }: { children: React.ReactNode }
         next.extraSystem === prev.extraSystem &&
         next.initialChatId === prev.initialChatId &&
         next.initialPrompt === prev.initialPrompt &&
-        next.initialTicket === prev.initialTicket
+        next.initialTicket === prev.initialTicket &&
+        next.autoTitle === prev.autoTitle
       ) {
         return prev;
       }
