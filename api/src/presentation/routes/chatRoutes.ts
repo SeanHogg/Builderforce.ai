@@ -116,7 +116,7 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // List consolidated chats in branched view for this tenant
-  router.get('/brain/sessions/consolidated', authMiddleware as never, async (c) => {
+  router.get('/brain/sessions/consolidated', authMiddleware, async (c) => {
     const db = c.get('db') as Db;
     const tenantId = c.get('tenantId') as number;
     const limit = Math.min(Number(c.req.query('limit') ?? 50), 100);
