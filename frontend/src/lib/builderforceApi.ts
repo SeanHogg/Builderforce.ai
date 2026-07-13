@@ -3132,6 +3132,7 @@ export interface LlmUsageStats {
   promptTokens: number;
   completionTokens: number;
   byModel: Array<{ model: string; requests: number; tokens: number }>;
+  byCredential: Array<{ type: 'integration' | 'api_key'; id: string; name: string; requests: number; modelCount: number; tokens: number }>;
   period: string;
 }
 
@@ -3211,8 +3212,23 @@ export interface ModelAnalyticsResponse {
 }
 
 export const llmApi = {
-  usage: (): Promise<LlmUsageStats> =>
-    request<LlmUsageStats>('/llm/v1/usage'),
+  usage: async (): Promise<LlmUsageStats> => {
+    const raw = await request<{
+      days: number;
+      totals: { requests: number; totalTokens: number; promptTokens: number; completionTokens: number };
+      byModel: Array<{ model: string; requests: number; total_tokens: string | number }>;
+      byCredential?: Array<{ type: 'integration' | 'api_key'; id: string; name: string; requests: number; modelCount: number; tokens: string | number }>;
+    }>('/llm/v1/usage');
+    return {
+      totalRequests: raw.totals.requests,
+      totalTokens: raw.totals.totalTokens,
+      promptTokens: raw.totals.promptTokens,
+      completionTokens: raw.totals.completionTokens,
+      byModel: raw.byModel.map((m) => ({ model: m.model, requests: m.requests, tokens: Number(m.total_tokens) })),
+      byCredential: (raw.byCredential ?? []).map((c) => ({ ...c, requests: Number(c.requests), modelCount: Number(c.modelCount), tokens: Number(c.tokens) })),
+      period: `${raw.days} days`,
+    };
+  },
 
   health: (): Promise<LlmHealthResponse> =>
     request<LlmHealthResponse>('/llm/v1/health'),
