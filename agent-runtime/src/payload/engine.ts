@@ -213,6 +213,17 @@ function runDerivedFunction(
 }
 
 /** Local failure emitter that writes to log buffer and optional sink. */
+function logTransform(
+  logRef: LogEntry[],
+  logSink?: (entry: LogEntry) => void,
+  partial: Omit<LogEntry, "timestamp">,
+): void {
+  const entry: LogEntry = { ...partial, timestamp: new Date().toISOString() };
+  logRef.push(entry);
+  if (logSink) {
+    try { logSink(entry); } catch { }
+  }
+}
 function logFailure(
   logRef: LogEntry[],
   logSink?: (entry: LogEntry) => void,
