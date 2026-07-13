@@ -29,7 +29,7 @@ export function ChatDetail({
   const [editTitleText, setEditTitleText] = useState('');
   const [updatedChat, setUpdatedChat] = useState(chat);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   // Update local chat state when we get a new title from the backend
   useEffect(() => {
