@@ -34,6 +34,14 @@ export default defineConfig({
     ],
   },
   test: {
+    // Keep env isolation strict for llm-task extensions
+    unstubEnvs: true,
+    pool: "web",
+    poolOptions: {
+      web: {
+        singleThread: true,
+      },
+    },
     testTimeout: 120_000,
     hookTimeout: isWindows ? 180_000 : 120_000,
     // Many suites rely on `vi.stubEnv(...)` and expect it to be scoped to the test.
