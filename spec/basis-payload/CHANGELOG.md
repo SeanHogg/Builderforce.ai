@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **FR-4** — Evidence block (required top-level array, supports per-claim references via `claim_ids`), weight (`[0,1]`), and provenance (`source_system` required, `checksum` optional).
 - **FR-5** — Reasoning chain block: step number, `inference_type` enum (`deductive`, `inductive`, `abductive`, `analogical`, `lookup`).
 - **FR-6** — Uncertainty block: `overall_confidence` (`[0,1]`), `known_unknowns`, `assumptions` arrays, optional `contradictions` with claim IDs.
-- **FR-7** — Context block: `task_id`/`task_description` (optional), `model_id` required, `model_version` optional, `tool_calls[]`, `environment` enum (`production`/`staging`/`development`/`test`).
+- **FR-7** — Context block: `task_id`/`task_description` (optional), `model_id` required, `model_version` optional, `tool_calls[]`, `environment` string (`production`/`staging`/`development`/`test` values accepted by payload; not enforced as a static enum).
 - **FR-8** — Extensions block: reverse-DNS namespaced keys, `additionalProperties: false` inside extensions, `additionalProperties: true` at root for unknown fields (AC-6 warning behavior).
 - **FR-9** — JSON Schema validation + documentation + validation harness.
 - **FR-10** — Full canonical example present and validated.
