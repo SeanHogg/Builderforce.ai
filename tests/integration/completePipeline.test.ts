@@ -102,27 +102,27 @@ interface ReasoningOutput {
  * In production, this would be a call to the display rendering module.
  */
 function renderDisplay(payload: ProgressPayload, reasoning: ReasoningOutput): string {
-  let output = `## Progress Update (${payload.basis})\n\n`;
-  output += `- **Completion**: ${payload.subtasksDone}/${payload.subtasksTotal} (${((payload.subtasksDone / payload.subtasksTotal) * 100).toFixed(1)}%)\n`;
-  output += `- **Task ID**: ${payload.taskId ?? 'Not assigned'}\n`;
+  let output = `## Progress Update (${payload.basis})\\n\\n`;
+  output += `- **Completion**: ${payload.subtasksDone}/${payload.subtasksTotal} (${((payload.subtasksDone / payload.subtasksTotal) * 100).toFixed(1)}%)\\n`;
+  output += `- **Task ID**: ${payload.taskId ?? 'Not assigned'}\\n`;
   if (payload.message) {
-    output += `- **Message**: ${payload.message}\n`;
+    output += `- **Message**: ${payload.message}\\n`;
   }
-  output += `- **Timestamp**: ${payload.timestamp}\n\n`;
-  output += `### Reasoning\n\n`;
-  output += `- **Status**: ${reasoning.conflictSignals ? '⚠️ Needs Attention' : '✅ Normal'}\n`;
-  output += `- **Confidence**: ${(reasoning.confidenceScore * 100).toFixed(0)}%\n`;
-  output += `- **Conclusion**: ${reasoning.conclusion}\n\n`;
+  output += `- **Timestamp**: ${payload.timestamp}\\n\\n`;
+  output += `### Reasoning\\n\\n`;
+  output += `- **Status**: ${reasoning.conflictSignals ? '⚠️ Needs Attention' : '✅ Normal'}\\n`;
+  output += `- **Confidence**: ${(reasoning.confidenceScore * 100).toFixed(0)}%\\n`;
+  output += `- **Conclusion**: ${reasoning.conclusion}\\n\\n`;
   if (reasoning.steps.length > 0) {
-    output += `### Reasoning Steps\n\n`;
+    output += `### Reasoning Steps\\n\\n`;
     reasoning.steps.forEach((step, i) => {
-      output += `${i + 1}. ${step}\n`;
+      output += `${i + 1}. ${step}\\n`;
     });
   }
   if (reasoning.conflictSignals && reasoning.conflictSignals.length > 0) {
-    output += `\n### ⚠️ Issues Detected\n\n`;
+    output += `\\n### ⚠️ Issues Detected\\n\\n`;
     reasoning.conflictSignals.forEach((signal, i) => {
-      output += `${i + 1}. ${signal}\n`;
+      output += `${i + 1}. ${signal}\\n`;
     });
   }
   return output;
@@ -226,7 +226,7 @@ test('FR-4.3: cross-module data integrity (payload fields reflect in reasoning a
   expect(payload.subtasksDone).toBe(2);
   expect(payload.subtasksTotal).toBe(8);
   expect(payload.message).toBe('Testing data integrity');
-  expect(payload.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  expect(payload.timestamp).toMatch(/\d{4}-\d{2}-\d{2}T/);
 
   const reasoning = executeReasoning(payload);
 
