@@ -16,6 +16,9 @@ describe('chatWorkLinkingDirective', () => {
     expect(d).toContain('builtin_chats_link_ticket (chatId=42, linkType="created")');
     expect(d).toContain('builtin_tickets_from_delta (chatId=42');
     expect(d).toContain('builtin_tasks_create');
+    expect(d).toContain('builtin_tasks_assignees');
+    expect(d).toContain('builtin_kanban_assess_resource');
+    expect(d).toContain('builtin_kanban_materialize_work_items');
     expect(d).toContain('builtin_chats_list_tickets (chatId=42)');
     // The status-progression requirement is present (the reported "worked a ticket but
     // never moved it off backlog" gap).

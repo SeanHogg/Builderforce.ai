@@ -227,14 +227,14 @@ describe('callBuiltinTool', () => {
 
   it('passes tenant through to createTask', async () => {
     taskSvc.createTask.mockResolvedValue({ toPlain: () => ({ id: 5 }) });
-    await callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.create', arguments: { projectId: 3, title: 'Do it' } });
+    await callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.create', arguments: { projectId: 3, title: 'Do it', assignedUserId: 'coordinator-1' } });
     expect(taskSvc.createTask).toHaveBeenCalledWith(expect.objectContaining({ projectId: 3, title: 'Do it' }), TENANT);
   });
 
   it('tasks.create is idempotent — a same-title task on the project is returned, not duplicated', async () => {
     // Existing board already has "Ship OKRs"; a re-run with different casing/spacing must dedup.
-    taskSvc.listTasks.mockResolvedValue([{ toPlain: () => ({ id: 42, title: 'Ship OKRs', projectId: 3 }) }]);
-    const res = await callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.create', arguments: { projectId: 3, title: '  ship   okrs ' } });
+    taskSvc.listTasks.mockResolvedValue([{ toPlain: () => ({ id: 42, title: 'Ship OKRs', projectId: 3, assignedUserId: 'coordinator-1' }) }]);
+    const res = await callBuiltinTool(db, { tenantId: TENANT, tool: 'tasks.create', arguments: { projectId: 3, title: '  ship   okrs ', assignedUserId: 'coordinator-1' } });
     expect(taskSvc.createTask).not.toHaveBeenCalled();
     expect(res).toMatchObject({ deduped: true, id: 42, title: 'Ship OKRs' });
   });
