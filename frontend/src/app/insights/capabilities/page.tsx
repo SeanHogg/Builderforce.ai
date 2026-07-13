@@ -8,8 +8,8 @@ import PageContainer from '@/components/PageContainer';
 import { RoleGate } from '@/components/RoleGate';
 import { Skeleton, Spinner, Alert, Button } from '@/components/dashboard';
 import type { Capability } from './capabilityTypes';
-import { GaugeChart } from '@/components/charts/GaugeChart';
-import { DonutChart, type DonutSegment } from '@/components/charts/DonutChart';
+import { CanvasPieChart, type PieSegment } from '@/components/charts/CanvasPieChart';
+import { CanvasBarChart, type BarDatum } from '@/components/charts/CanvasBarChart';
 
 /* -------------------------------------------------------------------------- */
 /* Capability types & demo data (mocked; backend endpoint /api/capabilities TBD) */
