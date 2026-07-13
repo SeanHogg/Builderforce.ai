@@ -1,0 +1,72 @@
+{
+  "name": "builderforce/memory",
+  "version": "1.0.0",
+  "description": "BuilderForce memory management utilities for AI agents - file-backed search, retrieval, and memory persistence",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js"
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "build:dev": "tsdown --minify false",
+    "build:types": "tsc --emitDeclarationOnly",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:coverage": "vitest coverage",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "prepublishOnly": "pnpm build"
+  },
+  "keywords": [
+    "builderforce",
+    "memory",
+    "ai",
+    "agent",
+    "search",
+    "retrieval",
+    "persistence",
+    "vector"
+  ],
+  "author": "BuilderForce",
+  "license": "MIT",
+  "homepage": "https://github.com/seanhogg/Builderforce.ai/tree/main/builderforce/memory",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/seanhogg/Builderforce.ai.git",
+    "directory": "builderforce/memory"
+  },
+  "bugs": {
+    "url": "https://github.com/seanhogg/Builderforce.ai/issues"
+  },
+  "files": [
+    "dist/",
+    "*.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "devDependencies": {
+    "@builderforce/memory-core": "workspace:*",
+    "tsdown": "^0.20.3",
+    "typescript": "^5.9.3",
+    "oxlint": "^1.48.0",
+    "@types/node": "^25.17.3",
+    "vitest": "^4.5.0"
+  },
+  "peerDependencies": {
+    "@builderforce/memory-core": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "packageManager": "pnpm@10.23.0"
+}
