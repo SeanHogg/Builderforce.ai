@@ -1,0 +1,6 @@
+{
+  "moduleName": "messages",
+  "path": "tests/mocks/modules/messages.ts",
+  "comment": "Mock for messages module; real implementation should eventually live in an application repo",
+  "purpose": "Placeholder so tests can be reachable; never counted in coverage"
+}
