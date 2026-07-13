@@ -390,6 +390,9 @@ export const llmUsageLog = pgTable('llm_usage_log', {
    *  row on the on-prem / VSIX `surface` is EXEMPT from the plan token allowance
    *  (see tokenUsage.ts). BYO cloud-agent rows still count (charged). */
   byo:              boolean('byo').notNull().default(false),
+  /** Connected LLM provider credential that funded a BYO call (for example
+   *  'anthropic' or 'google'). Null for platform-funded calls. */
+  byoProvider:      varchar('byo_provider', { length: 32 }),
   /** Which agent modality produced this row (migration 0284): 'web' | 'vsix' |
    *  'on_prem' | 'cloud' | 'sdk'. Drives the BYO metering exemption above so
    *  own-machine (on-prem/VSIX) BYO usage is free while cloud BYO is charged. */

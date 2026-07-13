@@ -23,7 +23,7 @@ import {
   type ChatCompletionRequest,
   type LlmUsage,
 } from '../../application/llm/LlmProxyService';
-import { resolvePaidOverflowCapMillicents } from '../../application/llm/usageLedger';
+import { normalizeByoProvider, resolvePaidOverflowCapMillicents } from '../../application/llm/usageLedger';
 import { classifyReplyAccount } from '../../application/llm/replyProvenance';
 import { USAGE_KIND } from '../../application/llm/usageSource';
 import { logTrace, backfillTraceUsage } from '../../application/llm/traceLogger';
@@ -1756,7 +1756,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
             metadata: callerMetadata, idempotencyKey, useCase: callerUseCase,
             tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId }, traceId,
             paidOverflow: result.paidOverflow,
-            byo: result.byoFunded ?? false, surface: resolveUsageSurface(c, access),
+            byo: result.byoFunded ?? false,
+            byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,
+            surface: resolveUsageSurface(c, access),
           });
           // Back-fill the streamed trace row (logged above with 0 tokens) [1298].
           backfillTraceUsage(c.env, c.executionCtx, traceId, usage);
@@ -1781,7 +1783,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       metadata: callerMetadata, idempotencyKey, useCase: callerUseCase,
       tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId }, traceId,
       paidOverflow: result.paidOverflow,
-      byo: result.byoFunded ?? false, surface: resolveUsageSurface(c, access),
+      byo: result.byoFunded ?? false,
+      byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,
+      surface: resolveUsageSurface(c, access),
     });
 
     // Surface the trace id inside the error envelope too, so a consumer hitting
@@ -2244,6 +2248,28 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       ORDER BY total_tokens DESC NULLS LAST
     `);
 
+    // Credential attribution is independent of model attribution: a single BYO
+    // integration or bfk_* API key may consume several models in this window.
+    const byCredential = await db.execute(sql`
+      SELECT
+        CASE WHEN u.byo_provider IS NOT NULL THEN 'integration' ELSE 'api_key' END AS "type",
+        COALESCE(u.byo_provider, u.tenant_api_key_id::text) AS "id",
+        COALESCE(u.byo_provider, k.name, 'Unnamed API key') AS "name",
+        COUNT(*)::int AS requests,
+        COUNT(DISTINCT u.model)::int AS "modelCount",
+        SUM(u.total_tokens)::bigint AS tokens
+      FROM llm_usage_log u
+      LEFT JOIN tenant_api_keys k ON k.id = u.tenant_api_key_id
+      WHERE u.tenant_id = ${access.tenantId}
+        AND u.created_at >= NOW() - (${days} || ' days')::interval
+        AND (u.byo_provider IS NOT NULL OR u.tenant_api_key_id IS NOT NULL)
+      GROUP BY
+        CASE WHEN u.byo_provider IS NOT NULL THEN 'integration' ELSE 'api_key' END,
+        COALESCE(u.byo_provider, u.tenant_api_key_id::text),
+        COALESCE(u.byo_provider, k.name, 'Unnamed API key')
+      ORDER BY tokens DESC NULLS LAST
+    `);
+
     const [totals] = (await db.execute(sql`
       SELECT
         COUNT(*)::int                  AS requests,
@@ -2299,6 +2325,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         completionTokens: Number(mine?.completion_tokens ?? 0),
       },
       byModel: byModel.rows,
+      byCredential: byCredential.rows,
       byDay: byDay.rows,
       byUser: byUser.rows,
       bySource: bySource.rows,

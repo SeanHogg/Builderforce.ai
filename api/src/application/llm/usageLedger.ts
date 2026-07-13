@@ -103,6 +103,17 @@ export function computeCostMillicents(
  */
 export type UsageSurface = 'web' | 'vsix' | 'on_prem' | 'cloud' | 'sdk';
 
+/** Map internal gateway vendor ids to the stable provider ids shown in the BYO
+ * integrations UI. */
+export function normalizeByoProvider(vendor: string): string {
+  const aliases: Record<string, string> = {
+    googleai: 'google',
+    'openai-codex': 'openai',
+    moonshot: 'kimi',
+  };
+  return aliases[vendor] ?? vendor;
+}
+
 /**
  * Who produced a usage row. Exactly one of the agent dimensions is set in
  * practice:
@@ -146,6 +157,9 @@ export interface RecordUsageRow {
    *  platform paid nothing) and, combined with an on-prem/VSIX `surface`, exempts
    *  the row from the plan token allowance. See tokenUsage.ts. */
   byo?: boolean | null;
+  /** Stable connected-provider id when `byo` is true. This is deliberately
+   *  separate from `model`: one credential can serve many models. */
+  byoProvider?: string | null;
   /** Which modality produced the row — drives the BYO metering exemption.
    *  Defaults to 'web' when unset. */
   surface?: UsageSurface | null;
@@ -236,6 +250,7 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
       traceId:             row.traceId ?? null,
       paidOverflow:        row.paidOverflow ?? false,
       byo:                 row.byo ?? false,
+      byoProvider:         row.byo ? (row.byoProvider ?? null) : null,
       surface:             row.surface ?? 'web',
     });
   } catch { /* never let usage logging fail the request */ }
