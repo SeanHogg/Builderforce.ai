@@ -69,9 +69,11 @@ export function CapabilitiesDashboard({ projectId }: LaunchParams) {
     // Sort
     result = [...result].sort((a, b) => {
       if (sortKey === 'lastUpdated') {
-        return sortDirection === 'asc'
-          ? new Date(a.lastUpdated).getTime() - new Date(b.lastUpdated).getTime()
-          : new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime();
+        // Handle undefined/null/NaN timestamps: undefined/NaN should be pushed to top (as earliest)
+        const aTime = a.lastUpdated ? new Date(a.lastUpdated).getTime() : 0;
+        const bTime = b.lastUpdated ? new Date(b.lastUpdated).getTime() : 0;
+        if (aTime === bTime) return 0;
+        return sortDirection === 'asc' ? aTime - bTime : bTime - aTime;
       }
       const aVal = a[sortKey];
       const bVal = b[sortKey];
