@@ -1,0 +1,28 @@
+{
+  "name": "builderforce.ai",
+  "version": "0.6.7",
+  "private": true,
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SeanHogg/Builderforce.ai.git",
+    "directory": "Builderforce.ai"
+  },
+  "scripts": {
+    "dev": "esbuild --bundle ./frontend/src/main.tsx --outfile=./frontend/dist/main.js --sourcemap=inline --format=es-module --platform=browser --loader:.json=json --define:process.env.NODE_ENV='development' && esbuild --bundle ./agent-runtime/builderforce.mjs --outfile=./agent-runtime/build/builderforce.js --sourcemap=inline --format=es-module --platform=node",
+    "build": "npm run build:api && npm run build:frontend && npm run build:agents",
+    "build:frontend": "esbuild --bundle ./frontend/src/main.tsx --outfile=./frontend/dist/main.js --sourcemap=inline --format=es-module --platform=browser --loader:.json=json",
+    "build:api": "tsc --project tsconfig.api.json",
+    "build:agents": "tsc --project tsconfig.agents.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src/**/*.ts --max-warnings=0",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "builderforce-devdynamics": "^0.3.0"
+  },
+  "devDependencies": {
+    "vite": "^6.0.7"
+  }
+}
