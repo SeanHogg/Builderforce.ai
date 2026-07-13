@@ -55,7 +55,7 @@
  *   - Paths: use dot notation and index brackets (e.g., "items[0].name").
  *
  * - Transformations
- *   - Type coercion: transform: { type: "number" } via transform.type
+ *   - Type coercion: transform: { type: { type: "number" } } via transform.type
  *   - Derived functions: transform: { derivedFunction: "upper" }
  *   - Array transforms: transform: { arrayTransform: { field: "tags", transform: "fn:upperAt" } }
  *
@@ -112,4 +112,34 @@
 
 export { createPayloadGenerator } from "./engine.js";
 export type { CustomFunction } from "./engine.js";
-export type { InputContext, FieldResolution, OutputField, PayloadDefinition, PayloadGenerator, Result, TypeCoercion, ValidationError, LogEntry } from "./types.js";
+export type {
+  InputContext,
+  FieldResolution,
+  OutputField,
+  PayloadDefinition,
+  PayloadGenerator,
+  Result,
+  TypeCoercion,
+  ValidationError,
+  LogEntry,
+} from "./types.js";
+
+/**
+ * Business Ruleset Catalog helpers (FR‑3 / AC‑5 / AC‑8 extensibility).
+ * Allows callers to look up business rulesets and configure derived functions
+ * without modifying the engine core.
+ */
+export {
+  getBusinessRulesets,
+  resolveBusinessRuleset,
+  buildDerivedFunctionMap,
+  derive,
+  registerBusinessRuleset,
+} from "./ruleset.js";
+
+export type {
+  BusinessRuleset,
+  BusinessRule,
+  RulesetCatalog,
+  DerivedFunction,
+} from "./types.js";
