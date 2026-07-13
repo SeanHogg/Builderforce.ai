@@ -1,121 +1,206 @@
 {
-  "$schema": "http://json-schema.org/draft-2020-12/schema",
   "schema_version": "1.0.0",
   "basis_id": "550e8400-e29b-41d4-a716-446655440000",
-  "created_at": "2025-04-10T10:00:00Z",
-  "agent_id": "finance-unified-planner-v2",
-  "session_id": "finance-session-a1b2c3",
-  "parent_basis_id": "4c76d011-cd7e-42e5-9656-4231ca0c3a7b",
+  "created_at": "2025-10-14T12:00:00Z",
+  "agent_id": "coderclaw-mock-basis-gen",
+  "session_id": "session-2025-10-14-a3f5",
+  "parent_basis_id": null,
+  "sandbox": "development",
   "claims": [
     {
       "claim_id": "claim-1",
-      "text": "Revenue growth is projected at 15.2% YoY",
-      "confidence": 0.87,
-      "confidence_method": "empirical",
-      "tags": ["revenue", "forecast", "q1"],
+      "text": "The project uses TypeScript for static type safety across the codebase",
+      "confidence": 0.96,
+      "confidence_method": "heuristic",
+      "tags": [
+        "language",
+        "type-safety"
+      ],
       "status": "asserted"
     },
     {
       "claim_id": "claim-2",
-      "text": "Marketing spend correlation coefficient is 0.68",
-      "confidence": 0.72,
-      "confidence_method": "regression",
-      "tags": ["marketing", "correlation"],
+      "text": "All services expose RESTful APIs with OpenAPI specifications",
+      "confidence": 0.91,
+      "confidence_method": "empirical",
+      "tags": [
+        "api",
+        "architecture"
+      ],
+      "status": "asserted"
+    },
+    {
+      "claim_id": "claim-3",
+      "text": "Unit test coverage exceeds 85% for critical business logic paths",
+      "confidence": 0.98,
+      "confidence_method": "measured",
+      "tags": [
+        "testing",
+        "quality"
+      ],
       "status": "asserted"
     }
   ],
   "evidence": [
     {
-      "evidence_id": "evidence-1",
-      "claim_ids": ["claim-1"],
-      "type": "database_record",
-      "uri": "https://api.finance-db.com/reports/2025q1",
-      "title": "Q1 2025 Revenue Forecast",
-      "excerpt": "Quarterly revenue projection with supporting metrics",
-      "retrieved_at": "2025-04-10T09:55:00Z",
-      "weight": 0.92,
+      "evidence_id": "e1",
+      "claim_ids": [
+        "claim-1"
+      ],
+      "type": "document",
+      "uri": "https://github.com/seanhogg/builderforce.ai/blob/main/tsconfig.json",
+      "title": "TypeScript Configuration (tsconfig.json)",
+      "excerpt": "compilerOptions: { 'target': 'ES2020', 'module': 'commonjs', 'strict': true }",
+      "retrieved_at": "2025-10-14T11:55:00Z",
+      "weight": 0.95,
       "provenance": {
-        "source_system": "Financial Core",
-        "source_version": "2.0.3",
+        "source_system": "github.com",
+        "source_version": "main",
         "checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
       }
     },
     {
-      "evidence_id": "evidence-2",
-      "claim_ids": ["claim-2"],
-      "type": "database_record",
-      "uri": "https://api.finance-db.com/metrics/marketing-spends",
-      "title": "Marketing Spend vs Revenue Correlation (2022-2024)",
-      "excerpt": "Correlation matrix excluding outlier quarters",
-      "retrieved_at": "2025-04-10T09:58:00Z",
-      "weight": 0.75,
+      "evidence_id": "e2",
+      "claim_ids": [
+        "claim-1",
+        "claim-2"
+      ],
+      "type": "agent_output",
+      "uri": null,
+      "title": "API Spec Discovery for builderforce.ai",
+      "excerpt": "Found 8 microservices with .openapi.yaml files (backend, auth, payments, inventory, ...)",
+      "retrieved_at": "2025-10-14T11:58:00Z",
+      "weight": 0.88,
       "provenance": {
-        "source_system": "Analytics Core",
-        "checksum": "e4b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b856"
+        "source_system": "coderclaw-ide",
+        "source_version": "v4.2",
+        "checksum": "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae"
+      }
+    },
+    {
+      "evidence_id": "e3",
+      "claim_ids": [
+        "claim-3"
+      ],
+      "type": "database_record",
+      "uri": "https://app.builderforce.ai/reports/test-coverage-x/yMF67z",
+      "title": "Build 2025-10-13-nightly: Critical Paths",
+      "excerpt": "Critical paths: 87.4%; High-risk paths: 5.9%; Overall: 91.2%",
+      "retrieved_at": "2025-10-14T11:50:00Z",
+      "weight": 1.0,
+      "provenance": {
+        "source_system": "builderforce.ai (ci-tab)",
+        "source_version": "q4-2025",
+        "checksum": "a0712c3e4b567890abcd0123456789abcdef01234567890abcdef0123456789"
+      }
+    },
+    {
+      "evidence_id": "e4",
+      "claim_ids": [
+        "claim-2"
+      ],
+      "type": "document",
+      "uri": "https://github.com/seanhogg/builderforce.ai/blob/main/docs/architecture.md",
+      "title": "System Architecture",
+      "excerpt": "All services expose REST interfaces with explicit OpenAPI endpoints",
+      "retrieved_at": "2025-10-14T12:02:00Z",
+      "weight": 0.92,
+      "provenance": {
+        "source_system": "github.com",
+        "source_version": "main",
+        "checksum": "3b/da45e9b6c7f53d9b3/af71ae4b1b21"
       }
     }
   ],
   "reasoning_chain": [
     {
       "step": 1,
-      "description": "Load historical revenue data and Q1 forecast metrics from the source system",
-      "evidence_ids": ["evidence-1"],
-      "claim_ids": ["claim-1"],
-      "inference_type": "lookup"
+      "description": "Scanned TypeScript configuration files for strict mode and language targeting",
+      "inference_type": "lookup",
+      "evidence_ids": [
+        "e1"
+      ],
+      "claim_ids": [
+        "claim-1"
+      ]
     },
     {
       "step": 2,
-      "description": "Extract marketing spend correlation from the analytics repository by excluding outlier months",
-      "evidence_ids": ["evidence-2"],
-      "claim_ids": ["claim-2"],
-      "inference_type": "inference"
-    },
-    {
-      "step": 3,
-      "description": "Compute weighted average confidence from supporting evidence",
-      "evidence_ids": ["evidence-1", "evidence-2"],
-      "claim_ids": ["claim-1", "claim-2"],
-      "inference_type": "computational"
+      "description": "Cross-referenced built examples and build reports for codebase characteristics",
+      "inference_type": "inductive",
+      "evidence_ids": [
+        "e2",
+        "e3",
+        "e4"
+      ],
+      "claim_ids": [
+        "claim-1",
+        "claim-2",
+        "claim-3"
+      ]
     }
   ],
   "uncertainty": {
-    "overall_confidence": 0.81,
+    "overall_confidence": 0.94,
     "known_unknowns": [
-      "External economic sanctions not yet modeled in the query scope",
-      "Late-notice changes in tax policy not yet reflected"
+      "Does every non-critical path exceed 85% coverage?",
+      "Are all APIs documented in OpenAPI specs."
     ],
     "assumptions": [
-      "Marketing spend correlation holds constant across all quarters",
-      "Historical seasonality patterns apply to projected period"
+      "Standard TypeScript config reflects team conventions across repositories.",
+      "CI coverage reports accurately reflect runtime code paths."
     ],
     "contradictions": []
   },
   "context": {
-    "task_id": "task-basis-revenue-projection-123",
-    "task_description": "Create a quarterly revenue projection basis for Q1 2025",
-    "model_id": "finance-unified-planner-v2",
-    "model_version": "2.0.3",
+    "task_id": null,
+    "task_description": null,
+    "model_id": "claude-3.5-sonnet",
+    "model_version": "20250314",
     "tool_calls": [
       {
-        "tool_name": "query_financial_db",
-        "input_summary": "SELECT revenue, marketing_spend FROM q1_history WHERE year=2025; SELECT correlation, p_value FROM marketing_correlation WHERE attribute='total_spend'",
-        "output_summary": "Loaded 8 monthly records and 12 correlation coefficients",
-        "called_at": "2025-04-10T10:15:00Z"
+        "tool_name": "github_search",
+        "input_summary": "Query tsconfig.json files for strict mode and target ES2020",
+        "output_summary": "Found 12 tsconfig files; 4 in main repositories match pattern",
+        "called_at": "2025-10-14T11:30:00Z"
+      },
+      {
+        "tool_name": "builderforce_ci_report",
+        "input_summary": "Fetch test coverage report for latest nightly build",
+        "output_summary": "Retrieved critical-path coverage 87.4% for build xM0Vjz",
+        "called_at": "2025-10-14T11:45:00Z"
+      },
+      {
+        "tool_name": "api_spec_discovery",
+        "input_summary": "Discover OpenAPI.yaml files under /api, /services, /backend",
+        "output_summary": "Found 8 parallel services with .openapi.yaml files",
+        "called_at": "2025-10-14T11:50:00Z"
       }
     ],
-    "environment": "production"
+    "environment": "development"
   },
   "extensions": {
-    "com.builderforce.review": {
-      "peer_review_status": "pending",
-      "reviewers": ["agent-audit", "user-finops"]
+    "com.builderforce.project-analysis": {
+      "project_risk_score": 0.24,
+      "dominant_risk_factors": [
+        "legacy-dependencies",
+        "testing-parity-with-runtime"
+      ],
+      "kanban-age-days": 18,
+      "processing-intent": {
+        "goal": "Identify high-impact improvement opportunities for a 2026-Q2 roadmap update",
+        "scope": "assessment-only",
+        "confidence-adjuster": 0.03
+      }
     },
-    "com.acme.risk": {
-      "risk_exposure_score": 0.45
-    },
-    "com.customer-frontend.filters": {
-      "min_confidence": 0.8,
-      "visible_sources": ["database_record", "computed"]
+    "com.acme.security": {
+      "report_id": "sec-2025-10-14-0001",
+      "priority_vulns": 2,
+      "recommendation_rebuttal_threshold": 0.7,
+      "compliance-matrix": {
+        "soc2-tr-2": "testing",
+        "cis-l1-1.0.1": "documented"
+      }
     }
   }
 }
