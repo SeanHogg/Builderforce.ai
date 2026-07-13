@@ -4,6 +4,19 @@
  * Domain models for storing W-9 and W-8BEN forms in the database.
  */
 
+// Re-export interface keys for consistency
+export interface { W9Entity } { id: string; freelancerId: string; version: number; submittedAt: Date; validFrom: Date; effectiveUntil?: Date; status: string; taxpayerType: string; tinType: string; tin: string; nameOnForm: string; businessName?: string; address: TaxAddress; accountNumbers?: string; statementTransactions?: boolean; waiverCheckbox?: boolean; resetEIN?: boolean; formDataJson: string; scannedDocumentUrl?: string; uploadedAt: Date; createdAt: Date; updatedAt: Date; irsTargetCategory?: string; indexedByCreator?: boolean; }
+export interface { ForeignTaxAddress } { country: string; city?: string; region?: string; postalCode?: string; streetLine1: string; streetLine2?: string; }
+export interface { W8BENEntity } { id: string; freelancerId: string; version: number; submittedAt: Date; validFrom: Date; effectiveUntil?: Date; status: string; taxpayerType: string; entityName: string; foreignTaxNumber?: string; foreignAddress: ForeignTaxAddress; beneficialOwner?: any; waiverText?: boolean; archiveReason?: string; archivedAt?: Date; formType: string; formDataJson: string; scannedDocumentUrl?: string; uploadedAt: Date; createdAt: Date; updatedAt: Date; indexedByCreator?: boolean; }
+export interface { PaymentEntity } { id: string; freelancerId: string; invoiceId?: string; amount: number; currency: string; paymentDate: Date; category: string; status: string; metadataJson?: string; createdAt: Date; updatedAt: Date; }
+export interface { Generated1099Entity } { id: string; fiscalYear: number; formType: string; recipientId: string; taxYear: number; summary: { count: number; totalAmount: number; timestamp: Date }; status: string; documents?: { pdf_url: string; e_file_package_url?: string; internal_report_url?: string }; e_filing?: { provider: string; fta_id?: string; tracking_number?: string; filed_at?: Date; confirmation_number?: string }; created_at: Date; updated_at: Date; }
+
+/**
+ * Tax Form Database Entities
+ * 
+ * Domain models for storing W-9 and W-8BEN forms in the database.
+ */
+
 export enum TaxFormStatus {
   PENDING = 'pending',
   SUBMITTED = 'submitted',
