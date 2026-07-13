@@ -34,6 +34,11 @@ function parseDays(raw: string | undefined, def = 30): number {
   return Number.isFinite(n) && n >= 1 && n <= 365 ? Math.floor(n) : def;
 }
 
+/** Validate decision type */
+function validateDecision(decision: unknown): decision is 'accepted' | 'rejected' {
+  return decision === 'accepted' || decision === 'rejected';
+}
+
 /** Per-tenant version token bumped on every dismissal so the cached list ages out.
  *  Exported so the bundled /ai-overview read shares the exact same cache key (and
  *  thus honours dismissals) rather than re-deriving the recommendations. */
