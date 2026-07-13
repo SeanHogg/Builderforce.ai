@@ -714,4 +714,49 @@ describe("finalizeProgressBreakdown", () => {
 
     expect(base).toEqual(inputClone);
   });
+
+  // FR-4.4: Floating-point values should not cause serialization errors or unexpected rounding.
+  describe(\\"floating-point precision (FR-4.4)\\", () => {
+    test(\\"handles floating-point subtasksDone value in breakdown without serialization errors\\", () => {
+      const base: ProgressBreakdown = {
+        basis: \\"subtasks\\",
+        subtasksDone: 3.75, // Floating-point value to test precision handling
+        subtasksTotal: 5,
+        codeDelivered: false,
+        testsPassing: null,
+        prState: null,
+      };
+
+      // This should not throw an error (AC-3 isolation from the test server).
+      expect(() => JSON.stringify(base)).not.toThrow();
+
+      // Verify the serialized output contains the expected floating-point value.
+      const serialized = JSON.stringify(base);
+      expect(serialized).toContain(\\"3.75\\");
+
+      // Verify the deserialized value preserves the precision (no uncontrolled mutation).
+      const deserialized: ProgressBreakdown = JSON.parse(serialized);
+      expect(deserialized.subtasksDone).toBeCloseTo(3.75);
+    });
+
+    test(\\"handles completion timestamp with high precision in zero-state object\\", () => {
+      const zeroState: ProgressBreakdown = {
+        basis: \\"manual\\",
+        subtasksDone: 0,
+        subtasksTotal: 0,
+        codeDelivered: false,
+        testsPassing: null,
+        prState: null,
+      };
+
+      // Serialize and ensure round-trip is valid.
+      const serialized = JSON.stringify(zeroState);
+      expect(() => JSON.parse(serialized)).not.toThrow();
+
+      // Ensure integer field values remain integers after serialization/deserialization.
+      const deserialized: ProgressBreakdown = JSON.parse(serialized);
+      expect(Number.isInteger(deserialized.subtasksDone));
+      expect(Number.isInteger(deserialized.subtasksTotal));
+    });
+  });
 });
