@@ -1,87 +1,293 @@
-# Agent/Board Basis Payload Design (v1)
+# Basis Payload v1.0.0 — Design Document
 
-## Purpose
-Define the canonical JSON contract for **basis** data so all agents and boards have a shared, versioned payload structure for claims, evidence, reasoning, uncertainty, and context.
-
-**Version:** 1.0.0
-**Status:** Ratified (2025-06-XX; task #674)
-**Authors:** BuilderForce architect (Ada/Hari)
-
----
-
-## Constraints & Out of Scope
-
-1. **Transport/Messaging** – How payloads are sent (REST, WebSocket, queue) is not defined here; only the JSON body shape.
-2. **Storage Schema** – What tables/document stores are created is separate.
-3. **UI/Renders** – How boards display claims, evidence, reasoning chains is left to board developers; the schema carries all fields they need.
-4. **Authz** – Who can emit or read payloads is handled by the platform-layer authz.
-5. **Compression/Binary** – Payloads are JSON text.
-6. **Streaming** – The schema describes a complete, finalized basis; streaming will be a vN+1 variant.
-7. **Auto-generation** – This PRD defines the output contract, not how agents compute it.
+> **Status:** Ratified
+>
+> **Related PRD:** [`PRD.md`](../../../PRD.md) (Task #674)
+>
+> **Schema Version:** 1.0.0
+>
+> **Last Updated:** 2025-06-18
 
 ---
 
-## Payload Structure Overview
+## Overview
 
-### Top-Level Keys
-| Key | Type | Required | Description |
-|-----|------|----------|--------------|
-| `schema_version` | string | yes | SemVer of the schema (e.g., "1.0.0"); consumers must reject if major unsupported |
-| `basis_id` | UUID | yes | Unique identifier for this basis instance |
-| `created_at` | ISO-8601 UTC | yes | When this basis was produced |
-| `agent_id` | string | yes | Agent identifier |
-| `session_id` | string | yes | Optional, session-level ID (e.g., human dial-in, conversation circuit ID) |
-| `parent_basis_id` | UUID | yes | Links to prior basis (refinement/rebuttal chain) |
-| `claims` | Claim[] | yes | Atomic assertions with confidence and evidence references |
-| `evidence` | Evidence[] | yes | Sources referenced by evidence_id |
-| `reasoning_chain` | ReasoningStep[] | optional | Ordered logical steps linking evidence → claims |
-| `uncertainty` | Uncertainty | yes | Top-level summary of confidence and caveats |
-| `context` | Context | yes | Operational context (task, model, tools, environment) |
-| `extensions` | { [namespace: string]: any } | optional | Open extension slots for domain-specific or experimental fields |
-
-### Extra Fields (Extension Layout) – per AC-6
-- Extension namespaces must be reverse-DNS strings (e.g., "com.acme.risk", "com.builderforce.review") and MUST start with a leading dot.
-- Consumers MUST ignore unknown extension namespaces.
-- When an extension uses `extraExtends` to define its own sub-key with a schema object, only that specific extension’s k is required and the object is expected to be truthy. The parent schema ignores any unknown extension keys.
+This document provides the design rationale and architectural decisions behind the ratified **Basis Payload v1.0.0** contract. It clarifies constraints, defines behaviour where semver schema cannot enforce, and justifies trade-offs.
 
 ---
 
-## Field Definitions
+## High-Level Architecture
 
-### Top-Level Identity Block
-- `schema_version`: semver string; must be resolvable by consumer.
-- `basis_id`: UUIDv4; globally unique.
-- `created_at`: ISO-8601 UTC (no TZ indicator).
-- `agent_id`: string (identifies the emitting agent).
-- `session_id`: optional string (cases where a session/context ID is applicable).
-- `parent_basis_id`: optional UUIDv4; null if independent.
+### Purpose
 
-### Claim / Evidence / Reasoning / Uncertainty / Context Sub-Structures
-- **Claims:** claim_id, text, confidence, confidence_method, tags (array), status (asserted/retracted/superseded/immediate only; immediate as per FR-3). Confidence in [0.0, 1.0].
-- **Evidence:** evidence_id, claim_ids (array), type (document/database_record/api_response/agent_output/human_input/computed), uri/title/excerpt/retrieved_at/weight/provenance (source_system, optional source_version, optional checksum), weight in [0.0, 1.0]; required at payload level.
-- **ReasoningChain:** ordered steps; each step has step (1+), description, evidence_ids, claim_ids, inference_type.
-- **Uncertainty:** overall_confidence, known_unknowns, assumptions, contradictions (claim_id pairs + text). Confidence in [0.0, 1.0].
-- **Context:** task_id/description/model_id/model_version/tool_calls(called_at only, plus tool_name/input_summary/output_summary), environment (production/staging/development/test).
+Define a stable, versioned JSON contract for structured **basis data** used by:
+- **Agents** (producers) to emit facts, sources, weights, and reasoning traces.
+- **Boards** (consumers) to display, audit, and challenge information grounded in claims and evidence.
 
-### FR-1 Drivers
-- `schema_version` present => validation passes at least FR-1.
-- Mismatched major version => consumer must reject.
+### Product Objectives
+
+- **Canonical Interoperability:** All agents and boards use the same schema, avoiding divergent implementations.
+- **Auditability:** Every claim must reference verifiable evidence with provenance, enabling a claim-to-source chain.
+- **Transparency:** Boards can inspect reasoning chains, uncertainty summaries, and context to understand how outputs were generated.
+- **Extensibility:** Future domain extensions can be added via `extensions` without rewriting the core schema.
+- **Version Scoping:** Schema versioning ensures backward compatibility and enables incremental evolution (semver).
 
 ---
 
-## Example Payload
+## Core Design Decisions
 
-See `spec/basis-payload/example.canonical.json` for a complete, valid payload illustrating all documented fields.
+### 1. Payload-level vs Per-claim Evidence
+
+**Requirement Tension:**
+- **FR-4:** "Every claim MAY reference one or more evidence items." This phrasing suggests per-claim evidence flexibility.
+- **AC-1:** "Schema MUST reject payloads missing `schema_version`, `basis_id`, `agent_id`, `claims`, or `evidence`." This requires the entire payload to contain an `evidence` array.
+
+**Resolution:**
+- **Top-level `evidence` is required** (like `claims`). All evidence items are referenced at the payload level by ID.
+- **Claims may reference zero or more evidence items** via `claim_ids` (can be empty).
+- **Implication:** Evidence remains fully decoupled from claims; each claim is independently linkable to any evidence item, supporting flexible provenance while preserving a single canonical reference set.
+
+**Rationale:**
+- Ensures that all evidence sources are uniquely identifiable at the payload level (good for ingestion pipelines).
+- Supports multi-purpose evidence (e.g., a single document supporting multiple distinct claims).
+- Avoids having to duplicate `evidence_id` arrays inside every claim object.
+- Aligns with AC-1’s hard rejection when `evidence` is missing, while preserving per-claim flexibility.
+
+**Meta-rules:**
+- Producers must ensure that every referenced `evidence_id` is present in the payload-level `evidence` array.
+- Consumers should validate claim-to-evidence cross-references for completeness (optional but recommended).
 
 ---
 
-## Extensibility & Validation
+### 2. Extensions Namespacing (Reverse-DNS)
 
-- **Extensions:** Use reverse-DNS namespace keys; unknown namespaces ignored. Each extension object is arbitrary; only extraExtends is constrained.
-- **Validate:** Clients MUST validate before processing. Length constraints follow license/oem policy (no hard limit; length is in scope of local policy).
+**Goal:** Allow domain-specific or experimental fields without bloating the core schema.
+
+**Decision:**
+- Unknown top-level fields cause a **warning**, not a hard error (AC-6).
+- Only the `extensions` object is constrained via `patternProperties` for keys with reverse-DNS pattern (`com.example.category`).
+- The schema uses `additionalProperties: true` at the root, so unknown keys are permitted.
+
+**Rationale:**
+- Prevents schema breakage when new fields are added (e.g., future versions of the basis contract). Unknown keys are logged by consumers but do not fail processing.
+- Encourages systematic namespaces (`com.builderforce.*`, `com.acme.risk`, `com.customer-frontend.*`) but does not enforce usage.
+- Simplifies integration and reduces validation overhead for early adopters.
+
+**Enforcement:**
+- The `extensions` object enforces `additionalProperties: false`, meaning only extension keys can be present under it.
+- Extension keys must match `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`.
 
 ---
 
-## Maturity Level
-- **Document:** Ratified (requires no further implementation).
-- **Implementation:** Next turn (tasks or repo integration may generate payloads conforming to this schema).
+### 3. Reasoning Chain Ordering
+
+**Problem:**
+- Need step-by-step logical reasoning, but the schema alone cannot enforce sequential gaps (e.g., steps 2 followed by step 4 without step 3).
+
+**Decision:**
+- Schema enforces:
+  - `step >= 1` (minimum).
+  - Each `step` number is an integer.
+- **Sequential ordering (no gaps)** is **semantic guidance** for producers/consumers; it is not enforced by JSON Schema validation.
+
+**Rationale:**
+- Strong validation could complicate incremental reasoning generation (e.g., adding a missing step below).
+- Logging/reporting tools can enforce ordering as part of producer tooling or board rendering, decoupled from schema validation.
+- Boards may degrade gracefully if small gaps are present, as long as semantic continuity is maintained.
+
+**User-facing Impact:**
+- Boards SHOULD render reasoning chains as navigable lists with steps.
+- If steps are not strictly sequential, boards may still present them but indicate gaps.
+
+---
+
+### 4. Uncertainty Block Requiredness
+
+**Requirement:**
+- All payloads MUST include an `uncertainty` block (FR-6).
+
+**Decision:**
+- `uncertainty` is **required**, containing:
+  - `overall_confidence` in [0.0, 1.0].
+  - `known_unknowns` (array, required).
+  - `assumptions` (array, required).
+  - `contradictions` (array, required).
+
+**Rationale:**
+- Encourages agents to surface uncertainty explicitly rather than hiding it.
+- Provides a uniform interface for boards and infra tools to compute aggregate risk/opportunity scores.
+- Enables auditability and regulatory readiness (e.g., industries requiring explicit uncertainty reporting).
+
+---
+
+### 5. Payload Validation Strategy
+
+**Producer Validation:**
+- MUST validate against the JSON Schema BEFORRE sending to a board (FR-9).
+- Use `ajv` with `draft-2020-12` and enforced formats (`ajv-formats`) for schema validation.
+- Emission of malformed payloads is blocked; structured error messages are returned to the producer.
+
+**Consumer Validation:**
+- SHOULD validate on ingestion.
+- Unknown top-level fields (outside `extensions`) cause a **warning level log**, not a hard error (AC-6).
+- Board rendering can proceed with warnings for optional fields.
+
+---
+
+### 6. Versioning Strategy
+
+**SemVer Policy:**
+- `major.minor.patch` format (v1.0.0).
+- Consumers MUST reject payloads with a major version they don’t support.
+- Schema version is stored at payload root (`schema_version`) to allow runtime version negotiation.
+
+**Evolution Control:**
+- Patch bumps: backwards-compatible bug fixes or minor enhancements (e.g., performance, documentation).
+- Minor bumps: backwards-compatible additions (new fields or enums).
+- Major bumps: breaking changes (structure or semantics), requiring new consumers.
+
+---
+
+### 7. Toolkit & CLI
+
+**Relevant Artifact:**
+- `validate.js` provides zero-dependency CLI for validation and example test plan execution.
+
+**Strategy:**
+- CLI validates the canonical example against the schema.
+- Executes positive/negative/extension/reasoning-chain test cases against the AC test plan.
+- Documents how to reproduce validation on producer/consumer side, enabling CI integration.
+
+---
+
+## Field-by-Field Design Notes
+
+### Identity Block
+
+| Field | Type | Remarks |
+|-------|------|---------|
+| `schema_version` | `string` | Semver pattern enforced; determines consumer support. |
+| `basis_id` | UUID | Schema enforced per RFC 4122; globally unique. |
+| `parent_basis_id` | UUID | Optional; used to chain bases (e.g., rebuttal/refinement). |
+| `tool_calls` | `context.tool_calls[]` | Capabilities: tool name, input/output summaries, called_at. |
+
+---
+
+### Claims
+
+| Field | Type | Remarks |
+|-------|------|---------|
+| `confidence` | [0.0, 1.0] | Enforced schema; as a float; boundaries inclusive. |
+| `confidence_method` | Enum or null | Enum values: `"bayesian"`, `"heuristic"`, `"llm-self-report"`, `"empirical"`. Null indicates no explicit method recorded. |
+| `status` | Default `"asserted"` | Values: `"asserted"`, `"retracted"`, `"superseded"`. |
+
+---
+
+### Evidence
+
+| Field | Type | Remarks |
+|-------|------|---------|
+| `weight` | [0.0, 1.0] | Strength of evidence; inclusive boundaries. |
+| `provenance.checksum` | Optional SHA-256 | Recommended for reproducibility. |
+| `type` | Enum | Enum values: `"document"`, `"database_record"`, `"api_response"`, `"agent_output"`, `"human_input"`, `"computed"`. |
+| `uri` | Optional string | Link to full source; can be optional if content is internal. |
+
+---
+
+### Context
+
+| Field | Type | Remarks |
+|-------|------|---------|
+| `model_id` | Required | Identifies model or orchestrator. |
+| `environment` | Enum | Values: `"production"`, `"staging"`, `"development"`, `"test"`. |
+| `tool_calls[]` | Tool-call objects | Captures tool execution directly relevant to the basis. |
+
+---
+
+### Uncertainty
+
+| Field | Type | Remarks |
+|-------|------|---------|
+| `overall_confidence` | [0.0, 1.0] | Overall basis confidence; inclusive. |
+| `known_unknowns` | Array (required) | Known limitations / unknown factors. |
+| `assumptions` | Array (required) | Assumptions made in deriving this basis. |
+| `contradictions[]` | Array of object | Pairs of claims with contradictions. |
+
+---
+
+### Extensions
+
+- **Key pattern:** `^[a-z][a-z0-9]*(-[a-z0-9]+)*$` (camelCase with hyphens allowed; reverse-DNS structure).
+- **Enforcement:** `additionalProperties: false` inside `extensions`; reverse-DNS enforced via `patternProperties`.
+
+---
+
+## Implementation Lifecycle
+
+### Phase 1: Ratification (this PRD)
+
+- Ratify v1.0.0 schema and documentation.
+- Publish schema artifacts in `spec/basis-payload/`.
+- Create canonical example and validation CLI.
+- Tag PR and create PR from commit and pieces (schema, README, basis-payload.md, CHANGELOG.md, validate.js, example.canonical.json). Ensure all fields are in place; sync across repo and platform tracking.
+
+### Phase 2: Producer Integration
+
+- Update agents to emit validated payloads.
+- Optionally add reasoning chain generation.
+- Periodic audits of `tool_calls` coverage.
+
+### Phase 3: Consumer Integration
+
+- Integrate boards to render claims/evidence/reasoning_chain/uncertainty from basis payloads.
+- Enforce unknown field warning.
+- Provide UI for confidence visualization.
+
+### Phase 4: Evolving Schema
+
+- Future versions (v1.1.0+, etc.) will add:
+  - New JSON Schema.
+  - Extended extensions for new domains.
+  - New inference types for reasoning chains.
+- Maintain backwards compatibility for new versions (e.g., v1.0.0 consumers can always read v1.x.x with differing `schema_version` as long as they support that major version).
+
+---
+
+## Open Issues, Future Considerations, and Deferred Work
+
+- **Transport Protocol:** Not defined here. Future work may define REST API payloads for basis endpoints or WebSocket message schemas.
+- **Storage Schema:** Database/table design is external to this payload contract.
+- **UI Component Design:** Rendering components are out of scope; boards may use basis payloads as data source for new components.
+- **Authentication:** Basis interface may be behind platform-level auth; not specified here.
+- **Payload Compression / Binary:** Only JSON text encoding defined.
+- **Real-time Streaming:** Streaming of partial payloads is out of scope; v1 describes complete finalized bases.
+- **Automated Basis Generation Logic:** Production algorithms for generating claims/evidence/traces are out of scope.
+
+---
+
+## Compliance & Trust Service Criteria (TSC)
+
+| TSC | Alignment |
+|-----|-----------|
+| **Availability** | Schema is ambient and always present; producers must emit before boards can use. |
+| **Processing Integrity** | JSON Schema enforces fields, types, and bounds; unknown top-level fields log warnings (not hard errors). |
+| **Confidentiality** | Constrained by contract; no requirement for encryption; agents must align with platform policies. |
+| **Privacy** | Fields are defined in spec; agents must handle personal data in accordance with privacy policies. |
+
+---
+
+## References
+
+- **Full PRD:** [`../PRD.md`](../../../PRD.md) in repository root.
+- **Reference Docs:** [`../spec/basis-payload/`](../spec/basis-payload/).
+- **Design Document for this PRD:** This document.
+- **JSON Schema Specifications:** Draft 2020-12 (draft-wright-json-schema-2020-12).
+- **Validator:** `spec/basis-payload/validate.js`.
+
+---
+
+## Revision History
+
+| Version | Date | Author | Change |
+|---------|------|--------|--------|
+| 1.0.0 | 2025-06-18 | SeanHogg | Initial ratified design document. |
