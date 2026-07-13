@@ -1,4 +1,4 @@
-import { TaskId, ProjectId, TaskStatus, TaskPriority, TaskType, AgentType, AgentHostId } from '../shared/types';
+import { TaskId, ProjectId, TaskStatus, TaskPriority, TaskType, AgentType, AgentHostId, PRDTaskType, DeliverableType } from '../shared/types';
 import { ValidationError } from '../shared/errors';
 
 export interface TaskProps {
@@ -7,15 +7,13 @@ export interface TaskProps {
   key: string;
   title: string;
   description: string | null;
-  /**
-   * Free-form status = the key of the swimlane (board column) the task sits in.
-   * The {@link TaskStatus} enum holds the canonical defaults automation drives;
-   * a configurable board may use any lane key here.
-   */
+  /** Free-form status = the key of the swimlane (board column) the task sits in. The {@link TaskStatus} enum holds the canonical defaults automation drives; a configurable board may use any lane key here. */
   status: string;
   priority: TaskPriority;
   /** Fixed type dimension: a plain `task` or an `epic` that decomposes into children. */
   taskType: TaskType;
+  /** Highest existing key sequence in the project; this task gets the next one. */
+  lastKeySeq: number;
   /** Parent Epic's id (null for top-level tasks). Set on children of a decomposed Epic. */
   parentTaskId: TaskId | null;
   assignedAgentType: AgentType | null;
@@ -34,11 +32,9 @@ export interface TaskProps {
   explicitRepoId: string | null;
   /** sprints.id this task is scheduled into, or null when unscheduled (backlog). */
   sprintId: string | null;
-  /** product_releases.id this task ships in, or null (0227). Makes a release a
-   *  first-class deliverable for the delivery lens. */
+  /** product_releases.id this task ships in, or null (0227). Makes a release a first-class deliverable for the delivery lens. */
   releaseId: string | null;
-  /** Story-point estimate (0246), or null when unestimated — the leaf source for
-   *  derived sprint velocity. */
+  /** Story-point estimate (0246), or null when unestimated — the leaf source for derived sprint velocity. */
   storyPoints: number | null;
   /** AI Manager (0265): business value 0-100, null when unscored. */
   businessValue: number | null;
@@ -48,8 +44,7 @@ export interface TaskProps {
   businessValueSource: string | null;
   /** The manager's computed backlog rank (1 = do first), null when unranked. */
   managerRank: number | null;
-  /** Validator review bookkeeping (0270): how many review passes this task has had,
-   *  when the last pass ran, and its verdict ('complete' | 'gaps' | null). */
+  /** Validator review bookkeeping (0270): how many review passes this task has had, when the last pass ran, and its verdict ('complete' | 'gaps' | null). */
   reviewCount: number;
   lastReviewedAt: Date | null;
   lastReviewVerdict: string | null;
@@ -68,6 +63,12 @@ export interface TaskProps {
  *
  * A Task represents a unit of work that can be assigned to an AI agent
  * or a human developer.
+ *
+ * PRD #615: Detailed task taxonomy and delivery-type classification.
+ * - taskType (new PRDTaskType): 'coding', 'analysis', 'provisioning', 'decision', 'documentation'
+ * - deliverableType: 'code', 'decision', 'spec', 'ops'
+ * These fields support the completion gate logic, distinguishing code-driven from
+ * analysis/provisioning/decision tasks that may legitimately complete via doc-only PRs.
  */
 export class Task {
   private constructor(private readonly props: TaskProps) {}
@@ -75,15 +76,6 @@ export class Task {
   // ------------------------------------------------------------------
   // Factory methods
   // ------------------------------------------------------------------
-
-  /**
-   * Canonical task-key format: `${projectKey}-${NNN}` (3-digit, zero-padded).
-   * The single source of truth for key shape — both {@link Task.create} and the
-   * move/re-key path go through here so the format never drifts.
-   */
-  static buildKey(projectKey: string, seq: number): string {
-    return `${projectKey}-${String(seq).padStart(3, '0')}`;
-  }
 
   static create(
     props: Omit<
@@ -99,6 +91,11 @@ export class Task {
       assignedUserId?: string | null;
       /** Type at creation (default `task`). A decomposed child passes the Epic's id as parent. */
       taskType?: TaskType;
+      /** PRD #615 task taxonomy for gating. Defaults to coding. */
+      prdTaskType?: PRDTaskType | null;
+      /** PRD #615 high-level deliverable classification used by completion gate. Defaults to code. */
+      deliverableType?: DeliverableType | null;
+      /** ParentTaskId (null for top-level tasks). Set on children of a decomposed Epic. */
       parentTaskId?: TaskId | null;
       /** For a GAP task: the Done item whose review produced it (Validator sets this). */
       gapOriginTaskId?: TaskId | null;
@@ -165,10 +162,10 @@ export class Task {
   get status(): string { return this.props.status; }
   get priority(): TaskPriority { return this.props.priority; }
   get taskType(): TaskType { return this.props.taskType; }
+  get lastKeySeq(): number { return this.props.lastKeySeq; }
   get parentTaskId(): TaskId | null { return this.props.parentTaskId; }
   get isEpic(): boolean { return this.props.taskType === TaskType.EPIC; }
-  /** True when an AGENT (self-hosted host or cloud ref) owns this task — the
-   *  on-assign decomposition hook only fires for agent assignees, not humans. */
+  /** True when an AGENT (self-hosted host or cloud ref) owns this task — the on-assign decomposition hook only fires for agent assignees, not humans. */
   get isAssignedToAgent(): boolean {
     return this.props.assignedAgentHostId != null || this.props.assignedAgentRef != null;
   }
@@ -202,6 +199,30 @@ export class Task {
   get updatedAt(): Date { return this.props.updatedAt; }
 
   // ------------------------------------------------------------------
+  // PRD #615 new accessors
+  // ------------------------------------------------------------------
+
+  /** PRD #615 task taxonomy used by completion gate. Defaults to coding if absent. */
+  get prdTaskType(): PRDTaskType {
+    return (this.props as TaskProps & { prdTaskType?: PRDTaskType }).prdTaskType ?? 'coding';
+  }
+
+  /** PRD #615 high-level deliverable classification used by completion gate. Defaults to code if absent. */
+  get deliverableType(): DeliverableType {
+    return (this.props as TaskProps & { deliverableType?: DeliverableType }).deliverableType ?? 'code';
+  }
+
+  /** PRD #615: Returns whether this task is code-driven (coding or analysis with deliverable code). */
+  get isCodeDriven(): boolean {
+    return this.prdTaskType === 'coding' || (this.prdTaskType === 'analysis' && this.deliverableType === 'code');
+  }
+
+  /** PRD #615: Returns whether this task can legitimately complete via a docs-only PR. */
+  get canCompleteViaDocPr(): boolean {
+    return [ 'provisioning', 'decision', 'documentation' ].includes(this.prdTaskType);
+  }
+
+  // ------------------------------------------------------------------
   // Behaviour
   // ------------------------------------------------------------------
 
@@ -209,23 +230,18 @@ export class Task {
     updates: Partial<
       Pick<
         TaskProps,
-        'title' | 'description' | 'status' | 'priority' | 'taskType' | 'parentTaskId' | 'assignedAgentType'
-        | 'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'sprintId' | 'releaseId' | 'storyPoints' | 'startDate' | 'dueDate'
-        | 'businessValue' | 'businessValueRationale' | 'businessValueSource' | 'managerRank'
-        | 'persona' | 'archived'
+        'title' | 'description' | 'status' | 'priority' | 'taskType' | 'parentTaskId' | 'assignedAgentType' |
+        'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'sprintId' | 'releaseId' | 'storyPoints' | 'startDate' | 'dueDate' |
+        'businessValue' | 'businessValueRationale' | 'businessValueSource' | 'managerRank' |
+        'persona' | 'archived' |
+        'prdTaskType' | 'deliverableType'
       >
     >,
   ): Task {
     return new Task({ ...this.props, ...updates, updatedAt: new Date() });
   }
 
-  /**
-   * Reclassify this task as an Epic — the first step of agent-driven decomposition.
-   * A BA-style agent assigned a vague "new item" may determine it is really an Epic
-   * (too large to execute directly) and flip the type before fanning it out into
-   * child tasks. An Epic is a planning container, not an executable unit, so it also
-   * sheds any agent assignee (the children carry the real execution assignments).
-   */
+  /** Reclassify this task as an Epic — the first step of agent-driven decomposition. A BA-style agent assigned a vague "new item" may determine it is really an Epic (too large to execute directly) and flip the type before fanning it out into child tasks. An Epic is a planning container, not an executable unit, so it also sheds any agent assignee (the children carry the real execution assignments). */
   reclassifyAsEpic(): Task {
     if (this.props.taskType === TaskType.EPIC) return this;
     return new Task({
@@ -237,13 +253,7 @@ export class Task {
     });
   }
 
-  /**
-   * Move this task to a different project (board). The key is regenerated from the
-   * destination project so it matches that board's prefix (e.g. ACME-014), mirroring
-   * how issue trackers re-key an issue moved between projects. projectId/key live
-   * outside {@link update}'s allowed fields because reassignment is a distinct
-   * lifecycle event, not a field edit.
-   */
+  /** Move this task to a different project (board). The key is regenerated from the destination project so it matches that board's prefix (e.g. ACME-014), mirroring how issue trackers re-key an issue moved between projects. projectId/key live outside {@link update}'s allowed fields because reassignment is a distinct lifecycle event, not a field edit. */
   moveToProject(projectId: ProjectId, key: string): Task {
     return new Task({ ...this.props, projectId, key, updatedAt: new Date() });
   }
