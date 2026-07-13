@@ -13,10 +13,11 @@ interface PreviouslyNotifiedAccount {
 }
 
 /**
+ * Storage for notification tracking.
  * In-memory storage for notification tracking.
  * In production, this would be persisted to a database.
  */
-class NotificationStorage {
+export class NotificationStorage {
   private notifications = new Map<string, PreviouslyNotifiedAccount>();
 
   /**
