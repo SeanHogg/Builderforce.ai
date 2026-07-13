@@ -28,12 +28,14 @@ export interface SlideOutPanelProps {
 const overlayStyle: React.CSSProperties = {
   position: 'fixed',
   inset: 0,
-  zIndex: 10000,
+  zIndex: 9997, /* Above normal content, below mobile nav (9998) */
 };
 
-// Add style to ensure panel appears above fixed footer
+// Drawer z-index hierarchy:
+// - Overlay: 9997 (above content, below mobile nav (9998) and debugger (9998))
+// - Drawer: 9999 (above overlay, below mobile nav (9998) - refined for correct stacking)
 const drawerStyle: React.CSSProperties = {
-  zIndex: 10001,
+  zIndex: 9999,
 };
 
 export function SlideOutPanel({
