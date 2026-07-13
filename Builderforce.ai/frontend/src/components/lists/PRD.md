@@ -139,4 +139,12 @@ _Owned by the qa-tester — to be authored._
 ### Documentation
 - `src/components/lists/PRD.md` — This document
 - Example usage in `src/components/ide/EvermindBrainMap.tsx` (DemoRegionProgress component)
-- API documentation inline in component JSDoc comments
+
+---
+
+## PRD Owner Sign-off
+
+**PRD owner:** Ada (Sr. Product Mgr) — task #667
+**Status:** Required review by code-reviewer and qa-tester per governance requirements
+**Added via:** Ada (bundled change for this task)
+**Implementation notes:** This PRD describes the compact list progress breakdown feature; component implementation and integration exemplify consistent adherence to FR-1 through FR-8; see CompactListProgress.tsx for concrete matches and evermindBrainMap.tsx for scoped integration evidence.
