@@ -2502,6 +2502,13 @@ export interface ProviderKeySummary {
    *  `null` = unset (falls back to catalog-tier ordering). */
   priority: number | null;
 }
+export interface ProviderDiagnostic {
+  provider: LlmProvider;
+  configured: boolean;
+  usable: boolean;
+  status: 'ready' | 'not_connected' | 'revoked' | 'expired' | 'undecryptable' | 'unavailable';
+  usage: { periodDays: number; requests: number; tokens: number; lastUsedAt: string | null };
+}
 
 export const providerKeysApi = {
   /** Configured providers + how each authenticates (no secrets returned). */
@@ -2516,6 +2523,12 @@ export const providerKeysApi = {
 
   remove: (provider: LlmProvider): Promise<{ ok: true }> =>
     request<{ ok: true }>(`/llm/provider-keys/${provider}`, { method: 'DELETE' }),
+
+  status: (provider: LlmProvider): Promise<ProviderDiagnostic> =>
+    request<ProviderDiagnostic>(`/llm/provider-keys/${provider}/status`),
+
+  test: (provider: LlmProvider): Promise<{ ok: boolean; status: string; model?: string; testedAt?: string }> =>
+    request<{ ok: boolean; status: string; model?: string; testedAt?: string }>(`/llm/provider-keys/${provider}/test`, { method: 'POST' }),
 
   /** Set the BYO precedence — the ordered provider list (most-preferred first) the
    *  auto-select cloud pin leads its connected flagships by (e.g. Meta first). */
@@ -2534,10 +2547,10 @@ export const providerKeysApi = {
 
   /** Finish connecting a Claude subscription with the `code#state` the user
    *  pasted from Claude.ai's consent page. */
-  oauthComplete: (provider: LlmProvider, code: string): Promise<{ ok: true; provider: LlmProvider; authType: ProviderAuthType }> =>
+  oauthComplete: (provider: LlmProvider, code: string, state?: string): Promise<{ ok: true; provider: LlmProvider; authType: ProviderAuthType }> =>
     request<{ ok: true; provider: LlmProvider; authType: ProviderAuthType }>(
       `/llm/provider-keys/${provider}/oauth/complete`,
-      { method: 'POST', body: JSON.stringify({ code }) },
+      { method: 'POST', body: JSON.stringify({ code, ...(state ? { state } : {}) }) },
     ),
 };
 

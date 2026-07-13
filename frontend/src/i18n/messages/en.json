@@ -7672,8 +7672,8 @@
       "xai": {
         "blurb": "Connect an eligible SuperGrok subscription or paste an xAI API key to run Grok models on your own account.",
         "subscription": "SuperGrok subscription",
-        "pastePrompt": "After approving access, copy the full <code>http://127.0.0.1:56121/callback?code=…&state=…</code> URL from the browser address bar and paste it below.",
-        "pastePlaceholder": "Paste the full xAI redirect URL…"
+        "pastePrompt": "After approving access, copy the code shown on the xAI page and paste it below.",
+        "pastePlaceholder": "Paste the xAI sign-in code…"
       }
     }
   },
