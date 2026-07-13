@@ -25,17 +25,17 @@ export interface SlideOutPanelProps {
   width?: string;
 }
 
+// Override inline styles on drawer for correct z-index: overlay 9997, drawer 9998
+// Consistent with globals.css: overlay 9999 is being replaced.
 const overlayStyle: React.CSSProperties = {
   position: 'fixed',
   inset: 0,
-  zIndex: 9997, /* Above normal content, below mobile nav (9998) */
+  zIndex: 9997, /* Above content, below mobile nav (9998) and debugger (9998) */
 };
 
-// Drawer z-index hierarchy:
-// - Overlay: 9997 (above content, below mobile nav (9998) and debugger (9998))
-// - Drawer: 9999 (above overlay, below mobile nav (9998) - refined for correct stacking)
+// Drawer z-index: must be below mobile nav/sidebar so buttons/inputs remain accessible
 const drawerStyle: React.CSSProperties = {
-  zIndex: 9999,
+  zIndex: 9998,
 };
 
 export function SlideOutPanel({
