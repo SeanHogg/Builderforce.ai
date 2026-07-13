@@ -17,7 +17,7 @@ This directory contains the ratified JSON schema and documentation for the **Bas
 | [`basis-payload.schema.json`](basis-payload.schema.json) | JSON Schema (Draft 2020-12) contract — validates all payloads. |
 | [`basis-payload.md`](basis-payload.md) | Human-readable reference and usage guide. |
 | [`CHANGELOG.md`](CHANGELOG.md) | Version history (v1.0.0 ratified). |
-| [`validate.js`](validate.js) | Validation harness (requires `ajv@^8`; run `cd spec/basis-payload && npm install ajv@^8 && node validate.js`). |
+| [`validate.js`](validate.js) | Validation harness (requires `ajv@^8` — run `cd spec/basis-payload && npm install ajv@^8 && node validate.js`). |
 
 ---
 
