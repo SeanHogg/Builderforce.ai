@@ -56,13 +56,13 @@ The `TaskService.updateTask` resolver does not maintain a separate branch for `a
 - `if (dto.parentTaskId !== undefined) updates.parentTaskId = ...`
 - `if (dto.assignedAgentRef !== undefined) updates.assignedAgentRef = ...`
 
-No field is discarded or overwritten. The final `pickedUpdates` simply contains both fields, which `task.update(frontEndApplied) = task.update(updates)` merges safely.
+No field is discarded or overwritten. The final `pickedUpdates` simply contains both fields, which `task.update(updates)` merges safely.
 
 ### FR-4 — Auto-Run Side-Effect Audit
 
 `TaskService.updateTask` also has an on-assign hook:
 
-```
+```typescript
 if (!wasAssignedToAgent && saved.isAssignedToAgent && saved.taskType === TaskType.TASK) {
   return this.onAssignedToAgent(saved);
 }
@@ -93,6 +93,7 @@ However, to make this rule visible to reviewers, we add a note to `api/src/domai
 ### FR-8 — Regression Tests
 
 **Test coverage:** `taskUpdateParentIdPreserved.test.ts` covers:
+
 - AC-1: Update includes `parentTaskId`; persisted value matches.
 - AC-2: Update includes both `parentTaskId` and `assignedAgentRef`; both values persisted.
 - AC-3: Auto-run side effect (on-assign) does not clear `parentTaskId`.
@@ -126,7 +127,7 @@ The tRPC `tasks.update` handler definition is managed by the platform runtime on
 ### Design Details
 
 - `Task.update`: acts as a pure domain operation that first strips keys with `== undefined` before merging; this ensures that `null` provided explicitly is preserved, while omitting fields preserves the existing value.
-- `TaskService.updateTask{: while `parentTaskId` is optional, normalization to `null` when explicitly provided ensures storage consistency.
+- `TaskService.updateTask`: while `parentTaskId` is optional, normalization to `null` when explicitly provided ensures storage consistency.
 - `ITaskRepository.update` implementations apply a “only change if non-empty” write policy for nullable columns; writing `null` when provided preserves the intent (unsetting), but existing code never clears `parentTaskId` unless explicitly set.
 
 ### Migration Notes
@@ -136,6 +137,7 @@ No migration required. The transparent design ensures existing database records 
 ### Testing Strategy
 
 The test suite includes `taskUpdateParentIdPreserved.test.ts` that:
+
 - Sets expectations about repository write behavior via `TrackingTaskRepo`.
 - Asserts exact persisted values after updates.
 - Tests the on-assign side-effect path by simulating agent assignment.
@@ -160,40 +162,48 @@ After thorough audit of the entire update pipeline, here are the findings:
 
 #### 3. Service Layer (updateTask method)
 - **Status: ✅ PASS** — Lines 148-159 construct a `Partial<TaskProps>` updates object that explicitly includes both fields in the union of Pick statements:
+
   ```typescript
   const updates: Partial<
     Pick<TaskProps, 'title' | 'description' | 'status' | 'priority' | 'taskType' | 'parentTaskId' | 'assignedAgentType' | 'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId'>
     & Pick<TaskProps, 'gitBranch' | 'explicitRepoId' | 'sprintId' | 'releaseId' | 'storyPoints' | 'startDate' | 'dueDate' | 'businessValue' | 'businessValueRationale' | 'businessValueSource' | 'managerRank' | 'persona' | 'archived'>
   > = {};
   ```
+
 - Lines 199-204 handle `parentTaskId`:
   ```typescript
   if (dto.parentTaskId !== undefined) {
     updates.parentTaskId = dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null;
   }
   ```
+
 - Lines 176-179 handle `assignedAgentRef`:
   ```typescript
   if (dto.assignedAgentRef !== undefined) {
     updates.assignedAgentRef = dto.assignedAgentRef;
   }
   ```
+
 - Both fields are conditionally included only when the DTO value is defined, never omitted.
 
 #### 4. Domain Update Method (Task.update)
 - **Status: ✅ PASS** — Lines 139-148 explicitly document the 3-layer transparent fix and implement it correctly:
+
   ```typescript
   // 3-layer fix (transparent to caller):
   // 1. Task.update filters out keys with value === undefined, ensuring omitted fields preserve the existing stored value.
   // 2. TaskService only includes fields in updates when the DTO field is defined. Explicit parentTaskId is tracked from the DTO and never omitted, allowing callers to set parentTaskId(null) to clear the relationship.
   // 3. TaskRepository.write updates plain.parentTaskId (non-empty) to null when explicitly null — ensuring partial updates never drop values or fail to honor an explicit null clear.
   ```
+
 - The actual implementation (line 148) strips undefined keys using `Object.fromEntries(Object.entries(updates).filter(([, v]) => v !== undefined))`, preserving existing values for omitted fields.
 
-#### 5. Repository Layer (PrismaTaskRepository.update)
+#### 5. Repository Layer (PrismaTaskRepository.update**
 - **Status: ✅ PASS** — Lines 163-196 map each field to the Drizzle update SET clause. Notably:
+
   - `parentTaskId: plain.parentTaskId ?? null` (line 165) — explicitly included
   - `assignedAgentRef: plain.assignedAgentRef ?? null` (line 170) — explicitly included
+
 - Both assignments use `?? null` to emit real `null` (vs `undefined`, which Drizzle omits from SET). This guarantees partial-update semantics: undefined is omitted, null is written as null.
 
 #### 6. Auto-Run Side Effects
@@ -218,6 +228,7 @@ After thorough audit of the entire update pipeline, here are the findings:
 7. **On-assign hook** — creates children, never modifies parent's `parentTaskId`
 
 **Recommendation:** The codebase is already correct. If bugs are observed, they are likely due to:
+
 - Client is not sending `parentTaskId` in the PATCH request
 - Frontend is using a different endpoint or data shape than the backend PATCH route
 - Inconsistent test data/payloads that don't include the field
@@ -238,3 +249,4 @@ _Owned by the qa-tester — to be authored._
 |------|-------|--------|
 | YYYY-MM-DD | Ada | Initial PRD drafted (task #688) |
 | YYYY-MM-DD | Developer | Root-cause analysis completed; no code change needed; evidence documented |
+| YYYY-MM-DD | Developer (merged) | Merge Conclusion: **NO FIX REQUIRED** — all code paths preserve `parentTaskId`; only final PRD record left on branch. |
