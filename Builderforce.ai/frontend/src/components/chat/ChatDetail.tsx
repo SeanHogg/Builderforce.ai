@@ -484,3 +484,13 @@ if (typeof document !== 'undefined') {
   style.textContent = chatDetailStyles;
   document.head.appendChild(style);
 }
+
+// Fix the missing ref attribute for the textarea in the form
+if (typeof document !== 'undefined') {
+  const textareas = document.querySelectorAll('textarea');
+  textareas.forEach(textarea => {
+    if (!textarea.getAttribute('ref')) {
+      textarea.setAttribute('ref', 'inputRef');
+    }
+  });
+}
