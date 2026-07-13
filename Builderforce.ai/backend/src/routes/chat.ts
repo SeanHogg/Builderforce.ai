@@ -118,16 +118,27 @@ export async function POST_SEND(request: NextRequest) {
 
     const result = await sendMessageToChat(chatId, userId || 'current-user', role || 'user', content);
 
-    // Check if this is the first user message - if so, need to generate title
-    // In a real app, we'd query the messages backend, but for now,
-    // we return a flag indicating title generation may be needed
-    const isNewChat = role === 'user';
+    // Check if this is a new chat without a title - auto-generate if so
+    // FR1.5: If no clear topic, use sensible default title
+    const chat = await getChatById(chatId);
+    if (chat && (!chat.title || chat.title.trim().length === 0)) {
+      const messages = await getMessagesByChatId(chatId);
+      const autoTitle = await autoGenerateTitleFromMessages(messages, userId);
 
-    // Return both message, updated chat, and flag for potential title generation
+      if (autoTitle && autoTitle !== 'yyyy-MM-dd') {
+        const updatedChat = await updateChatTitleRecord(chatId, autoTitle);
+        return Response.json({
+          message: result.message,
+          chat: updatedChat,
+          isNewTitle: true
+        });
+      }
+    }
+
+    // Return both message and updated chat
     return Response.json({
       message: result.message,
-      chat: result.chat,
-      isNewChat: isNewChat
+      chat: result.chat
     });
   } catch (error: any) {
     console.error('Error sending message:', error);
