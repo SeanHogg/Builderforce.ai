@@ -16,19 +16,27 @@ import type { BrainChat } from './types';
 export const DEFAULT_CHAT_TITLE = 'New chat';
 
 /**
+ * Max character length for an auto-generated title (AC3: under 50 characters so the
+ * chat list stays readable). Truncation lands on a word boundary when possible.
+ */
+export const MAX_CHAT_TITLE_LENGTH = 50;
+
+/**
  * Derive a short, human chat title from the first user message — "what the chat is
  * about" — so a conversation stops showing as "New chat" the moment it starts. Pure and
  * LLM-free (no cost, instant, deterministic): first non-empty line, whitespace
- * collapsed, trimmed to ~60 chars on a word boundary. Returns '' when there's nothing
- * usable (so the caller leaves the placeholder in place).
+ * collapsed, trimmed to {@link MAX_CHAT_TITLE_LENGTH} chars on a word boundary. Returns
+ * '' when there's nothing usable (so the caller leaves the placeholder in place).
  */
 export function deriveChatTitle(text: string): string {
   const firstLine = (text.split('\n').find((l) => l.trim()) ?? '').replace(/\s+/g, ' ').trim();
   if (!firstLine) return '';
-  if (firstLine.length <= 60) return firstLine;
-  const cut = firstLine.slice(0, 60);
+  if (firstLine.length <= MAX_CHAT_TITLE_LENGTH) return firstLine;
+  const cut = firstLine.slice(0, MAX_CHAT_TITLE_LENGTH);
   const lastSpace = cut.lastIndexOf(' ');
-  return `${(lastSpace > 30 ? cut.slice(0, lastSpace) : cut).trim()}…`;
+  // Prefer a word boundary when it still leaves a meaningful prefix (~half the budget).
+  const minKeep = Math.floor(MAX_CHAT_TITLE_LENGTH / 2);
+  return `${(lastSpace > minKeep ? cut.slice(0, lastSpace) : cut).trim()}…`;
 }
 
 export interface UseBrainChatsOptions {
