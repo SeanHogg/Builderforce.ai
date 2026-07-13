@@ -173,3 +173,25 @@ export function computeProgressBreakdown(
     prState: hasPr ? "open" : "not_open",
   };
 }
+
+/** -------------------------------------------------------------------------- */
+/** Test Helpers (finalizeProgressBreakdown for testing)                       */
+/** -------------------------------------------------------------------------- */
+
+/**
+ * Finalizes a progress breakdown object with a timestamp.
+ * Useful for test fixtures and ensuring lastUpdated is properly set.
+ *
+ * @param breakdown - The progress breakdown to finalize.
+ * @param lastUpdated - The timestamp to set as lastUpdated (optional).
+ * @returns The breakdown with lastUpdated set to an integer timestamp.
+ */
+export function finalizeProgressBreakdown(
+  breakdown: ProgressBreakdown,
+  lastUpdated?: Date
+): ProgressBreakdown {
+  return {
+    ...breakdown,
+    lastUpdated: lastUpdated ? lastUpdated.getTime() : Date.now(),
+  };
+}
