@@ -84,21 +84,21 @@
       "description": "Analyzed source code commit to identify refactoring patterns",
       "evidence_ids": ["evidence_002"],
       "claim_ids": ["claim_002"],
-      "inference_type": "analytical"
+      "inference_type": "inductive"
     },
     {
       "step": 2,
       "description": "Ran complexity analysis on modified branches",
       "evidence_ids": ["evidence_001"],
       "claim_ids": ["claim_001"],
-      "inference_type": "computational"
+      "inference_type": "deductive"
     },
     {
       "step": 3,
       "description": "Cross-referenced with recent CI runs to confirm test results",
       "evidence_ids": ["evidence_003"],
       "claim_ids": ["claim_003"],
-      "inference_type": "deductive"
+      "inference_type": "lookup"
     }
   ],
   "uncertainty": {
