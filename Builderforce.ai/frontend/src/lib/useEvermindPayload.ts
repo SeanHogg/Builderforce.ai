@@ -17,12 +17,9 @@ import {
   PayloadDeliveryError, 
   ValidatedPayload,
   AgentContext,
-  EvermindEvent,
   EventPayloadDelivery,
   EventPayloadValidation,
-  EventAgentContext,
-  EVERMIND_POLL_INTERVAL_MS,
-  EVERMIND_CLIENT_ERROR_LOAD_DELAY_MS,
+  EVENMIND_POLL_INTERVAL_MS,
 } from './types';
 
 // === Hook Props ===
@@ -50,7 +47,7 @@ export interface UseEvermindPayloadReturn {
 export function useEvermindPayload(props: UseEvermindPayloadProps): UseEvermindPayloadReturn {
   const { 
     projectId, 
-    refetchIntervalMs = EVERMIND_POLL_INTERVAL_MS, 
+    refetchIntervalMs = 10000, // 10s default
     enabled = true 
   } = props;
 
@@ -60,28 +57,23 @@ export function useEvermindPayload(props: UseEvermindPayloadProps): UseEvermindP
   
   // Validity state tracks whether the payload passed validation
   const [validity, setValidity] = useState<'valid' | 'invalid' | 'unknown'>('unknown');
-
+  
   // Refs to track changes and prevent double-fetches
   const lastPollTriggeredAt = useRef(0);
   const wasLoadingRef = useRef(false);
+  const lastValidSnapshotRef = useRef<EvermindPayloadSnapshot | null>(null);
 
-  // Import here to avoid circular dependency with events
-  const { loadEvermindPayload, agentContextFromPayload } = (() => {
-    // Dynamic import to avoid circular dependencies
-    try {
-      const deliveryModule = require('./evermindPayloadDelivery');
-      return {
-        loadEvermindPayload: deliveryModule.loadEvermindPayload,
-        agentContextFromPayload: deliveryModule.agentContextFromPayload,
-      };
-    } catch (e) {
-      console.error('[useEvermindPayload] Failed to load delivery module:', e);
-      return {
-        loadEvermindPayload: () => Promise.reject(new Error('Module not loaded')),
-        agentContextFromPayload: () => null,
-      };
-    }
-  })();
+  // Import here to avoid circular dependency
+  let loadEvermindPayload, agentContextFromPayload;
+  try {
+    const deliveryModule = require('./evermindPayloadDelivery');
+    loadEvermindPayload = deliveryModule.loadEvermindPayload;
+    agentContextFromPayload = deliveryModule.agentContextFromPayload;
+  } catch (e) {
+    console.error('[useEvermindPayload] Failed to load delivery module:', e);
+    loadEvermindPayload = () => Promise.reject(new Error('Module not loaded'));
+    agentContextFromPayload = () => null;
+  }
 
   // Core loading function
   const fetchPayload = useCallback(async (): Promise<void> => {
@@ -105,10 +97,10 @@ export function useEvermindPayload(props: UseEvermindPayloadProps): UseEvermindP
         setSnapshot(result.snapshot);
         setError(null);
         setValidity('valid');
+        lastValidSnapshotRef.current = result.snapshot;
         
         // Log delivery success
-        const deliveryEvent: EventPayloadDelivery = {
-          type: 'payload_delivery',
+        console.log('[useEvermindPayload] Payload delivery successful', {
           timestamp: new Date().toISOString(),
           eventId: `ev-${now}`,
           projectId,
@@ -116,8 +108,7 @@ export function useEvermindPayload(props: UseEvermindPayloadProps): UseEvermindP
           status: 'success',
           payloadVersion: result.snapshot.payloadVersion,
           lastWinningAt: result.snapshot.lastWinningAt
-        };
-        console.log('[useEvermindPayload]', deliveryEvent);
+        });
         
         wasLoadingRef.current = false;
         return;
@@ -131,12 +122,12 @@ export function useEvermindPayload(props: UseEvermindPayloadProps): UseEvermindP
         
         // In board use case, we show last valid snapshot if available
         // In agent use case, we reject to halt reasoning (FR-1.3, FR-4.3)
-        if (snapshot) {
+        if (lastValidSnapshotRef.current) {
+          setSnapshot(lastValidSnapshotRef.current);
           setError(validationError);
           setValidity('invalid');
           
-          const validationEvent: EventPayloadValidation = {
-            type: 'payload_validation',
+          console.log('[useEvermindPayload] Payload validation failed', {
             timestamp: new Date().toISOString(),
             eventId: `ev-${Date.now()}`,
             projectId,
@@ -144,9 +135,8 @@ export function useEvermindPayload(props: UseEvermindPayloadProps): UseEvermindP
             status: 'failed',
             level: 'warning',
             payloadVersion: result.snapshot.payloadVersion,
-            errors: result.errors,
-          };
-          console.log('[useEvermindPayload]', validationEvent);
+            errors: result.errors
+          });
         }
         
         // Agent consumption: halt reasoning if payload is invalid
@@ -164,8 +154,8 @@ export function useEvermindPayload(props: UseEvermindPayloadProps): UseEvermindP
       setValidity('unknown');
       wasLoadingRef.current = false;
       
-      const validationEvent: EventPayloadValidation = {
-        type: 'payload_validation',
+      const lastValidSnapshot = lastValidSnapshotRef.current;
+      console.log('[useEvermindPayload] Payload fetch error', {
         timestamp: new Date().toISOString(),
         eventId: `ev-${Date.now()}`,
         projectId,
@@ -173,13 +163,12 @@ export function useEvermindPayload(props: UseEvermindPayloadProps): UseEvermindP
         status: 'failed',
         level: 'error',
         payloadVersion: lastValidSnapshot?.payloadVersion || 'unknown',
-        errors: [{ message: payloadError.message }]
-      };
-      console.log('[useEvermindPayload]', validationEvent);
+        error: payloadError.message
+      });
     }
     
     setLoading(false);
-  }, [enabled, projectId, lastValidSnapshot]);
+  }, [enabled, projectId]);
 
   // Initial load
   useEffect(() => {
@@ -190,9 +179,8 @@ export function useEvermindPayload(props: UseEvermindPayloadProps): UseEvermindP
   useEffect(() => {
     if (!enabled) return;
 
-    // Debounce polling around client errors
     const intervalMs = error && error.severity === 'validation' 
-      ? EVERMIND_CLIENT_ERROR_LOAD_DELAY_MS 
+      ? 500 // 500ms debounce for validation errors
       : refetchIntervalMs;
 
     const timer = setInterval(fetchPayload, intervalMs);
