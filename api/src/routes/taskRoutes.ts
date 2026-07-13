@@ -62,31 +62,49 @@ export function taskRoutes(taskRepo: ITaskRepository): Router {
 async function getTask(req: Request, res: Response): Promise<void> {
   const { id } = req.params;
 
-  // Retrieve the task from the repository
-  const task = await taskRepo.getById(id);
+  try {
+    // Retrieve the task from the repository
+    const task = await taskRepo.getById(id);
 
-  // Compute the progress breakdown using the service layer
-  const progress = TaskService.getTaskWithProgress(task);
+    // Compute the progress breakdown using the service layer
+    const progress = TaskService.getTaskWithProgress(task);
 
-  // Map to DTO for serialization
-  const dto: TaskDTO = {
-    id: task.id,
-    title: task.title,
-    status: task.status,
-    progress,
-    parentTaskId: task.parentTaskId,
-    createdAt: task.createdAt,
-    updatedAt: task.updatedAt,
-  };
+    // Map to DTO for serialization
+    const dto: TaskDTO = {
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      progress,
+      parentTaskId: task.parentTaskId,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+    };
 
-  // Handle 404 for non-existent tasks
-  if (task === undefined) {
-    res.status(404).json({
-      error: 'not_found',
-      message: `Task ${id} not found`,
+    res.status(200).json(dto);
+  } catch (error) {
+    // Handle invariant violations (FR-6, AC-7)
+    if (error instanceof TaskProgressInvariantError) {
+      res.status(500).json({
+        error: 'progress_invariant_violation',
+        message: `Server side data inconsistency detected: ${error.message}`,
+        detail: error.context,
+      });
+      return;
+    }
+
+    // Handle 404 for non-existent tasks
+    if (error instanceof TaskNotFoundError) {
+      res.status(404).json({
+        error: 'not_found',
+        message: `Task ${id} not found`,
+      });
+      return;
+    }
+
+    // Handle any other unexpected errors
+    res.status(500).json({
+      error: 'internal_error',
+      message: 'An unexpected error occurred while processing the task',
     });
-    return;
   }
-
-  res.status(200).json(dto);
 }
