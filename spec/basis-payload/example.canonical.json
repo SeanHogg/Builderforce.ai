@@ -87,7 +87,7 @@
       "title": "Build 2025-10-13-nightly: Critical Paths",
       "excerpt": "Critical paths: 87.4%; High-risk paths: 5.9%; Overall: 91.2%",
       "retrieved_at": "2025-10-14T11:50:00Z",
-      "weight": 1.0,
+      "weight": 0.92,
       "provenance": {
         "source_system": "builderforce.ai (ci-tab)",
         "source_version": "q4-2025",
