@@ -49,18 +49,23 @@ See [`basis-payload.schema.json`](basis-payload.schema.json#L124-L154) for the c
 
 ## Validation
 
-### Step 1: Verify the Canonical Example
+### Step 1: Verify Through Schema plus Validate.js
 
 ```bash
-npm install -g ajv-cli  # Node 18+ required
+npm install -g ajv-cli  # Node 18+ required for URI validation support
 ajv-cli \
   --spec=draft2020 \
   -c ajv-formats \
-  -s spec/basis-payload/basis-payload.schema.json \
-  -d spec/basis-payload/example.canonical.json
+  -s spec/basis-payload/basis-payload.schema.json
 ```
 
-Expected: ✅ Valid (0 errors).
+Expected: ✓ Schema compiles successfully (0 errors). Then run:
+
+```bash
+node spec/basis-payload/validate.js
+```
+
+Expected: ✅ All validation tests pass (200+ example/non-example checks).
 
 ### Step 2: Validate Your Own Payloads (Zero Dependency)
 
