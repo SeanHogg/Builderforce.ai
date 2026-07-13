@@ -19,6 +19,17 @@ export interface CreateDecisionParams {
   rationale?: string;
 }
 
+export interface CreateDecisionWithItemRationale {
+  recKey: string;
+  decision: DecisionType;
+  decidedBy: string;
+  rationale?: string;
+}
+
+export interface CreateBulkDecisionsWithItemRationale {
+  decisions: CreateDecisionWithItemRationale[];
+}
+
 export interface WorkflowExecutionResult {
   executionId: number;
   workflowId: number;
