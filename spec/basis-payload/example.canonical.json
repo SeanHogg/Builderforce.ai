@@ -1,156 +1,220 @@
 {
-  "$schema": "https://builderforce.ai/schemas/basis-payload-v1.schema.json",
   "schema_version": "1.0.0",
-  "basis_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "created_at": "2025-04-10T10:30:00Z",
-  "agent_id": "agent-finance-unified-v2",
-  "session_id": "session-abc-2025q1",
+  "basis_id": "85f2c8b4-1a6e-4b2d-9a7f-5d8e0f3c9b2a",
+  "created_at": "2025-04-10T16:35:22.123Z",
+  "agent_id": "finance-unified-planner-v2",
+  "session_id": "finance-session-fgk841",
   "parent_basis_id": null,
   "claims": [
     {
-      "claim_id": "c1a2b3c4-d5e6-f789-a01b-2c3d4e5f6789",
-      "text": "Revenue is projected to grow 15% YoY in Q1 2025 based on historical trend analysis.",
+      "claim_id": "claim-1",
+      "text": "Q1 2025 revenue will exceed expectations by 12.5% YoY, driven by growth in core product sales.",
       "confidence": 0.87,
       "confidence_method": "empirical",
-      "tags": ["revenue", "projection", "yoy"],
+      "tags": [
+        "revenue",
+        "forecast",
+        "q1-2025"
+      ],
       "status": "asserted"
     },
     {
-      "claim_id": "c2b3c4d5-e6f7-8901-bc2d-3e4f5a6b7c8d",
-      "text": "Marketing spend has a measured correlation coefficient of 0.42 with revenue growth.",
-      "confidence": 0.72,
+      "claim_id": "claim-2",
+      "text": "Upstream software licensing revenue will increase by 8.3% as customer renewals proceed on schedule.",
+      "confidence": 0.81,
+      "confidence_method": "bayesian",
+      "tags": [
+        "licensing",
+        "renewals"
+      ],
+      "status": "asserted"
+    },
+    {
+      "claim_id": "claim-3",
+      "text": "Seasonal Q1 impact is anticipated to be mild (±2%), consistent with historical patterns.",
+      "confidence": 0.74,
       "confidence_method": "heuristic",
-      "tags": ["marketing", "correlation"],
       "status": "asserted"
     },
     {
-      "claim_id": "c3c4d5e6-f7a8-9012-cd3e-4f5a6b7c8d9e",
-      "text": "The external economic sanctions scenario presents a downside risk of 8% to the projection.",
-      "confidence": 0.63,
-      "confidence_method": "llm-self-report",
-      "tags": ["risk", "external", "sanctions"],
-      "status": "asserted"
+      "claim_id": "claim-4",
+      "text": "Target price for new subscription tiers is expected to cross the $149/month adoption threshold within 12 months.",
+      "confidence": 0.68,
+      "confidence_method": "estimation",
+      "status": "ongoing"
     }
   ],
   "evidence": [
     {
-      "evidence_id": "e1a2b3c4-d5e6-f789-a01b-2c3d4e5f6789",
-      "claim_ids": ["c1a2b3c4-d5e6-f789-a01b-2c3d4e5f6789"],
+      "evidence_id": "evidence-1",
+      "claim_ids": [
+        "claim-1"
+      ],
       "type": "database_record",
-      "uri": "https://api.finance.example.com/reports/q1-2025-forecast",
-      "title": "Q1 2025 Revenue Forecast (Financial Core)",
-      "excerpt": "Revenue projected at $12.4M, up 15% from Q1 2024 actual $10.8M.",
-      "retrieved_at": "2025-04-10T09:45:00Z",
+      "uri": "https://api.finance-db.com/reports/2025q1_forecast",
+      "title": "Q1 2025 Revenue Forecast - Corporate",
+      "excerpt": "Predictive model shows core product revenue growth of 12.8% YoY, with seasonal variance ±1.5%.",
+      "retrieved_at": "2025-04-10T16:10:00Z",
       "weight": 0.92,
       "provenance": {
         "source_system": "Financial Core",
         "source_version": "2.4.1",
-        "checksum": "a0b1c2d3e4f567890abcdef0123456789abcdef0123456789abcdef0123456789"
+        "checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
       }
     },
     {
-      "evidence_id": "e2b3c4d5-e6f7-8901-bc2d-3e4f5a6b7c8d",
-      "claim_ids": ["c2b3c4d5-e6f7-8901-bc2d-3e4f5a6b7c8d", "c1a2b3c4-d5e6-f789-a01b-2c3d4e5f6789"],
+      "evidence_id": "evidence-2",
+      "claim_ids": [
+        "claim-2"
+      ],
+      "type": "database_record",
+      "uri": "https://api.finance-db.com/reports/2025q1_licensing",
+      "title": "Licensing Renewals and Cohorts as of 2025-03-31",
+      "excerpt": "Renewal rate of 94.2% across active enterprise accounts; historical volatility within ±0.7%.",
+      "retrieved_at": "2025-04-10T16:12:00Z",
+      "weight": 0.88,
+      "provenance": {
+        "source_system": "Revenue Management",
+        "source_version": "1.8.2",
+        "checksum": "a3af9c18148d9c6e411237421c6ed084da6df2e77fce9d88e24e4af7c9c0685a"
+      }
+    },
+    {
+      "evidence_id": "evidence-3",
+      "claim_ids": [
+        "claim-3"
+      ],
       "type": "computed",
-      "uri": null,
-      "title": "Marketing Spend Correlation Analysis",
-      "excerpt": "Pearson correlation 0.42 (p<0.05) between quarterly marketing spend delta and revenue delta, 8 quarters of data.",
-      "retrieved_at": "2025-04-10T10:00:00Z",
-      "weight": 0.75,
+      "uri": "https://api.finance-ops.com/seasonal-histories",
+      "title": "Q1 Seasonal Variance History (2018-2024)",
+      "excerpt": "Average Q1 variance ±1.9% with 68% of months falling within ±2.5%.",
+      "retrieved_at": "2025-04-10T16:15:00Z",
+      "weight": 0.78,
       "provenance": {
-        "source_system": "Analytics Engine",
+        "source_system": "Revenue Analytics",
         "source_version": "3.1.0",
-        "checksum": "b1c2d3e4f567890abcdef0123456789abcdef0123456789abcdef0123456789a0"
+        "checksum": "6b5c9f4781be3f5e11267f3d79d7d8e3a5b6c29fefc78b4ce7f6e1e2e3e4ca5b"
       }
     },
     {
-      "evidence_id": "e3c4d5e6-f7a8-9012-cd3e-4f5a6b7c8d9e",
-      "claim_ids": ["c3c4d5e6-f7a8-9012-cd3e-4f5a6b7c8d9e"],
-      "type": "document",
-      "uri": "https://docs.example.com/risk/sanctions-impact-2025.pdf",
-      "title": "Geopolitical Risk Assessment 2025 - Sanctions Impact",
-      "excerpt": "Sanctions escalation scenario estimates -8% revenue impact across EMEA region.",
-      "retrieved_at": "2025-04-09T14:20:00Z",
-      "weight": 0.60,
+      "evidence_id": "evidence-4",
+      "claim_ids": [
+        "claim-4"
+      ],
+      "type": "human_input",
+      "uri": "https://agent-ops.yellow.page/cadence-thresholds",
+      "title": "Rising Tier Value Target: Adaptive Cadence (RFC-004)",
+      "excerpt": "Assumes adoption of $149/month tier will break 15% cross-sell within 12 months based on pilot 2024 Q4 acceleration.",
+      "retrieved_at": "2025-04-10T16:30:00Z",
+      "weight": 0.65,
       "provenance": {
-        "source_system": "Risk Document Store",
-        "source_version": "1.0.0",
-        "checksum": "c2d3e4f567890abcdef0123456789abcdef0123456789abcdef0123456789a0b1"
+        "source_system": "Product Planning",
+        "source_version": "2.1.0",
+        "checksum": "9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d"
       }
     }
   ],
   "reasoning_chain": [
     {
       "step": 1,
-      "description": "Query and validate 8-quarter historical revenue data from Financial Core.",
-      "evidence_ids": ["e1a2b3c4-d5e6-f789-a01b-2c3d4e5f6789"],
-      "claim_ids": ["c1a2b3c4-d5e6-f789-a01b-2c3d4e5f6789"],
+      "description": "Load historical revenue trend, seasonality, and renewal cohort data",
+      "evidence_ids": [
+        "evidence-1",
+        "evidence-2",
+        "evidence-3"
+      ],
+      "claim_ids": [
+        "claim-1",
+        "claim-2",
+        "claim-3"
+      ],
       "inference_type": "lookup"
     },
     {
       "step": 2,
-      "description": "Compute marketing-revenue correlation from Analytics Engine.",
-      "evidence_ids": ["e2b3c4d5-e6f7-8901-bc2d-3e4f5a6b7c8d"],
-      "claim_ids": ["c2b3c4d5-e6f7-8901-bc2d-3e4f5a6b7c8d", "c1a2b3c4-d5e6-f789-a01b-2c3d4e5f6789"],
+      "description": "Compile forecast components into monthly revenue distribution; apply seasonal variance ±1.9%",
+      "evidence_ids": [
+        "evidence-1"
+      ],
+      "claim_ids": [
+        "claim-1",
+        "claim-2"
+      ],
       "inference_type": "deductive"
     },
     {
       "step": 3,
-      "description": "Incorporate geopolitical risk from Risk Document Store.",
-      "evidence_ids": ["e3c4d5e6-f7a8-9012-cd3e-4f5a6b7c8d9e"],
-      "claim_ids": ["c3c4d5e6-f7a8-9012-cd3e-4f5a6b7c8d9e"],
-      "inference_type": "deductive"
+      "description": "Weight evidence components and aggregate into overall sales confidence score",
+      "evidence_ids": [
+        "evidence-1",
+        "evidence-2",
+        "evidence-3"
+      ],
+      "claim_ids": [
+        "claim-1"
+      ],
+      "inference_type": "inductive"
     },
     {
       "step": 4,
-      "description": "Synthesize all evidence and reasoning into final projection.",
-      "evidence_ids": ["e1a2b3c4-d5e6-f789-a01b-2c3d4e5f6789", "e2b3c4d5-e6f7-8901-bc2d-3e4f5a6b7c8d", "e3c4d5e6-f7a8-9012-cd3e-4f5a6b7c8d9e"],
-      "claim_ids": ["c1a2b3c4-d5e6-f789-a01b-2c3d4e5f6789", "c3c4d5e6-f7a8-9012-cd3e-4f5a6b7c8d9e"],
-      "inference_type": "abductive"
+      "description": "Infer adoption threshold across new subscription tiers based on pilot acceleration",
+      "evidence_ids": [
+        "evidence-4"
+      ],
+      "claim_ids": [
+        "claim-4"
+      ],
+      "inference_type": "analogical"
     }
   ],
   "uncertainty": {
     "overall_confidence": 0.81,
     "known_unknowns": [
-      "External economic sanctions scenario not yet fully modeled",
-      "Q1 2025 actuals will not be available until April 30, 2025"
+      "Potential regulatory changes affecting multi-sponsor license structures",
+      "Unreleased product features from Q2 roadmap that could accelerate upsell, but validation unavailable",
+      "Geographic demand variability not captured in current cohort model"
     ],
     "assumptions": [
-      "Marketing spend correlation remains stable for Q1 2025",
-      "No major currency fluctuations affecting revenue",
-      "Customer churn rate stays within historical bounds (< 3%)"
+      "Seasonal variance pattern will hold in 2025 Q1 (±1.9% estimate)",
+      "Renewal variance players remain stable at current contract renewal rates",
+      "No pricing restructuring or competitive shifts in agent licensing tiers in Q1 2025"
     ],
     "contradictions": [
       {
-        "claim_id_a": "c2b3c4d5-e6f7-8901-bc2d-3e4f5a6b7c8d",
-        "claim_id_b": "c3c4d5e6-f7a8-9012-cd3e-4f5a6b7c8d9e",
-        "description": "Marketing spend correlation (0.42) suggests growth is partially due to spend; sanctions scenario (-8%) contradicts upside projection from marketing alone."
+        "claim_id_a": "claim-1",
+        "claim_id_b": "claim-4"
       }
     ]
   },
   "context": {
-    "task_id": "task-finance-projection-2025q1",
-    "task_description": "Generate quarterly revenue projection basis for Q1 2025 board review",
+    "task_id": "task-basis-fgk841",
+    "task_description": "Create a foundation Q1 2025 revenue plan basis, including forecasts, dependencies, and uncertainty.",
     "model_id": "finance-unified-planner-v2",
     "model_version": "2.0.3",
     "tool_calls": [
       {
         "tool_name": "query_financial_db",
-        "input_summary": "SELECT revenue, marketing_spend, churn FROM q1_history WHERE year BETWEEN 2023 AND 2024",
-        "output_summary": "Loaded 24 monthly records across 2 years",
-        "called_at": "2025-04-10T09:45:00Z"
+        "input_summary": "SELECT revenue, period, variable FROM tbl_trends WHERE period LIKE '2025%' AND dimension = 'core_product'",
+        "output_summary": "Fetched 12 months of forecasted core product revenue timestamps aligned with業務 unit hierarchy",
+        "called_at": "2025-04-10T16:10:00Z"
       },
       {
-        "tool_name": "run_correlation_analysis",
-        "input_summary": "Compute Pearson correlation between marketing_spend_delta and revenue_delta on loaded dataset",
-        "output_summary": "r=0.42, p<0.05, 95%CI [0.12, 0.65]",
-        "called_at": "2025-04-10T09:50:00Z"
+        "tool_name": "query_financial_db",
+        "input_summary": "SELECT client_id, met_renewal_date FROM tbl_renewals WHERE met_renewal_date BETWEEN '2024-01-01' AND '2025-03-31'",
+        "output_summary": "Retrieved renewal cohort data for 847 active enterprise clients",
+        "called_at": "2025-04-10T16:11:00Z"
       },
       {
-        "tool_name": "retrieve_risk_documents",
-        "input_summary": "Search for documents tagged 'sanctions' AND 'revenue impact' with date >= 2025-01-01",
-        "output_summary": "Found 2 documents; top match is 'Geopolitical Risk Assessment 2025 - Sanctions Impact'",
-        "called_at": "2025-04-10T10:05:00Z"
+        "tool_name": "agent_query_tool",
+        "input_summary": "SELECT AVG(variance_pct) AS avg_variance FROM tbl_seasonal WHERE period IN (SELECT period FROM tbl_period WHERE qtr = 'Q1')",
+        "output_summary": "Computed Q1 average variance = ±1.9% for the 2018..2024 window",
+        "called_at": "2025-04-10T16:14:00Z"
+      },
+      {
+        "tool_name": "human_cadence_review",
+        "input_summary": "Confirm top-level confidence thresholds and currency unit for Q1 renewal uplift projection",
+        "output_summary": "User confirms 12.5% YoY lift baseline with confidence dw window ±2%",
+        "called_at": "2025-04-10T16:30:00Z"
       }
     ],
     "environment": "production"
@@ -158,12 +222,18 @@
   "extensions": {
     "com.builderforce.review": {
       "peer_review_status": "pending",
-      "reviewers": ["agent-audit", "user-finops"]
+      "reviewers": [
+        "agent-audit",
+        "user-finops"
+      ],
+      "review_comment": "Approved for board consumption pending final sign-off from platform governance."
     },
     "com.acme.risk": {
       "risk_exposure_score": 0.45,
-      "risk_category": "geopolitical",
-      "mitigation_plan": "hedge-20percent-options"
+      "risk_category": "revenue",
+      "mitigation_actions": [
+        "Monitor regulatory filings and adjust forecasts Q2 if changes materialize"
+      ]
     }
   }
 }
