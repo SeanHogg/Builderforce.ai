@@ -11,10 +11,10 @@
  * AccountEmailResolver port for separation of concerns.
  */
 
-import type { EmailNotifier, AccountEmailResolver, NotificationLogEntry } from "../transport/types.js";
+import type { EmailNotifier, AccountEmailResolver, NotificationLogEntry } from "../../src/transport/notification-domain-ports.js";
 import notificationStorage from "./notification-storage.js";
 
-// Re-export types from domain ports defined in agent-runtime/src/transport/types.ts
+// Re-export types from domain ports for backward compatibility
 export type { EmailNotifier, AccountEmailResolver, NotificationLogEntry };
 
 // Zod schema for configuring the notifier
