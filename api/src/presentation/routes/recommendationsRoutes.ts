@@ -21,6 +21,8 @@ import { scope } from './segmentTrackerRoutes';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { computeRecommendations, dismissRecommendation } from '../../application/insights/recommendationsEngine';
 import { computeSpaceMetrics } from '../../application/insights/spaceMetrics';
+import { createDecision, bulkCreateDecisions, getDecisionHistory, exportDecisionHistory } from '../../application/insights/recommendationDecisionService';
+import { recsVersionKey } from './recommendationsRoutes';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
