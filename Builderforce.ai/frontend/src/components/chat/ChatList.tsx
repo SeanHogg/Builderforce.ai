@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { chatApi, type Chat } from '@/lib/chatApi';
+import type { TitleEntry } from '@/lib/storage';
 
 interface ChatListProps {
   onSelectChat: (chatId: string) => void;
@@ -9,6 +10,8 @@ interface ChatListProps {
   userId: string;
   onChatsUpdated?: () => void;
 }
+
+const MOCK_USER_ID = 'user-123';
 
 export function ChatList({ onSelectChat, currentChatId, userId, onChatsUpdated }: ChatListProps) {
   const [chats, setChats] = useState<Chat[]>([]);
