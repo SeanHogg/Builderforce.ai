@@ -343,3 +343,122 @@ export function createChatRoutes(db: Db): Hono<HonoEnv> {
 
   return router;
 }
+
+// ----------------------------------------------------------------------
+// POST /api/brain/sessions/{target}/consolidate — merge given upstream sources into target
+// ----------------------------------------------------------------------
+router.post('/brain/sessions/:target/consolidate', authMiddleware as never, async (c) => {
+  const db = c.get('db');
+  const targetId = c.req.param('target');
+  if (!targetId || targetId.includes('/')) {
+    return c.json({ error: 'invalid targetId' }, 400);
+  }
+  const [targetRow] = await db
+    .select({ id: chatSessions.id, msgCount: chatSessions.msgCount })
+    .from(chatSessions)
+    .where(and(eq(chatSessions.id, Number(targetId)), eq(chatSessions.tenantId, c.get('tenantId'))));
+  if (!targetRow) {
+    return c.json({ error: 'target session not found' }, 404);
+  }
+
+  let payload: { sourceRefs: string[]; assignedUserId?: string; notes?: string };
+  try {
+    payload = await c.req.json();
+  } catch {
+    return c.json({ error: 'invalid json' }, 400);
+  }
+  if (!Array.isArray(payload.sourceRefs) || payload.sourceRefs.length === 0) {
+    return c.json({ error: 'sourceRefs is required and must be a non-empty array' }, 400);
+  }
+  if (payload.sourceRefs.length > 200) {
+    return c.json({ error: 'sourceRefs length must be ≤ 200' }, 400);
+  }
+
+  // Validate each source session exists
+  const sourceIds: number[] = [];
+  for (const ref of payload.sourceRefs) {
+    const [sourceRow] = await db
+      .select({ id: chatSessions.id })
+      .from(chatSessions)
+      .where(and(eq(chatSessions.sessionKey, ref), eq(chatSessions.tenantId, c.get('tenantId'))));
+    if (!sourceRow) {
+      return c.json({ error: `sourceRef not found: ${ref}` }, 404);
+    }
+    sourceIds.push(Number(sourceRow.id));
+  }
+
+  // T-SQL merge semantics: unique by (sequence, role, content, createdAt)
+  const upperCaseNormalized = (s: string) => s.trim().toUpperCase();
+  const lowerCaseTrimmed = (s: string) => s.trim().toLowerCase();
+
+  // Fetch target messages first
+  const [targetSession] = await db
+    .select({ id: chatSessions.id, lastMsgAt: chatSessions.lastMsgAt })
+    .from(chatSessions)
+    .where(eq(chatSessions.id, targetId));
+
+  const targetMessages = await db
+    .select({
+      sequence: chatMessages.sequence,
+      role: chatMessages.role,
+      content: chatMessages.content,
+      createdAt: chatMessages.createdAt,
+    })
+    .from(chatMessages)
+    .where(eq(chatMessages.sessionId, targetId))
+    .orderBy(chatMessages.sequence);
+
+  const existingContentKeys = new Set<string>();
+  for (const m of targetMessages) {
+    const k = `${m.sequence}:${m.createdAt}:${upperCaseNormalized(m.content)}`;
+    existingContentKeys.add(k);
+  }
+
+  let totalInserted = 0;
+  for (const sourceId of sourceIds) {
+    const sourceMessages = await db
+      .select({
+        sequence: chatMessages.sequence,
+        role: chatMessages.role,
+        content: chatMessages.content,
+        createdAt: chatMessages.createdAt,
+      })
+      .from(chatMessages)
+      .where(eq(chatMessages.sessionId, sourceId))
+      .orderBy(chatMessages.sequence);
+
+    for (const m of sourceMessages) {
+      const k = `${m.sequence}:${m.createdAt}:${upperCaseNormalized(m.content)}`;
+      // Validate strict uniqueness: NOT EXISTS matching (sequence, role, content, createdAt)
+      const normalizedContent = lowerCaseTrimmed(m.content);
+      if (!existingContentKeys.has(k)) {
+        await db.insert(chatMessages).values({
+          tenantId: c.get('tenantId'),
+          sessionId: targetId,
+          role: m.role,
+          content: m.content,
+          seq: m.sequence,
+        });
+        totalInserted++;
+        existingContentKeys.add(k);
+      }
+    }
+  }
+
+  // Update target stats
+  await db
+    .update(chatSessions)
+    .set({ msgCount: targetSession.msgCount + totalInserted, lastMsgAt: new Date() })
+    .where(eq(chatSessions.id, targetId));
+
+  return c.json({
+    success: true,
+    targetSessionId: targetId,
+    sourceSessionIds: sourceIds,
+    totalMessagesMerged: totalInserted,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+  return router;
+}
