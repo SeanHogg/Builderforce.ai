@@ -5,13 +5,17 @@ import { IProjectRepository } from '../../domain/project/IProjectRepository';
 import { Task } from '../../domain/task/Task';
 import { Project } from '../../domain/project/Project';
 import {
-  ProjectId, TaskId, TaskStatus, ProjectStatus,
-  asTaskId, asProjectId, asTenantId,
+  ProjectId,
+  TaskId,
+  TaskStatus,
+  ProjectStatus,
+  asTaskId,
+  asProjectId,
+  asTenantId,
 } from '../../domain/shared/types';
 
 // ---------------------------------------------------------------------------
-// In-memory fakes (no DB) — exercise repository & domain paths.
-// ---------------------------------------------------------------------------
+// In-memory fakes (no DB) — exercise repository & domain paths. ---------------------------------------------------------------------------
 
 class InMemoryTaskRepo implements ITaskRepository {
   private seq = 1;
@@ -99,7 +103,10 @@ function makeProject(): Project {
   });
 }
 
-function makeService(): { repo: InMemoryTaskRepo; service: TaskService } {
+function makeService(): {
+  repo: InMemoryTaskRepo;
+  service: TaskService;
+} {
   const repo = new InMemoryTaskRepo();
   const projects = new InMemoryProjectRepo(makeProject());
   const service = new TaskService(repo, projects);
