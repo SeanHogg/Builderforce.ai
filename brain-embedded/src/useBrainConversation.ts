@@ -193,6 +193,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     ensureChatId,
     onActivity,
     onFirstUserTurn,
+    autoTitle,
     evermind,
     augmentSystemPrompt,
   } = options;
