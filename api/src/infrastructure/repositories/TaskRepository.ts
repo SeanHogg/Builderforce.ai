@@ -133,32 +133,24 @@ export class TaskRepository implements ITaskRepository {
         description:       plain.description ?? undefined,
         status:            plain.status,
         priority:          plain.priority,
-        taskType:          plain.taskType,
-        // Authoritative (real null) so de-nesting a child (clearing its parent)
-        // actually NULLs the column — Drizzle would omit `undefined` from SET.
+        taskType:          plain.taskType ?? undefined,
         parentTaskId:      plain.parentTaskId ?? null,
+        prdTaskType:       (plain.prdTaskType ?? undefined),
+        deliverableType:   (plain.deliverableType ?? undefined),
         assignedAgentType: plain.assignedAgentType ?? undefined,
-        // Assignee columns write real null (not undefined) so reassignment actually
-        // CLEARS the other two — a task is owned by exactly one of host/cloud/human.
-        // (Drizzle omits `undefined` from the SET clause, which would leave a stale
-        //  assignee behind; only `null` nulls the column.)
         assignedAgentHostId: plain.assignedAgentHostId ?? null,
         assignedAgentRef:  plain.assignedAgentRef ?? null,
         assignedUserId:    plain.assignedUserId ?? null,
         gitBranch:         plain.gitBranch ?? undefined,
-        // Authoritative (real null) so un-pinning the repo via the domain clears it.
         explicitRepoId:    plain.explicitRepoId ?? null,
-        // Authoritative (real null) so un-scheduling (drag out of a sprint) clears it.
         sprintId:          plain.sprintId ?? null,
-        // Authoritative (real null) so un-linking from a release clears it.
         releaseId:         plain.releaseId ?? null,
-        // Authoritative (real null) so clearing the estimate persists.
         storyPoints:       plain.storyPoints ?? null,
-        // AI Manager fields — authoritative so a manual clear/round-trip persists.
         businessValue:         plain.businessValue ?? null,
         businessValueRationale: plain.businessValueRationale ?? null,
         businessValueSource:   plain.businessValueSource ?? null,
         managerRank:           plain.managerRank ?? null,
+        gapOriginTaskId:       plain.gapOriginTaskId ?? undefined,
         githubIssueNumber: plain.githubIssueNumber ?? undefined,
         githubIssueUrl:    plain.githubIssueUrl ?? undefined,
         githubPrUrl:       plain.githubPrUrl ?? undefined,
