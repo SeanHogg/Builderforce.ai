@@ -229,6 +229,8 @@ function toDomain(row: Row): Task {
     priority:          row.priority as TaskPriority,
     taskType:          (row.taskType as TaskType) ?? TaskType.TASK,
     parentTaskId:      row.parentTaskId != null ? asTaskId(row.parentTaskId) : null,
+    prdTaskType:       row.prdTaskType ?? null,
+    deliverableType:   row.deliverableType ?? null,
     assignedAgentType: (row.assignedAgentType as AgentType) ?? null,
     assignedAgentHostId: row.assignedAgentHostId != null ? asAgentHostId(row.assignedAgentHostId) : null,
     assignedAgentRef:  row.assignedAgentRef ?? null,
