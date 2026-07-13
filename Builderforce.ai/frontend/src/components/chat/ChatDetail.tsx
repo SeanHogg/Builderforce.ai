@@ -25,8 +25,18 @@ export function ChatDetail({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [input, setInput] = useState('');
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [editTitleText, setEditTitleText] = useState('');
+  const [updatedChat, setUpdatedChat] = useState(chat);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Update local chat state when we get a new title from the backend
+  useEffect(() => {
+    if (chat) {
+      setUpdatedChat(chat);
+    }
+  }, [chat]);
 
   // Load messages on mount and when chatId changes
   useEffect(() => {
