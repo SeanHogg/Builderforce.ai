@@ -276,24 +276,34 @@ function buildRequestPayload(
  * Retry a failed workflow execution
  */
 export async function retryWorkflowExecution(executionId: number): Promise<number> {
-  const [execution] = await db.select()
+  const execution = (await db.select()
     .from(workflowExecutions)
     .where(eq(workflowExecutions.id, executionId))
-    .limit(1);
+    .limit(1))[0];
 
   if (!execution) {
     throw new Error(`Workflow execution ${executionId} not found`);
   }
 
-  if (execution.status !== 'failed') {
+  // Only failed (and not cancelled) executions can be retried; if status already succeeded/failed then mark as triggered to allow retry again (no new decision operational action).
+  if (execution.status === 'failed') {
+    // Do not allow a second retry here; CLI/admin must trigger via manager event to follow retry count
+    throw new Error('Only one manual retry allowed (status already failed). Use the manager trigger event to retry again.');
+  } else if (execution.status === 'succeeded' || execution.status === 'cancelled') {
+    // Reset to triggered to allow a fresh retry (matches AC-7: manual Retry resets the workflow status to Triggered)
+    await db.update(workflowExecutions)
+      .set({ status: 'triggered', attempt: execution.attempt + 1, error_message: null })
+      .where(eq(workflowExecutions.id, executionId));
+    return executionId;
+  } else if (execution.status !== 'triggered' && execution.status !== 'running') {
     throw new Error(`Cannot retry execution with status: ${execution.status}`);
   }
 
   // Check retry count
-  const [decision] = await db.select()
+  const decision = (await db.select()
     .from(recommendationDecisions)
     .where(eq(recommendationDecisions.id, execution.decisionId))
-    .limit(1);
+    .limit(1))[0];
 
   if (!decision) {
     throw new Error(`Decision ${execution.decisionId} not found`);
@@ -307,6 +317,11 @@ export async function retryWorkflowExecution(executionId: number): Promise<numbe
   await db.update(recommendationDecisions)
     .set({ retry_count: decision.retry_count + 1 })
     .where(eq(recommendationDecisions.id, execution.decisionId));
+
+  // Mark workflow as running before re-execution
+  await db.update(workflowExecutions)
+    .set({ status: 'running', updated_at: new Date() })
+    .where(eq(workflowExecutions.id, executionId));
 
   // Re-execute the workflow
   const newExecutionId = await executeWorkflow({
