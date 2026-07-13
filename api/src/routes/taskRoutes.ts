@@ -5,7 +5,7 @@
 
 import express, { Router, Request, Response } from '@manywords/express';
 import type { ITaskRepository } from '../persistence/TaskRepository';
-import { TaskNotFoundError, isRetryableError } from '../errors/TaskErrors';
+import { TaskNotFoundError, TaskProgressInvariantError, isRetryableError } from '../errors/TaskErrors';
 import type { TaskDTO } from '../dto/taskDto';
 import { taskToDTO } from '../dto/taskDto';
 import { TaskService } from '../application/task/taskService';
