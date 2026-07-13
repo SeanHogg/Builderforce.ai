@@ -13,7 +13,7 @@ describe('OpenAI Codex subscription vendor', () => {
   });
 
   it('allows an xAI subscription credential to lead the same BYO seed', () => {
-    expect(byoAutoSeedModels(new Set(['xai', 'anthropic']), { agentic: true, vendorPriority: ['xai', 'anthropic'] })[0]).toBe('direct/xai/grok-4.5');
+    expect(byoAutoSeedModels(new Set(['xai-oauth', 'anthropic']), { agentic: true, vendorPriority: ['xai-oauth', 'anthropic'] })[0]).toBe('xai-oauth/grok-4.3');
   });
   it('calls Codex Responses and normalizes the result', async () => {
     const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {

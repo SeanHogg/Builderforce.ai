@@ -977,6 +977,8 @@
     "merging": "Fusionando…"
   },
   "memberProfile": {
+    "tabs": { "overview": "Resumen", "timeLogs": "Registros de tiempo", "tasks": "Tareas" },
+    "noTasks": "No hay tareas asignadas a este usuario.",
     "subtitle": "{kind} · capacidad y disponibilidad",
     "syncing": "Sincronizando…",
     "syncFromGoogleCalendar": "Sincronizar desde Google Calendar",

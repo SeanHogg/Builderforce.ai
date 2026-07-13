@@ -92,7 +92,7 @@ export async function enforceLaneRequirements(
   const none: LaneGateOutcome = { blocked: false, flagged: false, dispatchedReviewers: [], dispatchedProducers: [] };
   const participants = new TicketParticipantsService(db);
   try {
-    const [board] = await db.select({ id: boards.id }).from(boards).where(eq(boards.projectId, args.projectId)).limit(1);
+    const [board] = await db.select({ id: boards.id, lifecycleManaged: boards.lifecycleManaged }).from(boards).where(eq(boards.projectId, args.projectId)).limit(1);
     if (!board) return none;
     const [lane] = await db
       .select({ id: swimlanes.id, requirementGate: swimlanes.requirementGate })
@@ -185,12 +185,12 @@ export async function enforceLaneRequirements(
       }
     }
 
-    // ── Producers (hard stages only — opt-in strictness, FR-3) ──────────────
+    // ── Producers ───────────────────────────────────────────────────────────
     // Dispatch the ROLE-CAPABLE producer AS the role when the producer stage isn't
     // engaged yet, so the correct role produces the work (not a wrong-role owner or
     // nothing). Loop-safe: an in_progress/completed producer slot is never re-dispatched.
     let producerUnmet = false;
-    if (lane.requirementGate === 'hard' && requiredProducers.length > 0) {
+    if (requiredProducers.length > 0) {
       const manifest = await participants.listParticipants(env, args.tenantId, args.taskId).catch(() => []);
       const stateByRole = new Map(manifest.filter((p) => p.stageKey === args.status).map((p) => [p.roleKey, p.state]));
       const done = new Set(['completed', 'waived', 'skipped']);
@@ -209,7 +209,8 @@ export async function enforceLaneRequirements(
           reviewInstruction:
             `You are the ${roleName(req.ref)} assigned to PRODUCE the work for ticket #${args.taskId} at lane '${args.status}'. ` +
             `Implement/author the required deliverable (open a PR for code, or write the PRD section for a spec role). ` +
-            `Your run is recorded as this role's participation on the accountability manifest.`,
+            `Your run is recorded as this role's participation on the accountability manifest. ` +
+            `When the deliverable is complete, record a role-attributed sign-off for lane '${args.status}' with contribution evidence.`,
         });
         const deferred: Promise<unknown>[] = [];
         const execId = await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
@@ -230,6 +231,9 @@ export async function enforceLaneRequirements(
     // Block the lane's normal agent when a role round-trip is owed (dispatched this hop)
     // OR a hard gate is unmet (reviewer quorum short / producer not completed).
     const blocked = dispatchedReviewers.length > 0 || dispatchedProducers.length > 0
+      // A managed ticket never falls through to a generic lane executor while its
+      // named producer is outstanding, even when the stage's advancement gate is soft.
+      || (board.lifecycleManaged && producerUnmet)
       || (lane.requirementGate === 'hard' && (reviewerSetUnmet || producerUnmet));
     return { blocked, flagged: reviewerSetUnmet || producerUnmet, dispatchedReviewers, dispatchedProducers };
   } catch {

@@ -786,13 +786,14 @@ function proxyForCompletion(
   env: Env,
   access: TenantAccess,
   body: ChatCompletionRequest,
-  opts: { disablePaidOverflow: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; tenantVendorKeys?: TenantVendorKeys | null; byoVendorPriority?: readonly string[] },
+  opts: { disablePaidOverflow: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; byoVendorPriority?: readonly string[] },
 ): ReturnType<typeof llmProxyForPlan> {
   return llmProxyForPlan(env, access.effectivePlan, access.premiumOverride, {
     disablePaidOverflow: opts.disablePaidOverflow,
     ...(isAgenticToolTurn(body as { tools?: unknown }) ? { codingOnly: true, backstopModels: CODING_BACKSTOP_MODELS } : {}),
     ...(opts.anthropicOAuthToken ? { anthropicOAuthToken: opts.anthropicOAuthToken } : {}),
     ...(opts.openaiCodexAuth ? { openaiCodexAuth: opts.openaiCodexAuth } : {}),
+    ...(opts.xaiOAuthToken ? { xaiOAuthToken: opts.xaiOAuthToken } : {}),
     ...(opts.tenantVendorKeys ? { tenantVendorKeys: opts.tenantVendorKeys } : {}),
     ...(opts.byoVendorPriority?.length ? { byoVendorPriority: opts.byoVendorPriority } : {}),
   });
@@ -967,7 +968,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     }
     const model = provider === 'openai' && creds.openaiCodexAuth
       ? 'openai-codex/gpt-5.3-codex'
-      : byoModelsFor([provider])[0]?.id;
+      : provider === 'xai' && creds.xaiOAuthToken
+        ? 'xai-oauth/grok-4.3'
+        : byoModelsFor([provider])[0]?.id;
     if (!model) return c.json({ ok: false, status: 'no_test_model' }, 409);
     const body: ChatCompletionRequest = {
       model, modelStrict: true, max_tokens: 8,
@@ -977,13 +980,23 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       disablePaidOverflow: true,
       anthropicOAuthToken: creds.anthropicOAuthToken,
       openaiCodexAuth: creds.openaiCodexAuth,
+      xaiOAuthToken: creds.xaiOAuthToken,
       tenantVendorKeys: creds.vendorKeys,
       byoVendorPriority: creds.vendorPriority,
     });
     const result = await service.complete(body, undefined, newTraceId());
     if (result.response.status >= 400) {
       const payload = await result.response.clone().text();
-      return c.json({ ok: false, status: 'error', httpStatus: result.response.status, message: payload.slice(0, 500) }, 502);
+      let upstreamMessage = payload.slice(0, 1000);
+      try {
+        const parsed = JSON.parse(payload) as { error?: { message?: string } | string; message?: string };
+        upstreamMessage = typeof parsed.error === 'string' ? parsed.error : parsed.error?.message ?? parsed.message ?? upstreamMessage;
+      } catch { /* retain bounded raw response */ }
+      return c.json({
+        error: `${provider} connection test failed: ${upstreamMessage || `upstream HTTP ${result.response.status}`}`,
+        code: 'provider_test_failed',
+        details: { provider, model, upstreamStatus: result.response.status },
+      }, 502);
     }
     return c.json({ ok: true, status: 'ready', model: result.resolvedModel, testedAt: new Date().toISOString() });
   });
@@ -1586,11 +1599,15 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // keys for their vendors so the tenant's own account serves the call ($0 to us,
     // metered byo). The connected vendors also unlock free-plan model choice.
     const tenantCreds = await resolveTenantLlmCredentials(c.env, access.tenantId);
-    const { anthropicOAuthToken, openaiCodexAuth, vendorKeys: tenantVendorKeys } = tenantCreds;
+    const { anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, vendorKeys: tenantVendorKeys } = tenantCreds;
     const byoVendors = byoVendorIdSet(providersFromCredentials(tenantCreds));
     if (tenantCreds.openaiCodexAuth) {
       byoVendors.delete('openai');
       byoVendors.add('openai-codex');
+    }
+    if (tenantCreds.xaiOAuthToken) {
+      byoVendors.delete('xai');
+      byoVendors.add('xai-oauth');
     }
 
     const queryStrict = c.req.query('strict') === 'true';
@@ -1708,7 +1725,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // a plain chat keeps the general pool. Reuses the credentials resolved above so
     // any direct-Claude resolution rides the tenant subscription and BYO vendors
     // serve from the tenant's own account.
-    const service = proxyForCompletion(c.env, access, body, { disablePaidOverflow, anthropicOAuthToken, openaiCodexAuth, tenantVendorKeys, byoVendorPriority: tenantCreds.vendorPriority });
+    const service = proxyForCompletion(c.env, access, body, { disablePaidOverflow, anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, tenantVendorKeys, byoVendorPriority: tenantCreds.vendorPriority });
     // Context-fit seeding: estimate the turn's tokens so the proxy drops
     // small-window models from the first-pass seed. This is the preventive half
     // of the Brain "dies after several executions" fix — the reactive 413
