@@ -142,8 +142,8 @@ export function runProgressGate(input: ProgressGateInput): ProgressGateOutput {
   // FR-10: default for unspecified task_type is coding (per PRD FR-10).
   // Log a warning if task_type was not provided so creators know to set it explicitly.
   if (!taskType) {
-    // TODO: wire to a telemetry system in the future
-    // console.warn(`[ProgressGate] task_type undefined for task, defaulting to 'coding'`);
+    (typeof console !== 'undefined' && console.warn) &&
+      console.warn('[ProgressGate] task_type undefined for task, defaulting to \'coding\'');
   }
   // Non-coding types (analysis, provisioning, decision, documentation) can complete without impl code.
   const effectiveTaskType = taskType ?? 'coding';
