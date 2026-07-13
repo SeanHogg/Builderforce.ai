@@ -56,6 +56,11 @@ export interface UseBrainChatsOptions {
 }
 
 export interface UseBrainChats {
+  /** Auto-name a still-untitled chat (title === {@link DEFAULT_CHAT_TITLE}) from its
+   * first user message, so "New chat" becomes the topic once the conversation begins.
+   * No-op when the chat was already given a real title (user rename / task seed), so it
+   * never clobbers an intentional name. Wired to the conversation's first-turn hook. */
+  autoTitle(id: number, firstUserText: string): Promise<void>;
   chats: BrainChat[];
   loading: boolean;
   error: string;
