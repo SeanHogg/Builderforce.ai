@@ -246,6 +246,29 @@ The ratified v1.0.0 contract ships in [`spec/basis-payload/`](spec/basis-payload
 | Full canonical example payload (validates against the schema) | [`spec/basis-payload/example.canonical.json`](spec/basis-payload/example.canonical.json) |
 | Versioned changelog (v1.0.0) | [`spec/basis-payload/CHANGELOG.md`](spec/basis-payload/CHANGELOG.md) |
 | Directory index + validation how-to + requirement traceability | [`spec/basis-payload/README.md`](spec/basis-payload/README.md) |
+| Integration usage guide for producers/consumers | [`docs/.internal/basis-payload-integration-usage.md`](docs/.internal/basis-payload-integration-usage.md) |
+| Architectural design rationale | [`docs/design/basis-payload-v1-design.md`](docs/design/basis-payload-v1-design.md) |
+
+Ratification actions taken:
+- All functional requirements (FR-1 through FR-10) and acceptance criteria (AC-1 through AC-8) defined and satisfied.
+- JSON Schema (Draft 2020-12) published in `spec/basis-payload/basis-payload.schema.json` with `$id` pointing to `https://builderforce.ai/spec/basis-payload/basis-payload.schema.json`.
+- Example canonical payload (`example.canonical.json`) validates against schema.
+- Zero-dependency validation harness (`validate.js`) validates example and runs tests spanning claims/evidence/uncertainty/reasoning-chain configurations.
+- Requirement decision documentation added to `Implementation Notes` (AC-1 vs FR-4 tension, AC-6 unknown-field behavior, AC-8 tagging).
+- References in PRD and design doc confirm full traceability (FYI: `sandbox` is not required by FR-2).
+
+Notes on requirement decisions:
+- **AC-1 vs FR-4 tension.** FR-4 states each *claim* MAY reference evidence (per-claim optionality), while AC-1 requires the payload to be rejected when `evidence` is missing. v1 resolves this by making the top-level `evidence` array **required** (like `claims`); a claim may still reference zero evidence items. Documented in the design and changelog.
+- **AC-6 (unknown fields → warning, not error).** The schema uses `additionalProperties: true` at the top level so unknown fields do not hard-fail; consumers log a warning. Only the `extensions` object constrains its keys (reverse-DNS namespaces).
+- **AC-8 (version tag).** Version `1.0.0` is recorded in the changelog and is to be tagged `basis-payload-v1.0.0` in version control on merge.
+
+| Artifact | File |
+|---|---|
+| JSON Schema (Draft 2020-12) — validating contract | [`spec/basis-payload/basis-payload.schema.json`](spec/basis-payload/basis-payload.schema.json) |
+| Reference documentation + integration guidelines | [`spec/basis-payload/basis-payload.md`](spec/basis-payload/basis-payload.md) |
+| Full canonical example payload (validates against the schema) | [`spec/basis-payload/example.canonical.json`](spec/basis-payload/example.canonical.json) |
+| Versioned changelog (v1.0.0) | [`spec/basis-payload/CHANGELOG.md`](spec/basis-payload/CHANGELOG.md) |
+| Directory index + validation how-to + requirement traceability | [`spec/basis-payload/README.md`](spec/basis-payload/README.md) |
 
 Notes on requirement decisions:
 
