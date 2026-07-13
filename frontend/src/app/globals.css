@@ -28,7 +28,7 @@
 .slide-panel-overlay {
   position: fixed;
   inset: 0;
-  z-index: 9999;  /* Above normal content, below tasks/footer nav (10001 in some patterns) */
+  z-index: 10000;  /* Above all content, below mobile nav/menus */
 }
 
 .slide-panel-overlay::before {
@@ -44,7 +44,7 @@
   top: 0;
   right: 0;
   bottom: 0;
-  z-index: 9999;  /* Above overlay; position escapes .shell */
+  z-index: 10001;  /* Above overlay; below nothing on mobile, accessible */
 }
 
 /* Ensure content is laid out above the panel so fallback taps can reach content if best-effort work is not available */
