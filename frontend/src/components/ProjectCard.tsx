@@ -185,6 +185,24 @@ export function ProjectCard({
               <path d="M12 3 v9 l6.5 3.5" />
             </svg>
           </button>
+          {/* Capabilities button — full overview (gauges, breakdowns, and table). */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              window.location.href = `/projects/${project.id}/capabilities`;
+            }}
+            aria-label={t('capabilities')}
+            title={t('capabilities')}
+            style={iconButtonStyle}
+          >
+            <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+              <path d="M12 2L2 7v10l10 5 10-5V7L12 2z" />
+              <path d="M12 12L2 7" />
+              <path d="M12 17l10-5" />
+              <line x1="12" y1="12" x2="12" y2="22" />
+            </svg>
+          </button>
           {/* IDE button */}
           <button
             type="button"
