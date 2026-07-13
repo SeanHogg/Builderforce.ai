@@ -17,6 +17,16 @@ import type { EmailNotifier, AccountEmailResolver, NotificationLogEntry } from "
 // Re-export types from domain port defined in agent-runtime/src/transport/types.ts
 export type { EmailNotifier, AccountEmailResolver, NotificationLogEntry };
 
+// Zod schema for configuring the notifier
+import { z } from "zod";
+
+export const HenTaskCompletionNotifierSchema = z.object({
+  enabled: z.boolean().default(true),
+  platformName: z.string().min(1).default("Builderforce"),
+  platformLoginUrl: z.string().url().default("https://builderforce.ai"),
+  resendApiKey: z.string().min(1).optional(),
+});
+
 // Template constants
 const HEADER = `<!DOCTYPE html>
 <html><head>
@@ -60,8 +70,8 @@ const BODY_TEMPLATE = `      <p>Good news! All Hen tasks for your account are no
       </p>`;
 
 /**
- * Concrete implementation of EmailNotifier using the existing Resend EmailService.
- * This acts as an adapter for the domain's EmailNotifier port.
+ * Concrete implementation of EmailNotifier using Resend API.
+ * Single Responsibility - only email dispatch.
  */
 class ResendEmailNotifier implements EmailNotifier {
   private readonly fromEmail: string;
@@ -103,7 +113,7 @@ class ResendEmailNotifier implements EmailNotifier {
 /**
  * Hen task completion notification service.
  *
- * Domain service responsible for:
+ * Domain Service Responsibility:
  * 1. Detecting when the last Hen task for an account completes (FR.1)
  * 2. Retrieving the account holder's email (FR.2)
  * 3. Composing email content with static subject/body (FR.3)
@@ -115,17 +125,18 @@ export class HenTaskCompletionNotifier {
   private readonly platformName: string;
   private readonly platformLoginUrl: string;
   private readonly enabled: boolean;
+  private readonly accountEmailResolver: AccountEmailResolver;
 
-  // Factory helper to create a notifier with a Resend adapter
-  static createResend(
-    apiKey: string,
-    platformName: string,
-    platformLoginUrl: string,
-    enabled: boolean = true
+  // Factory helper to create a notifier with a Resend adapter and account resolver
+  static createWithResend(
+    config: z.infer<typeof HenTaskCompletionNotifierSchema>,
+    accountEmailResolver: AccountEmailResolver
   ): HenTaskCompletionNotifier {
+    const { resendApiKey, platformName, platformLoginUrl, enabled } = config;
+
     const emailNotifier =
-      apiKey
-        ? new ResendEmailNotifier(apiKey)
+      resendApiKey
+        ? new ResendEmailNotifier(resendApiKey)
         : {
             // Graceful degradation when key is missing
             async send(to: string, subject: string, html: string): Promise<boolean> {
@@ -133,12 +144,13 @@ export class HenTaskCompletionNotifier {
               return false;
             },
           };
-    
+
     return new HenTaskCompletionNotifier(
       emailNotifier,
       platformName,
       platformLoginUrl,
-      enabled
+      enabled,
+      accountEmailResolver
     );
   }
 
@@ -146,8 +158,10 @@ export class HenTaskCompletionNotifier {
     emailNotifier: EmailNotifier,
     platformName: string,
     platformLoginUrl: string,
-    enabled: boolean
+    enabled: boolean,
+    accountEmailResolver: AccountEmailResolver
   ) {
+    this.accountEmailResolver = accountEmailResolver;
     this.emailNotifier = emailNotifier;
     this.platformName = platformName;
     this.platformLoginUrl = platformLoginUrl;
@@ -159,7 +173,97 @@ export class HenTaskCompletionNotifier {
   }
 
   /**
-   * Main entry point for notification on task completion.
+   * Process a task completion event and trigger notification if last Hen task complete.
+   *
+   * @param event - Task completion event
+   * @returns Promise<NotificationLogEntry> - Log entry for the notification attempt
+   */
+  async handleTaskCompletion(event: { task: { accountId: string; id: string; status: string } }): Promise<NotificationLogEntry> {
+    // FR.1: Detect when last Hen task completes
+    const accountId = event.task.accountId;
+    const taskId = event.task.id;
+    const finalStatus = event.task.status;
+
+    // Only process if this is a completed task
+    if (finalStatus !== "completed") {
+      return {
+        accountId,
+        email: "",
+        subject: "Your Hen Tasks are Complete!",
+        sentAt: new Date(),
+        success: false,
+        errorMessage: `Task ${taskId} completed but not appropriate to send notification (status: ${finalStatus})`,
+      };
+    }
+
+    // FR.2: Retrieve account holder's email
+    const accountEmail = await this.accountEmailResolver.getPrimaryEmail(accountId);
+
+    if (!accountEmail) {
+      return {
+        accountId,
+        email: "",
+        subject: "Your Hen Tasks are Complete!",
+        sentAt: new Date(),
+        success: false,
+        errorMessage: `No primary email found for account ${accountId}`,
+      };
+    }
+
+    // FR.3: Compose email content
+    const subject = "Your Hen Tasks are Complete!";
+
+    if (!this.enabled) {
+      console.debug("[HenTaskNotifier] Notification disabled by config.");
+      return {
+        accountId,
+        email: accountEmail,
+        subject,
+        sentAt: new Date(),
+        success: false,
+        errorMessage: "Notification disabled by config",
+      };
+    }
+
+    if (!this.emailNotifier) {
+      return {
+        accountId,
+        email: accountEmail,
+        subject,
+        sentAt: new Date(),
+        success: false,
+        errorMessage: "Email notifier not configured",
+      };
+    }
+
+    // Generate HTML email content
+    const bodyHtml = BODY_TEMPLATE
+      .replace("{{PlatformName}}", this.platformName)
+      .replace("{{PlatformLoginUrl}}", this.platformLoginUrl);
+
+    const html = this.renderEmail(subject, bodyHtml);
+
+    // FR.4: Dispatch the email
+    const sendSuccess = await this.emailNotifier.send(accountEmail, subject, html);
+
+    const logEntry: NotificationLogEntry = {
+      accountId,
+      email: accountEmail,
+      subject,
+      sentAt: new Date(),
+      success: sendSuccess,
+      errorMessage: sendSuccess ? undefined : "Email sending failed",
+    };
+
+    // FR.5: Log notification attempt
+    this.logNotification(logEntry);
+
+    return logEntry;
+  }
+
+  /**
+   * Main notification method for direct calls.
+   * Kept for backward compatibility with existing tests.
    *
    * @param accountId - The account ID that the Hen task belongs to
    * @param accountEmail - The account holder's primary email address
