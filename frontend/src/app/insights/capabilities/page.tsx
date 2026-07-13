@@ -8,6 +8,8 @@ import PageContainer from '@/components/PageContainer';
 import { RoleGate } from '@/components/RoleGate';
 import { Skeleton, Spinner, Alert, Button } from '@/components/dashboard';
 import type { Capability } from './capabilityTypes';
+import { GaugeChart } from '@/components/charts/GaugeChart';
+import { DonutChart, type DonutSegment } from '@/components/charts/DonutChart';
 
 /* -------------------------------------------------------------------------- */
 /* Capability types & demo data (mocked; backend endpoint /api/capabilities TBD) */
@@ -231,121 +233,22 @@ function Gauge(props: GaugeProps) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Mock Chart Stepper/UI for pie/bar charts (replacing undefined CanvasPieChart) */
+/* Chart helpers fitting framework primitives */
 /* -------------------------------------------------------------------------- */
 
-function PieChart({
-  segments,
-  size = 200,
-  legend = true,
-}: {
-  segments: { key: string; label: string; value: number; color: string }[];
-  size?: number;
-  legend?: boolean;
-}) {
-  const total = segments.reduce((s, x) => s + Math.max(0, x.value), 0);
-  const r = (size - 40) / 2;
-  const c = 2 * Math.PI * r;
-  const cx = size / 2;
-
-  let acc = 0;
-  const arcs = segments
-    .filter((s) => s.value > 0)
-    .map((s) => {
-      const frac = total > 0 ? s.value / total : 0;
-      const len = frac * c;
-      const dash = `${len} ${c - len}`;
-      const offset = -acc * c;
-      acc += frac;
-      return { ...s, dash, offset, frac };
-    });
-
-  return (
-    <div
-      className="flex items-center gap-4"
-      style={{ width: 'fit-content', justifyContent: 'center' }}
-    >
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Status Breakdown">
-        <g transform={`rotate(-90 ${cx} ${cx})`}>
-          {arcs.map((a) => (
-            <circle
-              key={a.key}
-              cx={cx}
-              cy={cx}
-              r={r}
-              fill="none"
-              stroke={a.color}
-              strokeWidth={20}
-              strokeDasharray={a.dash}
-              strokeDashoffset={a.offset}
-              strokeLinecap="butt"
-            />
-          ))}
-        </g>
-      </svg>
-
-      {legend && (
-        <div className="flex flex-col gap-2">
-          {arcs.map((s) => {
-            const frac = total > 0 ? s.value / total : 0;
-            return (
-              <div key={s.key} className="flex items-center gap-2 text-sm">
-                <span
-                  className="inline-block min-w-3 h-3 rounded-full bg-current"
-                  style={{ color: s.color, background: s.color }}
-                />
-                <span className="truncate text-text-secondary">{s.label}</span>
-                <span className="font-semibold">{Math.round(frac * 100)}%</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function BarChart({
-  data,
-  labelWidth = 100,
-  yAxisExtraLabel,
-  tooltipSuffix,
-  ariaLabel,
-}: {
-  data: { key: string; label: string; value: number }[];
-  labelWidth?: number;
-  yAxisExtraLabel?: string;
-  tooltipSuffix?: string;
-  ariaLabel?: string;
-}) {
-  const max = Math.max(1, ...data.map((d) => d.value));
-  return (
-    <div role="img" aria-label={ariaLabel} className="flex flex-col gap-3">
-      {data.map((d) => {
-        const pct = (d.value / max) * 100;
-        const suffix = tooltipSuffix ? ' ' + tooltipSuffix : '';
-
-        return (
-          <div key={d.key} className="flex items-center gap-3">
-            <span
-              className="truncate text-sm text-text-secondary min-w-[labelWidth]"
-              style={{ width: `${labelWidth}px` }}
-              title={d.label}
-            >
-              {d.label}
-            </span>
-            <div className="flex-1 h-6 rounded bg-border-subtle overflow-hidden">
-              <div
-                className="h-full inline-block transition-[width]"
-                style={{ width: `${pct}%`, background: 'var(--chart-color)' }}
-              />
-            </div>
-            <span className="text-sm font-semibold w-14 text-right">{d.value.toLocaleString()}{suffix}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
+function parseStatusOverrides(segments: CapabilityRollup['categoryCounts']): DonutSegment[] {
+  const colors = {
+    Security: '#22c55e',
+    Engineering: '#eab308',
+    Finance: '#6b7280',
+    default: '#94a3b8',
+  } as const;
+  return Object.entries(segments).map(([key, value]) => ({
+    key,
+    label: key,
+    value,
+    color: colors[key as keyof typeof colors] ?? colors['default'],
+  }));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -358,11 +261,17 @@ export default function CapabilitiesPage() {
   const pathname = usePathname();
   const { isAuthenticated, hasTenant } = useAuth();
 
+  const [reloadKey, setReloadKey] = useState(0);
+
   const [mode, setMode] = useState<'dashboard' | 'table' | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [capabilities, setCapabilities] = useState<Capability[]>(MOCK_CAPABILITIES);
   const [rollup, setRollup] = useState<CapabilityRollup>(MOCK_ROLLUP);
+
+  // Pagination
+  const [pageSize] = useState(8);
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
@@ -374,28 +283,31 @@ export default function CapabilitiesPage() {
   const [sortBy, setSortBy] = useState<'name' | 'status' | 'category' | 'healthScore' | 'lastUpdated'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
-  // Loading vs skeleton vs error vs empty
+  // Compose state for filtering and sorting
   const loadedWithItems = !loading && capabilities.length > 0;
   const filtered = loadedWithItems
     ? filterCapabilities(capabilities, { status: statusFilter, category: categoryFilter, min: healthMin, max: healthMax })
     : [];
   const sorted = loadedWithItems ? sortCapabilities(filtered, { key: sortBy, order: sortOrder }) : [];
+  const maxPage = pageSize > 0 ? Math.ceil(sorted.length / pageSize) : 1;
+  const paginated = currentPage > maxPage ? [] : sorted.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const isEmpty = loadedWithItems && sorted.length === 0;
 
   useEffect(() => {
     if (!isAuthenticated) router.replace('/login');
     else if (!hasTenant) router.replace('/tenants');
     else void loadData();
-  }, [isAuthenticated, hasTenant, reload]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, hasTenant, reloadKey]);
 
-  const reload = useCallback(async () => {
+  const loadData = useCallback(async () => {
     setError(null);
     setLoading(true);
     try {
       // TODO: migrate to real endpoints
       // const [cRes, rRes] = await Promise.all([
       //   dashboardsApi.request<Capability[]>(`/api/projects/${projectId}/capabilities`),
-      //   dashboardsApi.request<CapabilityRollup>(`/api/capabilities/rollup?projectId=${projectId}`)
+      //   dashboardsApi.request<CapabilityRollup>(`/api/capabilities/rollup?projectId=${projectId}`),
       // ]);
       // setCapabilities(cRes);
       // setRollup(rRes);
@@ -405,7 +317,19 @@ export default function CapabilitiesPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [reloadKey]);
+
+  const createProjectLink = (): string => {
+    const parts = pathname.split('/');
+    const projectId = parts.find((p: string) => /^[0-9]+$/.test(p));
+    if (projectId) return `/projects/${projectId}/page.tsx`;
+    return '';
+  };
+
+  const openProjectPage = (): void => {
+    const link = createProjectLink();
+    if (link) router.push(link);
+  };
 
   if (!isAuthenticated) return null;
   if (!hasTenant) {
@@ -495,23 +419,59 @@ export default function CapabilitiesPage() {
     { value: 'desc', label: 'Descending' },
   ];
 
+  // Merge Donut segments using categoryCounts to avoid mismatch
+  const pieSegments: DonutSegment[] = [
+    {
+      key: 'shipped',
+      label: 'Shipped',
+      value: rollup.shipped || 0,
+      color: '#22c55e',
+    },
+    {
+      key: 'in_progress',
+      label: 'In Progress',
+      value: rollup.in_progress || 0,
+      color: '#eab308',
+    },
+    {
+      key: 'planned',
+      label: 'Planned',
+      value: rollup.planned || 0,
+      color: '#6b7280',
+    },
+  ];
+
+  const barData = Object.keys(rollup.categoryCounts).map((cat) => ({
+    key: cat,
+    label: cat,
+    value: rollup.categoryCounts[cat] || 0,
+  }));
+
   return (
     <PageContainer>
       <div className="mb-6 flex items-center justify-between gap-4">
-        <h1 className="text-3xl font-bold tracking-tight">{t('title')}</h1>
-        <PillBadge>{t('capabilityCount', { count: capabilities.length })}</PillBadge>
+        <h1 className="text-3xl font-bold tracking-tight">Capabilities</h1>
+        <PillBadge>{capabilities.length}</PillBadge>
       </div>
 
       {/* Filters */}
       <div className="mb-6 flex flex-wrap gap-4">
         <div>
           <label className="text-sm font-semibold text-text-secondary">Status</label>
-          <SelectControl value={statusFilter || ''} onChange={(v) => setStatusFilter(v || null)} options={statusOptions} />
+          <SelectControl
+            value={statusFilter || ''}
+            onChange={(v) => setStatusFilter((v as string) || null)}
+            options={statusOptions}
+          />
         </div>
 
         <div>
           <label className="text-sm font-semibold text-text-secondary">Category</label>
-          <SelectControl value={categoryFilter || ''} onChange={(v) => setCategoryFilter(v || null)} options={categoryOptions} />
+          <SelectControl
+            value={categoryFilter || ''}
+            onChange={(v) => setCategoryFilter((v as string) || null)}
+            options={categoryOptions}
+          />
         </div>
 
         <div>
@@ -578,25 +538,16 @@ export default function CapabilitiesPage() {
           {/* Status Breakdown */}
           <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
             <h2 className="mb-4 text-lg font-semibold">Status Breakdown</h2>
-            <PieChart
-              segments={[
-                { key: 'shipped', label: 'Shipped', value: rollup.shipped || 0, color: '#22c55e' },
-                { key: 'in_progress', label: 'In Progress', value: rollup.in_progress || 0, color: '#eab308' },
-                { key: 'planned', label: 'Planned', value: rollup.planned || 0, color: '#6b7280' },
-              ]}
-              size={200}
-            />
+            <div className="flex items-center justify-center">
+              <DonutChart segments={pieSegments} size={200} ariaLabel="Status breakdown" />
+            </div>
           </div>
 
           {/* Category Breakdown */}
           <div className="rounded-xl border border-border bg-card p-6 shadow-sm col-span-2">
             <h2 className="mb-4 text-lg font-semibold">By Category</h2>
             <BarChart
-              data={Object.keys(rollup.categoryCounts).map((cat) => ({
-                key: cat,
-                label: cat,
-                value: rollup.categoryCounts[cat] || 0,
-              }))}
+              data={barData}
               labelWidth={120}
               yAxisExtraLabel="Capabilities"
               tooltipSuffix="items"
@@ -621,7 +572,7 @@ export default function CapabilitiesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {sorted.map((cap) => (
+                {paginated.map((cap) => (
                   <tr key={cap.id} className="hover:bg-muted/50">
                     <td className="px-4 py-3 text-sm">{cap.name}</td>
                     <td className="px-4 py-3">
@@ -639,7 +590,7 @@ export default function CapabilitiesPage() {
               </tbody>
             </table>
           </div>
-          {sorted.length === 0 && (
+          {paginated.length === 0 && (
             <div className="p-8 text-center text-text-muted">No capabilities match your filters</div>
           )}
         </div>
@@ -731,7 +682,7 @@ function sortCapabilities(
         break;
     }
     if (left < right) return opts.order === 'asc' ? -1 : 1;
-    if (left > right) return opts.order === 'asc' ? 1 : -1;
+    if (left > right) return opts.order === 'asc' ? 1 : 1;
     return 0;
   });
 }
