@@ -14,12 +14,12 @@ const DEFAULT_PR_STATE: ProgressBreakdown["prState"] = null;
 const DEFAULT_TESTS_PASSING: ProgressBreakdown["testsPassing"] = null;
 
 /** -------------------------------------------------------------------------- */
-/** Helper Functions (FR-2: Aggregation & Normalization)                        */
+/** Helper Functions (FR-2: Aggregation & Normalization)                       */
 /** -------------------------------------------------------------------------- */
 
 /**
- * FR-2.2: Normalization function scales raw scores to the [0, 100] range.
- * Normalizes by (value - min) / (max - min), clamping to [0, 100].
+ * FR-2.1 / FR-2.2: Normalization function scales raw scores to the [0, 100]
+ * range. Normalizes by (value - min) / (max - min), then clamps to [0, 100].
  * When min === max, returns 100 if value === min, otherwise 0.
  *
  * @param value - The raw value to normalize.
@@ -33,31 +33,26 @@ export function normalize(
   max: number
 ): number {
   if (min === max) {
-    // FR-2.2: Division-by-zero guard - return 100 if value is at the boundary
     return value === min ? 100 : 0;
   }
 
-  // Clamp the result to [0, 100]
   const normalized = (value - min) / (max - min);
   if (normalized < 0) return 0;
   if (normalized > 1) return 1;
-
   return normalized * 100;
 }
 
 /**
- * FR-2.3: Aggregation reducer that sums values for identical keys.
- * Later values overwrite earlier ones (last-write-wins).
+ * FR-2.3: Aggregation reducer that merges items. Later values overwrite earlier
+ * values (last-write-wins).
  *
  * @param acc - The accumulator object.
- * @param item - The item to add to the accumulator.
+ * @param item - The item to merge into the accumulator.
  * @returns The updated accumulator.
  */
-type AggregationItem = Record<string, number>;
-
 export function aggregate(
   acc: Record<string, number>,
-  item: AggregationItem
+  item: Record<string, number>
 ): Record<string, number> {
   return { ...acc, ...item };
 }
@@ -72,11 +67,9 @@ export function sortByProgressDesc<T extends { value: number; id?: string }>(
   items: T[]
 ): T[] {
   return [...items].sort((a, b) => {
-    // Descending by value
     if (b.value !== a.value) {
       return b.value - a.value;
     }
-    // Then by id if present (stable tiebreaker)
     if (a.id && b.id) {
       return a.id.localeCompare(b.id);
     }
@@ -120,9 +113,7 @@ export function filterHidden<T extends { hidden?: boolean }>(
  *     - testsPassing = null (not yet computed; tests support IS NOT implemented).
  *
  * @param task - The task to compute breakdown for.
- * @param children - Direct child task records (relevant for Epics). If not provided,
- *                   children will be fetched from the task's taskType=Epic parent task,
- *                   if the task is not itself an Epic.
+ * @param children - Direct child task records (relevant for Epics). Defaults to [].
  * @param options - Optional settings for breakdown computation.
  * @returns The computed progress breakdown.
  */
@@ -131,7 +122,7 @@ export function computeProgressBreakdown(
   children?: Task[],
   options?: ProgressBreakdownOptions
 ): ProgressBreakdown {
-  // FR-1.6: Empty input returns a well-defined zero-state object rather than an error.
+  // FR-1.6: Empty / null input returns a well-defined zero-state object.
   if (!task || !task.taskType) {
     return {
       basis: DEFAULT_BASE,
@@ -143,29 +134,19 @@ export function computeProgressBreakdown(
     };
   }
 
-  // FR-4.5: Handle large numbers of children (performance guard).
-  const MAX_CHILDREN = 10000;
-  const childCount = children?.length || 0;
-  if (childCount > MAX_CHILDREN) {
-    console.warn(
-      `computeProgressBreakdown: filtering to ${MAX_CHILDREN} children (requested ${childCount})`
-    );
-    // Truncate children array for large Epics to prevent regression
-  }
-  const effectiveChildren = children?.slice(0, MAX_CHILDREN) || [];
+  const effectiveChildren = Array.isArray(children) ? children : [];
 
-  // FR-1.8: lastUpdated is not computed here - callers should update it externally
-  // if needed based on the most recently modified child task.
+  // The includeHidden option is accepted for API compatibility but the existing
+  // ProgressBreakdown schema has no hidden fields. It is intentionally no-op
+  // at the calculation layer.
+  void options;
 
   if (task.taskType === TaskType.EPIC) {
-    // Epic: derive from children
-    // FR-4.1: All children at 100 → total is 100 (via count representation)
     const total = effectiveChildren.length;
     const done = effectiveChildren.filter(
       (child) =>
         child.status === "done" ||
-        child.status === "in_review" ||
-        child.status === "completed"
+        child.status === "in_review"
     ).length;
 
     return {
@@ -178,15 +159,10 @@ export function computeProgressBreakdown(
     };
   }
 
-  // Non-Epic: compute from current task status and PR info
+  // Non-Epic: compute from current task status and PR info.
   const hasPr =
     task.githubPrUrl != null &&
-    task.githubPrUrl !== "" &&
-    task.githubPrUrl !== undefined;
-
-  // FR-1.4: codeDelivered clamped to [0, 1]
-  const codeDelivered = hasPr ? (1 : 0) : 0;
-  const notCodeDelivered = hasPr ? (0 : 1) : 1;
+    task.githubPrUrl !== "";
 
   return {
     basis: "status",
@@ -195,26 +171,5 @@ export function computeProgressBreakdown(
     codeDelivered: hasPr && (task.status === "in_review" || task.status === "done"),
     testsPassing: DEFAULT_TESTS_PASSING,
     prState: hasPr ? "open" : "not_open",
-  } as ProgressBreakdown;
-}
-
-/** -------------------------------------------------------------------------- */
-/** Progress Breakdown Extensions                                              */
-/** -------------------------------------------------------------------------- */
-
-/**
- * Builds a breakdown object with additional metadata like lastUpdated timestamp.
- *
- * @param breakdown - The base breakdown to extend.
- * @param lastUpdated - The timestamp of the most recent modification (optional).
- * @returns A fully realized breakdown with all fields.
- */
-export function finalizeProgressBreakdown(
-  breakdown: ProgressBreakdown,
-  lastUpdated?: Date
-): ProgressBreakdown {
-  return {
-    ...breakdown,
-    lastUpdated: lastUpdated ?? breakdown.prState ?? new Date(),
   };
 }
