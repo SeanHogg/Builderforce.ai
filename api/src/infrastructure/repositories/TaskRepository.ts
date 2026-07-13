@@ -92,7 +92,7 @@ export class TaskRepository implements ITaskRepository {
         priority:          plain.priority,
         taskType:          plain.taskType ?? undefined,
         parentTaskId:      plain.parentTaskId ?? undefined,
-        prdTaskType:       (plain.prdTaskType ?? undefined),
+        pdTaskType:       (plain.prdTaskType ?? undefined),
         deliverableType:   (plain.deliverableType ?? undefined),
         assignedAgentType: plain.assignedAgentType ?? undefined,
         assignedAgentHostId: plain.assignedAgentHostId ?? undefined,
