@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 
 const Navbar: React.FC = () => {
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
@@ -10,32 +10,39 @@ const Navbar: React.FC = () => {
 
   return (
     <header style={styles.header}>
-      <div style={styles.container}>        <Link to="/" style={styles.logo}>BuilderForce.ai</Link>
-        
+      <div style={styles.container}>
+        {/* Logo - using text for simplicity, can be Image component */}
+        <Link href="/" style={styles.logo}>BuilderForce.ai</Link>
+
         {/* Hamburger menu for mobile */}
         <button
           onClick={toggleMenu}
           style={styles.hamburger}
           aria-label="Toggle menu"
+          aria-expanded={menuOpen}
         >
           <span style={styles.hamburgerLine}></span>
           <span style={styles.hamburgerLine}></span>
           <span style={styles.hamburgerLine}></span>
         </button>
-        
-        {/* Navigation links */}
-        <nav style={{ ...styles.nav, ...(menuOpen ? styles.navOpen : {}) }}>
+
+        {/* Navigation links - responsive toggling */}
+        <nav style={{ ...(menuOpen ? styles.navOpen : styles.navClosed) }}>
           <ul style={styles.navList}>
             <li style={styles.navItem}>
-              <Link to="/" style={styles.navLink}>
+              <Link href="/projects" style={styles.navLink} onClick={() => setMenuOpen(false)}>
                 Projects
               </Link>
             </li>
             <li style={styles.navItem}>
-              <Link to="/" style={styles.navLink} onClick={(e) => { e.preventDefault(); /* Placeholder */ }}>Tasks</Link>
+              <Link href="/tasks" style={styles.navLink} onClick={() => setMenuOpen(false)}>
+                Tasks
+              </Link>
             </li>
             <li style={styles.navItem}>
-              <Link to="/" style={styles.navLink} onClick={(e) => { e.preventDefault(); /* Placeholder */ }}>Messages</Link>
+              <Link href="/notifications" style={styles.navLink} onClick={() => setMenuOpen(false)}>
+                Messages
+              </Link>
             </li>
           </ul>
         </nav>
@@ -49,7 +56,10 @@ const styles = {
     backgroundColor: '#007bff',
     color: 'white',
     padding: '1rem 0',
-    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+    position: 'sticky',
+    top: 0,
+    zIndex: 100
   },
   container: {
     display: 'flex',
@@ -58,19 +68,19 @@ const styles = {
     maxWidth: '1200px',
     margin: '0 auto',
     padding: '0 1rem',
-    width: '100%',
+    width: '100%'
   },
   logo: {
     color: 'white',
     fontSize: '1.25rem',
-    fontWeight: 'bold',
+    fontWeight: 'bold'
   },
   hamburger: {
     display: 'flex',
     flexDirection: 'column' as const,
     justifyContent: 'space-around',
-    width: '2rem',
-    height: '1.5rem',
+    width: '44px',
+    height: '44px',
     backgroundColor: 'transparent',
     border: 'none',
     cursor: 'pointer',
@@ -87,37 +97,42 @@ const styles = {
     backgroundColor: 'white',
     borderRadius: '0.125rem'
   },
-  nav: {
+  navClosed: {
     // Hide by default on mobile
     '@media (max-width: 767.9px)': {
-      position: 'absolute' as const,
-      top: '100%',
+      position: 'fixed',
+      top: '60px',
       left: 0,
       width: '100%',
       backgroundColor: '#007bff',
       flexDirection: 'column' as const,
       padding: '1rem 0',
       clipPath: 'circle(0px at 90% -10%)',
-      transition: 'clip-path 0.5s ease-in-out'
+      transition: 'clip-path 0.5s ease-in-out',
+      boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
     }
   },
   navOpen: {
     // Show full screen nav on mobile when open
     '@media (max-width: 767.9px)': {
-      clipPath: 'circle(1000px at 90% -10%)',
+      clipPath: 'circle(1000px at 90% -10%)'
     }
   },
   navList: {
     display: 'flex',
     listStyle: 'none',
+    width: '100%',
     // On mobile, stack vertically
     '@media (max-width: 767.9px)': {
       flexDirection: 'column' as const,
-      alignItems: 'center'
+      alignItems: 'center',
+      gap: '0.5rem'
     }
   },
   navItem: {
     margin: '0 1rem',
+    width: '100%',
+    textAlign: 'center',
     // On mobile, add spacing
     '@media (max-width: 767.9px)': {
       margin: '0.5rem 0'
@@ -127,13 +142,14 @@ const styles = {
     color: 'white',
     fontSize: '1rem',
     fontWeight: 500,
-    padding: '0.5rem 0',
-    // Ensure touch targets are large enough
+    padding: '0.75rem 1.5rem',
     display: 'block',
-    minHeight: '44px',
-    minWidth: '44px',
+    minHeight: '48px',
+    minWidth: '48px',
     display: 'flex',
-    alignItems: 'center'
+    alignItems: 'center',
+    transition: 'opacity 0.2s',
+    borderRadius: '8px'
   }
 };
 
