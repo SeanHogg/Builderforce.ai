@@ -64,9 +64,6 @@ const validate = ajv.compile(schema);
 console.error(`✅ Schema loaded and compiled (Draft 2020-12)`);
 console.error('');
 
-// Ensure strict bounds for confidence/weight/overall_confidence [0.0, 1.0] as per PRD AC-4
-const CONFIDENCE_WEIGHT_UNBOUNDED_REJECT_MSG = "Reject confidence/weight/overall_confidence outside [0.0, 1.0] per AC-4.";
-
 function checkUnbounded(obj) {
   const { claims = [], evidence = [], uncertainty = {} } = obj;
   for (const ev of evidence) {
