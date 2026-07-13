@@ -45,6 +45,7 @@ export function CapabilityRow({ capability }: CapabilityRowProps) {
         borderBottom: '1px solid var(--border-subtle)',
         backgroundColor: 'var(--bg-base)',
       }}
+      className="capability-row-striped"
     >
       {/* Name */}
       <div
