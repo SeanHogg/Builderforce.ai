@@ -339,4 +339,45 @@ export class TaskService {
     if (projectIds.length === 0) return null;
     return this.tasks.dequeueNextReady(projectIds);
   }
+
+  /**
+   * Find unassigned high-priority tasks with pagination, project filtering, and sorting.
+   *
+   * Returns tasks where:
+   * - priority is 'high' or 'critical'
+   * - assignedUserId is NULL
+   * - archived is false
+   * - status is not 'done' or 'completed'
+   */
+  async findUnassignedHighPriority(
+    callerTenantId: number,
+    opts: {
+      projectId?: number;
+      page?: number;
+      pageSize?: number;
+      sortBy?: 'dueDate' | 'title' | 'createdAt';
+      sortOrder?: 'asc' | 'desc';
+    } = {}
+  ) {
+    // Verify caller has access to the requested project(s)
+    let validProjectId: ProjectId | undefined;
+    if (opts.projectId !== undefined) {
+      const project = await this.projects.findById(asProjectId(opts.projectId));
+      if (!project) {
+        throw new NotFoundError('Project', opts.projectId);
+      }
+      if (project.tenantId !== callerTenantId) {
+        throw new ForbiddenError('Project belongs to a different workspace');
+      }
+      validProjectId = asProjectId(opts.projectId);
+    }
+
+    return this.tasks.findUnassignedHighPriority({
+      projectId: validProjectId ? validProjectId : undefined,
+      page: opts.page || 1,
+      pageSize: opts.pageSize || 20,
+      sortBy: opts.sortBy || 'createdAt',
+      sortOrder: opts.sortOrder || 'desc',
+    });
+  }
 }
