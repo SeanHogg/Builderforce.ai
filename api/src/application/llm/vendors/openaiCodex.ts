@@ -14,13 +14,25 @@ function requestBody(params: VendorCallParams): Record<string, unknown> {
     const tool = raw as { type?: string; function?: { name?: string; description?: string; parameters?: unknown } };
     return tool.type === 'function' && tool.function ? { type: 'function', ...tool.function } : raw;
   });
-  const input = params.messages.flatMap((message) => {
+  const instructions = params.messages
+    .filter((message) => message['role'] === 'system' || message['role'] === 'developer')
+    .map((message) => typeof message['content'] === 'string' ? message['content'] : JSON.stringify(message['content'] ?? ''))
+    .filter(Boolean)
+    .join('\n\n') || 'You are a helpful assistant.';
+  const input = params.messages
+    .filter((message) => message['role'] !== 'system' && message['role'] !== 'developer')
+    .flatMap((message) => {
     const role = String(message['role'] ?? 'user');
     if (role === 'tool') {
       return [{ type: 'function_call_output', call_id: String(message['tool_call_id'] ?? ''), output: typeof message['content'] === 'string' ? message['content'] : JSON.stringify(message['content'] ?? '') }];
     }
     const items: Array<Record<string, unknown>> = [];
-    if (message['content'] !== undefined && message['content'] !== null && message['content'] !== '') items.push({ role, content: message['content'] });
+    if (message['content'] !== undefined && message['content'] !== null && message['content'] !== '') {
+      const content = typeof message['content'] === 'string'
+        ? [{ type: role === 'assistant' ? 'output_text' : 'input_text', text: message['content'] }]
+        : message['content'];
+      items.push({ role, content });
+    }
     if (role === 'assistant' && Array.isArray(message['tool_calls'])) {
       for (const raw of message['tool_calls']) {
         const call = raw as { id?: string; function?: { name?: string; arguments?: string } };
@@ -33,7 +45,7 @@ function requestBody(params: VendorCallParams): Record<string, unknown> {
   const toolChoice = rawChoice && typeof rawChoice === 'object' && rawChoice.type === 'function'
     ? { type: 'function', name: rawChoice.function?.name }
     : rawChoice;
-  return { model: params.model, input, store: false, ...(tools ? { tools } : {}), ...(toolChoice ? { tool_choice: toolChoice } : {}), ...(params.maxTokens ? { max_output_tokens: params.maxTokens } : {}) };
+  return { model: params.model, instructions, input, store: false, ...(tools ? { tools } : {}), ...(toolChoice ? { tool_choice: toolChoice } : {}), ...(params.maxTokens ? { max_output_tokens: params.maxTokens } : {}) };
 }
 
 async function callResponses(params: VendorCallParams): Promise<VendorCallResult> {

@@ -7661,7 +7661,7 @@
       "kimi": { "blurb": "Collez une clé d’abonnement Kimi Code ou une clé API Moonshot." },
       "qwen": { "blurb": "Collez une clé API Alibaba DashScope pour utiliser les modèles Qwen." },
       "minimax": { "blurb": "Collez une clé API MiniMax pour utiliser les modèles MiniMax." }
-      ,"xai": { "blurb": "Connectez un abonnement SuperGrok éligible ou une clé API xAI.", "subscription": "abonnement SuperGrok", "pastePrompt": "Copiez l’URL complète <code>http://127.0.0.1:56121/callback?code=…&state=…</code> et collez-la ici.", "pastePlaceholder": "Collez l’URL de redirection xAI…" }
+      ,"xai": { "blurb": "Connectez un abonnement SuperGrok éligible ou une clé API xAI.", "subscription": "abonnement SuperGrok", "pastePrompt": "Après approbation, copiez le code affiché sur la page xAI et collez-le ici.", "pastePlaceholder": "Collez le code de connexion xAI…" }
     }
   },
   "modelSelect": {

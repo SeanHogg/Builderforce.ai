@@ -514,6 +514,14 @@ export function isCapacityLimitBody(text: string | undefined | null): boolean {
   );
 }
 
+/** Some OpenRouter upstreams report context-window overflow as HTTP 400 instead
+ * of 413. The payload is valid for the gateway; a larger-window model can serve
+ * it, so normalize this narrow message class to the existing 413 cascade path. */
+export function isContextOverflowBody(text: string | undefined | null): boolean {
+  if (!text) return false;
+  return /context\s*(window|length)|maximum\s+context|too\s+many\s+tokens|prompt\s+is\s+too\s+long|input.*token.*(?:exceed|limit)|estimated\s+tokens.*exceed/i.test(text);
+}
+
 /**
  * Stable `reason` slug a schema-shape rejection carries through the cascade
  * ({@link VendorSchemaError} → `DispatchAttempt.reason` → `FailoverEvent.reason`
@@ -564,6 +572,9 @@ export function throwClassified4xx(
   status: number,
   errText: string,
 ): never {
+  if (isContextOverflowBody(errText)) {
+    throw new VendorRetryableError(vendorId, model, 413, `context window exceeded (upstream ${status}): ${errText.slice(0, 200)}`);
+  }
   // Schema-too-complex is checked FIRST: it rides on a 400 (so the fatal branch
   // below would wrongly hard-fail the run) but a DIFFERENT vendor can serve the
   // same schema, so it must cascade — and carry the `schema` class so an
