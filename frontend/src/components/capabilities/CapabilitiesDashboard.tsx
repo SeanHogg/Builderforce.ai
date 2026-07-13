@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useMemo as useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { GaugeChart } from '@/components/charts/GaugeChart';
 import { DonutChart } from '@/components/charts/DonutChart';
 import { CapabilityRow } from './CapabilityRow';
