@@ -18,10 +18,13 @@ import type { Db } from '../../infrastructure/database/connection';
 export function createChatRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
-  router.post('/brain/sessions/:target/consolidate', authMiddleware as never, async (c) => {
+  router.post('/brain/sessions/:target/consolidate', authMiddleware, async (c) => {
     const db = c.get('db') as Db;
     const env = c.get('env') as HonoEnv;
     const tenantId = c.get('tenantId') as number;
+
+    // Debug: log to stdout (optional)
+    console.log(`[consolidate] tenant:${tenantId} target:${targetId} sources:${sourceIds.join(',')}`);
 
     const targetIdParam = c.req.param('target');
     if (!targetIdParam || targetIdParam.includes('/')) {
