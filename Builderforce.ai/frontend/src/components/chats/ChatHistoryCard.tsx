@@ -143,13 +143,6 @@ export function ChatHistoryCard({
  * In production, this would call an API endpoint.
  */
 async function newTitlePersistence(chatId: string, title: string): Promise<void> {
-  // In a real implementation, this would:
-  // 1. Call the backend API to update the chat title
-  // 2. Refresh the chat data from the server
-  // 3. Handle any errors
-
+  // In the integrated app, this would call a backend API to persist the change.
   console.log(`[Chat History] Persisted new title for chat ${chatId}: "${title}"`);
-
-  // For demo purposes, we'll just log the change.
-  // In production, this would sync with the backend.
 }
