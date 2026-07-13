@@ -1,0 +1,17 @@
+{
+  "runtime": {
+    "upstream_url": "${BUILDERFORCE_UPSTREAM_URL:https://builders.test/api/agent-hosts}",
+    "upstream_key": "${BUILDERFORCE_UPSTREAM_KEY}",
+    "upstream_id": "${BUILDERFORCE_AGENT_HOST_ID:expected-builderforce-agent-host}"
+  },
+  "relay": {
+    "upstream_url": "${BUILDERFORCE_RELAY_UPSTREAM_URL:https://builders.test/api/agent-hosts}",
+    "gateway_as_local": true,
+    "local_gateway_port": 18789
+  },
+  "execution": {
+    "engine": "builderforce-v2",
+    "enable_clear_fallback_logging": true,
+    "allow_immediate_retry": true
+  }
+}
