@@ -223,12 +223,12 @@ List of business requirements to be satisfied by the current ratified version.
 
 ## Design
 
-The design of the versioned JSON contract is documented in
+The design of the ratifiable versioned JSON contract is documented in
 [`docs/design/basis-payload-v1-design.md`](docs/design/basis-payload-v1-design.md).
 It covers the payload structure overview, field definitions, enum choices,
 validation strategy, and rationale for design decisions at a high level.
 
-**Key design points** (see design doc for full detail):
+**Key ratified design points** (see design doc for full detail):
 
 - **Payload-level vs per-claim evidence** — FR-4 says each *claim* MAY reference evidence items, but AC-1 requires rejecting payloads missing `evidence` at the top level. v1 resolves this by making the top-level `evidence` array **required** (like `claims`); a claim may still reference zero evidence items.
 - **Extensions namespacing** — Unknown fields outside `extensions` must cause a *warning* (not hard error) in consumer logs (AC-6), so the root uses `additionalProperties: true` and only the `extensions` object supplies patternProperties for reverse-DNS keys.
