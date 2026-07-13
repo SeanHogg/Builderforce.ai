@@ -84,6 +84,13 @@ export interface UseBrainConversationOptions {
    */
   onFirstUserTurn?: (chatId: number, text: string) => void;
   /**
+   * Auto-name a still-untitled chat (title === {@link DEFAULT_CHAT_TITLE}) from its
+   * first user message via a callback provided by the host (e.g., the Brain panel).
+   * Providing this option enables FR1 and removes "New chat" placeholders immediately.
+   * Best-effort and idempotent across multiple first-turn events.
+   */
+  autoTitle?: (chatId: number, text: string) => void;
+  /**
    * Project-Evermind memory hooks, bound by the host to the active chat's project.
    * When set, a run recalls the project's learned memories before answering
    * (grounding the reply) and records recall/learn/reconcile steps in the trace.
