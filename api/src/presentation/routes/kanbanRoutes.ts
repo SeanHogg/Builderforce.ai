@@ -243,12 +243,14 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
       const memberKind = body.memberKind === 'agent' || body.memberKind === 'human' ? body.memberKind : 'human';
       const userId = (c.get('userId') as string) || null;
       const memberRef = body.memberRef?.trim() || userId;
+      const [taskScope] = await db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+      if (!taskScope) return c.json({ error: 'task not found' }, 404);
 
       // RBAC (default-deny, AC-6): only a member ROLE-CAPABLE of roleKey may sign off as
       // it. Agents check capability; humans pass if manager, pinned, or discipline-matched.
       const capable = memberKind === 'agent'
         ? await isAgentRefRoleCapable(db, tenantId, memberRef, body.roleKey)
-        : (isManager(c) || await humanIsRoleCapable(db, tenantId, memberRef, body.roleKey));
+        : (isManager(c) || await humanIsRoleCapable(db, tenantId, memberRef, body.roleKey, taskScope.projectId));
       if (!capable) return c.json({ error: `not authorized to sign off as role '${body.roleKey}'` }, 403);
 
       const memberName = await resolveMemberDisplayName(db, tenantId, memberKind, memberRef);
@@ -269,12 +271,11 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
       await participantsService.invalidate(env(c), taskId);
 
       // Emit the accountability trail on the HTTP path too (previously MCP-only).
-      const [proj] = await db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
       const actor = memberKind === 'agent'
         ? cloudAgentActor(memberRef ?? 'agent', memberName ?? memberRef ?? 'agent')
         : await resolveHumanActor(env(c), db, tenantId, memberRef ?? userId ?? '');
       await recordActivity(env(c), db, {
-        tenantId, projectId: proj?.projectId ?? null, actor,
+        tenantId, projectId: taskScope.projectId, actor,
         verb: verdict === 'approved' || verdict === 'waived' ? 'ticket.role.completed' : 'ticket.signed_off',
         targetType: 'task', targetId: String(taskId), targetLabel: `#${taskId}`,
         summary: `${roleLabel(body.roleKey)} ${verdict.replace('_', ' ')}${body.summary ? `: ${body.summary}` : ''}`.slice(0, 300),

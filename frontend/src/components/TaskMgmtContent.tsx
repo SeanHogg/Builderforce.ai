@@ -213,7 +213,7 @@ export function TaskMgmtContent({
   // until the viewer explicitly opens it; this state is intentionally session-only.
   const [expandedAssigneeRows, setExpandedAssigneeRows] = useState<Set<string>>(new Set());
   const [profileAssignee, setProfileAssignee] = useState<{
-    kind: MemberKind; refId: string; name: string;
+    kind: MemberKind; refId: string; name: string; tasks: Task[];
   } | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterProject, setFilterProject] = useState<string>(projectId != null ? String(projectId) : '');
@@ -624,8 +624,21 @@ export function TaskMgmtContent({
     const prefix = key.slice(0, 2);
     const refId = key.slice(2);
     const kind: MemberKind | null = prefix === 'u:' ? 'human' : prefix === 'c:' ? 'cloud_agent' : prefix === 'h:' ? 'host_agent' : null;
-    if (kind && refId) setProfileAssignee({ kind, refId, name });
-  }, []);
+    if (kind && refId) {
+      setProfileAssignee({
+        kind,
+        refId,
+        name,
+        // The profile is an assignee-level view, so include every task currently
+        // loaded for this board even when board filters hide some of them.
+        tasks: tasks.filter((task) => assigneeSelectValue(
+          task.assignedAgentHostId,
+          task.assignedAgentRef,
+          task.assignedUserId,
+        ) === key),
+      });
+    }
+  }, [tasks]);
 
   const toggleAssigneeRow = useCallback((key: string) => {
     setExpandedAssigneeRows((current) => {
@@ -2650,6 +2663,7 @@ export function TaskMgmtContent({
           kind={profileAssignee.kind}
           refId={profileAssignee.refId}
           name={profileAssignee.name}
+          tasks={profileAssignee.tasks}
           onClose={() => setProfileAssignee(null)}
         />
       )}

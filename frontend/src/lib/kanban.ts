@@ -162,6 +162,7 @@ export interface ManifestParticipant {
   state: ParticipantState;
   signoffId: string | null;
   childTaskId: number | null;
+  evidence: SignoffContribution | null;
   note: string | null;
 }
 
@@ -175,6 +176,7 @@ export interface SignoffContribution {
 }
 
 export interface AccountabilitySignoff {
+  laneKey: string | null;
   roleKey: string;
   roleName: string;
   memberKind: string | null;

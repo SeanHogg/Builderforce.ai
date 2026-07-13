@@ -9,7 +9,7 @@
  * and then auto-run AS the implementer. Capability is now explicit:
  *   explicit ide_agents.role_keys  →  builtin_kind-derived  →  fuzzy title/skill.
  */
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull, or } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
@@ -153,15 +153,22 @@ export async function resolveRoleCapableAgents(
 
     // 1) explicit pins (project-specific + workspace default) for this role.
     const pins = await db
-      .select({ assigneeRef: projectRoleAssignments.assigneeRef, assigneeName: projectRoleAssignments.assigneeName })
+      .select({ projectId: projectRoleAssignments.projectId, assigneeRef: projectRoleAssignments.assigneeRef, assigneeName: projectRoleAssignments.assigneeName })
       .from(projectRoleAssignments)
-      .where(and(eq(projectRoleAssignments.tenantId, tenantId), eq(projectRoleAssignments.roleKey, roleKey), eq(projectRoleAssignments.assigneeKind, 'agent')));
+      .where(and(
+        eq(projectRoleAssignments.tenantId, tenantId),
+        eq(projectRoleAssignments.roleKey, roleKey),
+        eq(projectRoleAssignments.assigneeKind, 'agent'),
+        or(eq(projectRoleAssignments.projectId, projectId), isNull(projectRoleAssignments.projectId)),
+      ));
 
     const out: RoleCandidate[] = [];
     const seen = new Set<string>();
+    pins.sort((a, b) => Number(b.projectId === projectId) - Number(a.projectId === projectId));
     for (const p of pins) {
       if (seen.has(p.assigneeRef)) continue;
       const a = byId.get(p.assigneeRef);
+      if (!a) continue;
       out.push({ kind: 'agent', ref: p.assigneeRef, name: p.assigneeName ?? a?.name ?? p.assigneeRef, via: 'assignment' });
       seen.add(p.assigneeRef);
     }
@@ -203,7 +210,7 @@ export async function isAgentRefRoleCapable(db: Db, tenantId: number, agentRef: 
 /** Is a human role-capable of `roleKey`? True when pinned to it (project_role_assignments)
  *  OR their member-profile discipline matches the role's. Empty roleKey ⇒ true. Used for
  *  default-deny RBAC on the sign-off route (managers bypass separately). */
-export async function humanIsRoleCapable(db: Db, tenantId: number, userId: string | null | undefined, roleKey: string | null | undefined): Promise<boolean> {
+export async function humanIsRoleCapable(db: Db, tenantId: number, userId: string | null | undefined, roleKey: string | null | undefined, projectId?: number | null): Promise<boolean> {
   const nk = (roleKey ?? '').trim();
   if (!nk) return true;
   const uid = (userId ?? '').trim();
@@ -211,7 +218,11 @@ export async function humanIsRoleCapable(db: Db, tenantId: number, userId: strin
   const [pin] = await db
     .select({ ref: projectRoleAssignments.assigneeRef })
     .from(projectRoleAssignments)
-    .where(and(eq(projectRoleAssignments.tenantId, tenantId), eq(projectRoleAssignments.roleKey, nk), eq(projectRoleAssignments.assigneeKind, 'human'), eq(projectRoleAssignments.assigneeRef, uid)))
+    .where(and(
+      eq(projectRoleAssignments.tenantId, tenantId), eq(projectRoleAssignments.roleKey, nk),
+      eq(projectRoleAssignments.assigneeKind, 'human'), eq(projectRoleAssignments.assigneeRef, uid),
+      projectId == null ? isNull(projectRoleAssignments.projectId) : or(eq(projectRoleAssignments.projectId, projectId), isNull(projectRoleAssignments.projectId)),
+    ))
     .limit(1);
   if (pin) return true;
   const discipline = BUILTIN_ROLES.find((r) => r.key === nk)?.discipline;
