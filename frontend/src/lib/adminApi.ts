@@ -89,6 +89,43 @@ export interface AdminHealth {
   timestamp: string;
 }
 
+export interface AdminSystemTable {
+  name: string;
+  totalBytes: number;
+  estimatedRows: number;
+  insertsSinceStatsReset: number;
+  updatesSinceStatsReset: number;
+  deletesSinceStatsReset: number;
+  lastAutovacuum: string | null;
+  lastAnalyze: string | null;
+}
+
+export interface AdminSystemDatabase {
+  name: 'primary' | 'transactional';
+  ok: boolean;
+  latencyMs: number;
+  databaseName: string | null;
+  totalBytes: number;
+  tables: AdminSystemTable[];
+  error?: string;
+}
+
+export interface AdminSystemHealth {
+  timestamp: string;
+  worker: {
+    version: string;
+    environment: string;
+    bindings: Record<string, boolean>;
+  };
+  runtime: {
+    agentHosts: number;
+    onlineAgentHosts: number;
+    activeExecutions: number;
+    failedExecutions24h: number;
+  };
+  databases: AdminSystemDatabase[];
+}
+
 /** One zero-filled daily point (matches the API MetricPoint). */
 export interface AdminMetricPoint { day: string; value: number; }
 
@@ -612,6 +649,20 @@ export const adminApi = {
 
   async health(): Promise<AdminHealth> {
     return adminRequest<AdminHealth>('/api/admin/health');
+  },
+
+  async systemHealth(): Promise<AdminSystemHealth> {
+    return adminRequest<AdminSystemHealth>('/api/admin/system-health');
+  },
+
+  async systemMaintenance(input: {
+    action: 'purge_expired' | 'vacuum_analyze';
+    target?: 'primary' | 'transactional';
+    table?: string;
+  }): Promise<{ ok: boolean }> {
+    return adminRequest('/api/admin/system-health/maintenance', {
+      method: 'POST', body: JSON.stringify(input),
+    });
   },
 
   async errors(): Promise<AdminError[]> {
