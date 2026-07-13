@@ -71,7 +71,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'portfolio', labelKey: 'tab.portfolio', icon: '📊' },
       { id: 'ceremonies', labelKey: 'tab.ceremonies', icon: '🎯' },
       { id: 'templates', labelKey: 'tab.templates', icon: '🗂' },
-      { id: 'capabilities', labelKey: 'tab.capabilities', icon: '⚡' },
+      { id: 'capabilities', labelKey: 'tab.projects', icon: '□' },
       // Pre-sales: respond to an RFQ/RFP with a co-branded proposal grounded on the
       // portfolio + a fresh diagnostics scan (capability roster + P&L + plan).
       { id: 'rfp', labelKey: 'tab.rfp', icon: '📄' },
