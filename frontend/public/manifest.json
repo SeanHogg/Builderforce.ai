@@ -2,6 +2,7 @@
   "name": "Builderforce.ai",
   "short_name": "Builderforce",
   "description": "Build, train, and deploy custom AI agents. WebGPU LoRA fine-tuning in the browser.",
+  "version": "2026.05.31",
   "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",
