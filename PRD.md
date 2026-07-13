@@ -506,6 +506,8 @@ Ratification actions taken:
 - Requirement decision documentation added to `Implementation Notes` (AC-1 vs FR-4 tension, AC-6 unknown-field behavior, AC-8 tagging).
 - References in PRD and design doc confirm full traceability (FYI: `sandbox` is not required by FR-2).
 
+Runtime dependency: The validation harness explicitly requires `ajv` via `require('ajv')`. For local use in-tree at `spec/basis-payload/`, run `npm install ajv@^8`. Consumers DO NOT commit `node_modules` under the spec directory; runtime availability is ensured by the platform or consumer's dependency management.
+
 Notes on requirement decisions:
 - **AC-1 vs FR-4 tension.** FR-4 states each *claim* MAY reference evidence (per-claim optionality), while AC-1 requires the payload to be rejected when `evidence` is missing. v1 resolves this by making the top-level `evidence` array **required** (like `claims`); a claim may still reference zero evidence items. Documented in the design and changelog.
 - **AC-6 (unknown fields → warning, not error).** The schema uses `additionalProperties: true` at the top level so unknown fields do not hard-fail; consumers log a warning. Only the `extensions` object constrains its keys (reverse-DNS namespaces).
