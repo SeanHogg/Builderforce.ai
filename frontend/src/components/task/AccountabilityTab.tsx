@@ -38,11 +38,20 @@ function StateChip({ state, label }: { state: string; label: string }) {
   );
 }
 
-function ContributionLinks({ p }: { p: ManifestParticipant }) {
-  // The contribution lives on the sign-off; the manifest carries evidence + child link.
-  const items: string[] = [];
-  if (p.childTaskId != null) items.push(`#${p.childTaskId}`);
-  return items.length ? <span style={{ color: 'var(--text-secondary)' }}>{items.join(' · ')}</span> : <span style={{ color: 'var(--text-muted)' }}>—</span>;
+function ContributionLinks({ p, contribution }: { p: ManifestParticipant; contribution?: AccountabilityReport['signoffs'][number]['contribution'] }) {
+  const evidence = contribution ?? p.evidence;
+  const labels: string[] = [];
+  if (p.childTaskId != null) labels.push(`#${p.childTaskId}`);
+  if (evidence?.executionId != null) labels.push(`Run #${evidence.executionId}`);
+  if (evidence?.prdRevision != null) labels.push(`PRD r${evidence.prdRevision}`);
+  if (evidence?.toolRunId) labels.push(`Test ${evidence.toolRunId}`);
+  if (evidence?.diffFiles?.length) labels.push(`${evidence.diffFiles.length} file${evidence.diffFiles.length === 1 ? '' : 's'}`);
+  return (
+    <span style={{ color: 'var(--text-secondary)' }}>
+      {evidence?.prUrl && <><a href={evidence.prUrl} target="_blank" rel="noreferrer">PR</a>{labels.length ? ' · ' : ''}</>}
+      {labels.length ? labels.join(' · ') : evidence?.reviewThreadRef ?? (!evidence?.prUrl ? '—' : '')}
+    </span>
+  );
 }
 
 export function AccountabilityTab({ taskId }: { taskId: number }) {
@@ -68,9 +77,9 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { kanbanApi.listRoles().then(setRoles).catch(() => setRoles([])); }, []);
 
-  const signoffByRole = useMemo(() => {
+  const signoffBySlot = useMemo(() => {
     const m = new Map<string, AccountabilityReport['signoffs'][number]>();
-    for (const s of report?.signoffs ?? []) m.set(s.roleKey, s); // last wins = latest
+    for (const s of report?.signoffs ?? []) m.set(`${s.laneKey ?? ''}:${s.roleKey}`, s);
     return m;
   }, [report]);
 
@@ -147,7 +156,7 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
                 <tr style={trStyle}><td style={tdMutedStyle} colSpan={7}>{t('table.empty')}</td></tr>
               )}
               {required.map((p) => {
-                const so = signoffByRole.get(p.roleKey);
+                const so = signoffBySlot.get(`${p.stageKey ?? ''}:${p.roleKey}`);
                 return (
                   <tr key={p.id} style={trStyle}>
                     <td style={tdStyle}>
@@ -159,7 +168,7 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
                     <td style={tdStyle}>{so ? verdictLabel(so.verdict) : <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
                     <td style={tdMutedStyle}>{so ? new Date(so.createdAt).toLocaleString() : '—'}</td>
                     <td style={tdMutedStyle}>{so?.summary ?? so?.waiveReason ?? '—'}</td>
-                    <td style={tdStyle}><ContributionLinks p={p} /></td>
+                    <td style={tdStyle}><ContributionLinks p={p} contribution={so?.contribution} /></td>
                   </tr>
                 );
               })}

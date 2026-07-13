@@ -67,7 +67,7 @@ import { ExecutionStatus } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { executions, tasks, specs, toolAuditEvents, usageSnapshots, projects, approvals, projectAgents } from '../../infrastructure/database/schema';
+import { boards, executions, tasks, specs, toolAuditEvents, usageSnapshots, projects, approvals, projectAgents } from '../../infrastructure/database/schema';
 
 /** Resolved cloud-agent identity for a run — engine, display label, surface, model. */
 export interface ResolvedCloudAgent {
@@ -822,7 +822,11 @@ export async function loadContainerRunContext(env: Env, db: Db, executionId: num
       .select({ title: tasks.title, description: tasks.description, projectId: tasks.projectId, assignedAgentRef: tasks.assignedAgentRef })
       .from(tasks).where(eq(tasks.id, exec.taskId)).limit(1);
     if (!task) return null;
-    const ref = parseCloudAgentRef(exec.payload ?? undefined) ?? task.assignedAgentRef ?? undefined;
+    const explicitRef = parseCloudAgentRef(exec.payload ?? undefined);
+    const [board] = await db.select({ lifecycleManaged: boards.lifecycleManaged }).from(boards).where(eq(boards.projectId, task.projectId)).limit(1);
+    // Managed-ticket assignees coordinate; role dispatches must name their executor.
+    if (board?.lifecycleManaged && !explicitRef) return null;
+    const ref = explicitRef ?? task.assignedAgentRef ?? undefined;
     const agent = await resolveCloudAgent(env, exec.tenantId, ref);
     const payloadModel = parseModel(exec.payload ?? undefined);
     const routing = await resolveCloudRouting(env, exec.tenantId);

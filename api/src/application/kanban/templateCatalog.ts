@@ -145,7 +145,8 @@ const BUG_TRIAGE: KanbanTemplate = {
  * lifecycle-managed board: the Assignee is the Coordinator (never the executor), each
  * stage has enforced producer + reviewer participation, reviewer quorum (2-of-3), a
  * business-validation stage, and a security review that applies ONLY to security-type
- * tickets. Opt-in (a tenant applies it explicitly); its hard gates are intentional.
+ * tickets. This is the default for new software projects; existing boards retain
+ * their selected template until a manager explicitly reapplies one.
  */
 const STANDARD_SWE_V2: KanbanTemplate = {
   id: 'standard-swe-v2',
@@ -202,7 +203,7 @@ const STANDARD_SWE_V2: KanbanTemplate = {
 export const BUILTIN_TEMPLATES: KanbanTemplate[] = [STANDARD_SWE, STANDARD_SWE_V2, LEAN_STARTUP, BUG_TRIAGE];
 
 /** The template applied to a brand-new project's board by default. */
-export const DEFAULT_TEMPLATE_ID = 'standard-swe';
+export const DEFAULT_TEMPLATE_ID = 'standard-swe-v2';
 
 const BY_ID = new Map(BUILTIN_TEMPLATES.map((t) => [t.id, t]));
 

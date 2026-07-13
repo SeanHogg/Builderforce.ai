@@ -85,6 +85,7 @@ export function providersFromCredentials(creds: TenantLlmCredentials): LlmProvid
   const set = new Set<LlmProvider>((Object.keys(creds.vendorKeys) as LlmProvider[]).filter((p) => creds.vendorKeys[p]));
   if (creds.anthropicOAuthToken) set.add('anthropic');
   if (creds.openaiCodexAuth) set.add('openai');
+  if (creds.xaiOAuthToken) set.add('xai');
   return [...set];
 }
 
@@ -338,6 +339,7 @@ export async function resolveTenantVendorKeys(env: Env, tenantId: number): Promi
 export interface TenantLlmCredentials {
   anthropicOAuthToken: string | null;
   openaiCodexAuth?: { accessToken: string; accountId: string } | null;
+  xaiOAuthToken?: string | null;
   vendorKeys: TenantVendorKeys;
   /** Every provider the tenant has a stored credential ROW for — regardless of whether
    *  it could be RESOLVED this call. A provider that is `configured` but absent from the
@@ -374,10 +376,10 @@ export async function resolveTenantLlmCredentials(env: Env, tenantId: number): P
     listTenantProviderKeys(env, tenantId).catch(() => [] as ProviderKeySummary[]),
   ]);
   const anthropicOAuthToken = anthropicRes.auth?.mode === 'oauth' ? anthropicRes.auth.accessToken : null;
-  if (xaiRes.token) vendorKeys.xai = xaiRes.token;
   const creds: TenantLlmCredentials = {
     anthropicOAuthToken,
     openaiCodexAuth: openaiRes.auth,
+    xaiOAuthToken: xaiRes.token,
     vendorKeys,
     // `configured` is already ordered by tenant-set precedence (listTenantProviderKeys),
     // so both the provider list and the vendor-priority order read straight off it.
@@ -530,7 +532,9 @@ export function byoVendorPriorityOrder(summaries: readonly ProviderKeySummary[])
     .filter((s) => s.priority !== null)
     .map((s) => s.provider === 'openai' && s.authType === 'oauth'
       ? 'openai-codex'
-      : PROVIDER_VENDOR_MAP[s.provider].vendorId);
+      : s.provider === 'xai' && s.authType === 'oauth'
+        ? 'xai-oauth'
+        : PROVIDER_VENDOR_MAP[s.provider].vendorId);
 }
 
 /** Remove a tenant's provider credential (API key or OAuth subscription). */

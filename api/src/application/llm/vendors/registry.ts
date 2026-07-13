@@ -15,6 +15,7 @@ import { nvidiaModule } from './nvidia';
 import { ollamaModule } from './ollama';
 import { openRouterModule } from './openrouter';
 import { openAiCodexModule } from './openaiCodex';
+import { xaiOAuthModule } from './xaiOAuth';
 import { openAICompatibleModules, openAICompatibleModulesById } from './openaiCompatibleVendors';
 import { registerSchemaDialectResolver } from '../jsonSchemaSanitize';
 import {
@@ -56,7 +57,7 @@ import {
 // vendor count to 30+ (the "30+ model providers" marketing claim) without
 // touching the tuned free/paid cascade. See openaiCompatibleVendors.ts.
 const MODULES: ReadonlyArray<VendorModule> = [
-  cerebrasModule, ollamaModule, nvidiaModule, cloudflareModule, openRouterModule, googleAiModule, anthropicModule, openAiCodexModule,
+  cerebrasModule, ollamaModule, nvidiaModule, cloudflareModule, openRouterModule, googleAiModule, anthropicModule, openAiCodexModule, xaiOAuthModule,
   // `evermind` is autoRoute:false (explicit `evermind/<ref>` pin only), so its
   // position never affects the auto-selected FREE/PRO pool ordering.
   evermindModule,
@@ -75,6 +76,7 @@ const MODULES_BY_ID: Record<VendorId, VendorModule> = {
   cloudflare: cloudflareModule,
   anthropic:  anthropicModule,
   'openai-codex': openAiCodexModule,
+  'xai-oauth': xaiOAuthModule,
   evermind:   evermindModule,
 };
 
@@ -112,6 +114,7 @@ const VENDOR_PREFIXES: ReadonlyArray<{ prefix: string; vendor: VendorId }> = [
   // everything after `evermind/` as the model id, which is exactly the ref.
   { prefix: 'evermind/',   vendor: 'evermind' },
   { prefix: 'openai-codex/', vendor: 'openai-codex' },
+  { prefix: 'xai-oauth/', vendor: 'xai-oauth' },
   // Cloudflare model ids natively start with `@cf/...` so they're
   // self-identifying without a `cloudflare/` URL-style prefix. We still accept
   // `cloudflare/@cf/...` for symmetry with the other vendors — callers who

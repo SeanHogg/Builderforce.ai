@@ -57,6 +57,11 @@ describe('BYO provider routing map', () => {
     expect(byoVendorPriorityOrder([{ provider: 'openai', authType: 'oauth', priority: 0 }])).toEqual(['openai-codex']);
     expect(byoVendorPriorityOrder([{ provider: 'openai', authType: 'api_key', priority: 0 }])).toEqual(['openai']);
   });
+
+  it('maps xAI OAuth priority to the SuperGrok Responses vendor', () => {
+    expect(byoVendorPriorityOrder([{ provider: 'xai', authType: 'oauth', priority: 0 }])).toEqual(['xai-oauth']);
+    expect(byoVendorPriorityOrder([{ provider: 'xai', authType: 'api_key', priority: 0 }])).toEqual(['xai']);
+  });
 });
 
 /** Stage an oauth row whose decrypted token blob has the given absolute `expires`. */

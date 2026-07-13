@@ -6,6 +6,14 @@ import { Select } from '@/components/Select';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { membersApi, type MemberKind, type MemberProfile } from '@/lib/builderforceApi';
 import { MemberTimeChart } from './MemberTimeChart';
+import { taskStatusBadgeClass, taskStatusLabel } from '@/lib/taskStatus';
+
+export interface MemberProfileTask {
+  id: number;
+  title: string;
+  status: string;
+  key?: string | null;
+}
 
 /**
  * Capability & availability profile editor for one workforce member (human OR
@@ -37,8 +45,8 @@ function textToStrings(s: string): string[] {
   return s.split(',').map((t) => t.trim()).filter(Boolean);
 }
 
-export function MemberProfileEditor({ kind, refId, name, onClose, onSaved }: {
-  kind: MemberKind; refId: string; name: string; onClose: () => void; onSaved?: () => void;
+export function MemberProfileEditor({ kind, refId, name, tasks, onClose, onSaved }: {
+  kind: MemberKind; refId: string; name: string; tasks?: MemberProfileTask[]; onClose: () => void; onSaved?: () => void;
 }) {
   const t = useTranslations('memberProfile');
   const tw = useTranslations('workforce');
@@ -52,6 +60,7 @@ export function MemberProfileEditor({ kind, refId, name, onClose, onSaved }: {
   const [taskTypesText, setTaskTypesText] = useState('');
   const [calMsg, setCalMsg] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [activeTab, setActiveTab] = useState<'overview' | 'timeLogs' | 'tasks'>('overview');
 
   useEffect(() => {
     membersApi.getProfile(kind, refId)
@@ -118,10 +127,37 @@ export function MemberProfileEditor({ kind, refId, name, onClose, onSaved }: {
         </div>
       }
       width="min(560px, 96vw)"
+      tabs={[
+        { id: 'overview', label: t('tabs.overview') },
+        { id: 'timeLogs', label: t('tabs.timeLogs') },
+        ...(tasks ? [{ id: 'tasks', label: t('tabs.tasks') }] : []),
+      ]}
+      activeTabId={activeTab}
+      onTabChange={(id) => setActiveTab(id as 'overview' | 'timeLogs' | 'tasks')}
     >
+      {activeTab === 'timeLogs' ? (
+        <div style={{ padding: 20 }}>
+          <MemberTimeChart kind={kind} refId={refId} />
+        </div>
+      ) : activeTab === 'tasks' ? (
+        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {tasks?.length ? tasks.map((task) => (
+            <div
+              key={task.id}
+              style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, padding: '10px 12px', border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-base)' }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{task.title}</div>
+                <div style={{ marginTop: 3, fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{task.key ?? `#${task.id}`}</div>
+              </div>
+              <span className={taskStatusBadgeClass(task.status)} style={{ flexShrink: 0 }}>{taskStatusLabel(task.status)}</span>
+            </div>
+          )) : (
+            <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('noTasks')}</div>
+          )}
+        </div>
+      ) : (
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {/* Activity chart — real logged time (migration 0245). */}
-        <MemberTimeChart kind={kind} refId={refId} />
 
         {loading ? (
           <div style={{ color: 'var(--muted)', fontSize: 13 }}>{tc('loading')}</div>
@@ -221,6 +257,7 @@ export function MemberProfileEditor({ kind, refId, name, onClose, onSaved }: {
           </>
         )}
       </div>
+      )}
     </SlideOutPanel>
   );
 }

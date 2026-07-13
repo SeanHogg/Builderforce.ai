@@ -17,7 +17,7 @@
  * sign-offs with no linked contribution, audited waivers). The sign-off ledger is
  * append-only, so this record is immutable history.
  */
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
@@ -69,6 +69,7 @@ export interface ManifestParticipant {
 }
 
 export interface AccountabilitySignoff {
+  laneKey: string | null;
   roleKey: string;
   roleName: string;
   memberKind: string | null;
@@ -257,11 +258,16 @@ export class TicketParticipantsService {
 
   /** Resolve the best concrete assignee for a role (explicit pin → capable agent). */
   private async resolveAssignee(env: Env, tenantId: number, projectId: number, roleKey: string): Promise<{ kind: string; ref: string; name: string } | null> {
-    const [pin] = await this.db
-      .select({ kind: projectRoleAssignments.assigneeKind, ref: projectRoleAssignments.assigneeRef, name: projectRoleAssignments.assigneeName })
+    const pins = await this.db
+      .select({ projectId: projectRoleAssignments.projectId, kind: projectRoleAssignments.assigneeKind, ref: projectRoleAssignments.assigneeRef, name: projectRoleAssignments.assigneeName })
       .from(projectRoleAssignments)
-      .where(and(eq(projectRoleAssignments.tenantId, tenantId), eq(projectRoleAssignments.roleKey, roleKey)))
-      .limit(1);
+      .where(and(
+        eq(projectRoleAssignments.tenantId, tenantId),
+        eq(projectRoleAssignments.roleKey, roleKey),
+        or(eq(projectRoleAssignments.projectId, projectId), isNull(projectRoleAssignments.projectId)),
+      ));
+    pins.sort((a, b) => Number(b.projectId === projectId) - Number(a.projectId === projectId));
+    const pin = pins[0];
     if (pin) return { kind: pin.kind, ref: pin.ref, name: pin.name ?? pin.ref };
     const [agent] = await resolveRoleCapableAgents(env, this.db, tenantId, projectId, roleKey);
     return agent ? { kind: 'agent', ref: agent.ref, name: agent.name } : null;
@@ -398,12 +404,12 @@ export class TicketParticipantsService {
 
     // Latest sign-off per role (append-only ledger — last verdict wins).
     const signoffs = await this.db
-      .select({ id: ticketRoleSignoffs.id, roleKey: ticketRoleSignoffs.roleKey, verdict: ticketRoleSignoffs.verdict, createdAt: ticketRoleSignoffs.createdAt })
+      .select({ id: ticketRoleSignoffs.id, laneKey: ticketRoleSignoffs.laneKey, roleKey: ticketRoleSignoffs.roleKey, verdict: ticketRoleSignoffs.verdict, createdAt: ticketRoleSignoffs.createdAt })
       .from(ticketRoleSignoffs)
       .where(eq(ticketRoleSignoffs.taskId, taskId))
       .orderBy(asc(ticketRoleSignoffs.createdAt));
-    const latestByRole = new Map<string, { id: string; verdict: string }>();
-    for (const s of signoffs) latestByRole.set(s.roleKey, { id: s.id, verdict: s.verdict });
+    const latestBySlot = new Map<string, { id: string; verdict: string }>();
+    for (const s of signoffs) latestBySlot.set(`${s.laneKey ?? ''}:${s.roleKey}`, { id: s.id, verdict: s.verdict });
 
     // Child task statuses for rollup.
     const childIds = rows.map((r) => r.childTaskId).filter((n): n is number => n != null);
@@ -414,7 +420,7 @@ export class TicketParticipantsService {
     }
 
     for (const r of rows) {
-      const so = latestByRole.get(r.roleKey);
+      const so = latestBySlot.get(`${r.stageKey ?? ''}:${r.roleKey}`);
       let state: ParticipantState = r.assigneeRef ? 'assigned' : (r.required ? 'unstaffed' : 'pending');
       let signoffId: string | null = r.signoffId;
       if (r.childTaskId != null) {
@@ -486,6 +492,7 @@ export class TicketParticipantsService {
         .where(eq(ticketRoleSignoffs.taskId, taskId))
         .orderBy(asc(ticketRoleSignoffs.createdAt));
       const signoffs: AccountabilitySignoff[] = soRows.map((s) => ({
+        laneKey: s.laneKey,
         roleKey: s.roleKey,
         roleName: roleName(s.roleKey),
         memberKind: s.memberKind,
@@ -497,8 +504,8 @@ export class TicketParticipantsService {
         waiveReason: s.waiveReason,
         createdAt: s.createdAt.toISOString(),
       }));
-      const latestByRole = new Map<string, AccountabilitySignoff>();
-      for (const s of signoffs) latestByRole.set(s.roleKey, s);
+      const latestBySlot = new Map<string, AccountabilitySignoff>();
+      for (const s of signoffs) latestBySlot.set(`${s.laneKey ?? ''}:${s.roleKey}`, s);
 
       const required = participants.filter((p) => p.required);
       const done = new Set<ParticipantState>(['completed', 'waived', 'skipped']);
@@ -511,7 +518,7 @@ export class TicketParticipantsService {
         else if (p.state === 'changes_requested') gaps.push({ kind: 'changes_requested', roleKey: p.roleKey, roleName: p.roleName, detail: 'Changes were requested and not yet resolved.' });
         else if (!done.has(p.state)) gaps.push({ kind: 'unsigned', roleKey: p.roleKey, roleName: p.roleName, detail: 'Required role has not signed off.' });
       }
-      for (const s of latestByRole.values()) {
+      for (const s of latestBySlot.values()) {
         const hasContribution = s.contribution && Object.values(s.contribution).some((v) => v != null && (!Array.isArray(v) || v.length > 0));
         if ((s.verdict === 'approved') && !hasContribution) gaps.push({ kind: 'no_contribution', roleKey: s.roleKey, roleName: s.roleName, detail: 'Approved with no linked contribution/interaction — a rubber-stamp risk.' });
         if (s.verdict === 'waived') gaps.push({ kind: 'waived', roleKey: s.roleKey, roleName: s.roleName, detail: s.waiveReason ? `Waived: ${s.waiveReason}` : 'Waived without a recorded reason.' });
