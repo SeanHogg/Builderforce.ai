@@ -5,6 +5,7 @@ import { chatApi } from '@/lib/chatApi';
 import type { Chat } from '@/lib/chatApi';
 import { ChatList } from '@/components/chat/ChatList';
 import { ChatDetail } from '@/components/chat/ChatDetail';
+import { loadTitle } from '@/lib/storage';
 
 interface User {
   id: string;
