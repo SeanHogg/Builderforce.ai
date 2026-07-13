@@ -68,12 +68,6 @@ export enum TaskType {
    *  incident's severity, status and affected system, bridged to a prodIncidents
    *  record (task.incidentId) that owns the MTTR/escalation lifecycle. */
   INCIDENT = 'incident',
-  /** PRD #615 backward compatibility type for new taxonomy. */
-  TASK = 'task',
-  EPIC = 'epic',
-  GAP = 'gap',
-  SECURITY = 'security',
-  INCIDENT = 'incident',
 }
 
 export enum AgentType {
