@@ -175,7 +175,7 @@ export default function CapabilitiesList() {
       // Update local state immediately for responsive UX (AC-8)
       setCapabilities((prev) =>
         prev.map((c) =>
-          c.id === editingId ? { ...c, [editingField]: trimmedValue ] } : c
+          c.id === editingId ? { ...c, [editingField]: trimmedValue } : c
         )
       );
       setEditingId(null);
