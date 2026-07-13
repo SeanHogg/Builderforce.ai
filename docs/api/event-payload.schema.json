@@ -37,7 +37,7 @@
     },
     "progressPct": {
       "type": "number",
-      "description": "Optional progress percentage: 0 to 100. progressPct=100 is the authoritative TERMINAL signal of job/task completion for progress-stream consumers. Emission rule: at most once per job/task, emitted ONLY after all processing steps complete and no further progress updates follow. No ordering guarantee for intermediate values; check progressPct==100 and status==completed together to confirm terminal completion.",
+      "description": "Optional progress percentage: 0 to 100. progressPct=100 is the authoritative terminal signal for progress-stream consumers. Emission rule: at most once per job/task, emitted only after all processing steps complete. Ordering guarantee: no further progress updates follow. Check progressPct==100 and status==completed together to confirm terminal completion.",
       "minimum": 0,
       "maximum": 100,
       "examples": [
