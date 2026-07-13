@@ -277,9 +277,57 @@ export class TicketParticipantsService {
     if (!ctx) return 0;
     const projectId = ctx.projectId;
     const slots = await this.templateSlots(projectId, { taskType: ctx.taskType, actionType: ctx.actionType });
+    // Fetch the task's assignee fields directly (including assignedUserId/assignedAgentRef) to support auto-owner-resolution.
+    const [taskRow] = await this.db
+      .select({ assignedUserId: tasks.assignedUserId, assignedAgentRef: tasks.assignedAgentRef })
+      .from(tasks)
+      .where(eq(tasks.id, taskId))
+      .limit(1);
     const now = new Date();
+
+    // Determine the Owner internal role key (and whether to auto-assign from task ownership).
+    const ownerRoleKey = BUILTIN_ROLES.find((r) => r.key === 'owner')?.key ?? null;
+    const autoOwnerFromTask =
+      ownerRoleKey !== null
+        && !slots.some((s) => s.roleKey === ownerRoleKey)
+        && (taskRow?.assignedUserId != null || taskRow?.assignedAgentRef != null);
+
     for (const s of slots) {
-      const assignee = await this.resolveAssignee(env, tenantId, projectId, s.roleKey);
+      // Explicit Owner slot versus auto-owner injection: auto-owner uses a dedicated source to stay discoverable
+      // yet not collide with template slots. If autoOwnerFromTask and matching Owner role, we'll inject later.
+      const isExplicitOwnerSlot = s.roleKey === ownerRoleKey;
+
+      let assignee: { kind: string; ref: string; name: string } | null = null;
+      let source = s.source;
+
+      // Lax: use template source only if not manually set; we lean to 'manual' where we have it.
+      if (isExplicitOwnerSlot && !s.source) {
+        source = 'template'; // keep onConflict intentional grouping
+      } else if (isExplicitOwnerSlot && s.source === 'template') {
+        source = s.source;
+      } else {
+        source = s.source;
+      }
+
+      // If this slot pertains to Owner and we have auto-owner-ready task ownership, fetch from task instead of resolving via roles.
+      if (autoOwnerFromTask && s.roleKey === ownerRoleKey) {
+        // persoon: resolve which assignee to use in the manifest owner slot per PRD FR-1/FR-5/FR-6
+        if (taskRow?.assignedUserId != null) {
+          assignee = { kind: 'human', ref: taskRow.assignedUserId, name: taskRow.assignedUserId }; // will be resolved AFTER insertion into name/nameRef
+        } else if (taskRow?.assignedAgentRef != null) {
+          assignee = { kind: 'agent', ref: taskRow.assignedAgentRef, name: taskRow.assignedAgentRef };
+        }
+        // When assignee is null (task the owner role to be left unstaffed); we will not insert.
+      } else {
+        assignee = await this.resolveAssignee(env, tenantId, projectId, s.roleKey);
+      }
+
+      // Note: we skip insertion for Owner when auto-owner is assigned but we have no assignee, preserving AC-4 / AC-6 empty unstaffed.
+      if ((autoOwnerFromTask && s.roleKey === ownerRoleKey) && !assignee) {
+        // Keep empty: reflect no capable owner as a pending or unstaffed participant to be overridden later if needed.
+        continue;
+      }
+
       await this.db
         .insert(ticketParticipants)
         .values({
@@ -289,7 +337,7 @@ export class TicketParticipantsService {
           roleKey: s.roleKey,
           responsibility: s.responsibility,
           required: s.required,
-          source: 'template',
+          source: source,
           assigneeKind: assignee?.kind ?? null,
           assigneeRef: assignee?.ref ?? null,
           assigneeName: assignee?.name ?? null,
