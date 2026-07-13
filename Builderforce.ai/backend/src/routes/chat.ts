@@ -2,13 +2,14 @@
 // Handles chat creation, messaging, and title management
 
 import type { NextRequest } from 'next/server';
-import { 
-  getChatById, 
-  getChatsByUser, 
-  createChatRecord, 
-  sendMessageToChat, 
+import {
+  getChatById,
+  getChatsByUser,
+  createChatRecord,
+  sendMessageToChat,
   updateChatTitleRecord,
-  getMessagesByChatId 
+  getMessagesByChatId,
+  autoGenerateTitleFromMessages
 } from '@/lib/db/chat';
 
 export interface ChatResponse {
