@@ -149,6 +149,14 @@ export class RuntimeService {
       tenantId: number; taskId: number; projectId: number; executionId: number;
       status: 'completed' | 'failed'; actAsRole: string | null; laneServed: string | null;
     }) => Promise<void>,
+    /** Managed-board coordination seam. When it returns managed=true, the
+     * Coordinator owns every task-status transition for this execution and the
+     * legacy RuntimeService lane writer is bypassed. */
+    private readonly onManagedRunStatus?: (info: {
+      tenantId: number; taskId: number; projectId: number; executionId: number;
+      status: 'running' | 'completed' | 'failed'; fromStatus: string;
+      actAsRole: string | null; laneServed: string | null;
+    }) => Promise<{ managed: boolean; toStatus: string }>,
   ) {}
 
   /**
@@ -400,12 +408,22 @@ export class RuntimeService {
         // in_review and re-triggers a review (the completion loop). Record the terminal
         // signal for metrics but leave the ticket exactly where it is.
         const isReviewRun = isValidatorReviewPayload(execution.payload);
+        const managedResult = !isReviewRun && (dto.status === ExecutionStatus.RUNNING || terminal)
+          ? await this.onManagedRunStatus?.({
+              tenantId, taskId: Number(execution.taskId), projectId, executionId: Number(saved.id),
+              status: dto.status === ExecutionStatus.RUNNING ? 'running' : dto.status === ExecutionStatus.COMPLETED ? 'completed' : 'failed',
+              fromStatus, actAsRole: parseActAsRole(execution.payload) ?? null,
+              laneServed: parseLaneKey(execution.payload) ?? fromStatus,
+            }).catch(() => ({ managed: false, toStatus: fromStatus }))
+          : undefined;
+        const coordinatorOwnsTransition = managedResult?.managed === true;
+        if (coordinatorOwnsTransition) toStatus = managedResult.toStatus;
 
-        if (!isReviewRun && dto.status === ExecutionStatus.RUNNING && fromStatus !== TaskStatus.IN_PROGRESS) {
+        if (!coordinatorOwnsTransition && !isReviewRun && dto.status === ExecutionStatus.RUNNING && fromStatus !== TaskStatus.IN_PROGRESS) {
           toStatus = TaskStatus.IN_PROGRESS;
           await this.tasks.update(task.update({ status: TaskStatus.IN_PROGRESS }));
         }
-        if (!isReviewRun && dto.status === ExecutionStatus.COMPLETED) {
+        if (!coordinatorOwnsTransition && !isReviewRun && dto.status === ExecutionStatus.COMPLETED) {
           const resultText = dto.result ?? '';
           // Default advance is the board's NEXT swimlane by configured order — so a
           // custom board (renamed / re-ordered lanes) flows correctly instead of
@@ -428,7 +446,7 @@ export class RuntimeService {
         // Manifest attribution (PRD §5.6): a terminal run records that the role it ran
         // AS participated on the ticket (linked to this execution), and — with producer
         // evidence — completes that role's manifest slot. Best-effort, never blocks.
-        if (terminal) {
+        if (terminal && !coordinatorOwnsTransition) {
           await this.onRunFinalized?.({
             tenantId, taskId: Number(execution.taskId), projectId, executionId: Number(saved.id),
             status: dto.status === ExecutionStatus.COMPLETED ? 'completed' : 'failed',
@@ -443,7 +461,7 @@ export class RuntimeService {
         // A Done lane finalizes (PR/commit) instead of staffing a fresh agent, and
         // the RUNNING→in_progress move is the lane the CURRENT run already owns, so
         // both are excluded here (the trigger also dedupes/no-ops defensively).
-        if (!isReviewRun && dto.status === ExecutionStatus.COMPLETED && toStatus !== fromStatus && toStatus !== TaskStatus.DONE) {
+        if (!coordinatorOwnsTransition && !isReviewRun && dto.status === ExecutionStatus.COMPLETED && toStatus !== fromStatus && toStatus !== TaskStatus.DONE) {
           await this.onLaneEntry?.({
             tenantId, taskId: Number(execution.taskId), projectId, status: toStatus,
             originLaneKey: parseLaneKey(execution.payload),

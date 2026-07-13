@@ -12,7 +12,8 @@
 
 import { eq } from 'drizzle-orm';
 import { tenants } from '../../infrastructure/database/schema';
-import type { Db } from '../../infrastructure/database/connection';
+import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { resolveTokenLimits, resolveIngestionMonthlyBytes, resolveErrorEventsMonthly, resolveOutboundFetchesMonthly, resolveCloudRunsMonthly } from '../../domain/tenant/PlanLimits';
 import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
@@ -90,10 +91,12 @@ export async function buildConsumptionSnapshot(
   tenantId: number,
   monthStart: Date,
   monthEnd: Date,
+  env?: Env,
 ): Promise<ConsumptionSnapshot> {
+  const ingestionDb = env?.NEON_TRANSACTIONAL_DATABASE_URL ? buildTransactionalDatabase(env) : db;
   const [tokensDaily, ingestionDaily, errorEventsDaily, outboundFetchesDaily, cloudRunsDaily, tenantRows] = await Promise.all([
     dailyTenantTextTokens(db, tenantId, monthStart),
-    dailyTenantIngestionBytes(db, tenantId, monthStart),
+    dailyTenantIngestionBytes(ingestionDb, tenantId, monthStart),
     dailyTenantErrorEvents(db, tenantId, monthStart),
     dailyTenantOutboundFetches(db, tenantId, monthStart),
     dailyTenantCloudRuns(db, tenantId, monthStart),

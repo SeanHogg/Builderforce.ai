@@ -78,6 +78,7 @@ Versions are simple date‑based strings (e.g. `2026.3.7`). Before deploying bum
 
     ```bash
     wrangler secret put NEON_DATABASE_URL
+    wrangler secret put NEON_TRANSACTIONAL_DATABASE_URL
     ```
 
 2. Authenticate Wrangler (`wrangler whoami` should return your account).

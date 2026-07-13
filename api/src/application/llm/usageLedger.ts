@@ -17,6 +17,7 @@ import type { Env } from '../../env';
 import { llmUsageLog } from '../../infrastructure/database/schema';
 import type { LlmUsage } from './LlmProxyService';
 import { getCatalogCached } from './modelCatalog';
+import { buildTransactionalDatabase } from '../../infrastructure/database/connection';
 
 /** Cache-tier multipliers relative to the base input (prompt) price. cache_read
  *  is billed ~0.1x input, cache_creation ~1.25x — both are subsets of
@@ -206,6 +207,7 @@ export async function recordProxyUsage(
  *  Best-effort — never throws (logging must not fail a run). */
 export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Promise<void> {
   try {
+    const usageDb = env.NEON_TRANSACTIONAL_DATABASE_URL ? buildTransactionalDatabase(env) : db;
     // Clamp tokens ONCE at the canonical write boundary so neither the cost price
     // nor the persisted columns can carry a NaN/negative/fractional from a bad
     // upstream turn — every usage producer (gateway + cloud) funnels through here.
@@ -225,7 +227,7 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
       } catch { /* pricing unavailable — record tokens with cost 0 */ }
     }
 
-    await db.insert(llmUsageLog).values({
+    await usageDb.insert(llmUsageLog).values({
       tenantId:            row.tenantId,
       userId:              row.userId,
       llmProduct:          row.llmProduct,

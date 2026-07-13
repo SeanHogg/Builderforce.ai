@@ -26,6 +26,9 @@ import { maybeAutoRunOnLaneEntry } from './presentation/routes/taskRoutes';
 import { resolveNextTaskStatus } from './application/swimlane/nextLane';
 import { ChatTicketService } from './application/brain/ChatTicketService';
 import { attributeRunToManifest } from './application/kanban/attributeRunToManifest';
+import { coordinateCompletedStage } from './application/manager/coordinateTicket';
+import { boards } from './infrastructure/database/schema';
+import { eq } from 'drizzle-orm';
 
 export function buildRuntimeService(env: Env, db: Db): RuntimeService {
   // eslint-disable-next-line prefer-const -- the lane-auto callback closes over the
@@ -73,6 +76,26 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
     // it ran AS participated on the ticket's manifest (linked to the execution), and —
     // for a producer with PR evidence — completes that slot. Best-effort.
     (info) => attributeRunToManifest(env, db, info),
+    async (info) => {
+      const [board] = await db.select({ managed: boards.lifecycleManaged }).from(boards).where(eq(boards.projectId, info.projectId)).limit(1);
+      if (!board?.managed) return { managed: false, toStatus: info.fromStatus };
+
+      // Attribution must precede verification: the Coordinator evaluates the
+      // manifest produced by this exact execution, then and only then may advance.
+      if (info.status === 'completed' || info.status === 'failed') {
+        await attributeRunToManifest(env, db, {
+          tenantId: info.tenantId, taskId: info.taskId, projectId: info.projectId,
+          executionId: info.executionId, status: info.status,
+          actAsRole: info.actAsRole, laneServed: info.laneServed,
+        });
+      }
+      if (info.status !== 'completed') return { managed: true, toStatus: info.fromStatus };
+      const result = await coordinateCompletedStage(env, db, runtimeService, {
+        tenantId: info.tenantId, projectId: info.projectId, taskId: info.taskId,
+        fromStatus: info.laneServed ?? info.fromStatus,
+      });
+      return { managed: result.managed, toStatus: result.toStatus };
+    },
   );
   return runtimeService;
 }
