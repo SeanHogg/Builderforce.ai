@@ -5,6 +5,7 @@ const emptySignals = (): AuditSignals => ({
   approvedRoles: new Set(),
   changesRequestedRoles: new Set(),
   ranDiagnostics: new Set(),
+  failedDiagnostics: new Set(),
   performedRoles: new Set(),
 });
 
@@ -40,6 +41,49 @@ describe('requirementUnmetReason', () => {
     expect(requirementUnmetReason(diag, s)).toBe('missing');
     s.ranDiagnostics.add('security-posture');
     expect(requirementUnmetReason(diag, s)).toBeNull();
+  });
+
+  it('a diagnostic that RAN but scored below the pass threshold stays unmet', () => {
+    const s = emptySignals();
+    const diag = req({ kind: 'diagnostic', ref: 'security-posture' });
+    s.ranDiagnostics.add('security-posture');   // it ran
+    s.failedDiagnostics.add('security-posture'); // …but below threshold
+    expect(requirementUnmetReason(diag, s)).toBe('missing');
+    // A later passing run clears the fail signal → satisfied.
+    s.failedDiagnostics.delete('security-posture');
+    expect(requirementUnmetReason(diag, s)).toBeNull();
+  });
+});
+
+describe('computeCoverage — reviewer quorum (AC-4)', () => {
+  const rev = (ref: string, quorum?: number): RequirementInput => ({ laneKey: 'in_review', laneName: 'Review', kind: 'review', ref, isRequired: true, quorum });
+
+  it('a 2-of-3 reviewer set advances on the 2nd approval, not the 1st', () => {
+    const reqs = [rev('code-reviewer', 2), rev('architect', 2), rev('team-lead', 2)];
+    const s = emptySignals();
+    // 0 approvals → flagged, needs 2.
+    let r = computeCoverage(reqs, s);
+    expect(r.status).toBe('flagged');
+    expect(r.requiredCount).toBe(2);       // quorum, not 3
+    // 1 approval → still short.
+    s.approvedRoles.add('code-reviewer');
+    r = computeCoverage(reqs, s);
+    expect(r.status).toBe('flagged');
+    expect(r.satisfiedCount).toBe(1);
+    // 2 approvals → quorum met, pass (the 3rd is not required).
+    s.approvedRoles.add('architect');
+    r = computeCoverage(reqs, s);
+    expect(r.status).toBe('pass');
+    expect(r.satisfiedCount).toBe(2);
+  });
+
+  it('no quorum set = all reviewers must approve (legacy behaviour)', () => {
+    const reqs = [rev('code-reviewer'), rev('architect')];
+    const s = emptySignals();
+    s.approvedRoles.add('code-reviewer');
+    const r = computeCoverage(reqs, s);
+    expect(r.status).toBe('flagged');
+    expect(r.requiredCount).toBe(2);
   });
 });
 

@@ -4,7 +4,7 @@
  * Uses tenant JWT from auth.
  */
 
-import { attachEvermindLearn } from '@seanhogg/builderforce-brain-embedded';
+import { attachEvermindLearn, subscribeToChatMessages } from '@seanhogg/builderforce-brain-embedded';
 import {
   AUTH_API_URL,
   checkUnauthorizedAndRedirect,
@@ -154,7 +154,7 @@ export const toolsApi = {
 
 import type {
   JobRole, KanbanTemplate, TemplateSummary, RecommendedRoster, TicketAudit, FlaggedTicket, TemplateVisibility,
-  RoleAssignment, AssigneeKind,
+  RoleAssignment, AssigneeKind, AccountabilityReport, ManifestParticipant, SignoffContribution, ParticipantsSummaryRow, ImplicatedTicket,
 } from './kanban';
 
 export interface AssignableWorkforceDto {
@@ -234,8 +234,23 @@ export const kanbanApi = {
     request<{ audit: TicketAudit | null }>(`/api/kanban/tasks/${taskId}/audit`).then((r) => r.audit),
   recomputeAudit: (taskId: number): Promise<TicketAudit> =>
     request<{ audit: TicketAudit }>(`/api/kanban/tasks/${taskId}/audit/recompute`, { method: 'POST' }).then((r) => r.audit),
-  signoff: (taskId: number, body: { roleKey: string; laneKey?: string; verdict?: 'approved' | 'changes_requested'; summary?: string }): Promise<TicketAudit> =>
+  signoff: (taskId: number, body: { roleKey: string; laneKey?: string; verdict?: 'approved' | 'changes_requested' | 'waived' | 'delegated'; summary?: string; waiveReason?: string; contribution?: SignoffContribution }): Promise<TicketAudit> =>
     request<{ audit: TicketAudit }>(`/api/kanban/tasks/${taskId}/signoff`, { method: 'POST', body: JSON.stringify(body) }).then((r) => r.audit),
+  // Coordinated Role Participation — manifest + accountability record.
+  accountability: (taskId: number): Promise<AccountabilityReport> =>
+    request<{ accountability: AccountabilityReport }>(`/api/kanban/tasks/${taskId}/accountability`).then((r) => r.accountability),
+  participants: (taskId: number): Promise<ManifestParticipant[]> =>
+    request<{ participants: ManifestParticipant[] }>(`/api/kanban/tasks/${taskId}/participants`).then((r) => r.participants),
+  assessResource: (taskId: number, body: { roleKey: string; responsibility?: 'owner' | 'reviewer' | 'contributor'; stageKey?: string; note?: string }): Promise<ManifestParticipant | null> =>
+    request<{ participant: ManifestParticipant | null }>(`/api/kanban/tasks/${taskId}/participants`, { method: 'POST', body: JSON.stringify(body) }).then((r) => r.participant),
+  removeParticipant: (taskId: number, participantId: string): Promise<void> =>
+    request<{ ok: boolean }>(`/api/kanban/tasks/${taskId}/participants/${participantId}`, { method: 'DELETE' }).then(() => undefined),
+  materializeParticipants: (taskId: number): Promise<number> =>
+    request<{ created: number }>(`/api/kanban/tasks/${taskId}/participants/materialize`, { method: 'POST' }).then((r) => r.created),
+  participantsSummary: (projectId: number): Promise<ParticipantsSummaryRow[]> =>
+    request<{ summary: ParticipantsSummaryRow[] }>(`/api/kanban/projects/${projectId}/participants-summary`).then((r) => r.summary),
+  coordinate: (taskId: number): Promise<{ ok: boolean; status: string; dispatched: boolean; requiredOutstanding: number }> =>
+    request<{ ok: boolean; status: string; dispatched: boolean; requiredOutstanding: number }>(`/api/kanban/tasks/${taskId}/coordinate`, { method: 'POST' }),
 };
 
 // ---------------------------------------------------------------------------
@@ -438,6 +453,9 @@ export const brain = {
     const q = limit != null ? `?limit=${limit}` : '';
     return request<{ messages: BrainMessage[] }>(`/api/brain/chats/${chatId}/messages${q}`).then((r) => r.messages);
   },
+
+  subscribeMessages: (chatId: number, onChanged: () => void) =>
+    subscribeToChatMessages(AUTH_API_URL, getStoredTenantToken, chatId, onChanged),
 
   sendMessages: (chatId: number, messages: Array<{ role: string; content: string; metadata?: string }>) =>
     request<{ messages: BrainMessage[]; evermindLearn?: { learned: boolean; version: number } }>(`/api/brain/chats/${chatId}/messages`, {
@@ -1450,6 +1468,7 @@ export type AutoRunReason =
   | 'no_agent'
   | 'capability_mismatch'
   | 'already_running'
+  | 'run_cap_exhausted'
   | 'not_executable';
 
 export interface AutoRunDiagnostic {
@@ -1632,7 +1651,7 @@ export type PrMergePolicy = 'immediate' | 'on_green' | 'queue';
 
 /** The action types the manager records on each run (drives the activity feed). */
 export type ManagerActionType =
-  | 'prioritize' | 'assign' | 'score_value' | 'dispatch' | 'merge_pr' | 'flag';
+  | 'prioritize' | 'assign' | 'score_value' | 'dispatch' | 'sync_pr' | 'merge_pr' | 'flag';
 
 /** Persisted manager configuration for a project (null until first configured). */
 export interface ManagerConfig {
@@ -1718,6 +1737,8 @@ export interface ManagerBacklogItem {
 export interface ManagerAction {
   id: string;
   taskId: number | null;
+  ticketKey?: string | null;
+  ticketTitle?: string | null;
   actionType: ManagerActionType;
   summary: string;
   detail: string | null;
@@ -1893,6 +1914,8 @@ export interface TaskFileChange {
   agent: string;
   executionId: number | null;
   createdAt: string;
+  /** Models observed in llm.complete telemetry for the execution that made this change. */
+  models?: string[];
 }
 
 /**
@@ -2473,7 +2496,7 @@ export const empMetricsApi = {
  * and meters them. The key is write-only: we only ever read which providers are
  * configured, never the secret.
  */
-export type LlmProvider = 'anthropic' | 'openai' | 'google';
+export type LlmProvider = 'anthropic' | 'openai' | 'google' | 'meta' | 'kimi' | 'qwen' | 'minimax' | 'xai';
 
 /** How a configured provider authenticates: a pasted API key, or a connected
  *  Claude Pro/Max subscription via OAuth. */
@@ -2481,6 +2504,16 @@ export type ProviderAuthType = 'api_key' | 'oauth';
 export interface ProviderKeySummary {
   provider: LlmProvider;
   authType: ProviderAuthType;
+  /** Tenant-set BYO precedence — LOWER = tried first by the auto-select cloud pin;
+   *  `null` = unset (falls back to catalog-tier ordering). */
+  priority: number | null;
+}
+export interface ProviderDiagnostic {
+  provider: LlmProvider;
+  configured: boolean;
+  usable: boolean;
+  status: 'ready' | 'not_connected' | 'revoked' | 'expired' | 'undecryptable' | 'unavailable';
+  usage: { periodDays: number; requests: number; tokens: number; lastUsedAt: string | null };
 }
 
 export const providerKeysApi = {
@@ -2497,19 +2530,33 @@ export const providerKeysApi = {
   remove: (provider: LlmProvider): Promise<{ ok: true }> =>
     request<{ ok: true }>(`/llm/provider-keys/${provider}`, { method: 'DELETE' }),
 
+  status: (provider: LlmProvider): Promise<ProviderDiagnostic> =>
+    request<ProviderDiagnostic>(`/llm/provider-keys/${provider}/status`),
+
+  test: (provider: LlmProvider): Promise<{ ok: boolean; status: string; model?: string; testedAt?: string }> =>
+    request<{ ok: boolean; status: string; model?: string; testedAt?: string }>(`/llm/provider-keys/${provider}/test`, { method: 'POST' }),
+
+  /** Set the BYO precedence — the ordered provider list (most-preferred first) the
+   *  auto-select cloud pin leads its connected flagships by (e.g. Meta first). */
+  setPriority: (order: LlmProvider[]): Promise<{ ok: true; order: LlmProvider[] }> =>
+    request<{ ok: true; order: LlmProvider[] }>('/llm/provider-keys/priority', {
+      method: 'PUT',
+      body: JSON.stringify({ order }),
+    }),
+
   /** Begin connecting a Claude subscription — returns the Claude.ai authorize URL
    *  the user opens to grant access (PKCE verifier is held server-side). */
-  oauthStart: (): Promise<{ authorizeUrl: string; state: string }> =>
-    request<{ authorizeUrl: string; state: string }>('/llm/provider-keys/anthropic/oauth/start', {
+  oauthStart: (provider: LlmProvider): Promise<{ authorizeUrl: string; state: string }> =>
+    request<{ authorizeUrl: string; state: string }>(`/llm/provider-keys/${provider}/oauth/start`, {
       method: 'POST',
     }),
 
   /** Finish connecting a Claude subscription with the `code#state` the user
    *  pasted from Claude.ai's consent page. */
-  oauthComplete: (code: string): Promise<{ ok: true; provider: LlmProvider; authType: ProviderAuthType }> =>
+  oauthComplete: (provider: LlmProvider, code: string, state?: string): Promise<{ ok: true; provider: LlmProvider; authType: ProviderAuthType }> =>
     request<{ ok: true; provider: LlmProvider; authType: ProviderAuthType }>(
-      '/llm/provider-keys/anthropic/oauth/complete',
-      { method: 'POST', body: JSON.stringify({ code }) },
+      `/llm/provider-keys/${provider}/oauth/complete`,
+      { method: 'POST', body: JSON.stringify({ code, ...(state ? { state } : {}) }) },
     ),
 };
 
@@ -2527,6 +2574,10 @@ export interface Approval {
   id: string;
   tenantId: number;
   agentHostId: number | null;
+  /** Ticket that caused this request, when it originated from a task execution. */
+  taskId: number | null;
+  /** Project containing the related ticket. */
+  projectId: number | null;
   requestedBy: string | null;
   kind: RequestKind;
   actionType: string;
@@ -3107,6 +3158,7 @@ export interface LlmUsageStats {
   promptTokens: number;
   completionTokens: number;
   byModel: Array<{ model: string; requests: number; tokens: number }>;
+  byCredential: Array<{ type: 'integration' | 'api_key'; id: string; name: string; requests: number; modelCount: number; tokens: number }>;
   period: string;
 }
 
@@ -3186,8 +3238,23 @@ export interface ModelAnalyticsResponse {
 }
 
 export const llmApi = {
-  usage: (): Promise<LlmUsageStats> =>
-    request<LlmUsageStats>('/llm/v1/usage'),
+  usage: async (): Promise<LlmUsageStats> => {
+    const raw = await request<{
+      days: number;
+      totals: { requests: number; totalTokens: number; promptTokens: number; completionTokens: number };
+      byModel: Array<{ model: string; requests: number; total_tokens: string | number }>;
+      byCredential?: Array<{ type: 'integration' | 'api_key'; id: string; name: string; requests: number; modelCount: number; tokens: string | number }>;
+    }>('/llm/v1/usage');
+    return {
+      totalRequests: raw.totals.requests,
+      totalTokens: raw.totals.totalTokens,
+      promptTokens: raw.totals.promptTokens,
+      completionTokens: raw.totals.completionTokens,
+      byModel: raw.byModel.map((m) => ({ model: m.model, requests: m.requests, tokens: Number(m.total_tokens) })),
+      byCredential: (raw.byCredential ?? []).map((c) => ({ ...c, requests: Number(c.requests), modelCount: Number(c.modelCount), tokens: Number(c.tokens) })),
+      period: `${raw.days} days`,
+    };
+  },
 
   health: (): Promise<LlmHealthResponse> =>
     request<LlmHealthResponse>('/llm/v1/health'),
@@ -4584,6 +4651,155 @@ export const factsApi = {
 };
 
 // ---------------------------------------------------------------------------
+// RFP / RFQ Response — /api/rfp  (PRD 15). Pre-sales proposal generation.
+// ---------------------------------------------------------------------------
+
+export interface BrandPalette {
+  primary: string;
+  secondary: string;
+  accent: string;
+  text: string;
+  background: string;
+  logoUrl?: string | null;
+}
+
+export interface RfpCostLineItem {
+  label: string;
+  category: 'build' | 'agentic' | 'marketing' | 'contingency' | 'margin';
+  amountUsd: number;
+}
+
+export interface RfpCostModel {
+  buildCostUsd: number;
+  agenticCostUsd: number;
+  marketingCostUsd: number;
+  contingencyUsd: number;
+  subtotalCostUsd: number;
+  marginPct: number;
+  marginUsd: number;
+  quotedPriceUsd: number;
+  effortWeeks: number;
+  lineItems: RfpCostLineItem[];
+}
+
+export interface RfpCapabilityRoster {
+  capabilities: string[];
+  keyComponents: { name: string; responsibility: string }[];
+  frameworks: string[];
+  primaryLanguages: string[];
+  valueProps: string[];
+  source: 'diagnostics' | 'audit' | 'greenfield';
+}
+
+export interface RfpPhase {
+  name: string;
+  startDate: string;
+  endDate: string;
+  milestones: { name: string; date: string }[];
+}
+
+export interface RfpRisk { title: string; severity: 'low' | 'medium' | 'high'; mitigation: string }
+export interface RfpDependency { title: string; type: 'internal' | 'external' | 'third_party'; note: string }
+export interface RfpPortfolioMatch { projectId: number; name: string; score: number; rationale: string }
+
+export interface RfpScanFreshness {
+  toolId: string;
+  lastScanAt: string | null;
+  ageDays: number | null;
+  refreshed: boolean;
+}
+
+export interface RfpResponseBody {
+  executiveSummary: string;
+  grounding: { mode: 'new' | 'existing'; projectId?: number; projectName?: string; scanFreshness?: RfpScanFreshness };
+  capabilityRoster: RfpCapabilityRoster;
+  costModel: RfpCostModel;
+  plan: { phases: RfpPhase[] };
+  risks: RfpRisk[];
+  dependencies: RfpDependency[];
+  timeline: { startDate: string; endDate: string; weeks: number };
+  branding: { requester: BrandPalette; tenant: BrandPalette; blended: BrandPalette };
+  portfolioMatches?: RfpPortfolioMatch[];
+}
+
+export interface RfpRequestRow {
+  id: string;
+  tenantId: number;
+  title: string;
+  requesterOrgName: string | null;
+  requesterBrand: BrandPalette | null;
+  requirements: string | null;
+  sourceMode: 'new' | 'existing_project';
+  basedOnProjectId: number | null;
+  marginPct: number | null;
+  marketingPct: number | null;
+  contingencyPct: number | null;
+  dueDate: string | null;
+  status: 'draft' | 'analyzing' | 'ready' | 'submitted';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RfpResponseRow {
+  id: string;
+  tenantId: number;
+  requestId: string;
+  projectId: number | null;
+  status: 'draft' | 'ready' | 'submitted';
+  body: RfpResponseBody | null;
+  docHtml: string | null;
+  quotedPriceUsdCents: number | null;
+  marginPct: number | null;
+  scanRefreshed: boolean;
+  generatedBy: { cto: string | null; productOwner: string | null } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type RfpResponseSummary = Pick<RfpResponseRow, 'id' | 'requestId' | 'status' | 'quotedPriceUsdCents' | 'marginPct' | 'scanRefreshed' | 'createdAt'>;
+export type RfpRequestListRow = RfpRequestRow & { latestResponse: RfpResponseSummary | null };
+
+export interface RfpRequestInput {
+  title: string;
+  requesterOrgName?: string | null;
+  requesterBrand?: BrandPalette | null;
+  requirements?: string | null;
+  sourceMode?: 'new' | 'existing_project';
+  basedOnProjectId?: number | null;
+  marginPct?: number | null;
+  marketingPct?: number | null;
+  contingencyPct?: number | null;
+  dueDate?: string | null;
+}
+
+export interface RfpGenerateResult {
+  responseId: string;
+  body: RfpResponseBody;
+  quotedPriceUsdCents: number;
+  marginPct: number;
+  scanRefreshed: boolean;
+  generatedBy: { cto: string | null; productOwner: string | null };
+  docHtml: string;
+}
+
+export const rfpApi = {
+  list: (): Promise<{ requests: RfpRequestListRow[] }> =>
+    request<{ requests: RfpRequestListRow[] }>('/api/rfp'),
+  getRequest: (id: string): Promise<{ request: RfpRequestRow; responses: RfpResponseRow[] }> =>
+    request<{ request: RfpRequestRow; responses: RfpResponseRow[] }>(`/api/rfp/requests/${id}`),
+  createRequest: (body: RfpRequestInput): Promise<RfpRequestRow> =>
+    request<RfpRequestRow>('/api/rfp/requests', { method: 'POST', body: JSON.stringify(body) }),
+  updateRequest: (id: string, body: Partial<RfpRequestInput>): Promise<RfpRequestRow> =>
+    request<RfpRequestRow>(`/api/rfp/requests/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  generate: (id: string): Promise<RfpGenerateResult> =>
+    request<RfpGenerateResult>(`/api/rfp/requests/${id}/generate`, { method: 'POST' }),
+  getResponse: (id: string): Promise<RfpResponseRow> =>
+    request<RfpResponseRow>(`/api/rfp/responses/${id}`),
+  portfolioMatch: (requirements: string, excludeProjectId?: number | null): Promise<{ matches: RfpPortfolioMatch[] }> =>
+    request<{ matches: RfpPortfolioMatch[] }>('/api/rfp/portfolio-match', { method: 'POST', body: JSON.stringify({ requirements, excludeProjectId }) }),
+};
+
+// ---------------------------------------------------------------------------
 // Integration credentials — /api/integrations  (GitHub / GitLab / Bitbucket /
 // Jira / Confluence / Freshservice keys). Workspace-global when projectId is
 // omitted, project-scoped when set (0074).
@@ -4720,6 +4936,18 @@ export interface CreateIncidentBody {
   page?: boolean;
 }
 
+/** A workflow run spawned by an incident — via an event trigger or a manual runbook. */
+export interface IncidentWorkflowRun {
+  id: string;
+  description: string | null;
+  status: string;
+  runtime: string;
+  createdAt: string;
+  completedAt: string | null;
+  definitionId: string | null;
+  definitionName: string | null;
+}
+
 export interface OnCallRotationMember {
   id: string;
   memberRef: string;
@@ -4784,6 +5012,14 @@ export const incidentsApi = {
   get: (id: string): Promise<{ incident: Incident; timeline: IncidentEvent[] }> =>
     request(`/api/incidents/${id}`),
 
+  // RCA linkage: implicated delivery ticket(s) + each one's Accountability Report.
+  implicated: (id: string): Promise<ImplicatedTicket[]> =>
+    request<{ implicated: ImplicatedTicket[] }>(`/api/incidents/${id}/implicated`).then((r) => r.implicated ?? []),
+  linkImplicated: (id: string, body: { taskId: number; relation?: string; note?: string }): Promise<{ ok: boolean }> =>
+    request(`/api/incidents/${id}/implicated`, { method: 'POST', body: JSON.stringify(body) }),
+  unlinkImplicated: (id: string, taskId: number): Promise<{ ok: boolean }> =>
+    request(`/api/incidents/${id}/implicated/${taskId}`, { method: 'DELETE' }),
+
   update: (id: string, body: Partial<{ severity: IncidentSeverity; status: IncidentStatus; impact: string; rootCause: string }>): Promise<{ ok: boolean }> =>
     request(`/api/incidents/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
@@ -4804,6 +5040,13 @@ export const incidentsApi = {
 
   publishPostmortem: (id: string, body: PublishPostmortemBody): Promise<PublishPostmortemResult> =>
     request(`/api/incidents/${id}/postmortem`, { method: 'POST', body: JSON.stringify(body) }),
+
+  // Custom workflows (runbooks) attached to an incident
+  listWorkflowRuns: (id: string): Promise<IncidentWorkflowRun[]> =>
+    request<{ runs: IncidentWorkflowRun[] }>(`/api/incidents/${id}/workflow-runs`).then((r) => r.runs ?? []),
+
+  runWorkflow: (id: string, body: { definitionId: string; runtime?: string; agentHostId?: number; cloudAgentRef?: string }): Promise<{ workflowId: string; taskCount: number }> =>
+    request(`/api/incidents/${id}/run-workflow`, { method: 'POST', body: JSON.stringify(body) }),
 
   // On-call rotations
   listRotations: (): Promise<OnCallRotation[]> =>

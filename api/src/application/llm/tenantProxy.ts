@@ -85,6 +85,7 @@ export async function tenantProxyForPlan(
       vendorKeys: {} as TenantVendorKeys,
       configuredProviders: [],
       unresolvedReasons: {},
+      vendorPriority: [],
     })),
   ]);
 

@@ -731,6 +731,8 @@ export function BrainPanel({
       'not-seeded': tTimeline('learnSkipReasonNotSeeded'),
       frozen: tTimeline('learnSkipReasonFrozen'),
     },
+    learnTargetContributed: tTimeline('learnTargetContributed'),
+    learnTargetSkipped: tTimeline('learnTargetSkipped'),
     reconcileTitle: tTimeline('reconcileTitle'),
     reconcileHint: tTimeline('reconcileHint'),
   }), [tTimeline]);
@@ -961,6 +963,12 @@ export function BrainPanel({
   // The banner surfaces either source; dismissing must clear whichever is set.
   const dismissError = useCallback(() => { chats.setError(''); conv.clearError(); }, [chats, conv]);
 
+  // Provider usage-cap banner — shown when a BYO provider's key hit its billing
+  // limit this run. Keyed on the provider set so a new provider re-shows it.
+  const [dismissedProviderCap, setDismissedProviderCap] = useState('');
+  const providerCapKey = conv.providerCap.join(',');
+  const showProviderCapBanner = conv.providerCap.length > 0 && dismissedProviderCap !== providerCapKey;
+
   // ---- Shared sub-renders ---------------------------------------------------
 
   const chatRows = (
@@ -1047,6 +1055,25 @@ export function BrainPanel({
           <button
             type="button"
             onClick={dismissError}
+            title={tCommon('dismiss')}
+            aria-label={tCommon('dismiss')}
+            style={{ flex: '0 0 auto', background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0 }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+      {showProviderCapBanner && (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, margin: '8px 12px 0', padding: '8px 12px', fontSize: 13, background: 'var(--warning-bg, rgba(234,179,8,0.12))', color: 'var(--warning-text, #d97706)', border: '1px solid var(--warning-border, rgba(234,179,8,0.3))', borderRadius: 8 }} role="status">
+          <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
+            {tBrain('providerCapBanner', { providers: conv.providerCap.join(', ') })}{' '}
+            <a href="/settings/integrations" style={{ color: 'inherit', fontWeight: 600, textDecoration: 'underline' }}>
+              {tBrain('manageApiKeys')}
+            </a>
+          </span>
+          <button
+            type="button"
+            onClick={() => setDismissedProviderCap(providerCapKey)}
             title={tCommon('dismiss')}
             aria-label={tCommon('dismiss')}
             style={{ flex: '0 0 auto', background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0 }}

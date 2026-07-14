@@ -21,11 +21,13 @@ import { neon } from '@neondatabase/serverless';
 import type { HonoEnv } from '../../env';
 import { encryptSecretForStorage, decryptSecretFromStorage } from '../../infrastructure/auth/MfaService';
 import { refreshAnthropicToken, OAUTH_SAFETY_MARGIN_MS, type AnthropicOAuthTokens } from './anthropicOAuth';
+import { refreshOpenAICodexToken, type OpenAICodexOAuthTokens } from './openaiCodexOAuth';
+import { refreshXaiToken, type XaiOAuthTokens } from './xaiOAuth';
 
 type Env = HonoEnv['Bindings'];
 
-export type LlmProvider = 'anthropic' | 'openai' | 'google';
-export const SUPPORTED_PROVIDERS: readonly LlmProvider[] = ['anthropic', 'openai', 'google'];
+export type LlmProvider = 'anthropic' | 'openai' | 'google' | 'meta' | 'kimi' | 'qwen' | 'minimax' | 'xai';
+export const SUPPORTED_PROVIDERS: readonly LlmProvider[] = ['anthropic', 'openai', 'google', 'meta', 'kimi', 'qwen', 'minimax', 'xai'];
 
 export type ProviderAuthType = 'api_key' | 'oauth';
 
@@ -33,10 +35,15 @@ export type ProviderAuthType = 'api_key' | 'oauth';
  *  overrides. `oauth` marks the provider that ALSO supports a connected
  *  subscription (Anthropic today) — the OAuth path is resolved separately via
  *  {@link resolveAnthropicOAuthToken}, so it isn't part of the api-key overlay. */
-export const PROVIDER_VENDOR_MAP: Record<LlmProvider, { vendorId: string; envKey: 'CLAUDE_API_KEY' | 'OPENAI_API_KEY' | 'GOOGLE_API_KEY'; oauth: boolean }> = {
+export const PROVIDER_VENDOR_MAP: Record<LlmProvider, { vendorId: string; envKey: 'CLAUDE_API_KEY' | 'OPENAI_API_KEY' | 'GOOGLE_API_KEY' | 'META_API_KEY' | 'MOONSHOT_API_KEY' | 'QWEN_API_KEY' | 'MINIMAX_API_KEY' | 'XAI_API_KEY'; oauth: boolean }> = {
   anthropic: { vendorId: 'anthropic', envKey: 'CLAUDE_API_KEY', oauth: true },
-  openai:    { vendorId: 'openai',    envKey: 'OPENAI_API_KEY', oauth: false },
+  openai:    { vendorId: 'openai',    envKey: 'OPENAI_API_KEY', oauth: true },
   google:    { vendorId: 'googleai',  envKey: 'GOOGLE_API_KEY', oauth: false },
+  meta:      { vendorId: 'meta',      envKey: 'META_API_KEY',   oauth: false },
+  kimi:      { vendorId: 'moonshot',  envKey: 'MOONSHOT_API_KEY', oauth: false },
+  qwen:      { vendorId: 'qwen',      envKey: 'QWEN_API_KEY', oauth: false },
+  minimax:   { vendorId: 'minimax',   envKey: 'MINIMAX_API_KEY', oauth: false },
+  xai:       { vendorId: 'xai',       envKey: 'XAI_API_KEY', oauth: true },
 };
 
 /** A tenant's resolved BYO API keys keyed by provider (decrypted, api_key mode
@@ -54,6 +61,9 @@ export type AnthropicAuth =
 export interface ProviderKeySummary {
   provider: LlmProvider;
   authType: ProviderAuthType;
+  /** Tenant-set BYO precedence — LOWER = tried FIRST by the auto-select cloud pin.
+   *  `null` = unset → the provider falls back to catalog-tier ordering. */
+  priority: number | null;
 }
 
 export function isSupportedProvider(p: string): p is LlmProvider {
@@ -74,6 +84,8 @@ export function byoVendorIdSet(providers: readonly LlmProvider[]): Set<string> {
 export function providersFromCredentials(creds: TenantLlmCredentials): LlmProvider[] {
   const set = new Set<LlmProvider>((Object.keys(creds.vendorKeys) as LlmProvider[]).filter((p) => creds.vendorKeys[p]));
   if (creds.anthropicOAuthToken) set.add('anthropic');
+  if (creds.openaiCodexAuth) set.add('openai');
+  if (creds.xaiOAuthToken) set.add('xai');
   return [...set];
 }
 
@@ -100,7 +112,7 @@ export async function setTenantProviderOAuth(
   env: Env,
   tenantId: number,
   provider: LlmProvider,
-  tokens: AnthropicOAuthTokens,
+  tokens: AnthropicOAuthTokens | OpenAICodexOAuthTokens | XaiOAuthTokens,
   userId: string | null,
 ): Promise<void> {
   const keyEnc = await encryptSecretForStorage(JSON.stringify(tokens), env.JWT_SECRET);
@@ -111,6 +123,55 @@ export async function setTenantProviderOAuth(
     ON CONFLICT (tenant_id, provider)
     DO UPDATE SET key_enc = ${keyEnc}, auth_type = 'oauth', updated_at = NOW()
   `;
+}
+
+export interface OpenAICodexResolution {
+  auth: { accessToken: string; accountId: string } | null;
+  reason?: ByoUnresolvedReason;
+}
+
+/** Resolve and rotate a tenant's ChatGPT/Codex subscription credential. */
+export async function resolveOpenAICodexResolution(env: Env, tenantId: number): Promise<OpenAICodexResolution> {
+  const row = await loadProviderRow(env, tenantId, 'openai');
+  if (!row?.key_enc || (row.auth_type ?? 'api_key') !== 'oauth') return { auth: null };
+  let tokens: OpenAICodexOAuthTokens;
+  try {
+    tokens = JSON.parse(await decryptSecretFromStorage(row.key_enc, env.JWT_SECRET)) as OpenAICodexOAuthTokens;
+  } catch { return { auth: null, reason: 'undecryptable' }; }
+  if (!tokens.access || !tokens.refresh || !tokens.accountId) return { auth: null, reason: 'undecryptable' };
+  if (Date.now() < tokens.expires) return { auth: { accessToken: tokens.access, accountId: tokens.accountId } };
+  try {
+    const refreshed = await refreshOpenAICodexToken(tokens.refresh);
+    await setTenantProviderOAuth(env, tenantId, 'openai', refreshed, null);
+    return { auth: { accessToken: refreshed.access, accountId: refreshed.accountId } };
+  } catch (e) {
+    const status = (e as { status?: number }).status;
+    if (status === 401 || status === 403) return { auth: null, reason: 'revoked' };
+    if (Date.now() < tokens.expires + OAUTH_SAFETY_MARGIN_MS) return { auth: { accessToken: tokens.access, accountId: tokens.accountId } };
+    return { auth: null, reason: 'expired' };
+  }
+}
+
+export interface XaiOAuthResolution { token: string | null; reason?: ByoUnresolvedReason }
+
+export async function resolveXaiOAuthResolution(env: Env, tenantId: number): Promise<XaiOAuthResolution> {
+  const row = await loadProviderRow(env, tenantId, 'xai');
+  if (!row?.key_enc || (row.auth_type ?? 'api_key') !== 'oauth') return { token: null };
+  let tokens: XaiOAuthTokens;
+  try { tokens = JSON.parse(await decryptSecretFromStorage(row.key_enc, env.JWT_SECRET)) as XaiOAuthTokens; }
+  catch { return { token: null, reason: 'undecryptable' }; }
+  if (!tokens.access || !tokens.refresh) return { token: null, reason: 'undecryptable' };
+  if (Date.now() < tokens.expires) return { token: tokens.access };
+  try {
+    const refreshed = await refreshXaiToken(tokens.refresh);
+    await setTenantProviderOAuth(env, tenantId, 'xai', refreshed, null);
+    return { token: refreshed.access };
+  } catch (e) {
+    const status = (e as { status?: number }).status;
+    if (status === 400 || status === 401 || status === 403) return { token: null, reason: 'revoked' };
+    if (Date.now() < tokens.expires + OAUTH_SAFETY_MARGIN_MS) return { token: tokens.access };
+    return { token: null, reason: 'expired' };
+  }
 }
 
 interface ProviderKeyRow {
@@ -277,6 +338,8 @@ export async function resolveTenantVendorKeys(env: Env, tenantId: number): Promi
  *  (OpenAI/Google/Anthropic). */
 export interface TenantLlmCredentials {
   anthropicOAuthToken: string | null;
+  openaiCodexAuth?: { accessToken: string; accountId: string } | null;
+  xaiOAuthToken?: string | null;
   vendorKeys: TenantVendorKeys;
   /** Every provider the tenant has a stored credential ROW for — regardless of whether
    *  it could be RESOLVED this call. A provider that is `configured` but absent from the
@@ -290,6 +353,10 @@ export interface TenantLlmCredentials {
    *  ("token revoked — reconnect" vs "transient — retry") instead of a bare provider id.
    *  Only populated for a provider that has a row but produced no usable credential. */
   unresolvedReasons: Partial<Record<LlmProvider, ByoUnresolvedReason>>;
+  /** Tenant-set BYO precedence as ordered gateway vendor ids (most-preferred first) —
+   *  the order the auto-select cloud pin leads its connected flagships by (empty when
+   *  no precedence is set → catalog-tier ordering). See {@link byoVendorPriorityOrder}. */
+  vendorPriority: string[];
 }
 
 /**
@@ -301,17 +368,24 @@ export interface TenantLlmCredentials {
  * WHY in `unresolvedReasons`) so the degrade to the shared pool is never silent.
  */
 export async function resolveTenantLlmCredentials(env: Env, tenantId: number): Promise<TenantLlmCredentials> {
-  const [anthropicRes, vendorKeys, configured] = await Promise.all([
+  const [anthropicRes, openaiRes, xaiRes, vendorKeys, configured] = await Promise.all([
     resolveAnthropicResolution(env, tenantId).catch(() => ({ auth: null }) as AnthropicResolution),
+    resolveOpenAICodexResolution(env, tenantId).catch(() => ({ auth: null }) as OpenAICodexResolution),
+    resolveXaiOAuthResolution(env, tenantId).catch(() => ({ token: null }) as XaiOAuthResolution),
     resolveTenantVendorKeys(env, tenantId),
     listTenantProviderKeys(env, tenantId).catch(() => [] as ProviderKeySummary[]),
   ]);
   const anthropicOAuthToken = anthropicRes.auth?.mode === 'oauth' ? anthropicRes.auth.accessToken : null;
   const creds: TenantLlmCredentials = {
     anthropicOAuthToken,
+    openaiCodexAuth: openaiRes.auth,
+    xaiOAuthToken: xaiRes.token,
     vendorKeys,
+    // `configured` is already ordered by tenant-set precedence (listTenantProviderKeys),
+    // so both the provider list and the vendor-priority order read straight off it.
     configuredProviders: configured.map((p) => p.provider),
     unresolvedReasons: {},
+    vendorPriority: byoVendorPriorityOrder(configured),
   };
   // Attach a reason to each configured-but-unusable provider: Anthropic gets the precise
   // reason from its resolver; an api-key provider that's configured but decrypted to
@@ -320,7 +394,10 @@ export async function resolveTenantLlmCredentials(env: Env, tenantId: number): P
   const usable = new Set(providersFromCredentials(creds));
   for (const p of creds.configuredProviders) {
     if (usable.has(p)) continue;
-    creds.unresolvedReasons[p] = p === 'anthropic' ? (anthropicRes.reason ?? 'undecryptable') : 'undecryptable';
+    creds.unresolvedReasons[p] = p === 'anthropic'
+      ? (anthropicRes.reason ?? 'undecryptable')
+      : p === 'openai' ? (openaiRes.reason ?? 'undecryptable')
+      : p === 'xai' ? (xaiRes.reason ?? 'undecryptable') : 'undecryptable';
   }
   return creds;
 }
@@ -386,21 +463,78 @@ export async function providersConnectedInOtherWorkspaces(
   }
 }
 
-/** List which providers a tenant has configured + how each authenticates (no secrets). */
+/** List which providers a tenant has configured + how each authenticates (no secrets).
+ *  Ordered by tenant-set BYO precedence (`priority` ascending; unset rows last), then
+ *  provider id — so the caller can read the precedence straight off the array order. */
 export async function listTenantProviderKeys(
   env: Env,
   tenantId: number,
 ): Promise<ProviderKeySummary[]> {
   const sql = neon(env.NEON_DATABASE_URL);
   const rows = (await sql`
-    SELECT provider, auth_type FROM tenant_llm_provider_keys WHERE tenant_id = ${tenantId}
-  `) as Array<{ provider: string; auth_type?: string }>;
+    SELECT provider, auth_type, priority FROM tenant_llm_provider_keys
+    WHERE tenant_id = ${tenantId}
+    ORDER BY priority ASC NULLS LAST, provider ASC
+  `) as Array<{ provider: string; auth_type?: string; priority?: number | null }>;
   return rows
     .filter((r) => isSupportedProvider(r.provider))
     .map((r) => ({
       provider: r.provider as LlmProvider,
       authType: ((r.auth_type ?? 'api_key') === 'oauth' ? 'oauth' : 'api_key') as ProviderAuthType,
+      priority: typeof r.priority === 'number' ? r.priority : null,
     }));
+}
+
+/**
+ * Set the tenant's BYO provider PRECEDENCE from an ordered provider list (most-
+ * preferred first). Each provider's `priority` is stamped with its index, so the
+ * auto-select cloud pin ({@link byoAutoSeedModels}) leads with the owner's chosen
+ * account (e.g. Meta first) before failing over across the rest in that order.
+ * Only rows that already exist (a connected provider) are updated — ordering an
+ * un-connected provider is a no-op. Providers absent from `order` are reset to
+ * unset (NULL → catalog-tier fallback), so the list is the single source.
+ */
+export async function setTenantProviderPriority(
+  env: Env,
+  tenantId: number,
+  order: readonly LlmProvider[],
+): Promise<void> {
+  const sql = neon(env.NEON_DATABASE_URL);
+  const ranked = order.filter(isSupportedProvider);
+  // Clear any provider NOT in the new order back to unset, then stamp the ranked ones.
+  // Empty order → clear ALL (a plain UPDATE; `= ANY('{}')` can't infer its element type).
+  if (ranked.length === 0) {
+    await sql`UPDATE tenant_llm_provider_keys SET priority = NULL, updated_at = NOW() WHERE tenant_id = ${tenantId}`;
+    return;
+  }
+  await sql`
+    UPDATE tenant_llm_provider_keys SET priority = NULL, updated_at = NOW()
+    WHERE tenant_id = ${tenantId}
+      AND NOT (provider = ANY(${ranked as unknown as string[]}))
+  `;
+  for (let i = 0; i < ranked.length; i++) {
+    await sql`
+      UPDATE tenant_llm_provider_keys SET priority = ${i}, updated_at = NOW()
+      WHERE tenant_id = ${tenantId} AND provider = ${ranked[i]}
+    `;
+  }
+}
+
+/**
+ * The tenant's connected providers as ordered GATEWAY VENDOR IDS (most-preferred
+ * first) — the precedence {@link byoAutoSeedModels} sorts its flagship seeds by.
+ * Only providers with a set `priority` are included (unset providers fall back to
+ * catalog-tier ordering inside the seed). Maps each provider → its gateway vendor
+ * id ('google' → 'googleai') so the ids line up with `vendorForModel(flagship)`.
+ */
+export function byoVendorPriorityOrder(summaries: readonly ProviderKeySummary[]): string[] {
+  return summaries
+    .filter((s) => s.priority !== null)
+    .map((s) => s.provider === 'openai' && s.authType === 'oauth'
+      ? 'openai-codex'
+      : s.provider === 'xai' && s.authType === 'oauth'
+        ? 'xai-oauth'
+        : PROVIDER_VENDOR_MAP[s.provider].vendorId);
 }
 
 /** Remove a tenant's provider credential (API key or OAuth subscription). */

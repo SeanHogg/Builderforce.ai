@@ -31,6 +31,7 @@ import {
   type VideoRVQCodec,
   type EvermindModality,
 } from '@seanhogg/builderforce-memory-engine';
+import { looksLikeCoherentText, EVERMIND_ANSWER_MIN_CHARS } from './textCoherence';
 
 export { EXPORT_FORMATS };
 export type { ExportFormat, ExportResult };
@@ -106,6 +107,50 @@ export function messagesToPrompt(messages: Array<{ role?: unknown; content?: unk
     })
     .filter(Boolean);
   return `${lines.join('\n')}\nassistant:`;
+}
+
+/** Neutral probe prompts a project chat head should be able to answer coherently.
+ *  Fixed + generic (not project-specific) so the probe measures GENERATION QUALITY,
+ *  not recall. Deterministic seeds keep the verdict reproducible. */
+const COHERENCE_PROBE_PROMPTS: readonly string[] = [
+  'Summarize the current status of the project.',
+  'What has the team been working on recently?',
+  'List the main things left to do.',
+];
+
+/** A head's fitness-to-serve verdict (see {@link assessEvermindCoherence}). */
+export interface EvermindCoherenceAssessment {
+  ready: boolean;
+  /** Fraction of probe samples that were substantive AND coherent (0..1). */
+  passRate: number;
+  samples: Array<{ prompt: string; text: string; coherent: boolean }>;
+}
+
+/**
+ * Benchmark a head's FITNESS TO SERVE CHAT by generating from a few neutral probe
+ * prompts and scoring each for coherence (`looksLikeCoherentText` + the min-length
+ * bar). This is the gate the promote-to-inference path consults so a degraded head
+ * (the one that answered users in gibberish) can never be marked inference-enabled.
+ * CPU-only, reuses the same R2 loader + per-isolate memo as generation.
+ */
+export async function assessEvermindCoherence(
+  store: ArtifactStore,
+  ref: string,
+  opts: { minPassRate?: number } = {},
+): Promise<EvermindCoherenceAssessment> {
+  const { lm, tok } = await loadEvermindModel(store, ref);
+  const samples = COHERENCE_PROBE_PROMPTS.map((prompt, i) => {
+    const text = lm.generateText(messagesToPrompt([{ role: 'user', content: prompt }]), tok, {
+      maxNewTokens: 80,
+      temperature: 0.7,
+      seed: 1234 + i,
+    });
+    const coherent = text.trim().length >= EVERMIND_ANSWER_MIN_CHARS && looksLikeCoherentText(text);
+    return { prompt, text, coherent };
+  });
+  const passRate = samples.length ? samples.filter((s) => s.coherent).length / samples.length : 0;
+  // Majority must be coherent by default — one lucky sample isn't fitness to serve.
+  return { ready: passRate >= (opts.minPassRate ?? 0.5), passRate, samples };
 }
 
 /** Run generation for a published Evermind model and return text + token usage. */

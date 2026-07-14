@@ -302,6 +302,46 @@ describe('pickCloudModel with a connected BYO account', () => {
   });
 });
 
+describe('BYO precedence — tenant-set provider priority (byoAutoSeedModels)', () => {
+  it('with NO precedence set, still orders by catalog tier (backward compatible)', () => {
+    // Anthropic (Opus = PREMIUM) outranks Meta MUSE (STANDARD) on tier alone.
+    const seeds = byoAutoSeedModels(new Set(['anthropic', 'meta']), { agentic: true });
+    expect(seeds[0]).toBe('claude-opus-4-8');
+  });
+
+  it('vendorPriority leads with the tenant-chosen provider (Meta first) over a stronger tier', () => {
+    const seeds = byoAutoSeedModels(new Set(['anthropic', 'meta', 'openai']), {
+      agentic: true,
+      vendorPriority: ['meta', 'anthropic'],
+    });
+    expect(seeds[0]).toBe('direct/meta/muse-spark-1.1'); // Meta leads despite lower tier
+    expect(seeds[1]).toBe('claude-opus-4-8');            // then Anthropic (next in precedence)
+    expect(seeds[2]).toBe('direct/openai/gpt-4.1');      // un-ranked → after ranked, by tier
+  });
+
+  it('a vendor absent from vendorPriority falls to the tier tiebreak, after every ranked one', () => {
+    const seeds = byoAutoSeedModels(new Set(['anthropic', 'meta']), {
+      agentic: true,
+      vendorPriority: ['meta'], // only Meta ranked; Anthropic un-ranked
+    });
+    expect(seeds).toEqual(['direct/meta/muse-spark-1.1', 'claude-opus-4-8']);
+  });
+
+  it('pickCloudModel threads byoVendorPriority so the cloud pin leads with Meta', () => {
+    const pick = pickCloudModel(undefined, 'pro', false, {
+      byoVendors: new Set(['anthropic', 'meta']),
+      byoVendorPriority: ['meta', 'anthropic'],
+    });
+    expect(pick).toEqual({ model: 'direct/meta/muse-spark-1.1', strict: false });
+  });
+
+  it('empty vendorPriority is a no-op (identical to omitting it)', () => {
+    const withEmpty = byoAutoSeedModels(new Set(['anthropic', 'meta']), { agentic: true, vendorPriority: [] });
+    const without = byoAutoSeedModels(new Set(['anthropic', 'meta']), { agentic: true });
+    expect(withEmpty).toEqual(without);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Learned Model Routing (PRD 13) — rankModelsForAction + pickCloudModel hook.
 // ---------------------------------------------------------------------------

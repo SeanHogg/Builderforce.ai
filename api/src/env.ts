@@ -4,6 +4,10 @@ import type { TenantRole } from './domain/shared/types';
 export interface Env {
   /** Postgres connection string. Set via `wrangler secret put NEON_DATABASE_URL`. */
   NEON_DATABASE_URL: string;
+  /** Operational Postgres connection (logs, audit, telemetry and processing
+   * ledgers). When omitted during local/test rollout, the primary connection is
+   * used for backwards compatibility. */
+  NEON_TRANSACTIONAL_DATABASE_URL?: string;
   /** Comma-separated allowed CORS origins, e.g. "https://builderforce.ai" */
   CORS_ORIGINS: string;
   /** "production" | "development" */
@@ -83,6 +87,7 @@ export interface Env {
   PERPLEXITY_API_KEY?: string;
   /** Moonshot AI (Kimi) — api.moonshot.cn/v1. */
   MOONSHOT_API_KEY?: string;
+  QWEN_API_KEY?: string;
   /** Hyperbolic — api.hyperbolic.xyz/v1. */
   HYPERBOLIC_API_KEY?: string;
   /** Novita AI — api.novita.ai/v3/openai. */

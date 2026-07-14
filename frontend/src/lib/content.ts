@@ -253,6 +253,42 @@ export const FEATURES: Feature[] = [
     longDesc: 'Connect the trackers and incident tools you already run — Jira, Linear, monday, Asana, ClickUp, ServiceNow, Freshservice, Sentry, PagerDuty, and GitHub — and sync work two-ways. Agents pick up and act on a ticket or incident wherever it originates, and changes flow back to the system of record. One pane to orchestrate across everything, with no migration and no lock-in.',
   },
   {
+    icon: '🚨',
+    title: 'Incident Management & On-Call',
+    shortDesc: 'A help-desk agent, on-call rotations, escalation, paging, and a war-room — that learn.',
+    longDesc: 'Run incidents where the work already lives. A Help-Desk / Incident-Manager agent triages, on-call rotations decide who is paged, timed escalation walks the chain, and Teams, Slack, or email paging reaches the responder — with a per-incident war-room feed for humans and agents together. When it resolves, the root-cause analysis is published to your Knowledge base and fed to the project\'s Evermind, so the workforce learns and stops repeating the same failure.',
+  },
+  {
+    icon: '📡',
+    title: 'Active Monitoring Canvas',
+    shortDesc: 'Pin live monitors onto your architecture diagram — a breach starts the investigation.',
+    longDesc: 'Upload your architecture diagram and pin heartbeat, HTTP, webhook, or metric monitors directly onto the systems they watch. A sweep evaluates them every five minutes, and a breach doesn\'t just light up red — it auto-starts the on-call investigation: monitor → signal → incident → paging, on one surface. Monitoring that opens the ticket and calls the responder instead of just drawing a chart.',
+  },
+  {
+    icon: '⚖️',
+    title: 'Role-Gated Accountability',
+    shortDesc: 'Proof that the right role did each part of the work — an immutable sign-off record.',
+    longDesc: 'Every ticket carries a participation manifest: the roles it requires, resolved to the humans and agents capable of each — so a Product Manager is never dispatched to write code and a producer stage runs a producer. An append-only Accountability Report records Who, When, Verdict, Comments, and Contribution per role, gated by default-deny sign-off permissions, with a Resource Assessment that flags a missing role as a blocking gap. Quality is proven at the board, not hoped for after the fact.',
+  },
+  {
+    icon: '📄',
+    title: 'Automated RFP & Proposal Response',
+    shortDesc: 'Turn an analyzed codebase into a branded, costed proposal.',
+    longDesc: 'Answer a request for proposal from what you\'ve already built. CTO and Product-Owner agents read a project\'s analyzed capabilities and generate a co-branded proposal — cost and P&L, a phased delivery Gantt, risks, dependencies, and a capability roster matched to the ask — blending the requester\'s brand palette and logo with yours. Freshness-gated grounding re-scans a stale project before it answers, so the proposal reflects the real system.',
+  },
+  {
+    icon: '🧑‍💼',
+    title: 'AI Managers & Coaching',
+    shortDesc: 'Typed managers you can coach — Dev, QA, Service-Desk, DevOps.',
+    longDesc: 'Managers aren\'t generic. A manager type — Dev, QA, Service-Desk, DevOps, or a custom role from your catalog — shapes how a manager agent runs its reports. When one gets it wrong, a human runs a Coaching Session: a directive or a task, with an expiry and a done state, that steers the manager\'s behavior going forward. Feedback becomes durable guidance, not a one-off correction lost to the next run.',
+  },
+  {
+    icon: '⚡',
+    title: 'Memory-First Answering',
+    shortDesc: 'Answer from the project\'s own memory before spending a paid model call.',
+    longDesc: 'The cheapest token is the one you never spend. Before a paid model call, the Brain consults the project\'s own memory — an exact-repeat question-and-answer cache plus opt-in inference on the project\'s Evermind — and short-circuits the LLM entirely on a confident hit. Learning fans out to every Evermind under the project (its own and its IDE builds\'), so a lesson taught once answers everywhere. Your token bill falls as the project\'s memory grows.',
+  },
+  {
     icon: '🗂️',
     title: 'AI Dataset Generation',
     shortDesc: 'Generate datasets from a single prompt.',
@@ -766,6 +802,22 @@ export const HOMEPAGE_FAQ: FaqItem[] = [
     answer: 'Builderforce supports LoRA fine-tuning of transformer and SSM (State Space Model) architectures up to 2 billion parameters. Training runs on your local GPU via the WebGPU API in Chrome, Edge, or any WebGPU-capable browser.',
   },
   {
+    question: 'Can Builderforce manage incidents and on-call?',
+    answer: 'Yes. Builderforce runs incidents end-to-end: a Help-Desk / Incident-Manager agent triages, on-call rotations decide who is paged, timed escalation walks the chain, and Teams, Slack, or email paging reaches the responder — with a per-incident war-room feed for humans and agents. Monitors pinned onto your architecture diagram sweep every five minutes and a breach auto-starts the investigation. When an incident resolves, its root-cause analysis is published to your Knowledge base and fed to the project\'s Evermind, so the workforce learns and stops repeating the same failure.',
+  },
+  {
+    question: 'How does Builderforce prove the right role did each part of the work?',
+    answer: 'Every ticket carries a participation manifest — the roles it requires, resolved to the humans and agents capable of each, so a Product Manager is never dispatched to write code. An append-only Accountability Report records Who, When, Verdict, Comments, and Contribution per role, gated by default-deny sign-off permissions, with a Resource Assessment that flags a missing role as a blocking gap. Quality is proven at the board with an immutable record, not hoped for after the fact.',
+  },
+  {
+    question: 'Can Builderforce answer without spending tokens on a model?',
+    answer: 'Yes. Before a paid model call, the Brain consults the project\'s own memory — an exact-repeat question-and-answer cache plus opt-in inference on the project\'s Evermind — and short-circuits the LLM entirely on a confident hit. Learning fans out to every Evermind under a project, so a lesson taught once answers everywhere. Combined with the semantic response cache, the token bill falls as the project\'s memory grows.',
+  },
+  {
+    question: 'Can Builderforce respond to an RFP or RFQ?',
+    answer: 'Yes. CTO and Product-Owner agents turn an analyzed project into a branded, costed proposal — cost and P&L, a phased delivery Gantt, risks, dependencies, and a capability roster matched to the ask — co-branded with the requester\'s palette and logo. Freshness-gated grounding re-scans a stale project before it answers, so the proposal reflects the real system. RFP responses live as a tab on the project itself.',
+  },
+  {
     question: 'Is my data private during training?',
     answer: 'Yes — 100% private. All training computation happens locally on your device using WebGPU. Your datasets, model weights, and training artifacts are never sent to external servers during training. Finished LoRA adapters are persisted to encrypted Cloudflare R2 storage.',
   },
@@ -1222,6 +1274,22 @@ export const DEFINED_TERMS: DefinedTermEntry[] = [
     name: 'Learned model routing',
     description: 'A cost-and-quality optimization on Builderforce.ai that scores every run on its outcome and reorders which model handles each action type accordingly — cheaper models take the work they do well while premium models are reserved for tasks that need them. Combined with the cross-surface semantic cache, the token bill bends down as the platform learns a team\'s workload, with a single kill-switch flag for manual control.',
   },
+  {
+    name: 'Memory-first inference',
+    description: 'A token-saving pattern on Builderforce.ai where, before any paid model call, the Brain consults the project\'s own memory — an exact-repeat question-and-answer cache plus opt-in inference on the project\'s Evermind — and short-circuits the frontier LLM entirely on a confident hit. The decision is single-sourced so every surface (web and VS Code) behaves identically, and learning fans out to every Evermind under a project (its own head and its IDE builds\'), so a lesson taught once answers everywhere and the token bill falls as memory grows.',
+  },
+  {
+    name: 'Role-gated accountability',
+    description: 'Builderforce.ai\'s model for proving the right role did each part of a ticket. A per-ticket participation manifest resolves the required roles to the humans and agents capable of each — so a role-incapable owner (for example a Product Manager) is never dispatched to a producer stage — and an append-only Accountability Report records Who, When, Verdict, Comments, and Contribution per role, gated by default-deny sign-off permissions, with a Resource Assessment that surfaces a missing role as a blocking gap. Quality is proven on the board with an immutable record rather than assumed after the fact.',
+  },
+  {
+    name: 'Incident management with learned RCA',
+    description: 'Builderforce.ai\'s end-to-end incident response: a Help-Desk / Incident-Manager agent triages, on-call rotations decide who is paged, timed escalation walks the chain, Teams/Slack/email paging reaches the responder, and a per-incident war-room feed coordinates humans and agents. Active monitors pinned onto an uploaded architecture diagram sweep every five minutes and a breach auto-starts the investigation. On resolution the root-cause analysis is published to the Knowledge base and fed to the project\'s Evermind, so the workforce learns and stops repeating the same failure.',
+  },
+  {
+    name: 'Automated RFP response',
+    description: 'A pre-sales capability on Builderforce.ai where CTO and Product-Owner agents turn a project\'s analyzed capabilities into a branded, costed proposal — cost and P&L, a phased delivery Gantt, risks, dependencies, and a capability roster matched to the ask — co-branded with the requester\'s palette and logo. Freshness-gated grounding re-runs the deterministic system audits before answering, so the proposal reflects the system as it is today. RFP responses live as a tab on the project itself.',
+  },
 ];
 
 /* ════════════════════ PRODUCT SURFACES (public capability tour) ════════════════════ */
@@ -1597,11 +1665,16 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
     'system-of-record-for-agentic-work',
     'planning-spine-cost-bearing-delivery',
     'quality-error-observability-one-click-fix',
+    'incident-management-on-call-and-war-rooms',
+    'role-gated-accountability-proof-of-participation',
+    'automated-rfp-response-from-your-codebase',
+    'memory-first-inference-skip-the-llm',
   ],
   // Evermind technology page / feature teaser.
   evermind: [
     'evermind-self-updating-model',
     'inside-evermind-architecture',
+    'memory-first-inference-skip-the-llm',
     'transitioning-to-an-agentic-workforce',
     'agent-tech-stack-all-seven-layers',
     'semantic-response-cache',
@@ -1613,6 +1686,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   ],
   pricing: [
     'evermind-self-updating-model',
+    'memory-first-inference-skip-the-llm',
     'system-of-record-for-agentic-work',
     'semantic-response-cache',
   ],
@@ -1629,13 +1703,13 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   ide: ['vs-code-command-center-for-your-agentic-workforce', 'in-browser-ide-and-collaboration', 'product-ideation-with-builderforce'],
   training: ['webgpu-lora-explained', 'inside-evermind-architecture', 'evermind-self-updating-model', 'ai-dataset-generation-best-practices'],
   workflows: ['define-a-need-the-agentic-system-solves-it', 'multi-agent-orchestration', 'autonomous-swimlane-execution'],
-  projects: ['planning-spine-cost-bearing-delivery', 'autonomous-swimlane-execution', 'task-execution-and-observability'],
+  projects: ['planning-spine-cost-bearing-delivery', 'role-gated-accountability-proof-of-participation', 'autonomous-swimlane-execution', 'task-execution-and-observability'],
   workforce: ['real-time-collaboration-humans-and-agents', 'multi-party-team-chat-humans-and-agents', 'fleet-management-and-agent-routing'],
   meetings: ['video-meetings-standups-and-shared-calendars', 'real-time-collaboration-humans-and-agents', 'multi-party-team-chat-humans-and-agents'],
   skills: ['skills-assignment-and-the-marketplace', 'builderforce-agents-and-agent-integration', 'best-ai-coding-agents-compared'],
   personas: ['ai-agent-personality-psychometric-personas', 'builderforce-agents-and-agent-integration', 'multi-agent-orchestration'],
   'content-manager': ['skills-assignment-and-the-marketplace', 'product-ideation-with-builderforce'],
-  security: ['every-role-operating-picture', 'security-and-multi-tenant-architecture', 'cobit-governance-readiness-for-agentic-it'],
+  security: ['every-role-operating-picture', 'role-gated-accountability-proof-of-participation', 'security-and-multi-tenant-architecture', 'cobit-governance-readiness-for-agentic-it'],
   soc2: ['cobit-governance-readiness-for-agentic-it', 'security-and-multi-tenant-architecture', 'knowledge-management-sops-and-compliance'],
   contributors: ['every-role-operating-picture', 'task-execution-and-observability', 'multi-agent-orchestration'],
   dashboard: ['system-of-record-for-agentic-work', 'real-time-collaboration-humans-and-agents', 'every-role-operating-picture'],
@@ -1644,5 +1718,5 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   diagnostics: ['ai-development-maturity-diagnostic', 'cobit-governance-readiness-for-agentic-it', 'system-of-record-for-agentic-work'],
   // Newer enterprise surfaces.
   knowledge: ['knowledge-management-sops-and-compliance', 'every-role-operating-picture', 'security-and-multi-tenant-architecture'],
-  quality: ['quality-error-observability-one-click-fix', 'agentic-tester-autonomous-qa', 'task-execution-and-observability'],
+  quality: ['quality-error-observability-one-click-fix', 'incident-management-on-call-and-war-rooms', 'agentic-tester-autonomous-qa', 'task-execution-and-observability'],
 };

@@ -18,7 +18,9 @@ import {
 import { ideProxy, explicitModelPreemptsByo, readProxyChoice, type LlmProxyService } from '../llm/LlmProxyService';
 import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
 import { classifyReplyAccount, buildReplyProvenance } from '../llm/replyProvenance';
-import { getProjectEvermindHead } from '../llm/projectEvermind';
+import { getProjectEvermindHead, recordEvermindServeOutcome } from '../llm/projectEvermind';
+import { looksLikeCoherentText, EVERMIND_ANSWER_MIN_CHARS } from '../llm/projectMemory';
+import { learnFromPersistedTurns } from './brainEvermindLearning';
 import { tenantProxyForPlan } from '../llm/tenantProxy';
 import { vendorForModel } from '../llm/vendors';
 import { recordProxyUsage } from '../llm/usageLedger';
@@ -668,12 +670,6 @@ export class BrainService {
    *  callers must have already verified access. Shared by {@link appendMessages}
    *  and {@link agentReply} so the write path lives once. */
   private async appendRaw(chatId: number, messages: Array<{ role: string; content: string; metadata?: string | null }>) {
-    const [maxRow] = await this.db
-      .select({ maxSeq: sql<number>`COALESCE(MAX(${brainChatMessages.seq}), 0)` })
-      .from(brainChatMessages)
-      .where(eq(brainChatMessages.chatId, chatId));
-    let seq = maxRow?.maxSeq ?? 0;
-
     const inserted: Array<{
       id: number;
       role: string;
@@ -685,7 +681,6 @@ export class BrainService {
 
     for (const msg of messages) {
       if (!msg.role || typeof msg.content !== 'string') continue;
-      seq += 1;
       const [row] = await this.db
         .insert(brainChatMessages)
         .values({
@@ -693,10 +688,14 @@ export class BrainService {
           role: msg.role,
           content: msg.content,
           metadata: msg.metadata ?? null,
-          seq,
         })
         .returning(messageColumns);
-      if (row) inserted.push(row);
+      if (row) {
+        // The generated PK is an atomic database append order. A read-then-write
+        // MAX(seq)+1 races when agents and humans append concurrently.
+        await this.db.update(brainChatMessages).set({ seq: row.id }).where(eq(brainChatMessages.id, row.id));
+        inserted.push({ ...row, seq: row.id });
+      }
     }
 
     // Touch updatedAt on the chat
@@ -1006,9 +1005,10 @@ export class BrainService {
     // SSM can't tool-call, so it never drives tool selection). SOFT pin: passing
     // `evermind/<ref>` WITHOUT modelStrict makes complete() try Evermind first and CASCADE
     // to the coding pool on error; we ADOPT the Evermind turn only when Evermind ITSELF
-    // served a substantive reply (resolved model still `evermind/`, ≥20 chars) — otherwise
-    // we keep the capable-model answer. So enabling inference can never break or blank a
-    // reply, and a successful turn carries the "🧠 Evermind vN" provenance chip.
+    // served a substantive AND coherent reply (resolved model still `evermind/`, ≥20 chars,
+    // passes `looksLikeCoherentText`) — otherwise we keep the capable-model answer. So an
+    // under-trained head can never make the agent reply in gibberish, enabling inference can
+    // never break or blank a reply, and a successful turn carries the "🧠 Evermind vN" chip.
     // [[evermind-learning-architecture]]
     let evermindRun: { version: number } | undefined;
     if (text && projectHint != null) {
@@ -1023,7 +1023,18 @@ export class BrainService {
         this.recordUsage(apiKey, tenantId, 'brain_agent_reply', evResult);
         const evModel = readModel(evResult);
         const evChoice = await readProxyChoice(evResult);
-        if (evModel.startsWith('evermind/') && evChoice.content.trim().length >= 20) {
+        // Adopt the Evermind turn ONLY when it served a substantive AND coherent reply
+        // (same bar the memory-first resolver uses — DRY). An under-trained head emits
+        // gibberish that clears the length check; keep the capable-model answer instead.
+        const evRan = evModel.startsWith('evermind/'); // false if it cascaded to a real model
+        const evCoherent = evRan && evChoice.content.trim().length >= EVERMIND_ANSWER_MIN_CHARS && looksLikeCoherentText(evChoice.content);
+        // Feed the outcome to the head's quarantine counter (only when Evermind ITSELF
+        // ran — a cascade-away isn't the SSM's output). N incoherent serves in a row
+        // auto-disable inference so a broken head stops answering in gibberish.
+        if (evRan) {
+          await recordEvermindServeOutcome(env, this.db, tenantId, projectHint, evCoherent).catch(() => { /* best-effort */ });
+        }
+        if (evCoherent) {
           text = evChoice.content;
           lastModel = evModel;
           lastVendor = readVendor(evResult) || lastVendor;
@@ -1100,6 +1111,17 @@ export class BrainService {
       provenance,
     });
     const [posted] = await this.appendRaw(chatId, [{ role: 'assistant', content: text, metadata }]);
+
+    // Contribute this @agent reply to the project's Evermind through the SAME
+    // learn-on-persist path the Brain message route uses. Previously the addressed-reply
+    // loop persisted via appendRaw DIRECTLY and silently skipped training, so @agent
+    // turns never fed the project Evermind (GAP-488). Best-effort; dispatched in the
+    // background via the route's executionCtx when present.
+    await learnFromPersistedTurns(
+      env, this.db, chatId, tenantId, [{ role: 'assistant', content: text }],
+      (p) => { if (opts?.executionCtx) opts.executionCtx.waitUntil(p); },
+    ).catch(() => { /* never fail the reply */ });
+
     return posted ?? { error: 'Failed to post reply' as const };
   }
 

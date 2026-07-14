@@ -38,6 +38,8 @@ import {
 import { BoardConfigPanel } from './board/BoardConfigPanel';
 import { AssigneeProfilesProvider } from './workforce/AssigneeProfilesContext';
 import AssigneeHovercard, { AssigneePersonalityInline } from './workforce/AssigneeHovercard';
+import { MemberProfileEditor } from './workforce/MemberProfileEditor';
+import type { MemberKind } from '@/lib/builderforceApi';
 import { AgentChip, ACTIVE_EXECUTION_STATUSES } from './board/AgentChip';
 import { SwimlaneTriageButton } from './board/SwimlaneTriageButton';
 import { trackActivity } from '@/lib/activity/tracker';
@@ -52,6 +54,7 @@ import { MoveToBoardControl } from './MoveToBoardControl';
 import { AgentTab } from './agent/AgentTab';
 import { TaskChangesPanel } from './agent/TaskChangesPanel';
 import { TaskPrdTab } from './task/TaskPrdTab';
+import { AccountabilityTab } from './task/AccountabilityTab';
 import { RunTaskButton } from './task/RunTaskButton';
 import { ApprovalResolveControl } from './humanRequests/ApprovalResolveControl';
 import { ChatMessageContent } from './ChatMessageContent';
@@ -189,6 +192,9 @@ export function TaskMgmtContent({
   // role or check was skipped). Fetched once per project (server-side cached) and
   // rendered as a flag chip on the card — no per-card round-trip.
   const [flaggedIds, setFlaggedIds] = useState<Set<number>>(new Set());
+  // Participation progress per ticket (X of Y required roles complete) — the
+  // Coordinated Role Participation %-complete chip. One cached project fetch.
+  const [participantProgress, setParticipantProgress] = useState<Map<number, { completed: number; required: number; percent: number }>>(new Map());
   const [projects, setProjects] = useState<Project[]>(projectsProp ?? globalScope?.projects ?? []);
   const [agentHostsList, setAgentHostsList] = useState<AgentHost[]>([]);
   const [cloudAgentsList, setCloudAgentsList] = useState<CloudAgentTarget[]>([]);
@@ -203,6 +209,12 @@ export function TaskMgmtContent({
   // Standup mode: pivot the board so rows = teammates/agents and columns = stages,
   // surfacing each person's in-flight work at a glance. Board-view only, session-only.
   const [groupByAssignee, setGroupByAssignee] = useState(false);
+  // Assignee swimlanes can contain hundreds of cards. Keep every row collapsed
+  // until the viewer explicitly opens it; this state is intentionally session-only.
+  const [expandedAssigneeRows, setExpandedAssigneeRows] = useState<Set<string>>(new Set());
+  const [profileAssignee, setProfileAssignee] = useState<{
+    kind: MemberKind; refId: string; name: string; tasks: Task[];
+  } | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterProject, setFilterProject] = useState<string>(projectId != null ? String(projectId) : '');
   const [filterPriority, setFilterPriority] = useState<string>('');
@@ -229,7 +241,7 @@ export function TaskMgmtContent({
   // Live ceremony overlay (standup/planning round-table) for the selected board.
   const [ceremony, setCeremony] = useState<CeremonyMode | null>(null);
   const [prdOpen, setPrdOpen] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<'details' | 'agent' | 'changes' | 'prd'>('details');
+  const [drawerTab, setDrawerTab] = useState<'details' | 'agent' | 'changes' | 'prd' | 'accountability'>('details');
   // Inline per-field editing in the task drawer. Only one field is editable at a
   // time; `fieldDraft` holds the in-progress value (string for text/date inputs).
   const [editingField, setEditingField] = useState<
@@ -251,28 +263,64 @@ export function TaskMgmtContent({
     setDrawerTask(t);
   }, []);
 
-  // Deep-link to a ticket's DETAIL drawer via a `?task=<id>` query param — the target
-  // the Brain ChatTicketsPanel "Open" now routes to for a linked task/epic/gap (so the
-  // chip opens the ticket's details, not just the board). Opens once per id after the
-  // matching task has loaded, then strips the param so closing the drawer doesn't
-  // re-open it and the URL stays clean. A ref guards against re-opening on re-render.
   const router = useRouter();
   const searchParams = useSearchParams();
   const deepLinkedTaskRef = useRef<string | null>(null);
+
+  // Close the drawer AND strip a lingering `?task=` deep-link param, so the board
+  // URL stays clean and the drawer can't re-open on the next render. Every
+  // user-facing close affordance (overlay, close button) goes through this.
+  // Programmatic closes (delete/move) call setDrawerTask(null) directly — the row
+  // is gone, so there's no deep-link left to honour.
+  const closeDrawer = useCallback(() => {
+    setDrawerTask(null);
+    if (searchParams?.get('task')) {
+      const params = new URLSearchParams(Array.from(searchParams.entries()));
+      params.delete('task');
+      const qs = params.toString();
+      router.replace(qs ? `?${qs}` : '?', { scroll: false });
+    }
+  }, [searchParams, router]);
+
+  // Deep-link to a ticket's DETAIL drawer via a `?task=<id>` query param — the target
+  // the Brain ChatTicketsPanel "Open" routes to for a linked task/epic/gap (so the
+  // chip opens the ticket's details, not just the board). Resolve from the loaded
+  // board list when the ticket is present (instant), otherwise FETCH it directly:
+  // the global ProjectScope resolving `?project=` and the scoped task list loading
+  // race, so at the moment this runs the target may not yet be in `tasks` (or may sit
+  // in a different project scope). A list-only lookup would silently no-op there.
+  // We deliberately KEEP the `?task=` param in place while the drawer is open
+  // (closeDrawer strips it) so a transient remount during auth/scope hydration
+  // RE-opens the drawer instead of dropping to the bare board — the "redirects back
+  // with no panel" symptom. The ref guards against re-opening the same id per mount.
   useEffect(() => {
     const raw = searchParams?.get('task');
-    if (!raw || deepLinkedTaskRef.current === raw) return;
+    if (!raw) return;
     const id = Number(raw);
-    if (!Number.isInteger(id)) return;
-    const match = tasks.find((t) => t.id === id);
-    if (!match) return; // not on this board yet — wait for load (or a foreign id we ignore)
-    deepLinkedTaskRef.current = raw;
-    openTask(match);
-    const params = new URLSearchParams(Array.from(searchParams.entries()));
-    params.delete('task');
-    const qs = params.toString();
-    router.replace(qs ? `?${qs}` : '?', { scroll: false });
-  }, [searchParams, tasks, openTask, router]);
+    if (!Number.isInteger(id) || id <= 0) return;
+    if (drawerTask?.id === id) return;             // already open on this ticket
+    if (deepLinkedTaskRef.current === raw) return; // handled this id already this mount
+    const inList = tasks.find((t) => t.id === id);
+    if (inList) {
+      deepLinkedTaskRef.current = raw;
+      openTask(inList);
+      return;
+    }
+    // Not in the (scoped) list — fetch it directly. GET /api/tasks/:id is tenant-
+    // scoped server-side (404s for a foreign / other-tenant id), so an inaccessible
+    // id just leaves the board unchanged. Guarded so a late resolve can't open a
+    // drawer the list-path already opened.
+    let alive = true;
+    tasksApi.get(id)
+      .then((full) => {
+        if (alive && full && deepLinkedTaskRef.current !== raw) {
+          deepLinkedTaskRef.current = raw;
+          openTask(full);
+        }
+      })
+      .catch(() => { /* not found / not accessible — leave the board as-is */ });
+    return () => { alive = false; };
+  }, [searchParams, tasks, openTask, drawerTask?.id]);
 
   // Load whether the open ticket is already published to the marketplace, so the
   // drawer can show a "Published" badge + Unpublish, or offer to publish. Best-effort:
@@ -426,6 +474,9 @@ export function TaskMgmtContent({
     kanbanApi.flaggedForProject(effectiveProjectId)
       .then((rows) => { if (alive) setFlaggedIds(new Set(rows.map((r) => r.taskId))); })
       .catch(() => { if (alive) setFlaggedIds(new Set()); });
+    kanbanApi.participantsSummary(effectiveProjectId)
+      .then((rows) => { if (alive) setParticipantProgress(new Map(rows.map((r) => [r.taskId, { completed: r.completed, required: r.required, percent: r.percent }]))); })
+      .catch(() => { if (alive) setParticipantProgress(new Map()); });
     return () => { alive = false; };
   }, [effectiveProjectId, tasks]);
 
@@ -567,6 +618,36 @@ export function TaskMgmtContent({
       return a.name.localeCompare(b.name);
     });
   }, [filtered, taskAssigneeName]);
+
+  const openAssigneeProfile = useCallback((key: string, name: string) => {
+    if (!key) return;
+    const prefix = key.slice(0, 2);
+    const refId = key.slice(2);
+    const kind: MemberKind | null = prefix === 'u:' ? 'human' : prefix === 'c:' ? 'cloud_agent' : prefix === 'h:' ? 'host_agent' : null;
+    if (kind && refId) {
+      setProfileAssignee({
+        kind,
+        refId,
+        name,
+        // The profile is an assignee-level view, so include every task currently
+        // loaded for this board even when board filters hide some of them.
+        tasks: tasks.filter((task) => assigneeSelectValue(
+          task.assignedAgentHostId,
+          task.assignedAgentRef,
+          task.assignedUserId,
+        ) === key),
+      });
+    }
+  }, [tasks]);
+
+  const toggleAssigneeRow = useCallback((key: string) => {
+    setExpandedAssigneeRows((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
 
   // Latest execution per task → which agent is actively running (or last ran) it.
   const latestExecByTask = useMemo(() => {
@@ -953,6 +1034,24 @@ export function TaskMgmtContent({
               ⚑ {tBoard('audit.flagged')}
             </span>
           )}
+          {(() => {
+            const prog = participantProgress.get(task.id);
+            if (!prog || prog.required === 0) return null;
+            const complete = prog.percent >= 100;
+            return (
+              <span
+                title={tBoard('audit.participantsTitle')}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10,
+                  padding: '2px 6px', borderRadius: 4, fontWeight: 700,
+                  background: complete ? 'var(--success-bg, #dcfce7)' : 'var(--bg-deep, #eef2ff)',
+                  color: complete ? 'var(--success-text, #166534)' : 'var(--text-secondary, #475569)',
+                }}
+              >
+                ✅ {prog.completed}/{prog.required}
+              </span>
+            );
+          })()}
           {task.businessValue != null && (
             <span
               title={task.businessValueRationale ?? tBoard('businessValue.badgeTitle')}
@@ -1320,49 +1419,82 @@ export function TaskMgmtContent({
                   {column.label}
                 </div>
               ))}
-              {assigneeRows.map((row) => (
-                <Fragment key={row.key || 'unassigned'}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: 'var(--text-primary)',
-                      padding: '8px 4px',
-                      borderTop: '1px solid var(--border-subtle)',
-                    }}
-                  >
-                    <AssigneeHovercard selectValue={row.key}>{row.name}</AssigneeHovercard>
-                    <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 500, color: 'var(--text-muted)' }}>
-                      {row.tasks.length}
-                    </span>
-                  </div>
-                  {boardColumns.map((column) => {
-                    const cellTasks = byManagerRank(row.tasks.filter((t) => t.status === column.status));
-                    return (
-                      <div
-                        key={column.id}
-                        onDragOver={onDragOver}
-                        onDrop={(e) => onDrop(e, column.status)}
-                        style={{
-                          background: 'var(--bg-deep)',
-                          border: '1px dashed var(--border-subtle)',
-                          borderRadius: 10,
-                          padding: 8,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: 8,
-                          minHeight: 56,
-                          borderTop: '1px solid var(--border-subtle)',
-                        }}
+              {assigneeRows.map((row) => {
+                const rowStateKey = row.key || 'unassigned';
+                const expanded = expandedAssigneeRows.has(rowStateKey);
+                return (
+                  <Fragment key={rowStateKey}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: 'var(--text-primary)',
+                        padding: '8px 4px',
+                        borderTop: '1px solid var(--border-subtle)',
+                        gridColumn: expanded ? undefined : '1 / -1',
+                        // An expanded assignee can own hundreds of cards. Keep the
+                        // row identity visible while its tall grid row scrolls, then
+                        // let the next assignee naturally replace it at the boundary.
+                        position: expanded ? 'sticky' : undefined,
+                        top: expanded ? 0 : undefined,
+                        alignSelf: expanded ? 'start' : undefined,
+                        zIndex: expanded ? 2 : undefined,
+                        background: expanded ? 'var(--bg-surface)' : undefined,
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleAssigneeRow(rowStateKey)}
+                        aria-expanded={expanded}
+                        aria-label={tTask(expanded ? 'collapseAssigneeRow' : 'expandAssigneeRow', { name: row.name })}
+                        style={{ border: 0, padding: 2, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', lineHeight: 1 }}
                       >
-                        {cellTasks.map((task) => renderTaskCard(task))}
-                      </div>
-                    );
-                  })}
-                </Fragment>
-              ))}
+                        <span aria-hidden>{expanded ? '▾' : '▸'}</span>
+                      </button>
+                      {row.key ? (
+                        <AssigneeHovercard selectValue={row.key}>
+                          <a
+                            href={`#assignee-${encodeURIComponent(row.key)}`}
+                            onClick={(event) => { event.preventDefault(); openAssigneeProfile(row.key, row.name); }}
+                            style={{ color: 'var(--accent)', textDecoration: 'underline', textUnderlineOffset: 2 }}
+                          >
+                            {row.name}
+                          </a>
+                        </AssigneeHovercard>
+                      ) : row.name}
+                      <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)' }}>
+                        {row.tasks.length}
+                      </span>
+                    </div>
+                    {expanded && boardColumns.map((column) => {
+                      const cellTasks = byManagerRank(row.tasks.filter((t) => t.status === column.status));
+                      return (
+                        <div
+                          key={column.id}
+                          onDragOver={onDragOver}
+                          onDrop={(e) => onDrop(e, column.status)}
+                          style={{
+                            background: 'var(--bg-deep)',
+                            border: '1px dashed var(--border-subtle)',
+                            borderRadius: 10,
+                            padding: 8,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 8,
+                            minHeight: 56,
+                            borderTop: '1px solid var(--border-subtle)',
+                          }}
+                        >
+                          {cellTasks.map((task) => renderTaskCard(task))}
+                        </div>
+                      );
+                    })}
+                  </Fragment>
+                );
+              })}
             </div>
           )}
         </div>
@@ -1918,7 +2050,7 @@ export function TaskMgmtContent({
               inset: 0,
               zIndex: 10002,
             }}
-            onClick={() => setDrawerTask(null)}
+            onClick={closeDrawer}
           />
           <div
             className="slide-panel-drawer"
@@ -2021,7 +2153,7 @@ export function TaskMgmtContent({
               )}
               <button
                 type="button"
-                onClick={() => setDrawerTask(null)}
+                onClick={closeDrawer}
                 style={{
                   width: 36,
                   height: 36,
@@ -2048,7 +2180,7 @@ export function TaskMgmtContent({
                 notice replaces all tab content. */}
             {!drawerTask.restricted && (
             <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0, overflowX: 'auto' }}>
-              {([['details', tTask('details')], ['agent', tTask('tabAgent')], ['changes', tTask('tabChanges')], ['prd', tTask('tabPrd')]] as const).map(([id, label]) => (
+              {([['details', tTask('details')], ['agent', tTask('tabAgent')], ['changes', tTask('tabChanges')], ['prd', tTask('tabPrd')], ['accountability', tTask('tabAccountability')]] as const).map(([id, label]) => (
                 <button
                   key={id}
                   type="button"
@@ -2086,6 +2218,10 @@ export function TaskMgmtContent({
             ) : drawerTab === 'prd' ? (
               <div style={{ flex: 1, overflow: 'auto' }}>
                 <TaskPrdTab taskId={drawerTask.id} projectId={drawerTask.projectId} />
+              </div>
+            ) : drawerTab === 'accountability' ? (
+              <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
+                <AccountabilityTab taskId={drawerTask.id} />
               </div>
             ) : (
             <>
@@ -2519,6 +2655,16 @@ export function TaskMgmtContent({
           projectId={effectiveProjectId}
           projectName={effectiveProjectName}
           initialTab={boardConfigTab}
+        />
+      )}
+
+      {profileAssignee && (
+        <MemberProfileEditor
+          kind={profileAssignee.kind}
+          refId={profileAssignee.refId}
+          name={profileAssignee.name}
+          tasks={profileAssignee.tasks}
+          onClose={() => setProfileAssignee(null)}
         />
       )}
 

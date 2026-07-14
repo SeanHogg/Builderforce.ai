@@ -390,6 +390,9 @@ export const llmUsageLog = pgTable('llm_usage_log', {
    *  row on the on-prem / VSIX `surface` is EXEMPT from the plan token allowance
    *  (see tokenUsage.ts). BYO cloud-agent rows still count (charged). */
   byo:              boolean('byo').notNull().default(false),
+  /** Connected LLM provider credential that funded a BYO call (for example
+   *  'anthropic' or 'google'). Null for platform-funded calls. */
+  byoProvider:      varchar('byo_provider', { length: 32 }),
   /** Which agent modality produced this row (migration 0284): 'web' | 'vsix' |
    *  'on_prem' | 'cloud' | 'sdk'. Drives the BYO metering exemption above so
    *  own-machine (on-prem/VSIX) BYO usage is free while cloud BYO is charged. */
@@ -1414,6 +1417,9 @@ export const ideAgents = pgTable('ide_agents', {
    *  so `name` can be renamed freely (to feel like a teammate) while dispatch and the
    *  card's type indicator key off this instead. See migration 0289. */
   builtinKind:      varchar('builtin_kind', { length: 32 }),
+  /** Explicit role keys this agent may act as (JSON string[]). NULL falls back to
+   *  builtin_kind-derived + fuzzy title/skill matching — see roleCapability.ts. */
+  roleKeys:         jsonb('role_keys'),
   title:            varchar('title', { length: 255 }),
   bio:              text('bio'),
   skills:           text('skills'),              // JSON string[] as text
@@ -1899,6 +1905,13 @@ export const workflows = pgTable('workflows', {
   projectId:    integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   /** Source definition this run was instantiated from (0094); null for ad-hoc runs. */
   workflowDefinitionId: uuid('workflow_definition_id').references(() => workflowDefinitions.id, { onDelete: 'set null' }),
+  /** Reliability linkage (0337): the incident/monitor whose event fired this run —
+   *  set on event-trigger runs and on a manual runbook launched from an incident, so
+   *  the incident detail can list "workflows run for this incident". Null otherwise.
+   *  Plain uuids (no ORM FK) — mirrors monitors.current_incident_id; the value is only
+   *  ever an equality filter and the tables are declared later in this module. */
+  sourceIncidentId: uuid('source_incident_id'),
+  sourceMonitorId:  uuid('source_monitor_id'),
   /** Where this run executes: 'host' (self-hosted agentHost) | 'cloud' (builderforce-hosted). */
   runtime:      varchar('runtime', { length: 16 }).notNull().default('host'),
   /** ide_agents.id of the cloud agent serving the run when runtime='cloud'. */
@@ -2005,7 +2018,7 @@ export const workflowTriggers = pgTable('workflow_triggers', {
   segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   definitionId:  uuid('definition_id').notNull().references(() => workflowDefinitions.id, { onDelete: 'cascade' }),
   nodeId:        varchar('node_id', { length: 128 }).notNull(),
-  triggerType:   varchar('trigger_type', { length: 32 }).notNull(),  // schedule|webhook|rss|inbound-email
+  triggerType:   varchar('trigger_type', { length: 32 }).notNull(),  // schedule|webhook|rss|inbound-email|monitor-breach|incident-created|incident-resolved|incident-status-change
   enabled:       boolean('enabled').notNull().default(true),
   config:        text('config').notNull().default('{}'),             // JSON of the trigger node config
   // Run target snapshot, inherited from the definition at sync time.
@@ -2313,9 +2326,13 @@ export const brainChatMessages = pgTable('brain_chat_messages', {
   role:      varchar('role', { length: 16 }).notNull(),
   content:   text('content').notNull().default(''),
   metadata:  text('metadata'),
+  /** Optional producer idempotency key (for example executionId:phase). */
+  eventKey:  varchar('event_key', { length: 160 }),
   seq:       integer('seq').notNull().default(0),
   createdAt: timestamp('created_at').notNull().defaultNow(),
-});
+}, (t) => [
+  uniqueIndex('uq_brain_chat_messages_event').on(t.chatId, t.eventKey),
+]);
 
 // ---------------------------------------------------------------------------
 // Brain chat TRACE (0330) — the tool/LLM-turn timeline that survives a reload.
@@ -4113,6 +4130,11 @@ export const boards = pgTable('boards', {
    *  built-in slug ('standard-swe') or a kanban_templates.id. Null = the legacy
    *  hardcoded default lanes. Records provenance; re-applying overwrites lanes. */
   templateId:          varchar('template_id', { length: 120 }),
+  /** Lifecycle-managed (PRD §5.5): when true the ticket's Assignee is the COORDINATOR
+   *  and is never the default per-stage executor — the owner→executor auto-run fallback
+   *  is suppressed and the per-stage producer is resolved by role capability. Default
+   *  false = legacy behaviour (migration 0335). */
+  lifecycleManaged:    boolean('lifecycle_managed').notNull().default(false),
   createdAt:            timestamp('created_at').notNull().defaultNow(),
   updatedAt:            timestamp('updated_at').notNull().defaultNow(),
 });
@@ -4267,6 +4289,9 @@ export const kanbanTemplateLaneRequirements = pgTable('kanban_template_lane_requ
   isRequired:     boolean('is_required').notNull().default(true),
   description:    text('description'),
   position:       integer('position').notNull().default(0),
+  ticketType:     varchar('ticket_type', { length: 32 }),      // null = all ticket types
+  quorum:         integer('quorum'),                            // N-of-M; null = all required
+  condition:      varchar('condition', { length: 48 }),        // small enum predicate
   createdAt:      timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -4283,6 +4308,9 @@ export const swimlaneRequirements = pgTable('swimlane_requirements', {
   isRequired:     boolean('is_required').notNull().default(true),
   description:    text('description'),
   position:       integer('position').notNull().default(0),
+  ticketType:     varchar('ticket_type', { length: 32 }),      // null = all ticket types
+  quorum:         integer('quorum'),                            // N-of-M; null = all required
+  condition:      varchar('condition', { length: 48 }),        // small enum predicate
   createdAt:      timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -4312,10 +4340,50 @@ export const ticketRoleSignoffs = pgTable('ticket_role_signoffs', {
   roleKey:    varchar('role_key', { length: 60 }).notNull(),
   memberKind: varchar('member_kind', { length: 16 }),
   memberRef:  varchar('member_ref', { length: 64 }),
-  verdict:    varchar('verdict', { length: 20 }).notNull().default('approved'), // approved | changes_requested
+  /** Denormalized signer display name — the accountability record must never be an
+   *  anonymous "system"; captured at write time so history survives a rename/delete. */
+  memberName: varchar('member_name', { length: 255 }),
+  verdict:    varchar('verdict', { length: 20 }).notNull().default('approved'), // approved | changes_requested | waived | delegated
   summary:    text('summary'),
+  /** Verifiable link to the actual work backing this sign-off — the interaction that
+   *  makes it more than a rubber stamp: { executionId?, prdRevision?, prUrl?, diffFiles?, reviewThreadRef?, toolRunId? }. */
+  contribution: jsonb('contribution'),
+  waiveReason:  text('waive_reason'), // required for waived/delegated
   createdAt:  timestamp('created_at').notNull().defaultNow(),
 });
+
+/** The per-ticket Participation Manifest — the forward-looking, stateful roster of
+ *  who MUST participate on a ticket, who has, and with what evidence. Derived from
+ *  the applicable process template and kept live; a Resource Assessment step ADDS
+ *  rows (source='assessment') so the manifest is dynamic. Each row may materialize
+ *  as a child task (childTaskId) so the parent ticket's %-complete rolls up. */
+export const ticketParticipants = pgTable('ticket_participants', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  taskId:         integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  stageKey:       varchar('stage_key', { length: 120 }),
+  roleKey:        varchar('role_key', { length: 120 }).notNull(),
+  responsibility: varchar('responsibility', { length: 16 }).notNull().default('owner'), // owner | reviewer | contributor
+  required:       boolean('required').notNull().default(true),
+  source:         varchar('source', { length: 16 }).notNull().default('template'), // template | assessment | manual
+  assigneeKind:   varchar('assignee_kind', { length: 16 }), // agent | human | hire | null (unresolved)
+  assigneeRef:    varchar('assignee_ref', { length: 128 }),
+  assigneeName:   varchar('assignee_name', { length: 255 }),
+  // pending|assigned|in_progress|completed|changes_requested|waived|skipped|unstaffed
+  state:          varchar('state', { length: 24 }).notNull().default('pending'),
+  signoffId:      varchar('signoff_id', { length: 36 }).references(() => ticketRoleSignoffs.id, { onDelete: 'set null' }),
+  childTaskId:    integer('child_task_id').references((): AnyPgColumn => tasks.id, { onDelete: 'set null' }),
+  evidence:       jsonb('evidence'),
+  quorumGroup:    varchar('quorum_group', { length: 160 }),
+  note:           text('note'),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uidx_ticket_participants_slot').on(t.taskId, t.stageKey, t.roleKey, t.responsibility, t.source),
+  index('idx_ticket_participants_task').on(t.taskId),
+  index('idx_ticket_participants_tenant').on(t.tenantId),
+  index('idx_ticket_participants_child').on(t.childTaskId),
+]);
 
 /** Computed per-ticket audit result (upserted; one row per task). */
 export const ticketAudits = pgTable('ticket_audits', {
@@ -5171,6 +5239,16 @@ export const projectEvermind = pgTable('project_evermind', {
    */
   teacherModel:  text('teacher_model'),
   lastLearnedAt: timestamp('last_learned_at'),
+  /**
+   * Auto-quarantine bookkeeping (migration 0339). `serveFailureStreak` counts
+   * CONSECUTIVE incoherent serves (reset to 0 by any coherent serve or a manual
+   * re-enable); when it reaches the threshold the head is force-disabled and
+   * `quarantinedAt`/`quarantineReason` are stamped so a broken head stops answering
+   * users in gibberish. See `recordEvermindServeOutcome`.
+   */
+  serveFailureStreak: integer('serve_failure_streak').notNull().default(0),
+  quarantinedAt:     timestamp('quarantined_at'),
+  quarantineReason:  text('quarantine_reason'),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ({
@@ -5492,6 +5570,25 @@ export const prodIncidents = pgTable('prod_incidents', {
   byStatus:  index('idx_prod_incidents_status').on(t.tenantId, t.status),
   uqExternal: uniqueIndex('uq_prod_incidents_external').on(t.tenantId, t.source, t.externalRef),
 }));
+
+/** Incident → implicated DELIVERY ticket(s) (PRD §5.10): the ticket(s) whose change
+ *  caused an incident, so RCA can pull their Accountability Reports and see where the
+ *  process was skipped/waived. Distinct from `boardTaskId` (the incident's OWN ticket)
+ *  and from remediation follow-ups (`tasks.incidentId`). Migration 0335. */
+export const prodIncidentImplicatedTasks = pgTable('prod_incident_implicated_tasks', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  incidentId: uuid('incident_id').notNull().references(() => prodIncidents.id, { onDelete: 'cascade' }),
+  taskId:     integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  relation:   varchar('relation', { length: 24 }).notNull().default('implicated'), // implicated | suspected | ruled_out
+  note:       text('note'),
+  createdBy:  varchar('created_by', { length: 36 }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uidx_incident_implicated_task').on(t.incidentId, t.taskId),
+  index('idx_incident_implicated_incident').on(t.incidentId),
+  index('idx_incident_implicated_tenant').on(t.tenantId),
+]);
 
 // ---------------------------------------------------------------------------
 // Incident management: on-call, escalation, contacts, timeline (migration 0325)
@@ -6506,6 +6603,57 @@ export const facts = pgTable('facts', {
   index('idx_facts_tenant_subject').on(t.tenantId, t.subject),
   index('idx_facts_tenant_predicate').on(t.tenantId, t.predicate),
   index('idx_facts_tenant_project').on(t.tenantId, t.projectId),
+]);
+
+// ---------------------------------------------------------------------------
+// RFP / RFQ Response (PRD 15, migration 0335) — pre-sales proposal generation.
+// A request captures the asking business's brand + requirements and is either
+// greenfield or grounded on an existing project; a response is the co-branded
+// proposal (capability roster + P&L + phase plan + risks + branded document).
+// ---------------------------------------------------------------------------
+export const rfpRequests = pgTable('rfp_requests', {
+  id:               uuid('id').primaryKey().defaultRandom(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:        uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  title:            varchar('title', { length: 255 }).notNull(),
+  requesterOrgName: varchar('requester_org_name', { length: 255 }),
+  requesterBrand:   jsonb('requester_brand'),                 // BrandPalette of the asking business
+  requirements:     text('requirements'),
+  sourceMode:       varchar('source_mode', { length: 16 }).notNull().default('new').$type<'new' | 'existing_project'>(),
+  basedOnProjectId: integer('based_on_project_id').references(() => projects.id, { onDelete: 'set null' }),
+  marginPct:        real('margin_pct'),
+  marketingPct:     real('marketing_pct'),
+  contingencyPct:   real('contingency_pct'),
+  dueDate:          timestamp('due_date', { withTimezone: true }),
+  status:           varchar('status', { length: 24 }).notNull().default('draft').$type<'draft' | 'analyzing' | 'ready' | 'submitted'>(),
+  createdBy:        varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:        timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_rfp_requests_tenant').on(t.tenantId, t.updatedAt),
+  index('idx_rfp_requests_project').on(t.basedOnProjectId),
+]);
+
+export const rfpResponses = pgTable('rfp_responses', {
+  id:                 uuid('id').primaryKey().defaultRandom(),
+  tenantId:           integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:          uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  requestId:          uuid('request_id').notNull().references(() => rfpRequests.id, { onDelete: 'cascade' }),
+  projectId:          integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  status:             varchar('status', { length: 24 }).notNull().default('draft').$type<'draft' | 'ready' | 'submitted'>(),
+  body:               jsonb('body'),                          // RfpResponseBody (typed in application/rfp/types.ts)
+  docHtml:            text('doc_html'),
+  quotedPriceUsdCents: integer('quoted_price_usd_cents'),
+  marginPct:          real('margin_pct'),
+  scanRefreshed:      boolean('scan_refreshed').notNull().default(false),
+  generatedBy:        jsonb('generated_by'),                  // { cto, productOwner } agent refs
+  createdBy:          varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:          timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:          timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_rfp_responses_tenant').on(t.tenantId, t.updatedAt),
+  index('idx_rfp_responses_request').on(t.requestId, t.createdAt),
+  index('idx_rfp_responses_project').on(t.projectId),
 ]);
 
 // ---------------------------------------------------------------------------

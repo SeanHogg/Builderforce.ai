@@ -56,3 +56,27 @@ export function matchGlob(pathPosix: string, pattern: string): boolean {
 export function filterByGlob(paths: readonly string[], pattern: string): string[] {
   return paths.filter((p) => matchGlob(p, pattern));
 }
+
+/**
+ * Normalize a `path` scope argument (the `search_code` / `list_files` subdirectory
+ * filter) to a clean repo-relative POSIX dir: back-slashes → forward, strip a leading
+ * `./` and any surrounding slashes. `"./src/board/"` and `"src\\board"` both become
+ * `"src/board"`; a blank/absent scope becomes `""` (no scope). ONE definition so every
+ * capability provider (cloud GitHub-API, on-prem ripgrep, editor walk) normalizes a
+ * scope identically instead of re-hand-rolling the same regex.
+ */
+export function normalizeScopeDir(raw: string | null | undefined): string {
+  return (raw ?? "").split("\\").join("/").trim().replace(/^\.\/+/, "").replace(/^\/+|\/+$/g, "");
+}
+
+/**
+ * Is a repo-relative POSIX path inside a normalized scope dir? True for the dir itself
+ * and anything beneath it (`src/board` ⊇ `src/board`, `src/board/x.ts`), false for a
+ * sibling that merely shares a prefix (`src/boardroom`). An empty scope matches every
+ * path (no scope). Shared prefix-match so provider scope-filtering can't drift.
+ */
+export function isUnderScopeDir(pathPosix: string, scopeDir: string): boolean {
+  if (!scopeDir) return true;
+  const p = pathPosix.split("\\").join("/");
+  return p === scopeDir || p.startsWith(`${scopeDir}/`);
+}

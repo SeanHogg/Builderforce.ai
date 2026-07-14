@@ -9,7 +9,7 @@
  */
 
 import { sql } from 'drizzle-orm';
-import { buildDatabase } from '../../infrastructure/database/connection';
+import { buildDatabase, buildTransactionalDatabase } from '../../infrastructure/database/connection';
 import {
   sendLlmHealthAlertEmail,
   type EmailEnv,
@@ -31,6 +31,7 @@ import type { ImageVendorEnv } from './imageVendors';
 
 export interface CronEnv extends VendorEnv, ImageVendorEnv, EmailEnv {
   NEON_DATABASE_URL: string;
+  NEON_TRANSACTIONAL_DATABASE_URL?: string;
 }
 
 /** Fetch the most recent prior status per vendor. Returns `null` for vendors with
@@ -71,9 +72,10 @@ export async function runVendorHealthCron(env: CronEnv & { LLM_HEALTH_ALERT_RECI
   emailed: number;
 }> {
   const db = buildDatabase(env as unknown as Parameters<typeof buildDatabase>[0]);
+  const healthDb = buildTransactionalDatabase(env as unknown as Parameters<typeof buildTransactionalDatabase>[0]);
 
   const [previousByVendor, chatResults, imageResults] = await Promise.all([
-    loadPreviousStatusByVendor(db),
+    loadPreviousStatusByVendor(healthDb),
     Promise.all(getAllVendorIds().map((v) => probeVendor(env, v))),
     probeAllImageVendors(env),
   ]);
@@ -84,7 +86,7 @@ export async function runVendorHealthCron(env: CronEnv & { LLM_HEALTH_ALERT_RECI
   const results: Array<VendorProbeResult | ImageVendorProbeResult> = [...chatResults, ...imageResults];
 
   for (const r of results) {
-    await persistProbe(db, r as VendorProbeResult, 'cron');
+    await persistProbe(healthDb, r as VendorProbeResult, 'cron');
   }
 
   const changes: LlmHealthChangeRow[] = [];

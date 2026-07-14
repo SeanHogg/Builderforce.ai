@@ -140,10 +140,70 @@ const BUG_TRIAGE: KanbanTemplate = {
   ],
 };
 
-export const BUILTIN_TEMPLATES: KanbanTemplate[] = [STANDARD_SWE, LEAN_STARTUP, BUG_TRIAGE];
+/**
+ * STANDARD_SWE_V2 — the Coordinated Role Participation lifecycle (PRD §4). A
+ * lifecycle-managed board: the Assignee is the Coordinator (never the executor), each
+ * stage has enforced producer + reviewer participation, reviewer quorum (2-of-3), a
+ * business-validation stage, and a security review that applies ONLY to security-type
+ * tickets. This is the default for new software projects; existing boards retain
+ * their selected template until a manager explicitly reapplies one.
+ */
+const STANDARD_SWE_V2: KanbanTemplate = {
+  id: 'standard-swe-v2',
+  slug: 'standard-swe-v2',
+  name: 'Standard SWE (Coordinated Roles)',
+  description: 'Full role-participation lifecycle: BA → Design → Implement → Review (quorum) → Test → Business Validation, ' +
+    'each stage with enforced producers + reviewers, a Coordinator assignee, and a security review for security tickets.',
+  category: 'software',
+  teamType: 'Software team',
+  builtin: true,
+  visibility: 'public',
+  published: true,
+  installCount: 0,
+  version: 1,
+  lifecycleManaged: true,
+  lanes: [
+    lane({ key: 'backlog', name: 'Backlog', position: 0, requirementGate: 'off', requirements: [
+      { kind: 'role', ref: 'business-analyst', responsibility: 'owner', isRequired: false, position: 0, description: 'BA captures the need.' },
+    ] }),
+    // Requirements Review (soft): BA authors requirements, Product Owner reviews.
+    lane({ key: 'ready', name: 'Requirements & Design', position: 1, requirementGate: 'soft', requirements: [
+      { kind: 'role', ref: 'business-analyst', responsibility: 'owner', isRequired: true, position: 0, description: 'BA writes the requirements section of the PRD.' },
+      { kind: 'review', ref: 'product-owner', responsibility: 'reviewer', isRequired: true, position: 1, description: 'Product Owner approves scope + acceptance criteria.' },
+      { kind: 'role', ref: 'architect', responsibility: 'owner', isRequired: true, position: 2, description: 'Architect authors the design section.' },
+    ] }),
+    // Implementation (hard): the Developer produces; the Architect contributes.
+    lane({ key: 'in_progress', name: 'Implementation', position: 2, requirementGate: 'hard', requirements: [
+      { kind: 'role', ref: 'developer', responsibility: 'owner', isRequired: true, position: 0, description: 'Developer implements and opens a PR.' },
+      { kind: 'role', ref: 'architect', responsibility: 'contributor', isRequired: false, position: 1 },
+    ] }),
+    // Implementation Review (hard): 2-of-3 reviewers + a security review for security tickets.
+    lane({ key: 'in_review', name: 'Implementation Review', position: 3, gate: 'human', requirementGate: 'hard', requirements: [
+      { kind: 'review', ref: 'code-reviewer', responsibility: 'reviewer', isRequired: true, position: 0, quorum: 2, description: 'Code review of the diff.' },
+      { kind: 'review', ref: 'architect', responsibility: 'reviewer', isRequired: true, position: 1, quorum: 2, description: 'Architecture review vs the PRD.' },
+      { kind: 'review', ref: 'team-lead', responsibility: 'reviewer', isRequired: true, position: 2, quorum: 2, description: 'Team-lead review (quorum: 2 of 3).' },
+      { kind: 'review', ref: 'security', responsibility: 'reviewer', isRequired: true, position: 3, ticketType: 'security', condition: 'is_security', description: 'Security review — required for security tickets only.' },
+    ] }),
+    // Test (hard): QA verifies acceptance + a passing test diagnostic.
+    lane({ key: 'test', name: 'Test', position: 4, requirementGate: 'hard', requirements: [
+      { kind: 'role', ref: 'qa-tester', responsibility: 'owner', isRequired: true, position: 0, description: 'QA runs tests and verifies acceptance criteria.' },
+    ] }),
+    // Business Validation (hard): Validator + BA + Product Owner confirm intent met.
+    lane({ key: 'validation', name: 'Business Validation', position: 5, gate: 'human', requirementGate: 'hard', requirements: [
+      { kind: 'review', ref: 'validator', responsibility: 'reviewer', isRequired: true, position: 0, description: 'Validator confirms acceptance criteria met.' },
+      { kind: 'review', ref: 'product-owner', responsibility: 'reviewer', isRequired: true, position: 1, description: 'Product Owner signs off on value.' },
+    ] }),
+    lane({ key: 'blocked', name: 'Blocked', position: 6, requirementGate: 'off' }),
+    // Validation is completed in the preceding stage. Done is a terminal state,
+    // not a new participation stage that could only be satisfied after arrival.
+    lane({ key: 'done', name: 'Done', position: 7, isTerminal: true, requirementGate: 'off' }),
+  ],
+};
+
+export const BUILTIN_TEMPLATES: KanbanTemplate[] = [STANDARD_SWE, STANDARD_SWE_V2, LEAN_STARTUP, BUG_TRIAGE];
 
 /** The template applied to a brand-new project's board by default. */
-export const DEFAULT_TEMPLATE_ID = 'standard-swe';
+export const DEFAULT_TEMPLATE_ID = 'standard-swe-v2';
 
 const BY_ID = new Map(BUILTIN_TEMPLATES.map((t) => [t.id, t]));
 

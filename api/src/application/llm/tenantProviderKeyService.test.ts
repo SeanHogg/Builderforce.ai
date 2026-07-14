@@ -37,11 +37,32 @@ vi.mock('./anthropicOAuth', async (orig) => {
 import {
   resolveAnthropicResolution,
   formatByoUnresolvedHeader,
+  PROVIDER_VENDOR_MAP,
+  byoVendorPriorityOrder,
   type TenantLlmCredentials,
 } from './tenantProviderKeyService';
 import { OAUTH_SAFETY_MARGIN_MS } from './anthropicOAuth';
 
 const env = { NEON_DATABASE_URL: 'x', JWT_SECRET: 's' } as never;
+
+describe('BYO provider routing map', () => {
+  it('maps Kimi, Qwen, and MiniMax to their direct gateway vendors', () => {
+    expect(PROVIDER_VENDOR_MAP.kimi).toMatchObject({ vendorId: 'moonshot', envKey: 'MOONSHOT_API_KEY' });
+    expect(PROVIDER_VENDOR_MAP.qwen).toMatchObject({ vendorId: 'qwen', envKey: 'QWEN_API_KEY' });
+    expect(PROVIDER_VENDOR_MAP.minimax).toMatchObject({ vendorId: 'minimax', envKey: 'MINIMAX_API_KEY' });
+    expect(PROVIDER_VENDOR_MAP.xai).toMatchObject({ vendorId: 'xai', envKey: 'XAI_API_KEY', oauth: true });
+  });
+
+  it('maps OpenAI OAuth priority to the Codex subscription vendor', () => {
+    expect(byoVendorPriorityOrder([{ provider: 'openai', authType: 'oauth', priority: 0 }])).toEqual(['openai-codex']);
+    expect(byoVendorPriorityOrder([{ provider: 'openai', authType: 'api_key', priority: 0 }])).toEqual(['openai']);
+  });
+
+  it('maps xAI OAuth priority to the SuperGrok Responses vendor', () => {
+    expect(byoVendorPriorityOrder([{ provider: 'xai', authType: 'oauth', priority: 0 }])).toEqual(['xai-oauth']);
+    expect(byoVendorPriorityOrder([{ provider: 'xai', authType: 'api_key', priority: 0 }])).toEqual(['xai']);
+  });
+});
 
 /** Stage an oauth row whose decrypted token blob has the given absolute `expires`. */
 function stageOAuth(expires: number, access = 'A1') {
@@ -119,6 +140,7 @@ describe('formatByoUnresolvedHeader — provider:reason encoding', () => {
     vendorKeys: {},
     configuredProviders: ['anthropic'],
     unresolvedReasons: { anthropic: 'revoked' },
+    vendorPriority: [],
   };
 
   it('encodes a same-tenant unresolved provider with its reason', () => {
@@ -130,7 +152,7 @@ describe('formatByoUnresolvedHeader — provider:reason encoding', () => {
   });
 
   it('is empty when everything resolved and nothing is connected elsewhere', () => {
-    const ok: TenantLlmCredentials = { anthropicOAuthToken: 'tok', vendorKeys: {}, configuredProviders: ['anthropic'], unresolvedReasons: {} };
+    const ok: TenantLlmCredentials = { anthropicOAuthToken: 'tok', vendorKeys: {}, configuredProviders: ['anthropic'], unresolvedReasons: {}, vendorPriority: [] };
     expect(formatByoUnresolvedHeader(ok)).toBe('');
   });
 });

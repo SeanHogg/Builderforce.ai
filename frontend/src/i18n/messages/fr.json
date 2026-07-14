@@ -121,6 +121,15 @@
     "assignTeam": "Assigner une équipe…",
     "assign": "Assigner",
     "boardNameLabel": "Nom du tableau",
+    "templateHeading": "Modèle du tableau",
+    "templateLabel": "Modèle du tableau",
+    "templateHint": "L’application d’un modèle remplace les couloirs, les exigences de rôles, les contrôles et le paramètre de cycle coordonné de ce tableau.",
+    "templateApply": "Appliquer le modèle",
+    "templateApplying": "Application…",
+    "templateConfirmTitle": "Appliquer le modèle du tableau ?",
+    "templateConfirmMessage": "Appliquer « {name} » à ce tableau ? La configuration actuelle des couloirs sera remplacée. Les tickets et leur historique seront conservés.",
+    "templateLoadError": "Impossible de charger les modèles du tableau",
+    "templateApplyError": "Impossible d’appliquer le modèle du tableau",
     "maxConcurrent": "Tickets simultanés max",
     "hideDoneItems": "Masquer les éléments terminés",
     "standupTimer": "Minuteur de tour du standup",
@@ -290,7 +299,8 @@
       "myWorkspace": "Mon espace",
       "marketplace": "Marché",
       "incidents": "Incidents",
-      "monitoring": "Surveillance"
+      "monitoring": "Surveillance",
+      "reliability": "Fiabilité"
     },
     "tab": {
       "projects": "Projets",
@@ -340,7 +350,7 @@
       "logs": "Journaux",
       "qa": "QA agentique",
       "home": "Accueil",
-      "integrations": "Intégrations",
+      "integrations": "Intégrations / Clés API",
       "manager": "Manager",
       "roles": "Rôles",
       "talent": "Talents",
@@ -365,7 +375,9 @@
       "escalation": "Escalade",
       "contacts": "Contacts",
       "boards": "Tableaux",
-      "reporting": "Rapports"
+      "monitors": "Moniteurs",
+      "reporting": "Rapports",
+      "rfp": "Appels d'offres"
     }
   },
   "alerts": {
@@ -974,6 +986,8 @@
     "merging": "Fusion…"
   },
   "memberProfile": {
+    "tabs": { "overview": "Aperçu", "timeLogs": "Temps enregistrés", "tasks": "Tâches" },
+    "noTasks": "Aucune tâche n’est assignée à cet utilisateur.",
     "subtitle": "{kind} · capacité et disponibilité",
     "syncing": "Synchronisation…",
     "syncFromGoogleCalendar": "Synchroniser depuis Google Agenda",
@@ -2411,7 +2425,9 @@
       "security": "Sécurité",
       "product_manager": "Produit",
       "designer": "Designer",
-      "incident_manager": "Gestionnaire d'incidents"
+      "incident_manager": "Gestionnaire d'incidents",
+      "cto": "CTO",
+      "product_owner": "Product Owner"
     },
     "teams": {
       "heading": "Équipes",
@@ -3155,6 +3171,7 @@
       "integrations": "Intégrations",
       "content": "Contenu",
       "ceremonies": "Cérémonies",
+      "incidents": "Incidents",
       "wfPlan": "Plan des effectifs",
       "empAllocation": "Répartition",
       "empCollaboration": "Collaboration",
@@ -3249,6 +3266,10 @@
       "obsContentByKind": "Documents par type",
       "obsCeremonyCadence": "Cadence des cérémonies",
       "obsCeremonyBalance": "Répartition de la parole",
+      "incStatus": "Incidents ouverts",
+      "incSeverity": "Incidents par gravité",
+      "incSystems": "Incidents par système",
+      "incMttr": "Temps moyen de résolution",
       "wfpCostSplit": "Coût recruter vs. agent",
       "wfpCapacity": "Capacité vs WIP",
       "wfpGap": "Marge allouable",
@@ -3381,6 +3402,19 @@
       "humanTalk": "Humain",
       "agentTalk": "Agent IA",
       "completed": "terminées"
+    },
+    "inc": {
+      "noIncidents": "Aucun incident",
+      "ofTotal": "sur {total} dans la fenêtre",
+      "openNudge": "{count} à traiter",
+      "allClear": "Tout va bien",
+      "incidents": "incidents",
+      "unclassified": "Non classé",
+      "mttrSub": "temps moyen de résolution",
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
     },
     "reorder": {
       "drag": "Glisser pour réorganiser",
@@ -5525,7 +5559,9 @@
       "learnSkipReasonFrozen": "l'Evermind de ce projet est gelé (lecture seule)",
       "reconcileTitle": "{count} souvenirs appris réconciliés dans Evermind v{version}",
       "reconcileHint": "La réponse a reformulé ces apprentissages rappelés, elle les met donc à jour (cognition en écriture directe).",
-      "stop": "Arrêter"
+      "stop": "Arrêter",
+      "learnTargetContributed": "Contribué à {name} (projet #{projectId} v{version})",
+      "learnTargetSkipped": "Ignoré {name} (projet #{projectId}) — {reason}"
     },
     "tickets": {
       "none": "Aucun ticket lié pour l’instant.",
@@ -5572,6 +5608,15 @@
       "lockHint": "Les chats partagés sont visibles par toute l’équipe ; verrouillez pour le réserver à ses membres.",
       "mergeHint": "Fusionnez d’autres chats dans celui-ci. Leurs messages, tickets et agents sont déplacés ici ; les sources sont archivées.",
       "mergeNoOthers": "Aucun autre chat à fusionner.",
+      "questions": "Questions",
+      "noQuestions": "Aucune question en attente.",
+      "answerPlaceholder": "Saisissez votre réponse…",
+      "submitAnswer": "Répondre",
+      "answering": "Envoi…",
+      "showTickets": "Afficher les tickets liés",
+      "hideTickets": "Masquer les tickets liés",
+      "ticketCount": "{n, plural, one {# ticket} other {# tickets}}",
+      "overallAria": "Progression globale : {pct}% terminé",
       "mergeAction": "Fusionner {n} ici",
       "mergedN": "{n} chat(s) fusionné(s).",
       "kind": {
@@ -5697,6 +5742,7 @@
         "already_running": "Déjà en cours",
         "human_gate": "En attente d'approbation",
         "capability_mismatch": "Compétences requises manquantes",
+        "run_cap_exhausted": "Trop d'exécutions en échec — en pause pour révision",
         "no_agent": "Aucun agent assigné",
         "no_board": "Aucun tableau configuré",
         "no_lane": "Voie non configurée",
@@ -5714,7 +5760,8 @@
     },
     "audit": {
       "flagged": "Signalé",
-      "flaggedTitle": "Ce ticket a sauté un rôle ou diagnostic requis — révision nécessaire"
+      "flaggedTitle": "Ce ticket a sauté un rôle ou diagnostic requis — révision nécessaire",
+      "participantsTitle": "Participation des rôles requis : terminés sur requis"
     }
   },
   "projectsContent": {
@@ -6155,6 +6202,7 @@
       "assign": "Attribué",
       "score_value": "Évalué",
       "dispatch": "Envoyé",
+      "sync_pr": "PR actualisée",
       "merge_pr": "PR fusionnée",
       "flag": "Signalé"
     },
@@ -6884,6 +6932,8 @@
     "taskCount": "{count, plural, one {# tâche} other {# tâches}}",
     "byStage": "Par étape",
     "byAssignee": "Par responsable",
+    "expandAssigneeRow": "Développer les tâches assignées à {name}",
+    "collapseAssigneeRow": "Réduire les tâches assignées à {name}",
     "startStandup": "Démarrer le stand-up",
     "startPlanning": "Démarrer la planification",
     "viewPrdAria": "Voir le PRD",
@@ -6901,6 +6951,7 @@
     "deleteTask": "Supprimer la tâche",
     "tabAgent": "Agent / Capacités",
     "tabPrd": "PRD",
+    "tabAccountability": "Validations et responsabilité",
     "changeStatusTitle": "Cliquez pour changer le statut",
     "changePriorityTitle": "Cliquez pour changer la priorité",
     "viewCodeChangesTitle": "Voir les modifications de code sur GitHub",
@@ -7592,17 +7643,37 @@
     "errStartConnect": "Échec du démarrage de la connexion",
     "errConnectSubscription": "Échec de la connexion de l'abonnement",
     "errRemove": "Échec de la suppression de l'identifiant",
+    "precedence": {
+      "title": "Priorité des fournisseurs",
+      "subtitle": "Lorsque plusieurs de vos comptes sont connectés, les agents cloud commencent par le fournisseur placé en tête et basculent vers le suivant en cas d'échec. Placez Meta en premier pour y acheminer les agents cloud.",
+      "leads": "Prioritaire",
+      "moveUp": "Monter {provider}",
+      "moveDown": "Descendre {provider}",
+      "errSave": "Échec de l'enregistrement de la priorité"
+    },
     "provider": {
       "anthropic": {
         "blurb": "Connectez votre abonnement Claude Pro/Max (sans facturation par token) ou collez une clé d'API Anthropic.",
-        "subscription": "abonnement Claude"
+        "subscription": "abonnement Claude",
+        "pastePrompt": "Après approbation dans l’onglet Claude, collez la valeur complète <code>code#state</code>.",
+        "pastePlaceholder": "Collez le code Claude…"
       },
       "openai": {
-        "blurb": "Collez une clé d'API OpenAI pour exécuter des modèles GPT sur votre propre compte OpenAI."
+        "blurb": "Connectez votre abonnement ChatGPT/Codex ou collez une clé API OpenAI.",
+        "subscription": "abonnement ChatGPT/Codex",
+        "pastePrompt": "Après connexion, copiez l’URL complète <code>http://localhost:1455/auth/callback?code=…&state=…</code> depuis la barre d’adresse et collez-la ici.",
+        "pastePlaceholder": "Collez l’URL de redirection OpenAI…"
       },
       "google": {
         "blurb": "Collez une clé d'API Google AI (Gemini) pour exécuter des modèles Gemini sur votre propre compte Google."
-      }
+      },
+      "meta": {
+        "blurb": "Collez une clé d'API Meta AI pour exécuter des modèles MUSE (muse-spark-1.1) sur votre propre compte Meta AI."
+      },
+      "kimi": { "blurb": "Collez une clé d’abonnement Kimi Code ou une clé API Moonshot." },
+      "qwen": { "blurb": "Collez une clé API Alibaba DashScope pour utiliser les modèles Qwen." },
+      "minimax": { "blurb": "Collez une clé API MiniMax pour utiliser les modèles MiniMax." }
+      ,"xai": { "blurb": "Connectez un abonnement SuperGrok éligible ou une clé API xAI.", "subscription": "abonnement SuperGrok", "pastePrompt": "Après approbation, copiez le code affiché sur la page xAI et collez-le ici.", "pastePlaceholder": "Collez le code de connexion xAI…" }
     }
   },
   "modelSelect": {
@@ -8584,6 +8655,10 @@
   },
   "agentExecution": {
     "runThisTask": "Exécuter cette tâche",
+    "coordinateThisTicket": "Coordonner ce ticket",
+    "coordinateNow": "Assigner et lancer le rôle suivant",
+    "coordinating": "Coordination…",
+    "coordinateHint": "Le responsable coordonne ce cycle. BuilderForce vérifie le manifeste et lance le prochain rôle requis, jamais le responsable comme exécuteur par défaut.",
     "awaitingApproval": "En attente d'approbation avant de pouvoir s'exécuter : {reason}",
     "executions": "Exécutions",
     "ticketSpendTooltip": "Dépense du ticket sur toutes les exécutions : {tokens} jetons sur {requests} appel(s) LLM. Cumulé sur ce projet, puis sur le compte.",
@@ -9080,6 +9155,16 @@
       "escalation": "Escalade",
       "contacts": "Contacts"
     },
+    "workflows": {
+      "title": "Runbooks et workflows",
+      "blurb": "Exécutez un workflow personnalisé pour cet incident ou consultez les workflows déclenchés par ses événements.",
+      "pick": "Workflow",
+      "pickPlaceholder": "Choisir un workflow…",
+      "run": "Exécuter le workflow",
+      "create": "Créer un workflow",
+      "runs": "Exécutions pour cet incident",
+      "noRuns": "Aucune exécution de workflow pour le moment."
+    },
     "severity": {
       "sev1": "SEV1",
       "sev2": "SEV2",
@@ -9139,6 +9224,8 @@
       "publishedNote": "Une analyse des causes racines a été publiée pour cet incident.",
       "prompt": "Cet incident est résolu. Publiez une analyse des causes racines dans la base de connaissances.",
       "formTitle": "Publier l'analyse des causes racines",
+      "fishTitle": "Pourquoi cela s'est-il produit ?",
+      "fishAria": "Diagramme en arêtes de poisson des causes racines pour {title}",
       "summary": "Résumé",
       "summaryPlaceholder": "Aperçu de l'incident en un paragraphe…",
       "rootCause": "Cause racine",
@@ -9218,7 +9305,18 @@
     "deleteContactConfirm": "Supprimer le contact « {name} » ?",
     "oncallSubtitle": "Les rotations d’astreinte déterminent qui est alerté en premier lorsqu’un incident se déclenche.",
     "escalationSubtitle": "Les politiques d’escalade parcourent les cibles et les canaux jusqu’à ce que quelqu’un réponde.",
-    "contactsSubtitle": "Contacts professionnels que vous pouvez alerter ou vers qui escalader pendant un incident."
+    "contactsSubtitle": "Contacts professionnels que vous pouvez alerter ou vers qui escalader pendant un incident.",
+    "implicated": {
+      "title": "Tickets de livraison impliqués",
+      "help": "Le(s) ticket(s) de livraison dont le changement a causé cet incident — chacun avec sa responsabilité pour que le RCA voie où le processus a été ignoré ou dispensé.",
+      "loading": "Chargement…",
+      "empty": "Aucun ticket impliqué lié pour le moment.",
+      "signed": "{done}/{total} validés",
+      "gaps": "{count} lacune(s)",
+      "remove": "Retirer",
+      "add": "Lier un ticket",
+      "addPlaceholder": "Ticket n°"
+    }
   },
   "monitoring": {
     "boardsTitle": "Surveillance active",
@@ -9346,5 +9444,148 @@
     "statusError": "Erreur",
     "errFailed": "Échec de l’invitation",
     "laterHint": "Vous pouvez aussi inviter des coéquipiers plus tard depuis <link>Équipe</link>."
+  },
+  "accountability": {
+    "loading": "Chargement de la responsabilité…",
+    "signedHeader": "{done} rôle(s) requis sur {total} ont validé",
+    "unassigned": "Non attribué",
+    "addedBadge": "ajouté",
+    "gaps": {
+      "title": "{count} lacune(s) de responsabilité",
+      "kind": {
+        "unsigned": "Non validé",
+        "unstaffed": "Manque de ressource",
+        "no_contribution": "Aucune contribution",
+        "waived": "Dispensé",
+        "changes_requested": "Modifications demandées"
+      }
+    },
+    "table": {
+      "title": "Validations et responsabilité",
+      "role": "Rôle",
+      "who": "Qui",
+      "state": "État",
+      "verdict": "Verdict",
+      "when": "Quand",
+      "comments": "Commentaires",
+      "contribution": "Contribution",
+      "empty": "Aucun rôle requis pour ce ticket pour le moment."
+    },
+    "verdict": {
+      "approved": "Approuvé",
+      "changes_requested": "Modifications demandées",
+      "waived": "Dispensé",
+      "delegated": "Délégué"
+    },
+    "state": {
+      "pending": "En attente",
+      "assigned": "Attribué",
+      "in_progress": "En cours",
+      "completed": "Terminé",
+      "changes_requested": "Modifications demandées",
+      "waived": "Dispensé",
+      "skipped": "Ignoré",
+      "unstaffed": "Sans ressource"
+    },
+    "responsibility": {
+      "owner": "Responsable",
+      "reviewer": "Relecteur",
+      "contributor": "Contributeur"
+    },
+    "assess": {
+      "title": "Évaluation des ressources",
+      "help": "Ajoutez un rôle dont ce ticket a besoin au-delà du modèle (p. ex. designer, ingénieur sécurité). Si aucune ressource compétente n’est disponible, il est signalé comme lacune de ressource.",
+      "rolePlaceholder": "Sélectionnez un rôle…",
+      "notePlaceholder": "Pourquoi ce rôle est-il nécessaire ? (facultatif)",
+      "add": "Ajouter un rôle requis",
+      "materialize": "Créer des éléments de travail",
+      "materializeHelp": "Crée une sous-tâche par ressource pour que la progression remonte à ce ticket."
+    }
+  },
+  "rfpPage": {
+    "title": "Réponse à un appel d'offres",
+    "subtitle": "Répondez à un RFQ/RFP par une proposition co-brandée fondée sur votre portefeuille : inventaire des capacités, compte de résultat, plan de livraison et risques.",
+    "newRequest": "Nouvelle réponse",
+    "needDeveloper": "Nécessite le rôle Développeur",
+    "loading": "Chargement…",
+    "empty": "Aucune demande d'appel d'offres pour l'instant. Créez-en une pour rédiger une proposition co-brandée.",
+    "validation": "Un titre est requis.",
+    "creating": "Création…",
+    "create": "Créer et rédiger",
+    "cancel": "Annuler",
+    "noOrg": "Organisation sans nom",
+    "sourceNew": "Nouveau projet",
+    "sourceExisting": "Basée sur un projet",
+    "quoted": "Devis {price}",
+    "notGenerated": "Pas encore générée",
+    "scanFresh": "Scan récent",
+    "status": {
+      "draft": "Brouillon",
+      "analyzing": "Analyse",
+      "ready": "Prête",
+      "submitted": "Soumise"
+    },
+    "field": {
+      "title": "Titre",
+      "titlePlaceholder": "ex. Refonte du portail client",
+      "requesterOrg": "Organisation demandeuse",
+      "requesterOrgPlaceholder": "Qui a émis l'appel d'offres",
+      "requesterBrand": "Couleurs de marque du demandeur",
+      "requesterBrandHint": "La palette de l'entreprise demandeuse, fusionnée avec la vôtre dans la proposition.",
+      "primary": "Principale",
+      "secondary": "Secondaire",
+      "accent": "Accent",
+      "logoUrl": "URL du logo",
+      "requirements": "Exigences",
+      "requirementsPlaceholder": "Collez les exigences du RFP/RFQ…",
+      "sourceMode": "Fondement",
+      "project": "Projet",
+      "selectProject": "Sélectionnez un projet…",
+      "economics": "Économie",
+      "margin": "Marge",
+      "marketing": "Marketing",
+      "contingency": "Contingence"
+    },
+    "backToList": "Retour aux demandes",
+    "generating": "Génération…",
+    "regenerate": "Régénérer",
+    "generate": "Générer la réponse",
+    "generatingHint": "Exécution du scan avec contrôle de fraîcheur, mise en correspondance de votre portefeuille et rédaction de la proposition…",
+    "noResponseYet": "Aucune proposition générée pour l'instant. Cliquez sur Générer pour en rédiger une.",
+    "scanRefreshed": "Scan actualisé",
+    "scanCurrent": "Scan à jour",
+    "groundedOn": "Fondée sur {project}",
+    "greenfield": "Nouveau projet — proposé à partir des exigences",
+    "scanAge": "dernier scan il y a {days}j",
+    "sec": {
+      "summary": "Synthèse",
+      "capabilities": "Capacités et approche",
+      "economics": "Investissement et volet commercial",
+      "plan": "Plan de livraison",
+      "risks": "Risques clés",
+      "dependencies": "Dépendances",
+      "portfolio": "Projets similaires",
+      "document": "Proposition brandée"
+    },
+    "capabilitiesGreenfield": "Nouveau projet — les capacités sont proposées à partir des exigences.",
+    "col": {
+      "component": "Composant",
+      "responsibility": "Responsabilité"
+    },
+    "stack": "Stack",
+    "quotedPrice": "Prix proposé",
+    "marginNote": "{pct} % de marge · {weeks} semaines d'effort.",
+    "deliveryWindow": "Livraison : {start} → {end} ({weeks} semaines).",
+    "severity": {
+      "low": "Faible",
+      "medium": "Moyen",
+      "high": "Élevé"
+    },
+    "depType": {
+      "internal": "Interne",
+      "external": "Externe",
+      "third_party": "Tierce partie"
+    },
+    "downloadDoc": "Télécharger"
   }
 }

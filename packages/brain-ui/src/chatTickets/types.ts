@@ -72,6 +72,14 @@ export interface ChatOptionVM {
   title: string;
 }
 
+/** A pending human question associated with one of this chat's linked tasks. */
+export interface ChatQuestionVM {
+  id: string;
+  description: string;
+  taskId: number | null;
+  createdAt?: string;
+}
+
 /**
  * Host-provided data access — the only coupling to a backend. The web app wires
  * this to its `brain.*` / `pmoApi` / `tasksApi` clients; the VS Code webview wires
@@ -99,6 +107,10 @@ export interface ChatTicketsAdapter {
   /** Tag an agent to execute a runnable (task/epic) ticket. Returns whether a run
    *  actually started + the agent's display name for the toast. */
   runTicket(kind: TicketKind, ref: string, agentRef: string): Promise<{ started: boolean; agentName: string }>;
+  /** Pending question/feedback requests for work linked to this chat. */
+  listQuestions(chatId: number): Promise<ChatQuestionVM[]>;
+  /** Deliver an answer and resume the waiting run. */
+  answerQuestion(id: string, responseText: string): Promise<void>;
 }
 
 /** Every visible string. Parametric ones are functions the host localizes. */
@@ -119,6 +131,11 @@ export interface ChatTicketsLabels {
   link: string;
   agents: string;
   merge: string;
+  questions: string;
+  noQuestions: string;
+  answerPlaceholder: string;
+  submitAnswer: string;
+  answering: string;
   linkFailed: string;
   kindLabel: string;
   pickTicket: string;
@@ -150,8 +167,16 @@ export interface ChatTicketsLabels {
   lockHint: string;
   mergeHint: string;
   mergeNoOthers: string;
+  /** Title on the collapsed ticket header — click to reveal the ring grid. */
+  showTickets: string;
+  /** Title on the expanded ticket header — click to collapse the ring grid. */
+  hideTickets: string;
   kind: Record<TicketKind, string>;
   ringAria: (label: string, pct: number) => string;
+  /** N-linked-tickets count shown in the collapsible header. */
+  ticketCount: (n: number) => string;
+  /** Aria label for the collapsed header's overall-progress ring. */
+  overallAria: (pct: number) => string;
   runStarted: (agent: string) => string;
   mergeAction: (n: number) => string;
   mergedN: (n: number) => string;
@@ -174,6 +199,11 @@ export const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels = {
   link: 'Link ticket',
   agents: 'Agents',
   merge: 'Merge',
+  questions: 'Questions',
+  noQuestions: 'No pending questions.',
+  answerPlaceholder: 'Type your answer…',
+  submitAnswer: 'Answer',
+  answering: 'Sending…',
   linkFailed: 'Could not link — check the ticket exists.',
   kindLabel: 'Ticket type',
   pickTicket: 'Choose a ticket…',
@@ -201,8 +231,12 @@ export const DEFAULT_CHAT_TICKETS_LABELS: ChatTicketsLabels = {
   lockHint: 'Shared chats are visible to the whole team; lock to keep this chat to its members only.',
   mergeHint: 'Merge other chats into this one. Their messages, tickets and agents move here; the sources are archived.',
   mergeNoOthers: 'No other chats to merge.',
+  showTickets: 'Show linked tickets',
+  hideTickets: 'Hide linked tickets',
   kind: { task: 'Task', epic: 'Epic', gap: 'Gap', objective: 'Objective', initiative: 'Initiative', portfolio: 'Portfolio', roadmap: 'Roadmap', spec: 'Spec' },
   ringAria: (label, pct) => `${label}: ${pct}% done`,
+  ticketCount: (n) => `${n} ticket${n === 1 ? '' : 's'}`,
+  overallAria: (pct) => `Overall progress: ${pct}% done`,
   runStarted: (agent) => `Started ${agent} on the ticket.`,
   mergeAction: (n) => `Merge ${n} here`,
   mergedN: (n) => `Merged ${n} chat(s).`,

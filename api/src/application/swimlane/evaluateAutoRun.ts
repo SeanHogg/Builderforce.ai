@@ -12,11 +12,13 @@
  * diagnostic can never disagree about whether a ticket runs — the triage UI shows
  * precisely the condition the trigger evaluates.
  */
-import { and, eq } from 'drizzle-orm';
-import { boards, swimlanes, swimlaneAgentAssignments, tasks } from '../../infrastructure/database/schema';
+import { and, asc, eq } from 'drizzle-orm';
+import { boards, swimlanes, swimlaneAgentAssignments, swimlaneRequirements, tasks } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveArtifacts } from '../artifact/resolveArtifacts';
+import { isAgentRefRoleCapable } from '../kanban/roleCapability';
 import { decideLaneAutoRun, withOwnerAgentFallback, type LaneAgentLike, type LaneAutoRunDecision } from './laneAutoRun';
+import { findCanonicalBoard } from './canonicalBoard';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import { ExecutionStatus, TaskStatus } from '../../domain/shared/types';
 
@@ -42,7 +44,37 @@ export type AutoRunReason =
   | 'no_agent'            // no lane-staffed agent AND no owner agent — nothing to run as
   | 'capability_mismatch' // every candidate agent lacks the lane's required capabilities
   | 'already_running'     // a live run already exists (or a same-lane re-entry loop guard)
+  | 'run_cap_exhausted'   // the ticket's last N consecutive runs all FAILED — autonomy stops re-dispatching (a human Run-now still overrides)
   | 'not_executable';     // a system/coordination chore (e.g. an AI Manager run task) — never dispatched to an agent
+
+/**
+ * How many consecutive FAILED runs a ticket may accumulate before autonomy stops
+ * auto-re-dispatching it. The reported failure mode: a single ticket auto-ran 30+
+ * times, every run failing (e.g. no reachable coding model → `coding_model_degraded`
+ * → a backstop that loops on search and ships nothing), and nothing halted the burn.
+ * Past this streak the ticket is surfaced as `run_cap_exhausted` for a human/manager
+ * to intervene, instead of silently churning identical failing runs. A human clicking
+ * "Run now" (which dispatches off `candidate`, not `canRunNow`) is the explicit escape
+ * hatch — it forces a run and, on success, breaks the streak.
+ */
+export const MAX_CONSECUTIVE_AUTORUN_FAILURES = 3;
+
+/**
+ * Count the ticket's most-recent consecutive FAILED runs. `execs` is newest-first
+ * (ExecutionRepository.findByTask orders createdAt DESC). Counts leading `failed`
+ * rows and STOPS at the first run that is not a failure — a `completed` or a
+ * deliberate `cancelled` (or any live run) resets the streak, so the breaker only
+ * trips on an unbroken run of failures and clears the moment one run does not fail.
+ * Pure — unit-tested directly.
+ */
+export function trailingFailureStreak(execs: ReadonlyArray<{ status: string }>): number {
+  let n = 0;
+  for (const e of execs) {
+    if (e.status === ExecutionStatus.FAILED) n += 1;
+    else break;
+  }
+  return n;
+}
 
 export interface AutoRunEvaluation {
   status: string;
@@ -81,11 +113,17 @@ export function classifyResolvedAutoRun(input: {
   hasCapabilityMismatch: boolean;
   sameLaneReentry: boolean;
   hasLiveExecution: boolean;
+  /** Consecutive most-recent FAILED runs on the ticket (see {@link trailingFailureStreak}). */
+  consecutiveFailures?: number;
 }): { reason: AutoRunReason; canRunNow: boolean } {
   if (input.gate === 'human') return { reason: 'human_gate', canRunNow: false };
   if (!input.decisionAutoRun) return { reason: input.hasCapabilityMismatch ? 'capability_mismatch' : 'no_agent', canRunNow: false };
   if (input.sameLaneReentry) return { reason: 'already_running', canRunNow: false };
   if (input.hasLiveExecution) return { reason: 'already_running', canRunNow: false };
+  // Circuit-breaker: a ticket that would otherwise auto-run but whose last N runs all
+  // failed is halted so autonomy stops re-dispatching an identically-failing run. A
+  // human Run-now still overrides (it dispatches off `candidate`, not `canRunNow`).
+  if ((input.consecutiveFailures ?? 0) >= MAX_CONSECUTIVE_AUTORUN_FAILURES) return { reason: 'run_cap_exhausted', canRunNow: false };
   return { reason: 'will_run', canRunNow: true };
 }
 
@@ -138,7 +176,7 @@ export async function evaluateTaskAutoRun(
   // Done / terminal status: the ticket is finalized (commit + PR), never auto-run.
   if (args.status === TaskStatus.DONE) return base({ reason: 'terminal_lane', isTerminalLane: true });
 
-  const [board] = await db.select({ id: boards.id }).from(boards).where(eq(boards.projectId, args.projectId)).limit(1);
+  const board = await findCanonicalBoard(db, args.projectId, args.tenantId);
   if (!board) return base({ reason: 'no_board' });
 
   const [lane] = await db
@@ -174,7 +212,33 @@ export async function evaluateTaskAutoRun(
   );
   const staffedAgentRefs = laneAgents.map((a) => a.agentRef).filter((r): r is string => !!r);
 
-  const agents = withOwnerAgentFallback(laneAgents, { agentRef: assignedAgentRef });
+  // Owner-fallback guardrail — the #467 fix. If this lane has a required PRODUCER role
+  // (a role requirement with owner/contributor responsibility), the ticket owner may
+  // be used as the auto-run fallback ONLY when it is actually capable of that role.
+  // A Product Manager owner must never auto-run an Implementation stage as the coder;
+  // suppressing the fallback surfaces the lane as `no_agent` so the Coordinator/manager
+  // resolves the right producer instead of the wrong owner burning failing runs.
+  let ownerFallbackRef: string | null = assignedAgentRef;
+  if (assignedAgentRef) {
+    if (board.lifecycleManaged) {
+      // Lifecycle-managed board (PRD §5.5): the Assignee IS the Coordinator and is
+      // NEVER the default per-stage executor — the per-stage producer is resolved by
+      // role capability (the lane gate / manifest), so drop the owner→executor fallback.
+      ownerFallbackRef = null;
+    } else {
+      const reqRows = await db
+        .select({ ref: swimlaneRequirements.ref, responsibility: swimlaneRequirements.responsibility, position: swimlaneRequirements.position })
+        .from(swimlaneRequirements)
+        .where(and(eq(swimlaneRequirements.swimlaneId, lane.id), eq(swimlaneRequirements.kind, 'role'), eq(swimlaneRequirements.isRequired, true)))
+        .orderBy(asc(swimlaneRequirements.position));
+      const producer = reqRows.find((r) => r.responsibility == null || r.responsibility === 'owner' || r.responsibility === 'contributor');
+      if (producer && !(await isAgentRefRoleCapable(db, args.tenantId, assignedAgentRef, producer.ref))) {
+        ownerFallbackRef = null;
+      }
+    }
+  }
+
+  const agents = withOwnerAgentFallback(laneAgents, { agentRef: ownerFallbackRef });
   const decision = decideLaneAutoRun(agents, gate);
   // The agent a manual Run-now would use: the same pick, but gate-blind (a human
   // click overrides a 'human' gate). decideLaneAutoRun(_, 'auto') never returns a
@@ -185,7 +249,10 @@ export async function evaluateTaskAutoRun(
     : null;
 
   const execs = await runtimeService.listByTask(args.taskId);
-  const liveRow = execs.map((e) => e.toPlain()).find((e) => ACTIVE_STATUSES.has(e.status));
+  // Newest-first (findByTask orders createdAt DESC) — reused for the live-run check
+  // AND the consecutive-failure streak that drives the run_cap_exhausted breaker.
+  const plainExecs = execs.map((e) => e.toPlain());
+  const liveRow = plainExecs.find((e) => ACTIVE_STATUSES.has(e.status));
   const liveExecution = liveRow ? { id: liveRow.id, status: liveRow.status } : null;
 
   const { reason, canRunNow } = classifyResolvedAutoRun({
@@ -194,6 +261,7 @@ export async function evaluateTaskAutoRun(
     hasCapabilityMismatch: !!decision.capabilityMismatches?.length,
     sameLaneReentry: !!args.originLaneKey && args.originLaneKey === args.status,
     hasLiveExecution: !!liveExecution,
+    consecutiveFailures: trailingFailureStreak(plainExecs),
   });
 
   return {

@@ -104,6 +104,9 @@ export class KanbanTemplateService {
           isRequired: r.isRequired,
           description: r.description ?? undefined,
           position: r.position,
+          ticketType: r.ticketType ?? null,
+          quorum: r.quorum ?? null,
+          condition: (r.condition as TemplateLane['requirements'][number]['condition']) ?? null,
         })),
     }));
     return {
@@ -181,7 +184,9 @@ export class KanbanTemplateService {
           lane.requirements.map((r, j) => ({
             id: crypto.randomUUID(), laneId, kind: r.kind, ref: r.ref,
             responsibility: r.responsibility ?? null, isRequired: r.isRequired,
-            description: r.description ?? null, position: r.position ?? j, createdAt: now,
+            description: r.description ?? null, position: r.position ?? j,
+            ticketType: r.ticketType ?? null, quorum: r.quorum ?? null, condition: r.condition ?? null,
+            createdAt: now,
           })),
         );
       }
@@ -357,14 +362,19 @@ export class KanbanTemplateService {
           lane.requirements.map((r) => ({
             id: crypto.randomUUID(), tenantId, swimlaneId: laneId!,
             kind: r.kind, ref: r.ref, responsibility: r.responsibility ?? null,
-            isRequired: r.isRequired, description: r.description ?? null, position: r.position, createdAt: now,
+            isRequired: r.isRequired, description: r.description ?? null, position: r.position,
+            ticketType: r.ticketType ?? null, quorum: r.quorum ?? null, condition: r.condition ?? null,
+            createdAt: now,
           })),
         );
         requirementsApplied += lane.requirements.length;
       }
     }
 
-    await this.db.update(boards).set({ templateId, updatedAt: now }).where(eq(boards.id, boardId));
+    // A lifecycle-managed template (PRD §5.5) flips the board into Coordinator mode
+    // (assignee = Coordinator, never the default executor); re-applying a legacy
+    // template turns it back off, so the flag always tracks the applied template.
+    await this.db.update(boards).set({ templateId, lifecycleManaged: template.lifecycleManaged === true, updatedAt: now }).where(eq(boards.id, boardId));
     await this.db.update(projects).set({ kanbanTemplateId: templateId, updatedAt: now }).where(eq(projects.id, projectId));
 
     return { boardId, lanesApplied: template.lanes.length, requirementsApplied };

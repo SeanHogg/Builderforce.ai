@@ -17,7 +17,7 @@ import {
   type ChatTicketsAdapter, type ChatTicketsLabels, type TicketLinkVM,
 } from '@seanhogg/builderforce-brain-ui';
 import {
-  brain, tasksApi,
+  brain, tasksApi, approvalsApi,
   type BrainChat, type ChatTicketLink, type ChatAgentInvite,
 } from '@/lib/builderforceApi';
 import { loadAgentPool } from '@/lib/agentPool';
@@ -75,6 +75,8 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
     none: t('none'), spawned: t('spawned'), run: t('run'), open: t('open'), lineage: t('lineage'), unlink: t('unlink'),
     pickAgent: t('pickAgent'), lineageTitle: t('lineageTitle'), lineageEmpty: t('lineageEmpty'), merged: t('merged'),
     runNoAgent: t('runNoAgent'), runFailed: t('runFailed'), link: t('link'), agents: t('agents'), merge: t('merge'),
+    questions: t('questions'), noQuestions: t('noQuestions'), answerPlaceholder: t('answerPlaceholder'),
+    submitAnswer: t('submitAnswer'), answering: t('answering'),
     linkFailed: t('linkFailed'), kindLabel: t('kindLabel'), pickTicket: t('pickTicket'), searchTicket: t('searchTicket'),
     searching: t('searching'), noMatches: t('noMatches'), refine: t('refine'), linkTypeLabel: t('linkTypeLabel'),
     linkTypeLinked: t('linkTypeLinked'), linkTypeCreated: t('linkTypeCreated'), linkAction: t('linkAction'),
@@ -83,8 +85,11 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
     removePerson: t('removePerson'), inviteSent: t('inviteSent'), invitePending: t('invitePending'),
     visibilityShared: t('visibilityShared'), visibilityLocked: t('visibilityLocked'), lockHint: t('lockHint'),
     mergeHint: t('mergeHint'), mergeNoOthers: t('mergeNoOthers'),
+    showTickets: t('showTickets'), hideTickets: t('hideTickets'),
     kind: { task: t('kind.task'), epic: t('kind.epic'), gap: t('kind.gap'), objective: t('kind.objective'), initiative: t('kind.initiative'), portfolio: t('kind.portfolio'), roadmap: t('kind.roadmap'), spec: t('kind.spec') },
     ringAria: (label, pct) => t('ringAria', { label, pct }),
+    ticketCount: (n) => t('ticketCount', { n }),
+    overallAria: (pct) => t('overallAria', { pct }),
     runStarted: (agent) => t('runStarted', { agent }),
     mergeAction: (n) => t('mergeAction', { n }),
     mergedN: (n) => t('mergedN', { n }),
@@ -114,6 +119,15 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
       const res = await tasksApi.runNow(Number(ref));
       return { started: !!res.executionId, agentName: res.agentRef };
     },
+    listQuestions: async (id) => {
+      const [links, pending] = await Promise.all([
+        brain.listChatTickets(id),
+        approvalsApi.list({ status: 'pending' }),
+      ]);
+      const taskIds = new Set(links.filter((tk) => tk.kind === 'task' || tk.kind === 'epic' || tk.kind === 'gap').map((tk) => Number(tk.ref)));
+      return pending.filter((q) => (q.kind === 'question' || q.kind === 'feedback') && q.taskId != null && taskIds.has(q.taskId));
+    },
+    answerQuestion: (id, responseText) => approvalsApi.decide(id, { status: 'answered', responseText }).then(() => undefined),
   }), [chatId]);
 
   return (

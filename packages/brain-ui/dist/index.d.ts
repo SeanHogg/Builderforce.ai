@@ -1,6 +1,6 @@
 import * as React from 'react';
 import React__default from 'react';
-import { BrainMessage, BrainTraceEvent, DirectedRecipient, EvermindRecallItem, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
+import { BrainMessage, BrainTraceEvent, DirectedRecipient, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
 
 interface BrainTimelineLabels {
     /** Shown on the live thinking node while a turn streams. */
@@ -53,6 +53,12 @@ interface BrainTimelineLabels {
         'not-seeded': string;
         frozen: string;
     };
+    /** Per-Evermind CONTRIBUTED line for a multi-target fan-out. Must contain `{name}`,
+     *  `{projectId}`, `{version}`. */
+    learnTargetContributed: string;
+    /** Per-Evermind SKIPPED line for a multi-target fan-out. Must contain `{name}`,
+     *  `{projectId}`, `{reason}` (filled from {@link learnSkipReason}). */
+    learnTargetSkipped: string;
     /** Evermind reconcile step — the turn updated learned memories. Must contain
      *  `{count}` and `{version}`. */
     reconcileTitle: string;
@@ -352,6 +358,13 @@ interface ChatOptionVM {
     id: number;
     title: string;
 }
+/** A pending human question associated with one of this chat's linked tasks. */
+interface ChatQuestionVM {
+    id: string;
+    description: string;
+    taskId: number | null;
+    createdAt?: string;
+}
 /**
  * Host-provided data access — the only coupling to a backend. The web app wires
  * this to its `brain.*` / `pmoApi` / `tasksApi` clients; the VS Code webview wires
@@ -391,6 +404,10 @@ interface ChatTicketsAdapter {
         started: boolean;
         agentName: string;
     }>;
+    /** Pending question/feedback requests for work linked to this chat. */
+    listQuestions(chatId: number): Promise<ChatQuestionVM[]>;
+    /** Deliver an answer and resume the waiting run. */
+    answerQuestion(id: string, responseText: string): Promise<void>;
 }
 /** Every visible string. Parametric ones are functions the host localizes. */
 interface ChatTicketsLabels {
@@ -410,6 +427,11 @@ interface ChatTicketsLabels {
     link: string;
     agents: string;
     merge: string;
+    questions: string;
+    noQuestions: string;
+    answerPlaceholder: string;
+    submitAnswer: string;
+    answering: string;
     linkFailed: string;
     kindLabel: string;
     pickTicket: string;
@@ -441,8 +463,16 @@ interface ChatTicketsLabels {
     lockHint: string;
     mergeHint: string;
     mergeNoOthers: string;
+    /** Title on the collapsed ticket header — click to reveal the ring grid. */
+    showTickets: string;
+    /** Title on the expanded ticket header — click to collapse the ring grid. */
+    hideTickets: string;
     kind: Record<TicketKind, string>;
     ringAria: (label: string, pct: number) => string;
+    /** N-linked-tickets count shown in the collapsible header. */
+    ticketCount: (n: number) => string;
+    /** Aria label for the collapsed header's overall-progress ring. */
+    overallAria: (pct: number) => string;
     runStarted: (agent: string) => string;
     mergeAction: (n: number) => string;
     mergedN: (n: number) => string;
@@ -624,6 +654,7 @@ type TimelineNode = {
     order: number;
     version: number;
     skipped?: BrainLearnSkipReason;
+    targets?: EvermindLearnTarget[];
 } | {
     key: string;
     kind: 'reconcile';
@@ -742,6 +773,29 @@ interface EvermindConsoleData {
     /** Latest automatic regression check (▲/▼ vs the previous version), or null. */
     eval?: EvermindEvalPoint | null;
 }
+/**
+ * The outcome of importing a local builderforce-memory snapshot into this Evermind:
+ * how many raw facts were absorbed + merged (and the resulting version), plus how many
+ * source entries were then compacted to terse stubs and the bytes that recovered. A
+ * host returns `null` from {@link EvermindConsoleAdapter.importMemory} when the user
+ * cancels the file picker (a no-op, not an error).
+ */
+interface MemoryImportReport {
+    /** The file the user imported (basename), for the confirmation notice. */
+    fileName: string;
+    /** Raw facts accepted into the learn queue. */
+    absorbed: number;
+    /** Facts skipped (too short / rejected), with the reason count rolled up. */
+    skipped: number;
+    /** Contributions merged into the model by the closing flush. */
+    merged: number;
+    /** Model version after the merge — stamped into each compacted stub. */
+    version: number;
+    /** Source entries rewritten to `[absorbed→Evermind vN]` stubs. */
+    compacted: number;
+    /** Bytes removed from the snapshot by compaction (the context-bloat recovered). */
+    bytesSaved: number;
+}
 /** A published Studio Evermind model that can seed a project's learnable base. */
 interface EvermindSeedModel {
     slug: string;
@@ -777,6 +831,14 @@ interface EvermindConsoleAdapter {
     }>;
     /** Validate a candidate task: which learned memories would answer it (ranked). */
     validate(prompt: string): Promise<EvermindValidateResult>;
+    /**
+     * OPTIONAL — import a local builderforce-memory snapshot into this Evermind and
+     * compact the absorbed facts to stubs. Only hosts with local filesystem access (the
+     * VS Code editor) implement it; the web app leaves it undefined, so the console hides
+     * the Import control there. Resolves to a {@link MemoryImportReport}, or `null` when
+     * the user cancels the file picker.
+     */
+    importMemory?(): Promise<MemoryImportReport | null>;
 }
 /** Every visible string. Parametric ones are functions the host localizes. */
 interface EvermindConsoleLabels {
@@ -829,6 +891,14 @@ interface EvermindConsoleLabels {
     flushing: string;
     flushedNone: string;
     flushedN: (merged: number, version: number) => string;
+    importTitle: string;
+    importHint: string;
+    importCta: string;
+    importing: string;
+    /** Success: N facts absorbed into vX, M entries compacted to stubs, K bytes recovered. */
+    importDone: (absorbed: number, version: number, compacted: number, savedKb: string) => string;
+    /** The picked file had nothing learnable (all too short / already stubbed). */
+    importNothing: string;
     validateCta: string;
     validating: string;
     validateHint: string;

@@ -121,6 +121,15 @@
     "assignTeam": "Assign a team…",
     "assign": "Assign",
     "boardNameLabel": "Board name",
+    "templateHeading": "Board template",
+    "templateLabel": "Board template",
+    "templateHint": "Applying a template replaces this board's swimlanes, role requirements, gates, and coordinated-lifecycle setting.",
+    "templateApply": "Apply template",
+    "templateApplying": "Applying…",
+    "templateConfirmTitle": "Apply board template?",
+    "templateConfirmMessage": "Apply “{name}” to this board? Existing swimlane configuration will be replaced. Tickets and their history are preserved.",
+    "templateLoadError": "Could not load board templates",
+    "templateApplyError": "Could not apply the board template",
     "maxConcurrent": "Max concurrent tickets",
     "hideDoneItems": "Hide done items",
     "standupTimer": "Standup turn timer",
@@ -290,7 +299,8 @@
       "myWorkspace": "My Workspace",
       "marketplace": "Marketplace",
       "incidents": "Incidents",
-      "monitoring": "Monitoring"
+      "monitoring": "Monitoring",
+      "reliability": "Reliability"
     },
     "tab": {
       "projects": "Projects",
@@ -340,7 +350,7 @@
       "logs": "Logs",
       "qa": "Agentic QA",
       "home": "Home",
-      "integrations": "Integrations",
+      "integrations": "Integrations / API Keys",
       "manager": "Manager",
       "roles": "Roles",
       "talent": "Talent",
@@ -365,7 +375,9 @@
       "escalation": "Escalation",
       "contacts": "Contacts",
       "boards": "Boards",
-      "reporting": "Reporting"
+      "monitors": "Monitors",
+      "reporting": "Reporting",
+      "rfp": "RFP"
     }
   },
   "alerts": {
@@ -974,6 +986,8 @@
     "merging": "Merging…"
   },
   "memberProfile": {
+    "tabs": { "overview": "Overview", "timeLogs": "Time Logs", "tasks": "Tasks" },
+    "noTasks": "No tasks are assigned to this user.",
     "subtitle": "{kind} · capability & availability",
     "syncing": "Syncing…",
     "syncFromGoogleCalendar": "Sync from Google Calendar",
@@ -2411,7 +2425,9 @@
       "security": "Security",
       "product_manager": "Product",
       "designer": "Designer",
-      "incident_manager": "Incident Manager"
+      "incident_manager": "Incident Manager",
+      "cto": "CTO",
+      "product_owner": "Product Owner"
     },
     "teams": {
       "heading": "Teams",
@@ -3155,6 +3171,7 @@
       "integrations": "Integrations",
       "content": "Content",
       "ceremonies": "Ceremonies",
+      "incidents": "Incidents",
       "wfPlan": "Workforce plan",
       "empAllocation": "Allocation",
       "empCollaboration": "Collaboration",
@@ -3249,6 +3266,10 @@
       "obsContentByKind": "Documents by kind",
       "obsCeremonyCadence": "Ceremony cadence",
       "obsCeremonyBalance": "Ceremony talk balance",
+      "incStatus": "Open incidents",
+      "incSeverity": "Incidents by severity",
+      "incSystems": "Incidents by system",
+      "incMttr": "Mean time to resolve",
       "wfpCostSplit": "Hire vs. agent cost",
       "wfpCapacity": "Capacity vs WIP",
       "wfpGap": "Allocatable gap",
@@ -3381,6 +3402,19 @@
       "humanTalk": "Human",
       "agentTalk": "AI agent",
       "completed": "completed"
+    },
+    "inc": {
+      "noIncidents": "No incidents",
+      "ofTotal": "of {total} in window",
+      "openNudge": "{count} needing attention",
+      "allClear": "All clear",
+      "incidents": "incidents",
+      "unclassified": "Unclassified",
+      "mttrSub": "mean time to resolve",
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
     },
     "reorder": {
       "drag": "Drag to reorder",
@@ -5525,7 +5559,9 @@
       "learnSkipReasonFrozen": "this project’s Evermind is frozen (read-only)",
       "reconcileTitle": "Reconciled {count} learned memories in Evermind v{version}",
       "reconcileHint": "The answer restated these recalled learnings, so it updates them (write-through cognition).",
-      "stop": "Stop"
+      "stop": "Stop",
+      "learnTargetContributed": "Contributed to {name} (project #{projectId} v{version})",
+      "learnTargetSkipped": "Skipped {name} (project #{projectId}) — {reason}"
     },
     "tickets": {
       "none": "No tickets linked yet.",
@@ -5572,6 +5608,15 @@
       "lockHint": "Shared chats are visible to the whole team; lock to keep this chat to its members only.",
       "mergeHint": "Merge other chats into this one. Their messages, tickets and agents move here; the sources are archived.",
       "mergeNoOthers": "No other chats to merge.",
+      "questions": "Questions",
+      "noQuestions": "No pending questions.",
+      "answerPlaceholder": "Type your answer…",
+      "submitAnswer": "Answer",
+      "answering": "Sending…",
+      "showTickets": "Show linked tickets",
+      "hideTickets": "Hide linked tickets",
+      "ticketCount": "{n, plural, one {# ticket} other {# tickets}}",
+      "overallAria": "Overall progress: {pct}% done",
       "mergeAction": "Merge {n} here",
       "mergedN": "Merged {n} chat(s).",
       "kind": {
@@ -5611,6 +5656,8 @@
     "brainDefault": "Brain (default)",
     "noChatsYet": "No chats yet. Click + New to start.",
     "noChatsMatch": "No chats match your search.",
+    "providerCapBanner": "Your {providers} API key hit its usage limit — this run fell back to the shared model pool.",
+    "manageApiKeys": "Manage your API keys →",
     "rename": "Rename",
     "summarize": "Summarize",
     "deleteChatConfirm": "Delete \"{title}\"? This cannot be undone.",
@@ -5697,6 +5744,7 @@
         "already_running": "Already running",
         "human_gate": "Waiting for approval",
         "capability_mismatch": "Agent missing required skills",
+        "run_cap_exhausted": "Too many failed runs — paused for review",
         "no_agent": "No agent assigned",
         "no_board": "No board configured",
         "no_lane": "Lane not configured",
@@ -5714,7 +5762,8 @@
     },
     "audit": {
       "flagged": "Flagged",
-      "flaggedTitle": "This ticket skipped a required role or diagnostic — review needed"
+      "flaggedTitle": "This ticket skipped a required role or diagnostic — review needed",
+      "participantsTitle": "Required-role participation: complete of required"
     }
   },
   "projectsContent": {
@@ -6155,6 +6204,7 @@
       "assign": "Assigned",
       "score_value": "Valued",
       "dispatch": "Dispatched",
+      "sync_pr": "Updated PR",
       "merge_pr": "Merged PR",
       "flag": "Flagged"
     },
@@ -6884,6 +6934,8 @@
     "taskCount": "{count, plural, one {# task} other {# tasks}}",
     "byStage": "By stage",
     "byAssignee": "By assignee",
+    "expandAssigneeRow": "Expand tasks assigned to {name}",
+    "collapseAssigneeRow": "Collapse tasks assigned to {name}",
     "startStandup": "Start standup",
     "startPlanning": "Start planning",
     "viewPrdAria": "View PRD",
@@ -6901,6 +6953,7 @@
     "deleteTask": "Delete task",
     "tabAgent": "Agent / Capabilities",
     "tabPrd": "PRD",
+    "tabAccountability": "Sign-off & Accountability",
     "changeStatusTitle": "Click to change status",
     "changePriorityTitle": "Click to change priority",
     "viewCodeChangesTitle": "View the code changes on GitHub",
@@ -7562,7 +7615,7 @@
   },
   "providerKeys": {
     "title": "Bring your own models",
-    "subtitle": "Connect your own Anthropic, OpenAI, or Google account. Connected providers power your agents on your own account and drive the model choices in every picker — usage on your machine (on-prem & VS Code) is free; cloud-agent usage is still billed. Credentials are stored encrypted and never shown again.",
+    "subtitle": "Connect your own Anthropic, OpenAI, Google, Kimi, Qwen, MiniMax, or Meta account. Connected providers power your agents on your own account and drive the model choices in every picker — usage on your machine (on-prem & VS Code) is free; cloud-agent usage is still billed. Credentials are stored encrypted and never shown again.",
     "loading": "Loading…",
     "errorPrefix": "Error: {message}",
     "status": {
@@ -7592,16 +7645,47 @@
     "errStartConnect": "Failed to start connect",
     "errConnectSubscription": "Failed to connect subscription",
     "errRemove": "Failed to remove credential",
+    "precedence": {
+      "title": "Provider priority",
+      "subtitle": "When more than one of your accounts is connected, cloud agents lead with the provider at the top and fail over down the list. Put Meta first to route cloud agents through it.",
+      "leads": "Leads",
+      "moveUp": "Move {provider} up",
+      "moveDown": "Move {provider} down",
+      "errSave": "Failed to save priority"
+    },
     "provider": {
       "anthropic": {
         "blurb": "Connect your Claude Pro/Max subscription (no per-token billing) or paste an Anthropic API key.",
-        "subscription": "Claude subscription"
+        "subscription": "Claude subscription",
+        "pastePrompt": "Approved in the Claude tab? Paste the code it shows you (the full <code>code#state</code> value) below.",
+        "pastePlaceholder": "Paste code from Claude…"
       },
       "openai": {
-        "blurb": "Paste an OpenAI API key to run GPT models on your own OpenAI account."
+        "blurb": "Connect your ChatGPT/Codex subscription or paste an OpenAI API key to run GPT models on your own account.",
+        "subscription": "ChatGPT/Codex subscription",
+        "pastePrompt": "After signing in, your browser may show a localhost error. Copy the full <code>http://localhost:1455/auth/callback?code=…&state=…</code> URL from the address bar and paste it below.",
+        "pastePlaceholder": "Paste the full OpenAI redirect URL…"
       },
       "google": {
         "blurb": "Paste a Google AI (Gemini) API key to run Gemini models on your own Google account."
+      },
+      "meta": {
+        "blurb": "Paste a Meta AI API key to run MUSE models (muse-spark-1.1) on your own Meta AI account."
+      },
+      "kimi": {
+        "blurb": "Paste a Kimi Code subscription key or Moonshot API key to run Kimi models on your own account."
+      },
+      "qwen": {
+        "blurb": "Paste an Alibaba DashScope API key to run Qwen models on your own account."
+      },
+      "minimax": {
+        "blurb": "Paste a MiniMax API key to run MiniMax models on your own account."
+      },
+      "xai": {
+        "blurb": "Connect an eligible SuperGrok subscription or paste an xAI API key to run Grok models on your own account.",
+        "subscription": "SuperGrok subscription",
+        "pastePrompt": "After approving access, copy the code shown on the xAI page and paste it below.",
+        "pastePlaceholder": "Paste the xAI sign-in code…"
       }
     }
   },
@@ -8584,6 +8668,10 @@
   },
   "agentExecution": {
     "runThisTask": "Run this task",
+    "coordinateThisTicket": "Coordinate this ticket",
+    "coordinateNow": "Assign and run next role",
+    "coordinating": "Coordinating…",
+    "coordinateHint": "The assignee coordinates this lifecycle. BuilderForce verifies the manifest and dispatches the next required BA, architect, developer, reviewer, QA, or validator—never the assignee as the default executor.",
     "awaitingApproval": "Awaiting approval before this can run: {reason}",
     "executions": "Executions",
     "ticketSpendTooltip": "Ticket spend across all runs: {tokens} tokens over {requests} LLM call(s). Rolls up to this project, then the account.",
@@ -9080,6 +9168,16 @@
       "escalation": "Escalation",
       "contacts": "Contacts"
     },
+    "workflows": {
+      "title": "Runbooks & workflows",
+      "blurb": "Run a custom workflow against this incident, or review the workflows its events triggered.",
+      "pick": "Workflow",
+      "pickPlaceholder": "Choose a workflow…",
+      "run": "Run workflow",
+      "create": "Create a workflow",
+      "runs": "Runs for this incident",
+      "noRuns": "No workflow runs yet."
+    },
     "severity": {
       "sev1": "SEV1",
       "sev2": "SEV2",
@@ -9139,6 +9237,8 @@
       "publishedNote": "A root-cause analysis has been published for this incident.",
       "prompt": "This incident is resolved. Publish a root-cause analysis to the knowledge base.",
       "formTitle": "Publish root-cause analysis",
+      "fishTitle": "Why did this occur?",
+      "fishAria": "Fishbone root-cause diagram for {title}",
       "summary": "Summary",
       "summaryPlaceholder": "One-paragraph overview of the incident…",
       "rootCause": "Root cause",
@@ -9218,7 +9318,18 @@
     "deleteContactConfirm": "Delete contact \"{name}\"?",
     "oncallSubtitle": "On-call rotations decide who gets paged first when an incident fires.",
     "escalationSubtitle": "Escalation policies climb through targets and channels until someone responds.",
-    "contactsSubtitle": "Business contacts you can page or escalate to during an incident."
+    "contactsSubtitle": "Business contacts you can page or escalate to during an incident.",
+    "implicated": {
+      "title": "Implicated delivery tickets",
+      "help": "The delivery ticket(s) whose change caused this incident — each with its accountability so RCA can see where the process was skipped or waived.",
+      "loading": "Loading…",
+      "empty": "No implicated tickets linked yet.",
+      "signed": "{done}/{total} signed off",
+      "gaps": "{count} gap(s)",
+      "remove": "Remove",
+      "add": "Link ticket",
+      "addPlaceholder": "Ticket #"
+    }
   },
   "monitoring": {
     "boardsTitle": "Active Monitoring",
@@ -9346,5 +9457,148 @@
     "statusError": "Error",
     "errFailed": "Failed to invite",
     "laterHint": "You can also invite teammates later from <link>Workforce</link>."
+  },
+  "accountability": {
+    "loading": "Loading accountability…",
+    "signedHeader": "{done} of {total} required roles signed off",
+    "unassigned": "Unassigned",
+    "addedBadge": "added",
+    "gaps": {
+      "title": "{count} accountability gap(s)",
+      "kind": {
+        "unsigned": "Unsigned",
+        "unstaffed": "Resource gap",
+        "no_contribution": "No contribution",
+        "waived": "Waived",
+        "changes_requested": "Changes requested"
+      }
+    },
+    "table": {
+      "title": "Sign-off & Accountability",
+      "role": "Role",
+      "who": "Who",
+      "state": "State",
+      "verdict": "Verdict",
+      "when": "When",
+      "comments": "Comments",
+      "contribution": "Contribution",
+      "empty": "No required roles for this ticket yet."
+    },
+    "verdict": {
+      "approved": "Approved",
+      "changes_requested": "Changes requested",
+      "waived": "Waived",
+      "delegated": "Delegated"
+    },
+    "state": {
+      "pending": "Pending",
+      "assigned": "Assigned",
+      "in_progress": "In progress",
+      "completed": "Completed",
+      "changes_requested": "Changes requested",
+      "waived": "Waived",
+      "skipped": "Skipped",
+      "unstaffed": "Unstaffed"
+    },
+    "responsibility": {
+      "owner": "Owner",
+      "reviewer": "Reviewer",
+      "contributor": "Contributor"
+    },
+    "assess": {
+      "title": "Resource assessment",
+      "help": "Add a role this ticket needs beyond the template (e.g. designer, security engineer). If no capable resource is available it is flagged as a resource gap.",
+      "rolePlaceholder": "Select a role…",
+      "notePlaceholder": "Why is this role needed? (optional)",
+      "add": "Add required role",
+      "materialize": "Create work items",
+      "materializeHelp": "Spin up a child task per resource so progress rolls up to this ticket."
+    }
+  },
+  "rfpPage": {
+    "title": "RFP Response",
+    "subtitle": "Respond to an RFQ/RFP with a co-branded proposal grounded on your portfolio — capability roster, P&L, delivery plan and risks.",
+    "newRequest": "New response",
+    "needDeveloper": "Requires Developer role",
+    "loading": "Loading…",
+    "empty": "No RFP requests yet. Create one to draft a co-branded proposal.",
+    "validation": "A title is required.",
+    "creating": "Creating…",
+    "create": "Create & draft",
+    "cancel": "Cancel",
+    "noOrg": "Unnamed organisation",
+    "sourceNew": "New build",
+    "sourceExisting": "Based on a project",
+    "quoted": "Quoted {price}",
+    "notGenerated": "Not generated yet",
+    "scanFresh": "Fresh scan",
+    "status": {
+      "draft": "Draft",
+      "analyzing": "Analyzing",
+      "ready": "Ready",
+      "submitted": "Submitted"
+    },
+    "field": {
+      "title": "Title",
+      "titlePlaceholder": "e.g. Customer portal rebuild",
+      "requesterOrg": "Requesting organisation",
+      "requesterOrgPlaceholder": "Who issued the RFP",
+      "requesterBrand": "Requester brand colours",
+      "requesterBrandHint": "The asking business's palette — blended with your own on the proposal.",
+      "primary": "Primary",
+      "secondary": "Secondary",
+      "accent": "Accent",
+      "logoUrl": "Logo URL",
+      "requirements": "Requirements",
+      "requirementsPlaceholder": "Paste the RFP/RFQ requirements…",
+      "sourceMode": "Grounding",
+      "project": "Project",
+      "selectProject": "Select a project…",
+      "economics": "Economics",
+      "margin": "Margin",
+      "marketing": "Marketing",
+      "contingency": "Contingency"
+    },
+    "backToList": "Back to requests",
+    "generating": "Generating…",
+    "regenerate": "Regenerate",
+    "generate": "Generate response",
+    "generatingHint": "Running the freshness-gated scan, matching your portfolio, and drafting the proposal…",
+    "noResponseYet": "No proposal generated yet. Click Generate to draft one.",
+    "scanRefreshed": "Scan refreshed",
+    "scanCurrent": "Scan current",
+    "groundedOn": "Grounded on {project}",
+    "greenfield": "Greenfield — proposed from the requirements",
+    "scanAge": "last scan {days}d ago",
+    "sec": {
+      "summary": "Executive summary",
+      "capabilities": "Capabilities & approach",
+      "economics": "Investment & commercials",
+      "plan": "Delivery plan",
+      "risks": "Key risks",
+      "dependencies": "Dependencies",
+      "portfolio": "Similar projects",
+      "document": "Branded proposal"
+    },
+    "capabilitiesGreenfield": "Greenfield engagement — capabilities are proposed from the requirements.",
+    "col": {
+      "component": "Component",
+      "responsibility": "Responsibility"
+    },
+    "stack": "Stack",
+    "quotedPrice": "Quoted price",
+    "marginNote": "{pct}% profit margin · {weeks} weeks of effort.",
+    "deliveryWindow": "Delivery: {start} → {end} ({weeks} weeks).",
+    "severity": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High"
+    },
+    "depType": {
+      "internal": "Internal",
+      "external": "External",
+      "third_party": "Third-party"
+    },
+    "downloadDoc": "Download"
   }
 }
