@@ -82,6 +82,8 @@ export async function tenantProxyForPlan(
           .catch(() => ({ effectivePlan: 'free' as const, premiumOverride: false })),
     resolveTenantLlmCredentials(env, tenantId).catch(() => ({
       anthropicOAuthToken: null,
+      openaiCodexAuth: null,
+      xaiOAuthToken: null,
       vendorKeys: {} as TenantVendorKeys,
       configuredProviders: [],
       unresolvedReasons: {},
@@ -95,7 +97,11 @@ export async function tenantProxyForPlan(
     ...(opts?.codingOnly ? { codingOnly: true, backstopModels: CODING_BACKSTOP_MODELS } : {}),
     ...(opts?.disablePaidOverflow ? { disablePaidOverflow: true } : {}),
     ...(creds.anthropicOAuthToken ? { anthropicOAuthToken: creds.anthropicOAuthToken } : {}),
+    ...(creds.openaiCodexAuth ? { openaiCodexAuth: creds.openaiCodexAuth } : {}),
+    ...(creds.xaiOAuthToken ? { xaiOAuthToken: creds.xaiOAuthToken } : {}),
     ...(hasVendorKeys(creds.vendorKeys) ? { tenantVendorKeys: creds.vendorKeys } : {}),
+    ...(creds.vendorPriority.length ? { byoVendorPriority: creds.vendorPriority } : {}),
+    ...(creds.configuredProviders.length ? { byoRequired: true } : {}),
     // A connected BYO account is the PRIMARY path — lift the free plan's 15s fast-fail
     // budget so a (non-streaming) frontier completion on the tenant's own account isn't
     // aborted (`code 0 / no response`) and silently cascaded to the shared pool.
