@@ -68,6 +68,7 @@ import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { boards, executions, tasks, specs, toolAuditEvents, usageSnapshots, projects, approvals, projectAgents } from '../../infrastructure/database/schema';
+import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 
 /** Resolved cloud-agent identity for a run — engine, display label, surface, model. */
 export interface ResolvedCloudAgent {
@@ -823,7 +824,7 @@ export async function loadContainerRunContext(env: Env, db: Db, executionId: num
       .from(tasks).where(eq(tasks.id, exec.taskId)).limit(1);
     if (!task) return null;
     const explicitRef = parseCloudAgentRef(exec.payload ?? undefined);
-    const [board] = await db.select({ lifecycleManaged: boards.lifecycleManaged }).from(boards).where(eq(boards.projectId, task.projectId)).limit(1);
+    const board = await findCanonicalBoard(db, task.projectId, exec.tenantId);
     // Managed-ticket assignees coordinate; role dispatches must name their executor.
     if (board?.lifecycleManaged && !explicitRef) return null;
     const ref = explicitRef ?? task.assignedAgentRef ?? undefined;

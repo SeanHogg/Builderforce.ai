@@ -8655,6 +8655,10 @@
   },
   "agentExecution": {
     "runThisTask": "Exécuter cette tâche",
+    "coordinateThisTicket": "Coordonner ce ticket",
+    "coordinateNow": "Assigner et lancer le rôle suivant",
+    "coordinating": "Coordination…",
+    "coordinateHint": "Le responsable coordonne ce cycle. BuilderForce vérifie le manifeste et lance le prochain rôle requis, jamais le responsable comme exécuteur par défaut.",
     "awaitingApproval": "En attente d'approbation avant de pouvoir s'exécuter : {reason}",
     "executions": "Exécutions",
     "ticketSpendTooltip": "Dépense du ticket sur toutes les exécutions : {tokens} jetons sur {requests} appel(s) LLM. Cumulé sur ce projet, puis sur le compte.",

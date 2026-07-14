@@ -249,6 +249,8 @@ export const kanbanApi = {
     request<{ created: number }>(`/api/kanban/tasks/${taskId}/participants/materialize`, { method: 'POST' }).then((r) => r.created),
   participantsSummary: (projectId: number): Promise<ParticipantsSummaryRow[]> =>
     request<{ summary: ParticipantsSummaryRow[] }>(`/api/kanban/projects/${projectId}/participants-summary`).then((r) => r.summary),
+  coordinate: (taskId: number): Promise<{ ok: boolean; status: string; dispatched: boolean; requiredOutstanding: number }> =>
+    request<{ ok: boolean; status: string; dispatched: boolean; requiredOutstanding: number }>(`/api/kanban/tasks/${taskId}/coordinate`, { method: 'POST' }),
 };
 
 // ---------------------------------------------------------------------------
@@ -1912,6 +1914,8 @@ export interface TaskFileChange {
   agent: string;
   executionId: number | null;
   createdAt: string;
+  /** Models observed in llm.complete telemetry for the execution that made this change. */
+  models?: string[];
 }
 
 /**

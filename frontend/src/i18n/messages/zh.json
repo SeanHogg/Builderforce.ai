@@ -8655,6 +8655,10 @@
   },
   "agentExecution": {
     "runThisTask": "运行此任务",
+    "coordinateThisTicket": "协调此工单",
+    "coordinateNow": "分配并运行下一个角色",
+    "coordinating": "正在协调…",
+    "coordinateHint": "负责人协调此生命周期。BuilderForce 会验证清单并运行下一个必需角色，绝不会默认让负责人执行工作。",
     "awaitingApproval": "此任务需先获得批准方可运行：{reason}",
     "executions": "执行记录",
     "ticketSpendTooltip": "所有运行的工单花费：{requests} 次 LLM 调用共 {tokens} 个 token。汇总至此项目，再汇总至账户。",

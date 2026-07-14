@@ -35,6 +35,7 @@ import { BUILTIN_ROLES } from '../kanban/roleCatalog';
 import { resolveRoleCapableAgents } from '../kanban/roleCapability';
 import { TicketParticipantsService } from '../kanban/ticketParticipants';
 import { recordActivity, cloudAgentActor } from '../activity/activityLog';
+import { findCanonicalBoard } from './canonicalBoard';
 
 /** Emit the Coordinator hand-off signal: role R was dispatched to work the ticket. */
 async function emitRoleDispatched(env: Env, db: Db, a: { tenantId: number; projectId: number; taskId: number; roleKey: string; roleName: string; agentRef: string; responsibility: 'reviewer' | 'producer' }): Promise<void> {
@@ -92,7 +93,7 @@ export async function enforceLaneRequirements(
   const none: LaneGateOutcome = { blocked: false, flagged: false, dispatchedReviewers: [], dispatchedProducers: [] };
   const participants = new TicketParticipantsService(db);
   try {
-    const [board] = await db.select({ id: boards.id, lifecycleManaged: boards.lifecycleManaged }).from(boards).where(eq(boards.projectId, args.projectId)).limit(1);
+    const board = await findCanonicalBoard(db, args.projectId, args.tenantId);
     if (!board) return none;
     const [lane] = await db
       .select({ id: swimlanes.id, requirementGate: swimlanes.requirementGate })

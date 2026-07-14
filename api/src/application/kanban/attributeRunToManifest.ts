@@ -11,6 +11,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { boards, pullRequests, swimlaneRequirements, swimlanes } from '../../infrastructure/database/schema';
 import { TicketParticipantsService } from './ticketParticipants';
+import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 
 export interface RunFinalizedInfo {
   tenantId: number;
@@ -26,7 +27,7 @@ export interface RunFinalizedInfo {
 
 /** The required PRODUCER role (owner/contributor) of a lane, if it declares one. */
 async function producerRoleOfLane(db: Db, projectId: number, laneKey: string): Promise<string | null> {
-  const [board] = await db.select({ id: boards.id }).from(boards).where(eq(boards.projectId, projectId)).limit(1);
+  const board = await findCanonicalBoard(db, projectId);
   if (!board) return null;
   const [lane] = await db.select({ id: swimlanes.id }).from(swimlanes).where(and(eq(swimlanes.boardId, board.id), eq(swimlanes.key, laneKey))).limit(1);
   if (!lane) return null;

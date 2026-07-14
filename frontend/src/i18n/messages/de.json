@@ -8655,6 +8655,10 @@
   },
   "agentExecution": {
     "runThisTask": "Diese Aufgabe ausführen",
+    "coordinateThisTicket": "Dieses Ticket koordinieren",
+    "coordinateNow": "Nächste Rolle zuweisen und starten",
+    "coordinating": "Wird koordiniert…",
+    "coordinateHint": "Der Zuständige koordiniert diesen Lebenszyklus. BuilderForce prüft das Manifest und startet die nächste erforderliche Rolle – niemals den Zuständigen als Standardausführer.",
     "awaitingApproval": "Warten auf Genehmigung, bevor dies ausgeführt werden kann: {reason}",
     "executions": "Ausführungen",
     "ticketSpendTooltip": "Ticket-Ausgaben über alle Ausführungen: {tokens} Tokens bei {requests} LLM-Aufruf(en). Wird auf dieses Projekt und dann auf das Konto hochgerechnet.",
