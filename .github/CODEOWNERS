@@ -1,0 +1,39 @@
+# CODEOWNERS
+#
+# GitHub uses this file to auto-request reviews and (with branch protection)
+# to REQUIRE an approving review from a code owner before a PR can merge into
+# `main`. This operationalizes FR-3.1 ("at least one approved review from a
+# qualified reviewer, not the author") and AC-7 for the Code Review & Merge
+# Pipeline PRD.
+#
+# Syntax: <path-pattern> <@owner> [<@owner> ...]
+# Later, more-specific rules win. Every merged PR that touches a matched path
+# requires an approval from a listed owner.
+#
+# NOTE: the repo's own audit engine (api/src/application/tools/AuditRunner.ts)
+# credits this file toward the CC1/CC3–CC5 change-management controls; its
+# matcher accepts .github/CODEOWNERS, docs/CODEOWNERS, or a root CODEOWNERS.
+
+# Default owner for everything not matched by a more specific rule below.
+*                       @SeanHogg
+
+# Backend / API and agent-runtime (highest scrutiny — core application code).
+/api/                   @SeanHogg
+/agent-runtime/         @SeanHogg
+
+# Frontend (SSR on Cloudflare Workers).
+/Builderforce.ai/       @SeanHogg
+/frontend/              @SeanHogg
+
+# Infrastructure & container builds.
+/Dockerfile.api         @SeanHogg
+/Dockerfile.frontend    @SeanHogg
+/.dockerignore          @SeanHogg
+
+# CI/CD pipelines and repo governance — DevOps approval required.
+/.github/               @SeanHogg
+/.claude/               @SeanHogg
+
+# Documentation and process docs.
+*.md                    @SeanHogg
+/docs/                  @SeanHogg
