@@ -921,7 +921,7 @@ async function recordCloudLlmTurn(
     const chain = result.candidateChain?.length ? ` · chain: ${result.candidateChain.join(' → ')}` : '';
     await recordCloudToolEvent(rc.db, {
       ...evtBase, toolName: 'llm.complete', category: 'llm',
-      detail: { model: resolvedModel, traceId: result.traceId ?? null, status: result.response.status, step: opts.step, outcome: result.outcome ?? null, candidateChain: result.candidateChain ?? null },
+      detail: { model: resolvedModel, provider: result.resolvedVendor, byo: result.byoFunded ?? false, keySource: result.byoFunded ? 'byo' : 'builderforce-managed', traceId: result.traceId ?? null, status: result.response.status, step: opts.step, outcome: result.outcome ?? null, candidateChain: result.candidateChain ?? null },
       result: `gateway ${result.response.status} on '${resolvedModel}' (${result.outcome ?? 'error'})`, durationMs,
     });
     return { ok: false, error: `Gateway ${result.response.status} on model '${resolvedModel}'${chain}: ${text.slice(0, 300)}`, resolvedModel };
@@ -929,7 +929,7 @@ async function recordCloudLlmTurn(
   const { content, toolCalls } = parseLlmChoice(await result.response.json().catch(() => null));
   await recordCloudToolEvent(rc.db, {
     ...evtBase, toolName: 'llm.complete', category: 'llm',
-    detail: { model: resolvedModel, traceId: result.traceId ?? null, step: opts.step, toolCalls: toolCalls.length },
+    detail: { model: resolvedModel, provider: result.resolvedVendor, byo: result.byoFunded ?? false, keySource: result.byoFunded ? 'byo' : 'builderforce-managed', traceId: result.traceId ?? null, step: opts.step, toolCalls: toolCalls.length },
     result: `${toolCalls.length} tool call(s)${content ? ` · ${content.length} chars` : ''}`, durationMs,
   });
   await emitCodingModelDegraded(rc.db, { ...evtBase, resolvedModel, requestedModel: rc.requestedModel ?? '' });
@@ -1077,7 +1077,7 @@ export async function handleContainerOp(
     // floor) when the tenant has connected nothing. Resolved BEFORE model pick so a
     // free tenant may pin a BYO model (byoVendors lifts the free-plan choice gate).
     const containerCreds = await resolveTenantLlmCredentials(env, tenantId);
-    const { anthropicOAuthToken, vendorKeys: tenantVendorKeys } = containerCreds;
+    const { anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, vendorKeys: tenantVendorKeys } = containerCreds;
     const pick = pickCloudModel(model, ctx.effectivePlan, ctx.premiumOverride, {
       // Context-aware seed: a small-window model isn't picked for a big container turn.
       estimatedTokens: estimateRequestTokens(sendMessages, containerTools),
@@ -1085,7 +1085,7 @@ export async function handleContainerOp(
       // Tenant BYO precedence — lead with the owner's chosen account (e.g. Meta first).
       byoVendorPriority: containerCreds.vendorPriority,
     });
-    const result = await llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}), ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}) }).complete({
+    const result = await llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}), ...(openaiCodexAuth ? { openaiCodexAuth } : {}), ...(xaiOAuthToken ? { xaiOAuthToken } : {}), ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}), ...(containerCreds.vendorPriority.length ? { byoVendorPriority: containerCreds.vendorPriority } : {}), ...(containerCreds.configuredProviders.length ? { byoRequired: true } : {}) }).complete({
       messages: sendMessages as unknown as ChatMessage[], tools: containerTools, tool_choice: 'auto',
       ...(pick.model ? { model: pick.model, ...(pick.strict ? { modelStrict: true } : {}) } : {}),
       // Personality temperature — parity with the Worker/DO loop.
@@ -1511,11 +1511,11 @@ export async function runCloudToolLoop(
   // loop/tick (NOT per turn) and re-resolved fresh each DO tick so a rotated token
   // stays valid. Empty when the tenant connected nothing — operator-key floor.
   const loopCreds = await resolveTenantLlmCredentials(env, tenantId);
-  const { anthropicOAuthToken, vendorKeys: tenantVendorKeys } = loopCreds;
+  const { anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, vendorKeys: tenantVendorKeys } = loopCreds;
   // `codingOnly` keeps the failover cascade inside the curated coding pool, so an
   // exhausted free run escalates to the paid coding backstop instead of degrading
   // onto a non-coder (gemini-flash-lite) or a tool-unreliable vendor (Ollama).
-  const proxy = llmProxyForPlan(env, routing.effectivePlan, routing.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}), ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}) });
+  const proxy = llmProxyForPlan(env, routing.effectivePlan, routing.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}), ...(openaiCodexAuth ? { openaiCodexAuth } : {}), ...(xaiOAuthToken ? { xaiOAuthToken } : {}), ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}), ...(loopCreds.vendorPriority.length ? { byoVendorPriority: loopCreds.vendorPriority } : {}), ...(loopCreds.configuredProviders.length ? { byoRequired: true } : {}) });
 
   // Per-run model pin. A coding agent must drive the WHOLE task on one model, not
   // hop between pool models per turn (the gateway's round-robin cursor would

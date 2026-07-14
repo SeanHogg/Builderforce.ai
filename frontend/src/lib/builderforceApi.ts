@@ -1916,6 +1916,8 @@ export interface TaskFileChange {
   createdAt: string;
   /** Models observed in llm.complete telemetry for the execution that made this change. */
   models?: string[];
+  /** Authoritative usage provenance: whether the tenant's own provider key served it. */
+  modelUsage?: Array<{ model: string; byo: boolean; provider: string | null }>;
 }
 
 /**

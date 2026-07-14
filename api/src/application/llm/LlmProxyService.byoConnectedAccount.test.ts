@@ -114,22 +114,24 @@ describe('connected account — a non-BYO caller model does NOT shadow the conne
   });
 });
 
-describe('connected account — failure is attributed HONESTLY (real dispatch)', () => {
-  it('a 400 on the connected account carries the real status + detail into failovers, then falls back', async () => {
+describe('connected account — failure stays inside the BYO boundary', () => {
+  it('a 400 on the connected account carries the real status + detail and never calls the shared pool', async () => {
+    const sharedCalls: string[] = [];
     const fetchSpy = vi.fn(async (input: string | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url === ANTHROPIC_ENDPOINT) {
         return new Response(JSON.stringify({ error: { message: 'system: first block must be Claude Code identity' } }), { status: 400, headers: { 'content-type': 'application/json' } });
       }
-      return openaiOk('fallback reply'); // shared pool serves the fallback
+      sharedCalls.push(url);
+      return openaiOk('must not be used');
     });
     (globalThis as { fetch: typeof fetch }).fetch = fetchSpy as unknown as typeof fetch;
 
     const result = await connectedProxy().complete(request);
 
-    // It fell back off the connected account…
-    expect(result.resolvedVendor).not.toBe('anthropic');
-    // …and the connected-account failure is recorded WITH its real status + detail,
+    expect(result.response.status).toBeGreaterThanOrEqual(400);
+    expect(sharedCalls).toEqual([]);
+    // The connected-account failure is recorded WITH its real status + detail,
     // so a diagnostic can say WHY instead of "no response".
     const anthropicFo = result.failovers.find((f) => f.vendor === 'anthropic');
     expect(anthropicFo).toBeTruthy();
@@ -137,11 +139,13 @@ describe('connected account — failure is attributed HONESTLY (real dispatch)',
     expect(anthropicFo!.detail).toContain('Claude Code identity');
   });
 
-  it('a THROWN fetch (code-0 "no response") on the connected account carries the network detail', async () => {
+  it('a THROWN fetch carries the network detail and never calls the shared pool', async () => {
+    const sharedCalls: string[] = [];
     const fetchSpy = vi.fn(async (input: string | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url === ANTHROPIC_ENDPOINT) throw new TypeError('Network connection lost.');
-      return openaiOk('fallback reply');
+      sharedCalls.push(url);
+      return openaiOk('must not be used');
     });
     (globalThis as { fetch: typeof fetch }).fetch = fetchSpy as unknown as typeof fetch;
 
@@ -153,5 +157,23 @@ describe('connected account — failure is attributed HONESTLY (real dispatch)',
     // The detail is the ONLY thing that distinguishes this from a skip — it must carry
     // the thrown cause, not be empty.
     expect(anthropicFo!.detail).toContain('Network connection lost');
+    expect(sharedCalls).toEqual([]);
+  });
+});
+
+describe('configured but unresolved BYO account', () => {
+  it('fails closed without contacting a BuilderForce-managed provider', async () => {
+    const fetchSpy = vi.fn(async () => openaiOk('must not be used'));
+    (globalThis as { fetch: typeof fetch }).fetch = fetchSpy as unknown as typeof fetch;
+    const proxy = llmProxyForPlan(env, 'free', false, {
+      codingOnly: true,
+      byoRequired: true,
+    });
+
+    const result = await proxy.complete(request);
+
+    expect(result.response.status).toBe(503);
+    expect(result.outcome).toBe('byo_unavailable');
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
