@@ -791,7 +791,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                 taskChanges.length > 0
                   ? taskChanges
                       .filter((f) => selectedId == null || f.executionId === selectedId)
-                      .map((f) => ({ path: f.path, change: f.change, agent: f.agent, executionId: f.executionId, createdAt: f.createdAt, models: f.models }))
+                      .map((f) => ({ path: f.path, change: f.change, agent: f.agent, executionId: f.executionId, createdAt: f.createdAt, models: f.models, modelUsage: f.modelUsage }))
                   : files.map((f) => ({ path: f.path, change: f.change }))
               }
               emptyLabel={isRunning ? t('noFileChangesYet') : t('noFileChangesRecorded')}
