@@ -25,6 +25,7 @@ import { recordManagerAction } from '../manager/ManagerService';
 import { computeCoverage, type AuditSignals, type RequirementInput } from './auditRules';
 import type { CoverageResult, UnmetRequirement } from './auditRules';
 import { requirementApplies } from '../kanban/types';
+import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 
 const flaggedKey = (tenantId: number) => `audit:flagged:${tenantId}`;
 
@@ -99,11 +100,7 @@ export class TicketAuditService {
       .limit(1);
     if (!task) throw new Error('task not found');
 
-    const [board] = await this.db
-      .select({ id: boards.id })
-      .from(boards)
-      .where(eq(boards.projectId, task.projectId))
-      .limit(1);
+    const board = await findCanonicalBoard(this.db, task.projectId, tenantId);
 
     let reqs: RequirementInput[] = [];
     if (board) {

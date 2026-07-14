@@ -36,6 +36,7 @@ import { approvals, chatTicketLinks, projectManagerConfigs } from '../../infrast
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { resolveProjectInferenceModel } from '../../application/llm/projectEvermind';
 import { executionTokenGate } from './executionTokenGate';
+import { authorizeManagedTaskExecution } from '../../application/kanban/managedExecutionGuard';
 
 /**
  * Runtime routes – task execution lifecycle.
@@ -433,6 +434,8 @@ export async function dispatchCloudRunForTask(
     .where(and(eq(tasks.id, params.taskId), eq(projects.tenantId, params.tenantId)))
     .limit(1);
   if (!taskRow) return null;
+  const authorization = await authorizeManagedTaskExecution(db, params.tenantId, params.taskId, params.payload);
+  if (!authorization.allowed) throw new Error(authorization.reason ?? 'managed execution is not authorized');
 
   // A per-run pinned host (e.g. an approved high-priority on-prem run) overrides
   // the task's assignee for THIS dispatch so host targeting survives the replay.
@@ -943,6 +946,9 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     if (!taskRow) {
       return c.json({ error: 'Task not found' }, 404);
     }
+
+    const authorization = await authorizeManagedTaskExecution(db, c.get('tenantId'), body.taskId, body.payload);
+    if (!authorization.allowed) return c.json({ error: authorization.reason }, 409);
 
     // Token gate — no budget → no run (shared adapter, so Run-now + this path + the
     // board Run agree and the superadmin bypass is applied once). Fails open on a
@@ -1965,12 +1971,19 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     if (!Number.isFinite(taskId)) return c.json({ changes: [] });
     const sql = neon((c.env as Env).NEON_DATABASE_URL);
     const rows = (await sql`
-      SELECT path, change, agent, execution_id AS "executionId", created_at AS "createdAt"
-      FROM task_file_changes
-      WHERE task_id = ${taskId} AND tenant_id = ${c.get('tenantId')}
-      ORDER BY created_at DESC
+      SELECT f.path, f.change, f.agent, f.execution_id AS "executionId", f.created_at AS "createdAt",
+        ARRAY(
+          SELECT DISTINCT substring(a.args from '"model"\\s*:\\s*"([^"]+)"')
+          FROM tool_audit_events a
+          WHERE a.execution_id = f.execution_id AND a.tenant_id = f.tenant_id
+            AND a.tool_name = 'llm.complete'
+            AND substring(a.args from '"model"\\s*:\\s*"([^"]+)"') IS NOT NULL
+        ) AS models
+      FROM task_file_changes f
+      WHERE f.task_id = ${taskId} AND f.tenant_id = ${c.get('tenantId')}
+      ORDER BY f.created_at DESC
       LIMIT 500
-    `) as Array<{ path: string; change: string; agent: string; executionId: number | null; createdAt: string }>;
+    `) as Array<{ path: string; change: string; agent: string; executionId: number | null; createdAt: string; models: string[] }>;
     return c.json({ changes: rows });
   });
 

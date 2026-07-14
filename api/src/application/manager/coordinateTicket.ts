@@ -16,6 +16,7 @@ import type { RuntimeService } from '../runtime/RuntimeService';
 import { boards, swimlanes, tasks } from '../../infrastructure/database/schema';
 import { TicketParticipantsService } from '../kanban/ticketParticipants';
 import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
+import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 
 export interface CoordinateResult {
   ok: boolean;
@@ -67,8 +68,8 @@ export async function coordinateCompletedStage(
   const unchanged = (managed: boolean, outstanding: string[] = []): CoordinateCompletionResult => ({
     managed, advanced: false, fromStatus: args.fromStatus, toStatus: args.fromStatus, outstanding,
   });
-  const [board] = await db.select({ id: boards.id, managed: boards.lifecycleManaged }).from(boards).where(eq(boards.projectId, args.projectId)).limit(1);
-  if (!board?.managed) return unchanged(false);
+  const board = await findCanonicalBoard(db, args.projectId, args.tenantId);
+  if (!board?.lifecycleManaged) return unchanged(false);
 
   const participants = new TicketParticipantsService(db);
   await participants.syncStates(env, args.tenantId, args.taskId);
@@ -109,6 +110,32 @@ export async function coordinateTicket(
   const manifest = await participants.listParticipants(env, args.tenantId, args.taskId).catch(() => []);
   const done = new Set(['completed', 'waived', 'skipped']);
   const requiredOutstanding = manifest.filter((p) => p.required && !done.has(p.state)).length;
+
+  // Applying coordinated governance to an already-active legacy ticket can reveal
+  // earlier BA/Design stages that never happened. Rewind to the earliest unmet
+  // required stage before dispatching anything; otherwise a ticket already in
+  // Implementation would run a Developer first and strand its BA/Architect slots.
+  const board = await findCanonicalBoard(db, task.projectId, args.tenantId);
+  if (board?.lifecycleManaged) {
+    const lanes = await db.select({ key: swimlanes.key, position: swimlanes.position })
+      .from(swimlanes).where(eq(swimlanes.boardId, board.id)).orderBy(asc(swimlanes.position));
+    const position = new Map(lanes.map((lane) => [lane.key, lane.position]));
+    const currentPosition = position.get(task.status);
+    const earliest = manifest
+      .filter((p) => p.required && p.stageKey && !done.has(p.state) && position.has(p.stageKey))
+      .sort((a, b) => position.get(a.stageKey!)! - position.get(b.stageKey!)!)[0];
+    if (earliest?.stageKey && currentPosition != null && position.get(earliest.stageKey)! < currentPosition) {
+      const moved = await db.update(tasks).set({ status: earliest.stageKey, updatedAt: new Date() })
+        .where(and(eq(tasks.id, args.taskId), eq(tasks.status, task.status))).returning({ id: tasks.id });
+      if (moved.length) {
+        const dispatched = await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+          tenantId: args.tenantId, projectId: task.projectId, taskId: args.taskId,
+          status: earliest.stageKey, originLaneKey: task.status, submittedBy: 'system:coordinator',
+        }).catch(() => false);
+        return { ok: true, status: earliest.stageKey, dispatched, requiredOutstanding };
+      }
+    }
+  }
 
   // A sign-off or other out-of-band contribution may satisfy the stage after its
   // execution already finished. The explicit Coordinator tick must therefore try
