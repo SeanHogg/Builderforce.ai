@@ -15,7 +15,8 @@
 #   - Edit api/src/*     → wrangler dev hot-reloads worker
 #
 # Prerequisites the stack does NOT provision (intentional):
-#   - NEON_DATABASE_URL must be set in api/.dev.vars (or env). The api uses
+#   - NEON_DATABASE_URL and NEON_TRANSACTIONAL_DATABASE_URL must be set in
+#     api/.dev.vars (or env). The api uses
 #     @neondatabase/serverless HTTP transport — see Gap Register for why
 #     we don't bundle a local Postgres.
 #   - JWT_SECRET and OPENROUTER_API_KEY also live in api/.dev.vars.
@@ -94,7 +95,8 @@ services:
     environment:
       ENVIRONMENT: development
       CORS_ORIGINS: http://localhost:3000
-      # NEON_DATABASE_URL, JWT_SECRET, OPENROUTER_API_KEY come from api/.dev.vars
+      # NEON_DATABASE_URL, NEON_TRANSACTIONAL_DATABASE_URL, JWT_SECRET,
+      # OPENROUTER_API_KEY come from api/.dev.vars
     ports:
       - "8787:8787"
     volumes:

@@ -53,6 +53,10 @@ import multiPartyChat from '@/content/blog/multi-party-team-chat-humans-and-agen
 import vsCodeCommandCenter from '@/content/blog/vs-code-command-center-for-your-agentic-workforce.md';
 import cobitGovernance from '@/content/blog/cobit-governance-readiness-for-agentic-it.md';
 import psychometricPersonas from '@/content/blog/ai-agent-personality-psychometric-personas.md';
+import incidentManagement from '@/content/blog/incident-management-on-call-and-war-rooms.md';
+import roleAccountability from '@/content/blog/role-gated-accountability-proof-of-participation.md';
+import rfpResponse from '@/content/blog/automated-rfp-response-from-your-codebase.md';
+import memoryFirst from '@/content/blog/memory-first-inference-skip-the-llm.md';
 
 export interface BlogPost {
   slug: string;
@@ -160,6 +164,10 @@ export const BLOG_POSTS: BlogPost[] = [
   buildPost('vs-code-command-center-for-your-agentic-workforce', vsCodeCommandCenter),
   buildPost('cobit-governance-readiness-for-agentic-it', cobitGovernance),
   buildPost('ai-agent-personality-psychometric-personas', psychometricPersonas),
+  buildPost('incident-management-on-call-and-war-rooms', incidentManagement),
+  buildPost('role-gated-accountability-proof-of-participation', roleAccountability),
+  buildPost('automated-rfp-response-from-your-codebase', rfpResponse),
+  buildPost('memory-first-inference-skip-the-llm', memoryFirst),
 ].sort((a, b) => (a.date < b.date ? 1 : -1));
 
 export function getPostBySlug(slug: string): BlogPost | undefined {

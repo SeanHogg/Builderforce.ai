@@ -21,7 +21,13 @@ import {
   type EvermindConsoleLabels,
 } from '@seanhogg/builderforce-brain-ui';
 import { authedFetch } from './authedFetch';
-import { getToken, onRefresh, refreshToken, type InitData, type LabelBundle } from './vscodeBridge';
+import { getToken, onRefresh, refreshToken, request, type InitData, type LabelBundle } from './vscodeBridge';
+
+/** Host reply to `evermind.pickMemory` — the parsed, learnable snapshot entries (or null
+ *  when the user cancels the file picker). */
+interface PickedMemory { path: string; fileName: string; entries: Array<{ key: string; text: string; prompt?: string }> }
+/** Gateway reply from POST …/extract-memories. */
+interface ExtractResponse { absorbed: string[]; skipped: Array<{ key: string; reason: string }>; merged: number; version: number }
 
 interface TenantModelRow { slug?: string; name?: string; baseModel?: string | null }
 interface LlmModelsResponse { codingModels?: string[]; premium?: boolean; effectivePlan?: string }
@@ -52,6 +58,7 @@ function evLabels(labels: LabelBundle): Partial<EvermindConsoleLabels> {
     'teachPromptPlaceholder', 'teachTextPlaceholder', 'teachCta', 'teaching', 'taught',
     'flushCta', 'flushing', 'flushedNone', 'inspectTitle', 'inspectEmpty', 'kindText',
     'kindDelta', 'deltaEntry', 'refresh', 'errorGeneric',
+    'importTitle', 'importHint', 'importCta', 'importing', 'importNothing',
   ];
   for (const k of keys) {
     const v = s(k);
@@ -62,6 +69,9 @@ function evLabels(labels: LabelBundle): Partial<EvermindConsoleLabels> {
   if (seeded) out.statusSeeded = (version) => seeded.replace('{version}', String(version));
   const flushedN = s('flushedN');
   if (flushedN) out.flushedN = (merged, version) => flushedN.replace('{merged}', String(merged)).replace('{version}', String(version));
+  const importDone = s('importDone');
+  if (importDone) out.importDone = (absorbed, version, compacted, savedKb) =>
+    importDone.replace('{absorbed}', String(absorbed)).replace('{version}', String(version)).replace('{compacted}', String(compacted)).replace('{savedKb}', savedKb);
   return out;
 }
 
@@ -122,6 +132,26 @@ export function EvermindScreen({ init }: { init: InitData }) {
       teach: (text, prompt) => req(`${base}/learn-text`, { method: 'POST', body: JSON.stringify({ text, ...(prompt ? { prompt } : {}) }) }).then(() => undefined),
       flush: () => req<{ merged?: number; version?: number }>(`${base}/flush`, { method: 'POST' }).then((r) => ({ merged: r.merged ?? 0, version: r.version ?? 0 })),
       validate: (prompt) => req(`${base}/validate`, { method: 'POST', body: JSON.stringify({ prompt }) }),
+      // Import: host reads the snapshot (fs) → gateway absorbs the entries → host compacts
+      // the absorbed ones to stubs. The three steps split by capability (fs on the host,
+      // authed fetch in the webview), so no single layer needs powers it lacks.
+      importMemory: async () => {
+        const picked = await request<PickedMemory | null>('evermind.pickMemory');
+        if (!picked || picked.entries.length === 0) return null;
+        const res = await req<ExtractResponse>(`${base}/extract-memories`, { method: 'POST', body: JSON.stringify({ entries: picked.entries }) });
+        const comp = await request<{ compacted: number; bytesSaved: number }>('evermind.compactMemory', {
+          path: picked.path, absorbedKeys: res.absorbed, version: res.version,
+        });
+        return {
+          fileName: picked.fileName,
+          absorbed: res.absorbed.length,
+          skipped: res.skipped.length,
+          merged: res.merged,
+          version: res.version,
+          compacted: comp.compacted,
+          bytesSaved: comp.bytesSaved,
+        };
+      },
     };
   }, [init.baseUrl, storageId]);
 

@@ -32,7 +32,7 @@
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 import { authMiddleware, isManager } from '../middleware/authMiddleware';
 import { ForbiddenError } from '../../domain/shared/errors';
 import {
@@ -148,7 +148,7 @@ export function createBoardRoutes(db: Db): Hono<HonoEnv> {
       .select()
       .from(boards)
       .where(eq(boards.tenantId, tenantId))
-      .orderBy(asc(boards.createdAt), asc(boards.id));
+      .orderBy(desc(boards.lifecycleManaged), desc(boards.updatedAt), desc(boards.createdAt), desc(boards.id));
     return c.json({ boards: rows });
   });
 

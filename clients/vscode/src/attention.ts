@@ -127,8 +127,8 @@ export class AttentionPoller implements vscode.Disposable {
     // Only repaint when the surfaced state changed — a stable key of every
     // live item so an unchanged poll costs zero tree work.
     const key = JSON.stringify({
-      t: Object.entries(next.tasks).map(([k, v]) => `${k}:${v.state}`).sort(),
-      c: Object.entries(next.chats).map(([k, v]) => `${k}:${v.state}`).sort(),
+      t: Object.entries(next.tasks).map(([k, v]) => `${k}:${v.state}:${v.approvalId ?? ""}`).sort(),
+      c: Object.entries(next.chats).map(([k, v]) => `${k}:${v.state}:${v.approvalId ?? ""}`).sort(),
       // Include manager cadence so the status bar repaints when a pass lands / ages out.
       m: `${next.manager?.recentlyActive ? 1 : 0}:${next.manager?.lastRunAt ?? ""}`,
     });

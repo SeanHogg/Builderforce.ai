@@ -212,14 +212,61 @@ export const CODING_DEFAULT_MODEL: string =
  * `direct/openai/…` is the only route to the tenant's OWN OpenAI key. `googleai/` is
  * a bespoke prefix already bound to the tenant Google key.
  */
+/**
+ * The BYO frontier flagship each connected provider leads auto-select with — ONE per
+ * vendor (Anthropic splits by turn shape: Opus drives agentic tool-loops, Sonnet plain
+ * chat; every other vendor uses one model for both shapes). EVERY id here is a real,
+ * tool- and structured-output-capable CODER served on the tenant's OWN key (the
+ * `direct/<vendor>/` and bespoke `googleai/` prefixes route to that key, NOT the operator
+ * OpenRouter pool — a bare `openai/…` id is OpenRouter's namespace).
+ *
+ * This map is the SINGLE SOURCE for both {@link providerFrontierFlagship} and the coder-
+ * recognition superset {@link RECOGNIZED_CODER_MODELS}: adding a BYO vendor here makes its
+ * flagship recognised as a coder automatically. That closes the drift that mislabelled
+ * `direct/meta/muse-spark-1.1` (Meta MUSE, a coder) as a "degraded onto a non-coder
+ * backstop" — only Anthropic's direct floor had been hand-added to CODING_MODEL_POOL.
+ */
+const BYO_FRONTIER_FLAGSHIPS: Readonly<Record<string, { agentic: string; chat: string }>> = {
+  anthropic: { agentic: 'claude-opus-4-8', chat: 'claude-sonnet-4-6' },
+  openai:    { agentic: 'direct/openai/gpt-4.1', chat: 'direct/openai/gpt-4.1' },
+  'openai-codex': { agentic: 'openai-codex/gpt-5.3-codex', chat: 'openai-codex/gpt-5.3-codex' },
+  'xai-oauth': { agentic: 'xai-oauth/grok-4.3', chat: 'xai-oauth/grok-4.3' },
+  googleai:  { agentic: 'googleai/gemini-2.5-pro', chat: 'googleai/gemini-2.5-pro' },
+  meta:      { agentic: 'direct/meta/muse-spark-1.1', chat: 'direct/meta/muse-spark-1.1' },
+  moonshot:  { agentic: 'direct/moonshot/kimi-k2-0711-preview', chat: 'direct/moonshot/kimi-k2-0711-preview' },
+  qwen:      { agentic: 'direct/qwen/qwen3-coder-plus', chat: 'direct/qwen/qwen3-max' },
+  minimax:   { agentic: 'direct/minimax/MiniMax-M1', chat: 'direct/minimax/MiniMax-Text-01' },
+  xai:       { agentic: 'direct/xai/grok-4.5', chat: 'direct/xai/grok-4.5' },
+};
+
 function providerFrontierFlagship(vendor: string, agentic: boolean): string | null {
-  switch (vendor) {
-    case 'anthropic': return agentic ? 'claude-opus-4-8' : 'claude-sonnet-4-6';
-    case 'openai':    return 'direct/openai/gpt-4.1';
-    case 'googleai':  return 'googleai/gemini-2.5-pro';
-    default:          return null;
-  }
+  const f = BYO_FRONTIER_FLAGSHIPS[vendor];
+  return f ? (agentic ? f.agentic : f.chat) : null;
 }
+
+/**
+ * Every BYO frontier coder id (both turn shapes, de-duped) — the connected-account
+ * flagships that route only on a tenant's own key and so are (correctly) ABSENT from the
+ * auto-routable {@link CODING_MODEL_POOL}. Folded into {@link RECOGNIZED_CODER_MODELS}.
+ */
+export const BYO_FRONTIER_CODERS: readonly string[] = [
+  ...new Set(Object.values(BYO_FRONTIER_FLAGSHIPS).flatMap((f) => [f.agentic, f.chat])),
+];
+
+/**
+ * The ONE set of models the runtime recognises as real CODERS (tool- + structured-
+ * output-capable): the auto-routable {@link CODING_MODEL_POOL} PLUS the BYO frontier
+ * flagships ({@link BYO_FRONTIER_CODERS}) that only route on a tenant's own key. The
+ * degradation check (`isCodingModelDegraded`), the seed "is this a coder" trace, and the
+ * tool/structured-output capability sets all derive from THIS — so a connected-account
+ * coding run (e.g. `direct/meta/muse-spark-1.1`) is never mislabelled a non-coder
+ * backstop. DISTINCT from CODING_MODEL_POOL, which stays the AUTO-ROUTE/selection pool
+ * (plan ordering + `codingModelsForPlan` are unchanged; recognition simply widens).
+ */
+export const RECOGNIZED_CODER_MODELS: ReadonlySet<string> = new Set<string>([
+  ...CODING_MODEL_POOL,
+  ...BYO_FRONTIER_CODERS,
+]);
 
 /** Best-first rank of a model's catalog tier (ULTRA → PREMIUM → STANDARD → FREE),
  *  used to order the connected providers' flagships by frontier strength from catalog
@@ -237,11 +284,12 @@ function frontierTierRank(model: string): number {
  *
  * Purely REGISTRATION-DRIVEN and multi-provider: it reflects exactly what the tenant
  * connected — connect only OpenAI → GPT leads; connect all three → all three frontier
- * flagships lead, ordered by catalog TIER (ULTRA → PREMIUM → STANDARD) so the
- * strongest frontier model is tried first and the cascade then fails over across the
- * owner's OTHER connected accounts before ever touching a free/paid pool model. There
- * is NO hardcoded vendor preference — a tie in tier keeps the vendor set's iteration
- * order. It is a SOFT seed: the plan pool stays behind the list as fallback.
+ * flagships lead. Ordering: the tenant's own BYO PRECEDENCE (`opts.vendorPriority`,
+ * most-preferred gateway vendor id first — e.g. Meta first) wins, with catalog TIER
+ * (ULTRA → PREMIUM → STANDARD) as the tiebreak for un-ranked vendors. With no precedence
+ * set it degrades to pure tier order (the prior behaviour). The cascade then fails over
+ * across the owner's OTHER connected accounts in that order before ever touching a
+ * free/paid pool model. It is a SOFT seed: the plan pool stays behind the list as fallback.
  *
  * `byoVendors` is the gateway VENDOR-id set the tenant can serve from their own
  * account (see `byoVendorIdSet` / the proxy's connected set). Returns `[]` when
@@ -253,15 +301,32 @@ function frontierTierRank(model: string): number {
  */
 export function byoAutoSeedModels(
   byoVendors: ReadonlySet<string> | null | undefined,
-  opts: { agentic: boolean },
+  opts: { agentic: boolean; vendorPriority?: readonly string[] },
 ): string[] {
   if (!byoVendors || byoVendors.size === 0) return [];
   const flagships = [...byoVendors]
     .map((v) => providerFrontierFlagship(v, opts.agentic))
     .filter((m): m is string => m !== null && isDispatchableSeed(m));
-  // Stable sort by frontier tier (strongest first); Array.prototype.sort is stable in
-  // V8, so same-tier flagships keep the connected-set order (no vendor value judgement).
-  return flagships.sort((a, b) => frontierTierRank(a) - frontierTierRank(b));
+  // TENANT PRECEDENCE first, catalog tier as tiebreak. `vendorPriority` is the tenant's
+  // ordered gateway vendor ids (most-preferred first — e.g. Meta first); a flagship's
+  // vendor is matched via vendorForModel so `direct/meta/…` → 'meta' lines up. A vendor
+  // NOT in the list sorts after every ranked one (Infinity), then falls back to tier —
+  // so with NO precedence set this is exactly the prior tier-only order. Array.prototype
+  // .sort is stable in V8, so equal keys keep the connected-set iteration order.
+  const priority = opts.vendorPriority ?? [];
+  // A vendor NOT in the precedence ranks AFTER every ranked one — but with a FINITE
+  // sentinel (`priority.length`), not Infinity: two un-ranked vendors must compare
+  // EQUAL (rank − rank = 0 → tier tiebreak), and Infinity − Infinity is NaN, which
+  // corrupts Array.sort. With no precedence set every rank is 0 → pure tier order.
+  const priorityRank = (m: string): number => {
+    const i = priority.indexOf(vendorForModel(m));
+    return i === -1 ? priority.length : i;
+  };
+  return flagships.sort((a, b) => {
+    const p = priorityRank(a) - priorityRank(b);
+    if (p !== 0) return p;
+    return frontierTierRank(a) - frontierTierRank(b);
+  });
 }
 
 /**
@@ -882,12 +947,19 @@ export interface LlmProxyOptions {
    *  tenant's own subscription — and is NOT metered as paid-overflow (it's $0 to
    *  us). Resolved per request from `resolveAnthropicOAuthToken`. */
   anthropicOAuthToken?: string | null;
+  openaiCodexAuth?: { accessToken: string; accountId: string } | null;
+  xaiOAuthToken?: string | null;
   /** A tenant's BYO api-key credentials (OpenAI / Google / Anthropic) keyed by
    *  provider. When set, vendorEnv overrides the matching operator env key with
    *  the tenant's key for that vendor and marks the vendor tenant-funded (byo) —
    *  so its usage is $0 to us and metered per the BYO rules. Resolved per request
    *  from {@link resolveTenantVendorKeys}. */
   tenantVendorKeys?: TenantVendorKeys | null;
+  /** The tenant's BYO PRECEDENCE as ordered gateway vendor ids (most-preferred first).
+   *  Threaded into the auto-select connected-flagship seed ({@link byoAutoSeedModels})
+   *  so the gateway completion seed leads with the owner's chosen account (e.g. Meta
+   *  first), matching the cloud-agent pin. Empty/undefined = catalog-tier order. */
+  byoVendorPriority?: readonly string[];
 }
 
 export class LlmProxyService {
@@ -902,7 +974,10 @@ export class LlmProxyService {
   private readonly codingOnly: boolean;
   private readonly freeBudget: number;
   private readonly anthropicOAuthToken: string | null;
+  private readonly openaiCodexAuth: { accessToken: string; accountId: string } | null;
+  private readonly xaiOAuthToken: string | null;
   private readonly tenantVendorKeys: TenantVendorKeys;
+  private readonly byoVendorPriority: readonly string[];
 
   constructor(env: ProxyEnv, options?: LlmProxyOptions) {
     this.env = env;
@@ -916,7 +991,10 @@ export class LlmProxyService {
     this.codingOnly = options?.codingOnly ?? false;
     this.freeBudget = options?.freeBudget && options.freeBudget > 0 ? options.freeBudget : FREE_ATTEMPT_BUDGET;
     this.anthropicOAuthToken = options?.anthropicOAuthToken ?? null;
+    this.openaiCodexAuth = options?.openaiCodexAuth ?? null;
+    this.xaiOAuthToken = options?.xaiOAuthToken ?? null;
     this.tenantVendorKeys = options?.tenantVendorKeys ?? {};
+    this.byoVendorPriority = options?.byoVendorPriority ?? [];
     // Mark every vendor a BYO key overrides as tenant-funded up front, so any
     // resolution landing on that vendor this request is stamped byo (cost 0,
     // on-prem/VSIX exempt). vendorEnv() applies the matching key override.
@@ -930,7 +1008,9 @@ export class LlmProxyService {
    *  must NOT be metered as paid-overflow. The vendor only ever uses OAuth when the
    *  token is present, so vendor=anthropic + token bound ⇒ subscription-funded. */
   private isSubscriptionFunded(result: ProxyResult): boolean {
-    return this.anthropicOAuthToken != null && result.resolvedVendor === 'anthropic';
+    return (this.anthropicOAuthToken != null && result.resolvedVendor === 'anthropic')
+      || (this.openaiCodexAuth != null && result.resolvedVendor === 'openai-codex')
+      || (this.xaiOAuthToken != null && result.resolvedVendor === 'xai-oauth');
   }
 
   /** Gateway vendor ids the tenant can serve from their OWN connected account this
@@ -940,6 +1020,8 @@ export class LlmProxyService {
   private get connectedByoVendors(): Set<string> {
     const set = new Set<string>(this.tenantFundedVendors);
     if (this.anthropicOAuthToken) set.add('anthropic');
+    if (this.openaiCodexAuth) set.add('openai-codex');
+    if (this.xaiOAuthToken) set.add('xai-oauth');
     return set;
   }
 
@@ -1075,7 +1157,7 @@ export class LlmProxyService {
     // failover after the connected account rather than being dropped.
     const hasCallerModel = typeof callerModel === 'string' && callerModel.length > 0;
     const callerLeads = hasCallerModel && explicitModelPreemptsByo(callerModel as string, this.connectedByoVendors);
-    const byoSeeds = callerLeads ? [] : byoAutoSeedModels(this.connectedByoVendors, { agentic: this.codingOnly });
+    const byoSeeds = callerLeads ? [] : byoAutoSeedModels(this.connectedByoVendors, { agentic: this.codingOnly, vendorPriority: this.byoVendorPriority });
     const seedHead: readonly string[] = callerLeads ? [callerModel as string] : byoSeeds;
     const basePool: readonly string[] = (hasCallerModel && !callerLeads && !fittedPool.includes(callerModel as string))
       ? [callerModel as string, ...fittedPool]
@@ -1340,6 +1422,8 @@ export class LlmProxyService {
       OPENROUTER_API_KEY: this.isPro
         ? (this.env.OPENROUTER_API_KEY_PRO ?? this.env.OPENROUTER_API_KEY ?? null)
         : (this.env.OPENROUTER_API_KEY ?? null),
+      OPENAI_CODEX_AUTH: this.openaiCodexAuth ? JSON.stringify(this.openaiCodexAuth) : null,
+      XAI_OAUTH_TOKEN: this.xaiOAuthToken,
       CEREBRAS_API_KEY:         this.env.CEREBRAS_API_KEY         ?? null,
       NVIDIA_API_KEY:           this.env.NVIDIA_API_KEY           ?? null,
       OLLAMA_API_KEY:           this.env.OLLAMA_API_KEY           ?? null,
@@ -1368,6 +1452,14 @@ export class LlmProxyService {
       // A tenant BYO OpenAI key overrides the operator OpenAI key (spread above)
       // for the `openai` vendor — marked tenant-funded → byo, $0 to us.
       ...(this.tenantVendorKeys.openai ? { OPENAI_API_KEY: this.tenantVendorKeys.openai } : {}),
+      ...(this.tenantVendorKeys.kimi ? { MOONSHOT_API_KEY: this.tenantVendorKeys.kimi } : {}),
+      ...(this.tenantVendorKeys.qwen ? { QWEN_API_KEY: this.tenantVendorKeys.qwen } : {}),
+      ...(this.tenantVendorKeys.minimax ? { MINIMAX_API_KEY: this.tenantVendorKeys.minimax } : {}),
+      ...(this.tenantVendorKeys.xai ? { XAI_API_KEY: this.tenantVendorKeys.xai } : {}),
+      // A tenant BYO Meta AI key powers the `meta` vendor (MUSE models). There is
+      // NO operator-level Meta key — this is the ONLY source. When absent the meta
+      // vendor no-key-skips at dispatch, same as any other unbound vendor.
+      ...(this.tenantVendorKeys.meta ? { META_API_KEY: this.tenantVendorKeys.meta } : {}),
     };
   }
 
@@ -1961,7 +2053,7 @@ export function llmProxyForPlan(
   env: ProxyEnv,
   effectivePlan: EffectivePlan,
   premiumOverride = false,
-  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; vendorCallTimeoutMs?: number },
+  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; vendorCallTimeoutMs?: number; byoVendorPriority?: readonly string[] },
 ): LlmProxyService {
   const routing = resolveRouting(effectivePlan, premiumOverride);
   const { productName, modelPool } = routing;
@@ -1991,9 +2083,14 @@ export function llmProxyForPlan(
       : { freeBudget: freeAttemptBudgetForPlan(effectivePlan) }),
     // A connected tenant subscription token powers any direct-Claude resolution.
     ...(opts?.anthropicOAuthToken ? { anthropicOAuthToken: opts.anthropicOAuthToken } : {}),
+    ...(opts?.openaiCodexAuth ? { openaiCodexAuth: opts.openaiCodexAuth } : {}),
+    ...(opts?.xaiOAuthToken ? { xaiOAuthToken: opts.xaiOAuthToken } : {}),
     // BYO api-keys (OpenAI/Google/Anthropic) override the operator keys for their
     // vendors and mark those calls tenant-funded (byo).
     ...(opts?.tenantVendorKeys ? { tenantVendorKeys: opts.tenantVendorKeys } : {}),
+    // Tenant BYO precedence — leads the connected-flagship seed with the owner's
+    // chosen account (e.g. Meta first), matching the cloud-agent pin.
+    ...(opts?.byoVendorPriority?.length ? { byoVendorPriority: opts.byoVendorPriority } : {}),
   });
 }
 
@@ -2121,6 +2218,10 @@ export interface PickCloudModelOptions {
    *  (BYO). A free tenant may pin a model owned by one of these — they pay their
    *  own provider — so the free-plan "can't choose a model" gate is lifted for it. */
   byoVendors?: ReadonlySet<string>;
+  /** The tenant's BYO PRECEDENCE as ordered gateway vendor ids (most-preferred first).
+   *  When set, the connected-flagship soft seed leads with the owner's chosen account
+   *  (e.g. Meta first) instead of catalog-tier order. See {@link byoAutoSeedModels}. */
+  byoVendorPriority?: readonly string[];
 }
 
 /** Headroom over the prompt estimate to reserve for the model's OUTPUT tokens +
@@ -2191,11 +2292,12 @@ export function pickCloudModel(
   // with the strongest connected frontier flagship as the soft seed so an auto-select
   // cloud run uses the owner's account before the free/paid coding pool.
   // Registration-driven (byoAutoSeedModels orders the connected providers' flagships by
-  // tier — a cloud run is always an agentic tool-loop, so Anthropic contributes Opus);
+  // the tenant's BYO precedence, tier as tiebreak — a cloud run is always an agentic
+  // tool-loop, so Anthropic contributes Opus);
   // the run locks onto whatever this seed resolves on turn 1. Shared with the gateway
   // completion seed so both surfaces agree. Soft (not strict) so a transient provider
   // error still fails over.
-  const byoSeed = byoAutoSeedModels(opts?.byoVendors, { agentic: true })[0];
+  const byoSeed = byoAutoSeedModels(opts?.byoVendors, { agentic: true, vendorPriority: opts?.byoVendorPriority })[0];
   if (byoSeed) return { model: byoSeed, strict: false };
 
   // Soft-seed branch — the ONLY place learned routing changes anything. Reorder the
@@ -2343,13 +2445,14 @@ const TOOL_ONLY_EXTRA_MODELS: readonly string[] = [
   'x-ai/grok-3-mini',
 ];
 const TOOL_CAPABLE_MODELS: ReadonlySet<string> = new Set([
-  ...CODING_MODEL_POOL,
+  ...RECOGNIZED_CODER_MODELS,
   ...TOOL_ONLY_EXTRA_MODELS,
 ]);
 
-/** Models that reliably emit valid JSON / honour json_schema. The coding pool
- *  doubles as the structured-output set — all of these honour json_schema. */
-const STRUCTURED_OUTPUT_MODELS: ReadonlySet<string> = new Set(CODING_MODEL_POOL);
+/** Models that reliably emit valid JSON / honour json_schema. The recognised-coder set
+ *  doubles as the structured-output set — all of these honour json_schema (including the
+ *  BYO frontier flagships that route on a tenant's own key). */
+const STRUCTURED_OUTPUT_MODELS: ReadonlySet<string> = RECOGNIZED_CODER_MODELS;
 
 /** Models with image-input (vision) capability. */
 const VISION_MODELS: ReadonlySet<string> = new Set([
@@ -2539,8 +2642,10 @@ export function reorderPoolForQuality(
 
 /** Membership set for {@link reorderPoolForCoding} — real coding drivers, distinct
  *  from the broader {@link TOOL_CAPABLE_MODELS} (which also admits generalists that
- *  merely advertise `tools`). Derived from CODING_MODEL_POOL so it never drifts. */
-const CODING_MODEL_SET: ReadonlySet<string> = new Set(CODING_MODEL_POOL);
+ *  merely advertise `tools`). The recognised-coder superset (auto-route pool + BYO
+ *  frontier flagships); reorder only ever sees plan-pool ids, so the BYO additions are
+ *  inert here — they just keep "is a real coder" consistent across the module. */
+const CODING_MODEL_SET: ReadonlySet<string> = RECOGNIZED_CODER_MODELS;
 
 /**
  * Cheap "flash"-class coders that must NOT LEAD an agentic tool-loop when a stronger

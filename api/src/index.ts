@@ -24,6 +24,7 @@ import { AuditRepository }      from './infrastructure/repositories/AuditReposit
 // Application services
 import { ProjectService }  from './application/project/ProjectService';
 import { TaskService }     from './application/task/TaskService';
+import { TaskType }        from './domain/shared/types';
 import { llmEpicDecomposer } from './application/task/EpicDecomposer';
 import { TenantService }   from './application/tenant/TenantService';
 import { AuthService }     from './application/auth/AuthService';
@@ -74,6 +75,7 @@ import { createRuntimeRoutes }     from './presentation/routes/runtimeRoutes';
 import { createAuditRoutes }       from './presentation/routes/auditRoutes';
 import { createMarketplaceRoutes } from './presentation/routes/marketplaceRoutes';
 import { createToolRoutes } from './presentation/routes/toolRoutes';
+import { createRfpRoutes } from './presentation/routes/rfpRoutes';
 import { ToolService } from './application/tools/ToolService';
 import { AuditRunner } from './application/tools/AuditRunner';
 import { createMarketingRoutes } from './presentation/routes/marketingRoutes';
@@ -248,7 +250,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // --- Application ---
   const projectService  = new ProjectService(projectRepo, taskRepo);
   const taskService     = new TaskService(taskRepo, projectRepo, llmEpicDecomposer(env),
-    (projectId) => recommendTopAssignee(env, db, projectId));
+    (projectId, roleKey) => recommendTopAssignee(env, db, projectId, roleKey ? { roleKey } : {}));
   const tenantService   = new TenantService(tenantRepo, paymentProvider);
   const toolService     = new ToolService(db);
   const auditRunner     = new AuditRunner(db, toolService, taskService);
@@ -385,6 +387,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Diagnostics & Tools — list/get/compute are public (free preview);
   // save/runs apply auth + manager role inside the router.
   app.route('/api/tools', createToolRoutes(toolService, auditRunner, db, runtimeService));
+  // RFP / RFQ Response — pre-sales proposal generation (PRD 15). Reuses the diagnostics
+  // scan (freshness gate) + audit runner (re-scan) grounded in the same toolService.
+  app.route('/api/rfp', createRfpRoutes(db, toolService, auditRunner));
   app.route('/api/marketing', createMarketingRoutes(marketingService));
   app.route('/api/guest', createGuestRoutes(guestChatService));
 
@@ -461,7 +466,14 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Protected endpoints (JWT injected by authMiddleware inside each router)
   app.route('/api/projects', createProjectRoutes(projectService, db));
   app.route('/api/tasks',    createTaskRoutes(taskService, db, runtimeService));
-  app.route('/api/kanban',   createKanbanRoutes(db));
+  app.route('/api/kanban',   createKanbanRoutes(db, async (args) => {
+    // Materialize a participation-manifest work item as a child task (%-complete rollup).
+    const child = await taskService.createTask({
+      projectId: args.projectId, title: args.title, taskType: TaskType.TASK, parentTaskId: args.parentTaskId,
+      assignedAgentRef: args.assignedAgentRef ?? null, assignedUserId: args.assignedUserId ?? null,
+    }, args.tenantId);
+    return { id: Number(child.id) };
+  }));
   app.route('/api/manager',  createManagerRoutes(db, runtimeService));
   app.route('/api/vscode',   createVscodeRoutes(db, tenantService));
   app.route('/api/members',  createMemberRoutes(db));
@@ -864,7 +876,7 @@ export default {
           'Access-Control-Allow-Headers': 'Content-Type,Authorization,Idempotency-Key,X-Emulation-Token,X-AgentHost-Signature',
           // Echo the daily-budget snapshot headers so SDK consumers in the
           // browser can pre-emptively throttle without a second fetch.
-          'Access-Control-Expose-Headers': 'x-request-id,x-builderforce-model,x-builderforce-account,x-builderforce-byo-unresolved,x-builderforce-retries,x-builderforce-product,x-builderforce-effective-plan,x-builderforce-daily-tokens-used,x-builderforce-daily-tokens-limit,x-builderforce-daily-tokens-remaining',
+          'Access-Control-Expose-Headers': 'x-request-id,x-builderforce-model,x-builderforce-account,x-builderforce-byo-unresolved,x-builderforce-provider-cap,x-builderforce-retries,x-builderforce-product,x-builderforce-effective-plan,x-builderforce-daily-tokens-used,x-builderforce-daily-tokens-limit,x-builderforce-daily-tokens-remaining',
           'Access-Control-Max-Age': '86400',
           Vary: 'Origin',
         },

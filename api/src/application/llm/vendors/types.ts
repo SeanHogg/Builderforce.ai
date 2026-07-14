@@ -16,7 +16,7 @@ import { parseSseDataLine } from '../sseFrames';
 
 export type VendorId =
   // ── Bespoke wire-format vendors (hand-rolled modules)
-  | 'openrouter' | 'cerebras' | 'ollama' | 'nvidia' | 'googleai' | 'cloudflare' | 'anthropic'
+  | 'openrouter' | 'cerebras' | 'ollama' | 'nvidia' | 'googleai' | 'cloudflare' | 'anthropic' | 'openai-codex' | 'xai-oauth'
   // ── Our OWN model: serves a published `.evermind` artifact from R2 via the
   //    builderforce-memory runtime (on-CPU, in-Worker). Reached only via an
   //    explicit `evermind/<ref>` pin (autoRoute:false). See vendors/evermind.ts.
@@ -26,11 +26,14 @@ export type VendorId =
   //    ride the shared transport. Reachable via an explicit `<vendor>/<id>` pin
   //    (autoRoute:false — they don't pollute the auto-selected FREE/PRO pools) and
   //    participate in the same dispatch/cooldown/fallback machinery as the rest.
-  | 'openai' | 'groq' | 'deepseek' | 'mistral' | 'together' | 'fireworks'
+  | 'openai' | 'groq' | 'deepseek' | 'mistral' | 'together' | 'fireworks' | 'qwen'
   | 'deepinfra' | 'xai' | 'perplexity' | 'moonshot' | 'hyperbolic' | 'novita'
   | 'sambanova' | 'lepton' | 'anyscale' | 'octoai' | 'featherless' | 'inferencenet'
   | 'targon' | 'avian' | 'nebius' | 'baseten' | 'lambda' | 'klusterai'
-  | 'parasail' | 'nscale' | 'chutes' | 'ai21' | 'siliconflow' | 'minimax';
+  | 'parasail' | 'nscale' | 'chutes' | 'ai21' | 'siliconflow' | 'minimax'
+  // ── BYO-only vendor: no operator pool key; only reachable when a tenant
+  //    connects their own Meta AI account from the provider-keys settings page.
+  | 'meta';
 
 /**
  * Tier classification per model — drives pricing, plan gating, and the
@@ -48,6 +51,8 @@ export type AiModelTier = 'FREE' | 'STANDARD' | 'PREMIUM' | 'ULTRA';
  * and synthesizing this env per call — vendors don't know about plans.
  */
 export interface VendorEnv {
+  OPENAI_CODEX_AUTH?: string | null;
+  XAI_OAUTH_TOKEN?: string | null;
   OPENROUTER_API_KEY?: string | null;
   CEREBRAS_API_KEY?: string | null;
   OLLAMA_API_KEY?: string | null;
@@ -103,6 +108,7 @@ export interface VendorEnv {
   PERPLEXITY_API_KEY?: string | null;
   /** Moonshot AI (Kimi) — api.moonshot.cn/v1. */
   MOONSHOT_API_KEY?: string | null;
+  QWEN_API_KEY?: string | null;
   /** Hyperbolic — api.hyperbolic.xyz/v1. */
   HYPERBOLIC_API_KEY?: string | null;
   /** Novita AI — api.novita.ai/v3/openai. */
@@ -143,6 +149,11 @@ export interface VendorEnv {
   SILICONFLOW_API_KEY?: string | null;
   /** MiniMax — api.minimax.io/v1. */
   MINIMAX_API_KEY?: string | null;
+  /** Meta AI (MUSE) — api.meta.ai/v1. BYO-only: populated exclusively from a
+   *  tenant's connected Meta AI provider key (settings → Bring your own models).
+   *  No operator-level key exists; when unset the `meta` vendor is skipped by the
+   *  cascade exactly like any other unbound vendor. */
+  META_API_KEY?: string | null;
 }
 
 export interface VendorCallParams {
@@ -504,6 +515,14 @@ export function isCapacityLimitBody(text: string | undefined | null): boolean {
   );
 }
 
+/** Some OpenRouter upstreams report context-window overflow as HTTP 400 instead
+ * of 413. The payload is valid for the gateway; a larger-window model can serve
+ * it, so normalize this narrow message class to the existing 413 cascade path. */
+export function isContextOverflowBody(text: string | undefined | null): boolean {
+  if (!text) return false;
+  return /context\s*(window|length)|maximum\s+context|too\s+many\s+tokens|prompt\s+is\s+too\s+long|input.*token.*(?:exceed|limit)|estimated\s+tokens.*exceed/i.test(text);
+}
+
 /**
  * Stable `reason` slug a schema-shape rejection carries through the cascade
  * ({@link VendorSchemaError} → `DispatchAttempt.reason` → `FailoverEvent.reason`
@@ -554,6 +573,9 @@ export function throwClassified4xx(
   status: number,
   errText: string,
 ): never {
+  if (isContextOverflowBody(errText)) {
+    throw new VendorRetryableError(vendorId, model, 413, `context window exceeded (upstream ${status}): ${errText.slice(0, 200)}`);
+  }
   // Schema-too-complex is checked FIRST: it rides on a 400 (so the fatal branch
   // below would wrongly hard-fail the run) but a DIFFERENT vendor can serve the
   // same schema, so it must cascade — and carry the `schema` class so an

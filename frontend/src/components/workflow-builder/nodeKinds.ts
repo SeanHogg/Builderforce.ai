@@ -59,10 +59,12 @@ export const NODE_KINDS: NodeKindMeta[] = [
     fields: [
       {
         key: 'triggerType', label: 'Trigger type', type: 'select',
-        // Includes marketing / data-collection events so a workflow can start
-        // from a captured signal (form, signup, purchase, email engagement…).
+        // Includes Reliability events (a monitor breach / an incident's lifecycle) so a
+        // workflow can automate the response, plus marketing / data-collection events so
+        // a workflow can start from a captured signal (form, signup, purchase…).
         options: [
           'manual', 'webhook', 'schedule', 'board-event',
+          'monitor-breach', 'incident-created', 'incident-resolved', 'incident-status-change',
           'form-submit', 'page-view', 'signup', 'purchase',
           'email-open', 'email-click', 'rss', 'inbound-email', 'integration',
         ],
@@ -75,6 +77,15 @@ export const NODE_KINDS: NodeKindMeta[] = [
       { key: 'webhookPath', label: 'Webhook path', type: 'text', placeholder: 'e.g. /hooks/lead', visibleWhen: { field: 'triggerType', equals: 'webhook' } },
       { key: 'secret', label: 'Signing secret', type: 'text', placeholder: 'Shared secret to verify payloads', visibleWhen: { field: 'triggerType', equals: 'webhook' } },
       { key: 'boardEvent', label: 'Board event', type: 'select', options: ['task-created', 'task-moved', 'task-completed', 'comment-added'], visibleWhen: { field: 'triggerType', equals: 'board-event' } },
+
+      // Reliability event filters (blank = fire on any). severity/affectedSystem apply
+      // to every Reliability event; the rest are event-specific. Keys are matched
+      // server-side by fireEventTriggers.
+      { key: 'severity', label: 'Severity filter (blank = any)', type: 'select', options: ['', 'sev1', 'sev2', 'sev3', 'sev4'], visibleWhen: { field: 'triggerType', equals: ['monitor-breach', 'incident-created', 'incident-resolved', 'incident-status-change'] } },
+      { key: 'affectedSystem', label: 'Affected-system filter (blank = any)', type: 'text', placeholder: 'e.g. Payments, Database', visibleWhen: { field: 'triggerType', equals: ['monitor-breach', 'incident-created', 'incident-resolved', 'incident-status-change'] } },
+      { key: 'monitorType', label: 'Monitor-type filter (blank = any)', type: 'select', options: ['', 'heartbeat', 'http_check', 'webhook', 'metric_threshold', 'manual'], visibleWhen: { field: 'triggerType', equals: 'monitor-breach' } },
+      { key: 'incidentSource', label: 'Incident-source filter (blank = any)', type: 'text', placeholder: 'e.g. monitor, manual, freshdesk', visibleWhen: { field: 'triggerType', equals: 'incident-created' } },
+      { key: 'status', label: 'Status filter (blank = any)', type: 'select', options: ['', 'open', 'acknowledged', 'mitigated', 'resolved'], visibleWhen: { field: 'triggerType', equals: 'incident-status-change' } },
       { key: 'formId', label: 'Form id', type: 'text', placeholder: 'Form identifier', visibleWhen: { field: 'triggerType', equals: 'form-submit' } },
       { key: 'pagePath', label: 'Page path', type: 'text', placeholder: 'e.g. /pricing', visibleWhen: { field: 'triggerType', equals: 'page-view' } },
       { key: 'sku', label: 'Product / SKU', type: 'text', placeholder: 'Match a product (blank = any)', visibleWhen: { field: 'triggerType', equals: 'purchase' } },

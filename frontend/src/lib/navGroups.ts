@@ -71,6 +71,9 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'portfolio', labelKey: 'tab.portfolio', icon: '📊' },
       { id: 'ceremonies', labelKey: 'tab.ceremonies', icon: '🎯' },
       { id: 'templates', labelKey: 'tab.templates', icon: '🗂' },
+      // Pre-sales: respond to an RFQ/RFP with a co-branded proposal grounded on the
+      // portfolio + a fresh diagnostics scan (capability roster + P&L + plan).
+      { id: 'rfp', labelKey: 'tab.rfp', icon: '📄' },
     ],
   },
   // IDE is one destination scoped to its project type. Each project IS typed by
@@ -150,27 +153,20 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    // Incident Management: live incident war rooms + on-call rotations + escalation
-    // policies + business-contact directory. Sub-views are ?tab= pills on the page.
-    id: 'incidents', labelKey: 'group.incidents', icon: '🚨', href: '/incidents',
-    match: ['/incidents'],
+    // Reliability: the detect→respond loop under ONE destination — active Monitoring
+    // (diagram boards + monitor pins; a breach opens an incident) folded together with
+    // Incident Management (war rooms + on-call + escalation + contacts). Sub-views are
+    // ?tab= pills on the /incidents page; the retired /monitoring route redirects into
+    // ?tab=monitors so old deep links still resolve (kept in `match` for highlighting).
+    id: 'reliability', labelKey: 'group.reliability', icon: '🚨', href: '/incidents',
+    match: ['/incidents', '/monitoring'],
     tabKind: 'query', basePath: '/incidents',
     tabs: [
       { id: '', labelKey: 'tab.incidents', icon: '🚨' },
+      { id: 'monitors', labelKey: 'tab.monitors', icon: '📡' },
       { id: 'oncall', labelKey: 'tab.oncall', icon: '📟' },
       { id: 'escalation', labelKey: 'tab.escalation', icon: '⏫' },
       { id: 'contacts', labelKey: 'tab.contacts', icon: '📇' },
-    ],
-  },
-  {
-    // Active Monitoring: upload an architecture diagram to a board, overlay
-    // monitor pins on it; a breach opens an incident. Reporting tab rolls up
-    // incident + monitor metrics. Sub-views are ?tab= pills on the page.
-    id: 'monitoring', labelKey: 'group.monitoring', icon: '📡', href: '/monitoring',
-    match: ['/monitoring'],
-    tabKind: 'query', basePath: '/monitoring',
-    tabs: [
-      { id: '', labelKey: 'tab.boards', icon: '🗺️' },
       { id: 'reporting', labelKey: 'tab.reporting', icon: '📊' },
     ],
   },
@@ -204,7 +200,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: '/settings/integrations', labelKey: 'tab.integrations', icon: '🔌' },
       { id: '/pricing', labelKey: 'tab.billing', icon: '💳' },
       { id: '/tenants', labelKey: 'tab.tenant', icon: '🏢' },
-      { id: '/settings/api-keys', labelKey: 'tab.apiKeys', icon: '🔑', ownerOnly: true },
     ],
   },
   {

@@ -21,17 +21,20 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
 import {
   prodIncidents,
+  prodIncidentImplicatedTasks,
   tasks as tasksTable,
   incidentEvents,
   brainChats,
   projects,
 } from '../../infrastructure/database/schema';
+import { TicketParticipantsService, type AccountabilityReport } from '../kanban/ticketParticipants';
 import { TaskService } from '../task/TaskService';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
 import { TaskType, TaskPriority } from '../../domain/shared/types';
 import { publishKnowledgeDoc } from '../knowledge/publishKnowledgeDoc';
 import { recordIncidentLearning } from './incidentLearning';
+import { fireEventTriggers } from '../workflow/eventTriggers';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -259,6 +262,18 @@ export class IncidentService {
     let warRoomChatId: number | null = null;
     if (input.openWarRoom) warRoomChatId = await this.ensureWarRoom(tenantId, incidentId, title, projectId);
 
+    // Fire any custom workflows listening for a new incident (best-effort — a
+    // workflow can automate the response: notify stakeholders, run a runbook, etc.).
+    try {
+      await fireEventTriggers(this.db, {
+        tenantId,
+        eventType: 'incident-created',
+        payload: { incidentId, title, severity, source, affectedSystem: affectedSystem ?? null, projectId },
+        sourceIncidentId: incidentId,
+        match: { severity, affectedSystem: affectedSystem ?? null, incidentSource: source },
+      });
+    } catch { /* event-trigger dispatch is best-effort */ }
+
     return { incidentId, boardTaskId, warRoomChatId, created: true };
   }
 
@@ -315,7 +330,7 @@ export class IncidentService {
     }
     const [inc] = await this.db.update(prodIncidents).set(set)
       .where(and(eq(prodIncidents.id, incidentId), eq(prodIncidents.tenantId, tenantId)))
-      .returning({ boardTaskId: prodIncidents.boardTaskId });
+      .returning({ boardTaskId: prodIncidents.boardTaskId, severity: prodIncidents.severity, affectedSystem: prodIncidents.affectedSystem, source: prodIncidents.source });
     if (!inc) throw new Error('Incident not found in workspace');
 
     if (inc.boardTaskId != null && (patch.status || patch.severity)) {
@@ -331,6 +346,17 @@ export class IncidentService {
         actorRef: patch.actorRef ?? 'system',
         message: `Status → ${patch.status}`,
       });
+
+      // Fire custom workflows listening for a status transition (and, on resolve, the
+      // dedicated incident-resolved event — e.g. auto-draft a post-mortem). Best-effort.
+      const payload = { incidentId, status: patch.status, severity: inc.severity, affectedSystem: inc.affectedSystem, source: inc.source };
+      const match = { severity: inc.severity, affectedSystem: inc.affectedSystem };
+      try {
+        await fireEventTriggers(this.db, { tenantId, eventType: 'incident-status-change', payload, sourceIncidentId: incidentId, match: { ...match, status: patch.status } });
+        if (patch.status === 'resolved') {
+          await fireEventTriggers(this.db, { tenantId, eventType: 'incident-resolved', payload, sourceIncidentId: incidentId, match });
+        }
+      } catch { /* event-trigger dispatch is best-effort */ }
     }
   }
 
@@ -493,5 +519,44 @@ export class IncidentService {
       .orderBy(desc(incidentEvents.createdAt))
       .limit(200);
     return { incident, timeline };
+  }
+
+  /** Link a DELIVERY ticket implicated in this incident (PRD §5.10) — the change whose
+   *  ship caused the regression, so RCA can pull its Accountability Report. Idempotent. */
+  async linkImplicatedTask(tenantId: number, incidentId: string, args: { taskId: number; relation?: string; note?: string | null; createdBy?: string | null }): Promise<void> {
+    await this.db
+      .insert(prodIncidentImplicatedTasks)
+      .values({ tenantId, incidentId, taskId: args.taskId, relation: args.relation ?? 'implicated', note: args.note ?? null, createdBy: args.createdBy ?? null })
+      .onConflictDoUpdate({
+        target: [prodIncidentImplicatedTasks.incidentId, prodIncidentImplicatedTasks.taskId],
+        set: { relation: args.relation ?? 'implicated', note: args.note ?? null },
+      });
+  }
+
+  async unlinkImplicatedTask(tenantId: number, incidentId: string, taskId: number): Promise<void> {
+    await this.db.delete(prodIncidentImplicatedTasks).where(and(
+      eq(prodIncidentImplicatedTasks.tenantId, tenantId),
+      eq(prodIncidentImplicatedTasks.incidentId, incidentId),
+      eq(prodIncidentImplicatedTasks.taskId, taskId),
+    ));
+  }
+
+  /**
+   * The implicated delivery tickets for an incident, EACH with its Accountability
+   * Report — the RCA's concrete "was the process followed?" answer: which roles signed
+   * off, with what evidence, and where the process was skipped/waived. Feeds the
+   * postmortem view and process-improvement aggregation.
+   */
+  async listImplicatedTasks(env: Env, tenantId: number, incidentId: string): Promise<Array<{ taskId: number; title: string; status: string; relation: string; note: string | null; accountability: AccountabilityReport }>> {
+    const rows = await this.db
+      .select({ taskId: prodIncidentImplicatedTasks.taskId, relation: prodIncidentImplicatedTasks.relation, note: prodIncidentImplicatedTasks.note, title: tasksTable.title, status: tasksTable.status })
+      .from(prodIncidentImplicatedTasks)
+      .innerJoin(tasksTable, eq(tasksTable.id, prodIncidentImplicatedTasks.taskId))
+      .where(and(eq(prodIncidentImplicatedTasks.tenantId, tenantId), eq(prodIncidentImplicatedTasks.incidentId, incidentId)));
+    const participants = new TicketParticipantsService(this.db);
+    return Promise.all(rows.map(async (r) => ({
+      taskId: r.taskId, title: r.title, status: r.status, relation: r.relation, note: r.note,
+      accountability: await participants.getAccountability(env, tenantId, r.taskId),
+    })));
   }
 }

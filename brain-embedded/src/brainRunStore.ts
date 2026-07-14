@@ -43,6 +43,7 @@ import {
   countReconciledMemories,
   type EvermindRunHooks,
   type EvermindRecallResult,
+  type MemoryFirstAnswer,
 } from './evermindMemory';
 
 /**
@@ -95,6 +96,17 @@ function accrueByoUnresolved(c: RunCell, raw: string | undefined): void {
   const next = new Set(c.byoUnresolved);
   for (const p of raw.split(',').map((s) => s.trim()).filter(Boolean)) next.add(p);
   if (next.size !== before) c.byoUnresolved = [...next];
+}
+
+/** Fold a `x-builderforce-provider-cap` header value (comma-separated providers)
+ *  into the run cell's accumulated set, updating only when it grows so the banner
+ *  appears the moment a BYO provider's usage cap is hit. */
+function accrueProviderCap(c: RunCell, raw: string | undefined): void {
+  if (!raw) return;
+  const before = c.providerCap.length;
+  const next = new Set(c.providerCap);
+  for (const p of raw.split(',').map((s) => s.trim()).filter(Boolean)) next.add(p);
+  if (next.size !== before) c.providerCap = [...next];
 }
 /**
  * Token budget for the working transcript sent to the model each turn. This is
@@ -256,6 +268,14 @@ export interface BrainRunSnapshot {
    * when everything resolved (or nothing is connected).
    */
   byoUnresolved: string[];
+  /**
+   * BYO providers whose key hit a usage/capacity cap on any turn of this run
+   * (from `x-builderforce-provider-cap`) — e.g. the tenant's Anthropic key hit its
+   * monthly spend limit, or Meta MUSE quota was exhausted. A mounted view shows a
+   * "manage your API keys" banner so the user knows to top up or switch providers.
+   * Accumulated across turns; reset fresh each run. Empty when no cap was hit.
+   */
+  providerCap: string[];
 }
 
 interface RunCell {
@@ -279,6 +299,8 @@ interface RunCell {
   abort: AbortController | null;
   /** Connected-but-unresolved BYO providers accumulated across this run's turns. */
   byoUnresolved: string[];
+  /** BYO providers that hit a capacity/usage cap accumulated across this run's turns. */
+  providerCap: string[];
   /**
    * Backstop bookkeeping for the current run (reset each {@link startRun}): whether a
    * workspace code-change tool succeeded, whether the model itself recorded a ticket
@@ -331,6 +353,7 @@ const EMPTY_SNAPSHOT: BrainRunSnapshot = {
   hasTrace: false,
   trace: [],
   byoUnresolved: [],
+  providerCap: [],
 };
 
 function makeCell(): RunCell {
@@ -347,6 +370,7 @@ function makeCell(): RunCell {
     listeners: new Set(),
     abort: null,
     byoUnresolved: [],
+    providerCap: [],
     codeChanged: false,
     ticketRecorded: false,
     touchedFiles: [],
@@ -399,6 +423,7 @@ function emit(c: RunCell): void {
     hasTrace: c.trace.length > 0,
     trace: c.trace,
     byoUnresolved: c.byoUnresolved,
+    providerCap: c.providerCap,
   };
   for (const l of c.listeners) l();
   // Cross-chat subscribers (the dropdown / session-list indicators) see every
@@ -864,6 +889,7 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
   c.error = '';
   c.streamingText = '';
   c.byoUnresolved = []; // fresh per run — a reconnected account clears the banner
+  c.providerCap = [];   // fresh per run — a topped-up account clears the banner
   // Fresh backstop bookkeeping per run (see the finally block below).
   c.codeChanged = false;
   c.ticketRecorded = false;
@@ -1085,6 +1111,42 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     }
   }
 
+  // Memory-first short-circuit: if the project's OWN memory can answer this request —
+  // an exact-repeat Q&A cache hit, or its Evermind SSM (opt-in) — adopt that answer and
+  // SKIP the paid model entirely. This is the token-reduction core: for a repeated or
+  // learned question we spend zero model tokens. Opt-in + best-effort — a host that
+  // doesn't inject `answer`, a non-project chat, or a miss falls straight through to the
+  // normal loop below. Only attempted on the run's FIRST turn (no tool results yet).
+  if (evermind?.answer && !c.abort?.signal.aborted) {
+    const query = latestUserText(convo);
+    if (query) {
+      let memAnswer: MemoryFirstAnswer | null = null;
+      try { memAnswer = await evermind.answer(query); } catch { memAnswer = null; }
+      const finalText = memAnswer?.text.trim();
+      if (finalText) {
+        convo.push({ role: 'assistant', content: finalText });
+        const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: finalText }]);
+        c.streamingText = '';
+        recordAppended(c, assistantMsg);
+        // Visible on the timeline: memory answered, the LLM was skipped.
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: 'recall',
+          label: memAnswer!.source === 'evermind' ? 'evermind.answer' : 'memory.answer',
+          args: { query },
+          result: {
+            source: memAnswer!.source,
+            skippedLlm: true,
+            ...(memAnswer!.evermindVersion != null ? { version: memAnswer!.evermindVersion } : {}),
+          },
+        });
+        emit(c);
+        onActivity?.(chatId);
+        return;
+      }
+    }
+  }
+
   // Per-turn system-prompt augmentation (the LIMBIC parity seam). Fetched once
   // at loop start with the latest user text; a non-empty return is appended to
   // the system prompt. Best-effort — a throw just skips it, exactly like the
@@ -1156,6 +1218,8 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     // Surface a connected-but-unresolved BYO account for a live banner (and reset
     // clears it when the account is reconnected). Emit happens with the trace below.
     accrueByoUnresolved(c, result.byoUnresolved);
+    // Surface any BYO provider usage cap so the user knows to manage their keys.
+    accrueProviderCap(c, result.providerCap);
     // Silent-downgrade detection: the gateway can fail over mid-run to a
     // different (often smaller-window) model than we requested. That's a prime
     // context-exhaustion symptom, so surface it as its own warning step instead
@@ -1337,7 +1401,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         ts: nowIso(),
         category: 'learn',
         label: 'evermind.learn',
-        result: { version: learn.version, queued: true },
+        // `targets` carries the per-Evermind breakdown (a project can fan out to many)
+        // so the timeline can name each by id; the renderer falls back to `version` alone.
+        result: { version: learn.version, queued: true, ...(learn.targets ? { targets: learn.targets } : {}) },
       });
       const reconciled = recalled?.items ? countReconciledMemories(recalled.items, finalText) : 0;
       if (reconciled > 0) {
@@ -1358,8 +1424,17 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         ts: nowIso(),
         category: 'learn',
         label: 'evermind.learn',
-        result: { version: learn.version, skipped: true, reason: learn.reason },
+        result: { version: learn.version, skipped: true, reason: learn.reason, ...(learn.targets ? { targets: learn.targets } : {}) },
       });
+    }
+
+    // Remember this (question → answer) so an exact repeat short-circuits next time
+    // (see the memory-first block at loop start) — the write half of the cache. Only
+    // caches genuine model answers; the server guards length + skips trivial ones.
+    // Best-effort, fire-and-forget — never delays or fails the reply.
+    if (evermind?.cacheAnswer) {
+      const q = latestUserText(convo);
+      if (q) { void Promise.resolve(evermind.cacheAnswer(q, finalText)).catch(() => { /* best-effort */ }); }
     }
 
     onActivity?.(chatId);
@@ -1394,6 +1469,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         { onTextDelta: (d) => { if (closeFirstTokenAt === undefined) closeFirstTokenAt = nowMs(); c.streamingText += d; emit(c); } },
       );
       accrueByoUnresolved(c, closing.byoUnresolved);
+      accrueProviderCap(c, closing.providerCap);
       pushTrace(c, {
         ts: nowIso(),
         category: 'llm',

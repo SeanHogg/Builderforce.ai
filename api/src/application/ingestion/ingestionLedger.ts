@@ -81,7 +81,11 @@ export type IngestionCapResult =
  * tenants) always pass. Fails OPEN on a query error — a metering hiccup must not
  * block a legitimate import.
  */
-export async function enforceIngestionCap(db: Db, tenantId: number): Promise<IngestionCapResult> {
+export async function enforceIngestionCap(
+  db: Db,
+  tenantId: number,
+  ingestionDb: Db = db,
+): Promise<IngestionCapResult> {
   try {
     const [tenantRow] = await db
       .select({
@@ -105,7 +109,7 @@ export async function enforceIngestionCap(db: Db, tenantId: number): Promise<Ing
     });
     if (limit < 0) return { allowed: true }; // unlimited
 
-    const used = await sumTenantIngestionBytes(db, tenantId, utcMonthStart());
+    const used = await sumTenantIngestionBytes(ingestionDb, tenantId, utcMonthStart());
     if (used >= limit) return { allowed: false, effectivePlan, used, limit };
     return { allowed: true };
   } catch {

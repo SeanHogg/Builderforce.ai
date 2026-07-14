@@ -29,14 +29,16 @@ import { Hono } from 'hono';
 import { and, desc, eq } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
-import { businessContacts } from '../../infrastructure/database/schema';
+import { businessContacts, workflows, workflowDefinitions } from '../../infrastructure/database/schema';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { incidentVersionKey } from '../../application/insights/versionKeys';
 import { IncidentService, type IncidentSeverity, type IncidentStatus } from '../../application/incident/IncidentService';
 import { OnCallService, type RotationKind } from '../../application/incident/OnCallService';
 import { EscalationService } from '../../application/incident/EscalationService';
 import { dispatchIncidentTriage } from '../../application/incident/incidentDispatch';
-import type { HonoEnv } from '../../env';
+import { instantiateWorkflowRun, runTargetFromDefinition, type RunTarget } from '../../application/workflow/instantiateRun';
+import { parseDefinition } from '../../domain/workflowGraph';
+import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
 export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
@@ -191,6 +193,29 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
     if (!data) return c.json({ error: 'Incident not found' }, 404);
     return c.json(data);
   });
+
+  // RCA linkage (PRD §5.10): the implicated delivery ticket(s) + each one's Accountability
+  // Report — the concrete "was the process followed?" answer (which roles signed off, with
+  // what evidence, where it was skipped/waived).
+  router.get('/:id/implicated', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const implicated = await new IncidentService(db).listImplicatedTasks(c.env as Env, tenantId, c.req.param('id'));
+    return c.json({ implicated });
+  });
+  router.post('/:id/implicated', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const b = (await c.req.json().catch(() => ({}))) as { taskId?: number; relation?: string; note?: string };
+    if (typeof b.taskId !== 'number') return c.json({ error: 'taskId is required' }, 400);
+    await new IncidentService(db).linkImplicatedTask(tenantId, c.req.param('id'), { taskId: b.taskId, relation: b.relation, note: b.note, createdBy: (c.get('userId') as string | undefined) ?? null });
+    await invalidate(c, tenantId);
+    return c.json({ ok: true });
+  });
+  router.delete('/:id/implicated/:taskId', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    await new IncidentService(db).unlinkImplicatedTask(tenantId, c.req.param('id'), Number(c.req.param('taskId')));
+    await invalidate(c, tenantId);
+    return c.json({ ok: true });
+  });
   router.patch('/:id', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const b = (await c.req.json().catch(() => ({}))) as { severity?: IncidentSeverity; status?: IncidentStatus; impact?: string; rootCause?: string };
@@ -244,6 +269,75 @@ export function createIncidentRoutes(db: Db): Hono<HonoEnv> {
     if (!detail) return c.json({ error: 'Incident not found' }, 404);
     const dispatched = await dispatchIncidentTriage(c.env, db, { tenantId, incidentId: c.req.param('id'), boardTaskId: detail.incident.boardTaskId ?? null });
     return c.json({ dispatched });
+  });
+
+  // ── Incident × custom workflows (runbooks) ───────────────────────────────────
+  // Workflow runs this incident spawned — via an event trigger (incident-created /
+  // status-change / monitor-breach) or a manual runbook launched below. Not cached:
+  // run `status` mutates continuously as the run progresses, so a cached list would
+  // serve stale states; the query is a single indexed lookup bounded to 50 rows.
+  router.get('/:id/workflow-runs', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const rows = await db.select({
+      id: workflows.id,
+      description: workflows.description,
+      status: workflows.status,
+      runtime: workflows.runtime,
+      createdAt: workflows.createdAt,
+      completedAt: workflows.completedAt,
+      definitionId: workflows.workflowDefinitionId,
+      definitionName: workflowDefinitions.name,
+    })
+      .from(workflows)
+      .leftJoin(workflowDefinitions, eq(workflows.workflowDefinitionId, workflowDefinitions.id))
+      .where(and(eq(workflows.tenantId, tenantId), eq(workflows.sourceIncidentId, c.req.param('id'))))
+      .orderBy(desc(workflows.createdAt))
+      .limit(50);
+    return c.json({ runs: rows });
+  });
+
+  // Launch a workflow as a runbook against this incident: instantiate a run of the
+  // chosen definition on its stored target (or a per-request override), carrying the
+  // incident as the trigger payload and stamping source_incident_id for the list above.
+  router.post('/:id/run-workflow', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const incidentId = c.req.param('id');
+    const b = (await c.req.json().catch(() => ({}))) as { definitionId?: string; runtime?: string; agentHostId?: number; cloudAgentRef?: string };
+    if (!b.definitionId) return c.json({ error: 'definitionId is required' }, 400);
+
+    const detail = await new IncidentService(db).getIncident(tenantId, incidentId);
+    if (!detail) return c.json({ error: 'Incident not found' }, 404);
+    const [defRow] = await db.select().from(workflowDefinitions)
+      .where(and(eq(workflowDefinitions.id, b.definitionId), eq(workflowDefinitions.tenantId, tenantId)));
+    if (!defRow) return c.json({ error: 'Workflow definition not found' }, 404);
+
+    // Request target wins; else fall back to the definition's saved target.
+    let target: RunTarget;
+    if (b.runtime === 'cloud') target = { runtime: 'cloud', cloudAgentRef: b.cloudAgentRef ?? defRow.runTargetCloudAgentRef };
+    else if (b.runtime === 'host' || b.agentHostId) target = { runtime: 'host', agentHostId: b.agentHostId ?? defRow.runTargetAgentHostId };
+    else target = runTargetFromDefinition(defRow);
+
+    const inc = detail.incident;
+    const result = await instantiateWorkflowRun(db, {
+      tenantId,
+      segmentId: c.get('segmentId') ?? null,
+      definition: parseDefinition(defRow.definition),
+      name: defRow.name,
+      projectId: defRow.projectId,
+      definitionId: defRow.id,
+      target,
+      triggerSource: 'incident:runbook',
+      triggerPayload: { incidentId, title: inc.title, severity: inc.severity, status: inc.status, affectedSystem: inc.affectedSystem, source: inc.source },
+      sourceIncidentId: incidentId,
+    });
+    if (!result.ok) return c.json({ error: result.error }, 400);
+
+    await new IncidentService(db).addEvent(tenantId, incidentId, {
+      kind: 'note', actorRef: `u:${c.get('userId') as string | undefined ?? 'system'}`,
+      message: `Ran workflow "${defRow.name}" as a runbook`,
+    });
+    await invalidate(c, tenantId);
+    return c.json({ workflowId: result.workflowId, taskCount: result.taskCount }, 201);
   });
 
   return router;

@@ -56,7 +56,7 @@ const btnSubtle: React.CSSProperties = {
 
 type PanelTab = 'credentials' | 'connections' | 'activity';
 
-export function IntegrationsGallery() {
+export function IntegrationsGallery({ search = '', viewMode = 'card' }: { search?: string; viewMode?: 'card' | 'table' }) {
   const t = useTranslations('integrations');
   const role = getStoredTenant()?.role;
   const canManage = role === 'owner' || role === 'manager';
@@ -101,13 +101,14 @@ export function IntegrationsGallery() {
 
   const grouped = useMemo(() => {
     const g = new Map<BoardProviderMeta['category'], BoardProviderMeta[]>();
-    for (const c of cards) {
+    const query = search.trim().toLowerCase();
+    for (const c of cards.filter((item) => !query || `${item.label} ${item.id} ${item.category}`.toLowerCase().includes(query))) {
       const list = g.get(c.category) ?? [];
       list.push(c);
       g.set(c.category, list);
     }
     return g;
-  }, [cards]);
+  }, [cards, search]);
 
   const activeMeta = cards.find((c) => c.id === activeProvider) ?? null;
   const activeCreds = activeProvider ? (credsByProvider.get(activeProvider) ?? []) : [];
@@ -123,11 +124,11 @@ export function IntegrationsGallery() {
           <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8 }}>
             {t(`gallery.category.${cat}`)}
           </div>
-          <div style={cardGrid}>
+          <div style={viewMode === 'card' ? cardGrid : { display: 'flex', flexDirection: 'column', gap: 8 }}>
             {grouped.get(cat)!.map((p) => {
               const count = credsByProvider.get(p.id)?.length ?? 0;
               return (
-                <button key={p.id} type="button" style={cardStyle} onClick={() => openProvider(p.id)}>
+                <button key={p.id} type="button" style={{ ...cardStyle, ...(viewMode === 'table' ? { flexDirection: 'row', alignItems: 'center' } : {}) }} onClick={() => openProvider(p.id)}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                     <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{p.label}</span>
                     <span style={{ fontSize: 11, color: count > 0 ? 'var(--success, #16a34a)' : 'var(--text-muted)' }}>

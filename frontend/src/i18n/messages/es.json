@@ -121,6 +121,15 @@
     "assignTeam": "Asignar un equipo…",
     "assign": "Asignar",
     "boardNameLabel": "Nombre del tablero",
+    "templateHeading": "Plantilla del tablero",
+    "templateLabel": "Plantilla del tablero",
+    "templateHint": "Aplicar una plantilla reemplaza los carriles, requisitos de roles, controles y la configuración del ciclo coordinado de este tablero.",
+    "templateApply": "Aplicar plantilla",
+    "templateApplying": "Aplicando…",
+    "templateConfirmTitle": "¿Aplicar la plantilla del tablero?",
+    "templateConfirmMessage": "¿Aplicar “{name}” a este tablero? Se reemplazará la configuración actual de carriles. Los tiques y su historial se conservarán.",
+    "templateLoadError": "No se pudieron cargar las plantillas del tablero",
+    "templateApplyError": "No se pudo aplicar la plantilla del tablero",
     "maxConcurrent": "Máximo de tiques simultáneos",
     "hideDoneItems": "Ocultar elementos terminados",
     "standupTimer": "Temporizador de turnos del standup",
@@ -290,7 +299,8 @@
       "myWorkspace": "Mi espacio",
       "marketplace": "Mercado",
       "incidents": "Incidentes",
-      "monitoring": "Monitorización"
+      "monitoring": "Monitorización",
+      "reliability": "Fiabilidad"
     },
     "tab": {
       "projects": "Proyectos",
@@ -340,7 +350,7 @@
       "logs": "Registros",
       "qa": "QA agéntica",
       "home": "Inicio",
-      "integrations": "Integraciones",
+      "integrations": "Integraciones / Claves API",
       "manager": "Manager",
       "roles": "Roles",
       "talent": "Talento",
@@ -365,7 +375,9 @@
       "escalation": "Escalación",
       "contacts": "Contactos",
       "boards": "Tableros",
-      "reporting": "Informes"
+      "monitors": "Monitores",
+      "reporting": "Informes",
+      "rfp": "RFP"
     }
   },
   "alerts": {
@@ -974,6 +986,8 @@
     "merging": "Fusionando…"
   },
   "memberProfile": {
+    "tabs": { "overview": "Resumen", "timeLogs": "Registros de tiempo", "tasks": "Tareas" },
+    "noTasks": "No hay tareas asignadas a este usuario.",
     "subtitle": "{kind} · capacidad y disponibilidad",
     "syncing": "Sincronizando…",
     "syncFromGoogleCalendar": "Sincronizar desde Google Calendar",
@@ -2411,7 +2425,9 @@
       "security": "Seguridad",
       "product_manager": "Producto",
       "designer": "Diseñador",
-      "incident_manager": "Gestor de incidentes"
+      "incident_manager": "Gestor de incidentes",
+      "cto": "CTO",
+      "product_owner": "Product Owner"
     },
     "teams": {
       "heading": "Equipos",
@@ -3155,6 +3171,7 @@
       "integrations": "Integraciones",
       "content": "Contenido",
       "ceremonies": "Ceremonias",
+      "incidents": "Incidencias",
       "wfPlan": "Plan de fuerza laboral",
       "empAllocation": "Asignación",
       "empCollaboration": "Colaboración",
@@ -3249,6 +3266,10 @@
       "obsContentByKind": "Documentos por tipo",
       "obsCeremonyCadence": "Cadencia de ceremonias",
       "obsCeremonyBalance": "Balance de intervención",
+      "incStatus": "Incidencias abiertas",
+      "incSeverity": "Incidencias por gravedad",
+      "incSystems": "Incidencias por sistema",
+      "incMttr": "Tiempo medio de resolución",
       "wfpCostSplit": "Coste contratar vs. agente",
       "wfpCapacity": "Capacidad vs WIP",
       "wfpGap": "Margen asignable",
@@ -3381,6 +3402,19 @@
       "humanTalk": "Humano",
       "agentTalk": "Agente IA",
       "completed": "completadas"
+    },
+    "inc": {
+      "noIncidents": "Sin incidencias",
+      "ofTotal": "de {total} en el periodo",
+      "openNudge": "{count} requieren atención",
+      "allClear": "Todo en orden",
+      "incidents": "incidencias",
+      "unclassified": "Sin clasificar",
+      "mttrSub": "tiempo medio de resolución",
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
     },
     "reorder": {
       "drag": "Arrastrar para reordenar",
@@ -5525,7 +5559,9 @@
       "learnSkipReasonFrozen": "el Evermind de este proyecto está congelado (solo lectura)",
       "reconcileTitle": "Se reconciliaron {count} memorias aprendidas en Evermind v{version}",
       "reconcileHint": "La respuesta reformuló estos aprendizajes recuperados, por lo que los actualiza (cognición de escritura directa).",
-      "stop": "Detener"
+      "stop": "Detener",
+      "learnTargetContributed": "Contribuido a {name} (proyecto #{projectId} v{version})",
+      "learnTargetSkipped": "Omitido {name} (proyecto #{projectId}) — {reason}"
     },
     "tickets": {
       "none": "Aún no hay tickets vinculados.",
@@ -5572,6 +5608,15 @@
       "lockHint": "Los chats compartidos son visibles para todo el equipo; bloquéalo para que solo lo vean sus miembros.",
       "mergeHint": "Fusiona otros chats en este. Sus mensajes, tickets y agentes se trasladan aquí; los orígenes se archivan.",
       "mergeNoOthers": "No hay otros chats para fusionar.",
+      "questions": "Preguntas",
+      "noQuestions": "No hay preguntas pendientes.",
+      "answerPlaceholder": "Escribe tu respuesta…",
+      "submitAnswer": "Responder",
+      "answering": "Enviando…",
+      "showTickets": "Mostrar tickets vinculados",
+      "hideTickets": "Ocultar tickets vinculados",
+      "ticketCount": "{n, plural, one {# ticket} other {# tickets}}",
+      "overallAria": "Progreso general: {pct}% completado",
       "mergeAction": "Fusionar {n} aquí",
       "mergedN": "Se fusionaron {n} chat(s).",
       "kind": {
@@ -5697,6 +5742,7 @@
         "already_running": "Ya en ejecución",
         "human_gate": "Esperando aprobación",
         "capability_mismatch": "Al agente le faltan capacidades requeridas",
+        "run_cap_exhausted": "Demasiadas ejecuciones fallidas: en pausa para revisión",
         "no_agent": "Sin agente asignado",
         "no_board": "Sin tablero configurado",
         "no_lane": "Carril no configurado",
@@ -5714,7 +5760,8 @@
     },
     "audit": {
       "flagged": "Marcado",
-      "flaggedTitle": "Este ticket omitió un rol o diagnóstico requerido: requiere revisión"
+      "flaggedTitle": "Este ticket omitió un rol o diagnóstico requerido: requiere revisión",
+      "participantsTitle": "Participación de roles requeridos: completados de requeridos"
     }
   },
   "projectsContent": {
@@ -6155,6 +6202,7 @@
       "assign": "Asignado",
       "score_value": "Valorado",
       "dispatch": "Despachado",
+      "sync_pr": "PR actualizado",
       "merge_pr": "PR fusionado",
       "flag": "Marcado"
     },
@@ -6884,6 +6932,8 @@
     "taskCount": "{count, plural, one {# tarea} other {# tareas}}",
     "byStage": "Por etapa",
     "byAssignee": "Por responsable",
+    "expandAssigneeRow": "Expandir las tareas asignadas a {name}",
+    "collapseAssigneeRow": "Contraer las tareas asignadas a {name}",
     "startStandup": "Iniciar standup",
     "startPlanning": "Iniciar planificación",
     "viewPrdAria": "Ver PRD",
@@ -6901,6 +6951,7 @@
     "deleteTask": "Eliminar tarea",
     "tabAgent": "Agente / Capacidades",
     "tabPrd": "PRD",
+    "tabAccountability": "Aprobaciones y responsabilidad",
     "changeStatusTitle": "Haz clic para cambiar el estado",
     "changePriorityTitle": "Haz clic para cambiar la prioridad",
     "viewCodeChangesTitle": "Ver los cambios de código en GitHub",
@@ -7592,17 +7643,37 @@
     "errStartConnect": "No se pudo iniciar la conexión",
     "errConnectSubscription": "No se pudo conectar la suscripción",
     "errRemove": "No se pudo eliminar la credencial",
+    "precedence": {
+      "title": "Prioridad de proveedores",
+      "subtitle": "Cuando tienes conectada más de una cuenta, los agentes en la nube empiezan por el proveedor situado arriba y van pasando al siguiente de la lista si falla. Pon Meta en primer lugar para enrutar los agentes en la nube a través de él.",
+      "leads": "Preferido",
+      "moveUp": "Subir {provider}",
+      "moveDown": "Bajar {provider}",
+      "errSave": "No se pudo guardar la prioridad"
+    },
     "provider": {
       "anthropic": {
         "blurb": "Conecta tu suscripción a Claude Pro/Max (sin facturación por token) o pega una clave de API de Anthropic.",
-        "subscription": "suscripción de Claude"
+        "subscription": "suscripción de Claude",
+        "pastePrompt": "¿Aprobaste en la pestaña de Claude? Pega el valor completo <code>code#state</code>.",
+        "pastePlaceholder": "Pega el código de Claude…"
       },
       "openai": {
-        "blurb": "Pega una clave de API de OpenAI para ejecutar modelos GPT en tu propia cuenta de OpenAI."
+        "blurb": "Conecta tu suscripción ChatGPT/Codex o pega una clave de API de OpenAI.",
+        "subscription": "suscripción ChatGPT/Codex",
+        "pastePrompt": "Después de iniciar sesión, copia la URL completa <code>http://localhost:1455/auth/callback?code=…&state=…</code> de la barra de direcciones y pégala aquí.",
+        "pastePlaceholder": "Pega la URL de redirección de OpenAI…"
       },
       "google": {
         "blurb": "Pega una clave de API de Google AI (Gemini) para ejecutar modelos Gemini en tu propia cuenta de Google."
-      }
+      },
+      "meta": {
+        "blurb": "Pega una clave de API de Meta AI para ejecutar modelos MUSE (muse-spark-1.1) en tu propia cuenta de Meta AI."
+      },
+      "kimi": { "blurb": "Pega una clave de suscripción de Kimi Code o una clave API de Moonshot." },
+      "qwen": { "blurb": "Pega una clave API de Alibaba DashScope para ejecutar modelos Qwen." },
+      "minimax": { "blurb": "Pega una clave API de MiniMax para ejecutar modelos MiniMax." }
+      ,"xai": { "blurb": "Conecta una suscripción SuperGrok compatible o una clave API de xAI.", "subscription": "suscripción SuperGrok", "pastePrompt": "Después de aprobar el acceso, copia el código mostrado en la página de xAI y pégalo aquí.", "pastePlaceholder": "Pega el código de acceso de xAI…" }
     }
   },
   "modelSelect": {
@@ -8584,6 +8655,10 @@
   },
   "agentExecution": {
     "runThisTask": "Ejecutar esta tarea",
+    "coordinateThisTicket": "Coordinar este tique",
+    "coordinateNow": "Asignar y ejecutar el siguiente rol",
+    "coordinating": "Coordinando…",
+    "coordinateHint": "La persona asignada coordina este ciclo. BuilderForce verifica el manifiesto y ejecuta el siguiente rol requerido, nunca a la persona asignada como ejecutor predeterminado.",
     "awaitingApproval": "A la espera de aprobación antes de poder ejecutarse: {reason}",
     "executions": "Ejecuciones",
     "ticketSpendTooltip": "Gasto del ticket en todas las ejecuciones: {tokens} tokens en {requests} llamada(s) a LLM. Se acumula en este proyecto y luego en la cuenta.",
@@ -9080,6 +9155,16 @@
       "escalation": "Escalación",
       "contacts": "Contactos"
     },
+    "workflows": {
+      "title": "Runbooks y flujos de trabajo",
+      "blurb": "Ejecuta un flujo de trabajo personalizado para este incidente o revisa los flujos que activaron sus eventos.",
+      "pick": "Flujo de trabajo",
+      "pickPlaceholder": "Elige un flujo de trabajo…",
+      "run": "Ejecutar flujo de trabajo",
+      "create": "Crear un flujo de trabajo",
+      "runs": "Ejecuciones de este incidente",
+      "noRuns": "Aún no hay ejecuciones de flujos de trabajo."
+    },
     "severity": {
       "sev1": "SEV1",
       "sev2": "SEV2",
@@ -9139,6 +9224,8 @@
       "publishedNote": "Se ha publicado un análisis de causa raíz para este incidente.",
       "prompt": "Este incidente está resuelto. Publica un análisis de causa raíz en la base de conocimiento.",
       "formTitle": "Publicar análisis de causa raíz",
+      "fishTitle": "¿Por qué ocurrió esto?",
+      "fishAria": "Diagrama de espina de pescado de causa raíz para {title}",
       "summary": "Resumen",
       "summaryPlaceholder": "Descripción del incidente en un párrafo…",
       "rootCause": "Causa raíz",
@@ -9218,7 +9305,18 @@
     "deleteContactConfirm": "¿Eliminar el contacto «{name}»?",
     "oncallSubtitle": "Las rotaciones de guardia deciden a quién se avisa primero cuando se dispara un incidente.",
     "escalationSubtitle": "Las políticas de escalación recorren objetivos y canales hasta que alguien responde.",
-    "contactsSubtitle": "Contactos de negocio a los que puedes avisar o escalar durante un incidente."
+    "contactsSubtitle": "Contactos de negocio a los que puedes avisar o escalar durante un incidente.",
+    "implicated": {
+      "title": "Tickets de entrega implicados",
+      "help": "El/los ticket(s) de entrega cuyo cambio causó este incidente, cada uno con su responsabilidad para que el RCA vea dónde se omitió o eximió el proceso.",
+      "loading": "Cargando…",
+      "empty": "Aún no hay tickets implicados vinculados.",
+      "signed": "{done}/{total} aprobados",
+      "gaps": "{count} brecha(s)",
+      "remove": "Quitar",
+      "add": "Vincular ticket",
+      "addPlaceholder": "Ticket n.º"
+    }
   },
   "monitoring": {
     "boardsTitle": "Monitorización activa",
@@ -9346,5 +9444,148 @@
     "statusError": "Error",
     "errFailed": "No se pudo invitar",
     "laterHint": "También puedes invitar a compañeros más tarde desde <link>Equipo</link>."
+  },
+  "accountability": {
+    "loading": "Cargando responsabilidad…",
+    "signedHeader": "{done} de {total} roles requeridos han aprobado",
+    "unassigned": "Sin asignar",
+    "addedBadge": "añadido",
+    "gaps": {
+      "title": "{count} brecha(s) de responsabilidad",
+      "kind": {
+        "unsigned": "Sin aprobar",
+        "unstaffed": "Falta de recurso",
+        "no_contribution": "Sin contribución",
+        "waived": "Exento",
+        "changes_requested": "Cambios solicitados"
+      }
+    },
+    "table": {
+      "title": "Aprobaciones y responsabilidad",
+      "role": "Rol",
+      "who": "Quién",
+      "state": "Estado",
+      "verdict": "Veredicto",
+      "when": "Cuándo",
+      "comments": "Comentarios",
+      "contribution": "Contribución",
+      "empty": "Aún no hay roles requeridos para este ticket."
+    },
+    "verdict": {
+      "approved": "Aprobado",
+      "changes_requested": "Cambios solicitados",
+      "waived": "Exento",
+      "delegated": "Delegado"
+    },
+    "state": {
+      "pending": "Pendiente",
+      "assigned": "Asignado",
+      "in_progress": "En progreso",
+      "completed": "Completado",
+      "changes_requested": "Cambios solicitados",
+      "waived": "Exento",
+      "skipped": "Omitido",
+      "unstaffed": "Sin personal"
+    },
+    "responsibility": {
+      "owner": "Responsable",
+      "reviewer": "Revisor",
+      "contributor": "Colaborador"
+    },
+    "assess": {
+      "title": "Evaluación de recursos",
+      "help": "Añade un rol que este ticket necesita más allá de la plantilla (p. ej., diseñador, ingeniero de seguridad). Si no hay un recurso capaz disponible, se marca como brecha de recurso.",
+      "rolePlaceholder": "Selecciona un rol…",
+      "notePlaceholder": "¿Por qué se necesita este rol? (opcional)",
+      "add": "Añadir rol requerido",
+      "materialize": "Crear elementos de trabajo",
+      "materializeHelp": "Genera una subtarea por recurso para que el progreso se agregue a este ticket."
+    }
+  },
+  "rfpPage": {
+    "title": "Respuesta a RFP",
+    "subtitle": "Responde a un RFQ/RFP con una propuesta de marca compartida basada en tu portafolio: inventario de capacidades, P&L, plan de entrega y riesgos.",
+    "newRequest": "Nueva respuesta",
+    "needDeveloper": "Requiere rol de Desarrollador",
+    "loading": "Cargando…",
+    "empty": "Aún no hay solicitudes de RFP. Crea una para redactar una propuesta de marca compartida.",
+    "validation": "Se requiere un título.",
+    "creating": "Creando…",
+    "create": "Crear y redactar",
+    "cancel": "Cancelar",
+    "noOrg": "Organización sin nombre",
+    "sourceNew": "Nuevo desarrollo",
+    "sourceExisting": "Basada en un proyecto",
+    "quoted": "Cotizado {price}",
+    "notGenerated": "Aún no generada",
+    "scanFresh": "Escaneo reciente",
+    "status": {
+      "draft": "Borrador",
+      "analyzing": "Analizando",
+      "ready": "Lista",
+      "submitted": "Enviada"
+    },
+    "field": {
+      "title": "Título",
+      "titlePlaceholder": "p. ej. Rediseño del portal de clientes",
+      "requesterOrg": "Organización solicitante",
+      "requesterOrgPlaceholder": "Quién emitió el RFP",
+      "requesterBrand": "Colores de marca del solicitante",
+      "requesterBrandHint": "La paleta de la empresa solicitante, combinada con la tuya en la propuesta.",
+      "primary": "Primario",
+      "secondary": "Secundario",
+      "accent": "Acento",
+      "logoUrl": "URL del logo",
+      "requirements": "Requisitos",
+      "requirementsPlaceholder": "Pega los requisitos del RFP/RFQ…",
+      "sourceMode": "Base",
+      "project": "Proyecto",
+      "selectProject": "Selecciona un proyecto…",
+      "economics": "Economía",
+      "margin": "Margen",
+      "marketing": "Marketing",
+      "contingency": "Contingencia"
+    },
+    "backToList": "Volver a solicitudes",
+    "generating": "Generando…",
+    "regenerate": "Regenerar",
+    "generate": "Generar respuesta",
+    "generatingHint": "Ejecutando el escaneo con control de frescura, cotejando tu portafolio y redactando la propuesta…",
+    "noResponseYet": "Aún no se ha generado una propuesta. Haz clic en Generar para redactar una.",
+    "scanRefreshed": "Escaneo actualizado",
+    "scanCurrent": "Escaneo actual",
+    "groundedOn": "Basada en {project}",
+    "greenfield": "Nuevo proyecto: propuesto a partir de los requisitos",
+    "scanAge": "último escaneo hace {days}d",
+    "sec": {
+      "summary": "Resumen ejecutivo",
+      "capabilities": "Capacidades y enfoque",
+      "economics": "Inversión y aspectos comerciales",
+      "plan": "Plan de entrega",
+      "risks": "Riesgos clave",
+      "dependencies": "Dependencias",
+      "portfolio": "Proyectos similares",
+      "document": "Propuesta con marca"
+    },
+    "capabilitiesGreenfield": "Proyecto nuevo: las capacidades se proponen a partir de los requisitos.",
+    "col": {
+      "component": "Componente",
+      "responsibility": "Responsabilidad"
+    },
+    "stack": "Stack",
+    "quotedPrice": "Precio cotizado",
+    "marginNote": "{pct}% de margen de beneficio · {weeks} semanas de esfuerzo.",
+    "deliveryWindow": "Entrega: {start} → {end} ({weeks} semanas).",
+    "severity": {
+      "low": "Bajo",
+      "medium": "Medio",
+      "high": "Alto"
+    },
+    "depType": {
+      "internal": "Interna",
+      "external": "Externa",
+      "third_party": "Terceros"
+    },
+    "downloadDoc": "Descargar"
   }
 }

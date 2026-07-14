@@ -23,6 +23,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
 import { activityLog, agentHosts, freelancerEngagements, ideAgents, tenantMembers, users } from '../../infrastructure/database/schema';
 import { bumpCacheVersion, getCacheVersion, getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { buildTransactionalDatabase } from '../../infrastructure/database/connection';
 
 export type ActorType = 'human' | 'hire' | 'cloud_agent' | 'host_agent' | 'system';
 
@@ -73,7 +74,8 @@ export function activityLogVersionKey(tenantId: number | null): string {
  */
 export async function recordActivity(env: Env | undefined, db: Db, input: ActivityInput): Promise<void> {
   try {
-    await db.insert(activityLog).values({
+    const activityDb = env?.NEON_TRANSACTIONAL_DATABASE_URL ? buildTransactionalDatabase(env) : db;
+    await activityDb.insert(activityLog).values({
       tenantId: input.tenantId ?? null,
       segmentId: input.segmentId ?? null,
       projectId: input.projectId ?? null,
@@ -265,5 +267,6 @@ export async function getActivityLog(env: Env, db: Db, tenantId: number, filter:
   const limit = Math.min(100, Math.max(1, filter.limit ?? 50));
   const version = await getCacheVersion(env, activityLogVersionKey(tenantId));
   const key = `activity-log:list:tenant:${tenantId}:v:${version}:${JSON.stringify({ ...filter, limit })}`;
-  return getOrSetCached(env, key, () => queryActivityLog(db, tenantId, filter, limit), { kvTtlSeconds: 120 });
+  const activityDb = env.NEON_TRANSACTIONAL_DATABASE_URL ? buildTransactionalDatabase(env) : db;
+  return getOrSetCached(env, key, () => queryActivityLog(activityDb, tenantId, filter, limit), { kvTtlSeconds: 120 });
 }

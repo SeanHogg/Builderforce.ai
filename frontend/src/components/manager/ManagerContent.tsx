@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslations, useFormatter } from 'next-intl';
+import Link from 'next/link';
 import { Select } from '@/components/Select';
 import { RoleGate } from '@/components/RoleGate';
 import { usePermission } from '@/lib/rbac';
@@ -57,6 +58,7 @@ const ACTION_ICON: Record<ManagerActionType, string> = {
   assign: '👤',
   score_value: '💎',
   dispatch: '🚀',
+  sync_pr: '🔄',
   merge_pr: '🔀',
   flag: '🚩',
 };
@@ -863,6 +865,14 @@ function ActivityRow({ action, typeLabel, when }: { action: ManagerAction; typeL
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--border-subtle)' }}>
       <span aria-hidden style={{ flexShrink: 0, fontSize: '1rem', lineHeight: '1.3rem' }}>{ACTION_ICON[action.actionType] ?? '•'}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
+        {action.taskId != null && (
+          <Link
+            href={`/projects?tab=tasks&task=${action.taskId}`}
+            style={{ display: 'inline-block', marginBottom: 3, color: 'var(--accent, #2563eb)', fontSize: '0.78rem', fontWeight: 700, textDecoration: 'none' }}
+          >
+            {action.ticketKey ?? `#${action.taskId}`}{action.ticketTitle ? ` · ${action.ticketTitle}` : ''}
+          </Link>
+        )}
         <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{action.summary}</div>
         {action.detail && <div style={{ ...mutedStyle, marginTop: 2 }}>{action.detail}</div>}
       </div>

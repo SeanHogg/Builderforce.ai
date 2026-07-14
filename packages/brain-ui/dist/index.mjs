@@ -301,7 +301,8 @@ function stepNode(step, ts, key) {
     case "learn": {
       const r = step.result ?? {};
       const skipped = r.skipped && isLearnSkipReason(r.reason) ? r.reason : void 0;
-      return { key, kind: "learn", ts, order: ORDER.learn, version: typeof r.version === "number" ? r.version : 0, ...skipped ? { skipped } : {} };
+      const targets = Array.isArray(r.targets) ? r.targets : void 0;
+      return { key, kind: "learn", ts, order: ORDER.learn, version: typeof r.version === "number" ? r.version : 0, ...skipped ? { skipped } : {}, ...targets ? { targets } : {} };
     }
     case "reconcile": {
       const r = step.result ?? {};
@@ -436,6 +437,8 @@ var DEFAULT_TIMELINE_LABELS = {
     "not-seeded": "this project has no Evermind model yet",
     frozen: "this project\u2019s Evermind is frozen (read-only)"
   },
+  learnTargetContributed: "Contributed to {name} (project #{projectId} v{version})",
+  learnTargetSkipped: "Skipped {name} (project #{projectId}) \u2014 {reason}",
   reconcileTitle: "Reconciled {count} learned memories in Evermind v{version}",
   reconcileHint: "The answer restated these recalled learnings, so it updates them (write-through cognition)."
 };
@@ -709,6 +712,20 @@ function BrainTimelineInner({
           ] }, node.key);
         }
         if (node.kind === "learn") {
+          if (node.targets && node.targets.length > 0) {
+            const lines = node.targets.map((tg) => {
+              if (tg.learned) {
+                return labels.learnTargetContributed.replace("{name}", tg.name).replace("{projectId}", String(tg.projectId)).replace("{version}", String(tg.version));
+              }
+              const reasonLabel = tg.reason && tg.reason !== "too-short" ? labels.learnSkipReason[tg.reason] : null;
+              return reasonLabel ? labels.learnTargetSkipped.replace("{name}", tg.name).replace("{projectId}", String(tg.projectId)).replace("{reason}", reasonLabel) : null;
+            }).filter((s) => !!s);
+            if (lines.length === 0) return null;
+            return /* @__PURE__ */ jsxs4("li", { className: "bf-tl__item bf-tl__item--memory", children: [
+              /* @__PURE__ */ jsx4("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx4("span", { className: "bf-tl__dot bf-tl__dot--muted", children: dotIcon("learn") }) }),
+              /* @__PURE__ */ jsx4("div", { className: "bf-tl__body", children: /* @__PURE__ */ jsx4("span", { className: "bf-tl__memory-line", children: lines.join("; ") }) })
+            ] }, node.key);
+          }
           const title = node.skipped ? labels.learnSkippedTitle.replace("{reason}", labels.learnSkipReason[node.skipped]) : labels.learnTitle.replace("{version}", String(node.version));
           const hint = node.skipped ? labels.learnSkippedHint : labels.learnHint;
           return /* @__PURE__ */ jsxs4("li", { className: "bf-tl__item bf-tl__item--memory", children: [
@@ -886,7 +903,7 @@ function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ar
 }
 
 // src/chatTickets/ChatTicketsPanel.tsx
-import { memo, useCallback, useEffect as useEffect2, useMemo as useMemo4, useState as useState4 } from "react";
+import { memo, useCallback, useEffect as useEffect2, useMemo as useMemo4, useRef as useRef2, useState as useState4 } from "react";
 
 // src/chatTickets/types.ts
 var TICKET_KINDS = ["task", "epic", "gap", "objective", "initiative", "portfolio", "roadmap", "spec"];
@@ -907,6 +924,11 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
   link: "Link ticket",
   agents: "Agents",
   merge: "Merge",
+  questions: "Questions",
+  noQuestions: "No pending questions.",
+  answerPlaceholder: "Type your answer\u2026",
+  submitAnswer: "Answer",
+  answering: "Sending\u2026",
   linkFailed: "Could not link \u2014 check the ticket exists.",
   kindLabel: "Ticket type",
   pickTicket: "Choose a ticket\u2026",
@@ -934,8 +956,12 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
   lockHint: "Shared chats are visible to the whole team; lock to keep this chat to its members only.",
   mergeHint: "Merge other chats into this one. Their messages, tickets and agents move here; the sources are archived.",
   mergeNoOthers: "No other chats to merge.",
+  showTickets: "Show linked tickets",
+  hideTickets: "Hide linked tickets",
   kind: { task: "Task", epic: "Epic", gap: "Gap", objective: "Objective", initiative: "Initiative", portfolio: "Portfolio", roadmap: "Roadmap", spec: "Spec" },
   ringAria: (label, pct) => `${label}: ${pct}% done`,
+  ticketCount: (n) => `${n} ticket${n === 1 ? "" : "s"}`,
+  overallAria: (pct) => `Overall progress: ${pct}% done`,
   runStarted: (agent) => `Started ${agent} on the ticket.`,
   mergeAction: (n) => `Merge ${n} here`,
   mergedN: (n) => `Merged ${n} chat(s).`
@@ -944,26 +970,33 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
 // src/chatTickets/ChatTicketsPanel.tsx
 import { jsx as jsx7, jsxs as jsxs7 } from "react/jsx-runtime";
 var RUNNABLE = new Set(RUNNABLE_KINDS);
+var COLLAPSE_THRESHOLD = 8;
 function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket }) {
   const [tickets, setTickets] = useState4([]);
   const [agents, setAgents] = useState4([]);
   const [members, setMembers] = useState4([]);
   const [pool, setPool] = useState4([]);
+  const [questions, setQuestions] = useState4([]);
   const [panel, setPanel] = useState4(null);
   const [lineageKey, setLineageKey] = useState4(null);
   const [lineage, setLineage] = useState4([]);
   const [runKey, setRunKey] = useState4(null);
   const [msg, setMsg] = useState4(null);
   const [busy, setBusy] = useState4(false);
+  const [collapsed, setCollapsed] = useState4(null);
+  const userCollapsed = useRef2(false);
   const load = useCallback(async () => {
-    const [tk, ag, mem] = await Promise.all([
+    const [tk, ag, mem, qs] = await Promise.all([
       adapter.listTickets(chatId).catch(() => []),
       adapter.listAgents(chatId).catch(() => []),
-      adapter.listMembers(chatId).catch(() => [])
+      adapter.listMembers(chatId).catch(() => []),
+      adapter.listQuestions(chatId).catch(() => [])
     ]);
     setTickets(tk);
     setAgents(ag);
     setMembers(mem);
+    setQuestions(qs);
+    if (!userCollapsed.current) setCollapsed(tk.length > COLLAPSE_THRESHOLD);
   }, [adapter, chatId]);
   useEffect2(() => {
     void load();
@@ -1007,8 +1040,43 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       setBusy(false);
     }
   };
+  const agg = useMemo4(() => {
+    let done = 0, total = 0, sumPct = 0;
+    for (const tk of tickets) {
+      done += tk.done;
+      total += tk.total;
+      sumPct += tk.progressPct;
+    }
+    const pct = total > 0 ? Math.round(done / total * 100) : tickets.length ? Math.round(sumPct / tickets.length) : 0;
+    return { pct, done, total };
+  }, [tickets]);
+  const isCollapsed = tickets.length > 0 && (collapsed ?? tickets.length > COLLAPSE_THRESHOLD);
+  const toggleCollapsed = () => {
+    userCollapsed.current = true;
+    setCollapsed(!isCollapsed);
+  };
   return /* @__PURE__ */ jsxs7("div", { style: S.root, children: [
-    /* @__PURE__ */ jsx7("div", { style: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }, children: tickets.length === 0 ? /* @__PURE__ */ jsx7("span", { style: S.muted, children: labels.none }) : tickets.map((tk) => {
+    tickets.length > 0 && /* @__PURE__ */ jsxs7(
+      "button",
+      {
+        type: "button",
+        onClick: toggleCollapsed,
+        "aria-expanded": !isCollapsed,
+        title: isCollapsed ? labels.showTickets : labels.hideTickets,
+        style: S.ticketsHeader,
+        children: [
+          /* @__PURE__ */ jsx7("span", { "aria-hidden": true, style: { ...S.caret, transform: isCollapsed ? "rotate(0deg)" : "rotate(90deg)" }, children: "\u25B8" }),
+          /* @__PURE__ */ jsx7(HealthRing, { percent: agg.pct, size: 22, muted: false, ariaLabel: labels.overallAria(agg.pct) }),
+          /* @__PURE__ */ jsx7("span", { style: S.ticketsCount, children: labels.ticketCount(tickets.length) }),
+          /* @__PURE__ */ jsxs7("span", { style: S.ticketsAgg, children: [
+            agg.pct,
+            "%",
+            agg.total > 0 ? ` \xB7 ${agg.done}/${agg.total}` : ""
+          ] })
+        ]
+      }
+    ),
+    !isCollapsed && /* @__PURE__ */ jsx7("div", { style: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }, children: tickets.length === 0 ? /* @__PURE__ */ jsx7("span", { style: S.muted, children: labels.none }) : tickets.map((tk) => {
       const key = `${tk.kind}:${tk.ref}`;
       return /* @__PURE__ */ jsxs7("div", { style: S.chip, children: [
         /* @__PURE__ */ jsx7(HealthRing, { percent: tk.progressPct, size: 36, caption: tk.total > 0 ? `${tk.done}/${tk.total}` : void 0, muted: !tk.exists, ariaLabel: labels.ringAria(tk.label, tk.progressPct) }),
@@ -1069,6 +1137,13 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       /* @__PURE__ */ jsxs7("button", { type: "button", onClick: () => setPanel(panel === "merge" ? null : "merge"), style: S.pill(panel === "merge"), children: [
         "\u29C9 ",
         labels.merge
+      ] }),
+      questions.length > 0 && /* @__PURE__ */ jsxs7("button", { type: "button", onClick: () => setPanel(panel === "questions" ? null : "questions"), style: S.pill(panel === "questions"), children: [
+        "\u2753 ",
+        labels.questions,
+        " (",
+        questions.length,
+        ")"
       ] }),
       msg && /* @__PURE__ */ jsx7("span", { style: { fontSize: 12, color: V.accent, alignSelf: "center" }, children: msg })
     ] }),
@@ -1161,8 +1236,47 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         },
         busy
       }
+    ),
+    panel === "questions" && /* @__PURE__ */ jsx7(
+      QuestionsSection,
+      {
+        questions,
+        labels,
+        onAnswer: async (id, answer) => {
+          await adapter.answerQuestion(id, answer);
+          await load();
+          onChanged?.();
+        }
+      }
     )
   ] });
+}
+function QuestionsSection({ questions, labels, onAnswer }) {
+  const [answers, setAnswers] = useState4({});
+  const [sending, setSending] = useState4(null);
+  return /* @__PURE__ */ jsx7("div", { style: S.drawer, children: questions.length === 0 ? /* @__PURE__ */ jsx7("span", { style: S.muted, children: labels.noQuestions }) : questions.map((q, index) => {
+    const value = answers[q.id] ?? "";
+    return /* @__PURE__ */ jsxs7("div", { style: { padding: "10px 0", borderBottom: index < questions.length - 1 ? `1px solid ${V.border}` : void 0 }, children: [
+      /* @__PURE__ */ jsx7("div", { style: { color: V.text, fontSize: 13, lineHeight: 1.45, whiteSpace: "pre-wrap", marginBottom: 8 }, children: q.description }),
+      /* @__PURE__ */ jsxs7("div", { style: { display: "flex", gap: 8, alignItems: "flex-start" }, children: [
+        /* @__PURE__ */ jsx7(
+          "textarea",
+          {
+            value,
+            onChange: (e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value })),
+            placeholder: labels.answerPlaceholder,
+            rows: 2,
+            disabled: sending === q.id,
+            style: { ...S.select, flex: 1, resize: "vertical", minHeight: 54, fontFamily: "inherit" }
+          }
+        ),
+        /* @__PURE__ */ jsx7("button", { type: "button", disabled: !value.trim() || sending === q.id, style: S.pill(true), onClick: () => {
+          setSending(q.id);
+          void onAnswer(q.id, value.trim()).finally(() => setSending(null));
+        }, children: sending === q.id ? labels.answering : labels.submitAnswer })
+      ] })
+    ] }, q.id);
+  }) });
 }
 var SEARCH_LIMIT = 40;
 function LinkForm({ search, projectId, existing, labels, onLink }) {
@@ -1333,6 +1447,12 @@ var V = {
 var S = {
   root: { margin: "4px 0 0", padding: "8px 10px", border: `1px solid ${V.border}`, borderRadius: 10, background: V.surface, display: "flex", flexDirection: "column", gap: 8 },
   muted: { fontSize: 12, color: V.muted },
+  // Collapsible ticket-summary header — full-width, button-reset, subtle hover-less
+  // affordance that carries a caret, an overall health ring and the linked count.
+  ticketsHeader: { display: "flex", alignItems: "center", gap: 8, padding: "2px 4px", width: "100%", background: "transparent", border: "none", cursor: "pointer", textAlign: "left", color: V.text },
+  caret: { display: "inline-block", fontSize: 11, color: V.muted, transition: "transform 120ms ease" },
+  ticketsCount: { fontSize: 12, fontWeight: 600, color: V.text },
+  ticketsAgg: { fontSize: 11, color: V.muted },
   chip: { display: "flex", alignItems: "center", gap: 6, padding: "2px 6px", border: `1px solid ${V.border}`, borderRadius: 8 },
   ticketLabel: { fontSize: 12, fontWeight: 600, color: V.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   // Clickable variant of the label — opens the artifact. Underlined-on-hover link
@@ -1549,7 +1669,7 @@ var POP = {
 };
 
 // src/evermind/EvermindConsole.tsx
-import { useCallback as useCallback3, useEffect as useEffect5, useMemo as useMemo7, useRef as useRef2, useState as useState7 } from "react";
+import { useCallback as useCallback3, useEffect as useEffect5, useMemo as useMemo7, useRef as useRef3, useState as useState7 } from "react";
 
 // src/evermind/types.ts
 function defaultFormatWhen(atMs) {
@@ -1611,6 +1731,12 @@ var DEFAULT_EVERMIND_LABELS = {
   flushing: "Learning\u2026",
   flushedNone: "Nothing queued to learn yet.",
   flushedN: (merged, version) => `Merged ${merged} contribution(s) into v${version}.`,
+  importTitle: "Import from builderforce-memory",
+  importHint: "Fold a local memory snapshot into this model, then compact the absorbed facts to stubs so they stop filling your context.",
+  importCta: "Import & compact\u2026",
+  importing: "Importing\u2026",
+  importDone: (absorbed, version, compacted, savedKb) => `Absorbed ${absorbed} memor${absorbed === 1 ? "y" : "ies"} into v${version}; compacted ${compacted} to stubs (~${savedKb} KB recovered).`,
+  importNothing: "Nothing to import \u2014 no learnable facts in that file.",
   validateCta: "Validate",
   validating: "Checking\u2026",
   validateHint: "Check which learned memories would answer this task \u2014 before you teach it.",
@@ -1702,7 +1828,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     }, refreshMs);
     return () => clearInterval(id);
   }, [refreshMs, busy, reload]);
-  const lastRefreshSignal = useRef2(refreshSignal);
+  const lastRefreshSignal = useRef3(refreshSignal);
   useEffect5(() => {
     if (refreshSignal == null || refreshSignal === lastRefreshSignal.current) return;
     lastRefreshSignal.current = refreshSignal;
@@ -1865,6 +1991,21 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           data?.pending
         ] })
       ] }),
+      canManage && adapter.importMemory && /* @__PURE__ */ jsx9(
+        ImportBox,
+        {
+          t,
+          busy,
+          frozen,
+          onImport: () => run(async () => {
+            const report = await adapter.importMemory();
+            if (!report) return;
+            setNotice(
+              report.absorbed > 0 ? t.importDone(report.absorbed, report.version, report.compacted, (report.bytesSaved / 1024).toFixed(1)) : t.importNothing
+            );
+          })
+        }
+      ),
       showRecent && /* @__PURE__ */ jsx9(RecentList, { t, entries: data?.recent ?? [] })
     ] }),
     notice && /* @__PURE__ */ jsx9("p", { style: { margin: 0, fontSize: "0.74rem", color: C.accent }, role: "status", children: notice }),
@@ -2039,6 +2180,14 @@ function TeachBox({
       /* @__PURE__ */ jsx9("button", { type: "button", onClick: onTeach, disabled: busy || !canTeach, style: primaryBtn(busy || !canTeach), children: busy ? t.teaching : teaching ? t.teachTeacherCta : t.teachCta }),
       /* @__PURE__ */ jsx9("button", { type: "button", onClick: onValidate, disabled: busy || validating || !canValidate, style: secondaryBtn(busy || validating || !canValidate), title: t.validateHint, children: validating ? t.validating : t.validateCta })
     ] })
+  ] });
+}
+function ImportBox({ t, busy, frozen, onImport }) {
+  const disabled = busy || frozen;
+  return /* @__PURE__ */ jsxs9("div", { style: { display: "flex", flexDirection: "column", gap: 6, borderTop: `1px solid ${C.border}`, paddingTop: 10 }, children: [
+    /* @__PURE__ */ jsx9("div", { style: fieldTitle, children: t.importTitle }),
+    /* @__PURE__ */ jsx9("div", { style: fieldHint, children: t.importHint }),
+    /* @__PURE__ */ jsx9("button", { type: "button", onClick: onImport, disabled, style: { ...secondaryBtn(disabled), alignSelf: "flex-start" }, children: busy ? t.importing : t.importCta })
   ] });
 }
 function ValidateResults({ t, result, onClear }) {

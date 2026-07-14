@@ -24,7 +24,9 @@ import type { Db } from '../../infrastructure/database/connection';
 import { ProjectService } from '../project/ProjectService';
 import { TaskService } from '../task/TaskService';
 import { addManagerDirective } from '../manager/managerDirectives';
-import { createManagerCoachingTask } from '../manager/ManagerService';
+import { createManagerCoachingTask, getEffectiveManagerPolicy } from '../manager/ManagerService';
+import { resolveManagerAssignee } from '../manager/managerPolicy';
+import { TicketParticipantsService } from '../kanban/ticketParticipants';
 import { ProjectRepository } from '../../infrastructure/repositories/ProjectRepository';
 import { TaskRepository } from '../../infrastructure/repositories/TaskRepository';
 import { ProjectStatus, TaskPriority, TaskType, TenantRole } from '../../domain/shared/types';
@@ -488,7 +490,7 @@ const CATALOG: BuiltinTool[] = [
   } },
   {
     tool: 'tasks.create', mutates: true,
-    description: 'Create a task on a project board. Set taskType="epic" to create a planning Epic (a DELIVERY container for other tasks), "gap" to log a follow-up gap (a validator-style missing-work item), or pass parentTaskId to nest the new task under an existing Epic. An Epic is NOT an OKR/Objective — for OKRs/goals use objectives.create + key_results.create. Assign by passing exactly one of assignedUserId (human member), assignedAgentRef (cloud agent) or assignedAgentHostId (self-hosted runner). Idempotent: if a task with the same title already exists on that project, the existing task is returned ({ deduped: true, … }) instead of creating a duplicate — so you can safely (re)run a reconciliation and use the returned id for traceability.',
+    description: 'Create an ACCOUNTABLE ticket on a project board. The assignee is the ticket Coordinator/Manager (not necessarily its producer): pass exactly one of assignedUserId, assignedAgentRef, or assignedAgentHostId. If omitted, the project Delivery Manager is assigned, falling back to the requesting human. Creation also derives the board process-template participation manifest. AFTER creation, scope the required workforce with kanban.assess_resource for every role implied by the work, inspect kanban.accountability, and use kanban.materialize_work_items to create one child task per resource. Set taskType="epic" for a planning Epic, "gap" for missing follow-up work, or parentTaskId to nest under an Epic. An Epic is not an OKR. Idempotent by project + normalized title; reconciliation also repairs missing coordination/manifest data on the existing ticket.',
     parameters: obj({ projectId: N, title: S, description: S, priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] }, dueDate: S, taskType: { type: 'string', enum: ['task', 'epic', 'gap'] }, parentTaskId: N, assignedUserId: S, assignedAgentRef: S, assignedAgentHostId: N }, ['projectId', 'title']),
     run: async (ctx, a) => {
       const title = str(a.title).trim(); if (!title) throw new Error('title is required');
@@ -498,7 +500,35 @@ const CATALOG: BuiltinTool[] = [
       // reconciling a roadmap, often across retries) gets the existing id back.
       const existingTasks = (await ctx.tasks.listTasks(ctx.tenantId, projectId)) ?? [];
       const dupeTask = existingTasks.find((t) => normTitle((t.toPlain() as { title?: unknown }).title) === normTitle(title));
-      if (dupeTask) return { deduped: true, ...(dupeTask.toPlain() as object) };
+      const explicitAssignee = {
+        assignedUserId: a.assignedUserId != null ? str(a.assignedUserId) : null,
+        assignedAgentRef: a.assignedAgentRef != null ? str(a.assignedAgentRef) : null,
+        assignedAgentHostId: a.assignedAgentHostId != null ? num(a.assignedAgentHostId) : null,
+      };
+      if ([explicitAssignee.assignedUserId, explicitAssignee.assignedAgentRef, explicitAssignee.assignedAgentHostId].filter((v) => v != null).length > 1) {
+        throw new Error('A ticket must have exactly one Coordinator; pass only one assignee field.');
+      }
+      const hasExplicitAssignee = Object.values(explicitAssignee).some((v) => v != null);
+      const policyAssignee = hasExplicitAssignee
+        ? { assignedUserId: null, assignedAgentRef: null, assignedAgentHostId: null }
+        : resolveManagerAssignee((await getEffectiveManagerPolicy(ctx.db, ctx.tenantId, projectId)).managerRef);
+      const coordinator = hasExplicitAssignee
+        ? explicitAssignee
+        : Object.values(policyAssignee).some((v) => v != null)
+          ? policyAssignee
+          : { assignedUserId: ctx.userId ?? null, assignedAgentRef: null, assignedAgentHostId: null };
+      if (!Object.values(coordinator).some((v) => v != null)) {
+        throw new Error('Every ticket requires a Coordinator. Configure a project Delivery Manager or pass an assignee returned by tasks.assignees.');
+      }
+      if (dupeTask) {
+        let reconciled = dupeTask;
+        const plain = dupeTask.toPlain();
+        if (!plain.assignedUserId && !plain.assignedAgentRef && plain.assignedAgentHostId == null) {
+          reconciled = await ctx.tasks.updateTask(Number(plain.id), coordinator);
+        }
+        if (ctx.env) await new TicketParticipantsService(ctx.db).deriveManifest(ctx.env, ctx.tenantId, Number(plain.id));
+        return { deduped: true, ...(reconciled.toPlain() as object) };
+      }
       const created = await ctx.tasks.createTask({
         projectId,
         title,
@@ -507,10 +537,9 @@ const CATALOG: BuiltinTool[] = [
         dueDate: a.dueDate != null ? str(a.dueDate) : null,
         taskType: a.taskType != null ? (str(a.taskType) as TaskType) : undefined,
         parentTaskId: a.parentTaskId != null ? num(a.parentTaskId) : undefined,
-        assignedUserId: a.assignedUserId != null ? str(a.assignedUserId) : undefined,
-        assignedAgentRef: a.assignedAgentRef != null ? str(a.assignedAgentRef) : undefined,
-        assignedAgentHostId: a.assignedAgentHostId != null ? num(a.assignedAgentHostId) : undefined,
+        ...coordinator,
       }, ctx.tenantId);
+      if (ctx.env) await new TicketParticipantsService(ctx.db).deriveManifest(ctx.env, ctx.tenantId, Number(created.id));
       // A ticket created straight into a staffed lane auto-runs, same as the board's
       // POST path (a create lands in the Backlog lane — fires only if that lane is staffed).
       await fireLaneAutoRun(ctx, created);
@@ -2184,8 +2213,13 @@ const CATALOG: BuiltinTool[] = [
   },
 
   // ---- Kanban: role sign-off (the reviewer round-trip, first-class for agents) ----
-  { tool: 'kanban.signoff', mutates: true, description: 'Record a role SIGN-OFF on a ticket as a reviewer acting AS a role (satisfies a lane\'s role/review requirement so the audit clears and the swimlane can advance). verdict "approved" (default) or "changes_requested". Pass laneKey to scope the sign-off to a lane; memberKind defaults to "agent" (you), memberRef to your agent id.', parameters: obj({ taskId: N, roleKey: S, laneKey: S, verdict: { type: 'string', enum: ['approved', 'changes_requested'] }, summary: S, memberRef: S }, ['taskId', 'roleKey']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${num(a.taskId)}/signoff`, { roleKey: str(a.roleKey), laneKey: a.laneKey != null ? str(a.laneKey) : undefined, verdict: a.verdict === 'changes_requested' ? 'changes_requested' : 'approved', summary: a.summary != null ? str(a.summary) : undefined, memberKind: 'agent', memberRef: a.memberRef != null ? str(a.memberRef) : (ctx.userId ?? undefined) }) },
+  { tool: 'kanban.signoff', mutates: true, description: 'Record a role SIGN-OFF on a ticket as a reviewer acting AS a role (satisfies a lane\'s role/review requirement so the audit clears and the swimlane can advance). verdict "approved" (default), "changes_requested", "waived", or "delegated" (waive/delegate need a reason). ALWAYS pass `contribution` linking the actual work (executionId, prUrl, diffFiles, prdRevision, toolRunId) — an approval with no linked contribution is itself an audit finding. memberKind defaults to "agent" (you), memberRef to your agent id.', parameters: obj({ taskId: N, roleKey: S, laneKey: S, verdict: { type: 'string', enum: ['approved', 'changes_requested', 'waived', 'delegated'] }, summary: S, memberRef: S, waiveReason: S, contribution: { type: 'object' } }, ['taskId', 'roleKey']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${num(a.taskId)}/signoff`, { roleKey: str(a.roleKey), laneKey: a.laneKey != null ? str(a.laneKey) : undefined, verdict: ['approved', 'changes_requested', 'waived', 'delegated'].includes(String(a.verdict)) ? str(a.verdict) : 'approved', summary: a.summary != null ? str(a.summary) : undefined, waiveReason: a.waiveReason != null ? str(a.waiveReason) : undefined, contribution: a.contribution != null && typeof a.contribution === 'object' ? a.contribution : undefined, memberKind: 'agent', memberRef: a.memberRef != null ? str(a.memberRef) : (ctx.userId ?? undefined) }) },
   { tool: 'kanban.audit', mutates: false, description: 'Get a ticket\'s role/diagnostic coverage audit (which required lane checks are satisfied vs missing).', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/kanban/tasks/${num(a.taskId)}/audit`) },
+  { tool: 'kanban.participants', mutates: false, description: 'Get a ticket\'s Participation Manifest — every required role, its resolved assignee, and its state (pending/assigned/in_progress/completed/changes_requested/waived/unstaffed). An `unstaffed` row is a RESOURCE GAP (no capable resource available).', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/kanban/tasks/${num(a.taskId)}/participants`) },
+  { tool: 'kanban.accountability', mutates: false, description: 'Get a ticket\'s Accountability Report — per required role: Who signed, When, Verdict, Comments, and the linked Contribution — plus gaps (unstaffed/unsigned roles, sign-offs with no contribution, waivers) and %-complete.', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'GET', `/api/kanban/tasks/${num(a.taskId)}/accountability`) },
+  { tool: 'kanban.assess_resource', mutates: true, description: 'RESOURCE ASSESSMENT — add a role the ticket needs beyond the template (e.g. designer, security). It becomes a required manifest participant that must execute + sign off; if no capable resource is available it is flagged as a resource gap. responsibility defaults to "owner".', parameters: obj({ taskId: N, roleKey: S, responsibility: { type: 'string', enum: ['owner', 'reviewer', 'contributor'] }, stageKey: S, note: S }, ['taskId', 'roleKey']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${num(a.taskId)}/participants`, { roleKey: str(a.roleKey), responsibility: a.responsibility != null ? str(a.responsibility) : undefined, stageKey: a.stageKey != null ? str(a.stageKey) : undefined, note: a.note != null ? str(a.note) : undefined }) },
+  { tool: 'kanban.coordinate', mutates: true, description: 'Run the ticket Coordinator now: ensure its template manifest exists and dispatch the next required role-capable participant. The ticket assignee coordinates; producers do the scoped work.', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${num(a.taskId)}/coordinate`, {}) },
+  { tool: 'kanban.materialize_work_items', mutates: true, description: 'Create one assigned child task per required participant in the ticket manifest. Call after resource assessment so delivery scope rolls up to the parent ticket and every required resource has explicit work.', parameters: obj({ taskId: N }, ['taskId']), run: (ctx, a) => replayRoute(ctx, 'POST', `/api/kanban/tasks/${num(a.taskId)}/participants/materialize`, {}) },
 
   // ---- Workflow DEFINITIONS: write/run/import + computed reads not backed by a plain table op ----
   { tool: 'workflows.create', mutates: true, description: 'Create a workflow definition.', parameters: obj({ name: S, description: S, projectId: N }, ['name']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/workflow-definitions', { name: str(a.name), description: a.description != null ? str(a.description) : undefined, projectId: a.projectId != null ? num(a.projectId) : undefined }) },
@@ -2461,6 +2495,13 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   // the swimlane can advance (the round-trip that used to need a hand HTTP call). Read
   // the coverage audit to see what it still needs to satisfy.
   'kanban.signoff', 'kanban.audit',
+  // Coordinated role participation (PRD "Coordinated Role Participation") — a Coordinator/
+  // Manager agent reads the ticket's Participation Manifest + Accountability Report to know
+  // which required roles still must execute + sign off, and performs a Resource Assessment
+  // (add a role the ticket needs beyond the template). Without these on the allowlist an
+  // unattended Coordinator can SEE the tools in the catalog but not invoke them.
+  'kanban.participants', 'kanban.accountability', 'kanban.assess_resource',
+  'kanban.coordinate', 'kanban.materialize_work_items',
   // Security agent: file SOC 2 findings mid-run. NOT security.configure_access —
   // deciding who can see security tickets is an admin action, never an unattended
   // agent reconfiguring its own findings' visibility.
@@ -2530,7 +2571,7 @@ export function resolveCloudAgentPlatformTool(advertised: string): string | unde
  *  dotted tool id (still readable, e.g. "portfolios.create"). */
 const MCP_VERB: Record<string, string> = {
   'tasks.create': 'task.created', 'tasks.update': 'task.updated', 'tasks.move': 'task.moved', 'tasks.delete': 'task.deleted',
-  'kanban.signoff': 'ticket.signed_off',
+  // kanban.signoff / kanban.assess_resource self-emit at their HTTP routes (see SELF_EMITTING_TOOLS).
   'objectives.create': 'okr.objective_created', 'objectives.update': 'okr.objective_updated', 'objectives.delete': 'okr.objective_deleted',
   'key_results.create': 'okr.kr_created',
   'marketplace.publish_ticket': 'gig.published', 'marketplace.unpublish_ticket': 'gig.unpublished',
@@ -2542,7 +2583,12 @@ const MCP_VERB: Record<string, string> = {
 /** Best-effort audit emit for a mutating built-in tool — the ONE place every
  *  MCP-/Brain-/agent-driven mutation (OKR, portfolio, brain-created ticket, …)
  *  reaches the unified activity log. Never throws. */
+/** Tools whose replayed HTTP route now records its OWN (richer, role-attributed)
+ *  activity — skip the generic wrapper emit for them to avoid a double entry. */
+const SELF_EMITTING_TOOLS = new Set(['kanban.signoff', 'kanban.assess_resource']);
+
 async function emitBuiltinToolActivity(env: Env, db: Db, tenantId: number, userId: string | null | undefined, tool: string, result: unknown): Promise<void> {
+  if (SELF_EMITTING_TOOLS.has(tool)) return;
   try {
     const actor = userId ? await resolveHumanActor(env, db, tenantId, userId) : SYSTEM_ACTOR;
     const r = (result && typeof result === 'object') ? (result as Record<string, unknown>) : null;

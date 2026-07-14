@@ -188,6 +188,13 @@ async function streamChatCompletion(opts, handlers = {}) {
     headerByoUnresolved = null;
   }
   const byoUnresolved = () => headerByoUnresolved ?? void 0;
+  let headerProviderCap = null;
+  try {
+    headerProviderCap = res.headers?.get?.("x-builderforce-provider-cap") || null;
+  } catch {
+    headerProviderCap = null;
+  }
+  const providerCap = () => headerProviderCap ?? void 0;
   let usage;
   const readUsage = (u) => {
     if (!u || typeof u !== "object") return;
@@ -214,7 +221,7 @@ async function streamChatCompletion(opts, handlers = {}) {
     });
     finishReason = choice?.finish_reason ?? null;
     handlers.onDone?.(finishReason);
-    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), usage };
+    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
   }
   const decoder = new TextDecoder();
   let buffer = "";
@@ -232,7 +239,7 @@ async function streamChatCompletion(opts, handlers = {}) {
         const tail2 = xml.flush();
         if (tail2) handlers.onTextDelta?.(tail2);
         handlers.onDone?.(finishReason);
-        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), usage };
+        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
       }
       let parsed;
       try {
@@ -861,6 +868,19 @@ function attachEvermindLearn(messages, outcome) {
 }
 function formatEvermindLearnStep(outcome) {
   if (!outcome) return null;
+  const targets = outcome.targets;
+  if (targets && targets.length > 0) {
+    const label = (t) => `${t.name} (proj #${t.projectId}${t.version ? ` v${t.version}` : ""})`;
+    const learned = targets.filter((t) => t.learned);
+    const skipped = targets.filter((t) => !t.learned && t.reason && t.reason !== "too-short");
+    const parts = [];
+    if (learned.length > 0) parts.push(`Contributed this turn to ${learned.map(label).join(", ")}`);
+    for (const t of skipped) {
+      const why = t.reason === "not-seeded" ? "not set up yet" : t.reason === "frozen" ? "frozen (read-only)" : String(t.reason);
+      parts.push(`skipped ${label(t)} \u2014 ${why}`);
+    }
+    return parts.length > 0 ? `\u{1F9E0} ${parts.join("; ")}.` : null;
+  }
   if (outcome.learned) return `\u{1F9E0} Contributed this turn to the project Evermind (v${outcome.version}).`;
   switch (outcome.reason) {
     case "not-attached":
@@ -1365,7 +1385,8 @@ function codeChangeFile(args) {
 }
 function chatWorkLinkingDirective(chatId) {
   return `You are working inside Brain chat #${chatId}. Tie the work of this conversation back to it:
-\u2022 When your investigation concludes that something needs to be DONE \u2014 a bug to fix, a missing capability, a follow-up, or a gap you identified \u2014 do not merely describe it. Create the work item now (builtin_tasks_create with taskType "task", "epic", or "gap"; or the matching builtin_*_create for an objective, spec, or roadmap item) AND link it to this conversation with builtin_chats_link_ticket (chatId=${chatId}, linkType="created"). To hand a large or long-horizon job off to run autonomously, set assignedAgentRef on the created task.
+\u2022 When your investigation concludes that something needs to be DONE \u2014 a bug to fix, a missing capability, a follow-up, or a gap you identified \u2014 do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (builtin_tasks_create with exactly one assignee and taskType "task", "epic", or "gap"; or the matching builtin_*_create for an objective, spec, or roadmap item) AND link it with builtin_chats_link_ticket (chatId=${chatId}, linkType="created"). The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.
+\u2022 Every created ticket must be resource-scoped before you report success: inspect its template manifest with builtin_kanban_participants; infer all additional roles required by its description and acceptance criteria; add each with builtin_kanban_assess_resource; then call builtin_kanban_accountability and explicitly report any unstaffed resource gaps. For an epic or multi-role ticket, call builtin_kanban_materialize_work_items so each required resource has an assigned child work item. Call builtin_kanban_coordinate when work should begin now. Never treat 0 required roles / 0 sign-offs as complete.
 \u2022 When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide") so the change becomes a ticket linked to this chat that completes when it ships.
 \u2022 Keep the board honest about STATUS. The MOMENT you start actively working an existing linked task/epic/gap \u2014 investigating its fix, editing code for it, or driving it \u2014 move it out of the backlog with builtin_tasks_update (id=<the ticket's ref>, status="in_progress"). When the work is finished and shipped, advance it to "in_review" (or "done" if it needs no review). Never leave a ticket you are actively working sitting in backlog.
 \u2022 Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked \u2014 both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.`;
@@ -1388,6 +1409,13 @@ function accrueByoUnresolved(c, raw) {
   const next = new Set(c.byoUnresolved);
   for (const p of raw.split(",").map((s) => s.trim()).filter(Boolean)) next.add(p);
   if (next.size !== before) c.byoUnresolved = [...next];
+}
+function accrueProviderCap(c, raw) {
+  if (!raw) return;
+  const before = c.providerCap.length;
+  const next = new Set(c.providerCap);
+  for (const p of raw.split(",").map((s) => s.trim()).filter(Boolean)) next.add(p);
+  if (next.size !== before) c.providerCap = [...next];
 }
 var HISTORY_TOKEN_BUDGET = 24e3;
 var MAX_TOOL_RESULT_CHARS = 6e3;
@@ -1423,7 +1451,8 @@ var EMPTY_SNAPSHOT = {
   appended: [],
   hasTrace: false,
   trace: [],
-  byoUnresolved: []
+  byoUnresolved: [],
+  providerCap: []
 };
 function makeCell() {
   return {
@@ -1439,6 +1468,7 @@ function makeCell() {
     listeners: /* @__PURE__ */ new Set(),
     abort: null,
     byoUnresolved: [],
+    providerCap: [],
     codeChanged: false,
     ticketRecorded: false,
     touchedFiles: [],
@@ -1476,7 +1506,8 @@ function emit(c) {
     appended: c.appended,
     hasTrace: c.trace.length > 0,
     trace: c.trace,
-    byoUnresolved: c.byoUnresolved
+    byoUnresolved: c.byoUnresolved,
+    providerCap: c.providerCap
   };
   for (const l of c.listeners) l();
   for (const l of storeListeners) l();
@@ -1715,6 +1746,7 @@ async function startRun(chatId, req) {
   c.error = "";
   c.streamingText = "";
   c.byoUnresolved = [];
+  c.providerCap = [];
   c.codeChanged = false;
   c.ticketRecorded = false;
   c.touchedFiles = [];
@@ -1858,6 +1890,38 @@ ${block}`;
       }
     }
   }
+  if (evermind?.answer && !c.abort?.signal.aborted) {
+    const query = latestUserText(convo);
+    if (query) {
+      let memAnswer = null;
+      try {
+        memAnswer = await evermind.answer(query);
+      } catch {
+        memAnswer = null;
+      }
+      const finalText = memAnswer?.text.trim();
+      if (finalText) {
+        convo.push({ role: "assistant", content: finalText });
+        const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: finalText }]);
+        c.streamingText = "";
+        recordAppended(c, assistantMsg);
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: "recall",
+          label: memAnswer.source === "evermind" ? "evermind.answer" : "memory.answer",
+          args: { query },
+          result: {
+            source: memAnswer.source,
+            skippedLlm: true,
+            ...memAnswer.evermindVersion != null ? { version: memAnswer.evermindVersion } : {}
+          }
+        });
+        emit(c);
+        onActivity?.(chatId);
+        return;
+      }
+    }
+  }
   if (req.augmentSystemPrompt) {
     try {
       const extra = await req.augmentSystemPrompt(latestUserText(convo));
@@ -1905,6 +1969,7 @@ ${chatWorkLinkingDirective(chatId)}`;
       throw e;
     }
     accrueByoUnresolved(c, result.byoUnresolved);
+    accrueProviderCap(c, result.providerCap);
     const resolved = result.resolvedModel ?? model ?? "default";
     const requested = model ?? "default";
     if (requested !== "default" && resolved !== "default" && resolved !== requested) {
@@ -2042,7 +2107,9 @@ ${chatWorkLinkingDirective(chatId)}`;
         ts: nowIso(),
         category: "learn",
         label: "evermind.learn",
-        result: { version: learn.version, queued: true }
+        // `targets` carries the per-Evermind breakdown (a project can fan out to many)
+        // so the timeline can name each by id; the renderer falls back to `version` alone.
+        result: { version: learn.version, queued: true, ...learn.targets ? { targets: learn.targets } : {} }
       });
       const reconciled = recalled?.items ? countReconciledMemories(recalled.items, finalText) : 0;
       if (reconciled > 0) {
@@ -2058,8 +2125,15 @@ ${chatWorkLinkingDirective(chatId)}`;
         ts: nowIso(),
         category: "learn",
         label: "evermind.learn",
-        result: { version: learn.version, skipped: true, reason: learn.reason }
+        result: { version: learn.version, skipped: true, reason: learn.reason, ...learn.targets ? { targets: learn.targets } : {} }
       });
+    }
+    if (evermind?.cacheAnswer) {
+      const q = latestUserText(convo);
+      if (q) {
+        void Promise.resolve(evermind.cacheAnswer(q, finalText)).catch(() => {
+        });
+      }
     }
     onActivity?.(chatId);
     return;
@@ -2087,6 +2161,7 @@ ${chatWorkLinkingDirective(chatId)}`;
         } }
       );
       accrueByoUnresolved(c, closing.byoUnresolved);
+      accrueProviderCap(c, closing.providerCap);
       pushTrace(c, {
         ts: nowIso(),
         category: "llm",
@@ -2182,6 +2257,10 @@ function useBrainConversation(options) {
       cancelled = true;
     };
   }, [persistence, chatId, reloadNonce]);
+  useEffect5(() => {
+    if (chatId == null || !persistence.subscribeMessages) return;
+    return persistence.subscribeMessages(chatId, reloadMessages);
+  }, [persistence, chatId, reloadMessages]);
   useEffect5(() => {
     const appended = snapshot.appended;
     if (appended.length === 0) return;
@@ -2404,7 +2483,57 @@ ${refs}`;
      *  subscription) — a mounted view renders a passive "reconnect your account"
      *  banner off this. Empty when everything resolved. */
     byoUnresolved: snapshot.byoUnresolved,
+    providerCap: snapshot.providerCap,
     buildTriageReport
+  };
+}
+
+// src/chatMessageSubscription.ts
+function subscribeToChatMessages(baseUrl, getToken, chatId, onChanged) {
+  let stopped = false;
+  let socket = null;
+  let retry = null;
+  let attempt = 0;
+  const connect = () => {
+    if (stopped || typeof WebSocket === "undefined") return;
+    const token = getToken();
+    if (!token) return;
+    const url = new URL(`/api/brain/chats/${chatId}/stream`, baseUrl);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    url.searchParams.set("token", token);
+    try {
+      socket = new WebSocket(url.toString());
+    } catch {
+      scheduleReconnect();
+      return;
+    }
+    socket.onopen = () => {
+      attempt = 0;
+    };
+    socket.onmessage = (event) => {
+      try {
+        const frame = JSON.parse(String(event.data));
+        if (frame.type === "changed") onChanged();
+      } catch {
+      }
+    };
+    socket.onclose = () => scheduleReconnect();
+    socket.onerror = () => socket?.close();
+  };
+  const scheduleReconnect = () => {
+    if (stopped || retry) return;
+    const delay = Math.min(1e3 * 2 ** attempt++, 3e4);
+    retry = setTimeout(() => {
+      retry = null;
+      connect();
+    }, delay);
+  };
+  connect();
+  return () => {
+    stopped = true;
+    if (retry) clearTimeout(retry);
+    socket?.close();
+    socket = null;
   };
 }
 
@@ -2574,6 +2703,7 @@ export {
   streamChatCompletion,
   subscribeRun,
   subscribeRunStore,
+  subscribeToChatMessages,
   takePendingPrompt,
   useBrainActions,
   useBrainChats,

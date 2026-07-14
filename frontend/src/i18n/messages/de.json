@@ -121,6 +121,15 @@
     "assignTeam": "Ein Team zuweisen…",
     "assign": "Zuweisen",
     "boardNameLabel": "Board-Name",
+    "templateHeading": "Board-Vorlage",
+    "templateLabel": "Board-Vorlage",
+    "templateHint": "Beim Anwenden einer Vorlage werden Swimlanes, Rollenanforderungen, Gates und die koordinierte Lebenszyklus-Einstellung dieses Boards ersetzt.",
+    "templateApply": "Vorlage anwenden",
+    "templateApplying": "Wird angewendet…",
+    "templateConfirmTitle": "Board-Vorlage anwenden?",
+    "templateConfirmMessage": "„{name}“ auf dieses Board anwenden? Die vorhandene Swimlane-Konfiguration wird ersetzt. Tickets und Verlauf bleiben erhalten.",
+    "templateLoadError": "Board-Vorlagen konnten nicht geladen werden",
+    "templateApplyError": "Board-Vorlage konnte nicht angewendet werden",
     "maxConcurrent": "Max. gleichzeitige Tickets",
     "hideDoneItems": "Erledigte Elemente ausblenden",
     "standupTimer": "Standup-Runden-Timer",
@@ -290,7 +299,8 @@
       "myWorkspace": "Mein Bereich",
       "marketplace": "Marktplatz",
       "incidents": "Vorfälle",
-      "monitoring": "Überwachung"
+      "monitoring": "Überwachung",
+      "reliability": "Zuverlässigkeit"
     },
     "tab": {
       "projects": "Projekte",
@@ -340,7 +350,7 @@
       "logs": "Protokolle",
       "qa": "Agentische QA",
       "home": "Start",
-      "integrations": "Integrationen",
+      "integrations": "Integrationen / API-Schlüssel",
       "manager": "Manager",
       "roles": "Rollen",
       "talent": "Talente",
@@ -365,7 +375,9 @@
       "escalation": "Eskalation",
       "contacts": "Kontakte",
       "boards": "Boards",
-      "reporting": "Berichte"
+      "monitors": "Monitore",
+      "reporting": "Berichte",
+      "rfp": "RFP"
     }
   },
   "alerts": {
@@ -974,6 +986,8 @@
     "merging": "Wird zusammengeführt…"
   },
   "memberProfile": {
+    "tabs": { "overview": "Übersicht", "timeLogs": "Zeiterfassung", "tasks": "Aufgaben" },
+    "noTasks": "Diesem Benutzer sind keine Aufgaben zugewiesen.",
     "subtitle": "{kind} · Fähigkeiten & Verfügbarkeit",
     "syncing": "Wird synchronisiert…",
     "syncFromGoogleCalendar": "Aus Google Kalender synchronisieren",
@@ -2411,7 +2425,9 @@
       "security": "Sicherheit",
       "product_manager": "Produkt",
       "designer": "Designer",
-      "incident_manager": "Incident-Manager"
+      "incident_manager": "Incident-Manager",
+      "cto": "CTO",
+      "product_owner": "Product Owner"
     },
     "teams": {
       "heading": "Teams",
@@ -3155,6 +3171,7 @@
       "integrations": "Integrationen",
       "content": "Inhalte",
       "ceremonies": "Zeremonien",
+      "incidents": "Vorfälle",
       "wfPlan": "Personalplan",
       "empAllocation": "Zuteilung",
       "empCollaboration": "Zusammenarbeit",
@@ -3249,6 +3266,10 @@
       "obsContentByKind": "Dokumente nach Typ",
       "obsCeremonyCadence": "Zeremonien-Takt",
       "obsCeremonyBalance": "Redeanteil-Verteilung",
+      "incStatus": "Offene Vorfälle",
+      "incSeverity": "Vorfälle nach Schweregrad",
+      "incSystems": "Vorfälle nach System",
+      "incMttr": "Mittlere Lösungszeit",
       "wfpCostSplit": "Kosten Einstellen vs. Agent",
       "wfpCapacity": "Kapazität vs. WIP",
       "wfpGap": "Zuteilbare Lücke",
@@ -3381,6 +3402,19 @@
       "humanTalk": "Mensch",
       "agentTalk": "KI-Agent",
       "completed": "abgeschlossen"
+    },
+    "inc": {
+      "noIncidents": "Keine Vorfälle",
+      "ofTotal": "von {total} im Zeitraum",
+      "openNudge": "{count} benötigen Aufmerksamkeit",
+      "allClear": "Alles in Ordnung",
+      "incidents": "Vorfälle",
+      "unclassified": "Nicht klassifiziert",
+      "mttrSub": "mittlere Lösungszeit",
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
     },
     "reorder": {
       "drag": "Zum Umsortieren ziehen",
@@ -5525,7 +5559,9 @@
       "learnSkipReasonFrozen": "das Evermind dieses Projekts ist eingefroren (schreibgeschützt)",
       "reconcileTitle": "{count} gelernte Erinnerungen in Evermind v{version} abgeglichen",
       "reconcileHint": "Die Antwort hat diese abgerufenen Erkenntnisse neu formuliert und aktualisiert sie damit (Write-Through-Kognition).",
-      "stop": "Stoppen"
+      "stop": "Stoppen",
+      "learnTargetContributed": "Zu {name} beigetragen (Projekt #{projectId} v{version})",
+      "learnTargetSkipped": "{name} übersprungen (Projekt #{projectId}) — {reason}"
     },
     "tickets": {
       "none": "Noch keine Tickets verknüpft.",
@@ -5572,6 +5608,15 @@
       "lockHint": "Geteilte Chats sind für das ganze Team sichtbar; sperren, um ihn nur den Mitgliedern vorzubehalten.",
       "mergeHint": "Andere Chats in diesen zusammenführen. Ihre Nachrichten, Tickets und Agenten wandern hierher; die Quellen werden archiviert.",
       "mergeNoOthers": "Keine anderen Chats zum Zusammenführen.",
+      "questions": "Fragen",
+      "noQuestions": "Keine offenen Fragen.",
+      "answerPlaceholder": "Antwort eingeben…",
+      "submitAnswer": "Antworten",
+      "answering": "Wird gesendet…",
+      "showTickets": "Verknüpfte Tickets anzeigen",
+      "hideTickets": "Verknüpfte Tickets ausblenden",
+      "ticketCount": "{n, plural, one {# Ticket} other {# Tickets}}",
+      "overallAria": "Gesamtfortschritt: {pct}% erledigt",
       "mergeAction": "{n} hier zusammenführen",
       "mergedN": "{n} Chat(s) zusammengeführt.",
       "kind": {
@@ -5697,6 +5742,7 @@
         "already_running": "Läuft bereits",
         "human_gate": "Warte auf Freigabe",
         "capability_mismatch": "Agent fehlen erforderliche Fähigkeiten",
+        "run_cap_exhausted": "Zu viele fehlgeschlagene Läufe — zur Prüfung pausiert",
         "no_agent": "Kein Agent zugewiesen",
         "no_board": "Kein Board konfiguriert",
         "no_lane": "Spur nicht konfiguriert",
@@ -5714,7 +5760,8 @@
     },
     "audit": {
       "flagged": "Markiert",
-      "flaggedTitle": "Dieses Ticket hat eine erforderliche Rolle oder Diagnose übersprungen – Prüfung nötig"
+      "flaggedTitle": "Dieses Ticket hat eine erforderliche Rolle oder Diagnose übersprungen – Prüfung nötig",
+      "participantsTitle": "Beteiligung erforderlicher Rollen: abgeschlossen von erforderlich"
     }
   },
   "projectsContent": {
@@ -6155,6 +6202,7 @@
       "assign": "Zugewiesen",
       "score_value": "Bewertet",
       "dispatch": "Versandt",
+      "sync_pr": "PR aktualisiert",
       "merge_pr": "PR zusammengeführt",
       "flag": "Markiert"
     },
@@ -6884,6 +6932,8 @@
     "taskCount": "{count, plural, one {# Aufgabe} other {# Aufgaben}}",
     "byStage": "Nach Phase",
     "byAssignee": "Nach Zuständigem",
+    "expandAssigneeRow": "Aufgaben von {name} aufklappen",
+    "collapseAssigneeRow": "Aufgaben von {name} einklappen",
     "startStandup": "Standup starten",
     "startPlanning": "Planung starten",
     "viewPrdAria": "PRD ansehen",
@@ -6901,6 +6951,7 @@
     "deleteTask": "Aufgabe löschen",
     "tabAgent": "Agent / Fähigkeiten",
     "tabPrd": "PRD",
+    "tabAccountability": "Freigaben & Verantwortlichkeit",
     "changeStatusTitle": "Zum Ändern des Status klicken",
     "changePriorityTitle": "Zum Ändern der Priorität klicken",
     "viewCodeChangesTitle": "Die Code-Änderungen auf GitHub ansehen",
@@ -7592,17 +7643,37 @@
     "errStartConnect": "Verbindung konnte nicht gestartet werden",
     "errConnectSubscription": "Abo konnte nicht verbunden werden",
     "errRemove": "Zugangsdaten konnten nicht entfernt werden",
+    "precedence": {
+      "title": "Anbieter-Priorität",
+      "subtitle": "Wenn mehrere Ihrer Konten verbunden sind, beginnen Cloud-Agenten mit dem obersten Anbieter und wechseln bei Ausfall die Liste hinab. Setzen Sie Meta an die erste Stelle, um Cloud-Agenten darüber zu leiten.",
+      "leads": "Bevorzugt",
+      "moveUp": "{provider} nach oben",
+      "moveDown": "{provider} nach unten",
+      "errSave": "Priorität konnte nicht gespeichert werden"
+    },
     "provider": {
       "anthropic": {
         "blurb": "Verbinden Sie Ihr Claude-Pro/Max-Abo (keine Abrechnung pro Token) oder fügen Sie einen Anthropic-API-Schlüssel ein.",
-        "subscription": "Claude-Abo"
+        "subscription": "Claude-Abo",
+        "pastePrompt": "Nach der Freigabe im Claude-Tab den vollständigen Wert <code>code#state</code> hier einfügen.",
+        "pastePlaceholder": "Claude-Code einfügen…"
       },
       "openai": {
-        "blurb": "Fügen Sie einen OpenAI-API-Schlüssel ein, um GPT-Modelle mit Ihrem eigenen OpenAI-Konto auszuführen."
+        "blurb": "Verbinden Sie Ihr ChatGPT/Codex-Abo oder fügen Sie einen OpenAI-API-Schlüssel ein.",
+        "subscription": "ChatGPT/Codex-Abo",
+        "pastePrompt": "Kopieren Sie nach der Anmeldung die vollständige URL <code>http://localhost:1455/auth/callback?code=…&state=…</code> aus der Adressleiste und fügen Sie sie hier ein.",
+        "pastePlaceholder": "OpenAI-Weiterleitungs-URL einfügen…"
       },
       "google": {
         "blurb": "Fügen Sie einen Google-AI-(Gemini-)API-Schlüssel ein, um Gemini-Modelle mit Ihrem eigenen Google-Konto auszuführen."
-      }
+      },
+      "meta": {
+        "blurb": "Fügen Sie einen Meta-AI-API-Schlüssel ein, um MUSE-Modelle (muse-spark-1.1) mit Ihrem eigenen Meta-AI-Konto auszuführen."
+      },
+      "kimi": { "blurb": "Fügen Sie einen Kimi-Code-Aboschlüssel oder Moonshot-API-Schlüssel ein." },
+      "qwen": { "blurb": "Fügen Sie einen Alibaba-DashScope-API-Schlüssel für Qwen-Modelle ein." },
+      "minimax": { "blurb": "Fügen Sie einen MiniMax-API-Schlüssel für MiniMax-Modelle ein." }
+      ,"xai": { "blurb": "Verbinden Sie ein berechtigtes SuperGrok-Abo oder einen xAI-API-Schlüssel.", "subscription": "SuperGrok-Abo", "pastePrompt": "Kopieren Sie nach der Freigabe den auf der xAI-Seite angezeigten Code und fügen Sie ihn hier ein.", "pastePlaceholder": "xAI-Anmeldecode einfügen…" }
     }
   },
   "modelSelect": {
@@ -8584,6 +8655,10 @@
   },
   "agentExecution": {
     "runThisTask": "Diese Aufgabe ausführen",
+    "coordinateThisTicket": "Dieses Ticket koordinieren",
+    "coordinateNow": "Nächste Rolle zuweisen und starten",
+    "coordinating": "Wird koordiniert…",
+    "coordinateHint": "Der Zuständige koordiniert diesen Lebenszyklus. BuilderForce prüft das Manifest und startet die nächste erforderliche Rolle – niemals den Zuständigen als Standardausführer.",
     "awaitingApproval": "Warten auf Genehmigung, bevor dies ausgeführt werden kann: {reason}",
     "executions": "Ausführungen",
     "ticketSpendTooltip": "Ticket-Ausgaben über alle Ausführungen: {tokens} Tokens bei {requests} LLM-Aufruf(en). Wird auf dieses Projekt und dann auf das Konto hochgerechnet.",
@@ -9080,6 +9155,16 @@
       "escalation": "Eskalation",
       "contacts": "Kontakte"
     },
+    "workflows": {
+      "title": "Runbooks & Workflows",
+      "blurb": "Führen Sie einen benutzerdefinierten Workflow für diesen Vorfall aus oder sehen Sie die von seinen Ereignissen ausgelösten Workflows.",
+      "pick": "Workflow",
+      "pickPlaceholder": "Workflow auswählen…",
+      "run": "Workflow ausführen",
+      "create": "Workflow erstellen",
+      "runs": "Ausführungen für diesen Vorfall",
+      "noRuns": "Noch keine Workflow-Ausführungen."
+    },
     "severity": {
       "sev1": "SEV1",
       "sev2": "SEV2",
@@ -9139,6 +9224,8 @@
       "publishedNote": "Für diesen Vorfall wurde eine Ursachenanalyse veröffentlicht.",
       "prompt": "Dieser Vorfall ist behoben. Veröffentlichen Sie eine Ursachenanalyse in der Wissensdatenbank.",
       "formTitle": "Ursachenanalyse veröffentlichen",
+      "fishTitle": "Warum ist das passiert?",
+      "fishAria": "Ishikawa-Ursachendiagramm für {title}",
       "summary": "Zusammenfassung",
       "summaryPlaceholder": "Überblick über den Vorfall in einem Absatz…",
       "rootCause": "Grundursache",
@@ -9218,7 +9305,18 @@
     "deleteContactConfirm": "Kontakt „{name}“ löschen?",
     "oncallSubtitle": "Bereitschaftsrotationen legen fest, wer bei einem Vorfall zuerst alarmiert wird.",
     "escalationSubtitle": "Eskalationsrichtlinien durchlaufen Ziele und Kanäle, bis jemand reagiert.",
-    "contactsSubtitle": "Geschäftskontakte, die Sie während eines Vorfalls alarmieren oder eskalieren können."
+    "contactsSubtitle": "Geschäftskontakte, die Sie während eines Vorfalls alarmieren oder eskalieren können.",
+    "implicated": {
+      "title": "Betroffene Liefertickets",
+      "help": "Das/die Lieferticket(s), deren Änderung diesen Vorfall verursacht hat — je mit Verantwortlichkeit, damit die RCA sieht, wo der Prozess übersprungen oder erlassen wurde.",
+      "loading": "Wird geladen…",
+      "empty": "Noch keine betroffenen Tickets verknüpft.",
+      "signed": "{done}/{total} freigegeben",
+      "gaps": "{count} Lücke(n)",
+      "remove": "Entfernen",
+      "add": "Ticket verknüpfen",
+      "addPlaceholder": "Ticket-Nr."
+    }
   },
   "monitoring": {
     "boardsTitle": "Aktive Überwachung",
@@ -9346,5 +9444,148 @@
     "statusError": "Fehler",
     "errFailed": "Einladung fehlgeschlagen",
     "laterHint": "Du kannst Teammitglieder auch später über <link>Team</link> einladen."
+  },
+  "accountability": {
+    "loading": "Verantwortlichkeit wird geladen…",
+    "signedHeader": "{done} von {total} erforderlichen Rollen haben freigegeben",
+    "unassigned": "Nicht zugewiesen",
+    "addedBadge": "hinzugefügt",
+    "gaps": {
+      "title": "{count} Verantwortlichkeitslücke(n)",
+      "kind": {
+        "unsigned": "Nicht freigegeben",
+        "unstaffed": "Ressourcenlücke",
+        "no_contribution": "Kein Beitrag",
+        "waived": "Erlassen",
+        "changes_requested": "Änderungen angefordert"
+      }
+    },
+    "table": {
+      "title": "Freigaben & Verantwortlichkeit",
+      "role": "Rolle",
+      "who": "Wer",
+      "state": "Status",
+      "verdict": "Urteil",
+      "when": "Wann",
+      "comments": "Kommentare",
+      "contribution": "Beitrag",
+      "empty": "Noch keine erforderlichen Rollen für dieses Ticket."
+    },
+    "verdict": {
+      "approved": "Genehmigt",
+      "changes_requested": "Änderungen angefordert",
+      "waived": "Erlassen",
+      "delegated": "Delegiert"
+    },
+    "state": {
+      "pending": "Ausstehend",
+      "assigned": "Zugewiesen",
+      "in_progress": "In Bearbeitung",
+      "completed": "Abgeschlossen",
+      "changes_requested": "Änderungen angefordert",
+      "waived": "Erlassen",
+      "skipped": "Übersprungen",
+      "unstaffed": "Unbesetzt"
+    },
+    "responsibility": {
+      "owner": "Verantwortlich",
+      "reviewer": "Prüfer",
+      "contributor": "Mitwirkender"
+    },
+    "assess": {
+      "title": "Ressourcenbewertung",
+      "help": "Fügen Sie eine Rolle hinzu, die dieses Ticket über die Vorlage hinaus benötigt (z. B. Designer, Sicherheitsingenieur). Ist keine geeignete Ressource verfügbar, wird dies als Ressourcenlücke markiert.",
+      "rolePlaceholder": "Rolle auswählen…",
+      "notePlaceholder": "Warum wird diese Rolle benötigt? (optional)",
+      "add": "Erforderliche Rolle hinzufügen",
+      "materialize": "Arbeitspakete erstellen",
+      "materializeHelp": "Erstellt pro Ressource eine Unteraufgabe, sodass der Fortschritt zu diesem Ticket zusammenläuft."
+    }
+  },
+  "rfpPage": {
+    "title": "RFP-Antwort",
+    "subtitle": "Beantworten Sie ein RFQ/RFP mit einem co-gebrandeten Angebot auf Basis Ihres Portfolios – Fähigkeitenkatalog, GuV, Lieferplan und Risiken.",
+    "newRequest": "Neue Antwort",
+    "needDeveloper": "Erfordert Entwicklerrolle",
+    "loading": "Laden…",
+    "empty": "Noch keine RFP-Anfragen. Erstellen Sie eine, um ein co-gebrandetes Angebot zu entwerfen.",
+    "validation": "Ein Titel ist erforderlich.",
+    "creating": "Wird erstellt…",
+    "create": "Erstellen & entwerfen",
+    "cancel": "Abbrechen",
+    "noOrg": "Unbenannte Organisation",
+    "sourceNew": "Neuentwicklung",
+    "sourceExisting": "Basierend auf einem Projekt",
+    "quoted": "Angebot {price}",
+    "notGenerated": "Noch nicht generiert",
+    "scanFresh": "Aktueller Scan",
+    "status": {
+      "draft": "Entwurf",
+      "analyzing": "Analyse",
+      "ready": "Bereit",
+      "submitted": "Eingereicht"
+    },
+    "field": {
+      "title": "Titel",
+      "titlePlaceholder": "z. B. Kundenportal-Neuaufbau",
+      "requesterOrg": "Anfragende Organisation",
+      "requesterOrgPlaceholder": "Wer das RFP ausgestellt hat",
+      "requesterBrand": "Markenfarben des Anfragenden",
+      "requesterBrandHint": "Die Palette des anfragenden Unternehmens – im Angebot mit Ihrer eigenen kombiniert.",
+      "primary": "Primär",
+      "secondary": "Sekundär",
+      "accent": "Akzent",
+      "logoUrl": "Logo-URL",
+      "requirements": "Anforderungen",
+      "requirementsPlaceholder": "Fügen Sie die RFP/RFQ-Anforderungen ein…",
+      "sourceMode": "Grundlage",
+      "project": "Projekt",
+      "selectProject": "Projekt auswählen…",
+      "economics": "Wirtschaftlichkeit",
+      "margin": "Marge",
+      "marketing": "Marketing",
+      "contingency": "Puffer"
+    },
+    "backToList": "Zurück zu Anfragen",
+    "generating": "Wird generiert…",
+    "regenerate": "Neu generieren",
+    "generate": "Antwort generieren",
+    "generatingHint": "Aktualitätsgeprüfter Scan läuft, Portfolio wird abgeglichen und das Angebot entworfen…",
+    "noResponseYet": "Noch kein Angebot generiert. Klicken Sie auf Generieren, um eines zu entwerfen.",
+    "scanRefreshed": "Scan aktualisiert",
+    "scanCurrent": "Scan aktuell",
+    "groundedOn": "Basierend auf {project}",
+    "greenfield": "Neuentwicklung – aus den Anforderungen abgeleitet",
+    "scanAge": "letzter Scan vor {days} T",
+    "sec": {
+      "summary": "Zusammenfassung",
+      "capabilities": "Fähigkeiten & Ansatz",
+      "economics": "Investition & Kommerzielles",
+      "plan": "Lieferplan",
+      "risks": "Wesentliche Risiken",
+      "dependencies": "Abhängigkeiten",
+      "portfolio": "Ähnliche Projekte",
+      "document": "Gebrandetes Angebot"
+    },
+    "capabilitiesGreenfield": "Neuentwicklung – Fähigkeiten werden aus den Anforderungen abgeleitet.",
+    "col": {
+      "component": "Komponente",
+      "responsibility": "Verantwortung"
+    },
+    "stack": "Stack",
+    "quotedPrice": "Angebotspreis",
+    "marginNote": "{pct}% Gewinnmarge · {weeks} Wochen Aufwand.",
+    "deliveryWindow": "Lieferung: {start} → {end} ({weeks} Wochen).",
+    "severity": {
+      "low": "Niedrig",
+      "medium": "Mittel",
+      "high": "Hoch"
+    },
+    "depType": {
+      "internal": "Intern",
+      "external": "Extern",
+      "third_party": "Drittanbieter"
+    },
+    "downloadDoc": "Herunterladen"
   }
 }

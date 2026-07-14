@@ -33,6 +33,39 @@ describe('searchRepoCode', () => {
     expect(r.truncated).toBe(false);
   });
 
+  it('scopes to a subdirectory SERVER-SIDE via GitHub\'s path: qualifier (no client post-filter)', async () => {
+    // Regression: a `path` scope used to post-filter the capped global top-N, which
+    // dropped a subdir's real matches for a common term and carried a stale truncated
+    // flag (the `total:0, truncated:true` loop). The scope must ride the query instead.
+    const fetchMock = vi.fn(async (url: string) => {
+      const decoded = decodeURIComponent(url);
+      expect(decoded).toContain('"padding" repo:acme/app path:frontend/src/components/board');
+      return new Response(JSON.stringify({
+        total_count: 1,
+        items: [{ path: 'frontend/src/components/board/TeamMemberAvatarFilter.tsx', text_matches: [{ fragment: 'padding: 0' }] }],
+      }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const r = await searchRepoCode(ctx, 'padding', { path: 'frontend/src/components/board' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.total).toBe(1);
+    expect(r.truncated).toBe(false);
+    expect(r.matches.map((m) => m.path)).toEqual(['frontend/src/components/board/TeamMemberAvatarFilter.tsx']);
+  });
+
+  it('normalizes a scope dir (strips leading ./ and surrounding slashes) before the qualifier', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      expect(decodeURIComponent(url)).toContain('path:src/board');
+      expect(decodeURIComponent(url)).not.toContain('path:./src/board/');
+      return new Response(JSON.stringify({ total_count: 0, items: [] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+    await searchRepoCode(ctx, 'x', { path: './src/board/' });
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
   it('splits a compound "a OR b" query into per-term searches and unions the hits', async () => {
     // Regression: GitHub REST code-search has no OR operator, so a single quoted
     // compound query matched the literal phrase (incl. " OR ") and returned 0 for

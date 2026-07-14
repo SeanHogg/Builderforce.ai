@@ -121,6 +121,15 @@
     "assignTeam": "分配一个小组…",
     "assign": "分配",
     "boardNameLabel": "看板名称",
+    "templateHeading": "看板模板",
+    "templateLabel": "看板模板",
+    "templateHint": "应用模板将替换此看板的泳道、角色要求、关卡和协调生命周期设置。",
+    "templateApply": "应用模板",
+    "templateApplying": "正在应用…",
+    "templateConfirmTitle": "应用看板模板？",
+    "templateConfirmMessage": "将“{name}”应用到此看板？现有泳道配置将被替换。工单及其历史记录会保留。",
+    "templateLoadError": "无法加载看板模板",
+    "templateApplyError": "无法应用看板模板",
     "maxConcurrent": "最大并发工单数",
     "hideDoneItems": "隐藏已完成项",
     "standupTimer": "站会轮次计时器",
@@ -290,7 +299,8 @@
       "myWorkspace": "我的工作台",
       "marketplace": "市场",
       "incidents": "事件",
-      "monitoring": "监控"
+      "monitoring": "监控",
+      "reliability": "可靠性"
     },
     "tab": {
       "projects": "项目",
@@ -340,7 +350,7 @@
       "logs": "日志",
       "qa": "智能体 QA",
       "home": "主页",
-      "integrations": "集成",
+      "integrations": "集成 / API 密钥",
       "manager": "经理",
       "roles": "角色",
       "talent": "人才",
@@ -365,7 +375,9 @@
       "escalation": "升级",
       "contacts": "联系人",
       "boards": "看板",
-      "reporting": "报告"
+      "monitors": "监控器",
+      "reporting": "报告",
+      "rfp": "RFP 响应"
     }
   },
   "alerts": {
@@ -974,6 +986,8 @@
     "merging": "正在合并…"
   },
   "memberProfile": {
+    "tabs": { "overview": "概览", "timeLogs": "时间日志", "tasks": "任务" },
+    "noTasks": "没有分配给此用户的任务。",
     "subtitle": "{kind} · 能力与可用性",
     "syncing": "正在同步…",
     "syncFromGoogleCalendar": "从 Google 日历同步",
@@ -2411,7 +2425,9 @@
       "security": "安全",
       "product_manager": "产品",
       "designer": "设计师",
-      "incident_manager": "事件经理"
+      "incident_manager": "事件经理",
+      "cto": "技术总监",
+      "product_owner": "产品负责人"
     },
     "teams": {
       "heading": "团队",
@@ -3155,6 +3171,7 @@
       "integrations": "集成",
       "content": "内容",
       "ceremonies": "仪式",
+      "incidents": "事件",
       "wfPlan": "人力计划",
       "empAllocation": "工作分配",
       "empCollaboration": "协作",
@@ -3249,6 +3266,10 @@
       "obsContentByKind": "按类型分布的文档",
       "obsCeremonyCadence": "仪式节奏",
       "obsCeremonyBalance": "仪式发言分布",
+      "incStatus": "未解决事件",
+      "incSeverity": "按严重程度划分的事件",
+      "incSystems": "按系统划分的事件",
+      "incMttr": "平均解决时间",
       "wfpCostSplit": "招聘 vs 智能体成本",
       "wfpCapacity": "产能对比 WIP",
       "wfpGap": "可分配余量",
@@ -3381,6 +3402,19 @@
       "humanTalk": "人类",
       "agentTalk": "AI 代理",
       "completed": "已完成"
+    },
+    "inc": {
+      "noIncidents": "无事件",
+      "ofTotal": "共 {total} 个（时间范围内）",
+      "openNudge": "{count} 个需要关注",
+      "allClear": "一切正常",
+      "incidents": "事件",
+      "unclassified": "未分类",
+      "mttrSub": "平均解决时间",
+      "sev1": "SEV1",
+      "sev2": "SEV2",
+      "sev3": "SEV3",
+      "sev4": "SEV4"
     },
     "reorder": {
       "drag": "拖动以重新排序",
@@ -5525,7 +5559,9 @@
       "learnSkipReasonFrozen": "该项目的 Evermind 已冻结（只读）",
       "reconcileTitle": "已在 Evermind v{version} 中协调 {count} 条已学习记忆",
       "reconcileHint": "回答重述了这些召回的学习内容，因此会对其进行更新（写通式认知）。",
-      "stop": "停止"
+      "stop": "停止",
+      "learnTargetContributed": "已贡献到 {name}（项目 #{projectId} v{version}）",
+      "learnTargetSkipped": "已跳过 {name}（项目 #{projectId}）— {reason}"
     },
     "tickets": {
       "none": "尚未关联任何工单。",
@@ -5572,6 +5608,15 @@
       "lockHint": "共享聊天对整个团队可见；锁定后仅其成员可见。",
       "mergeHint": "将其他聊天合并到此聊天。其消息、工单和代理都会转移到这里；来源聊天将被归档。",
       "mergeNoOthers": "没有可合并的其他聊天。",
+      "questions": "问题",
+      "noQuestions": "没有待回答的问题。",
+      "answerPlaceholder": "输入您的回答…",
+      "submitAnswer": "回答",
+      "answering": "正在发送…",
+      "showTickets": "显示关联工单",
+      "hideTickets": "隐藏关联工单",
+      "ticketCount": "{n, plural, other {# 个工单}}",
+      "overallAria": "总体进度：完成 {pct}%",
       "mergeAction": "将 {n} 个合并到此处",
       "mergedN": "已合并 {n} 个聊天。",
       "kind": {
@@ -5697,6 +5742,7 @@
         "already_running": "已在运行",
         "human_gate": "等待人工批准",
         "capability_mismatch": "智能体缺少所需技能",
+        "run_cap_exhausted": "失败次数过多——已暂停以待人工检查",
         "no_agent": "未分配智能体",
         "no_board": "未配置看板",
         "no_lane": "泳道未配置",
@@ -5714,7 +5760,8 @@
     },
     "audit": {
       "flagged": "已标记",
-      "flaggedTitle": "此工单跳过了必需的角色或诊断——需要复核"
+      "flaggedTitle": "此工单跳过了必需的角色或诊断——需要复核",
+      "participantsTitle": "必需角色参与情况：已完成 & 必需"
     }
   },
   "projectsContent": {
@@ -6155,6 +6202,7 @@
       "assign": "已分配",
       "score_value": "已评估",
       "dispatch": "已派发",
+      "sync_pr": "PR 已更新",
       "merge_pr": "已合并 PR",
       "flag": "已标记"
     },
@@ -6884,6 +6932,8 @@
     "taskCount": "{count, plural, other {# 个任务}}",
     "byStage": "按阶段",
     "byAssignee": "按负责人",
+    "expandAssigneeRow": "展开分配给{name}的任务",
+    "collapseAssigneeRow": "折叠分配给{name}的任务",
     "startStandup": "开始站会",
     "startPlanning": "开始规划",
     "viewPrdAria": "查看 PRD",
@@ -6901,6 +6951,7 @@
     "deleteTask": "删除任务",
     "tabAgent": "智能体 / 能力",
     "tabPrd": "PRD",
+    "tabAccountability": "签核与问责",
     "changeStatusTitle": "点击更改状态",
     "changePriorityTitle": "点击更改优先级",
     "viewCodeChangesTitle": "在 GitHub 上查看代码更改",
@@ -7592,17 +7643,37 @@
     "errStartConnect": "启动连接失败",
     "errConnectSubscription": "连接订阅失败",
     "errRemove": "移除凭据失败",
+    "precedence": {
+      "title": "提供商优先级",
+      "subtitle": "当连接了多个账户时，云代理会优先使用排在最前面的提供商，并沿列表向下依次故障转移。将 Meta 排在首位即可让云代理通过它路由。",
+      "leads": "首选",
+      "moveUp": "上移 {provider}",
+      "moveDown": "下移 {provider}",
+      "errSave": "保存优先级失败"
+    },
     "provider": {
       "anthropic": {
         "blurb": "连接您的 Claude Pro/Max 订阅（无需按令牌计费），或粘贴 Anthropic API 密钥。",
-        "subscription": "Claude 订阅"
+        "subscription": "Claude 订阅",
+        "pastePrompt": "在 Claude 标签页批准后，粘贴完整的 <code>code#state</code> 值。",
+        "pastePlaceholder": "粘贴 Claude 代码…"
       },
       "openai": {
-        "blurb": "粘贴 OpenAI API 密钥，在您自己的 OpenAI 账户上运行 GPT 模型。"
+        "blurb": "连接您的 ChatGPT/Codex 订阅，或粘贴 OpenAI API 密钥。",
+        "subscription": "ChatGPT/Codex 订阅",
+        "pastePrompt": "登录后，从地址栏复制完整的 <code>http://localhost:1455/auth/callback?code=…&state=…</code> URL 并粘贴到这里。",
+        "pastePlaceholder": "粘贴 OpenAI 重定向 URL…"
       },
       "google": {
         "blurb": "粘贴 Google AI (Gemini) API 密钥，在您自己的 Google 账户上运行 Gemini 模型。"
-      }
+      },
+      "meta": {
+        "blurb": "粘贴 Meta AI API 密钥，在您自己的 Meta AI 账户上运行 MUSE 模型（muse-spark-1.1）。"
+      },
+      "kimi": { "blurb": "粘贴 Kimi Code 订阅密钥或 Moonshot API 密钥。" },
+      "qwen": { "blurb": "粘贴阿里云 DashScope API 密钥以运行 Qwen 模型。" },
+      "minimax": { "blurb": "粘贴 MiniMax API 密钥以运行 MiniMax 模型。" }
+      ,"xai": { "blurb": "连接符合条件的 SuperGrok 订阅或粘贴 xAI API 密钥。", "subscription": "SuperGrok 订阅", "pastePrompt": "批准访问后，复制 xAI 页面显示的代码并粘贴到这里。", "pastePlaceholder": "粘贴 xAI 登录代码…" }
     }
   },
   "modelSelect": {
@@ -8584,6 +8655,10 @@
   },
   "agentExecution": {
     "runThisTask": "运行此任务",
+    "coordinateThisTicket": "协调此工单",
+    "coordinateNow": "分配并运行下一个角色",
+    "coordinating": "正在协调…",
+    "coordinateHint": "负责人协调此生命周期。BuilderForce 会验证清单并运行下一个必需角色，绝不会默认让负责人执行工作。",
     "awaitingApproval": "此任务需先获得批准方可运行：{reason}",
     "executions": "执行记录",
     "ticketSpendTooltip": "所有运行的工单花费：{requests} 次 LLM 调用共 {tokens} 个 token。汇总至此项目，再汇总至账户。",
@@ -9080,6 +9155,16 @@
       "escalation": "升级",
       "contacts": "联系人"
     },
+    "workflows": {
+      "title": "运行手册与工作流",
+      "blurb": "针对此事件运行自定义工作流，或查看其事件触发的工作流。",
+      "pick": "工作流",
+      "pickPlaceholder": "选择工作流…",
+      "run": "运行工作流",
+      "create": "创建工作流",
+      "runs": "此事件的运行记录",
+      "noRuns": "尚无工作流运行记录。"
+    },
     "severity": {
       "sev1": "SEV1",
       "sev2": "SEV2",
@@ -9139,6 +9224,8 @@
       "publishedNote": "已为此事件发布根因分析。",
       "prompt": "此事件已解决。请将根因分析发布到知识库。",
       "formTitle": "发布根因分析",
+      "fishTitle": "为何会发生？",
+      "fishAria": "{title} 的鱼骨根因分析图",
       "summary": "摘要",
       "summaryPlaceholder": "用一段话概述该事件……",
       "rootCause": "根本原因",
@@ -9218,7 +9305,18 @@
     "deleteContactConfirm": "删除联系人“{name}”？",
     "oncallSubtitle": "值班轮换决定当事件触发时最先呼叫谁。",
     "escalationSubtitle": "升级策略会依次通过各目标和渠道升级，直到有人响应。",
-    "contactsSubtitle": "在事件期间可呼叫或升级至的业务联系人。"
+    "contactsSubtitle": "在事件期间可呼叫或升级至的业务联系人。",
+    "implicated": {
+      "title": "受牵连的交付工单",
+      "help": "其变更导致本次事故的交付工单——每个都附带问责信息，便于 RCA 查看流程在何处被跳过或豁免。",
+      "loading": "加载中…",
+      "empty": "尚未关联受牵连的工单。",
+      "signed": "{done}/{total} 已签核",
+      "gaps": "{count} 项缺口",
+      "remove": "移除",
+      "add": "关联工单",
+      "addPlaceholder": "工单 #"
+    }
   },
   "monitoring": {
     "boardsTitle": "主动监控",
@@ -9346,5 +9444,148 @@
     "statusError": "错误",
     "errFailed": "邀请失败",
     "laterHint": "你也可以稍后在<link>工作团队</link>邀请队友。"
+  },
+  "accountability": {
+    "loading": "正在加载问责信息…",
+    "signedHeader": "{total} 个必需角色中已有 {done} 个签核",
+    "unassigned": "未分配",
+    "addedBadge": "新增",
+    "gaps": {
+      "title": "{count} 项问责缺口",
+      "kind": {
+        "unsigned": "未签核",
+        "unstaffed": "资源缺口",
+        "no_contribution": "无贡献记录",
+        "waived": "已豁免",
+        "changes_requested": "要求修改"
+      }
+    },
+    "table": {
+      "title": "签核与问责",
+      "role": "角色",
+      "who": "签核人",
+      "state": "状态",
+      "verdict": "裁定",
+      "when": "时间",
+      "comments": "备注",
+      "contribution": "贡献",
+      "empty": "此工单暂无必需角色。"
+    },
+    "verdict": {
+      "approved": "已批准",
+      "changes_requested": "要求修改",
+      "waived": "已豁免",
+      "delegated": "已委派"
+    },
+    "state": {
+      "pending": "待处理",
+      "assigned": "已分配",
+      "in_progress": "进行中",
+      "completed": "已完成",
+      "changes_requested": "要求修改",
+      "waived": "已豁免",
+      "skipped": "已跳过",
+      "unstaffed": "缺人手"
+    },
+    "responsibility": {
+      "owner": "负责人",
+      "reviewer": "评审人",
+      "contributor": "参与者"
+    },
+    "assess": {
+      "title": "资源评估",
+      "help": "为此工单添加模板之外所需的角色（如设计师、安全工程师）。若没有可用的合格资源，将标记为资源缺口。",
+      "rolePlaceholder": "选择角色…",
+      "notePlaceholder": "为何需要此角色？（可选）",
+      "add": "添加必需角色",
+      "materialize": "创建工作项",
+      "materializeHelp": "为每个资源生成一个子任务，使进度汇总到此工单。"
+    }
+  },
+  "rfpPage": {
+    "title": "RFP 响应",
+    "subtitle": "以联合品牌方案回应 RFQ/RFP，基于您的项目组合——能力清单、损益、交付计划与风险。",
+    "newRequest": "新建响应",
+    "needDeveloper": "需要开发者角色",
+    "loading": "加载中…",
+    "empty": "暂无 RFP 请求。创建一个以起草联合品牌方案。",
+    "validation": "标题为必填项。",
+    "creating": "创建中…",
+    "create": "创建并起草",
+    "cancel": "取消",
+    "noOrg": "未命名组织",
+    "sourceNew": "全新构建",
+    "sourceExisting": "基于某个项目",
+    "quoted": "报价 {price}",
+    "notGenerated": "尚未生成",
+    "scanFresh": "最新扫描",
+    "status": {
+      "draft": "草稿",
+      "analyzing": "分析中",
+      "ready": "就绪",
+      "submitted": "已提交"
+    },
+    "field": {
+      "title": "标题",
+      "titlePlaceholder": "例如：客户门户重建",
+      "requesterOrg": "请求方组织",
+      "requesterOrgPlaceholder": "谁发起了 RFP",
+      "requesterBrand": "请求方品牌色",
+      "requesterBrandHint": "发起方的配色——将与您的配色在方案中融合。",
+      "primary": "主色",
+      "secondary": "辅色",
+      "accent": "强调色",
+      "logoUrl": "徽标 URL",
+      "requirements": "需求",
+      "requirementsPlaceholder": "粘贴 RFP/RFQ 需求…",
+      "sourceMode": "依据",
+      "project": "项目",
+      "selectProject": "选择一个项目…",
+      "economics": "经济测算",
+      "margin": "利润率",
+      "marketing": "营销",
+      "contingency": "应急"
+    },
+    "backToList": "返回请求列表",
+    "generating": "生成中…",
+    "regenerate": "重新生成",
+    "generate": "生成响应",
+    "generatingHint": "正在运行时效性扫描、匹配您的项目组合并起草方案…",
+    "noResponseYet": "尚未生成方案。点击\"生成\"以起草。",
+    "scanRefreshed": "已刷新扫描",
+    "scanCurrent": "扫描为最新",
+    "groundedOn": "基于 {project}",
+    "greenfield": "全新项目——根据需求提出",
+    "scanAge": "上次扫描于 {days} 天前",
+    "sec": {
+      "summary": "执行摘要",
+      "capabilities": "能力与方案",
+      "economics": "投资与商务",
+      "plan": "交付计划",
+      "risks": "主要风险",
+      "dependencies": "依赖项",
+      "portfolio": "相似项目",
+      "document": "品牌方案"
+    },
+    "capabilitiesGreenfield": "全新项目——能力根据需求提出。",
+    "col": {
+      "component": "组件",
+      "responsibility": "职责"
+    },
+    "stack": "技术栈",
+    "quotedPrice": "报价",
+    "marginNote": "{pct}% 利润率 · {weeks} 周工作量。",
+    "deliveryWindow": "交付：{start} → {end}（{weeks} 周）。",
+    "severity": {
+      "low": "低",
+      "medium": "中",
+      "high": "高"
+    },
+    "depType": {
+      "internal": "内部",
+      "external": "外部",
+      "third_party": "第三方"
+    },
+    "downloadDoc": "下载"
   }
 }

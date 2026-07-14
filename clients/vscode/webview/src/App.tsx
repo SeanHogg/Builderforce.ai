@@ -115,6 +115,8 @@ function timelineLabels(labels: LabelBundle): Partial<BrainTimelineLabels> {
     recallHint: t('tl.recallHint', "This project's self-learning Evermind recalled these prior learnings and grounded the answer on them."),
     learnTitle: t('tl.learnTitle', 'Contributed this turn to Evermind v{version}'),
     learnHint: t('tl.learnHint', 'This turn was contributed back to the project Evermind — it will be merged into the learned model.'),
+    learnTargetContributed: t('tl.learnTargetContributed', 'Contributed to {name} (project #{projectId} v{version})'),
+    learnTargetSkipped: t('tl.learnTargetSkipped', 'Skipped {name} (project #{projectId}) — {reason}'),
     reconcileTitle: t('tl.reconcileTitle', 'Reconciled {count} learned memories in Evermind v{version}'),
     reconcileHint: t('tl.reconcileHint', 'The answer restated these recalled learnings, so it updates them (write-through cognition).'),
   };
@@ -635,6 +637,19 @@ function Chat({ init }: { init: InitData }) {
           method: 'POST',
           body: JSON.stringify({ query }),
         }).catch(() => null),
+      // Memory-first: BEFORE the paid model, ask the project's own memory (exact-repeat
+      // Q&A cache, then its Evermind SSM). A substantive hit short-circuits the LLM.
+      answer: (query: string) =>
+        req<{ answer: { text: string; source: 'qa-cache' | 'evermind'; evermindVersion?: number } | null }>(
+          `/api/projects/${evermindProjectId}/answer?query=${encodeURIComponent(query)}`,
+        ).then((r) => r?.answer ?? null).catch(() => null),
+      // Remember a fresh (question → answer) so the next exact repeat is free.
+      cacheAnswer: (query: string, answer: string) => {
+        void req(`/api/projects/${evermindProjectId}/answer`, {
+          method: 'POST',
+          body: JSON.stringify({ question: query, answer }),
+        }).catch(() => { /* best-effort */ });
+      },
     };
   }, [evermindProjectId, init.baseUrl]);
 
@@ -1019,6 +1034,12 @@ function Chat({ init }: { init: InitData }) {
   const byoOtherWorkspace = byoEntries.length > 0 && byoEntries.every((e) => e.reason === 'other-workspace');
   const showByoNotice = conv.byoUnresolved.length > 0 && dismissedByo !== byoKey;
 
+  // Provider usage-cap notice: shown when a BYO provider's key hit its billing limit.
+  // Keyed on the provider set so a different capped provider re-shows it.
+  const [dismissedProviderCap, setDismissedProviderCap] = useState('');
+  const providerCapKey = conv.providerCap.join(',');
+  const showProviderCapNotice = conv.providerCap.length > 0 && dismissedProviderCap !== providerCapKey;
+
   // Triage helpers: copy the full transcript (turns + tool I/O + errors) so a
   // "No response" turn can be shared with its underlying system output, and run
   // the host's connection diagnostics. The host owns the clipboard + the
@@ -1290,6 +1311,27 @@ function Chat({ init }: { init: InitData }) {
             <button
               className="bf-btn bf-btn--icon"
               onClick={() => setDismissedByo(byoKey)}
+              title={t('app.dismiss', 'Dismiss')}
+              aria-label={t('app.dismiss', 'Dismiss')}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showProviderCapNotice && (
+        <div className="bf-notice" role="status">
+          <span className="bf-error__msg">
+            {t(
+              'app.providerCapHit',
+              'Your {providers} API key hit its usage limit this run, so it fell back to the shared model pool. Manage your API keys in the web app under Settings ▸ API Keys.',
+            ).replace('{providers}', conv.providerCap.join(', '))}
+          </span>
+          <div className="bf-error__actions">
+            <button
+              className="bf-btn bf-btn--icon"
+              onClick={() => setDismissedProviderCap(providerCapKey)}
               title={t('app.dismiss', 'Dismiss')}
               aria-label={t('app.dismiss', 'Dismiss')}
             >

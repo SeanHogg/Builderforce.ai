@@ -23,6 +23,19 @@ interface BrainChat {
  * it to render a TRUTHFUL `learn` step, replacing the old client-side heuristic guess
  * (which both false-positived and, for a connected-but-empty Evermind, false-negatived).
  */
+/** Per-Evermind learn result — mirrors the api `EvermindTargetOutcome`. A surface's
+ *  project can fan out to MANY Everminds (its own head + the IDE builds grouped under
+ *  it); each is named BY ID so the operator can triage which one did/didn't learn. */
+interface EvermindLearnTarget {
+    /** The Evermind-bearing project id (the build's storage project, or the surface project). */
+    projectId: number;
+    /** Immutable version ref `evermind/project/<t>/<p>/v<version>`; null when unseeded. */
+    ref: string | null;
+    version: number;
+    name: string;
+    learned: boolean;
+    reason: 'not-attached' | 'not-seeded' | 'frozen' | 'too-short' | null;
+}
 interface EvermindLearnOutcome {
     learned: boolean;
     version: number;
@@ -34,6 +47,12 @@ interface EvermindLearnOutcome {
      *   `frozen` Evermind is read-only · `too-short` no teachable assistant text.
      */
     reason?: 'not-attached' | 'not-seeded' | 'frozen' | 'too-short' | null;
+    /**
+     * Per-Evermind breakdown WITH IDs — present when the chat is project-attached. A
+     * project can target 0, 1, or many Everminds; this names each so "which Evermind
+     * (didn't) learn" is triageable instead of a single ambiguous "this project".
+     */
+    targets?: EvermindLearnTarget[];
 }
 /** A single message within a chat. */
 interface BrainMessage {
@@ -279,6 +298,14 @@ interface StreamChatResult {
      * is self-explaining instead of looking like "nothing connected".
      */
     byoUnresolved?: string;
+    /**
+     * BYO providers that hit a usage/capacity cap this turn (from
+     * `x-builderforce-provider-cap`, comma-separated) — e.g. the tenant's Anthropic
+     * key hit its monthly spend limit, or Meta MUSE quota was exhausted. Only set
+     * when the tenant's OWN key hit the cap (never the shared operator pool). The
+     * client should prompt the user to manage their provider keys in settings.
+     */
+    providerCap?: string;
     /** Token usage for this completion, when the gateway reported it. */
     usage?: CompletionUsage;
 }
@@ -315,6 +342,9 @@ interface BrainPersistenceAdapter {
         error: string;
     }>;
     getMessages(chatId: number, limit?: number): Promise<BrainMessage[]>;
+    /** Subscribe to durable message invalidations for one chat. The callback carries
+     * no data; the hook reconciles from persistence as the source of truth. */
+    subscribeMessages?(chatId: number, onChanged: () => void): () => void;
     sendMessages(chatId: number, messages: Array<{
         role: string;
         content: string;
@@ -440,13 +470,33 @@ interface EvermindRecallResult {
     items: EvermindRecallItem[];
 }
 /**
- * The single hook a host injects into the run loop. Bound to the active chat's
- * project; returns null when the chat isn't project-scoped or recall is
- * unavailable (so the loop simply skips the memory steps).
+ * A memory-first answer that lets the run loop SKIP the paid model entirely — either
+ * an exact-repeat Q&A cache hit or the project's Evermind SSM. Returned by the opt-in
+ * {@link EvermindRunHooks.answer} hook; null means "memory can't answer, run the LLM".
+ */
+interface MemoryFirstAnswer {
+    /** The answer text to adopt as the assistant turn. */
+    text: string;
+    /** Where it came from — drives the "no LLM" provenance/step. */
+    source: 'qa-cache' | 'evermind';
+    /** Evermind head version, when `source === 'evermind'`. */
+    evermindVersion?: number;
+}
+/**
+ * The hooks a host injects into the run loop. Bound to the active chat's project.
+ * `recall` grounds the answer (RAG); the OPTIONAL `answer`/`cacheAnswer` pair adds the
+ * memory-first short-circuit — answer from the project's own memory (Q&A cache or
+ * Evermind) BEFORE spending a model call, and remember a fresh (question→answer) pair
+ * so the next exact repeat is free. All return null / no-op when the chat isn't
+ * project-scoped or memory is unavailable, so the loop simply falls through to the LLM.
  */
 interface EvermindRunHooks {
     /** Recall the project's learned memories most relevant to `query`. */
     recall(query: string): Promise<EvermindRecallResult | null>;
+    /** Try to answer `query` from memory WITHOUT the LLM; null → run the model. */
+    answer?(query: string): Promise<MemoryFirstAnswer | null>;
+    /** Remember a (question → answer) pair so an exact repeat short-circuits next time. */
+    cacheAnswer?(query: string, answer: string): void | Promise<void>;
 }
 /**
  * Assistant text shorter than this isn't a teaching signal, so the server won't
@@ -1095,6 +1145,13 @@ interface UseBrainConversation {
      */
     byoUnresolved: string[];
     /**
+     * BYO providers that hit a usage/capacity cap this run (e.g. Anthropic monthly
+     * spend limit, Meta MUSE quota exhausted). A mounted view renders a "manage your
+     * API keys" banner so the user can top up or switch providers. Empty when no cap
+     * was hit this run.
+     */
+    providerCap: string[];
+    /**
      * Assemble a paste-able triage report of the active chat's execution — the LLM
      * steps, the full tool chain (args + results), intermediate assistant messages,
      * every error, and the visible transcript. `agentLabel` names the persona the
@@ -1104,6 +1161,13 @@ interface UseBrainConversation {
     buildTriageReport(agentLabel?: string, surface?: string): string;
 }
 declare function useBrainConversation(options: UseBrainConversationOptions): UseBrainConversation;
+
+/**
+ * Shared reconnecting WebSocket invalidation client for Brain chat messages.
+ * Both BuilderForce web and VSIX adapters use this implementation so auth,
+ * reconnect, cleanup, and frame handling cannot drift between surfaces.
+ */
+declare function subscribeToChatMessages(baseUrl: string, getToken: () => string | null, chatId: number, onChanged: () => void): () => void;
 
 /**
  * Module-level Brain run engine — the agent tool-loop, hoisted OUT of React so a
@@ -1225,6 +1289,14 @@ interface BrainRunSnapshot {
      * when everything resolved (or nothing is connected).
      */
     byoUnresolved: string[];
+    /**
+     * BYO providers whose key hit a usage/capacity cap on any turn of this run
+     * (from `x-builderforce-provider-cap`) — e.g. the tenant's Anthropic key hit its
+     * monthly spend limit, or Meta MUSE quota was exhausted. A mounted view shows a
+     * "manage your API keys" banner so the user knows to top up or switch providers.
+     * Accumulated across turns; reset fresh each run. Empty when no cap was hit.
+     */
+    providerCap: string[];
 }
 /**
  * A snapshot of which chats are live right now, split by whether they are actively
@@ -1563,4 +1635,4 @@ interface ChatDiagnosticsData {
  */
 declare function formatChatDiagnostics(d: ChatDiagnosticsData): string[];
 
-export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatInputAttachment, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type EvermindLearnOutcome, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, type McpToolResultInfo, type MentionToken, type MessageProvenance, NOT_STARTED_TASK_STATUSES, PROVENANCE_META_KEY, type PreparedImage, type ProvenanceAccount, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, accountUsedInTrace, activeMentionToken, attachEvermindLearn, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, chatWorkLinkingDirective, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, filterMentionCandidates, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, getGlobalRunState, getRunSnapshot, getRunTrace, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, linkedTicketsToAdvance, mentionRecipient, modelsUsedInTrace, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, prepareImageDataUrl, resolveRecipient, resolveRunConfirm, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, startRun, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatInputAttachment, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, type McpToolResultInfo, type MentionToken, type MessageProvenance, NOT_STARTED_TASK_STATUSES, PROVENANCE_META_KEY, type PreparedImage, type ProvenanceAccount, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, accountUsedInTrace, activeMentionToken, attachEvermindLearn, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, chatWorkLinkingDirective, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, filterMentionCandidates, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, getGlobalRunState, getRunSnapshot, getRunTrace, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, linkedTicketsToAdvance, mentionRecipient, modelsUsedInTrace, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, prepareImageDataUrl, resolveRecipient, resolveRunConfirm, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, startRun, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };

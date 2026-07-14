@@ -25,6 +25,9 @@ import { syncExecutionTaskLifecycle } from './application/task/taskLifecycle';
 import { maybeAutoRunOnLaneEntry } from './presentation/routes/taskRoutes';
 import { resolveNextTaskStatus } from './application/swimlane/nextLane';
 import { ChatTicketService } from './application/brain/ChatTicketService';
+import { attributeRunToManifest } from './application/kanban/attributeRunToManifest';
+import { coordinateCompletedStage } from './application/manager/coordinateTicket';
+import { findCanonicalBoard } from './application/swimlane/canonicalBoard';
 
 export function buildRuntimeService(env: Env, db: Db): RuntimeService {
   // eslint-disable-next-line prefer-const -- the lane-auto callback closes over the
@@ -68,6 +71,30 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
       phase: info.phase, executionId: info.executionId,
       toStatus: info.toStatus, resultText: info.resultText, errorMessage: info.errorMessage,
     }).catch(() => {}),
+    // Coordinated Role Participation attribution: a terminal run records that the role
+    // it ran AS participated on the ticket's manifest (linked to the execution), and —
+    // for a producer with PR evidence — completes that slot. Best-effort.
+    (info) => attributeRunToManifest(env, db, info),
+    async (info) => {
+      const board = await findCanonicalBoard(db, info.projectId, info.tenantId);
+      if (!board?.lifecycleManaged) return { managed: false, toStatus: info.fromStatus };
+
+      // Attribution must precede verification: the Coordinator evaluates the
+      // manifest produced by this exact execution, then and only then may advance.
+      if (info.status === 'completed' || info.status === 'failed') {
+        await attributeRunToManifest(env, db, {
+          tenantId: info.tenantId, taskId: info.taskId, projectId: info.projectId,
+          executionId: info.executionId, status: info.status,
+          actAsRole: info.actAsRole, laneServed: info.laneServed,
+        });
+      }
+      if (info.status !== 'completed') return { managed: true, toStatus: info.fromStatus };
+      const result = await coordinateCompletedStage(env, db, runtimeService, {
+        tenantId: info.tenantId, projectId: info.projectId, taskId: info.taskId,
+        fromStatus: info.laneServed ?? info.fromStatus,
+      });
+      return { managed: result.managed, toStatus: result.toStatus };
+    },
   );
   return runtimeService;
 }

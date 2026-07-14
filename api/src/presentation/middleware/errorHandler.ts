@@ -7,7 +7,7 @@ import {
   UnauthorizedError,
 } from '../../domain/shared/errors';
 import { createServerCapture } from '@seanhogg/builderforce-quality/server';
-import { buildDatabase } from '../../infrastructure/database/connection';
+import { buildTransactionalDatabase } from '../../infrastructure/database/connection';
 import { apiErrorLog } from '../../infrastructure/database/schema';
 import type { Env, HonoEnv } from '../../env';
 import { API_VERSION } from '../../version';
@@ -56,9 +56,9 @@ export async function errorHandler(err: Error, c: Context): Promise<Response> {
     const stack   = err instanceof Error ? (err.stack ?? null) : null;
 
     try {
-      const env = c.env as { NEON_DATABASE_URL?: string };
+      const env = c.env as { NEON_DATABASE_URL?: string; NEON_TRANSACTIONAL_DATABASE_URL?: string };
       if (env.NEON_DATABASE_URL) {
-        const db = buildDatabase(env as Parameters<typeof buildDatabase>[0]);
+        const db = buildTransactionalDatabase(env as Parameters<typeof buildTransactionalDatabase>[0]);
         await db.insert(apiErrorLog).values({
           method:  c.req.method,
           path:    new URL(c.req.url).pathname,

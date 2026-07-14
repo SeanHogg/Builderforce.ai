@@ -214,12 +214,11 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
     if (!policy.enabled) {
       return c.json({ started: false, reason: 'disabled' as const });
     }
+    // Mint/reconcile the run task before acknowledging. createManagerRunTask closes
+    // any orphaned prior pass first, so a new pass never starts while older manager
+    // cards still appear open.
+    const runTaskId = await createManagerRunTask(db, { tenantId, projectId, policy });
     c.executionCtx.waitUntil((async () => {
-      // A manual run is a first-class, owned, status-tracked board task: mint it
-      // in-progress, run the pass (its decisions link back to the task), then close
-      // it with the summary. Cron sweeps pass no run task (feed-only) to avoid one
-      // card per project per tick.
-      const runTaskId = await createManagerRunTask(db, { tenantId, projectId, policy });
       let summary: Awaited<ReturnType<typeof runManagerForProject>> | null = null;
       let ok = false;
       try {

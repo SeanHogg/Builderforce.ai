@@ -49,7 +49,8 @@ import { resolveManagerTypeById, normalizeManagerType } from './managerTypes';
 import { listActiveManagerDirectives } from './managerDirectives';
 import { RoleAssignmentService, type AssigneeKind } from '../kanban/roleAssignmentService';
 import { recommendTopAssignee } from '../metrics/assigneeRecommender';
-import { mergeRecordedPullRequest } from '../repos/mergeRecordedPr';
+import { producerRoleForActionType } from '../kanban/roleCapability';
+import { mergeRecordedPullRequest, updateRecordedPullRequestBranch } from '../repos/mergeRecordedPr';
 import { pollPrCiStatus } from '../repos/pollPrCiStatus';
 import { dispatchTaskFinalize } from '../../presentation/routes/taskRoutes';
 import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
@@ -184,13 +185,15 @@ export async function recordManagerAction(
 /** The newest manager actions for a project (the activity feed). */
 export async function listManagerActions(
   db: Db, tenantId: number, projectId: number, limit = 50,
-): Promise<Array<{ id: string; taskId: number | null; actionType: string; summary: string; detail: string | null; createdAt: Date }>> {
+): Promise<Array<{ id: string; taskId: number | null; ticketKey: string | null; ticketTitle: string | null; actionType: string; summary: string; detail: string | null; createdAt: Date }>> {
   return db
     .select({
       id: managerActions.id, taskId: managerActions.taskId, actionType: managerActions.actionType,
+      ticketKey: tasks.key, ticketTitle: tasks.title,
       summary: managerActions.summary, detail: managerActions.detail, createdAt: managerActions.createdAt,
     })
     .from(managerActions)
+    .leftJoin(tasks, eq(tasks.id, managerActions.taskId))
     .where(and(eq(managerActions.tenantId, tenantId), eq(managerActions.projectId, projectId)))
     .orderBy(desc(managerActions.createdAt))
     .limit(Math.min(200, Math.max(1, limit)));
@@ -217,6 +220,21 @@ export async function createManagerRunTask(
 ): Promise<number | null> {
   const { tenantId, projectId, policy } = args;
   try {
+    // A Worker can be evicted after starting a pass but before its finally block
+    // closes the visibility card. Reconcile those orphaned/open cards first so the
+    // Manager surface never accumulates multiple active passes.
+    const now = new Date();
+    await db.update(tasks).set({
+      status: TaskStatus.BLOCKED,
+      description: 'Closed before a newer backlog management pass started; the prior background run did not report completion.',
+      lastWorkedAt: now,
+      updatedAt: now,
+    }).where(and(
+      eq(tasks.projectId, projectId),
+      eq(tasks.source, 'manager'),
+      inArray(tasks.status, [TaskStatus.BACKLOG, TaskStatus.TODO, TaskStatus.READY, TaskStatus.IN_PROGRESS, TaskStatus.IN_REVIEW]),
+    ));
+
     const [project] = await db
       .select({ key: projects.key })
       .from(projects)
@@ -226,8 +244,6 @@ export async function createManagerRunTask(
 
     const baseSeq = await nextProjectKeySeqBase(db, projectId);
     const assignee = resolveManagerAssignee(policy.managerRef);
-    const now = new Date();
-
     // Retry on a key collision (a concurrent create) by walking the sequence forward.
     for (let attempt = 0; attempt < 3; attempt++) {
       const key = `${project.key}-${String(baseSeq + attempt).padStart(3, '0')}`;
@@ -669,7 +685,11 @@ export async function runManagerForProject(
       .slice(0, MAX_ASSIGNMENTS_PER_RUN);
     for (const t of unowned) {
       try {
-        const pick = await recommendTopAssignee(env, db, projectId, []);
+        // Role-aware: constrain the pick to the ticket's producer role (from its
+        // technical action-type) so a coding ticket never lands on a role-incapable
+        // owner (the #467 root cause). No constraint when the type implies no role.
+        const roleKey = producerRoleForActionType((t as { actionType?: string | null }).actionType);
+        const pick = await recommendTopAssignee(env, db, projectId, roleKey ? { roleKey } : {});
         if (!pick) continue;
         const set: Record<string, unknown> = { assignedUserId: null, assignedAgentRef: null, assignedAgentHostId: null, updatedAt: new Date() };
         let label = '';
@@ -850,8 +870,55 @@ async function coordinatePullRequests(
     .from(pullRequests)
     .where(and(eq(pullRequests.tenantId, tenantId), eq(pullRequests.projectId, projectId), eq(pullRequests.status, 'open')))
     .limit(MAX_PR_ACTIONS_PER_RUN);
+  const activePrRuns = openPrs.some((pr) => pr.taskId != null)
+    ? await runtimeService.listActiveByTasks(openPrs.flatMap((pr) => pr.taskId == null ? [] : [pr.taskId])).catch(() => [])
+    : [];
+  const activePrTaskIds = new Set<number>(activePrRuns.map((e) => e.taskId as unknown as number));
   for (const pr of openPrs) {
     try {
+      // A previous conflict-resolution run owns this branch until it finishes.
+      if (pr.taskId != null && activePrTaskIds.has(pr.taskId)) continue;
+
+      // Always integrate the latest base first. This prevents a queue of agent PRs
+      // from all being merged against the same stale main revision.
+      const prepared = await updateRecordedPullRequestBranch(db, env, { tenantId, prId: pr.id });
+      if (!prepared.ok) {
+        const task = pr.taskId == null ? null : managed.find((t) => t.id === pr.taskId) ?? null;
+        let recoveryStarted = false;
+        if (prepared.code === 'conflict' && task && (task.assignedAgentRef || task.assignedAgentHostId != null)) {
+          const recoveryNote = `\n\n[Manager recovery] PR #${pr.number ?? '?'} conflicts with the latest base branch. Sync the latest base, resolve every conflict while preserving both sets of intended changes, run the relevant checks, and update the existing PR.`;
+          await db.update(tasks).set({
+            status: TaskStatus.IN_PROGRESS,
+            completedAt: null,
+            description: task.description?.includes('[Manager recovery]')
+              ? task.description
+              : `${task.description ?? ''}${recoveryNote}`.trim(),
+            updatedAt: new Date(),
+          }).where(eq(tasks.id, task.id));
+          recoveryStarted = await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+            tenantId, projectId, taskId: task.id, status: TaskStatus.IN_PROGRESS,
+            submittedBy: `manager:conflict-resolution:${policy.managerRef ?? 'system'}`,
+          });
+        }
+        await recordManagerAction(db, {
+          tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: 'flag',
+          summary: recoveryStarted
+            ? `PR #${pr.number ?? '?'} conflicts with the latest base; started its ticket agent to resolve and update it.`
+            : `Could not update PR #${pr.number ?? '?'} from the latest base: ${prepared.error}`,
+          detail: { code: prepared.code, recoveryStarted },
+        });
+        continue;
+      }
+      if (prepared.updated) {
+        await recordManagerAction(db, {
+          tenantId, projectId, taskId: pr.taskId, runTaskId, actionType: 'sync_pr',
+          summary: `Updated PR #${pr.number ?? '?'} with the latest base branch before merge.`,
+        });
+        // Both GitHub updates and GitLab rebases are accepted asynchronously. Never
+        // race the provider by merging the old head in this pass. The next manager
+        // pass observes the current head; on-green also polls CI for that new commit.
+        continue;
+      }
       // 'on_green' waits for CI to pass. Don't depend on the inbound CI webhook — POLL
       // the provider's live status ourselves (self-trigger), persisting the verdict, so
       // an on_green PR merges even on a repo with no webhook installed. 'immediate'
