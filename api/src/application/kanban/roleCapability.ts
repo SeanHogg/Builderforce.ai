@@ -103,7 +103,14 @@ export function agentRoleKeys(a: RoleCapableAgentRow): Set<string> {
   const keys = new Set<string>();
   for (const k of parseRoleKeys(a.roleKeys)) keys.add(k);
   const kindKeys = a.builtinKind ? BUILTIN_KIND_ROLE_KEYS[a.builtinKind] : undefined;
-  if (kindKeys) for (const k of kindKeys) keys.add(k);
+  if (kindKeys) {
+    for (const k of kindKeys) keys.add(k);
+    // A built-in identity is an authoritative role boundary. Generic execution
+    // skills/personas (e.g. "coding-agent" attached for tool availability) must
+    // not turn a Product Manager into a Developer. Grant cross-role capability
+    // explicitly through role_keys or a project role assignment.
+    return keys;
+  }
   for (const r of BUILTIN_ROLES) {
     if (agentMatchesRole({ title: a.title ?? null, name: a.name, skills: a.skills ?? null }, r.key, r.name)) keys.add(r.key);
   }

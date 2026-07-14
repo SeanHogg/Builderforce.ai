@@ -30,6 +30,7 @@ import { projectRoleAssignments } from '../../infrastructure/database/schema';
 import { requirementApplies, type Responsibility } from './types';
 import type { SignoffContribution } from '../audit/ticketAuditService';
 import { TaskStatus } from '../../domain/shared/types';
+import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 
 const ROLE_NAME = new Map(BUILTIN_ROLES.map((r) => [r.key, r.name]));
 function roleName(key: string): string {
@@ -146,8 +147,8 @@ export class TicketParticipantsService {
   async doneGate(env: Env, tenantId: number, taskId: number, targetStatus: string): Promise<{ blocked: boolean; outstanding: string[] }> {
     const ctx = await this.taskContext(taskId);
     if (!ctx) return { blocked: false, outstanding: [] };
-    const [board] = await this.db.select({ id: boards.id, managed: boards.lifecycleManaged }).from(boards).where(eq(boards.projectId, ctx.projectId)).limit(1);
-    if (!board || !board.managed) return { blocked: false, outstanding: [] };
+    const board = await findCanonicalBoard(this.db, ctx.projectId);
+    if (!board || !board.lifecycleManaged) return { blocked: false, outstanding: [] };
     const [lane] = await this.db.select({ isTerminal: swimlanes.isTerminal }).from(swimlanes).where(and(eq(swimlanes.boardId, board.id), eq(swimlanes.key, targetStatus))).limit(1);
     const terminal = lane?.isTerminal ?? targetStatus === TaskStatus.DONE;
     if (!terminal) return { blocked: false, outstanding: [] };
@@ -232,7 +233,7 @@ export class TicketParticipantsService {
    *  to the ticket's type/condition (a Security ticket includes the security role; a
    *  docs ticket excludes QA). */
   private async templateSlots(projectId: number, task: { taskType: string | null; actionType: string | null }): Promise<SlotSeed[]> {
-    const [board] = await this.db.select({ id: boards.id }).from(boards).where(eq(boards.projectId, projectId)).limit(1);
+    const board = await findCanonicalBoard(this.db, projectId);
     if (!board) return [];
     const laneRows = await this.db
       .select({ id: swimlanes.id, key: swimlanes.key, position: swimlanes.position })
@@ -462,8 +463,13 @@ export class TicketParticipantsService {
 
   /** Cached manifest read; derives on first access when empty. */
   async listParticipants(env: Env, tenantId: number, taskId: number): Promise<ManifestParticipant[]> {
-    const existing = await this.db.select().from(ticketParticipants).where(and(eq(ticketParticipants.tenantId, tenantId), eq(ticketParticipants.taskId, taskId)));
-    if (!existing.length) {
+    // Assessment/manual rows do not prove the board-template manifest was derived.
+    // A coordinator may assess resources before a template is applied; previously
+    // that single row permanently suppressed all BA→Architect→Developer→QA slots.
+    const [templateRow] = await this.db.select({ id: ticketParticipants.id }).from(ticketParticipants)
+      .where(and(eq(ticketParticipants.tenantId, tenantId), eq(ticketParticipants.taskId, taskId), eq(ticketParticipants.source, 'template')))
+      .limit(1);
+    if (!templateRow) {
       await this.deriveManifest(env, tenantId, taskId);
     }
     const version = await getCacheVersion(env, versionKey(taskId));

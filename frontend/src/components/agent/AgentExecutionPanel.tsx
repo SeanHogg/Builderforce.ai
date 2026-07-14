@@ -8,6 +8,7 @@ import {
   cloudAgents as cloudAgentsApi,
   taskSpecsApi,
   approvalsApi,
+  kanbanApi,
   isAwaitingApprovalExecution,
   type Task,
   type AgentHost,
@@ -215,6 +216,8 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   const [rerunError, setRerunError] = useState<string | null>(null);
   // Ticket-level spend (finest grain of the ticket → project → account rollup).
   const [taskCost, setTaskCost] = useState<{ estimatedCostUsd: number; totalTokens: number; requests: number } | null>(null);
+  const [coordinated, setCoordinated] = useState(false);
+  const [coordinating, setCoordinating] = useState(false);
   // Cloud-agent ref → display name, for scoping the Logs/Timeline tabs to the
   // agent that actually executed (cloud runs carry no host name).
   const [cloudAgentNames, setCloudAgentNames] = useState<Map<string, string>>(new Map());
@@ -236,6 +239,13 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   }, [task.id, selectedId]);
 
   useEffect(() => { loadExecutions(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [task.id]);
+  useEffect(() => {
+    let live = true;
+    kanbanApi.accountability(task.id)
+      .then((report) => { if (live) setCoordinated(report.requiredCount > 0); })
+      .catch(() => { if (live) setCoordinated(false); });
+    return () => { live = false; };
+  }, [task.id]);
 
   // Pull the gated approval so the inline resolve control can render. Cleared when
   // the gate clears (a run started or the gate was resolved/rejected).
@@ -564,13 +574,32 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
     <div style={{ padding: 20 }}>
       {/* Run control */}
       <div style={{ marginBottom: 16 }}>
-        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>{t('runThisTask')}</div>
-        <RunAgentControl
-          task={task}
-          agentHosts={agentHosts}
-          onRan={() => { setGate(null); loadExecutions(true); onTaskChanged?.(); }}
-          onAwaitingApproval={(g) => setGate({ approvalId: g.approvalId, reason: g.reason })}
-        />
+        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>{coordinated ? t('coordinateThisTicket') : t('runThisTask')}</div>
+        {coordinated ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              disabled={coordinating}
+              onClick={() => {
+                setCoordinating(true);
+                kanbanApi.coordinate(task.id)
+                  .then(() => { loadExecutions(true); onTaskChanged?.(); })
+                  .finally(() => setCoordinating(false));
+              }}
+              style={{ padding: '8px 14px', border: 'none', borderRadius: 8, background: 'var(--coral-bright)', color: '#fff', fontWeight: 600, cursor: coordinating ? 'default' : 'pointer', opacity: coordinating ? 0.65 : 1 }}
+            >
+              {coordinating ? t('coordinating') : t('coordinateNow')}
+            </button>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', flex: '1 1 260px' }}>{t('coordinateHint')}</span>
+          </div>
+        ) : (
+          <RunAgentControl
+            task={task}
+            agentHosts={agentHosts}
+            onRan={() => { setGate(null); loadExecutions(true); onTaskChanged?.(); }}
+            onAwaitingApproval={(g) => setGate({ approvalId: g.approvalId, reason: g.reason })}
+          />
+        )}
         {gate && (
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8, padding: 10, background: 'var(--bg-deep)', borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
             <span>{t('awaitingApproval', { reason: gate.reason })}</span>
@@ -760,7 +789,9 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
               resetKey={selectedId ?? undefined}
               changes={
                 taskChanges.length > 0
-                  ? taskChanges.map((f) => ({ path: f.path, change: f.change, agent: f.agent }))
+                  ? taskChanges
+                      .filter((f) => selectedId == null || f.executionId === selectedId)
+                      .map((f) => ({ path: f.path, change: f.change, agent: f.agent, executionId: f.executionId, createdAt: f.createdAt, models: f.models }))
                   : files.map((f) => ({ path: f.path, change: f.change }))
               }
               emptyLabel={isRunning ? t('noFileChangesYet') : t('noFileChangesRecorded')}
