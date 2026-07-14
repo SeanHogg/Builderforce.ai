@@ -216,7 +216,16 @@ export class Task {
       >
     >,
   ): Task {
-    return new Task({ ...this.props, ...updates, updatedAt: new Date() });
+    // Partial-update semantics: a key set to `undefined` in `updates` (e.g. a field
+    // OMITTED from a tasks.update payload) must NOT overwrite the stored value —
+    // a naive `{ ...this.props, ...updates }` spread would clobber it with
+    // undefined, which the persistence layer then writes as null (the parentTaskId
+    // preservation bug). Strip undefined-valued keys so only fields the caller
+    // explicitly provided are merged; an explicit `null` is preserved and clears.
+    const defined = Object.fromEntries(
+      Object.entries(updates).filter(([, value]) => value !== undefined),
+    ) as Partial<TaskProps>;
+    return new Task({ ...this.props, ...defined, updatedAt: new Date() });
   }
 
   /**
