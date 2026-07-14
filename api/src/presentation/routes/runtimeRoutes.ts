@@ -1978,12 +1978,21 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
           WHERE a.execution_id = f.execution_id AND a.tenant_id = f.tenant_id
             AND a.tool_name = 'llm.complete'
             AND substring(a.args from '"model"\\s*:\\s*"([^"]+)"') IS NOT NULL
-        ) AS models
+        ) AS models,
+        COALESCE((
+          SELECT jsonb_agg(DISTINCT jsonb_build_object(
+            'model', u.model,
+            'byo', u.byo,
+            'provider', u.byo_provider
+          ))
+          FROM llm_usage_log u
+          WHERE u.execution_id = f.execution_id AND u.tenant_id = f.tenant_id
+        ), '[]'::jsonb) AS "modelUsage"
       FROM task_file_changes f
       WHERE f.task_id = ${taskId} AND f.tenant_id = ${c.get('tenantId')}
       ORDER BY f.created_at DESC
       LIMIT 500
-    `) as Array<{ path: string; change: string; agent: string; executionId: number | null; createdAt: string; models: string[] }>;
+    `) as Array<{ path: string; change: string; agent: string; executionId: number | null; createdAt: string; models: string[]; modelUsage: Array<{ model: string; byo: boolean; provider: string | null }> }>;
     return c.json({ changes: rows });
   });
 
