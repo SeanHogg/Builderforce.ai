@@ -34,6 +34,15 @@ describe('agentRoleKeys / agentIsRoleCapable (#467 regression)', () => {
     expect(agentIsRoleCapable(ada, 'product-manager')).toBe(true);
   });
 
+  it('generic coding skills do not turn a built-in Product Manager into a Developer', () => {
+    const configuredAda: RoleCapableAgentRow = {
+      ...ada,
+      skills: '["product-management","github","coding-agent","code-creator"]',
+    };
+    expect(agentIsRoleCapable(configuredAda, 'developer')).toBe(false);
+    expect(agentIsRoleCapable(configuredAda, 'business-analyst')).toBe(true);
+  });
+
   it('explicit role_keys make an agent capable', () => {
     const dev: RoleCapableAgentRow = { id: 'a2', name: 'Builder', title: null, skills: null, builtinKind: null, roleKeys: ['developer'] };
     expect(agentIsRoleCapable(dev, 'developer')).toBe(true);

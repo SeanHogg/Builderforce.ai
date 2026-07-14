@@ -8655,6 +8655,10 @@
   },
   "agentExecution": {
     "runThisTask": "Ejecutar esta tarea",
+    "coordinateThisTicket": "Coordinar este tique",
+    "coordinateNow": "Asignar y ejecutar el siguiente rol",
+    "coordinating": "Coordinando…",
+    "coordinateHint": "La persona asignada coordina este ciclo. BuilderForce verifica el manifiesto y ejecuta el siguiente rol requerido, nunca a la persona asignada como ejecutor predeterminado.",
     "awaitingApproval": "A la espera de aprobación antes de poder ejecutarse: {reason}",
     "executions": "Ejecuciones",
     "ticketSpendTooltip": "Gasto del ticket en todas las ejecuciones: {tokens} tokens en {requests} llamada(s) a LLM. Se acumula en este proyecto y luego en la cuenta.",

@@ -1,7 +1,8 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { boards, swimlanes } from '../../infrastructure/database/schema';
 import { DEFAULT_SWIMLANES } from './defaultSwimlanes';
 import type { Db } from '../../infrastructure/database/connection';
+import { findCanonicalBoard } from './canonicalBoard';
 
 type Board = typeof boards.$inferSelect;
 
@@ -74,14 +75,7 @@ export async function findOrCreateBoard(
 ): Promise<FindOrCreateBoardResult> {
   const segmentId = input.segmentId ?? null;
 
-  // Prefer the earliest board so callers agree on *which* board when a project
-  // already (legacy) holds more than one — same tiebreak as `GET /api/boards`.
-  const [existing] = await db
-    .select()
-    .from(boards)
-    .where(and(eq(boards.tenantId, input.tenantId), eq(boards.projectId, input.projectId)))
-    .orderBy(asc(boards.createdAt), asc(boards.id))
-    .limit(1);
+  const existing = await findCanonicalBoard(db, input.projectId, input.tenantId);
   if (existing) return { board: existing, created: false };
 
   const now = new Date();

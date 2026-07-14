@@ -12,6 +12,7 @@
 import { asc, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { boards, swimlanes } from '../../infrastructure/database/schema';
+import { findCanonicalBoard } from './canonicalBoard';
 
 /** Minimal lane shape the ordering needs. */
 export interface LanePosition {
@@ -52,11 +53,7 @@ export function resolveNextLaneKey(lanes: LanePosition[], fromStatus: string): s
  * resolves the same lanes.
  */
 export async function resolveNextTaskStatus(db: Db, projectId: number, fromStatus: string): Promise<string | null> {
-  const [board] = await db
-    .select({ id: boards.id })
-    .from(boards)
-    .where(eq(boards.projectId, projectId))
-    .limit(1);
+  const board = await findCanonicalBoard(db, projectId);
   if (!board) return null;
 
   const lanes = await db

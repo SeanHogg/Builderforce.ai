@@ -8668,6 +8668,10 @@
   },
   "agentExecution": {
     "runThisTask": "Run this task",
+    "coordinateThisTicket": "Coordinate this ticket",
+    "coordinateNow": "Assign and run next role",
+    "coordinating": "Coordinating…",
+    "coordinateHint": "The assignee coordinates this lifecycle. BuilderForce verifies the manifest and dispatches the next required BA, architect, developer, reviewer, QA, or validator—never the assignee as the default executor.",
     "awaitingApproval": "Awaiting approval before this can run: {reason}",
     "executions": "Executions",
     "ticketSpendTooltip": "Ticket spend across all runs: {tokens} tokens over {requests} LLM call(s). Rolls up to this project, then the account.",
