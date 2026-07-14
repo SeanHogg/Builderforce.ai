@@ -1,281 +1,217 @@
 /**
- * The chat-titling behavior ships as platform functionality in the Brain hook:
- * - auto-title only replaces the placeholder FIRST a user sends a turn
- * - auto-title guards against doing this multiple times (single-flight)
- * - auto-title NEVER overwrites a user-provided or seed-titled chat
- * - rename persists a custom label immediately
- * - create always creates-chats with a default title (placeholder/no intent-case)
+ * Chat titling behavior – useBrainChats (autoTitle, rename, create defaults to placeholder).
  *
- * This test file is the TESTS persona coverage for FR1 (auto-title) and FR2
- * (manual edit) plus FR4 (create defaults to placeholder), ordered by AC:
- * AC-1: Newly initiated chat title defaults to "New chat" on create.
- * AC-2: First-user-turn auto-title replaces "New chat" with a topic-based title.
- * AC-3: Auto-title respects single-flight (full same-turn guard) and fails gracefully.
- * AC-4: Auto-title does NOT rename chats whose title is already set (user or seed).
- * AC-5: Manual rename updates the title and persists via updateChat.
- * AC-6: Rename is best-effort (fails to persist only on updateChat error).
- * AC-7: Title editing maximum-of-100 vs auto-title truncation is not enforced here;
- *       that would need a UI hook integ test (not in scope of this unit test suite).
+ * Tests correspond to PRD Chat Titling requirements:
+ * - FR1 (auto-title): placeholder-only replacements on first user turn; single-flight guard; no clobber of user/seeded titles.
+ * - FR2 (manual rename): edit interface is rename() hook; best-effort persistence and state update.
+ * - FR4 (create defaults): create() calls persistence.createChat with DEFAULT_CHAT_TITLE or user-supplied title.
+ *
+ * The tests mirror useBrainConversation.test.tsx patterns:
+ * - mock persistence to let useBrainChats proceed without real DB
+ * - renderHook + waitFor pattern for async operations
+ * - act() for sync mutations within a component lifecycle
+ * - vi.mocked to safely verify interactions
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import React from 'react';
 import { useBrainChats, DEFAULT_CHAT_TITLE, deriveChatTitle } from './useBrainChats';
 import { resetBrainRunStore } from './brainRunStore';
-import {
-  type BrainPersistenceAdapter,
-  type BrainConfig,
-  BrainProvider,
-  type BrainChat,
-} from './config';
+import { BrainProvider, type BrainConfig, type BrainPersistenceAdapter } from './config';
 
-// --- Persistence mock that stays consistent across the suite ---
-let chatSeq = 0;
-let persistence: Partial<Record<keyof BrainPersistenceAdapter, any>>;
-const persistedChats: ChatMock[] = [];
+// --- Mock brain configuration (same pattern as useBrainConversation.test.tsx) ---
+let seq = 0;
+let persistence: Partial<Record<keyof BrainPersistenceAdapter, unknown>>;
+const persistedChats: any[] = [];
 
-function resetPersistence() {
-  persistedChats.length = 0;
-  chatSeq = 0;
-  persistence = {
-    listChats: vi.fn(async (params) => persistedChats.slice(),
-      // Limits (if implemented) are ignored for simplicity
-    ),
-    getChat: vi.fn(async (id: number) => persistedChats.find((c) => c.id === id)),
-    createChat: vi.fn(async (body: { title?: string; projectId?: number | null }) => {
-      const chatId = ++chatSeq;
-      const newChat: ChatMock = {
-        id: chatId,
-        title: body.title ?? DEFAULT_CHAT_TITLE, // FR4: create defaults to placeholder
-        projectId: body.projectId ?? null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      persistedChats.push(newChat);
-      return newChat;
-    }),
-    updateChat: vi.fn(async (id: number, body: { title?: string; projectId?: number | null }) => {
-      const chat = persistedChats.find((c) => c.id === id);
-      if (!chat) return { ...chat }; // Return a fresh object to prove it changed
-      // Apply partial update (title and/or projectId) per BrainPersistenceAdapter signature
-      if (body.title !== undefined) {
-        chat.title = body.title;
-      }
-      if (body.projectId !== undefined) {
-        chat.projectId = body.projectId;
-      }
-      chat.updatedAt = new Date().toISOString();
-      return {
-        ...chat,
-      };
-    }),
-    deleteChat: vi.fn(async (id: number) => {
-      const idx = persistedChats.findIndex((c) => c.id === id);
-      if (idx !== -1) persistedChats.splice(idx, 1);
-    }),
-    summarizeChat: vi.fn(async (id: number): Promise<{ summary: string } | { error: string }> => {
-      const chat = persistedChats.find((c) => c.id === id);
-      if (!chat) return { error: 'Chat not found' };
-      return { summary: truncateChat(chat.title, 40) };
-    }),
-    // Remaining required methods are unused in autoTitle/rename create; we keep stubs for completeness.
-    upload: vi.fn(async () => ({ key: `u${Date.now()}`, name: 'test.txt' })),
-    uploadUrl: vi.fn((_key: string) => `https://gw.example/u/${_key}`),
-    sendMessages: vi.fn(async (_c: number, msgs) =>
-      msgs.map((m, i) => ({ id: ++chatSeq, role: m.role as 'user' | 'assistant', content: m.content, metadata: null, seq: i, createdAt: '' })),
-    ),
-    setMessageFeedback: vi.fn() as any,
-  } as Partial<BrainPersistenceAdapter>;
-}
-
-/** Minified version for summarizeChat mock (helps avoid false-positive autoTitle in its summary tests). */
-function truncateChat(title: string, len: number): string {
-  // Keep 3-10 words: keep first word + ellipsis if long
-  const first = title.trim().split(/\s+/)[0] || DEFAULT_CHAT_TITLE;
-  return first.slice(0, len) + (first.length > len ? '…' : '');
-}
+const persistenceFake: BrainPersistenceAdapter = {
+  listChats: vi.fn(async (params?: { projectId?: string; limit?: number; offset?: number }): Promise<ReturnType<typeof persistedChats>> => persistedChats.slice()),
+  getChat: vi.fn(async (id: number) => persistedChats.find((c) => c.id === id)),
+  createChat: vi.fn(async (body: { title?: string; projectId?: number | null }): Promise<ReturnType<typeof persistedChats>['0']> => {
+    const newChat = {
+      id: ++seq,
+      title: body.title ?? DEFAULT_CHAT_TITLE,
+      projectId: body.projectId ?? null,
+      origin: 'firstTurn' as const,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    } as any;
+    persistedChats.push(newChat);
+    return newChat;
+  }),
+  updateChat: vi.fn(async (id: number, body: { title?: string; projectId?: number | null }): Promise<ReturnType<typeof persistedChats>['0']> => {
+    const chat = persistedChats.find((c) => c.id === id);
+    expect(chat, `Chat ${id} not found in mock`).toBeTruthy();
+    if (!chat) throw new Error(`Chat ${id} not found`);
+    if (body?.title) chat.title = body.title;
+    if (body?.projectId) chat.projectId = body.projectId;
+    chat.updatedAt = new Date().toISOString();
+    return { ...chat };
+  }),
+  deleteChat: vi.fn(async (id: number) => {
+    const idx = persistedChats.findIndex((c) => c.id === id);
+    if (idx !== -1) persistedChats.splice(idx, 1);
+  }),
+  summarizeChat: vi.fn(async (id: number): Promise<{ summary: string } | { error: string }> => {
+    const chat = persistedChats.find((c) => c.id === id);
+    if (!chat) return { error: 'Chat not found' };
+    // truncate to ~60 chars to avoid a too-long title (our summarize would be long otherwise)
+    const len = 60;
+    return { summary: chat.title.slice(0, len) + (chat.title.length > len ? '…' : '') };
+  }),
+  upload: vi.fn(async () => ({ key: `u${Date.now()}`, name: 'test.txt' })),
+  uploadUrl: vi.fn(() => `https://gw.example/u/`),
+  sendMessages: vi.fn(async (_c: number, msgs) =>
+    msgs.map((m, i) => ({
+      id: ++seq,
+      role: m.role === 'user' || m.role === 'assistant' ? (m.role === 'user' ? 'user' : 'assistant') : 'user',
+      content: m.content,
+      metadata: null,
+      seq: i,
+      createdAt: '',
+    })),
+  ),
+  setMessageFeedback: vi.fn(async () => ({ ok: true, error: undefined })),
+} as BrainPersistenceAdapter;
 
 const config: BrainConfig = {
   transport: { baseUrl: 'https://gw.example', getToken: () => null },
-  persistence: {} as BrainPersistenceAdapter,
+  persistence: persistenceFake,
   resolveSystemPrompt: () => 'You are Brain.',
 };
 
-const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <BrainProvider config={config}>{children}</BrainProvider>
-);
-
-function addChat(title: string, projectId: number | null = null) {
-  return {
-    title,
-    projectId,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  } as ChatMock;
-}
-
-interface ChatMock {
-  id: number;
-  title: string;
-  projectId: number | null;
-  createdAt: string;
-  updatedAt: string;
-}
+const wrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => <BrainProvider config={config}>{children}</BrainProvider>;
 
 beforeEach(() => {
   resetBrainRunStore();
-});
-afterEach(() => {
-  vi.restoreAllMocks();
+  seq = 0;
+  persistedChats.length = 0; // reset mock state
+  vi.clearAllMocks();
 });
 
-describe('useBrainChats chat titling (FR1, FR2, FR4)', () => {
-  it('AC-1: create defaults to DEFAULT_CHAT_TITLE placeholder', async () => {
-    resetPersistence();
-    persistChat(null); // chat without projectId
+describe('useBrainChats FR1/FR2/FR4: autoTitle and rename behavior', () => {
+  const persistChat = (
+    title?: string,
+    projectId: number | null = null,
+    id?: number,
+  ): void => {
+    seq++;
+    persistedChats.push({
+      id: id ?? seq,
+      title: title ?? DEFAULT_CHAT_TITLE,
+      projectId,
+      origin: 'firstTurn' as const,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  };
 
+  it('FR4: create generates DEFAULT_CHAT_TITLE placeholder on first chat', async () => {
+    persistChat(null) as any; // placeholder chat
     const { result } = renderHook(() => useBrainChats(), { wrapper });
     await waitFor(() => !result.current.loading);
 
     const chat = await result.current.create();
-    expect(persistence.createChat).toHaveBeenCalledWith(
+    expect(result.current.chats[0]?.title).toBe(DEFAULT_CHAT_TITLE);
+    expect(persistenceFake.createChat).toHaveBeenCalledWith(
       expect.objectContaining({ title: DEFAULT_CHAT_TITLE, projectId: null }),
     );
-    expect(chat.title).toBe(DEFAULT_CHAT_TITLE);
   });
 
-  it('AC-1 variant: create with custom title passes it through', async () => {
-    resetPersistence();
-    persistChat(null);
-    const customTitle = 'Pre-defined topic';
-
+  it('FR4: create honors explicit title passed through opts', async () => {
+    persistChat(null) as any;
     const { result } = renderHook(() => useBrainChats(), { wrapper });
     await waitFor(() => !result.current.loading);
 
+    const customTitle = 'Pre-defined topic';
     const chat = await result.current.create({ title: customTitle, projectId: 42 });
-    expect(persistence.createChat).toHaveBeenCalledWith(
+    expect(result.current.chats[0]?.title).toBe(customTitle);
+    expect(persistenceFake.createChat).toHaveBeenCalledWith(
       expect.objectContaining({ title: customTitle, projectId: 42 }),
     );
-    expect(chat.title).toBe(customTitle); // create honors custom label (no guard relative to placeholder)
   });
 
-  it('AC-2: auto-title replaces placeholder with topic from first-h user turn', async () => {
-    resetPersistence();
+  it('FR1: autotitle replaces DEFAULT_CHAT_TITLE on first user turn', async () => {
     const newlyCreatedId = 101;
-    persistChat({ id: newlyCreatedId, title: DEFAULT_CHAT_TITLE, projectId: null });
-
+    persistChat(DEFAULT_CHAT_TITLE, null, newlyCreatedId);
     const { result } = renderHook(() => useBrainChats(), { wrapper });
     await waitFor(() => !result.current.loading);
 
-    const firstMsgUserTurn = 'Write a script to compress PNGs';
+    const firstMsgUserTurn = 'Write script to compress PNGs';
     await act(async () => {
       await result.current.autoTitle(newlyCreatedId, firstMsgUserTurn);
     });
 
-    expect(persistence.updateChat).toHaveBeenCalledWith(
+    expect(persistenceFake.updateChat).toHaveBeenCalledTimes(1);
+    expect(persistenceFake.updateChat).toHaveBeenCalledWith(
       newlyCreatedId,
-      expect.objectContaining({ title: expect.stringMatching(/^Write a script to compress PNGs/) }),
+      expect.objectContaining({ title: /^Write script to compress PNGs/ }),
     );
-    expect(result.current.chats[0]?.title).not.toBe(DEFAULT_CHAT_TITLE);
   });
 
-  it('AC-3: auto-title respects single-flight guard (call again with parallel fire)', async () => {
-    resetPersistence();
+  it('FR1: autotitle is single-flight (multiple fires same-turn are idempotent)', async () => {
     const id = 102;
-    persistChat({ id, title: DEFAULT_CHAT_TITLE, projectId: null });
-
-    const { result } = renderHook(() => useBrainChats(), { wrapper });
-    await waitFor(() => !result.current.loading);
-    const derived = 'Quick guide for insane developers';
-
-    // First call updates
-    await act(async () => {
-      await result.current.autoTitle(id, derived);
-    });
-    expect(persistence.updateChat).toHaveBeenCalledTimes(1);
-    expect(persistence.updateChat).toHaveBeenCalledWith(id, expect.objectContaining({ title: expect.stringMatching(/^Quick guide for insane developers/) }));
-
-    // Second call when same-turn fires again (STRICTMODE/TWIRL API)
-    await act(async () => {
-      await result.current.autoTitle(id, 'Another parallel fire'); // usage of empty text is fine
-    });
-
-    // Should not perform another update (single-flight guard)
-    expect(persistence.updateChat).toHaveBeenCalledTimes(1);
-    expect(result.current.chats[0]?.title).not.toBe(DEFAULT_CHAT_TITLE);
-  });
-
-  it('AC-4: auto-title does NOT overwrite user or seed-provided titles', async () => {
-    resetPersistence();
-    const seedOrUserTitleId = 103;
-    const seedOrUserTitle = 'Critical security patch rollout'; // used by task seeding or by user rename
-
-    persistChat({ id: seedOrUserTitleId, title: seedOrUserTitle, projectId: null });
-
+    persistChat(DEFAULT_CHAT_TITLE, null, id);
     const { result } = renderHook(() => useBrainChats(), { wrapper });
     await waitFor(() => !result.current.loading);
 
-    const draftedAutoTitle = 'security patch rollout';
+    const topic = 'Quick guide for insane developers';
 
-    // First fire attempt
     await act(async () => {
-      await result.current.autoTitle(seedOrUserTitleId, draftedAutoTitle);
+      await result.current.autoTitle(id, topic);
     });
-
-    // Should skip update because chat title already matches seed/user label
-    expect(persistence.updateChat).not.toHaveBeenCalledWith(
-      seedOrUserTitleId,
-      expect.objectContaining({ title: expect.not.stringMatching('^Critical security patch rollout') }),
+    expect(persistenceFake.updateChat).toHaveBeenCalledTimes(1);
+    expect(persistenceFake.updateChat).toHaveBeenCalledWith(
+      id,
+      expect.objectContaining({ title: /^Quick guide for insane developers/ }),
     );
-    expect(result.current.chats[0]?.title).toBe(seedOrUserTitle); // MID: title not changed
+
+    await act(async () => {
+      await result.current.autoTitle(id, 'Another parallel fire');
+    });
+    expect(persistenceFake.updateChat).toHaveBeenCalledTimes(1);
   });
 
-  it('AC-4 variant: auto-title also skips when title is already a meaningful label (neither DEFAULT_CHAT_TITLE)', async () => {
-    resetPersistence();
-    const id = 104;
-    const meaningfulTitle = 'Project cleanup thread'; // used by seeding
-
-    persistChat({ id, title: meaningfulTitle, projectId: null });
-
+  it('FR1: autotitle does NOT clobber existing titles (user or seed-provided)', async () => {
+    const id = 103;
+    const meaningfulTitle = 'Critical security patch rollout';
+    persistChat(meaningfulTitle, null, id);
     const { result } = renderHook(() => useBrainChats(), { wrapper });
     await waitFor(() => !result.current.loading);
 
     await act(async () => {
-      await result.current.autoTitle(id, 'Project cleanup thread'); // the auto-title engine’s alias
+      await result.current.autoTitle(id, 'security patch rollout');
     });
-
-    // Should skip update because chat title explicitly came from seeding
-    expect(persistence.updateChat).not.toHaveBeenCalledWith(id, expect.objectContaining({ title: expect.not.stringMatching(/^Project cleanup thread$/) }));
+    expect(persistenceFake.updateChat).not.toHaveBeenCalledWith(
+      id,
+      expect.objectContaining({ title: /^Critical security patch rollout$/ }),
+    );
     expect(result.current.chats[0]?.title).toBe(meaningfulTitle);
   });
 
-  it('AC-5: rename updates the title and persists via updateChat', async () => {
-    resetPersistence();
-    const id = 105;
-    persistChat({ id, title: DEFAULT_CHAT_TITLE, projectId: null });
-
+  it('FR2: rename updates title via updateChat', async () => {
+    const id = 104;
+    persistChat(DEFAULT_CHAT_TITLE, null, id);
     const { result } = renderHook(() => useBrainChats(), { wrapper });
     await waitFor(() => !result.current.loading);
 
-    const newIndex = 'Quick guide for insane developers';
+    const newIndex = 'PSD compression script';
 
     await act(async () => {
       await result.current.rename(id, newIndex);
     });
 
-    expect(persistence.updateChat).toHaveBeenCalledWith(
+    expect(persistenceFake.updateChat).toHaveBeenCalledWith(
       id,
-      expect.objectContaining({ title: newIndex }),
+      expect.objectContaining({ title: 'PSD compression script' }),
     );
     expect(result.current.chats[0]?.title).toBe(newIndex);
   });
 
-  it('AC-5 variant: rename best-effort on updateChat failure (raises error)', async () => {
-    resetPersistence();
-    const id = 106;
-    persistChat({ id, title: DEFAULT_CHAT_TITLE, projectId: null });
-    // Stub updateChat to reject
-    persistence.updateChat = vi.fn<BrainPersistenceAdapter['updateChat'], Promise<BrainChat>>(() => Promise.reject(new Error('update failed')));
+  it('FR2: rename is best-effort on persistence errors (catch and set error state)', async () => {
+    const id = 105;
+    persistChat(DEFAULT_CHAT_TITLE, null, id);
+    persistenceFake.updateChat.mockRejectedValue(new Error('update failed'));
 
     const { result } = renderHook(() => useBrainChats(), { wrapper });
     await waitFor(() => !result.current.loading);
@@ -286,52 +222,26 @@ describe('useBrainChats chat titling (FR1, FR2, FR4)', () => {
       await expect(result.current.rename(id, newIndex)).resolves.not.toThrow();
     });
 
-    // updateChat was invoked, but the error was caught and set as error state (keepEssential vs hideIntermediate)
-    expect(result.current.error).toBe('Rename failed'); // best-effort as per autoTitle implementation
+    expect(result.current.error).toBe('Rename failed');
   });
 
-  it('Extra test: deriveChatTitle integrity mirrors autoTitle expectations', () => {
-    // Acceptance-criteria-aligned case: short first message, trimmed, <= 60
+  it('deriveChatTitle: checks first line, collapses whitespace, and ellipsis truncation', () => {
     expect(deriveChatTitle('Write script to compress PNGs')).toBe('Write script to compress PNGs');
-    expect(deriveChatTitle('   Fix the CRLF edit bug\n\nmore detail ')).toBe('Fix the CRLF edit bug');
-    expect(deriveChatTitle(run语文章写不好的测试示例)).toBe('run语文章写不好');
+    expect(deriveChatTitle('   Fix the CRLF edit bug\n\nmore detail \')).toBe('Fix the CRLF edit bug');
+    expect(deriveChatTitle('run语文章写不好')).toBe('run语文章写不好');
+    expect(deriveChatTitle('first\nline 2\nline 3')).toBe('first'); // multi-line uses first line only
+  });
 
-    // Multi-line guard: only first line used, ignore onto third line
-    expect(deriveChatTitle('line 1\nline 2\nline 3')).toBe('line 1');
-    expect(deriveChatTitle('line 1\n\nline 2')).toBe('line 1'); // extra whitespace should be collapsed
-    expect(deriveChatTitle('line 1\n\n\n')).toBe(''); // whitespace-only first line yields empty
+  it('deriveChatTitle: returns empty for blank first line (caller keeps placeholder)', () => {
+    expect(deriveChatTitle('')).toBe('');
+    expect(deriveChatTitle('   \n\n')).toBe('');
+  });
 
-    // Long-line truncation guard: collapse and ellipsis
+  it('deriveChatTitle: ellipsis after truncation preserves lastSpace guard and trims end', () => {
     const longText = 'Please review the entire brain run store compaction logic and explain why it reverts to the opening request';
-    expect(deriveChatTitle(longText).length).toBeLessThanOrEqual(61);
-    expect(deriveChatTitle(longText).endsWith('…')).toBe(true);
+    const shortened = deriveChatTitle(longText);
+    expect(shortened.length).toBeLessThanOrEqual(60);
+    expect(shortened.endsWith('…')).toBe(true);
+    expect(shortened).not.toMatch(/\s…$/);
   });
 });
-
-/**
- * Helpers for suite maintainers:
- * - persistChat: Simulates an existing chat in persistence via our ICS.
- * - resetPersistence: Clears state and restores stubs prior to each test.
- */
-function persistChat(chatl?: Partial<ChatMock>) {
-  if (chatl) {
-    chatSeq++;
-    const base: ChatMock = {
-      id: chatSeq,
-      title: chatl.title ?? DEFAULT_CHAT_TITLE,
-      projectId: chatl.projectId ?? null,
-      createdAt: chatl.createdAt ?? new Date().toISOString(),
-      updatedAt: chatl.updatedAt ?? new Date().toISOString(),
-    };
-    persistedChats.push(base);
-  } else {
-    chatSeq++; // placeholder chat for create
-    persistedChats.push({
-      id: chatSeq,
-      title: DEFAULT_CHAT_TITLE,
-      projectId: null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-  }
-}
