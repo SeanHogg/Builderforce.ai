@@ -95,6 +95,9 @@ interface CatalogModel {
   id?: string;
   pricing?: { prompt?: number; completion?: number };
   pool?: "free" | "pro";
+  /** Gateway-advertised tunable params. Must include "tools" to drive the Brain's
+   *  tool loop. */
+  supportedParameters?: string[];
 }
 
 export async function getModels(
@@ -128,13 +131,20 @@ export async function getModels(
  * Paid OpenRouter models the plan pool does NOT already route — the premium tier.
  * Mirrors the server's `isPremiumModelSelection`: a model that costs money and carries
  * no `pool` marker. Cheapest-first so the picker's top entries are the affordable ones.
+ *
+ * TOOL-CAPABLE ONLY: the selected model drives the Brain's tool loop on every editor
+ * chat turn, so a premium model that can't call tools would break the surface it was
+ * picked for. Same filter the web picker's coding variant applies.
  */
 async function getPremiumCatalog(): Promise<string[]> {
   const res = await fetch(`${getBaseUrl()}/llm/v1/catalog`, { headers: { accept: "application/json" } });
   if (!res.ok) throw new Error(`catalog_failed_${res.status}`);
   const json = (await res.json()) as { data?: CatalogModel[] };
   return (json.data ?? [])
-    .filter((m) => !!m.id && !m.pool && ((m.pricing?.prompt ?? 0) > 0 || (m.pricing?.completion ?? 0) > 0))
+    .filter((m) =>
+      !!m.id && !m.pool &&
+      ((m.pricing?.prompt ?? 0) > 0 || (m.pricing?.completion ?? 0) > 0) &&
+      (m.supportedParameters?.includes("tools") ?? false))
     .sort((a, b) =>
       ((a.pricing?.prompt ?? 0) + (a.pricing?.completion ?? 0)) -
       ((b.pricing?.prompt ?? 0) + (b.pricing?.completion ?? 0)))

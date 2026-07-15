@@ -49,7 +49,14 @@ export function ModelSelect({
   // group off `premiumModels.length` can never show a paywalled option. `useLlmModels`
   // resolves entitlement from the SAME server rule the gateway enforces, so a selection
   // offered here is always one the gateway will accept.
-  const showPremium = canUsePremiumModels && premiumModels.length > 0;
+  //
+  // The 'coding' variant pins ONE model for a whole agent tool-loop, so it must only
+  // offer premium models the gateway advertises as tool-capable — a non-tool model
+  // there would pin an agent to something that cannot call a single tool.
+  const premiumChoices = variant === 'coding'
+    ? premiumModels.filter((m) => m.supportedParameters?.includes('tools'))
+    : premiumModels;
+  const showPremium = canUsePremiumModels && premiumChoices.length > 0;
   const known = preserveValue
     && !pool.includes(preserveValue)
     && !byoModels.includes(preserveValue)
@@ -83,7 +90,7 @@ export function ModelSelect({
           validated card); everyone else gets the unlock CTA from PremiumModelUnlock. */}
       {showPremium && (
         <optgroup label={t('premiumModels')}>
-          {premiumModels.map((m) => (
+          {premiumChoices.map((m) => (
             <option key={m.id} value={m.id}>
               {t('premiumOption', { name: m.name, price: formatPricePerMillion(m.pricing.prompt) })}
             </option>
