@@ -9,6 +9,7 @@ import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { qualityApi, type ErrorGroup } from '@/lib/builderforceApi';
 import { ErrorGroupDetail } from './ErrorGroupDetail';
 import { QualityStatsPanel } from './QualityStatsPanel';
+import { ErrorConsumptionCard } from './ErrorConsumptionCard';
 import { LEVELS, STATUSES, LEVEL_COLOR, STATUS_COLOR } from './qualityColors';
 
 const cardStyle: React.CSSProperties = {
@@ -72,6 +73,9 @@ export function QualityDashboard() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* The plan meter is tenant-aggregate; analytics below follow project scope. */}
+      <ErrorConsumptionCard />
+
       {/* Data-driven overview: volume collected, frequency trend + breakdowns. */}
       <QualityStatsPanel projectId={currentProjectId} />
 

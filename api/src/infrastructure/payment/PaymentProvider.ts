@@ -1,22 +1,37 @@
 /**
  * Payment provider abstraction.
  *
- * All payment processors (Stripe, Helcim, etc.) implement this interface.
- * The application layer (`TenantService`) depends only on this interface,
- * never on a concrete provider. To swap processors: implement this interface,
- * add the provider to the factory in `index.ts`, and set PAYMENT_PROVIDER env var.
+ * Stripe is the only implementation ({@link ../StripeProvider}); this interface exists
+ * so the application layer (`TenantService`) depends on a contract rather than on the
+ * concrete Stripe client, and so tests can inject a fake. It is NOT a provider-swap
+ * seam — there is no provider switch and no manual/no-op fallback.
  *
- * Flow:
+ * Flow (there is exactly one — every checkout is hosted):
  *   1. Frontend calls POST /api/tenants/:id/subscription/checkout
  *   2. API calls provider.createCheckoutSession() → returns checkoutUrl
- *   3a. If checkoutUrl: frontend redirects user to hosted checkout
- *       → provider fires webhook → POST /api/webhooks/payment
- *       → handler calls provider.parseWebhook() → normalised WebhookEvent
- *       → handler calls tenantService.activateFromWebhook()
- *   3b. If null (ManualProvider): subscription is immediately active, no redirect
+ *   3. Frontend redirects the user to the hosted checkout
+ *   4. Provider fires a webhook → POST /api/webhooks/payment
+ *      → handler calls provider.parseWebhook() → normalised WebhookEvent
+ *      → handler calls tenantService.handleWebhookEvent()
+ *
+ * A subscription is therefore only ever activated by a signed webhook confirming real
+ * money moved — never synchronously from user-supplied input.
  */
 
 import { TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
+
+/**
+ * Thrown when a payment operation is attempted without the Stripe secrets configured.
+ * Deliberately raised at the point of USE rather than at Worker boot: billing being
+ * unconfigured must fail the billing routes (503), not the entire API.
+ */
+export class PaymentNotConfiguredError extends Error {
+  readonly code = 'payment_not_configured' as const;
+  constructor(missing: string) {
+    super(`Payments are not configured: ${missing} is not set on this Worker.`);
+    this.name = 'PaymentNotConfiguredError';
+  }
+}
 
 export interface CheckoutSessionOpts {
   tenantId: number;
@@ -35,11 +50,11 @@ export interface CheckoutSessionOpts {
 export interface CheckoutSessionResult {
   /** Session/transaction ID from the provider (store for audit trail) */
   sessionId: string;
-  /** Redirect the user here if non-null. Null for manual/noop providers. */
-  checkoutUrl: string | null;
+  /** Hosted checkout URL — always redirect the user here. */
+  checkoutUrl: string;
   /** Provider-assigned customer ID (available immediately for some providers) */
   externalCustomerId: string | null;
-  /** Provider-assigned subscription ID (may arrive later via webhook) */
+  /** Provider-assigned subscription ID (arrives later via webhook) */
   externalSubscriptionId: string | null;
 }
 
@@ -57,14 +72,11 @@ export interface CardValidationSessionOpts {
 
 export interface CardValidationSessionResult {
   sessionId: string;
-  /** Redirect the user here to enter/confirm a card. Null for the manual provider,
-   *  which validates immediately (dev / manual-invoicing). */
-  checkoutUrl: string | null;
+  /** Hosted URL where the user enters/confirms the card — always redirect here.
+   *  Validation completes asynchronously via the `card.validated` webhook. */
+  checkoutUrl: string;
   /** Provider-assigned customer id, when created up-front. */
   externalCustomerId: string | null;
-  /** True when the provider validated synchronously (manual) so the caller can stamp
-   *  `card_validated_at` immediately without waiting for a webhook. */
-  validatedImmediately: boolean;
 }
 
 /**
@@ -102,28 +114,22 @@ export interface WebhookEvent {
 }
 
 export interface PaymentProvider {
-  /** Human-readable provider name (e.g. "manual", "stripe", "helcim") */
-  readonly name: string;
-
   /**
-   * Create a checkout session for upgrading to Pro.
-   * For hosted providers: returns a `checkoutUrl` to redirect the user to.
-   * For the manual provider: activates immediately and returns `checkoutUrl: null`.
+   * Create a hosted checkout session for upgrading to Pro/Teams. Returns the
+   * `checkoutUrl` to redirect the user to; the plan activates on the resulting webhook.
+   * Throws {@link PaymentNotConfiguredError} when the Stripe secrets are absent.
    */
   createCheckoutSession(opts: CheckoutSessionOpts): Promise<CheckoutSessionResult>;
 
   /**
    * Start an explicit CARD-VALIDATION session (SetupIntent / $0 auth) so the tenant
-   * can unlock PREMIUM (any-paid-OpenRouter) model selection. Hosted providers return
-   * a `checkoutUrl` and confirm asynchronously via a `card.validated` webhook; the
-   * manual provider returns `validatedImmediately: true` (dev / manual invoicing).
+   * can unlock PREMIUM (any-paid-OpenRouter) model selection. Returns a `checkoutUrl`;
+   * validation confirms asynchronously via the `card.validated` webhook.
+   * Throws {@link PaymentNotConfiguredError} when the Stripe secrets are absent.
    */
   createCardValidationSession(opts: CardValidationSessionOpts): Promise<CardValidationSessionResult>;
 
-  /**
-   * Cancel the active subscription for a tenant (called on downgrade to Free).
-   * No-op for manual provider.
-   */
+  /** Cancel the active subscription for a tenant (called on downgrade to Free). */
   cancelSubscription(externalSubscriptionId: string): Promise<void>;
 
   /**

@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
-import { providerKeysApi, type ProviderAuthType, type ProviderDiagnostic, type LlmProvider } from '@/lib/builderforceApi';
+import { ConsumptionMeterCard } from '@/components/UsageMeter';
+import { llmApi, providerKeysApi, type LlmUsageStats, type ProviderAuthType, type ProviderDiagnostic, type LlmProvider } from '@/lib/builderforceApi';
 
 /**
  * BYO (bring-your-own-provider) credentials. A workspace owner connects their OWN
@@ -368,10 +369,14 @@ export function ProviderKeysSettings({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeProvider, setActiveProvider] = useState<LlmProvider | null>(null);
+  const [usage, setUsage] = useState<LlmUsageStats | null>(null);
   const visibleProviders = PROVIDERS.filter((p) => !search.trim() || `${p.label} ${p.id}`.toLowerCase().includes(search.trim().toLowerCase()));
 
-  const refresh = () =>
-    providerKeysApi.list()
+  const refresh = () => {
+    // Usage is an all-member read. Keep credential management available if that
+    // secondary read fails, while loading both together to avoid flashing zeroes.
+    const usageRead = llmApi.usage().catch(() => null);
+    return providerKeysApi.list()
       .then((r) => {
         const map: Partial<Record<LlmProvider, ProviderAuthType>> = {};
         for (const d of r.details) map[d.provider] = d.authType;
@@ -379,9 +384,12 @@ export function ProviderKeysSettings({
         // r.details already arrives ordered by tenant precedence — connected only.
         setOrder(r.details.map((d) => d.provider));
         onPriorityChange?.(r.details.map((d) => d.provider));
+        return usageRead;
       })
+      .then(setUsage)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
+  };
 
   useEffect(() => { void refresh(); }, []);
 
@@ -418,9 +426,24 @@ export function ProviderKeysSettings({
           <div style={viewMode === 'card' ? wrapStyle : { display: 'flex', flexDirection: 'column', gap: 10 }}>
             {visibleProviders.map((p) => (
               <button key={p.id} type="button" onClick={() => setActiveProvider(p.id)} style={{ ...cardStyle, cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: viewMode === 'table' ? 'row' : 'column', alignItems: viewMode === 'table' ? 'center' : 'stretch', gap: 10 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={sectionTitle}>{p.label}</div>
-                  <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{t(`provider.${p.id}.blurb`)}</div>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flex: 1, minWidth: 0 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={sectionTitle}>{p.label}</div>
+                    <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{t(`provider.${p.id}.blurb`)}</div>
+                  </div>
+                  {usage && (
+                    <ConsumptionMeterCard
+                      meter={{
+                        key: 'ai_tokens', unit: 'tokens',
+                        used: usage.byCredential.find((c) => c.type === 'integration' && c.id === p.id)?.tokens ?? 0,
+                        limit: -1, unlimited: true, remaining: -1, percentUsed: 0,
+                      }}
+                      isFree={false}
+                      title="AI tokens used"
+                      usageOnly
+                      periodLabel={`Last ${usage.period}`}
+                    />
+                  )}
                 </div>
                 <span style={{ fontSize: 12, fontWeight: 650, color: authByProvider[p.id] ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                   {authByProvider[p.id] === 'oauth'
