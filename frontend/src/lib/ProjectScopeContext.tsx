@@ -19,8 +19,8 @@ import { useAuth } from '@/lib/AuthContext';
  *
  * `currentProjectId == null` is a first-class state meaning "all projects" (the
  * tenant-wide / portfolio rollup) — not "nothing selected". Surfaces that are
- * genuinely tenant-wide (Workforce, Insights) ignore this; project-scoped
- * surfaces (Planning, Tasks, Ceremonies) read it so there is ONE project picker
+ * genuinely tenant-wide surfaces may ignore this; project-scoped surfaces
+ * (Planning, Tasks, Ceremonies, Insights) read it so there is ONE project picker
  * (the TopBar TenantProjectSwitcher) instead of a bespoke dropdown per surface.
  *
  * Source of truth: this context, persisted per-tenant in localStorage so the

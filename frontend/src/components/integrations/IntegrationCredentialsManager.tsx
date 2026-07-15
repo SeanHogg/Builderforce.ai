@@ -103,6 +103,15 @@ export interface IntegrationCredentialsManagerProps {
   heading?: string | null;
 }
 
+/** Keep a provider-specific drawer from leaking unrelated workspace keys. */
+export function filterCredentialsByProvider(
+  credentials: IntegrationCredential[],
+  providerFilterKey: string,
+): IntegrationCredential[] {
+  const allowedProviders = new Set(providerFilterKey.split('|'));
+  return credentials.filter((credential) => allowedProviders.has(credential.provider));
+}
+
 export function IntegrationCredentialsManager({ projectId, providers, heading }: IntegrationCredentialsManagerProps) {
   const confirm = useConfirm();
   const tc = useTranslations('common');
@@ -111,6 +120,9 @@ export function IntegrationCredentialsManager({ projectId, providers, heading }:
   const canManage = role === 'owner' || role === 'manager';
 
   const providerList = providers ?? (Object.keys(PROVIDER_META) as IntegrationProvider[]);
+  // A stable primitive keeps the loader in sync when a gallery drawer switches
+  // providers even though callers commonly pass a fresh one-item array.
+  const providerFilterKey = providerList.join('|');
 
   const [scoped, setScoped] = useState<IntegrationCredential[]>([]);
   const [inherited, setInherited] = useState<IntegrationCredential[]>([]);
@@ -140,12 +152,20 @@ export function IntegrationCredentialsManager({ projectId, providers, heading }:
       ? integrationsApi.list({ scope: 'global' })
       : Promise.resolve<IntegrationCredential[]>([]);
     Promise.all([scopedP, inheritedP])
-      .then(([s, i]) => { setScoped(s); setInherited(i); })
+      .then(([s, i]) => {
+        setScoped(filterCredentialsByProvider(s, providerFilterKey));
+        setInherited(filterCredentialsByProvider(i, providerFilterKey));
+      })
       .catch(() => setError(t('loadError')))
       .finally(() => setLoading(false));
-  }, [canManage, projectId]);
+  }, [canManage, projectId, providerFilterKey]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    setProvider(providerList[0]);
+    setAdding(false);
+    setEditingId(null);
+  }, [providerFilterKey]);
 
   if (!canManage) return null;
 

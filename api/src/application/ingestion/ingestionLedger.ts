@@ -70,6 +70,30 @@ export async function dailyTenantIngestionBytes(
   return rows.map((r) => ({ day: r.day, value: Math.max(0, Math.floor(Number(r.used ?? 0))) }));
 }
 
+/** Month-to-date ingestion grouped by the integration that supplied it. Null
+ * provider rows remain part of the aggregate meter but are intentionally omitted
+ * here because there is no integration card to attribute them to. */
+export async function tenantIngestionBytesByProvider(
+  db: Db,
+  tenantId: number,
+  since: Date,
+): Promise<Array<{ key: string; used: number }>> {
+  const rows = await db
+    .select({ provider: ingestionUsageLog.provider, used: sql<number>`COALESCE(SUM(${ingestionUsageLog.bytesIngested}), 0)` })
+    .from(ingestionUsageLog)
+    .where(and(
+      eq(ingestionUsageLog.tenantId, tenantId),
+      gte(ingestionUsageLog.createdAt, since),
+      sql`${ingestionUsageLog.provider} IS NOT NULL`,
+    ))
+    .groupBy(ingestionUsageLog.provider)
+    .orderBy(ingestionUsageLog.provider);
+  return rows.map((r) => ({
+    key: String(r.provider),
+    used: Math.max(0, Math.floor(Number(r.used ?? 0))),
+  }));
+}
+
 export type IngestionCapResult =
   | { allowed: true }
   | { allowed: false; effectivePlan: TenantPlan; used: number; limit: number };

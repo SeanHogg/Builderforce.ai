@@ -136,7 +136,23 @@ export async function mergePullRequest(input: MergePrInput): Promise<MergePrResu
   // surfaces a 409 the UI can explain. GitHub 405 / GitLab 405-406 = not
   // mergeable; 409 (all) = head moved / conflict.
   const text = await res.text().catch(() => '');
-  if (res.status === 405 || res.status === 406) return { ok: false, code: 'not_mergeable', reason: `not mergeable: ${text.slice(0, 200)}` };
+  if (res.status === 405 || res.status === 406) {
+    const providerMessage = extractProviderMessage(text);
+    const reason = input.provider === 'github'
+      ? `GitHub could not merge this pull request${providerMessage ? `: ${providerMessage}` : ''}. Check for merge conflicts, draft status, required checks or reviews, branch rules or merge-queue requirements, and whether '${normalizeMergeMethod(input.method)}' merges are enabled. Open the pull request on GitHub for the exact blocker.`
+      : `The pull request is not mergeable${providerMessage ? `: ${providerMessage}` : ''}. Check the provider for unresolved merge requirements.`;
+    return { ok: false, code: 'not_mergeable', reason };
+  }
   if (res.status === 409) return { ok: false, code: 'conflict', reason: `merge conflict: ${text.slice(0, 200)}` };
   return { ok: false, code: 'provider_error', reason: `${input.provider} ${res.status}: ${text.slice(0, 200)}` };
+}
+
+/** Extract the useful provider error without leaking a raw JSON envelope to the UI. */
+function extractProviderMessage(text: string): string {
+  if (!text.trim()) return '';
+  try {
+    const body = JSON.parse(text) as { message?: unknown };
+    if (typeof body.message === 'string') return body.message.trim().slice(0, 200);
+  } catch { /* non-JSON provider response */ }
+  return text.trim().slice(0, 200);
 }
