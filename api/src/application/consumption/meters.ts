@@ -18,7 +18,7 @@ import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { resolveTokenLimits, resolveIngestionMonthlyBytes, resolveErrorEventsMonthly, resolveOutboundFetchesMonthly, resolveCloudRunsMonthly } from '../../domain/tenant/PlanLimits';
 import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { dailyTenantTextTokens, utcDayStart } from '../llm/tokenUsage';
-import { dailyTenantIngestionBytes } from '../ingestion/ingestionLedger';
+import { dailyTenantIngestionBytes, tenantIngestionBytesByProvider } from '../ingestion/ingestionLedger';
 import { dailyTenantErrorEvents } from '../quality/errorEventsLedger';
 import { dailyTenantOutboundFetches } from '../web/outboundFetchLedger';
 import { dailyTenantCloudRuns } from '../runtime/cloudRunLedger';
@@ -40,6 +40,9 @@ export interface MeterSnapshot {
   /** Month-to-date daily series (one entry per elapsed UTC day) for a sparkline.
    *  Omitted for meters that don't carry a daily trend. */
   trend?: number[];
+  /** Optional scoped totals beneath this meter (for example, ingestion bytes by
+   * integration provider; unattributed rows can remain only in the aggregate). */
+  breakdown?: Array<{ key: string; used: number }>;
 }
 
 const DAY_MS = 86_400_000;
@@ -94,9 +97,10 @@ export async function buildConsumptionSnapshot(
   env?: Env,
 ): Promise<ConsumptionSnapshot> {
   const ingestionDb = env?.NEON_TRANSACTIONAL_DATABASE_URL ? buildTransactionalDatabase(env) : db;
-  const [tokensDaily, ingestionDaily, errorEventsDaily, outboundFetchesDaily, cloudRunsDaily, tenantRows] = await Promise.all([
+  const [tokensDaily, ingestionDaily, ingestionByProvider, errorEventsDaily, outboundFetchesDaily, cloudRunsDaily, tenantRows] = await Promise.all([
     dailyTenantTextTokens(db, tenantId, monthStart),
     dailyTenantIngestionBytes(ingestionDb, tenantId, monthStart),
+    tenantIngestionBytesByProvider(ingestionDb, tenantId, monthStart),
     dailyTenantErrorEvents(db, tenantId, monthStart),
     dailyTenantOutboundFetches(db, tenantId, monthStart),
     dailyTenantCloudRuns(db, tenantId, monthStart),
@@ -142,7 +146,7 @@ export async function buildConsumptionSnapshot(
     meters: [
       makeMeter('ai_tokens', 'tokens', tokensUsed, tokenLimit, tokensTrend),
       makeMeter('cloud_runs', 'runs', cloudRunsUsed, cloudRunsLimit, cloudRunsTrend),
-      makeMeter('ingestion', 'bytes', ingestionUsed, ingestionLimit, ingestionTrend),
+      { ...makeMeter('ingestion', 'bytes', ingestionUsed, ingestionLimit, ingestionTrend), breakdown: ingestionByProvider },
       makeMeter('error_events', 'events', errorEventsUsed, errorEventsLimit, errorEventsTrend),
       makeMeter('outbound_fetches', 'fetches', outboundFetchesUsed, outboundFetchesLimit, outboundFetchesTrend),
     ],

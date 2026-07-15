@@ -20,9 +20,12 @@ export interface PullRequestDetail {
   /** open | closed (GitHub `state`). */
   state: string | null;
   merged: boolean;
+  draft: boolean;
   /** null while GitHub is still computing mergeability. */
   mergeable: boolean | null;
   mergeableState: string | null;
+  /** Merge strategies enabled by the repository, when the provider exposes them. */
+  allowedMergeMethods: Array<'squash' | 'merge' | 'rebase'> | null;
   additions: number | null;
   deletions: number | null;
   changedFiles: number | null;
@@ -43,7 +46,7 @@ export interface PrCoords {
 }
 
 const UNSUPPORTED = (error?: string): PullRequestDetail => ({
-  supported: false, state: null, merged: false, mergeable: null, mergeableState: null,
+  supported: false, state: null, merged: false, draft: false, mergeable: null, mergeableState: null, allowedMergeMethods: null,
   additions: null, deletions: null, changedFiles: null, checks: null, checksTotal: 0, error,
 });
 
@@ -78,8 +81,10 @@ async function fetchGitlabDetail(coords: PrCoords): Promise<PullRequestDetail> {
     supported: true,
     state: mr.state === 'opened' ? 'open' : mr.state ?? null,
     merged: mr.state === 'merged' || !!mr.merged_at,
+    draft: false,
     mergeable: mr.merge_status ? mr.merge_status === 'can_be_merged' : null,
     mergeableState: mr.merge_status ?? null,
+    allowedMergeMethods: null,
     additions: null,
     deletions: null,
     changedFiles: mr.changes_count ? Number(mr.changes_count) || null : null,
@@ -102,8 +107,10 @@ async function fetchBitbucketDetail(coords: PrCoords): Promise<PullRequestDetail
     supported: true,
     state: pr.state === 'OPEN' ? 'open' : pr.state === 'MERGED' ? 'merged' : pr.state === 'DECLINED' ? 'closed' : pr.state ?? null,
     merged: pr.state === 'MERGED',
+    draft: false,
     mergeable: null,
     mergeableState: null,
+    allowedMergeMethods: null,
     additions: null,
     deletions: null,
     changedFiles: null,
@@ -127,8 +134,9 @@ async function fetchDetail(coords: PrCoords): Promise<PullRequestDetail> {
     return UNSUPPORTED(prRes ? `GitHub ${prRes.status}` : 'network error');
   }
   const pr = (await prRes.json().catch(() => null)) as {
-    state?: string; merged?: boolean; mergeable?: boolean | null; mergeable_state?: string;
+    state?: string; merged?: boolean; draft?: boolean; mergeable?: boolean | null; mergeable_state?: string;
     additions?: number; deletions?: number; changed_files?: number; head?: { sha?: string };
+    base?: { repo?: { allow_squash_merge?: boolean; allow_merge_commit?: boolean; allow_rebase_merge?: boolean } };
   } | null;
   if (!pr) return UNSUPPORTED('malformed PR response');
 
@@ -151,8 +159,14 @@ async function fetchDetail(coords: PrCoords): Promise<PullRequestDetail> {
     supported: true,
     state: pr.state ?? null,
     merged: pr.merged ?? false,
+    draft: pr.draft ?? false,
     mergeable: pr.mergeable ?? null,
     mergeableState: pr.mergeable_state ?? null,
+    allowedMergeMethods: pr.base?.repo ? [
+      ...(pr.base.repo.allow_squash_merge !== false ? ['squash' as const] : []),
+      ...(pr.base.repo.allow_merge_commit !== false ? ['merge' as const] : []),
+      ...(pr.base.repo.allow_rebase_merge !== false ? ['rebase' as const] : []),
+    ] : null,
     additions: pr.additions ?? null,
     deletions: pr.deletions ?? null,
     changedFiles: pr.changed_files ?? null,

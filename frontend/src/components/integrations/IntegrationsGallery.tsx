@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { ConsumptionMeterCard } from '@/components/UsageMeter';
 import { IntegrationCredentialsManager, PROVIDER_META } from '@/components/integrations/IntegrationCredentialsManager';
 import { MigrationWizard } from '@/components/integrations/MigrationWizard';
 import {
@@ -15,6 +16,7 @@ import {
   type IntegrationProvider,
 } from '@/lib/builderforceApi';
 import { getStoredTenant } from '@/lib/auth';
+import { useConsumption } from '@/lib/useConsumption';
 
 /**
  * Integrations gallery — the workspace-level home for every external system.
@@ -60,6 +62,8 @@ export function IntegrationsGallery({ search = '', viewMode = 'card' }: { search
   const t = useTranslations('integrations');
   const role = getStoredTenant()?.role;
   const canManage = role === 'owner' || role === 'manager';
+  const consumption = useConsumption();
+  const ingestionMeter = consumption?.meters.find((meter) => meter.key === 'ingestion');
 
   const [providersMeta, setProvidersMeta] = useState<BoardProviderMeta[]>([]);
   const [credentials, setCredentials] = useState<IntegrationCredential[]>([]);
@@ -129,19 +133,36 @@ export function IntegrationsGallery({ search = '', viewMode = 'card' }: { search
               const count = credsByProvider.get(p.id)?.length ?? 0;
               return (
                 <button key={p.id} type="button" style={{ ...cardStyle, ...(viewMode === 'table' ? { flexDirection: 'row', alignItems: 'center' } : {}) }} onClick={() => openProvider(p.id)}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{p.label}</span>
-                    <span style={{ fontSize: 11, color: count > 0 ? 'var(--success, #16a34a)' : 'var(--text-muted)' }}>
-                      {count > 0 ? `● ${t('gallery.connected')}` : `○ ${t('gallery.notConnected')}`}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {p.supportsDiscovery && (
-                      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--coral-bright)', border: '1px solid var(--coral-bright)', borderRadius: 6, padding: '1px 6px' }}>
-                        {t('gallery.migratable')}
-                      </span>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{p.label}</span>
+                        <span style={{ fontSize: 11, color: count > 0 ? 'var(--success, #16a34a)' : 'var(--text-muted)' }}>
+                          {count > 0 ? `● ${t('gallery.connected')}` : `○ ${t('gallery.notConnected')}`}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {p.supportsDiscovery && (
+                          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--coral-bright)', border: '1px solid var(--coral-bright)', borderRadius: 6, padding: '1px 6px' }}>
+                            {t('gallery.migratable')}
+                          </span>
+                        )}
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{count > 0 ? t('gallery.keyCount', { count }) : t('gallery.tapToConnect')}</span>
+                      </div>
+                    </div>
+                    {ingestionMeter && (
+                      <ConsumptionMeterCard
+                        meter={{
+                          key: 'ingestion', unit: 'bytes',
+                          used: ingestionMeter.breakdown?.find((item) => item.key === p.id)?.used ?? 0,
+                          limit: -1, unlimited: true, remaining: -1, percentUsed: 0,
+                        }}
+                        isFree={false}
+                        title="Data consumed"
+                        usageOnly
+                        periodLabel="This month"
+                      />
                     )}
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{count > 0 ? t('gallery.keyCount', { count }) : t('gallery.tapToConnect')}</span>
                   </div>
                 </button>
               );
