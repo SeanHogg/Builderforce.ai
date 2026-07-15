@@ -19,7 +19,14 @@ import { StripeProvider } from './StripeProvider';
 import { HelcimProvider } from './HelcimProvider';
 
 export { ManualProvider, StripeProvider, HelcimProvider };
-export type { PaymentProvider, CheckoutSessionOpts, CheckoutSessionResult, WebhookEvent } from './PaymentProvider';
+export type {
+  PaymentProvider,
+  CheckoutSessionOpts,
+  CheckoutSessionResult,
+  CardValidationSessionOpts,
+  CardValidationSessionResult,
+  WebhookEvent,
+} from './PaymentProvider';
 
 export function buildPaymentProvider(env: Env): PaymentProvider {
   const provider = (env.PAYMENT_PROVIDER ?? 'manual').toLowerCase();

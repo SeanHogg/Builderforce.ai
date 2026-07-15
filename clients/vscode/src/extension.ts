@@ -110,10 +110,15 @@ export function activate(context: vscode.ExtensionContext): void {
     managerStatus,
     vscode.commands.registerCommand(OPEN_MANAGER_CMD, () =>
       vscode.env.openExternal(vscode.Uri.parse(`${appUrl()}/projects?tab=manager`))),
-    attention.onDidChange(() => { tree.refresh(); projects.refresh(); inbox.refresh(); updateManagerStatus(); }),
+    attention.onDidChange(() => {
+      tree.refresh(); projects.refresh(); inbox.refresh(); updateManagerStatus();
+      // Per-session chat tabs show the same live status as the Sessions rows, off the
+      // same map — repaint them on the same signal (no second poller).
+      BrainWebview.refreshTabStatus();
+    }),
     // The in-webview Brain loop reports its own running / awaiting chats (the server
     // can't see them) — repaint the Sessions tree so they light up in lockstep.
-    onLocalRunsChange(() => tree.refresh()),
+    onLocalRunsChange(() => { tree.refresh(); BrainWebview.refreshTabStatus(); }),
     // Switching the active project re-scopes the attention query.
     onProjectChange(() => attention.refresh()),
   );
@@ -134,8 +139,9 @@ export function activate(context: vscode.ExtensionContext): void {
     },
     // Merge the webview's in-flight chat runs into the live-status map so a chat
     // that keeps executing after the user opens a new one still shows a spinner
-    // (or ❓ when paused on a confirm) in the Sessions tree.
-    onLocalRunsChanged: (runs) => setLocalChatRuns(runs),
+    // (or ❓ when paused on a confirm) in the Sessions tree. Keyed by the reporting
+    // panel — with per-session tabs several panels report at once.
+    onLocalRunsChanged: (sourceId, runs) => setLocalChatRuns(sourceId, runs),
   });
   projectView = vscode.window.createTreeView("builderforce.project", { treeDataProvider: projects });
   context.subscriptions.push(projectView);
@@ -951,14 +957,32 @@ async function signOut(
 
 async function pickModel(context: vscode.ExtensionContext): Promise<void> {
   try {
-    const models = await getModels(context.secrets, true);
+    const { models, canUsePremiumModels, premiumModels } = await getModels(context.secrets, true);
     const auto = "(auto — let the gateway choose)";
-    const pick = await vscode.window.showQuickPick([auto, ...models], {
+
+    // Separator-grouped QuickPick: the plan pool first, then the PREMIUM tier (any
+    // paid OpenRouter model) when the tenant has a paid plan + a validated card. An
+    // un-entitled tenant never sees the group, so the picker can only offer models
+    // the gateway will accept.
+    const items: vscode.QuickPickItem[] = [
+      { label: auto, description: "Default" },
+      { label: "Plan models", kind: vscode.QuickPickItemKind.Separator },
+      ...models.map((m) => ({ label: m })),
+    ];
+    if (canUsePremiumModels && premiumModels.length > 0) {
+      items.push(
+        { label: "Premium — any OpenRouter model (cost + 1¢/request)", kind: vscode.QuickPickItemKind.Separator },
+        ...premiumModels.map((m) => ({ label: m, description: "premium · +1¢/request" })),
+      );
+    }
+
+    const pick = await vscode.window.showQuickPick(items, {
       title: "Select BuilderForce model",
       placeHolder: "Pick a model for new turns",
+      matchOnDescription: true,
     });
     if (pick === undefined) return;
-    setSelectedModel(pick === auto ? undefined : pick);
+    setSelectedModel(pick.label === auto ? undefined : pick.label);
   } catch (e) {
     const message = (e as { message?: string }).message ?? String(e);
     if (message.includes("not_signed_in")) {

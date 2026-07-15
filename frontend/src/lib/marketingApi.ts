@@ -8,7 +8,7 @@
  */
 
 import { AUTH_API_URL, getStoredTenantToken, getStoredWebToken } from './auth';
-import { getVisitorId, getFirstTouch } from './visitor';
+import { getExistingVisitorId, getVisitorId, getFirstTouch } from './visitor';
 import type { ToolResult } from './tools';
 
 export interface MarketingRun {
@@ -69,7 +69,9 @@ export async function getMarketingSession(): Promise<MarketingSessionView | null
 
 /** Link the anonymous session to the authenticated user (attribution close-out). */
 export function convertVisitor(): void {
-  const visitorId = getVisitorId();
+  // Conversion must not mint an anonymous identity for someone who arrived
+  // already authenticated; only close a real pre-auth visitor session.
+  const visitorId = getExistingVisitorId();
   const token = getStoredTenantToken() ?? getStoredWebToken();
   if (!visitorId || !token) return;
   void fetch(`${AUTH_API_URL}/api/marketing/convert`, {

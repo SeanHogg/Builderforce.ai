@@ -29,6 +29,7 @@ import { authedFetch } from './authedFetch';
 import {
   BrainTimeline, ChatTicketsPanel, DEFAULT_CHAT_TICKETS_LABELS, Avatar, useChatParticipants,
   useMentionAutocomplete,
+  PendingQuestionBanner, selectPendingAskUser, askUserAnchorId,
   type BrainTimelineLabels,
 } from '@seanhogg/builderforce-brain-ui';
 import { createChatTicketsAdapter } from './chatTicketsAdapter';
@@ -558,6 +559,15 @@ function Chat({ init }: { init: InitData }) {
   // chat falls back to the sidebar's active project it will be scoped to on first send.
   // Names resolve from the host's projectId→name map, falling back to the sidebar name.
   const activeChat = useMemo(() => chatOptions.find((c) => c.id === chatId) ?? null, [chatOptions, chatId]);
+  // Tell the host which conversation this panel is showing. With
+  // `builderforce.sessionTabs: perSession` the host binds its TAB to that chat —
+  // naming the tab after the conversation and tracking its live status — and a
+  // brand-new chat (no server id until first send) re-keys its tab here once created.
+  // Title is left undefined rather than blanked while the chat is still loading.
+  const sessionTitle = activeChat?.title ?? (chatId == null ? t('app.newChat', 'New chat') : undefined);
+  useEffect(() => {
+    post('session.meta', { chatId: chatId ?? undefined, title: sessionTitle });
+  }, [chatId, sessionTitle]);
   const associatedProjectId = activeChat ? activeChat.projectId : (init.project?.id ?? null);
   const associatedProject = useMemo<{ id: number; name: string } | null>(() => {
     if (associatedProjectId == null) return null;
@@ -1013,6 +1023,26 @@ function Chat({ init }: { init: InitData }) {
     void conv.send(answer, { addressedTo: recipient });
   }, [conv, recipient]);
 
+  // The question this chat is BLOCKED on, if any. A long transcript buries the
+  // agent's card, so it is restated at the composer (and the session shows ❓ on its
+  // tab + Sessions row) — one shared predicate, so banner and card never disagree.
+  const pendingQuestion = useMemo(() => selectPendingAskUser(conv.messages), [conv.messages]);
+  const askLabels = useMemo(
+    () => ({
+      askSubmit: t('tl.askSubmit', 'Send'),
+      askAnswered: t('tl.askAnswered', 'Answered'),
+      askPending: t('app.askPending', 'Answer needed'),
+      askJumpTo: t('app.askJumpTo', 'Show in conversation'),
+    }),
+    [init.labels],
+  );
+  const revealQuestion = useCallback(() => {
+    if (!pendingQuestion) return;
+    document
+      .getElementById(askUserAnchorId(pendingQuestion.messageId))
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [pendingQuestion]);
+
   // An expired/invalid session surfaces as a 401 whose body mentions the token.
   // We offer an explicit "Reconnect" affordance for it (re-exchange the token),
   // on top of the always-available dismiss.
@@ -1384,6 +1414,15 @@ function Chat({ init }: { init: InitData }) {
             </label>
           </div>
         </div>
+      )}
+
+      {pendingQuestion && (
+        <PendingQuestionBanner
+          payload={pendingQuestion.payload}
+          labels={askLabels}
+          onAnswer={answerQuestion}
+          onReveal={revealQuestion}
+        />
       )}
 
       <div

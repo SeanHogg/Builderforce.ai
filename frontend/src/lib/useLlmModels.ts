@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { llmApi, tenantModelApi, type TenantModel } from './builderforceApi';
+import { llmApi, tenantModelApi, type PremiumModelInfo, type TenantModel } from './builderforceApi';
+import { getPremiumModelCatalog, type ModelRecord } from './modelCatalog';
 
 /**
  * Shared loader for the gateway model list. `models` is the full plan pool;
@@ -43,9 +44,21 @@ export interface LlmModelLists {
    *  THIS (not `isPaid`) for any "requires a paid plan to use a frontier model" gate,
    *  so a superadmin or a BYO tenant is never shown a false paywall. */
   canUseFrontierModels: boolean;
+  /** True when the tenant may select ANY paid OpenRouter model (billed at OpenRouter
+   *  cost + a flat 1¢/request). STRICTER than {@link canUseFrontierModels}: it needs a
+   *  paid plan AND a validated card, because premium routes on Builderforce's metered
+   *  key rather than the tenant's own. Mirrors the server's `evaluatePremiumModelAccess`. */
+  canUsePremiumModels: boolean;
+  /** Why premium is (un)available + the exact unlock step ('upgrade' | 'validate_card')
+   *  + the per-request surcharge. Undefined only on an older/failed payload. */
+  premiumInfo?: PremiumModelInfo;
+  /** The paid OpenRouter models premium unlocks, cheapest-first. Loaded from the cached
+   *  public catalog ONLY when the tenant is entitled — an un-entitled tenant never pays
+   *  for a fetch it can't use. Empty until then. */
+  premiumModels: ModelRecord[];
 }
 
-const EMPTY: LlmModelLists = { models: [], codingModels: [], teacherModels: [], tenantModels: [], isPaid: false, byoModels: [], canChooseModel: false, canUseFrontierModels: false };
+const EMPTY: LlmModelLists = { models: [], codingModels: [], teacherModels: [], tenantModels: [], isPaid: false, byoModels: [], canChooseModel: false, canUseFrontierModels: false, canUsePremiumModels: false, premiumModels: [] };
 
 let cache: LlmModelLists | null = null;
 let inflight: Promise<LlmModelLists> | null = null;
@@ -58,7 +71,7 @@ function load(): Promise<LlmModelLists> {
       // Tenant models are tenant-scoped + optional; a failure must not block the pool.
       tenantModelApi.list().then((r) => r.models).catch(() => [] as TenantModel[]),
     ])
-      .then(([res, tenantModels]) => {
+      .then(async ([res, tenantModels]) => {
         const models = 'data' in res ? res.data.map((m) => m.model) : res.models;
         const isPaid = res.premium === true || res.effectivePlan !== 'free';
         const byoModels = res.byo?.models.map((m) => m.id) ?? [];
@@ -72,7 +85,21 @@ function load(): Promise<LlmModelLists> {
         // BYO models ∪ coding pool so a BYO tenant still sees their own frontier models.
         const teacherModels = res.teacherModels
           ?? (canUseFrontierModels ? Array.from(new Set([...byoModels, ...(res.codingModels ?? [])])) : []);
-        cache = { models: models ?? [], codingModels: res.codingModels ?? [], teacherModels, tenantModels, isPaid, byoModels, canChooseModel, canUseFrontierModels };
+        // Premium (any-paid-OpenRouter) selection. Older payloads have no flag → false
+        // (never assume entitlement, or the picker offers models the gateway 402s).
+        const canUsePremiumModels = res.canUsePremiumModels === true;
+        // Only fetch the premium catalog for an entitled tenant. It's the cached public
+        // catalog, so this is one shared request — and skipped entirely for everyone else.
+        const premiumModels = canUsePremiumModels
+          ? await getPremiumModelCatalog().catch(() => [] as ModelRecord[])
+          : [];
+        cache = {
+          models: models ?? [], codingModels: res.codingModels ?? [], teacherModels, tenantModels,
+          isPaid, byoModels, canChooseModel, canUseFrontierModels,
+          canUsePremiumModels,
+          ...(res.premiumInfo ? { premiumInfo: res.premiumInfo } : {}),
+          premiumModels,
+        };
         return cache;
       })
       .catch(() => {

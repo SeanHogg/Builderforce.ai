@@ -70,9 +70,27 @@ import {
   publishLegalDoc,
 } from '../legal/legalDocsService';
 import { resolveIsSuperadmin } from '../../infrastructure/auth/superadminFlag';
+import {
+  modelPoolForPlan,
+  productNameForPlan,
+  isPremiumModelSelection,
+} from './LlmProxyService';
+import { PREMIUM_REQUEST_SURCHARGE_MILLICENTS } from './usageLedger';
+import { catalogEntry, tierForModel, vendorForModel } from './vendors';
+import { evaluatePremiumModelAccess } from '../../domain/tenant/planFeatures';
+import { TenantPlan } from '../../domain/shared/types';
 
 /** Sentinel extensionId the gateway routes to this in-process catalog. */
 export const BUILTIN_EXTENSION_ID = 'builtin';
+
+/** Map the gateway's string effectivePlan onto the plan enum the pure entitlement
+ *  evaluators take. (The gateway speaks 'free'|'pro'|'teams'; the domain speaks the
+ *  enum.) */
+function toTenantPlanEnum(ep: 'free' | 'pro' | 'teams'): TenantPlan {
+  if (ep === 'pro') return TenantPlan.PRO;
+  if (ep === 'teams') return TenantPlan.TEAMS;
+  return TenantPlan.FREE;
+}
 
 type Json = Record<string, unknown>;
 
@@ -312,6 +330,59 @@ function listEnvelope<T>(key: string, all: T[], limit: number): Record<string, u
 // ---------------------------------------------------------------------------
 
 const CATALOG: BuiltinTool[] = [
+  // ---- Session ----
+  {
+    tool: 'session.current_model', mutates: false,
+    description:
+      'Report which LLM model is serving this conversation — id, vendor, tier, label, the plan/product billing it, and whether it is a PREMIUM (any-paid-OpenRouter) selection carrying the flat per-request surcharge. '
+      + 'Call this to answer "what model are you running on?" / "what model was used?". '
+      + 'The caller normally supplies `model` (the id it observed on the turn, from the x-builderforce-model response header) — then the answer is exact. '
+      + 'With no `model` the gateway auto-selects per turn, so this reports the plan default instead and says so via `source`.',
+    parameters: obj({ model: S }),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('Model info requires the platform environment.');
+      // Dynamic import: `llmRoutes` imports THIS module, so a static import would be a
+      // cycle. Same escape hatch `replayRoute` uses.
+      const { resolveTenantPlan } = await import('../../presentation/routes/llmRoutes');
+      const access = await resolveTenantPlan(ctx.env, ctx.tenantId);
+
+      const observed = str(a.model).trim();
+      // With no observed id, report what the plan would resolve to. This is the plan's
+      // pool leader, NOT a promise: auto-select re-decides per turn (a connected BYO
+      // account or the learned reorder can lead), which `source` makes explicit.
+      const planPool = modelPoolForPlan(access.effectivePlan, access.premiumOverride);
+      const model = observed || planPool[0] || '';
+      if (!model) return { model: null, source: 'unknown', plan: access.effectivePlan };
+
+      const entry = catalogEntry(model);
+      const premiumSelection = isPremiumModelSelection(model, access.effectivePlan, access.premiumOverride);
+      const premiumAccess = evaluatePremiumModelAccess({
+        effectivePlan: toTenantPlanEnum(access.effectivePlan),
+        premiumOverride: access.premiumOverride,
+        isSuperadmin: await resolveIsSuperadmin(ctx.env, ctx.userId),
+        cardValidated: access.cardValidated,
+      });
+
+      return {
+        model,
+        // 'observed' → the id that actually served the turn (exact).
+        // 'plan_default' → nothing observed was supplied; the gateway auto-selects per
+        //   turn, so this is the plan's leading model, not necessarily what ran.
+        source: observed ? 'observed' : 'plan_default',
+        vendor: vendorForModel(model),
+        tier: tierForModel(model),
+        label: entry?.label ?? null,
+        brand: entry?.brand ?? null,
+        contextWindow: entry?.contextWindow ?? null,
+        plan: access.effectivePlan,
+        product: productNameForPlan(access.effectivePlan, access.premiumOverride),
+        inPlanPool: planPool.includes(model),
+        premiumSelection,
+        ...(premiumSelection ? { premiumSurchargeMillicents: PREMIUM_REQUEST_SURCHARGE_MILLICENTS } : {}),
+        premiumAccess: { entitled: premiumAccess.entitled, reason: premiumAccess.reason, ...(premiumAccess.unlock ? { unlock: premiumAccess.unlock } : {}) },
+      };
+    },
+  },
   // ---- Projects ----
   {
     tool: 'projects.list', mutates: false,
@@ -2469,6 +2540,9 @@ export function listBuiltinTools(): McpToolEntry[] {
  * CATALOG-membership test (every id below must exist in CATALOG).
  */
 export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
+  // Session introspection — read-only. Lets a run answer "what model am I on?" and
+  // report the model/tier it is actually driving on the timeline.
+  'session.current_model',
   // Projects — read + write (no delete)
   'projects.list', 'projects.get', 'projects.create', 'projects.update', 'projects.check_key',
   // Tasks — read + write + move + assignees (no delete). "create other tasks for gaps".

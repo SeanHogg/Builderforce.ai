@@ -667,6 +667,18 @@ export const tenants = pgTable('tenants', {
   billingPaymentBrand:    varchar('billing_payment_brand', { length: 50 }),
   billingPaymentLast4:    varchar('billing_payment_last4', { length: 4 }),
   billingUpdatedAt:       timestamp('billing_updated_at'),
+  /**
+   * Explicit card-validation flow for PREMIUM (any-paid-OpenRouter) model selection
+   * (migration 0342). A tenant may select any paid OpenRouter model (billed at
+   * OpenRouter cost + a flat 1¢/request) only with a PAID plan AND a card that has
+   * been through the provider's validation flow (SetupIntent / $0 auth):
+   *   card_validated_at    → stamped when the provider confirms a usable card (NULL
+   *                          until then). Presence = "validated card on file".
+   *   card_validation_status → none | pending | validated | failed (drives the UI).
+   * See `cardValidationService.ts` + `evaluatePremiumModelAccess`.
+   */
+  cardValidatedAt:        timestamp('card_validated_at', { withTimezone: true }),
+  cardValidationStatus:   varchar('card_validation_status', { length: 16 }).notNull().default('none').$type<'none' | 'pending' | 'validated' | 'failed'>(),
   externalCustomerId:     varchar('external_customer_id', { length: 255 }),
   externalSubscriptionId: varchar('external_subscription_id', { length: 255 }),
   seatCount:              integer('seat_count'),

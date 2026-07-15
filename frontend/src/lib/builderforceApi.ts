@@ -3208,9 +3208,27 @@ export interface ByoModel { id: string; vendor: string; tier: string; contextWin
  *  connected provider (BYO), so the model choices follow the connected providers. */
 export interface ByoModelInfo { providers: string[]; models: ByoModel[] }
 
+/** How a tenant's card-validation flow stands — the gate on PREMIUM model selection. */
+export type CardValidationStatus = 'none' | 'pending' | 'validated' | 'failed';
+
+/** PREMIUM (any-paid-OpenRouter) model selection: the tenant may pick ANY paid
+ *  OpenRouter model, billed at OpenRouter's own price + a flat per-request surcharge.
+ *  Stricter than frontier access — it needs a paid plan AND a validated card, because
+ *  it routes on Builderforce's metered key. `unlock` names the exact next step on a
+ *  miss so the UI shows "Upgrade" vs "Validate your card" rather than a generic wall.
+ *  Mirrors `evaluatePremiumModelAccess` (the api is the source of truth). */
+export interface PremiumModelInfo {
+  entitled: boolean;
+  reason: 'superadmin' | 'premium_override' | 'paid_card' | 'card_required' | 'plan_required';
+  unlock?: 'upgrade' | 'validate_card';
+  cardValidationStatus: CardValidationStatus;
+  /** Flat surcharge added per request, in millicents (1/100000 USD). 1000 = 1¢. */
+  surchargeMillicents: number;
+}
+
 export type LlmModelsResponse =
-  | { configured: false; product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; models: string[]; codingModels?: string[]; teacherModels?: string[]; canChooseModel?: boolean; canUseFrontierModels?: boolean; byo?: ByoModelInfo }
-  | { configured: true;  product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; object: 'list'; data: LlmModelStatus[]; codingModels?: string[]; teacherModels?: string[]; canChooseModel?: boolean; canUseFrontierModels?: boolean; byo?: ByoModelInfo };
+  | { configured: false; product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; models: string[]; codingModels?: string[]; teacherModels?: string[]; canChooseModel?: boolean; canUseFrontierModels?: boolean; canUsePremiumModels?: boolean; premiumInfo?: PremiumModelInfo; byo?: ByoModelInfo }
+  | { configured: true;  product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; object: 'list'; data: LlmModelStatus[]; codingModels?: string[]; teacherModels?: string[]; canChooseModel?: boolean; canUseFrontierModels?: boolean; canUsePremiumModels?: boolean; premiumInfo?: PremiumModelInfo; byo?: ByoModelInfo };
 
 /** Learned Model Routing (PRD 13) — closed action-type taxonomy. MIRRORS
  *  `api/src/application/llm/actionTypes.ts` (the api is the source of truth). */
@@ -3238,6 +3256,34 @@ export interface ModelAnalyticsResponse {
   updatedAt: string;
   byAction: ModelAnalyticsAction[];
 }
+
+/** Card-validation state — the gate on PREMIUM (any-paid-OpenRouter) model selection. */
+export interface CardValidationState {
+  status: CardValidationStatus;
+  validated: boolean;
+  validatedAt: string | null;
+  brand: string | null;
+  last4: string | null;
+  paymentProvider: string;
+}
+
+/**
+ * Explicit card validation (Stripe SetupIntent / Helcim $0 verify). A paid tenant runs
+ * this once to unlock premium model selection — no charge is made; it only proves the
+ * card is usable, since premium is metered per request rather than sold as a plan.
+ */
+export const cardValidationApi = {
+  get: (tenantId: number): Promise<CardValidationState> =>
+    request<CardValidationState>(`/api/tenants/${tenantId}/card-validation`),
+
+  /** Start validation. Hosted providers return a `checkoutUrl` to send the user to;
+   *  the manual provider validates immediately (`validated: true`). */
+  start: (tenantId: number, body?: { billingEmail?: string; successUrl?: string; cancelUrl?: string }) =>
+    request<{ checkoutUrl: string | null; sessionId: string; validated: boolean; status: CardValidationStatus }>(
+      `/api/tenants/${tenantId}/card-validation`,
+      { method: 'POST', body: JSON.stringify(body ?? {}) },
+    ),
+};
 
 export const llmApi = {
   usage: async (): Promise<LlmUsageStats> => {

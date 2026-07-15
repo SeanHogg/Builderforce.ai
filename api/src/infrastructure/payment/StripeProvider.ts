@@ -21,7 +21,14 @@
  * NOTE: Uses fetch-based Stripe client — compatible with Cloudflare Workers.
  */
 
-import type { PaymentProvider, CheckoutSessionOpts, CheckoutSessionResult, WebhookEvent } from './PaymentProvider';
+import type {
+  PaymentProvider,
+  CheckoutSessionOpts,
+  CheckoutSessionResult,
+  CardValidationSessionOpts,
+  CardValidationSessionResult,
+  WebhookEvent,
+} from './PaymentProvider';
 import { TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
 
 interface StripeConfig {
@@ -92,6 +99,42 @@ export class StripeProvider implements PaymentProvider {
     };
   }
 
+  async createCardValidationSession(opts: CardValidationSessionOpts): Promise<CardValidationSessionResult> {
+    // Stripe Checkout in `setup` mode collects + validates a card (a $0 SetupIntent)
+    // without charging — the exact "validate a card on file" flow. On completion Stripe
+    // fires `checkout.session.completed` with `mode: 'setup'`, which parseWebhook maps
+    // to a `card.validated` event.
+    const params = new URLSearchParams({
+      mode: 'setup',
+      customer_email: opts.billingEmail,
+      success_url: opts.successUrl,
+      cancel_url: opts.cancelUrl,
+      'metadata[tenantId]': String(opts.tenantId),
+      'metadata[purpose]': 'card_validation',
+    });
+    if (opts.externalCustomerId) params.set('customer', opts.externalCustomerId);
+
+    const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.config.secretKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params.toString(),
+    });
+    if (!res.ok) {
+      const err = await res.json() as { error?: { message?: string } };
+      throw new Error(`Stripe card-validation error: ${err?.error?.message ?? res.status}`);
+    }
+    const session = await res.json() as { id: string; url: string; customer: string | null };
+    return {
+      sessionId: session.id,
+      checkoutUrl: session.url,
+      externalCustomerId: session.customer ?? opts.externalCustomerId ?? null,
+      validatedImmediately: false,
+    };
+  }
+
   async cancelSubscription(externalSubscriptionId: string): Promise<void> {
     const res = await fetch(
       `https://api.stripe.com/v1/subscriptions/${externalSubscriptionId}`,
@@ -120,20 +163,51 @@ export class StripeProvider implements PaymentProvider {
         const meta = (obj['metadata'] ?? {}) as Record<string, string>;
         const sub = obj['subscription'] as string | null;
         const customer = obj['customer'] as string;
-        const paymentMethodDetails = (obj['payment_method_details'] as Record<string, unknown> | undefined);
-        const card = paymentMethodDetails?.['card'] as Record<string, string> | undefined;
+
+        // `setup` mode = the explicit CARD-VALIDATION flow (a $0 SetupIntent), not a
+        // subscription purchase. Stripe reuses checkout.session.completed for both, so
+        // branch on mode BEFORE the subscription mapping below (a setup session has no
+        // subscription and would otherwise activate a plan the tenant never bought).
+        if (obj['mode'] === 'setup') {
+          const setupIntentId = obj['setup_intent'] as string | null;
+          const card = setupIntentId
+            ? await this.fetchCard(`https://api.stripe.com/v1/setup_intents/${setupIntentId}?expand[]=payment_method`)
+            : undefined;
+          return {
+            type: 'card.validated',
+            externalCustomerId: customer,
+            externalSubscriptionId: '',
+            ...(card?.brand ? { paymentBrand: card.brand } : {}),
+            ...(card?.last4 ? { paymentLast4: card.last4 } : {}),
+            raw: event,
+          };
+        }
+
+        const customerDetails = obj['customer_details'] as Record<string, string> | undefined;
         const rawSeats = parseInt(meta['seats'] ?? '1', 10);
+
+        // A Checkout Session carries no card details of its own, so read them off the
+        // subscription's payment method.
+        const card = sub
+          ? await this.fetchCard(
+              `https://api.stripe.com/v1/subscriptions/${sub}` +
+                '?expand[]=default_payment_method&expand[]=latest_invoice.payment_intent.payment_method',
+            )
+          : undefined;
 
         return {
           type: 'subscription.activated',
           externalCustomerId: customer,
           externalSubscriptionId: sub ?? '',
           billingCycle: (meta['billingCycle'] as TenantBillingCycle) ?? TenantBillingCycle.MONTHLY,
-          billingEmail: (obj['customer_email'] as string | undefined) ?? meta['billingEmail'],
+          billingEmail:
+            (obj['customer_email'] as string | undefined) ??
+            customerDetails?.['email'] ??
+            meta['billingEmail'],
           targetPlan: (meta['targetPlan'] as TenantPlan.PRO | TenantPlan.TEAMS | undefined) ?? TenantPlan.PRO,
           seats: isNaN(rawSeats) ? 1 : rawSeats,
-          paymentBrand: card?.['brand'],
-          paymentLast4: card?.['last4'],
+          ...(card?.brand ? { paymentBrand: card.brand } : {}),
+          ...(card?.last4 ? { paymentLast4: card.last4 } : {}),
           raw: event,
         };
       }
@@ -142,8 +216,15 @@ export class StripeProvider implements PaymentProvider {
         const status = obj['status'] as string;
         const customer = obj['customer'] as string;
         const meta = (obj['metadata'] ?? {}) as Record<string, string>;
+
+        // Only statuses that carry an actual billing verdict may move the tenant's
+        // plan. Anything else (incomplete, paused, …) is acknowledged and ignored —
+        // treating them as a renewal would activate a plan that was never paid for.
+        const mapped = mapSubscriptionStatus(status);
+        if (!mapped) return null;
+
         return {
-          type: status === 'past_due' ? 'subscription.past_due' : 'subscription.renewed',
+          type: mapped,
           externalCustomerId: customer,
           externalSubscriptionId: obj['id'] as string,
           billingCycle: (meta['billingCycle'] as TenantBillingCycle | undefined),
@@ -169,11 +250,87 @@ export class StripeProvider implements PaymentProvider {
         };
       }
 
+      case 'setup_intent.setup_failed': {
+        return {
+          type: 'card.validation_failed',
+          externalCustomerId: obj['customer'] as string,
+          externalSubscriptionId: '',
+          raw: event,
+        };
+      }
+
       default:
         return null; // unhandled event type — not an error
     }
   }
+
+  /**
+   * Best-effort card brand/last4 for display ("Visa ••1234"), given a Stripe URL that
+   * expands the payment method. Handles both the SetupIntent shape (`payment_method`)
+   * and the Subscription shape (`default_payment_method`, falling back to the latest
+   * invoice's payment intent). Returns undefined on any failure — these details are
+   * cosmetic and must never fail an otherwise-good webhook, in which case the tenant's
+   * existing brand/last4 is left untouched.
+   */
+  private async fetchCard(url: string): Promise<{ brand?: string; last4?: string } | undefined> {
+    try {
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${this.config.secretKey}` } });
+      if (!res.ok) return undefined;
+      const body = await res.json() as StripeCardCarrier;
+      const card =
+        body.payment_method?.card ??
+        body.default_payment_method?.card ??
+        body.latest_invoice?.payment_intent?.payment_method?.card;
+      if (!card) return undefined;
+      return {
+        ...(card.brand ? { brand: card.brand } : {}),
+        ...(card.last4 ? { last4: card.last4 } : {}),
+      };
+    } catch {
+      return undefined;
+    }
+  }
 }
+
+interface StripePaymentMethod {
+  card?: { brand?: string; last4?: string } | null;
+}
+
+/** The subset of Stripe objects `fetchCard` can pull an expanded card off. */
+interface StripeCardCarrier {
+  /** SetupIntent */
+  payment_method?: StripePaymentMethod | null;
+  /** Subscription */
+  default_payment_method?: StripePaymentMethod | null;
+  /** Subscription fallback, when no default payment method is set */
+  latest_invoice?: { payment_intent?: { payment_method?: StripePaymentMethod | null } | null } | null;
+}
+
+/**
+ * Translate a Stripe subscription status into a billing verdict.
+ * Returns null for statuses that must NOT move the tenant's plan either way.
+ * See: https://stripe.com/docs/api/subscriptions/object#subscription_object-status
+ */
+function mapSubscriptionStatus(status: string): WebhookEvent['type'] | null {
+  switch (status) {
+    case 'active':
+    case 'trialing':
+      return 'subscription.renewed';
+    case 'past_due':
+    case 'unpaid':
+      return 'subscription.past_due';
+    case 'canceled':
+      return 'subscription.cancelled';
+    // incomplete / incomplete_expired / paused carry no verdict: the customer either
+    // hasn't paid yet or is deliberately suspended. `customer.subscription.deleted`
+    // handles real terminations.
+    default:
+      return null;
+  }
+}
+
+/** Stripe's documented replay window for webhook signatures. */
+const SIGNATURE_TOLERANCE_SECONDS = 300;
 
 /**
  * Verify Stripe webhook signature using Web Crypto API (no Node.js required).
@@ -185,12 +342,24 @@ async function verifyStripeSignature(
   secret: string,
 ): Promise<boolean> {
   try {
-    const parts = Object.fromEntries(
-      signatureHeader.split(',').map((p) => p.split('=')),
-    ) as Record<string, string>;
-    const timestamp = parts['t'];
-    const signature = parts['v1'];
-    if (!timestamp || !signature) return false;
+    // Header form: `t=<ts>,v1=<sig>[,v1=<sig>]`. Multiple v1 entries appear while a
+    // signing secret is being rotated, so every one is a candidate.
+    let timestamp = '';
+    const signatures: string[] = [];
+    for (const part of signatureHeader.split(',')) {
+      const eq = part.indexOf('=');
+      if (eq === -1) continue;
+      const key = part.slice(0, eq).trim();
+      const value = part.slice(eq + 1).trim();
+      if (key === 't') timestamp = value;
+      else if (key === 'v1') signatures.push(value);
+    }
+    if (!timestamp || signatures.length === 0) return false;
+
+    // Without this, a captured payload stays replayable forever.
+    const sentAt = Number(timestamp);
+    if (!Number.isFinite(sentAt)) return false;
+    if (Math.abs(Date.now() / 1000 - sentAt) > SIGNATURE_TOLERANCE_SECONDS) return false;
 
     const signedPayload = `${timestamp}.${payload}`;
     const key = await crypto.subtle.importKey(
@@ -205,8 +374,16 @@ async function verifyStripeSignature(
       .map((b) => b.toString(16).padStart(2, '0'))
       .join('');
 
-    return hex === signature;
+    return signatures.some((candidate) => timingSafeEqual(hex, candidate));
   } catch {
     return false;
   }
+}
+
+/** Compare without leaking how many leading characters matched via response time. */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
 }

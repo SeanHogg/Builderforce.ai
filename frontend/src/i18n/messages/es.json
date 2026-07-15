@@ -986,7 +986,11 @@
     "merging": "Fusionando…"
   },
   "memberProfile": {
-    "tabs": { "overview": "Resumen", "timeLogs": "Registros de tiempo", "tasks": "Tareas" },
+    "tabs": {
+      "overview": "Resumen",
+      "timeLogs": "Registros de tiempo",
+      "tasks": "Tareas"
+    },
     "noTasks": "No hay tareas asignadas a este usuario.",
     "subtitle": "{kind} · capacidad y disponibilidad",
     "syncing": "Sincronizando…",
@@ -1737,7 +1741,12 @@
       "activeUsers": "Usuarios activos",
       "cost": "Coste",
       "tokensSub": "en todos los modelos",
-      "tokensByModel": "Tokens por modelo"
+      "tokensByModel": "Tokens por modelo",
+      "byIntegration": "Consumo por integración",
+      "platformKey": "Builderforce (clave de la plataforma)",
+      "fundedOwnKey": "Tu clave",
+      "fundedPlatform": "Plataforma",
+      "requests": "Solicitudes"
     },
     "devexhub": {
       "title": "DevEx",
@@ -3191,6 +3200,7 @@
       "aiModelShare": "Cuota de modelos en ejecuciones",
       "aiMergeRate": "Tasa de fusión por modelo",
       "aiComparison": "Evaluación multiherramienta",
+      "aiByIntegration": "Consumo por integración",
       "aiShareTrend": "Tendencia de adopción y cuota",
       "delivCycleTime": "Tiempo de ciclo",
       "delivVelocity": "Velocidad",
@@ -3314,7 +3324,11 @@
       "bySource": "Coste por origen",
       "spendSub": "estimado, últimos 7 días",
       "byProject": "Gasto por proyecto",
-      "noProjects": "Sin gasto por proyecto"
+      "noProjects": "Sin gasto por proyecto",
+      "byoFundedOnly": "Sin gasto de plataforma: todo el uso se ejecutó con tus claves conectadas",
+      "sourceCloud": "Nube",
+      "sourceOnPrem": "Local",
+      "sourceWeb": "Web / SDK"
     },
     "catalog": {
       "noInstalls": "Sin instalaciones aún",
@@ -6995,6 +7009,7 @@
     "sub": {
       "health": "Estado",
       "directory": "Directorio",
+      "sessions": "Sesiones",
       "security": "Seguridad",
       "emulation": "Emulación",
       "tenants": "Espacios",
@@ -7183,6 +7198,22 @@
         "colDuration": "Duración",
         "durationActive": "Activa"
       }
+    },
+    "sessions": {
+      "title": "Sesiones de adopción",
+      "subtitle": "Visitantes anónimos de Brain y herramientas gratuitas, incluida la conversión a cuenta y pago.",
+      "count": "{count, plural, one {# sesión} other {# sesiones}}",
+      "empty": "No se encontraron sesiones de invitados.",
+      "visitor": "Visitante",
+      "engagement": "Interacción",
+      "firstSeen": "Primera visita",
+      "lastSeen": "Última visita",
+      "conversion": "Conversión",
+      "brainMessages": "{count} mensajes de Brain",
+      "tokensAndTools": "{tokens} tokens · {tools} usos de herramientas",
+      "guest": "invitado",
+      "registered": "registrado",
+      "paid": "de pago"
     },
     "usage": {
       "aiAnalyze": "Analizar con IA",
@@ -7670,17 +7701,40 @@
       "meta": {
         "blurb": "Pega una clave de API de Meta AI para ejecutar modelos MUSE (muse-spark-1.1) en tu propia cuenta de Meta AI."
       },
-      "kimi": { "blurb": "Pega una clave de suscripción de Kimi Code o una clave API de Moonshot." },
-      "qwen": { "blurb": "Pega una clave API de Alibaba DashScope para ejecutar modelos Qwen." },
-      "minimax": { "blurb": "Pega una clave API de MiniMax para ejecutar modelos MiniMax." }
-      ,"xai": { "blurb": "Conecta una suscripción SuperGrok compatible o una clave API de xAI.", "subscription": "suscripción SuperGrok", "pastePrompt": "Después de aprobar el acceso, copia el código mostrado en la página de xAI y pégalo aquí.", "pastePlaceholder": "Pega el código de acceso de xAI…" }
+      "kimi": {
+        "blurb": "Pega una clave de suscripción de Kimi Code o una clave API de Moonshot."
+      },
+      "qwen": {
+        "blurb": "Pega una clave API de Alibaba DashScope para ejecutar modelos Qwen."
+      },
+      "minimax": {
+        "blurb": "Pega una clave API de MiniMax para ejecutar modelos MiniMax."
+      },
+      "xai": {
+        "blurb": "Conecta una suscripción SuperGrok compatible o una clave API de xAI.",
+        "subscription": "suscripción SuperGrok",
+        "pastePrompt": "Después de aprobar el acceso, copia el código mostrado en la página de xAI y pégalo aquí.",
+        "pastePlaceholder": "Pega el código de acceso de xAI…"
+      }
     }
   },
   "modelSelect": {
     "yourLlms": "Tus LLM",
     "connectedProviders": "Proveedores conectados",
     "models": "Modelos",
-    "current": "{model} (actual)"
+    "current": "{model} (actual)",
+    "premiumModels": "Premium: cualquier modelo de OpenRouter (coste + 1¢/solicitud)",
+    "premiumOption": "{name} · {price}/M entrada",
+    "premiumUnlockTitle": "Desbloquear modelos premium",
+    "premiumUnlockCardBody": "Valida una tarjeta para seleccionar cualquier modelo de pago de OpenRouter. Se te cobra el precio de OpenRouter más 1¢ por solicitud. La validación no realiza ningún cargo: solo confirma que la tarjeta funciona.",
+    "premiumUnlockUpgradeBody": "Los modelos premium (cualquier modelo de pago de OpenRouter, facturado al coste de OpenRouter más 1¢ por solicitud) requieren un plan de pago con una tarjeta validada.",
+    "premiumValidateCard": "Validar una tarjeta",
+    "premiumValidating": "Abriendo…",
+    "premiumPending": "Esperando confirmación",
+    "premiumPendingHint": "Completa la validación con tu proveedor de pagos y luego recarga.",
+    "premiumFailedHint": "No se pudo validar esa tarjeta. Prueba con otra.",
+    "premiumUpgrade": "Cambiar a Pro",
+    "premiumUnlockFailed": "No se pudo iniciar la validación de la tarjeta."
   },
   "runAgentControl": {
     "agentTitle": "Agente",

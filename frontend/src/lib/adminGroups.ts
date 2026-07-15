@@ -36,6 +36,7 @@ export const ADMIN_GROUP_META: AdminGroupMeta[] = [
   ] },
   { id: 'users', labelKey: 'tab.adminUsers', icon: '👤', subs: [
     { id: '', subKey: 'directory', icon: '👤' },
+    { id: 'sessions', subKey: 'sessions', icon: '🧠' },
     { id: 'security', subKey: 'security', icon: '🔒' },
     { id: 'emulation', subKey: 'emulation', icon: '🕵️' },
   ] },

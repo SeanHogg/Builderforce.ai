@@ -1,7 +1,8 @@
 import * as vscode from "vscode";
 import { getTenantJwt, getCurrentUserId } from "./bfApi";
 import { TOOL_DEFS } from "./fileTools";
-import { getBaseUrl, getWebBaseUrl, SECRET_KEY, fetchPersonalityBlock, fetchLimbicBlock } from "./gateway";
+import { getBaseUrl, getWebBaseUrl, SECRET_KEY, fetchPersonalityBlock, fetchLimbicBlock, getSessionTabMode, type SessionTabMode } from "./gateway";
+import { attentionFor, sessionTabIcon, sessionTabPrefix } from "./attention";
 import { getGroundingSummary } from "./grounding";
 import { getEditorContext, watchEditorContext } from "./editorContext";
 import { resolveEffectiveModel } from "./modelState";
@@ -23,6 +24,10 @@ interface BrainInbound extends WebviewInbound {
   /** For `runs.local`: chat ids the webview's agent loop is executing / paused on. */
   running?: number[];
   awaiting?: number[];
+  /** For `session.meta`: the chat this panel is showing (id + current title), so a
+   *  per-session tab can name itself and bind to the chat it was opened for. */
+  chatId?: number;
+  title?: string;
 }
 
 /** A work item to auto-link to the chat the intent opens, so the conversation is
@@ -61,8 +66,12 @@ export interface BrainWebviewHooks {
    * the gateway), so the server-side attention endpoint never sees it — the host
    * merges this into the same live-status map so the Sessions tree lights up the
    * still-running conversations after the user switches to a new chat.
+   *
+   * `sourceId` identifies the reporting PANEL: in `sessionTabs:perSession` several
+   * panels report concurrently, each seeing only its own chat, so the merge must be
+   * per-source or the last reporter would erase the others' runs.
    */
-  onLocalRunsChanged?: (runs: { running: number[]; awaiting: number[] }) => void;
+  onLocalRunsChanged?: (sourceId: string, runs: { running: number[]; awaiting: number[] }) => void;
 }
 
 /**
@@ -99,6 +108,10 @@ function buildLabels(): Record<string, string> {
     "app.renamePlaceholder": t("Chat name"),
     "app.noProject": t("No project"),
     "app.copyChat": t("Copy chat diagnostics (identity + Evermind state + transcript)"),
+    // Pending ask_user question, restated at the composer so a blocked chat is
+    // answerable without hunting back through the transcript for its card.
+    "app.askPending": t("Answer needed"),
+    "app.askJumpTo": t("Show in conversation"),
     // Consolidate + Fork composer actions
     "app.consolidate": t("Consolidate"),
     "app.consolidateHint": t("Summarize this chat into a compact context the rest of the conversation builds on"),
@@ -170,32 +183,94 @@ function buildLabels(): Record<string, string> {
  *   - the tenant token is minted/refreshed here from the stored editor key
  */
 export class BrainWebview extends WebviewPanelBase<BrainInbound> {
-  private static current: BrainWebview | undefined;
+  /** The single reused panel (`sessionTabs:reuse` — the default). */
+  private static reused: BrainWebview | undefined;
+  /** `sessionTabs:perSession`: one panel per chat id, so sessions are switchable tabs. */
+  private static readonly byChat = new Map<number, BrainWebview>();
+  /** perSession panels for a chat that has no server id yet (a 'new'/'seed' intent);
+   *  each re-keys itself into {@link byChat} once the webview reports its chat. */
+  private static readonly unassigned = new Set<BrainWebview>();
   private static hooks: BrainWebviewHooks = {};
+  private static seq = 0;
 
   /** Wire host callbacks once (from `activate`) so the panel can refresh the trees. */
   static configure(hooks: BrainWebviewHooks): void {
     BrainWebview.hooks = hooks;
   }
 
-  static open(ctx: vscode.ExtensionContext, intent?: BrainIntent): void {
-    if (BrainWebview.current) {
-      BrainWebview.current.panel.reveal();
-      if (intent) BrainWebview.current.sendIntent(intent);
-      return;
-    }
-    BrainWebview.current = new BrainWebview(ctx, intent);
+  /** Every live Brain panel, whichever registry holds it. */
+  private static allPanels(): BrainWebview[] {
+    return [
+      ...(BrainWebview.reused ? [BrainWebview.reused] : []),
+      ...BrainWebview.byChat.values(),
+      ...BrainWebview.unassigned,
+    ];
   }
 
-  /** Re-push init (token/grounding/model/labels) to an open panel — e.g. after sign-in. */
+  /**
+   * Open (or reveal) the Brain on `intent`. In `reuse` mode one panel is kept and the
+   * intent switches the conversation inside it. In `perSession` mode each session gets
+   * its own tab: focusing a session that is already open reveals ITS tab rather than
+   * stealing another one, so the user can switch between chats like editor tabs.
+   */
+  static open(ctx: vscode.ExtensionContext, intent?: BrainIntent): void {
+    const mode = getSessionTabMode();
+
+    if (mode === "reuse") {
+      if (BrainWebview.reused) {
+        BrainWebview.reused.panel.reveal();
+        if (intent) BrainWebview.reused.sendIntent(intent);
+        return;
+      }
+      BrainWebview.reused = new BrainWebview(ctx, intent, mode);
+      return;
+    }
+
+    // perSession: an already-open session just comes forward — never duplicated, and
+    // never switched out from under another tab.
+    if (intent?.kind === "focus" && intent.chatId != null) {
+      const open = BrainWebview.byChat.get(intent.chatId);
+      if (open) {
+        open.panel.reveal();
+        return;
+      }
+    }
+    const panel = new BrainWebview(ctx, intent, mode);
+    if (intent?.kind === "focus" && intent.chatId != null) {
+      panel.ownChatId = intent.chatId;
+      BrainWebview.byChat.set(intent.chatId, panel);
+      panel.applyTabStatus();
+    } else {
+      // 'new'/'seed'/'task' — the chat id only exists once the webview creates it.
+      BrainWebview.unassigned.add(panel);
+    }
+  }
+
+  /** Re-push init (token/grounding/model/labels) to every open panel — e.g. after sign-in. */
   static refresh(): void {
-    void BrainWebview.current?.sendInit();
+    for (const panel of BrainWebview.allPanels()) void panel.sendInit();
+  }
+
+  /**
+   * Repaint every per-session tab's live status. Called from the SAME handlers that
+   * already repaint the trees on an attention change, so tabs ride the one existing
+   * poller + local-run overlay — no second timer, no extra fetch.
+   */
+  static refreshTabStatus(): void {
+    for (const panel of BrainWebview.byChat.values()) panel.applyTabStatus();
+    for (const panel of BrainWebview.unassigned) panel.applyTabStatus();
   }
 
   /** Intent captured at construction, flushed once the webview signals `ready`. */
   private pendingIntent?: BrainIntent;
+  /** The chat this panel is bound to (perSession); undefined until the webview reports one. */
+  private ownChatId?: number;
+  /** The bound chat's title — the per-session tab's label. */
+  private chatTitle = "";
+  /** Identifies this panel in the shared local-run overlay (see BrainWebviewHooks). */
+  private readonly sourceId = `brain:${++BrainWebview.seq}`;
 
-  private constructor(ctx: vscode.ExtensionContext, intent?: BrainIntent) {
+  private constructor(ctx: vscode.ExtensionContext, intent: BrainIntent | undefined, private readonly mode: SessionTabMode) {
     super(ctx, { viewType: "builderforce.brain", title: "BuilderForce", htmlTitle: "BuilderForce" });
     this.pendingIntent = intent;
     // Keep the React app's editor context live: whenever the active file, selection,
@@ -227,9 +302,23 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
       case "runs.local": {
         const nums = (v: unknown): number[] =>
           Array.isArray(v) ? v.filter((n): n is number => typeof n === "number") : [];
-        BrainWebview.hooks.onLocalRunsChanged?.({ running: nums(msg.running), awaiting: nums(msg.awaiting) });
+        // Repainting this panel's tab rides the overlay's change event (which the host
+        // already fans out to refreshTabStatus) — no direct call needed here.
+        BrainWebview.hooks.onLocalRunsChanged?.(this.sourceId, {
+          running: nums(msg.running),
+          awaiting: nums(msg.awaiting),
+        });
         break;
       }
+      // The webview switched to (or created / renamed) the chat it is showing. A
+      // per-session tab binds to that chat here: it re-keys itself under the new id
+      // and names the tab after the conversation.
+      case "session.meta":
+        this.bindSession(
+          typeof msg.chatId === "number" ? msg.chatId : undefined,
+          typeof msg.title === "string" ? msg.title : undefined,
+        );
+        break;
       // Triage: the webview built a full transcript (turns + tool I/O + errors);
       // the privileged host writes it to the clipboard reliably (a sandboxed
       // webview can't), so a "No response" turn can be pasted out to debug.
@@ -367,6 +456,45 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
     void this.panel.webview.postMessage({ type: "intent", intent });
   }
 
+  /**
+   * Bind this panel to the chat its webview is showing. In perSession mode the panel
+   * re-keys itself in the registry — this is how a tab opened for a BRAND-NEW chat
+   * (which has no id until the webview creates it server-side) becomes switchable and
+   * starts tracking its own live status. In reuse mode only the title is recorded.
+   */
+  private bindSession(chatId: number | undefined, title: string | undefined): void {
+    if (title !== undefined) this.chatTitle = title;
+    if (this.mode === "perSession" && chatId !== this.ownChatId) {
+      if (this.ownChatId != null && BrainWebview.byChat.get(this.ownChatId) === this) {
+        BrainWebview.byChat.delete(this.ownChatId);
+      }
+      this.ownChatId = chatId;
+      if (chatId != null) {
+        // Another tab already holds this chat (e.g. the webview navigated onto it) —
+        // it loses the key so exactly one tab owns a session.
+        BrainWebview.byChat.set(chatId, this);
+        BrainWebview.unassigned.delete(this);
+      } else {
+        BrainWebview.unassigned.add(this);
+      }
+    }
+    this.applyTabStatus();
+  }
+
+  /**
+   * Paint this tab with its chat's title + live status, so a user juggling sessions
+   * sees which one is working and which one needs an answer WITHOUT opening it —
+   * the same signal the Sessions row shows, off the same {@link attentionFor} map.
+   * Reuse mode keeps the product title (its one tab is not a single session).
+   */
+  private applyTabStatus(): void {
+    if (this.mode !== "perSession") return;
+    const state = this.ownChatId != null ? attentionFor("chat", this.ownChatId) : undefined;
+    const name = this.chatTitle.trim() || "BuilderForce";
+    this.panel.title = `${sessionTabPrefix(state)}${name}`;
+    this.panel.iconPath = sessionTabIcon(this.ctx.extensionUri, state);
+  }
+
   /** Push the current editor context (active file / selection / open tabs) to the
    *  React app so its ambient system channel stays in sync as the user navigates. */
   private pushEditorContext(): void {
@@ -485,9 +613,14 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
   }
 
   protected onDispose(): void {
-    BrainWebview.current = undefined;
+    if (BrainWebview.reused === this) BrainWebview.reused = undefined;
+    if (this.ownChatId != null && BrainWebview.byChat.get(this.ownChatId) === this) {
+      BrainWebview.byChat.delete(this.ownChatId);
+    }
+    BrainWebview.unassigned.delete(this);
     // Closing the panel destroys the webview's JS context, so its in-flight runs
-    // are gone — clear their indicators from the Sessions tree.
-    BrainWebview.hooks.onLocalRunsChanged?.({ running: [], awaiting: [] });
+    // are gone — retire THIS panel's indicators from the Sessions tree. Scoped to
+    // its own source so closing one tab never clears another tab's live runs.
+    BrainWebview.hooks.onLocalRunsChanged?.(this.sourceId, { running: [], awaiting: [] });
   }
 }

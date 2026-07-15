@@ -11,6 +11,13 @@ import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import { buildPlanLimitsGuard, seatCapacityForTenant } from '../middleware/planLimitsGuard';
 import { canAddSeat } from '../../domain/tenant/PlanLimits';
 import { trialDaysRemaining } from '../../domain/tenant/effectivePlan';
+import { buildPaymentProvider } from '../../infrastructure/payment';
+import {
+  getCardValidation,
+  isCardValidated,
+  markCardPending,
+  markCardValidated,
+} from '../../application/tenant/cardValidationService';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
 import {
@@ -347,6 +354,78 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     });
 
     return c.json(result);
+  });
+
+  /**
+   * GET /api/tenants/:id/card-validation
+   *
+   * Current card-validation state — the gate on PREMIUM (any-paid-OpenRouter) model
+   * selection. `validated` is the same predicate the gateway enforces.
+   */
+  router.get('/:id/card-validation', async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    const callerTenantId = c.get('tenantId') as number;
+    if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
+
+    const state = await getCardValidation(c.env, tenantId);
+    return c.json({
+      status: state.status,
+      validated: isCardValidated(state),
+      validatedAt: state.validatedAt?.toISOString() ?? null,
+      brand: state.brand,
+      last4: state.last4,
+      paymentProvider: tenantService.paymentProviderName,
+    });
+  });
+
+  /**
+   * POST /api/tenants/:id/card-validation
+   *
+   * Start the explicit card-validation flow (Stripe SetupIntent / Helcim $0 verify)
+   * that unlocks PREMIUM model selection — any paid OpenRouter model, billed at
+   * OpenRouter cost + a flat 1¢ per request.
+   *
+   * For hosted providers: returns { checkoutUrl } to redirect to; the card is stamped
+   *   validated when the provider fires the `card.validated` webhook.
+   * For ManualProvider: validates immediately and returns { checkoutUrl: null,
+   *   validated: true }.
+   *
+   * Body:
+   *   billingEmail  string   required
+   *   successUrl    string   optional
+   *   cancelUrl     string   optional
+   */
+  router.post('/:id/card-validation', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    const callerTenantId = c.get('tenantId') as number;
+    if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
+
+    const body = await c.req.json<{ billingEmail?: string; successUrl?: string; cancelUrl?: string }>()
+      .catch(() => ({} as { billingEmail?: string; successUrl?: string; cancelUrl?: string }));
+
+    const tenant = await tenantService.getTenant(tenantId);
+    const billingEmail = body.billingEmail ?? tenant.billingEmail;
+    if (!billingEmail) return c.json({ error: 'billingEmail is required' }, 400);
+
+    const appUrl = c.env.APP_URL ?? 'https://builderforce.ai';
+    const payment = buildPaymentProvider(c.env);
+    const result = await payment.createCardValidationSession({
+      tenantId,
+      billingEmail,
+      externalCustomerId: tenant.externalCustomerId,
+      successUrl: body.successUrl ?? `${appUrl}/settings?card=validated`,
+      cancelUrl: body.cancelUrl ?? `${appUrl}/settings?card=cancelled`,
+    });
+
+    if (result.validatedImmediately) {
+      await markCardValidated(c.env, tenantId);
+      return c.json({ checkoutUrl: null, sessionId: result.sessionId, validated: true, status: 'validated' });
+    }
+
+    // Hosted flow — mark in-flight so the UI can show "awaiting confirmation" until
+    // the provider's `card.validated` webhook lands.
+    await markCardPending(c.env, tenantId);
+    return c.json({ checkoutUrl: result.checkoutUrl, sessionId: result.sessionId, validated: false, status: 'pending' });
   });
 
   /**

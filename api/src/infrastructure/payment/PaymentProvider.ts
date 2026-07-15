@@ -43,6 +43,30 @@ export interface CheckoutSessionResult {
   externalSubscriptionId: string | null;
 }
 
+/** Options to start an explicit CARD-VALIDATION session (SetupIntent / $0 auth) —
+ *  used to unlock PREMIUM (any-paid-OpenRouter) model selection, which needs a
+ *  funding instrument on file even though it's metered per-request, not a plan. */
+export interface CardValidationSessionOpts {
+  tenantId: number;
+  billingEmail: string;
+  /** Provider customer id when the tenant already has one (attach the card to it). */
+  externalCustomerId?: string | null;
+  successUrl: string;
+  cancelUrl: string;
+}
+
+export interface CardValidationSessionResult {
+  sessionId: string;
+  /** Redirect the user here to enter/confirm a card. Null for the manual provider,
+   *  which validates immediately (dev / manual-invoicing). */
+  checkoutUrl: string | null;
+  /** Provider-assigned customer id, when created up-front. */
+  externalCustomerId: string | null;
+  /** True when the provider validated synchronously (manual) so the caller can stamp
+   *  `card_validated_at` immediately without waiting for a webhook. */
+  validatedImmediately: boolean;
+}
+
 /**
  * Normalised webhook event — provider-specific payloads are translated into this shape.
  * The webhook route handler calls tenantService methods based on `type`.
@@ -54,7 +78,9 @@ export interface WebhookEvent {
     | 'subscription.cancelled'   // customer or admin cancelled
     | 'subscription.past_due'    // payment failed, grace period
     | 'payment.succeeded'        // one-off or first payment succeeded
-    | 'payment.failed';          // payment declined
+    | 'payment.failed'           // payment declined
+    | 'card.validated'           // explicit card-validation (SetupIntent) succeeded
+    | 'card.validation_failed';  // explicit card-validation could not complete
 
   /** Use this to look up the tenant */
   externalCustomerId: string;
@@ -85,6 +111,14 @@ export interface PaymentProvider {
    * For the manual provider: activates immediately and returns `checkoutUrl: null`.
    */
   createCheckoutSession(opts: CheckoutSessionOpts): Promise<CheckoutSessionResult>;
+
+  /**
+   * Start an explicit CARD-VALIDATION session (SetupIntent / $0 auth) so the tenant
+   * can unlock PREMIUM (any-paid-OpenRouter) model selection. Hosted providers return
+   * a `checkoutUrl` and confirm asynchronously via a `card.validated` webhook; the
+   * manual provider returns `validatedImmediately: true` (dev / manual invoicing).
+   */
+  createCardValidationSession(opts: CardValidationSessionOpts): Promise<CardValidationSessionResult>;
 
   /**
    * Cancel the active subscription for a tenant (called on downgrade to Free).

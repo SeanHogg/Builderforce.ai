@@ -13,8 +13,17 @@ export type { BrainTimelineProps, BrainTimelineLabels } from './BrainTimeline';
 export { Markdown } from './Markdown';
 export type { MarkdownProps, MarkdownLabels } from './Markdown';
 
-export { QuestionCard, parseAskUser, stripAskUser, serializeAskUser, DEFAULT_ASK_USER_LABELS } from './askUser';
-export type { AskUserPayload, AskUserOption, AskUserLabels } from './askUser';
+export {
+  QuestionCard,
+  PendingQuestionBanner,
+  selectPendingAskUser,
+  askUserAnchorId,
+  parseAskUser,
+  stripAskUser,
+  serializeAskUser,
+  DEFAULT_ASK_USER_LABELS,
+} from './askUser';
+export type { AskUserPayload, AskUserOption, AskUserLabels, PendingAskUser } from './askUser';
 
 export { ConsolidateForkControl, DEFAULT_CONSOLIDATE_FORK_LABELS } from './ConsolidateForkControl';
 export type { ConsolidateForkControlProps, ConsolidateForkLabels } from './ConsolidateForkControl';

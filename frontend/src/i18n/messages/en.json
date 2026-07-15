@@ -986,7 +986,11 @@
     "merging": "Merging…"
   },
   "memberProfile": {
-    "tabs": { "overview": "Overview", "timeLogs": "Time Logs", "tasks": "Tasks" },
+    "tabs": {
+      "overview": "Overview",
+      "timeLogs": "Time Logs",
+      "tasks": "Tasks"
+    },
     "noTasks": "No tasks are assigned to this user.",
     "subtitle": "{kind} · capability & availability",
     "syncing": "Syncing…",
@@ -1737,7 +1741,12 @@
       "activeUsers": "Active users",
       "cost": "Cost",
       "tokensSub": "across all models",
-      "tokensByModel": "Tokens by model"
+      "tokensByModel": "Tokens by model",
+      "byIntegration": "Consumption by integration",
+      "platformKey": "Builderforce (platform key)",
+      "fundedOwnKey": "Your key",
+      "fundedPlatform": "Platform",
+      "requests": "Requests"
     },
     "devexhub": {
       "title": "DevEx",
@@ -3191,6 +3200,7 @@
       "aiModelShare": "Model share of runs",
       "aiMergeRate": "Merge rate by model",
       "aiComparison": "Multi-tool evaluation",
+      "aiByIntegration": "Consumption by integration",
       "aiShareTrend": "Adoption & share trend",
       "delivCycleTime": "Cycle time",
       "delivVelocity": "Velocity",
@@ -3314,7 +3324,11 @@
       "bySource": "Cost by source",
       "spendSub": "estimated, last 7 days",
       "byProject": "Spend by project",
-      "noProjects": "No project spend"
+      "noProjects": "No project spend",
+      "byoFundedOnly": "No platform spend — all usage ran on your connected keys",
+      "sourceCloud": "Cloud",
+      "sourceOnPrem": "On-prem",
+      "sourceWeb": "Web / SDK"
     },
     "catalog": {
       "noInstalls": "No installs yet",
@@ -6997,6 +7011,7 @@
     "sub": {
       "health": "Health",
       "directory": "Directory",
+      "sessions": "Sessions",
       "security": "Security",
       "emulation": "Emulation",
       "tenants": "Workspaces",
@@ -7185,6 +7200,22 @@
         "colDuration": "Duration",
         "durationActive": "Active"
       }
+    },
+    "sessions": {
+      "title": "Adoption sessions",
+      "subtitle": "Anonymous Brain and free-tool visitors, including account and paid conversion.",
+      "count": "{count, plural, one {# session} other {# sessions}}",
+      "empty": "No guest sessions found.",
+      "visitor": "Visitor",
+      "engagement": "Engagement",
+      "firstSeen": "First seen",
+      "lastSeen": "Last seen",
+      "conversion": "Conversion",
+      "brainMessages": "{count} Brain messages",
+      "tokensAndTools": "{tokens} tokens · {tools} tool runs",
+      "guest": "guest",
+      "registered": "registered",
+      "paid": "paid"
     },
     "usage": {
       "aiAnalyze": "AI Analyze",
@@ -7693,7 +7724,19 @@
     "yourLlms": "Your LLMs",
     "connectedProviders": "Connected providers",
     "models": "Models",
-    "current": "{model} (current)"
+    "current": "{model} (current)",
+    "premiumModels": "Premium — any OpenRouter model (cost + 1¢/request)",
+    "premiumOption": "{name} · {price}/M in",
+    "premiumUnlockTitle": "Unlock premium models",
+    "premiumUnlockCardBody": "Validate a card to select any paid OpenRouter model. You are billed OpenRouter’s own price plus 1¢ per request. Validation places no charge — it only confirms the card works.",
+    "premiumUnlockUpgradeBody": "Premium models (any paid OpenRouter model, billed at OpenRouter cost plus 1¢ per request) need a paid plan with a validated card.",
+    "premiumValidateCard": "Validate a card",
+    "premiumValidating": "Opening…",
+    "premiumPending": "Awaiting confirmation",
+    "premiumPendingHint": "Finish validation with your payment provider, then reload.",
+    "premiumFailedHint": "That card could not be validated. Try another.",
+    "premiumUpgrade": "Upgrade to Pro",
+    "premiumUnlockFailed": "Could not start card validation."
   },
   "runAgentControl": {
     "agentTitle": "Agent",

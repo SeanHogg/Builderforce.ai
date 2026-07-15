@@ -82,6 +82,29 @@
 
 ## Consolidated Gap Register
 
+### 💳 Stripe card processing — code ready + hardened 2026-07-14, NOT enabled (config-blocked)
+
+> The Stripe path is complete and now unit-tested (`StripeProvider.test.ts`), but live card processing is still **off**: `PAYMENT_PROVIDER` is unset in `api/wrangler.toml`, so `buildPaymentProvider` falls back to `ManualProvider` and upgrades activate without ever charging a card. Enabling is pure configuration — no code change — and is blocked on credentials, not engineering.
+>
+> Deliberately NOT flipped: `buildPaymentProvider` throws on boot when `PAYMENT_PROVIDER=stripe` without `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET`, so setting the var before the secrets exist would take the Worker down.
+
+- **Stripe test-mode products/prices not created.** Needs the 4 recurring price IDs the provider reads (`STRIPE_PRICE_PRO_MONTHLY` $29/mo, `STRIPE_PRICE_PRO_YEARLY` $290/yr, `STRIPE_PRICE_TEAMS_MONTHLY` $20/seat/mo, `STRIPE_PRICE_TEAMS_YEARLY` $192/seat/yr). Blocked on the `stripe@claude-plugins-official` MCP, which needs a Claude Code restart to load. Unblocks: a real checkout session.
+- **Webhook endpoint not registered in Stripe.** Needs `https://api.builderforce.ai/api/webhooks/payment` subscribed to `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`, `setup_intent.setup_failed` → yields `STRIPE_WEBHOOK_SECRET`. Unblocks: activation-on-payment.
+- **Worker secrets not set.** The 6 `STRIPE_*` values need `wrangler secret put` against the account owning the `api.builderforce.ai` Worker. Unblocks: flipping `PAYMENT_PROVIDER=stripe` and the end-to-end test-card run.
+- **No end-to-end card verification yet.** The webhook parsing/mapping is unit-tested, but no test card has been driven through `POST /api/tenants/:id/subscription/checkout` → webhook → tenant activation. Unblocks: confidence before live mode.
+
+### 💳 BYO usage attribution — core fixed 2026-07-14 (api 2026.7.93), residual gaps
+
+> The AI Insights page now sources "models used" / token totals from `llm_usage_log` instead of the run-outcome matrix, and reports consumption per funding credential (`byo_provider`). `recordProxyUsage` now carries BYO provenance. Remaining:
+>
+- **Historical BYO rows are mis-attributed AND mis-billed.** Every row written via `completeForTenant` → `recordProxyUsage` before this fix landed has `byo = false` and a catalog-priced `cost_usd_millicents`, so tenants were charged for tokens their own key paid for, and those rows still render as platform-funded in `/insights/ai`. Fixing needs a backfill that re-infers BYO from `tenant_llm_provider_keys` + the row's model vendor and re-zeroes cost — inference is lossy (a key connected *after* the call would false-positive), so it needs an explicit operator decision on the cutoff. Unblocks: accurate historical spend + a truthful per-integration history.
+- **Usage cannot attribute to a specific API key, only to a provider.** `tenant_llm_provider_keys` is keyed `(tenant_id, provider)` with no surrogate id and is upserted `ON CONFLICT`, so a rotated key is indistinguishable from its predecessor and `llm_usage_log.byo_provider` is a denormalized string with no FK. The insights breakdown is therefore per-*integration*, not per-*key-instance*. Fixing needs a surrogate `id` on the credential table + a `byo_credential_id` FK on the usage log. Unblocks: per-key consumption + spend attribution across key rotations.
+- **`normalizeByoProvider` is lossy.** It collapses `openai-codex`→`openai`, `googleai`→`google`, `moonshot`→`kimi`, so an OAuth Codex subscription and a static OpenAI key report as one integration. Unblocks: distinguishing subscription-funded from key-funded spend.
+- **Orphaned usage rows vanish from every tenant surface.** `llm_usage_log.tenant_id` is nullable with `ON DELETE SET NULL`, so rows survive tenant deletion but match no `tenant_id = ?` filter — they still count in the untenanted admin rollup (`adminRoutes.ts`), so admin and tenant totals silently disagree. Unblocks: admin/tenant reconciliation.
+- **Model-share donut hides models used earlier in the window.** `summarizeModelShareTrend` computes share from the LAST week only, and `aiImpactWidgets.tsx` drops `currentSharePct === 0`, so a model used on day 1 of a 30-day window disappears from the donut while still appearing in the trend table. Unblocks: a donut that matches its own table.
+- **`summarizeComparison` joins models by raw string.** It looks tokens up from a map keyed on `llm_usage_log.model` using `run_model_outcomes.resolved_model`; any slug drift (`claude-sonnet-4-5` vs `anthropic/claude-sonnet-4-5`) silently yields `tokens = 0` in the evaluation matrix. Unblocks: a trustworthy multi-tool comparison.
+- **Image generation has no BYO path.** `imageProxyForPlan` never receives tenant vendor keys, so every image row is platform-funded even for a tenant with a connected provider. Unblocks: BYO-funded image generation + its attribution.
+
 ### 🧠 Evermind "Import from builderforce-memory" — shipped 2026-07-12, two follow-ups
 
 > The VS Code Evermind console now imports a local `builderforce-memory` JSON snapshot into the selected build's Evermind (batch `POST /api/projects/:id/evermind/extract-memories` → flush) and compacts absorbed facts to `[absorbed→Evermind vN]` stubs in place, shrinking the recall/digest context the memory MCP was eating. Residual gaps:
