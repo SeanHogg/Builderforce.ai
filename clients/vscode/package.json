@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.7.78",
+  "version": "2026.7.80",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -664,6 +664,19 @@
             "%config.permissionMode.acceptEdits%"
           ],
           "description": "%config.permissionMode.desc%"
+        },
+        "builderforce.sessionTabs": {
+          "type": "string",
+          "enum": [
+            "reuse",
+            "perSession"
+          ],
+          "default": "reuse",
+          "markdownEnumDescriptions": [
+            "%config.sessionTabs.reuse%",
+            "%config.sessionTabs.perSession%"
+          ],
+          "description": "%config.sessionTabs.desc%"
         }
       }
     }

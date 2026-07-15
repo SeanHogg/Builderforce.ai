@@ -2154,6 +2154,37 @@ export function codingDefaultForPlan(effectivePlan: EffectivePlan, premiumOverri
 }
 
 /**
+ * Is `model` a PREMIUM OpenRouter selection — i.e. an explicit pin on a PAID
+ * OpenRouter model that is NOT already in the tenant's curated in-plan pool? This
+ * is the "leverage OpenRouter → any paid model" tier: it routes on OUR metered
+ * OpenRouter key, so selecting it is gated behind premium access (paid plan + a
+ * validated card) and billed at OpenRouter cost + a flat 1¢/request.
+ *
+ * Excluded (return false):
+ *   • empty / no pin — nothing selected;
+ *   • non-OpenRouter vendors (`@cf/*`, `direct/*`, `googleai/*`, `evermind/*`,
+ *     `cerebras/*`, …) — those are plan-pool or BYO paths, not premium;
+ *   • `:free` OpenRouter ids — the free tier;
+ *   • ids already in the plan's auto-route pool (the curated PREMIUM coders like
+ *     `anthropic/claude-sonnet-4.6` a paid plan already reaches for free).
+ * Everything else that resolves to the OpenRouter vendor is the premium long tail.
+ *
+ * Pure so the gateway gate, the surcharge decision, and any picker filter share ONE
+ * definition of "premium selection".
+ */
+export function isPremiumModelSelection(
+  model: string | undefined | null,
+  effectivePlan: EffectivePlan,
+  premiumOverride = false,
+): boolean {
+  const id = typeof model === 'string' ? model.trim() : '';
+  if (!id) return false;
+  if (vendorForModel(id) !== 'openrouter') return false;
+  if (id.endsWith(':free')) return false;
+  return !modelPoolForPlan(effectivePlan, premiumOverride).includes(id);
+}
+
+/**
  * Decide the model a cloud-agent run should use for a turn, shared by every cloud
  * executor (durable loop + container op) so the "explicit pick = hard pin, else
  * plan's best coding model" rule lives in ONE place.

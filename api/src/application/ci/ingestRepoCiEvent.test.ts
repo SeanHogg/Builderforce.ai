@@ -1,5 +1,16 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { ingestRepoCiEvent, type RepoCiEvent } from './ingestRepoCiEvent';
+
+// A successful build completes the task, and `recordStatusTransition` reaches the
+// Validator via a RUNTIME dynamic import (deliberate — it breaks the taskLifecycle →
+// validationDispatch → runtimeRoutes cycle). Vitest transforms that whole graph on
+// demand, which costs ~20s and blows the default timeout. The Worker bundles the
+// import at build time, so stubbing it here removes a test-only cost, not coverage:
+// with no Validator agent the real function returns null anyway, which is what the
+// fake db already yields.
+vi.mock('../validation/validationDispatch', () => ({
+  triggerFastValidatorReview: async () => null,
+}));
 import { pullRequests, tasks, executions, toolAuditEvents } from '../../infrastructure/database/schema';
 import type { Env } from '../../env';
 
