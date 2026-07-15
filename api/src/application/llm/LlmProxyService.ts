@@ -2285,6 +2285,18 @@ export interface PickCloudModelOptions {
    *  When set, the connected-flagship soft seed leads with the owner's chosen account
    *  (e.g. Meta first) instead of catalog-tier order. See {@link byoAutoSeedModels}. */
   byoVendorPriority?: readonly string[];
+  /**
+   * The tenant may select a PREMIUM model (any paid OpenRouter model outside the plan
+   * pool, billed at OpenRouter cost + a flat 1¢/request) — i.e. a paid plan WITH a
+   * validated card, per `evaluatePremiumModelAccess`. Defaults to false.
+   *
+   * A cloud run dispatches through the internal proxy, NOT the gateway HTTP route, so
+   * the route's premium gate never sees it. Without this, an agent whose `base_model`
+   * is a premium id would run ungated on our metered key. Mirrors the free-plan rule
+   * below: an un-entitled premium pin is IGNORED (the run falls back to the plan's
+   * coding default) rather than erroring a background run.
+   */
+  premiumEntitled?: boolean;
 }
 
 /** Headroom over the prompt estimate to reserve for the model's OUTPUT tokens +
@@ -2348,7 +2360,24 @@ export function pickCloudModel(
   const explicitIsByo = !!explicit && !!opts?.byoVendors?.has(vendorForModel(explicit.trim()));
   if (explicitModelPreemptsByo(explicit, opts?.byoVendors)) {
     const canChooseModel = premiumOverride || effectivePlan !== 'free' || explicitIsByo;
-    if (canChooseModel && isKnownModel(explicit)) return { model: (explicit as string).trim(), strict: true };
+    // A PREMIUM pin (paid OpenRouter model off the plan pool) additionally needs the
+    // card-validated entitlement — a cloud run never passes the route's premium gate,
+    // so it is enforced here or nowhere. Un-entitled → ignore the pin and use the
+    // plan's coding default (same shape as the free-plan gate: a background run
+    // degrades to a model it may use rather than failing).
+    const isPremiumPin = !explicitIsByo && isPremiumModelSelection(explicit, effectivePlan, premiumOverride);
+    const premiumBlocked = isPremiumPin && opts?.premiumEntitled !== true;
+    // `isKnownModel` normally guards against strict-pinning a typo'd/retired id (which
+    // would 503 with no failover). But a PREMIUM id is off our curated catalog BY
+    // DEFINITION — it's the paid OpenRouter long tail — so that guard would reject
+    // every premium pin and silently drop the run back to the plan default. An
+    // ENTITLED premium pin is therefore honoured on its own: it came from the
+    // OpenRouter-catalog-driven picker, and dispatch resolves a bare `<org>/<slug>` to
+    // the OpenRouter vendor.
+    const pinnable = isKnownModel(explicit) || (isPremiumPin && !premiumBlocked);
+    if (canChooseModel && !premiumBlocked && pinnable) {
+      return { model: (explicit as string).trim(), strict: true };
+    }
   }
 
   // No honored explicit pin: when the tenant has connected their OWN provider(s), lead
