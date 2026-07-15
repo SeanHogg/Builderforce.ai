@@ -77,14 +77,12 @@ Builderforce.ai is the cloud-side control plane for [BuilderForce Agents](https:
 - **Multi-workspace** — users belong to multiple tenants; `bf_default_tenant_id` auto-selects on login
 - **Admin observability** — `/admin` surface for platform admins (superadmin flag); `logs/global-errors.txt` in R2; `/observability` LLM usage metrics
 
-### Billing & Subscriptions (Provider-Agnostic)
-- **PaymentProvider abstraction** — `src/infrastructure/payment/PaymentProvider.ts` defines the interface; swap providers by changing one env var
-- **ManualProvider** (default) — no external processor; subscription activates immediately; suits manual invoicing or internal deployments
-- **StripeProvider** — Stripe Checkout + Billing; hosted payment page; webhook-activated subscriptions
-- **HelcimProvider** — Helcim HelcimPay.js; webhook-activated; stub ready for implementation
-- **Checkout flow** — `POST /api/tenants/:id/subscription/checkout` returns either a redirect URL (hosted providers) or `null` (manual, activates immediately)
-- **Webhook handler** — `POST /api/webhooks/payment` receives provider events; HMAC-verified; activates/cancels subscriptions via normalised `WebhookEvent`
-- **Switching providers** — set `PAYMENT_PROVIDER=stripe|helcim|manual` + provider credentials; no application code changes required
+### Billing & Subscriptions (Stripe)
+- **Stripe only** — `src/infrastructure/payment/StripeProvider.ts` (Stripe Checkout + Billing, hosted payment page, webhook-activated). There is deliberately no provider switch and no manual fallback: a fallback that activated plans without charging meant an unconfigured deploy handed out paid plans for free.
+- **PaymentProvider interface** — `src/infrastructure/payment/PaymentProvider.ts` keeps `TenantService` off the concrete Stripe client and lets tests inject a fake; it is not a provider-swap seam.
+- **Checkout flow** — `POST /api/tenants/:id/subscription/checkout` always returns a hosted `checkoutUrl`. The plan activates only when the signed webhook confirms payment — never from the request itself.
+- **Webhook handler** — `POST /api/webhooks/payment` receives Stripe events; HMAC-verified with a 5-minute replay window; activates/cancels subscriptions via normalised `WebhookEvent`
+- **Configuration** — set the `STRIPE_*` Worker secrets (see `src/infrastructure/payment/index.ts`). They are validated lazily: absent secrets return **503** from the billing routes and never break Worker boot.
 
 ### Dev Analytics & Team Intelligence
 - **Contributor profiles** — cross-platform developer identity reconciliation (GitHub, Jira, Bitbucket); `GET /api/contributors`

@@ -15,7 +15,7 @@ import {
   type QualityIntegration,
   type QualityMappingRule,
 } from '@/lib/builderforceApi';
-import { QualityStatsPanel } from './QualityStatsPanel';
+import { ErrorConsumptionCard } from './ErrorConsumptionCard';
 
 const ingestBase = `${AUTH_API_URL}/api/quality-ingest`;
 
@@ -82,9 +82,6 @@ export function QualityCollectorsManager() {
         {isTenant ? t('setup.tenantIntro') : t('setup.projectIntro')}
       </div>
 
-      {/* How much is this collection actually gathering? — volume, frequency, types. */}
-      <QualityStatsPanel projectId={currentProjectId} />
-
       {created && <CreatedKeyPanel created={created} onDismiss={() => setCreated(null)} t={t} />}
       {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger, #dc2626)' }}>{error}</div>}
 
@@ -132,6 +129,8 @@ function CollectorPanel({
 }) {
   const confirm = useConfirm();
   const isTenant = collector.projectId == null;
+  const [testing, setTesting] = useState(false);
+  const [testMessage, setTestMessage] = useState<string | null>(null);
   const keyLabel = createdKey ?? '<YOUR_INGEST_KEY>';
   const sdkSnippet = `<script src="https://unpkg.com/@seanhogg/builderforce-quality"></script>
 <script>
@@ -140,9 +139,22 @@ function CollectorPanel({
 
   const toggle = async () => { await qualityApi.collectors.update(collector.id, { enabled: !collector.enabled }); onChanged(); };
   const remove = async () => { if (await confirm(t('setup.confirmDelete'))) { await qualityApi.collectors.remove(collector.id); onChanged(); } };
+  const test = async () => {
+    setTesting(true); setTestMessage(null); setError(null);
+    try {
+      await qualityApi.collectors.test(collector.id);
+      setTestMessage(t('setup.testSucceeded'));
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('setup.testFailed'));
+    } finally {
+      setTesting(false);
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <ErrorConsumptionCard collectorId={collector.id} collectorName={collector.name} refreshKey={collector.lastEventAt} />
       <div style={card}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontWeight: 700, fontSize: 14, flex: 1 }}>
@@ -153,10 +165,15 @@ function CollectorPanel({
             </span>
           </span>
           <RoleGate capability="quality.manageSources">
+            <button type="button" style={btnSubtle} disabled={testing || !collector.enabled} onClick={test}>
+              {testing ? t('setup.testing') : t('setup.test')}
+            </button>
             <button type="button" style={btnSubtle} onClick={toggle}>{collector.enabled ? t('setup.pause') : t('setup.resume')}</button>
             <button type="button" style={{ ...btnSubtle, color: 'var(--danger, #dc2626)' }} onClick={remove}>{t('setup.delete')}</button>
           </RoleGate>
         </div>
+
+        {testMessage && <div role="status" style={{ fontSize: 12, color: 'var(--success, #16a34a)', marginTop: 10 }}>{testMessage}</div>}
 
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 10 }}>{t('setup.snippetNote')}</div>
         <CopyBlock label={t('setup.sdkSnippet')} value={sdkSnippet} />

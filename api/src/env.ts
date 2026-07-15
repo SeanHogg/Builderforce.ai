@@ -291,15 +291,13 @@ export interface Env {
   SEMANTIC_CACHE_KV?: KVNamespace;
 
   // ---------------------------------------------------------------------------
-  // Payment provider (optional — defaults to "manual" if unset)
+  // Payments — Stripe is the only provider (see infrastructure/payment/index.ts).
+  // Absent secrets do NOT break boot; billing routes return 503 until they are set.
   // ---------------------------------------------------------------------------
 
-  /** Which payment provider to use: "manual" | "stripe" | "helcim"  Default: "manual" */
-  PAYMENT_PROVIDER?: string;
   /** App URL used to build checkout success/cancel redirect URLs (e.g. "https://builderforce.ai") */
   APP_URL?: string;
 
-  // Stripe (required when PAYMENT_PROVIDER=stripe)
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
   /** Pro plan flat-rate prices */
@@ -311,10 +309,6 @@ export interface Env {
   /** Legacy aliases (still accepted for backwards compatibility) */
   STRIPE_PRICE_MONTHLY?: string;
   STRIPE_PRICE_YEARLY?: string;
-
-  // Helcim (required when PAYMENT_PROVIDER=helcim)
-  HELCIM_API_TOKEN?: string;
-  HELCIM_WEBHOOK_SECRET?: string;
 
   // ---------------------------------------------------------------------------
   // OAuth providers (optional — only required for the providers you enable)

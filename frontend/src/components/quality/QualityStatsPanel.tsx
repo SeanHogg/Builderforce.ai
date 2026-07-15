@@ -12,9 +12,9 @@ import { levelColor, statusColor, sourceColor } from './qualityColors';
  * Data-driven Quality overview — the "what have we collected, and what is it
  * telling us?" panel. Self-fetching off the cached /api/quality/stats aggregate
  * (project-scoped or tenant-wide), it renders the volume collected, the daily
- * frequency trend, and breakdowns by error level / type / collector. Reused on
- * BOTH the Quality dashboard (above the error table) and the collectors tab (the
- * "data collected" card), so there's one place that visualises the corpus.
+ * frequency trend, and breakdowns by error level / type / collector. It is the
+ * analytics half of the Errors tab; billed month-to-date consumption is rendered
+ * separately by the reusable Errors allowance meter.
  */
 export function QualityStatsPanel({ projectId, days = 30 }: { projectId?: number | null; days?: number }) {
   const t = useTranslations('quality');

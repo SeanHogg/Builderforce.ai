@@ -66,8 +66,7 @@
 | Gap | Location | Severity | Resolution |
 |-----|----------|----------|------------|
 | Agent channels endpoint always returns `[]` (stub, no DB) | `clawRoutes.ts:1103` | HIGH | Needs a channel-registry table + schema design |
-| Helcim checkout creates no recurring billing schedule (one-time charges) | `HelcimProvider.ts:78` | HIGH | Call Helcim recurring-billing API after `APPROVED` webhook |
-| Helcim webhook mapping is a placeholder (all `APPROVED` → `subscription.activated`) | `HelcimProvider.ts:130` | HIGH | Needs Helcim webhook payload schema |
+| Paid marketplace listings cannot be bought (no one-off settlement) | `knowledgeRoutes.ts` `/listings/:id/checkout` | MEDIUM | Wire Stripe Checkout in `payment` mode; currently returns `requiresConfig` (previously granted the listing free whenever payments were unconfigured) |
 
 ## Risk Register
 
@@ -82,15 +81,21 @@
 
 ## Consolidated Gap Register
 
-### 💳 Stripe card processing — code ready + hardened 2026-07-14, NOT enabled (config-blocked)
+### 🧪 Frontend test suite — 13 failures across 5 files (2026-07-14)
 
-> The Stripe path is complete and now unit-tested (`StripeProvider.test.ts`), but live card processing is still **off**: `PAYMENT_PROVIDER` is unset in `api/wrangler.toml`, so `buildPaymentProvider` falls back to `ManualProvider` and upgrades activate without ever charging a card. Enabling is pure configuration — no code change — and is blocked on credentials, not engineering.
->
-> Deliberately NOT flipped: `buildPaymentProvider` throws on boot when `PAYMENT_PROVIDER=stripe` without `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET`, so setting the var before the secrets exist would take the Worker down.
+> `cd frontend && npx vitest run` → 13 failed / 310 passed. Unrelated to payments or i18n; the API suite is fully green (2204/2204). Each fails on components **no current change touches**, so this is standing drift, not a regression from the Stripe-only cut.
+
+- **`AgentExecutionPanel.test.tsx` (8 failures).** `vi.mock('@/lib/builderforceApi')` auto-mocks the module and the test spies only a subset of methods; the component calls one that isn't stubbed, so the automock returns `undefined` → `TypeError: Cannot read properties of undefined (reading 'then')`. Unblocks: the execution-panel suite. Fixing means stubbing the missing call (or asserting which call is unstubbed) — note `builderforceApi.ts` is under active edit for quality-collector consumption, so reconcile before touching.
+- **`model-provider.test.ts` (1 failure).** `train() delegates to the REAL MambaTrainer.train` throws `[MambaModelProvider] engine not initialised — call init() first` — the test drives `train()` without an initialised WebGPU engine. Provably pre-existing: neither `model-provider.ts` nor its test is modified in the working tree. Unblocks: the SSM provider suite.
+- **`TaskMgmtContent.test.tsx` (2) + `TaskMgmtContent.live.test.tsx` (1) + `AgentCapabilitiesContent.test.tsx` (1).** Same shape as the execution-panel failures (board/list render + agent-capability scope switching). Unblocks: the board/capabilities suites.
+
+### 💳 Stripe card processing — Stripe-only as of 2026-07-14, awaiting secrets
+
+> The provider switch is GONE: `ManualProvider` + `HelcimProvider` are deleted and `PAYMENT_PROVIDER` / `HELCIM_*` are removed from `Env`. Stripe is the only path, plans activate only on a signed webhook, and the manual card-brand/last4 form is gone from `/pricing`. Secrets are validated lazily, so the remaining work is configuration only — the API boots and runs fine without them; billing routes return **503 `payment_not_configured`** until they are set.
 
 - **Stripe test-mode products/prices not created.** Needs the 4 recurring price IDs the provider reads (`STRIPE_PRICE_PRO_MONTHLY` $29/mo, `STRIPE_PRICE_PRO_YEARLY` $290/yr, `STRIPE_PRICE_TEAMS_MONTHLY` $20/seat/mo, `STRIPE_PRICE_TEAMS_YEARLY` $192/seat/yr). Blocked on the `stripe@claude-plugins-official` MCP, which needs a Claude Code restart to load. Unblocks: a real checkout session.
 - **Webhook endpoint not registered in Stripe.** Needs `https://api.builderforce.ai/api/webhooks/payment` subscribed to `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`, `setup_intent.setup_failed` → yields `STRIPE_WEBHOOK_SECRET`. Unblocks: activation-on-payment.
-- **Worker secrets not set.** The 6 `STRIPE_*` values need `wrangler secret put` against the account owning the `api.builderforce.ai` Worker. Unblocks: flipping `PAYMENT_PROVIDER=stripe` and the end-to-end test-card run.
+- **Worker secrets not set.** The 6 `STRIPE_*` values need `wrangler secret put` against the account owning the `api.builderforce.ai` Worker. **Until then no tenant can upgrade at all** — the previous free-activation path is intentionally gone. Unblocks: the end-to-end test-card run.
 - **No end-to-end card verification yet.** The webhook parsing/mapping is unit-tested, but no test card has been driven through `POST /api/tenants/:id/subscription/checkout` → webhook → tenant activation. Unblocks: confidence before live mode.
 
 ### 💳 BYO usage attribution — core fixed 2026-07-14 (api 2026.7.93), residual gaps

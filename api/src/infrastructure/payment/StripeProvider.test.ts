@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StripeProvider } from './StripeProvider';
+import { buildPaymentProvider, PaymentNotConfiguredError } from './index';
+import type { Env } from '../../env';
 
 const WEBHOOK_SECRET = 'whsec_test_secret';
 
@@ -49,6 +51,43 @@ function stubCardFetch(body: unknown, ok = true): void {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+describe('buildPaymentProvider — unconfigured', () => {
+  // Regression: this factory runs at Worker boot for every request. It used to throw
+  // when secrets were missing, which would 500 the entire API rather than just billing.
+  it('builds without throwing when no Stripe secrets are set', () => {
+    expect(() => buildPaymentProvider({} as Env)).not.toThrow();
+  });
+
+  // Regression: the deleted ManualProvider activated a paid plan with no charge, so an
+  // unconfigured deploy gave Teams away to anyone who typed a card brand into a form.
+  // Unconfigured must now FAIL, never silently succeed.
+  it('refuses to create a checkout session instead of activating for free', async () => {
+    const provider = buildPaymentProvider({} as Env);
+    await expect(provider.createCheckoutSession({
+      tenantId: 1,
+      billingCycle: 'monthly' as never,
+      billingEmail: 'a@example.com',
+      successUrl: 'https://x/ok',
+      cancelUrl: 'https://x/no',
+    })).rejects.toBeInstanceOf(PaymentNotConfiguredError);
+  });
+
+  it('refuses to start a card validation session', async () => {
+    const provider = buildPaymentProvider({} as Env);
+    await expect(provider.createCardValidationSession({
+      tenantId: 1,
+      billingEmail: 'a@example.com',
+      successUrl: 'https://x/ok',
+      cancelUrl: 'https://x/no',
+    })).rejects.toBeInstanceOf(PaymentNotConfiguredError);
+  });
+
+  it('refuses to parse a webhook without a signing secret', async () => {
+    const provider = buildPaymentProvider({ STRIPE_SECRET_KEY: 'sk_test' } as Env);
+    await expect(provider.parseWebhook('{}', 't=1,v1=abc')).rejects.toBeInstanceOf(PaymentNotConfiguredError);
+  });
 });
 
 describe('verifyStripeSignature (via parseWebhook)', () => {

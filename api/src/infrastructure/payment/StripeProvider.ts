@@ -1,14 +1,16 @@
 /**
  * StripeProvider — Stripe Checkout + Billing integration.
  *
+ * The ONLY payment provider — see `./index.ts` for why there is no provider switch.
+ *
  * SETUP:
- *   1. Set env vars in wrangler.toml secrets:
+ *   1. Set Worker secrets (`wrangler secret put`):
  *        STRIPE_SECRET_KEY           — sk_live_... or sk_test_...
  *        STRIPE_WEBHOOK_SECRET       — whsec_... (from Stripe dashboard webhook config)
- *        PAYMENT_PROVIDER            — "stripe"
  *   2. Configure Stripe webhook → https://api.builderforce.ai/api/webhooks/payment
  *      Events: checkout.session.completed, customer.subscription.updated,
- *              customer.subscription.deleted, invoice.payment_failed
+ *              customer.subscription.deleted, invoice.payment_failed,
+ *              setup_intent.setup_failed
  *
  * PRICE IDs — create recurring prices in Stripe dashboard, then set:
  *   Pro plan (flat rate):
@@ -29,6 +31,7 @@ import type {
   CardValidationSessionResult,
   WebhookEvent,
 } from './PaymentProvider';
+import { PaymentNotConfiguredError } from './PaymentProvider';
 import { TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
 
 interface StripeConfig {
@@ -43,11 +46,23 @@ interface StripeConfig {
 }
 
 export class StripeProvider implements PaymentProvider {
-  readonly name = 'stripe';
-
   constructor(private readonly config: StripeConfig) {}
 
+  /**
+   * Fail loudly when a secret is missing, at the point of USE. The factory cannot do
+   * this: it runs during Worker boot, so throwing there would 500 every route rather
+   * than only billing. Callers map this to a 503.
+   */
+  private requireConfigured(): void {
+    if (!this.config.secretKey) throw new PaymentNotConfiguredError('STRIPE_SECRET_KEY');
+  }
+
+  private requireWebhookConfigured(): void {
+    if (!this.config.webhookSecret) throw new PaymentNotConfiguredError('STRIPE_WEBHOOK_SECRET');
+  }
+
   async createCheckoutSession(opts: CheckoutSessionOpts): Promise<CheckoutSessionResult> {
+    this.requireConfigured();
     const isTeams = opts.targetPlan === TenantPlan.TEAMS;
     const seats = isTeams ? (opts.seats ?? 1) : 1;
 
@@ -104,6 +119,7 @@ export class StripeProvider implements PaymentProvider {
     // without charging — the exact "validate a card on file" flow. On completion Stripe
     // fires `checkout.session.completed` with `mode: 'setup'`, which parseWebhook maps
     // to a `card.validated` event.
+    this.requireConfigured();
     const params = new URLSearchParams({
       mode: 'setup',
       customer_email: opts.billingEmail,
@@ -131,11 +147,11 @@ export class StripeProvider implements PaymentProvider {
       sessionId: session.id,
       checkoutUrl: session.url,
       externalCustomerId: session.customer ?? opts.externalCustomerId ?? null,
-      validatedImmediately: false,
     };
   }
 
   async cancelSubscription(externalSubscriptionId: string): Promise<void> {
+    this.requireConfigured();
     const res = await fetch(
       `https://api.stripe.com/v1/subscriptions/${externalSubscriptionId}`,
       {
@@ -152,6 +168,7 @@ export class StripeProvider implements PaymentProvider {
 
   async parseWebhook(rawBody: string, signatureHeader: string): Promise<WebhookEvent | null> {
     // Verify Stripe webhook signature using Web Crypto (Workers-compatible)
+    this.requireWebhookConfigured();
     const verified = await verifyStripeSignature(rawBody, signatureHeader, this.config.webhookSecret);
     if (!verified) throw new Error('Invalid Stripe webhook signature');
 
