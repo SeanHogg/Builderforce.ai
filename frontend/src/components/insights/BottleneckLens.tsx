@@ -7,6 +7,7 @@ import { usePmData } from '@/lib/pm/usePmData';
 import { PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { DaysWindowSelect, KpiGrid } from './LensShell';
 import { hrs, int, pct } from './format';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 
 /**
  * BOTTLENECK ANALYSIS lens — pinpoints WHICH SDLC stage stalls work and WHY:
@@ -15,8 +16,9 @@ import { hrs, int, pct } from './format';
  */
 export function BottleneckLens() {
   const t = useTranslations('insights');
+  const { currentProjectId } = useProjectScope();
   const [days, setDays] = useState(30);
-  const { data, error } = usePmData<BottleneckInsights>(() => insightsApi.bottlenecks(days), [days]);
+  const { data, error } = usePmData<BottleneckInsights>(() => insightsApi.bottlenecks(days, currentProjectId), [days, currentProjectId]);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;

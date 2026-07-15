@@ -39,8 +39,8 @@ export const BENCHMARK_INDUSTRIES = ['software_saas'] as const;
 export const BENCHMARK_SIZE_BANDS = ['small', 'mid', 'large'] as const;
 
 export const benchmarkingApi = {
-  get: (days = 30): Promise<BenchmarkingResult> =>
-    apiRequest<BenchmarkingResult>(`/api/insights/benchmarking?days=${days}`),
+  get: (days = 30, projectId?: number | null): Promise<BenchmarkingResult> =>
+    apiRequest<BenchmarkingResult>(`/api/insights/benchmarking?days=${days}${projectId != null ? `&projectId=${projectId}` : ''}`),
 
   getProfile: (): Promise<BenchmarkProfile> =>
     apiRequest<BenchmarkProfile>('/api/insights/benchmarking/profile'),

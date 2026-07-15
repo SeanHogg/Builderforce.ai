@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { empInsightsApi, type DelayTaxonomyResult } from '@/lib/empInsightsApi';
 import { usePmData } from '@/lib/pm/usePmData';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { PmCard, PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { DonutChart, type DonutSegment } from '@/components/charts/DonutChart';
 import { colorAt } from '@/components/charts/chartColors';
@@ -17,8 +18,9 @@ import { DaysWindowSelect } from './LensShell';
  */
 export function DelayTaxonomyLens() {
   const t = useTranslations('insights.emp');
+  const { currentProjectId } = useProjectScope();
   const [days, setDays] = useState(90);
-  const { data, error } = usePmData<DelayTaxonomyResult>(() => empInsightsApi.delayTaxonomy(days), [days]);
+  const { data, error } = usePmData<DelayTaxonomyResult>(() => empInsightsApi.delayTaxonomy(days, currentProjectId), [days, currentProjectId]);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;

@@ -126,7 +126,7 @@ export interface LifecycleInsights {
 
 /** Thin DB shell — mirrors computeBottleneckInsights (two bounded queries, cap
  *  pattern), then maps the same dwell intervals into phases + the lifecycle trend. */
-export async function computeLifecycleInsights(db: Db, tenantId: number, days: number): Promise<LifecycleInsights> {
+export async function computeLifecycleInsights(db: Db, tenantId: number, days: number, projectId?: number): Promise<LifecycleInsights> {
   const now = Date.now();
   const since = new Date(now - days * 24 * HOUR_MS);
 
@@ -146,6 +146,7 @@ export async function computeLifecycleInsights(db: Db, tenantId: number, days: n
     .innerJoin(projects, eq(projects.id, tasks.projectId))
     .where(and(
       eq(projects.tenantId, tenantId),
+      ...(projectId != null ? [eq(tasks.projectId, projectId)] : []),
       eq(tasks.archived, false),
       gte(tasks.updatedAt, since),
       notSystemTask,

@@ -15,7 +15,7 @@
 
 import { and, eq, gte, desc } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { delayReasons, taskStatusTransitions } from '../../infrastructure/database/schema';
+import { delayReasons, tasks, taskStatusTransitions } from '../../infrastructure/database/schema';
 
 const HOUR_MS = 3_600_000;
 /** Only stalls longer than this are treated as an inferred delay. */
@@ -151,16 +151,24 @@ export function summarizeDelays(
 }
 
 /** I/O: fetch manual tags + windowed transitions, derive stalls, summarise. */
-export async function computeDelayTaxonomy(db: Db, tenantId: number, days: number): Promise<DelayTaxonomyResult> {
+export async function computeDelayTaxonomy(db: Db, tenantId: number, days: number, projectId?: number): Promise<DelayTaxonomyResult> {
   const since = new Date(Date.now() - days * 24 * HOUR_MS);
 
   const [manualRows, transitionRows] = await Promise.all([
     db.select({ taskId: delayReasons.taskId, reasonCode: delayReasons.reasonCode })
       .from(delayReasons)
-      .where(eq(delayReasons.tenantId, tenantId)),
+      .innerJoin(tasks, eq(tasks.id, delayReasons.taskId))
+      .where(and(
+        eq(delayReasons.tenantId, tenantId),
+        ...(projectId != null ? [eq(tasks.projectId, projectId)] : []),
+      )),
     db.select({ taskId: taskStatusTransitions.taskId, toStatus: taskStatusTransitions.toStatus, occurredAt: taskStatusTransitions.occurredAt })
       .from(taskStatusTransitions)
-      .where(and(eq(taskStatusTransitions.tenantId, tenantId), gte(taskStatusTransitions.occurredAt, since)))
+      .where(and(
+        eq(taskStatusTransitions.tenantId, tenantId),
+        ...(projectId != null ? [eq(taskStatusTransitions.projectId, projectId)] : []),
+        gte(taskStatusTransitions.occurredAt, since),
+      ))
       .orderBy(desc(taskStatusTransitions.occurredAt))
       .limit(MAX_TRANSITION_ROWS) as Promise<TransitionRow[]>,
   ]);

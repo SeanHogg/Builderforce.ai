@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { insightsApi, type DoraInsights } from '@/lib/builderforceApi';
 import { usePmData } from '@/lib/pm/usePmData';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { PmCard, PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { DaysWindowSelect, KpiGrid } from './LensShell';
 import { BandedMetricBar, type MetricTier } from '@/components/charts/BandedMetricBar';
@@ -48,9 +49,10 @@ function tierMttr(h: number): number {
 }
 
 export function DoraLens() {
+  const { currentProjectId } = useProjectScope();
   const t = useTranslations('insights');
   const [days, setDays] = useState(30);
-  const { data, error } = usePmData<DoraInsights>(() => insightsApi.dora(days), [days]);
+  const { data, error } = usePmData<DoraInsights>(() => insightsApi.dora(days, currentProjectId), [days, currentProjectId]);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;

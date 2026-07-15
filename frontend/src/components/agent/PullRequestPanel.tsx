@@ -8,6 +8,7 @@ import {
   type TaskPullRequest,
   type PullRequestDetail,
 } from '@/lib/builderforceApi';
+import { getMergeBlockReason } from './pullRequestMergeState';
 
 /**
  * In-product Pull Request review for a task's run. Shows the recorded PR + its
@@ -119,6 +120,12 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
     return () => clearInterval(t);
   }, [buildPending, taskId]);
 
+  const liveDetail = data?.detail ?? null;
+  const availableMethods = liveDetail?.allowedMergeMethods?.length ? liveDetail.allowedMergeMethods : MERGE_METHODS;
+  useEffect(() => {
+    if (!availableMethods.includes(method)) setMethod(availableMethods[0] ?? 'squash');
+  }, [availableMethods, method]);
+
   const merge = async () => {
     if (!data?.pullRequest) return;
     setMerging(true);
@@ -138,10 +145,13 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
   if (!data?.pullRequest) return null;
 
   const pr = data.pullRequest;
-  const detail: PullRequestDetail | null = data.detail;
+  const detail: PullRequestDetail | null = liveDetail;
   const isMerged = pr.status === 'merged' || detail?.merged === true;
   const checks = detail?.checks ?? null;
   const checksRed = checks === 'failure' || checks === 'pending';
+  const mergeBlockReason = pr.status === 'draft'
+    ? 'Mark this pull request ready for review on the provider before merging.'
+    : getMergeBlockReason(detail);
 
   return (
     <div style={{ minHeight: 80, fontSize: 13, color: 'var(--text-secondary)' }}>
@@ -162,7 +172,7 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
       {detail?.supported && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
           {checks && <span style={{ color: CHECK_COLOR[checks] }}>● CI {checks}{detail.checksTotal ? ` (${detail.checksTotal})` : ''}</span>}
-          {detail.mergeable === false && !isMerged && <span style={{ color: 'var(--danger, #dc2626)' }}>not mergeable{detail.mergeableState ? ` · ${detail.mergeableState}` : ''}</span>}
+          {mergeBlockReason && !isMerged && <span style={{ color: 'var(--danger, #dc2626)' }}>not mergeable{detail.mergeableState ? ` · ${detail.mergeableState}` : ''}</span>}
           {(detail.changedFiles != null) && (
             <span style={{ color: 'var(--text-muted)' }}>
               {detail.changedFiles} file{detail.changedFiles === 1 ? '' : 's'}
@@ -184,29 +194,30 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
         </div>
       )}
 
-      {/* Approve & merge — enabled anytime (warns on red checks per product policy) */}
+      {/* Approve & merge — provider mergeability is authoritative. */}
       {!isMerged && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <Select
             value={method}
             onChange={(e) => setMethod(e.target.value as MergeMethod)}
-            disabled={merging}
+            disabled={merging || !!mergeBlockReason}
             style={{ fontSize: 12, padding: '6px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
           >
-            {MERGE_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+            {availableMethods.map((m) => <option key={m} value={m}>{m}</option>)}
           </Select>
           <button
             type="button"
             onClick={merge}
-            disabled={merging}
+            disabled={merging || !!mergeBlockReason}
             style={{
-              fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 6, border: 'none', cursor: merging ? 'default' : 'pointer',
-              background: 'var(--success, #16a34a)', color: 'var(--text-on-accent, #fff)', opacity: merging ? 0.6 : 1,
+              fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 6, border: 'none', cursor: merging || mergeBlockReason ? 'not-allowed' : 'pointer',
+              background: 'var(--success, #16a34a)', color: 'var(--text-on-accent, #fff)', opacity: merging || mergeBlockReason ? 0.6 : 1,
             }}
           >
             {merging ? 'Merging…' : 'Approve & Merge'}
           </button>
-          {checksRed && <span style={{ fontSize: 12, color: 'var(--warning, #d97706)' }}>⚠ CI is {checks} — merging anyway will override it.</span>}
+          {mergeBlockReason && <span style={{ fontSize: 12, color: 'var(--danger, #dc2626)' }}>{mergeBlockReason}</span>}
+          {!mergeBlockReason && checksRed && <span style={{ fontSize: 12, color: 'var(--warning, #d97706)' }}>⚠ CI is {checks}. Repository rules may block merging until required checks pass.</span>}
         </div>
       )}
 

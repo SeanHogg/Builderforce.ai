@@ -114,9 +114,15 @@ describe('mergePullRequest', () => {
   });
 
   it('maps 405 to not_mergeable and 409 to conflict', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('blocked', { status: 405 })));
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({
+      message: 'Pull Request is not mergeable',
+      documentation_url: 'https://docs.github.com/rest/pulls/pulls#merge-a-pull-request',
+    }, 405)));
     const a = await mergePullRequest({ ...base, provider: 'github' });
     expect(a.ok ? '' : a.code).toBe('not_mergeable');
+    expect(a.ok ? '' : a.reason).toContain('Pull Request is not mergeable');
+    expect(a.ok ? '' : a.reason).toContain("whether 'squash' merges are enabled");
+    expect(a.ok ? '' : a.reason).not.toContain('documentation_url');
 
     vi.stubGlobal('fetch', vi.fn(async () => new Response('head moved', { status: 409 })));
     const b = await mergePullRequest({ ...base, provider: 'github' });

@@ -38,7 +38,7 @@ export function createConsumptionRoutes(db: Db): Hono<HonoEnv> {
 
     const payload = await getOrSetCached(
       c.env as Env,
-      `consumption-meter:v2:${tenantId}:${monthKey}`,
+      `consumption-meter:v3:${tenantId}:${monthKey}`,
       () => buildConsumptionSnapshot(db, tenantId, monthStart, monthEnd, c.env as Env),
       { kvTtlSeconds: 60, l1TtlMs: 30_000 },
     );
