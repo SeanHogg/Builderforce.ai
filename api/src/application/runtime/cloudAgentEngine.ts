@@ -24,7 +24,9 @@ import { claimTaskPrOpen, releaseTaskPrClaim } from '../repos/openTaskPullReques
 import { readRepoFile, listRepoFiles, searchRepoCode, listBranchDiff } from '../repos/readRepoContents';
 import { verifyWrittenFiles } from '../repos/verifyWrittenFiles';
 import { scanWrittenForPlaceholders } from '../repos/scanForPlaceholders';
-import { CODING_BACKSTOP_MODELS, RECOGNIZED_CODER_MODELS, codingModelsForPlan, estimateRequestTokens, llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../llm/LlmProxyService';
+import { CODING_BACKSTOP_MODELS, RECOGNIZED_CODER_MODELS, codingModelsForPlan, estimateRequestTokens, isPremiumModelSelection, llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../llm/LlmProxyService';
+import { evaluatePremiumModelAccess } from '../../domain/tenant/planFeatures';
+import { TenantPlan } from '../../domain/shared/types';
 import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
 import { resolveTenantLlmCredentials, byoVendorIdSet, providersFromCredentials, type TenantVendorKeys } from '../llm/tenantProviderKeyService';
 import { cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool, callBuiltinTool } from '../llm/builtinMcpService';
@@ -728,7 +730,17 @@ async function createCloudQuestion(
 export async function recordCloudUsage(
   env: Env,
   db: Db,
-  args: { tenantId: number; cloudAgentRef?: string; executionId: number; taskId: number; projectId?: number | null; model: string; inputTokens: number; outputTokens: number; byo?: boolean; byoProvider?: string | null },
+  args: {
+    tenantId: number; cloudAgentRef?: string; executionId: number; taskId: number;
+    projectId?: number | null; model: string; inputTokens: number; outputTokens: number;
+    byo?: boolean; byoProvider?: string | null;
+    /** The run's effective plan + premium override — used ONLY to price a PREMIUM
+     *  (any-paid-OpenRouter) turn, which adds the flat per-request surcharge on top of
+     *  the metered token cost. Omit and a premium cloud turn would be billed at plain
+     *  OpenRouter cost, i.e. the surcharge silently lost on this surface. */
+    effectivePlan?: 'free' | 'pro' | 'teams';
+    premiumOverride?: boolean;
+  },
 ): Promise<void> {
   // Clamp at the boundary so a bad-usage turn (NaN/negative tokens) can't poison the
   // snapshot's context math or the billing ledger — same shared clamp recordUsageRow uses.
@@ -761,6 +773,13 @@ export async function recordCloudUsage(
     // counts against the tenant's token allowance (free tenants are charged for
     // cloud-agent usage), so surface is 'cloud' — never exempt. See tokenUsage.ts.
     byo: args.byo ?? false, byoProvider: args.byoProvider ?? null, surface: 'cloud',
+    // Premium (any-paid-OpenRouter) turns carry the flat per-request surcharge on the
+    // cloud surface too — the same rule the gateway route applies, so a premium model
+    // costs the same whether a chat or an autonomous run drove it. BYO rows are $0 to
+    // us, so recordUsageRow skips the surcharge for them.
+    premiumSurcharge: args.effectivePlan
+      ? isPremiumModelSelection(args.model, args.effectivePlan, args.premiumOverride ?? false)
+      : false,
   });
 }
 
@@ -775,18 +794,42 @@ function hasVendorKeys(keys: TenantVendorKeys): boolean {
   return Object.values(keys).some((v) => !!v);
 }
 
+/** Map the gateway's string effectivePlan onto the plan enum the pure entitlement
+ *  evaluators take. */
+function toTenantPlanEnum(ep: EffectivePlan): TenantPlan {
+  if (ep === 'pro') return TenantPlan.PRO;
+  if (ep === 'teams') return TenantPlan.TEAMS;
+  return TenantPlan.FREE;
+}
+
 /** A cloud run's LLM routing — which model pool / vendor key its tenant's plan
  *  unlocks. Resolved once per run and reused, never recomputed per turn. */
-export type CloudRouting = { effectivePlan: EffectivePlan; premiumOverride: boolean };
+export type CloudRouting = {
+  effectivePlan: EffectivePlan;
+  premiumOverride: boolean;
+  /** May this run honour a PREMIUM (any-paid-OpenRouter) pin — a paid plan WITH a
+   *  validated card? A cloud run never passes the gateway route's premium gate, so
+   *  `pickCloudModel` enforces it from this. */
+  premiumEntitled: boolean;
+};
 
 /** Resolve a tenant's cloud LLM routing, degrading to the free plan if the plan
  *  lookup throws — a background cloud run must never hard-fail on plan I/O. */
 async function resolveCloudRouting(env: Env, tenantId: number): Promise<CloudRouting> {
   try {
     const r = await resolveTenantPlan(env, tenantId);
-    return { effectivePlan: r.effectivePlan, premiumOverride: r.premiumOverride };
+    // Superadmin is deliberately NOT consulted: a cloud run has no acting user, and
+    // premium is a tenant-funding question. A comped tenant still gets it via the
+    // premium override, which the evaluator honours.
+    const premium = evaluatePremiumModelAccess({
+      effectivePlan: toTenantPlanEnum(r.effectivePlan),
+      premiumOverride: r.premiumOverride,
+      isSuperadmin: false,
+      cardValidated: r.cardValidated,
+    });
+    return { effectivePlan: r.effectivePlan, premiumOverride: r.premiumOverride, premiumEntitled: premium.entitled };
   } catch {
-    return { effectivePlan: 'free', premiumOverride: false };
+    return { effectivePlan: 'free', premiumOverride: false, premiumEntitled: false };
   }
 }
 
@@ -805,6 +848,10 @@ interface ContainerRunContext {
    *  so per-op `llm` calls pick the plan's pool/key without a per-call plan query. */
   effectivePlan: EffectivePlan;
   premiumOverride: boolean;
+  /** Whether a PREMIUM (any-paid-OpenRouter) pin may be honoured — paid plan + a
+   *  validated card. Resolved with the routing above so the container op enforces the
+   *  same rule as the durable loop. */
+  premiumEntitled: boolean;
   /** Execution levers compiled from the assigned personas + the agent's own
    *  personality, resolved once at context build (cached) so the container's per-step
    *  `llm` op applies the trait-derived temperature — parity with the Worker/DO loop. */
@@ -851,6 +898,7 @@ export async function loadContainerRunContext(env: Env, db: Db, executionId: num
       cloudAgentRef: agent.ref, agentLabel: agent.label ?? 'BuilderForce Agent',
       model: payloadModel ?? agent.baseModel,
       effectivePlan: routing.effectivePlan, premiumOverride: routing.premiumOverride,
+      premiumEntitled: routing.premiumEntitled,
       execParams,
     };
   }, { kvTtlSeconds: 600, l1TtlMs: 600_000 });
@@ -886,6 +934,10 @@ interface CloudLlmTurnCtx {
   requestedModel?: string;
   /** Model id to attribute when the gateway doesn't echo a resolved one. */
   fallbackModel?: string;
+  /** The run's effective plan + premium override — needed to price a PREMIUM
+   *  (any-paid-OpenRouter) turn's flat per-request surcharge. */
+  effectivePlan?: 'free' | 'pro' | 'teams';
+  premiumOverride?: boolean;
 }
 
 /**
@@ -907,6 +959,7 @@ async function recordCloudLlmTurn(
   if (result.usage) {
     await recordCloudUsage(rc.env, rc.db, {
       ...evtBase, taskId: rc.taskId, projectId: rc.projectId, model: resolvedModel,
+      ...(rc.effectivePlan ? { effectivePlan: rc.effectivePlan, premiumOverride: rc.premiumOverride ?? false } : {}),
       inputTokens: result.usage.promptTokens ?? 0, outputTokens: result.usage.completionTokens ?? 0,
       byo: result.byoFunded ?? false,
       byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,
@@ -1084,6 +1137,8 @@ export async function handleContainerOp(
       byoVendors: byoVendorIdSet(providersFromCredentials(containerCreds)),
       // Tenant BYO precedence — lead with the owner's chosen account (e.g. Meta first).
       byoVendorPriority: containerCreds.vendorPriority,
+      // Parity with the durable loop: a PREMIUM pin needs a paid plan + validated card.
+      premiumEntitled: ctx.premiumEntitled,
     });
     const result = await llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}), ...(openaiCodexAuth ? { openaiCodexAuth } : {}), ...(xaiOAuthToken ? { xaiOAuthToken } : {}), ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}), ...(containerCreds.vendorPriority.length ? { byoVendorPriority: containerCreds.vendorPriority } : {}), ...(containerCreds.configuredProviders.length ? { byoRequired: true } : {}) }).complete({
       messages: sendMessages as unknown as ChatMessage[], tools: containerTools, tool_choice: 'auto',
@@ -1109,6 +1164,7 @@ export async function handleContainerOp(
     const turn = await recordCloudLlmTurn(result, {
       env, db, tenantId, cloudAgentRef, executionId, taskId, projectId,
       requestedModel: pick.model ?? model, fallbackModel: pick.model,
+      effectivePlan: ctx.effectivePlan, premiumOverride: ctx.premiumOverride,
     }, { tGen0, notify: true });
     // Heartbeat: a live container keeps the run out of the orphan reaper.
     await heartbeatExecution(db, executionId);
@@ -1549,6 +1605,9 @@ export async function runCloudToolLoop(
         byoVendors: byoVendorIdSet(providersFromCredentials(loopCreds)),
         // Tenant BYO precedence — lead with the owner's chosen account (e.g. Meta first).
         byoVendorPriority: loopCreds.vendorPriority,
+        // A PREMIUM pin is honoured only with a paid plan + a validated card; otherwise
+        // it's ignored and the run uses the plan's coding default.
+        premiumEntitled: routing.premiumEntitled,
       });
   // Mutable: a 429 on the pinned model drops the strict pin so the proxy cascades
   // (see the per-turn cascade below); the run then stays unpinned for later turns.
@@ -1740,6 +1799,7 @@ export async function runCloudToolLoop(
     const turn = await recordCloudLlmTurn(result, {
       env, db, tenantId, cloudAgentRef, executionId, taskId: taskRow.id, projectId,
       requestedModel: pick.model, fallbackModel: activeModel,
+      effectivePlan: routing.effectivePlan, premiumOverride: routing.premiumOverride,
     }, { tGen0, step, notify: false });
     if (!turn.ok) return { ok: false, output: turn.error, cancelled, finished: true };
     const { content, toolCalls } = turn;

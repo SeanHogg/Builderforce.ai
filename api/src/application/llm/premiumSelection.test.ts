@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   isPremiumModelSelection,
   modelPoolForPlan,
+  pickCloudModel,
   FREE_MODEL_POOL,
 } from './LlmProxyService';
 import {
@@ -55,6 +56,45 @@ describe('isPremiumModelSelection', () => {
   it('classifies a paid model as premium for a FREE plan (it is off their pool)', () => {
     // The gate then rejects it with plan_required — free tenants can't reach premium.
     expect(isPremiumModelSelection('openai/o1-pro', 'free')).toBe(true);
+  });
+});
+
+/**
+ * A cloud run dispatches through the internal proxy, NOT the gateway HTTP route, so the
+ * route's premium gate never sees it. Since an agent's `base_model` is user-settable,
+ * `pickCloudModel` is the ONLY thing standing between an un-entitled tenant and an
+ * ungated premium model on our metered key.
+ */
+describe('pickCloudModel — premium gate', () => {
+  const PREMIUM = 'openai/o1-pro'; // paid, OpenRouter, off every plan pool
+  const inPoolPaid = modelPoolForPlan('pro').find((m) => m.includes('/'))!;
+
+  it('honours a premium pin for a paid tenant WITH a validated card', () => {
+    const pick = pickCloudModel(PREMIUM, 'pro', false, { premiumEntitled: true });
+    expect(pick).toEqual({ model: PREMIUM, strict: true });
+  });
+
+  it('IGNORES a premium pin when the tenant is not premium-entitled (no validated card)', () => {
+    const pick = pickCloudModel(PREMIUM, 'pro', false, { premiumEntitled: false });
+    expect(pick.model).not.toBe(PREMIUM);
+    // Degrades to the plan's coding default rather than erroring a background run.
+    expect(pick.strict).toBe(false);
+  });
+
+  it('defaults to NOT entitled when the option is omitted (fail closed)', () => {
+    const pick = pickCloudModel(PREMIUM, 'pro');
+    expect(pick.model).not.toBe(PREMIUM);
+  });
+
+  it('still honours a NON-premium in-pool pin for a paid tenant without premium', () => {
+    const pick = pickCloudModel(inPoolPaid, 'pro', false, { premiumEntitled: false });
+    expect(pick).toEqual({ model: inPoolPaid, strict: true });
+  });
+
+  it('honours a premium pin under a premium override', () => {
+    // premiumOverride comps premium access, so the caller resolves premiumEntitled=true.
+    const pick = pickCloudModel(PREMIUM, 'free', true, { premiumEntitled: true });
+    expect(pick).toEqual({ model: PREMIUM, strict: true });
   });
 });
 
