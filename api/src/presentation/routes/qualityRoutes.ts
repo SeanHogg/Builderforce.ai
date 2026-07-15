@@ -27,6 +27,7 @@ import {
 } from '../../infrastructure/cache/readThroughCache';
 import { qualityGroupsVersionKey, qualityGroupsTenantVersionKey, ingestErrorEvents } from '../../application/quality/ingestEngine';
 import type { CollectorRef, MappingRule } from '../../application/quality/errorMapping';
+import type { NormalizedErrorEvent } from '../../application/quality/errorSpec';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
 import { TaskPriority } from '../../domain/shared/types';
 import type { TaskService } from '../../application/task/TaskService';
@@ -109,9 +110,12 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
   router.use('*', authMiddleware);
 
   /** Load a tenant-owned collector by id (CollectorRef shape), or null. */
-  async function loadCollector(tenantId: number, id: string): Promise<(CollectorRef & { tenantId: number }) | null> {
+  async function loadCollector(tenantId: number, id: string): Promise<(CollectorRef & { enabled: boolean }) | null> {
     const [row] = await db
-      .select({ id: errorCollectors.id, tenantId: errorCollectors.tenantId, projectId: errorCollectors.projectId, defaultProjectId: errorCollectors.defaultProjectId })
+      .select({
+        id: errorCollectors.id, tenantId: errorCollectors.tenantId, projectId: errorCollectors.projectId,
+        defaultProjectId: errorCollectors.defaultProjectId, enabled: errorCollectors.enabled,
+      })
       .from(errorCollectors)
       .where(and(eq(errorCollectors.id, id), eq(errorCollectors.tenantId, tenantId)))
       .limit(1);
@@ -229,6 +233,86 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
   });
 
   // ── Integrations: list providers attached to a collector ──────────────────
+  // Month-to-date metered events attributable to one collector. The plan limit
+  // remains tenant-wide and comes from /api/consumption; this is its scoped share.
+  router.get('/collectors/:id/consumption', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    if (!(await loadCollector(tenantId, id))) return c.json({ error: 'Collector not found' }, 404);
+
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const ver = await getCacheVersion(c.env as Env, qualityGroupsTenantVersionKey(tenantId));
+    const cacheKey = `quality-collector-consumption:t:${tenantId}:c:${id}:m:${monthStart.toISOString()}:v:${ver}`;
+    const result = await getOrSetCached(c.env as Env, cacheKey, async () => {
+      const rows = await db
+        .select({
+          day: sql<string>`date_trunc('day', ${errorEvents.ts})`,
+          count: sql<number>`count(*)`,
+        })
+        .from(errorEvents)
+        .innerJoin(errorGroups, eq(errorEvents.groupId, errorGroups.id))
+        .where(and(
+          eq(errorEvents.tenantId, tenantId),
+          eq(errorGroups.collectorId, id),
+          gte(errorEvents.ts, monthStart),
+        ))
+        .groupBy(sql`date_trunc('day', ${errorEvents.ts})`)
+        .orderBy(sql`date_trunc('day', ${errorEvents.ts})`);
+
+      const byDay = new Map(rows.map((row) => [new Date(row.day).toISOString().slice(0, 10), Number(row.count)]));
+      const elapsedDays = Math.floor((Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - monthStart.getTime()) / 86_400_000) + 1;
+      const trend = Array.from({ length: elapsedDays }, (_, offset) => {
+        const day = new Date(monthStart.getTime() + offset * 86_400_000).toISOString().slice(0, 10);
+        return byDay.get(day) ?? 0;
+      });
+      return { used: trend.reduce((sum, count) => sum + count, 0), trend };
+    });
+    return c.json(result);
+  });
+
+  // Test collector configuration through the real ingest pipeline.
+  router.post('/collectors/:id/test', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+    const collector = await loadCollector(tenantId, id);
+    if (!collector) return c.json({ error: 'Collector not found' }, 404);
+    if (!collector.enabled) return c.json({ error: 'Resume the collector before testing it' }, 409);
+
+    const rules = collector.projectId == null ? await loadRulesForCollector(db, id) : [];
+    if (collector.projectId == null && collector.defaultProjectId == null && rules.length === 0) {
+      return c.json({ error: 'Add a mapping rule or default project before testing this collector' }, 422);
+    }
+
+    const event: NormalizedErrorEvent = {
+      fingerprint: `builderforce-collector-test:${id}`,
+      type: 'BuilderforceCollectorTest',
+      message: 'Synthetic test error from the Builderforce collector setup',
+      level: 'error',
+      timestamp: new Date().toISOString(),
+      environment: 'builderforce-test',
+      source: 'test',
+      context: { synthetic: true, collectorId: id },
+    };
+
+    if (collector.projectId == null && collector.defaultProjectId == null && rules[0]) {
+      const rule = rules[0];
+      if (rule.matchField === 'release') event.release = rule.matchValue;
+      else if (rule.matchField === 'environment') event.environment = rule.matchValue;
+      else if (rule.matchField === 'url') event.url = rule.matchValue;
+      else {
+        const tag = rule.matchField.startsWith('tag:') ? rule.matchField.slice(4) : rule.matchField;
+        event.tags = { [tag]: rule.matchValue };
+      }
+    }
+
+    const result = await ingestErrorEvents(db, c.env as Env, collector, [event], rules);
+    if (result.capExceeded) return c.json({ error: 'Monthly error event limit reached', ...result }, 429);
+    if (result.accepted !== 1) return c.json({ error: 'The test event could not be routed to a project', ...result }, 422);
+    return c.json({ ok: true, ...result });
+  });
+
+  // Integrations attached to this collector (no secrets returned).
   router.get('/collectors/:id/integrations', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
