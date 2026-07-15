@@ -1,24 +1,31 @@
 /**
- * Payment provider factory.
+ * Payment provider wiring.
  *
- * Reads PAYMENT_PROVIDER from the Worker environment and returns the
- * appropriate implementation. Add new providers here as the business grows.
+ * Stripe is the ONLY payment processor — there is deliberately no provider switch.
+ * The old "manual" fallback activated subscriptions without charging anything, so an
+ * unconfigured deploy silently handed paid plans to anyone who typed a card brand into
+ * a form. A loud failure is strictly better than that.
  *
- * PAYMENT_PROVIDER values:
- *   "manual"  — no external processor; subscribe/cancel are local state changes (default)
- *   "stripe"  — Stripe Checkout + Billing (requires STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
- *               STRIPE_PRICE_PRO_MONTHLY, STRIPE_PRICE_PRO_YEARLY,
- *               STRIPE_PRICE_TEAMS_MONTHLY, STRIPE_PRICE_TEAMS_YEARLY)
- *   "helcim"  — Helcim HelcimPay.js (requires HELCIM_API_TOKEN, HELCIM_WEBHOOK_SECRET)
+ * Required Worker secrets (`wrangler secret put`):
+ *   STRIPE_SECRET_KEY           — sk_live_… / sk_test_…
+ *   STRIPE_WEBHOOK_SECRET       — whsec_… (from the Stripe dashboard webhook config)
+ *   STRIPE_PRICE_PRO_MONTHLY    — price_…  ($29/mo)
+ *   STRIPE_PRICE_PRO_YEARLY     — price_…  ($290/yr)
+ *   STRIPE_PRICE_TEAMS_MONTHLY  — price_…  ($20/seat/mo)
+ *   STRIPE_PRICE_TEAMS_YEARLY   — price_…  ($192/seat/yr)
+ *
+ * Config is validated LAZILY, not here. This factory runs during Worker boot on every
+ * request, so throwing on a missing secret would take the whole API down rather than
+ * just billing. Instead {@link StripeProvider} throws {@link PaymentNotConfiguredError}
+ * at the point of use, which the routes surface as a 503.
  */
 
 import type { Env } from '../../env';
 import type { PaymentProvider } from './PaymentProvider';
-import { ManualProvider } from './ManualProvider';
 import { StripeProvider } from './StripeProvider';
-import { HelcimProvider } from './HelcimProvider';
 
-export { ManualProvider, StripeProvider, HelcimProvider };
+export { StripeProvider };
+export { PaymentNotConfiguredError } from './PaymentProvider';
 export type {
   PaymentProvider,
   CheckoutSessionOpts,
@@ -29,33 +36,12 @@ export type {
 } from './PaymentProvider';
 
 export function buildPaymentProvider(env: Env): PaymentProvider {
-  const provider = (env.PAYMENT_PROVIDER ?? 'manual').toLowerCase();
-
-  switch (provider) {
-    case 'stripe':
-      if (!env.STRIPE_SECRET_KEY || !env.STRIPE_WEBHOOK_SECRET) {
-        throw new Error('STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET are required for PAYMENT_PROVIDER=stripe');
-      }
-      return new StripeProvider({
-        secretKey: env.STRIPE_SECRET_KEY,
-        webhookSecret: env.STRIPE_WEBHOOK_SECRET,
-        priceProMonthly: env.STRIPE_PRICE_PRO_MONTHLY ?? env.STRIPE_PRICE_MONTHLY ?? '',
-        priceProYearly: env.STRIPE_PRICE_PRO_YEARLY ?? env.STRIPE_PRICE_YEARLY ?? '',
-        priceTeamsMonthly: env.STRIPE_PRICE_TEAMS_MONTHLY ?? '',
-        priceTeamsYearly: env.STRIPE_PRICE_TEAMS_YEARLY ?? '',
-      });
-
-    case 'helcim':
-      if (!env.HELCIM_API_TOKEN || !env.HELCIM_WEBHOOK_SECRET) {
-        throw new Error('HELCIM_API_TOKEN and HELCIM_WEBHOOK_SECRET are required for PAYMENT_PROVIDER=helcim');
-      }
-      return new HelcimProvider({
-        apiToken: env.HELCIM_API_TOKEN,
-        webhookSecret: env.HELCIM_WEBHOOK_SECRET,
-      });
-
-    case 'manual':
-    default:
-      return new ManualProvider();
-  }
+  return new StripeProvider({
+    secretKey: env.STRIPE_SECRET_KEY ?? '',
+    webhookSecret: env.STRIPE_WEBHOOK_SECRET ?? '',
+    priceProMonthly: env.STRIPE_PRICE_PRO_MONTHLY ?? env.STRIPE_PRICE_MONTHLY ?? '',
+    priceProYearly: env.STRIPE_PRICE_PRO_YEARLY ?? env.STRIPE_PRICE_YEARLY ?? '',
+    priceTeamsMonthly: env.STRIPE_PRICE_TEAMS_MONTHLY ?? '',
+    priceTeamsYearly: env.STRIPE_PRICE_TEAMS_YEARLY ?? '',
+  });
 }

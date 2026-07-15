@@ -5695,6 +5695,12 @@ export interface QualityStats {
   daily: { day: string; count: number }[];
 }
 
+/** Month-to-date event consumption attributable to one error collector. */
+export interface QualityCollectorConsumption {
+  used: number;
+  trend: number[];
+}
+
 export const qualityApi = {
   sourceCatalog: (): Promise<QualitySourceCatalogEntry[]> =>
     request<{ sources: QualitySourceCatalogEntry[] }>('/api/quality/source-catalog').then((r) => r.sources ?? []),
@@ -5706,6 +5712,10 @@ export const qualityApi = {
       request('/api/quality/collectors', { method: 'POST', body: JSON.stringify(body) }),
     update: (id: string, body: { name?: string; enabled?: boolean; status?: string; defaultProjectId?: number | null }): Promise<{ ok: true }> =>
       request(`/api/quality/collectors/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    test: (id: string): Promise<{ ok: true; accepted: number; dropped: number }> =>
+      request(`/api/quality/collectors/${id}/test`, { method: 'POST' }),
+    consumption: (id: string): Promise<QualityCollectorConsumption> =>
+      request(`/api/quality/collectors/${id}/consumption`),
     remove: (id: string): Promise<void> =>
       request<void>(`/api/quality/collectors/${id}`, { method: 'DELETE' }),
 

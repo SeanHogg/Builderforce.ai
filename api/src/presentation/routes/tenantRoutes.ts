@@ -298,20 +298,15 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   /**
    * POST /api/tenants/:id/subscription/checkout
    *
-   * Initiate a Pro or Teams upgrade checkout session.
-   *
-   * For ManualProvider: activates immediately; returns { checkoutUrl: null }.
-   * For hosted providers (Stripe, Helcim): returns { checkoutUrl: "https://..." }
-   *   — the frontend should redirect the user to this URL.
-   *   The subscription becomes active once the provider fires a webhook.
+   * Initiate a Pro or Teams upgrade. Returns { checkoutUrl: "https://..." } — the
+   * frontend redirects the user there. The subscription becomes active only once
+   * Stripe fires the activation webhook, never from this request.
    *
    * Body:
    *   targetPlan          "pro" | "teams"        optional (defaults to "pro")
    *   seats               number                 required when targetPlan="teams"
    *   billingCycle        "monthly" | "yearly"   required
    *   billingEmail        string                 required
-   *   billingPaymentBrand string                 optional (manual provider only)
-   *   billingPaymentLast4 string (4 digits)      optional (manual provider only)
    *   successUrl          string                 optional (defaults to /pricing?success=1)
    *   cancelUrl           string                 optional (defaults to /pricing?cancelled=1)
    */
@@ -325,8 +320,6 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       seats?: number;
       billingCycle: TenantBillingCycle;
       billingEmail: string;
-      billingPaymentBrand?: string;
-      billingPaymentLast4?: string;
       successUrl?: string;
       cancelUrl?: string;
     }>();
@@ -347,8 +340,6 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       seats: body.seats,
       billingCycle: body.billingCycle,
       billingEmail: body.billingEmail,
-      billingPaymentBrand: body.billingPaymentBrand,
-      billingPaymentLast4: body.billingPaymentLast4,
       successUrl: body.successUrl ?? `${appUrl}/pricing?success=1`,
       cancelUrl: body.cancelUrl ?? `${appUrl}/pricing?cancelled=1`,
     });
@@ -374,21 +365,18 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       validatedAt: state.validatedAt?.toISOString() ?? null,
       brand: state.brand,
       last4: state.last4,
-      paymentProvider: tenantService.paymentProviderName,
     });
   });
 
   /**
    * POST /api/tenants/:id/card-validation
    *
-   * Start the explicit card-validation flow (Stripe SetupIntent / Helcim $0 verify)
-   * that unlocks PREMIUM model selection — any paid OpenRouter model, billed at
-   * OpenRouter cost + a flat 1¢ per request.
+   * Start the explicit card-validation flow (Stripe SetupIntent / $0 auth) that unlocks
+   * PREMIUM model selection — any paid OpenRouter model, billed at OpenRouter cost + a
+   * flat 1¢ per request.
    *
-   * For hosted providers: returns { checkoutUrl } to redirect to; the card is stamped
-   *   validated when the provider fires the `card.validated` webhook.
-   * For ManualProvider: validates immediately and returns { checkoutUrl: null,
-   *   validated: true }.
+   * Returns { checkoutUrl } to redirect to; the card is stamped validated when Stripe
+   * fires the `card.validated` webhook.
    *
    * Body:
    *   billingEmail  string   required
@@ -417,54 +405,10 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       cancelUrl: body.cancelUrl ?? `${appUrl}/settings?card=cancelled`,
     });
 
-    if (result.validatedImmediately) {
-      await markCardValidated(c.env, tenantId);
-      return c.json({ checkoutUrl: null, sessionId: result.sessionId, validated: true, status: 'validated' });
-    }
-
-    // Hosted flow — mark in-flight so the UI can show "awaiting confirmation" until
-    // the provider's `card.validated` webhook lands.
+    // Mark in-flight so the UI can show "awaiting confirmation" until Stripe's
+    // `card.validated` webhook lands.
     await markCardPending(c.env, tenantId);
     return c.json({ checkoutUrl: result.checkoutUrl, sessionId: result.sessionId, validated: false, status: 'pending' });
-  });
-
-  /**
-   * POST /api/tenants/:id/subscription/pro  (kept for backward compatibility)
-   * Delegates to the checkout endpoint using ManualProvider semantics.
-   * New integrations should call /subscription/checkout instead.
-   */
-  router.post('/:id/subscription/pro', requireRole(TenantRole.MANAGER), async (c) => {
-    const tenantId = Number(c.req.param('id'));
-    const callerTenantId = c.get('tenantId') as number;
-    if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
-
-    const body = await c.req.json<{
-      billingCycle: TenantBillingCycle;
-      billingEmail: string;
-      billingPaymentBrand: string;
-      billingPaymentLast4: string;
-    }>();
-
-    if (!body.billingCycle || !body.billingEmail) {
-      return c.json({ error: 'billingCycle and billingEmail are required' }, 400);
-    }
-
-    const appUrl = c.env.APP_URL ?? 'https://builderforce.ai';
-    const result = await tenantService.createCheckoutSession(tenantId, {
-      billingCycle: body.billingCycle,
-      billingEmail: body.billingEmail,
-      billingPaymentBrand: body.billingPaymentBrand,
-      billingPaymentLast4: body.billingPaymentLast4,
-      successUrl: `${appUrl}/pricing?success=1`,
-      cancelUrl: `${appUrl}/pricing?cancelled=1`,
-    });
-
-    // Legacy response shape: return updated tenant for in-place subscription activation
-    if (result.checkoutUrl === null) {
-      const sub = await tenantService.getSubscription(tenantId);
-      return c.json({ tenant: sub });
-    }
-    return c.json(result);
   });
 
   // POST /api/tenants/:id/subscription/free
