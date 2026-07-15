@@ -59,11 +59,11 @@ export type ExportDataset = 'dora' | 'finance' | 'allocation' | 'benchmarking';
 export type ExportFormat = 'csv' | 'html';
 
 export const empInsightsApi = {
-  crossTeam: (days = 30): Promise<CrossTeamBenchmarkResult> =>
-    apiRequest<CrossTeamBenchmarkResult>(`/api/insights/benchmarking/cross-team?days=${days}`),
+  crossTeam: (days = 30, projectId?: number | null): Promise<CrossTeamBenchmarkResult> =>
+    apiRequest<CrossTeamBenchmarkResult>(`/api/insights/benchmarking/cross-team?days=${days}${projectId != null ? `&projectId=${projectId}` : ''}`),
 
-  delayTaxonomy: (days = 90): Promise<DelayTaxonomyResult> =>
-    apiRequest<DelayTaxonomyResult>(`/api/insights/delay-taxonomy?days=${days}`),
+  delayTaxonomy: (days = 90, projectId?: number | null): Promise<DelayTaxonomyResult> =>
+    apiRequest<DelayTaxonomyResult>(`/api/insights/delay-taxonomy?days=${days}${projectId != null ? `&projectId=${projectId}` : ''}`),
 
   tagDelay: (taskId: number, reasonCode: DelayReasonCode, notes?: string): Promise<unknown> =>
     apiRequest(`/api/insights/delay-taxonomy`, {
@@ -74,8 +74,8 @@ export const empInsightsApi = {
     apiRequest<void>(`/api/insights/delay-taxonomy/${taskId}`, { method: 'DELETE' }),
 
   /** Fetch an export as text (CSV or HTML) so the caller can trigger a download. */
-  exportDataset: (dataset: ExportDataset, format: ExportFormat, days = 30): Promise<string> =>
-    apiRequestText(`/api/insights/export?dataset=${dataset}&format=${format}&days=${days}`),
+  exportDataset: (dataset: ExportDataset, format: ExportFormat, days = 30, projectId?: number | null): Promise<string> =>
+    apiRequestText(`/api/insights/export?dataset=${dataset}&format=${format}&days=${days}${projectId != null ? `&projectId=${projectId}` : ''}`),
 };
 
 /** Trigger a browser download of an already-fetched export string. */

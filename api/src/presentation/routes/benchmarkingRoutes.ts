@@ -34,6 +34,12 @@ function parseDays(raw: string | undefined, def = 30): number {
   return Number.isFinite(n) && n >= 1 && n <= 365 ? Math.floor(n) : def;
 }
 
+
+function parseProjectId(raw: string | undefined): number | undefined {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
+}
+
 function profileCacheKey(tenantId: number): string {
   return `insights:bench:profile:t:${tenantId}`;
 }
@@ -47,9 +53,10 @@ export function createBenchmarkingRoutes(db: Db): Hono<HonoEnv> {
   router.get('/benchmarking', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId } = scope(c);
     const days = parseDays(c.req.query('days'));
+    const projectId = parseProjectId(c.req.query('projectId'));
     const env = c.env as Env;
-    const key = `insights:bench:t:${tenantId}:d:${days}`;
-    return c.json(await getOrSetCached(env, key, () => computeBenchmarking(db, tenantId, days), SHORT_TTL));
+    const key = `insights:bench:t:${tenantId}:d:${days}:p:${projectId ?? 0}`;
+    return c.json(await getOrSetCached(env, key, () => computeBenchmarking(db, tenantId, days, projectId), SHORT_TTL));
   });
 
   // Read the tenant's benchmark profile (industry + size band), defaulted.

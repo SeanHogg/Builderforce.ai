@@ -11,6 +11,7 @@
  */
 
 import { Hono } from 'hono';
+import { and, eq } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { mountTrackers, scope } from './segmentTrackerRoutes';
@@ -28,6 +29,11 @@ function parseInitiativeId(raw: string | undefined): string | undefined {
   return raw && /^[0-9a-f-]{36}$/i.test(raw) ? raw : undefined;
 }
 
+function parseProjectId(raw: string | undefined): number | undefined {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
+}
+
 export function createInnovationRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
@@ -36,15 +42,27 @@ export function createInnovationRoutes(db: Db): Hono<HonoEnv> {
   router.get('/funnel', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
     const initiativeId = parseInitiativeId(c.req.query('initiative'));
+    const projectId = parseProjectId(c.req.query('projectId'));
     const env = c.env as Env;
     const ver = await getCacheVersion(env, funnelVersionKey(tenantId));
-    const key = `innovation:funnel:t:${tenantId}:s:${segmentId}:i:${initiativeId ?? 'all'}:v:${ver}`;
+    const key = `innovation:funnel:t:${tenantId}:s:${segmentId}:i:${initiativeId ?? 'all'}:p:${projectId ?? 0}:v:${ver}`;
     const funnel = await getOrSetCached(
       env, key,
-      () => computeFunnel(db, tenantId, segmentId, initiativeId, Date.now()),
+      () => computeFunnel(db, tenantId, segmentId, initiativeId, Date.now(), projectId),
       { kvTtlSeconds: 120, l1TtlMs: 30_000 },
     );
     return c.json(funnel);
+  });
+
+  // Project-aware list for the Delivery hub. The generic tracker still owns
+  // mutations below; this exact route is registered first so reads can filter on
+  // innovation_ideas.linked_project_id (whose name differs from project_id).
+  router.get('/ideas', async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const projectId = parseProjectId(c.req.query('projectId'));
+    const conds = [eq(innovationIdeas.tenantId, tenantId), eq(innovationIdeas.segmentId, segmentId)];
+    if (projectId != null) conds.push(eq(innovationIdeas.linkedProjectId, projectId));
+    return c.json(await db.select().from(innovationIdeas).where(and(...conds)));
   });
 
   // Idea CRUD (generic tracker; writes bump the funnel version token).

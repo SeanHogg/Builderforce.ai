@@ -12,6 +12,7 @@ import { usePmData } from '@/lib/pm/usePmData';
 import { PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { KpiGrid } from './LensShell';
 import { hrs, pct, days as dDays, int } from './format';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 
 /**
  * Compact "at-a-glance" KPI summaries for the combined Delivery dashboard.
@@ -39,10 +40,11 @@ function ordinal(n: number | null): string {
   return `${v}${suffix}`;
 }
 
-/** Delivery — tenant-wide end-to-end cycle time (the Life Cycle Explorer rollup). */
+/** Delivery — scoped end-to-end cycle time (the Life Cycle Explorer rollup). */
 export function DeliverySummary({ days }: { days: number }) {
   const t = useTranslations('insights');
-  const { data, error } = usePmData<LifecycleInsights>(() => insightsApi.lifecycle(days), [days]);
+  const { currentProjectId } = useProjectScope();
+  const { data, error } = usePmData<LifecycleInsights>(() => insightsApi.lifecycle(days, currentProjectId), [days, currentProjectId]);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
@@ -58,7 +60,8 @@ export function DeliverySummary({ days }: { days: number }) {
 /** Bottlenecks — slowest stage, rework rate and currently-stuck WIP. */
 export function BottleneckSummary({ days }: { days: number }) {
   const t = useTranslations('insights');
-  const { data, error } = usePmData<BottleneckInsights>(() => insightsApi.bottlenecks(days), [days]);
+  const { currentProjectId } = useProjectScope();
+  const { data, error } = usePmData<BottleneckInsights>(() => insightsApi.bottlenecks(days, currentProjectId), [days, currentProjectId]);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
@@ -75,7 +78,8 @@ export function BottleneckSummary({ days }: { days: number }) {
 /** DORA — the four DevOps keys. */
 export function DoraSummary({ days }: { days: number }) {
   const t = useTranslations('insights');
-  const { data, error } = usePmData<DoraInsights>(() => insightsApi.dora(days), [days]);
+  const { currentProjectId } = useProjectScope();
+  const { data, error } = usePmData<DoraInsights>(() => insightsApi.dora(days, currentProjectId), [days, currentProjectId]);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
@@ -93,7 +97,8 @@ export function DoraSummary({ days }: { days: number }) {
 /** SPACE — the five productivity dimensions (0..100 each). */
 export function SpaceSummary({ days }: { days: number }) {
   const t = useTranslations('insights');
-  const { data, error } = usePmData<SpaceMetrics>(() => recommendationsApi.space(days), [days]);
+  const { currentProjectId } = useProjectScope();
+  const { data, error } = usePmData<SpaceMetrics>(() => recommendationsApi.space(days, currentProjectId), [days, currentProjectId]);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
@@ -118,7 +123,8 @@ export function SpaceSummary({ days }: { days: number }) {
 /** Industry benchmarking — average percentile + how many metrics rate elite/high. */
 export function BenchmarkingSummary({ days }: { days: number }) {
   const t = useTranslations('insights');
-  const { data, error } = usePmData<BenchmarkingResult>(() => benchmarkingApi.get(days), [days]);
+  const { currentProjectId } = useProjectScope();
+  const { data, error } = usePmData<BenchmarkingResult>(() => benchmarkingApi.get(days, currentProjectId), [days, currentProjectId]);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;
@@ -138,7 +144,8 @@ export function BenchmarkingSummary({ days }: { days: number }) {
 /** Innovation funnel — pipeline size, idea→ship conversion and time-to-value. */
 export function FunnelSummary(_: { days: number }) {
   const t = useTranslations('insights');
-  const { data, error } = usePmData<FunnelMetrics>(() => innovationApi.funnel(), []);
+  const { currentProjectId } = useProjectScope();
+  const { data, error } = usePmData<FunnelMetrics>(() => innovationApi.funnel(undefined, currentProjectId), [currentProjectId]);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;

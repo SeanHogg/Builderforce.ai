@@ -268,7 +268,7 @@ export interface BottleneckInsights {
  * computeMemberMetrics / computeDora. Two bounded queries (tasks in window, then
  * their transitions by id-set) avoid any N+1; all aggregation is pure JS.
  */
-export async function computeBottleneckInsights(db: Db, tenantId: number, days: number): Promise<BottleneckInsights> {
+export async function computeBottleneckInsights(db: Db, tenantId: number, days: number, projectId?: number): Promise<BottleneckInsights> {
   const now = Date.now();
   const since = new Date(now - days * 24 * HOUR_MS);
 
@@ -288,6 +288,7 @@ export async function computeBottleneckInsights(db: Db, tenantId: number, days: 
     .innerJoin(projects, eq(projects.id, tasks.projectId))
     .where(and(
       eq(projects.tenantId, tenantId),
+      ...(projectId != null ? [eq(tasks.projectId, projectId)] : []),
       eq(tasks.archived, false),
       gte(tasks.updatedAt, since),
       notSystemTask,

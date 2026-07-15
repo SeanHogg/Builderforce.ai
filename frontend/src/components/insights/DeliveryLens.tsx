@@ -20,6 +20,7 @@ import { colorAt } from '@/components/charts/chartColors';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { KpiGrid } from './LensShell';
 import { pct } from './format';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 
 /** Compact hours → "Xd Yh" / "Yh" / "Zm" for lifecycle phase durations. */
 function fmtDur(hours: number): string {
@@ -296,10 +297,11 @@ function ScenarioPlanner({ scope, id, baseline }: { scope: DeliverableScope; id:
 }
 
 /** Life cycle explorer — time per SDLC phase (Refinement → Work → Review → Deploy)
- *  and the end-to-end lifecycle trend over recent months. Tenant-wide. */
+ *  and the end-to-end lifecycle trend over recent months. */
 function LifecycleExplorer() {
   const t = useTranslations('insights');
-  const { data, error } = usePmData<LifecycleInsights>(() => insightsApi.lifecycle(30), []);
+  const { currentProjectId } = useProjectScope();
+  const { data, error } = usePmData<LifecycleInsights>(() => insightsApi.lifecycle(30, currentProjectId), [currentProjectId]);
   if (error) return <PmError message={error} />;
   if (!data) return null;
 
@@ -348,6 +350,7 @@ function LifecycleExplorer() {
 
 export function DeliveryLens() {
   const t = useTranslations('insights');
+  const { currentProjectId } = useProjectScope();
   const [picks, setPicks] = useState<Pick[]>([]);
   const [selected, setSelected] = useState<string>(''); // "scope:id"
 
@@ -361,16 +364,25 @@ export function DeliveryLens() {
         releasesApi.list().catch(() => [] as ProductRelease[]),
       ]);
       if (!alive) return;
-      const list: Pick[] = [
+      const list: Pick[] = currentProjectId == null ? [
         ...inits.map((i) => ({ scope: 'initiative' as const, id: i.id, label: `${t('deliv.kind.initiative')}: ${i.name}` })),
         ...projs.map((p) => ({ scope: 'project' as const, id: String(p.id), label: `${t('deliv.kind.project')}: ${p.name}` })),
         ...rels.map((r) => ({ scope: 'release' as const, id: r.id, label: `${t('deliv.kind.release')}: ${r.version ? `${r.name} (${r.version})` : r.name}` })),
-      ];
+      ] : projs
+        .filter((p) => p.id === currentProjectId)
+        .map((p) => ({ scope: 'project' as const, id: String(p.id), label: `${t('deliv.kind.project')}: ${p.name}` }));
       setPicks(list);
-      if (list.length && !selected) setSelected(`${list[0].scope}:${list[0].id}`);
+      if (list.length) {
+        const preferred = currentProjectId == null && list.some((p) => `${p.scope}:${p.id}` === selected)
+          ? selected
+          : `${list[0].scope}:${list[0].id}`;
+        setSelected(preferred);
+      } else {
+        setSelected('');
+      }
     })();
     return () => { alive = false; };
-  }, [t]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [t, currentProjectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [scope, id] = useMemo(() => {
     const i = selected.indexOf(':');
@@ -381,8 +393,9 @@ export function DeliveryLens() {
     () => (scope && id ? insightsApi.delivery(scope, id) : Promise.resolve(null)),
     [scope, id],
   );
-  // Derived sprint velocity from real task story points (EMP-4) — tenant-wide.
-  const { data: velocity } = usePmData<VelocityInsights>(() => agileMetricsApi.derivedVelocity(), []);
+  // Derived sprint velocity from real task story points (EMP-4), project-scoped
+  // whenever the global selector has a project selected.
+  const { data: velocity } = usePmData<VelocityInsights>(() => agileMetricsApi.derivedVelocity(currentProjectId), [currentProjectId]);
 
   const picker = (
     <Select style={{ ...inputStyle, minWidth: 260 }} value={selected} onChange={(e) => setSelected(e.target.value)} aria-label={t('deliv.deliverable')}>
@@ -486,7 +499,7 @@ export function DeliveryLens() {
         </PmCard>
       )}
 
-      {/* Life cycle explorer — tenant-wide time per SDLC phase + lifecycle trend. */}
+      {/* Life cycle explorer — scoped time per SDLC phase + lifecycle trend. */}
       <LifecycleExplorer />
 
       {/* Value stream — the cross-artifact initiative dependency graph + critical
