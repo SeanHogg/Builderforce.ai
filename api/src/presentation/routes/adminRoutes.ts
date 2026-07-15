@@ -4,6 +4,7 @@
  * All routes require a WebJWT with sa: true (enforced by superAdminMiddleware).
  *
  * GET  /api/admin/users                — all platform users + tenant counts
+ * GET  /api/admin/guest-sessions       — anonymous Brain/tool adoption sessions
  * GET  /api/admin/tenants              — all tenants + member/agentHost counts
  * GET  /api/admin/health               — system health (DB ping, model pool, counts)
  * GET  /api/admin/errors               — recent API error log (last 200 entries)
@@ -1182,6 +1183,45 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     `);
 
     return c.json({ users: rows.rows });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/guest-sessions
+  // Anonymous Brain sessions are marketing leads, not auth_user_sessions. Keep
+  // them visible beside the user directory so admins can follow the full
+  // guest -> account -> paid adoption funnel.
+  // -------------------------------------------------------------------------
+  router.get('/guest-sessions', async (c) => {
+    const db = buildDatabase(c.env);
+
+    const rows = await db.execute(sql`
+      SELECT
+        ms.id,
+        ms.visitor_id        AS "visitorId",
+        ms.guest_chat_count  AS "guestChatCount",
+        ms.guest_chat_tokens AS "guestChatTokens",
+        ms.guest_chat_day    AS "guestChatDay",
+        ms.tool_runs         AS "toolRuns",
+        ms.last_tool_id      AS "lastToolId",
+        ms.landing_path      AS "landingPath",
+        ms.referrer,
+        ms.converted,
+        ms.converted_user_id AS "convertedUserId",
+        ms.converted_at      AS "convertedAt",
+        ms.first_seen_at     AS "firstSeenAt",
+        ms.last_seen_at      AS "lastSeenAt",
+        u.email              AS "convertedEmail",
+        COALESCE(BOOL_OR(t.plan = 'pro' AND t.billing_status = 'active'), false) AS "isPaid"
+      FROM marketing_sessions ms
+      LEFT JOIN users u ON u.id = ms.converted_user_id
+      LEFT JOIN tenant_members tm ON tm.user_id = u.id AND tm.is_active = true
+      LEFT JOIN tenants t ON t.id = tm.tenant_id
+      GROUP BY ms.id, u.email
+      ORDER BY ms.last_seen_at DESC
+      LIMIT 500
+    `);
+
+    return c.json({ sessions: rows.rows });
   });
 
   // -------------------------------------------------------------------------
@@ -2874,11 +2914,16 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const effective = resolveEffectivePermissions({ rolePermissions: rolePerms, modulePermissions: modulePerms, userGrants, userRevocations: userRevokes });
 
     return c.json({
+      userId: targetId,
+      tenantId,
       role: membership.role,
+      permissions: effective,
       rolePermissions: rolePerms,
       modulePermissions: modulePerms,
       userGrants,
       userRevocations: userRevokes,
+      // Keep the original field during the rolling-deploy window for any older
+      // clients that consumed the route before its response contract was fixed.
       effectivePermissions: effective,
     });
   });

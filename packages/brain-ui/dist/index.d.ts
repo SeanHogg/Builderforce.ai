@@ -173,6 +173,10 @@ interface AskUserLabels {
     askSubmit: string;
     /** Shown on the card once the user has answered (buttons disabled). */
     askAnswered: string;
+    /** <PendingQuestionBanner> heading — the chat is blocked on this answer. */
+    askPending: string;
+    /** <PendingQuestionBanner> link to scroll the question's card into view. */
+    askJumpTo: string;
 }
 declare const DEFAULT_ASK_USER_LABELS: AskUserLabels;
 /** Extract the ask-user payload from an assistant message, or null if none/invalid. */
@@ -186,16 +190,59 @@ declare function stripAskUser(text: string): string;
  * never drift on the format.
  */
 declare function serializeAskUser(payload: AskUserPayload): string;
+/** The minimal message shape {@link selectPendingAskUser} needs — structural on
+ *  purpose, so this module stays free of a brain-embedded import. */
+interface AskUserMessageLike {
+    id: number;
+    role: string;
+    content: string;
+}
+/** An unanswered question and the message carrying it. */
+interface PendingAskUser {
+    payload: AskUserPayload;
+    /** The assistant message the question rides in (lets a host reveal its card). */
+    messageId: number;
+}
+/** The DOM id of a rendered question card. ONE convention, shared by the timeline
+ *  that stamps it and any host that scrolls to it — so the two can never drift. */
+declare function askUserAnchorId(messageId: number): string;
+/**
+ * The question the conversation is currently BLOCKED on, or null when there is none.
+ * Walks back from the newest turn: the last assistant `ask-user` block wins, but a
+ * user turn after it means the question was already answered (answering posts the
+ * choice as the next user turn), so nothing is pending.
+ *
+ * Shared so a host never re-derives "is there an open question" — the same predicate
+ * drives the pinned banner and any host-side pending affordance.
+ */
+declare function selectPendingAskUser(messages: readonly AskUserMessageLike[]): PendingAskUser | null;
 /**
  * A clarifying question rendered as clickable options. Single-select sends the
  * chosen label on click; multi-select collects checkboxes behind a submit button.
  * The chosen label(s) are handed to `onAnswer`, which the host posts as the user's
  * next turn — so the model's question and the user's answer stay in the transcript.
  */
-declare function QuestionCard({ payload, labels, onAnswer, }: {
+declare function QuestionCard({ payload, labels, onAnswer, anchorId, }: {
     payload: AskUserPayload;
     labels?: Partial<AskUserLabels>;
     onAnswer: (answer: string) => void;
+    /** DOM id for scroll-to (see {@link askUserAnchorId}); omit when not targetable. */
+    anchorId?: string;
+}): React.JSX.Element;
+/**
+ * The open question, pinned at the composer. A long transcript buries the agent's
+ * `ask_user` card, so a chat that is BLOCKED on an answer looks merely idle — this
+ * restates the live question where the user is already typing, and answers it through
+ * the very same <QuestionCard> (no second options UI to drift), so one click unblocks
+ * the run. `onReveal` scrolls the original card into view for the surrounding context.
+ *
+ * Pair with {@link selectPendingAskUser}; render nothing when it returns null.
+ */
+declare function PendingQuestionBanner({ payload, labels, onAnswer, onReveal, }: {
+    payload: AskUserPayload;
+    labels?: Partial<AskUserLabels>;
+    onAnswer: (answer: string) => void;
+    onReveal?: () => void;
 }): React.JSX.Element;
 
 /**
@@ -1223,4 +1270,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, ConsolidateForkControl, type ConsolidateForkControlProps, type ConsolidateForkLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_CONSOLIDATE_FORK_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindMode, type EvermindRecentEntry, type EvermindSeedModel, type EvermindTeacherOptions, HealthRing, type HealthRingProps, type HealthTier, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, ParticipantBadge, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, serializeAskUser, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };
+export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, ConsolidateForkControl, type ConsolidateForkControlProps, type ConsolidateForkLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_CONSOLIDATE_FORK_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindMode, type EvermindRecentEntry, type EvermindSeedModel, type EvermindTeacherOptions, HealthRing, type HealthRingProps, type HealthTier, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, ParticipantBadge, type PendingAskUser, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, selectPendingAskUser, serializeAskUser, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };

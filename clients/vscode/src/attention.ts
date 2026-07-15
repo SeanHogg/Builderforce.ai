@@ -31,8 +31,13 @@ export function managerAttention(): BfAttentionManager {
  * {@link setLocalChatRuns}, and {@link attentionFor} merges them, so those chats
  * get the same live indicators as server-tracked (cloud / on-prem) runs. Keyed by
  * chat id; `awaiting_input` = paused on a human confirm (the actionable state).
+ *
+ * Keyed BY SOURCE (one entry per open Brain panel): with `sessionTabs:perSession`
+ * several panels are live at once and each reports only ITS OWN chat, so a single
+ * shared map would let the last reporter erase every other panel's runs. Each
+ * panel owns its own bucket and {@link attentionFor} merges across all of them.
  */
-const localChats = new Map<number, BfAttentionState>();
+const localBySource = new Map<string, Map<number, BfAttentionState>>();
 const _onLocalRunsChange = new vscode.EventEmitter<void>();
 /** Fires when the webview-local run set changes (subscribe to repaint the trees). */
 export const onLocalRunsChange = _onLocalRunsChange.event;
@@ -45,24 +50,34 @@ function strongestState(...states: Array<BfAttentionState | undefined>): BfAtten
   return undefined;
 }
 
-/** Replace the webview-local run set (chat ids the editor Brain loop is running /
- *  paused on). Fires {@link onLocalRunsChange} only when the surfaced set changes. */
-export function setLocalChatRuns(runs: { running: number[]; awaiting: number[] }): void {
+/** Replace ONE source's webview-local run set (chat ids that panel's Brain loop is
+ *  running / paused on). Pass an empty set to retire a source (e.g. its panel
+ *  closed). Fires {@link onLocalRunsChange} only when that source's set changes. */
+export function setLocalChatRuns(sourceId: string, runs: { running: number[]; awaiting: number[] }): void {
   const next = new Map<number, BfAttentionState>();
   for (const id of runs.running) next.set(id, "running");
   // Awaiting wins over running for the same id — it's the state the user must act on.
   for (const id of runs.awaiting) next.set(id, "awaiting_input");
-  if (next.size === localChats.size && [...next].every(([k, v]) => localChats.get(k) === v)) return;
-  localChats.clear();
-  for (const [k, v] of next) localChats.set(k, v);
+  const prev = localBySource.get(sourceId) ?? new Map<number, BfAttentionState>();
+  if (next.size === prev.size && [...next].every(([k, v]) => prev.get(k) === v)) return;
+  // An empty report retires the bucket outright, so a closed panel leaves nothing behind.
+  if (next.size === 0) localBySource.delete(sourceId);
+  else localBySource.set(sourceId, next);
   _onLocalRunsChange.fire();
+}
+
+/** The strongest webview-local state for a chat across every reporting panel. */
+function localChatState(id: number): BfAttentionState | undefined {
+  let out: BfAttentionState | undefined;
+  for (const bucket of localBySource.values()) out = strongestState(out, bucket.get(id));
+  return out;
 }
 
 /** The live state of a task or Brain chat, or undefined when idle. Merges the
  *  server attention map with the webview-local run overlay (chats only). */
 export function attentionFor(kind: "task" | "chat", id: number): BfAttentionState | undefined {
   const server = (kind === "task" ? current.tasks[id] : current.chats[id])?.state;
-  const local = kind === "chat" ? localChats.get(id) : undefined;
+  const local = kind === "chat" ? localChatState(id) : undefined;
   return strongestState(server, local);
 }
 
@@ -86,6 +101,26 @@ export function attentionIcon(state: BfAttentionState): vscode.ThemeIcon {
  *  is conveyed by its spinner icon, so only `awaiting_input` gets a glyph. */
 export function attentionDescriptionPrefix(state: BfAttentionState): string {
   return state === "awaiting_input" ? "❓ " : "";
+}
+
+/**
+ * Title-prefix glyph for a per-session chat TAB. A `WebviewPanel.iconPath` takes only
+ * a Uri — never a ThemeIcon — so a tab cannot host the tree's animated `loading~spin`
+ * codicon. Running therefore needs its OWN glyph here, unlike
+ * {@link attentionDescriptionPrefix} (whose row already carries the spinner icon).
+ * Idle returns '' so the tab reads as just the chat title.
+ */
+export function sessionTabPrefix(state: BfAttentionState | undefined): string {
+  return state === "awaiting_input" ? "❓ " : state === "running" ? "⏳ " : "";
+}
+
+/** Tab icon for a per-session chat panel — the static-PNG counterpart to
+ *  {@link attentionIcon} (see {@link sessionTabPrefix} for why a tab can't use a
+ *  ThemeIcon). Idle falls back to the extension's own mark. */
+export function sessionTabIcon(extensionUri: vscode.Uri, state: BfAttentionState | undefined): vscode.Uri {
+  const file =
+    state === "awaiting_input" ? "session-question.png" : state === "running" ? "session-running.png" : "icon.png";
+  return vscode.Uri.joinPath(extensionUri, "media", file);
 }
 
 /**

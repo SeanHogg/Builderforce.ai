@@ -12,6 +12,13 @@ vi.mock('../middleware/authMiddleware', () => ({
   requireRole: () => async (_c: any, next: any) => next(),
 }));
 
+// The premium lenses sit behind requirePlanFeature('advancedInsights'), which resolves
+// the tenant's plan from the real database. These tests cover the lens reads, not the
+// paywall, and pass a fake db rather than an env — so stub the gate to "entitled".
+vi.mock('../middleware/insightPlanGate', () => ({
+  requirePlanFeature: () => async (_c: any, next: any) => next(),
+}));
+
 import { createInsightsRoutes } from './insightsRoutes';
 
 /** Chainable fake: every builder method returns the chain; awaiting (or

@@ -14,7 +14,14 @@
  *  - PAYMENT_PROVIDER env var is unset or set to "manual"
  */
 
-import type { PaymentProvider, CheckoutSessionOpts, CheckoutSessionResult, WebhookEvent } from './PaymentProvider';
+import type {
+  PaymentProvider,
+  CheckoutSessionOpts,
+  CheckoutSessionResult,
+  CardValidationSessionOpts,
+  CardValidationSessionResult,
+  WebhookEvent,
+} from './PaymentProvider';
 
 export class ManualProvider implements PaymentProvider {
   readonly name = 'manual';
@@ -28,6 +35,19 @@ export class ManualProvider implements PaymentProvider {
       checkoutUrl: null,
       externalCustomerId: null,
       externalSubscriptionId: null,
+    };
+  }
+
+  async createCardValidationSession(
+    _opts: CardValidationSessionOpts,
+  ): Promise<CardValidationSessionResult> {
+    // No external processor — treat the card as validated immediately (dev /
+    // manual-invoicing). The caller stamps card_validated_at synchronously.
+    return {
+      sessionId: `manual-card-${Date.now()}`,
+      checkoutUrl: null,
+      externalCustomerId: null,
+      validatedImmediately: true,
     };
   }
 

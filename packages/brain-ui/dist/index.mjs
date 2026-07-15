@@ -139,7 +139,9 @@ import { useMemo as useMemo2, useState as useState2 } from "react";
 import { jsx as jsx3, jsxs as jsxs3 } from "react/jsx-runtime";
 var DEFAULT_ASK_USER_LABELS = {
   askSubmit: "Send",
-  askAnswered: "Answered"
+  askAnswered: "Answered",
+  askPending: "Answer needed",
+  askJumpTo: "Show in conversation"
 };
 var ASK_USER_FENCE = /```ask-user\s*\n([\s\S]*?)\n```/i;
 function coercePayload(raw) {
@@ -177,10 +179,24 @@ function stripAskUser(text2) {
 function serializeAskUser(payload) {
   return ["```ask-user", JSON.stringify(payload), "```"].join("\n");
 }
+function askUserAnchorId(messageId) {
+  return `bf-ask-${messageId}`;
+}
+function selectPendingAskUser(messages) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role === "user") return null;
+    if (msg.role !== "assistant") continue;
+    const payload = parseAskUser(msg.content);
+    if (payload) return { payload, messageId: msg.id };
+  }
+  return null;
+}
 function QuestionCard({
   payload,
   labels,
-  onAnswer
+  onAnswer,
+  anchorId
 }) {
   const lab = useMemo2(() => ({ ...DEFAULT_ASK_USER_LABELS, ...labels }), [labels]);
   const [answered, setAnswered] = useState2(null);
@@ -203,7 +219,7 @@ function QuestionCard({
     const picks = payload.options.filter((_, i) => checked.has(i)).map((o) => o.label);
     if (picks.length) commit(picks.join(", "));
   };
-  return /* @__PURE__ */ jsxs3("div", { className: `bf-qcard${answered ? " bf-qcard--done" : ""}`, role: "group", "aria-label": payload.question, children: [
+  return /* @__PURE__ */ jsxs3("div", { id: anchorId, className: `bf-qcard${answered ? " bf-qcard--done" : ""}`, role: "group", "aria-label": payload.question, children: [
     /* @__PURE__ */ jsx3("div", { className: "bf-qcard__q", children: payload.question }),
     /* @__PURE__ */ jsx3("div", { className: "bf-qcard__opts", children: payload.options.map(
       (opt, i) => multi ? /* @__PURE__ */ jsxs3("label", { className: `bf-qcard__opt bf-qcard__opt--check${checked.has(i) ? " is-checked" : ""}`, children: [
@@ -238,6 +254,21 @@ function QuestionCard({
     ) }),
     multi && !answered && /* @__PURE__ */ jsx3("button", { type: "button", className: "bf-qcard__submit", disabled: checked.size === 0, onClick: submitMulti, children: lab.askSubmit }),
     answered && /* @__PURE__ */ jsx3("div", { className: "bf-qcard__answered", children: `${lab.askAnswered}: ${answered}` })
+  ] });
+}
+function PendingQuestionBanner({
+  payload,
+  labels,
+  onAnswer,
+  onReveal
+}) {
+  const lab = useMemo2(() => ({ ...DEFAULT_ASK_USER_LABELS, ...labels }), [labels]);
+  return /* @__PURE__ */ jsxs3("div", { className: "bf-qpend", role: "region", "aria-label": lab.askPending, children: [
+    /* @__PURE__ */ jsxs3("div", { className: "bf-qpend__bar", children: [
+      /* @__PURE__ */ jsx3("span", { className: "bf-qpend__badge", children: lab.askPending }),
+      onReveal && /* @__PURE__ */ jsx3("button", { type: "button", className: "bf-qpend__jump", onClick: onReveal, children: lab.askJumpTo })
+    ] }),
+    /* @__PURE__ */ jsx3(QuestionCard, { payload, labels: lab, onAnswer })
   ] });
 }
 
@@ -662,7 +693,8 @@ function BrainTimelineInner({
                 {
                   payload: card,
                   labels: { askSubmit: labels.askSubmit, askAnswered: labels.askAnswered },
-                  onAnswer: onAnswerQuestion
+                  onAnswer: onAnswerQuestion,
+                  anchorId: askUserAnchorId(node.message.id)
                 }
               ),
               renderAssistantActions && /* @__PURE__ */ jsx4("div", { className: "bf-tl__actions", children: renderAssistantActions(node.message) }),
@@ -2770,12 +2802,14 @@ export {
   HealthRing,
   Markdown,
   ParticipantBadge,
+  PendingQuestionBanner,
   Project360View,
   ProjectListView,
   QuestionCard,
   RUNNABLE_KINDS,
   Sunburst,
   TICKET_KINDS,
+  askUserAnchorId,
   attachmentsOf,
   avatarColor,
   buildSettledTimeline,
@@ -2785,6 +2819,7 @@ export {
   healthRingColor,
   initialsOf,
   parseAskUser,
+  selectPendingAskUser,
   serializeAskUser,
   streamingNode,
   stripAskUser,
