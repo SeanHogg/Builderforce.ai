@@ -17,13 +17,14 @@ import {
   codingModelsForPlan,
   resolveStrictPin,
   estimateRequestTokens,
+  isPremiumModelSelection,
   CODING_BACKSTOP_MODELS,
   FREE_MODEL_POOL,
   PRO_MODEL_POOL,
   type ChatCompletionRequest,
   type LlmUsage,
 } from '../../application/llm/LlmProxyService';
-import { normalizeByoProvider, resolvePaidOverflowCapMillicents } from '../../application/llm/usageLedger';
+import { normalizeByoProvider, resolvePaidOverflowCapMillicents, PREMIUM_REQUEST_SURCHARGE_MILLICENTS } from '../../application/llm/usageLedger';
 import { classifyReplyAccount } from '../../application/llm/replyProvenance';
 import { USAGE_KIND } from '../../application/llm/usageSource';
 import { logTrace, backfillTraceUsage } from '../../application/llm/traceLogger';
@@ -109,7 +110,8 @@ import { verifyJwt, signJwt } from '../../infrastructure/auth/JwtService';
 import { hashSecret } from '../../infrastructure/auth/HashService';
 import { TenantRole, TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { getLimits, resolveImageCreditsDailyLimit, GUEST_CHAT_LIMITS } from '../../domain/tenant/PlanLimits';
-import { evaluateFrontierAccess } from '../../domain/tenant/planFeatures';
+import { evaluateFrontierAccess, evaluatePremiumModelAccess, premiumModelGateBody } from '../../domain/tenant/planFeatures';
+import { isCardValidated } from '../../application/tenant/cardValidationService';
 import { GuestChatService } from '../../application/guest/GuestChatService';
 import { verifyGuestToken, guestBrainEnabled, GUEST_TOKEN_PREFIX } from '../../application/guest/guestToken';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
@@ -259,6 +261,15 @@ type TenantAccess = {
    *  premium model pool (top PREMIUM-tier models) and the extended per-vendor
    *  timeout regardless of plan/billingStatus. Comped / beta access. */
   premiumOverride: boolean;
+  /**
+   * The tenant has a card that passed the explicit validation flow (SetupIntent /
+   * $0 auth — migration 0342). Combined with a PAID plan this unlocks PREMIUM model
+   * selection: any paid OpenRouter model, billed at OpenRouter cost + a flat 1¢ per
+   * request. See `evaluatePremiumModelAccess`.
+   */
+  cardValidated: boolean;
+  /** Where the card-validation flow currently stands (drives the unlock CTA). */
+  cardValidationStatus: 'none' | 'pending' | 'validated' | 'failed';
   /** True when the JWT carries `sa: true`. Bypasses plan-cap and strict-pin
    *  gates so platform admins can use the gateway without hitting tenant caps.
    *  Always false for `clk_*` and `bfk_*` machine-credential paths. */
@@ -280,7 +291,7 @@ function toTenantPlan(ep: TenantAccess['effectivePlan']): TenantPlan {
 export async function resolveTenantPlan(
   env: Env,
   tenantId: number,
-): Promise<Pick<TenantAccess, 'plan' | 'billingStatus' | 'effectivePlan' | 'tokenDailyLimitOverride' | 'paidOverflowDailyCap' | 'imageCreditsDailyLimit' | 'premiumOverride'>> {
+): Promise<Pick<TenantAccess, 'plan' | 'billingStatus' | 'effectivePlan' | 'tokenDailyLimitOverride' | 'paidOverflowDailyCap' | 'imageCreditsDailyLimit' | 'premiumOverride' | 'cardValidated' | 'cardValidationStatus'>> {
   const db = buildDatabase(env);
   const [tenantRow] = await db
     .select({
@@ -292,6 +303,8 @@ export async function resolveTenantPlan(
       paidOverflowDailyCap: tenants.paidOverflowDailyCap,
       imageCreditsDailyLimit: tenants.imageCreditsDailyLimit,
       premiumOverride: tenants.premiumOverride,
+      cardValidatedAt: tenants.cardValidatedAt,
+      cardValidationStatus: tenants.cardValidationStatus,
     })
     .from(tenants)
     .where(eq(tenants.id, tenantId))
@@ -309,6 +322,8 @@ export async function resolveTenantPlan(
     trialEndsAt: tenantRow.trialEndsAt ?? null,
   }) as TenantAccess['effectivePlan'];
 
+  const cardValidationStatus = (tenantRow.cardValidationStatus ?? 'none') as TenantAccess['cardValidationStatus'];
+
   return {
     plan,
     billingStatus,
@@ -317,6 +332,10 @@ export async function resolveTenantPlan(
     paidOverflowDailyCap: tenantRow.paidOverflowDailyCap ?? null,
     imageCreditsDailyLimit: tenantRow.imageCreditsDailyLimit ?? null,
     premiumOverride: tenantRow.premiumOverride === true,
+    // A card counts as validated only when the flow COMPLETED (status + stamp) —
+    // the same rule `isCardValidated` applies, kept in lockstep via one predicate.
+    cardValidated: isCardValidated({ status: cardValidationStatus, validatedAt: tenantRow.cardValidatedAt ?? null }),
+    cardValidationStatus,
   };
 }
 
@@ -1279,7 +1298,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
             },
             metadata: { engine: 'agent' }, idempotencyKey, useCase: 'agent',
             tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId },
-            byo: true, surface: resolveUsageSurface(c, access),
+            // This branch IS the tenant's connected Anthropic credential serving the
+            // call, so name it — an unstamped byo row can't attribute to an integration.
+            byo: true, byoProvider: 'anthropic', surface: resolveUsageSurface(c, access),
           });
         }
         return new Response(JSON.stringify(json ?? { error: 'upstream_error' }), {
@@ -1298,7 +1319,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
             retries: 0, streamed: true, usage: parseAnthropicSseUsage(text),
             metadata: { engine: 'agent' }, idempotencyKey, useCase: 'agent',
             tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId },
-            byo: true, surface: resolveUsageSurface(c, access),
+            byo: true, byoProvider: 'anthropic', surface: resolveUsageSurface(c, access),
           });
         } catch { /* metering is best-effort */ }
       })());
@@ -1353,7 +1374,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           useCase: 'agent', tenantApiKeyId: access.tenantApiKeyId,
           attribution: { agentHostId: access.agentHostId }, traceId,
           paidOverflow: result.paidOverflow,
-          byo: result.byoFunded ?? false, surface: resolveUsageSurface(c, access),
+          byo: result.byoFunded ?? false,
+          byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,
+          surface: resolveUsageSurface(c, access),
         });
       });
       return new Response(stream, {
@@ -1371,7 +1394,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       useCase: 'agent', tenantApiKeyId: access.tenantApiKeyId,
       attribution: { agentHostId: access.agentHostId }, traceId,
       paidOverflow: result.paidOverflow,
-      byo: result.byoFunded ?? false, surface: resolveUsageSurface(c, access),
+      byo: result.byoFunded ?? false,
+      byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,
+      surface: resolveUsageSurface(c, access),
     });
     return new Response(JSON.stringify(openAiToAnthropicMessage(openaiJson, result.resolvedModel, messageId)), {
       status: result.response.status,
@@ -1637,6 +1662,26 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       body.modelStrict = true;
     }
 
+    // ── Premium (any-paid-OpenRouter) model selection ────────────────────────
+    // Picking an OpenRouter model OUTSIDE the plan's curated pool is the premium
+    // tier: it routes on OUR metered OpenRouter key, so it needs a paid plan AND a
+    // validated card (superadmin / premium override bypass). A model the tenant's
+    // OWN connected provider serves is NOT premium — that's BYO, funded by them, so
+    // it stays on the frontier-access rule and never reaches this gate.
+    const pinnedModel = typeof bodyAny.model === 'string' ? bodyAny.model.trim() : '';
+    const pinnedIsByoVendor = !!pinnedModel && byoVendors.has(vendorForModel(pinnedModel));
+    const premiumSelected = !pinnedIsByoVendor
+      && isPremiumModelSelection(pinnedModel, access.effectivePlan, access.premiumOverride);
+    if (premiumSelected) {
+      const premium = evaluatePremiumModelAccess({
+        effectivePlan: toTenantPlan(access.effectivePlan),
+        premiumOverride: access.premiumOverride,
+        isSuperadmin: access.isSuperadmin,
+        cardValidated: access.cardValidated,
+      });
+      if (!premium.entitled) return c.json(premiumModelGateBody(premium), 402);
+    }
+
     // ── Token usage + limit checks (daily + monthly) ────────────────────────
     // Shared cache-discounted gate (per tenant) — also enforced on /v1/messages'
     // our-models branch. Returns the 429 to send, or the usage numbers reused
@@ -1736,11 +1781,19 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const estimatedTokens = estimateRequestTokens(body.messages, (body as { tools?: unknown }).tools);
     const result = await service.complete(body, undefined, traceId, undefined, { estimatedTokens });
 
+    // Did the PREMIUM model the tenant selected actually serve this turn? Only then
+    // does the flat 1¢ surcharge apply — if the cascade failed over to a plan-pool
+    // model, the tenant gets plan pricing and no surcharge (they didn't get premium).
+    const premiumServed = premiumSelected && result.resolvedModel === pinnedModel;
+
     // Clone upstream headers we care about
     const upstreamHeaders = new Headers();
     const contentType = result.response.headers.get('content-type');
     if (contentType) upstreamHeaders.set('content-type', contentType);
     upstreamHeaders.set('x-builderforce-model', result.resolvedModel);
+    // Tell the client this turn billed the premium surcharge, so the chat surface can
+    // show "premium · +1¢" provenance next to the model chip instead of guessing.
+    if (premiumServed) upstreamHeaders.set('x-builderforce-premium-surcharge', String(PREMIUM_REQUEST_SURCHARGE_MILLICENTS));
     upstreamHeaders.set('x-builderforce-trace-id', traceId);
     upstreamHeaders.set('x-builderforce-vendor', result.resolvedVendor);
     // Which account served this turn (own / shared / shared_byo_unused) — the Brain
@@ -1842,6 +1895,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
             byo: result.byoFunded ?? false,
             byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,
             surface: resolveUsageSurface(c, access),
+            premiumSurcharge: premiumServed,
           });
           // Back-fill the streamed trace row (logged above with 0 tokens) [1298].
           backfillTraceUsage(c.env, c.executionCtx, traceId, usage);
@@ -1869,6 +1923,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       byo: result.byoFunded ?? false,
       byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,
       surface: resolveUsageSurface(c, access),
+      premiumSurcharge: premiumServed,
     });
 
     // Surface the trace id inside the error envelope too, so a consumer hitting
@@ -1910,6 +1965,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         product:       llmProduct,
         effectivePlan: access.effectivePlan,
         ...(access.premiumOverride ? { premium: true } : {}),
+        // A premium (any-paid-OpenRouter) turn: billed at OpenRouter cost + this flat
+        // per-request surcharge. Surfaced so the caller can attribute the extra cent.
+        ...(premiumServed ? { premiumSurchargeMillicents: PREMIUM_REQUEST_SURCHARGE_MILLICENTS } : {}),
         ...(result.schemaRetries != null ? { schemaRetries: result.schemaRetries } : {}),
         ...(result.schemaDowngraded ? { schemaDowngraded: true } : {}),
         ...(callerUseCase     ? { useCase:    callerUseCase  } : {}),
@@ -2007,6 +2065,33 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // `canChooseModel` is an alias kept for existing clients; it IS frontier access.
     const canChooseModel = canUseFrontierModels;
 
+    // PREMIUM (any-paid-OpenRouter) selection — a STRICTER, separate rule from frontier
+    // access: paid plan AND a validated card (superadmin / override bypass). The premium
+    // model LIST is deliberately NOT inlined here: it is the whole paid OpenRouter
+    // catalog (hundreds of ids) and is already served, read-through + edge cached, by
+    // `GET /v1/catalog`. The picker loads it from there and filters, so this payload
+    // stays bounded and there is one catalog source.
+    const premiumAccess = evaluatePremiumModelAccess({
+      effectivePlan: toTenantPlan(effectivePlan),
+      premiumOverride,
+      isSuperadmin: access?.isSuperadmin === true,
+      cardValidated: access?.cardValidated === true,
+    });
+    // NOTE: the key is `premiumInfo`, NOT `premium` — `premium: true` is already the
+    // superadmin premium-OVERRIDE flag on this payload (clients read `res.premium ===
+    // true` to derive isPaid), so reusing it here would silently break that.
+    const premiumInfo = {
+      canUsePremiumModels: premiumAccess.entitled,
+      premiumInfo: {
+        entitled: premiumAccess.entitled,
+        reason: premiumAccess.reason,
+        ...(premiumAccess.unlock ? { unlock: premiumAccess.unlock } : {}),
+        cardValidationStatus: access?.cardValidationStatus ?? 'none',
+        /** Flat per-request surcharge on top of OpenRouter's own token price. */
+        surchargeMillicents: PREMIUM_REQUEST_SURCHARGE_MILLICENTS,
+      },
+    };
+
     // Frontier TEACHER options — the models eligible to distil into an Evermind. A
     // connected BYO account means teaching with THEIR OWN frontier models (a BYO-Anthropic
     // tenant teaches with Opus/Sonnet on their account, NOT a free `@cf/*`/qwen coder), so
@@ -2033,6 +2118,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         teacherModels,
         canChooseModel,
         canUseFrontierModels,
+        ...premiumInfo,
         byo: { providers: byoProviders, models: byoModels },
       });
     }
@@ -2049,6 +2135,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       teacherModels,
       canChooseModel,
       canUseFrontierModels,
+      ...premiumInfo,
       byo: { providers: byoProviders, models: byoModels },
     });
   });
@@ -2551,6 +2638,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       metadata: callerMetadata, idempotencyKey, useCase: callerUseCase,
       tenantApiKeyId: access.tenantApiKeyId, attribution: { agentHostId: access.agentHostId },
       paidOverflow: result.paidOverflow,
+      // No `byo`: image generation has no tenant-credential path (imageProxyForPlan
+      // never takes tenant vendor keys), so every image row is platform-funded.
+      surface: resolveUsageSurface(c, access),
     });
 
     if (cascadeExhausted) {

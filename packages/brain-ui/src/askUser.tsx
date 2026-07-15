@@ -33,11 +33,17 @@ export interface AskUserLabels {
   askSubmit: string;
   /** Shown on the card once the user has answered (buttons disabled). */
   askAnswered: string;
+  /** <PendingQuestionBanner> heading — the chat is blocked on this answer. */
+  askPending: string;
+  /** <PendingQuestionBanner> link to scroll the question's card into view. */
+  askJumpTo: string;
 }
 
 export const DEFAULT_ASK_USER_LABELS: AskUserLabels = {
   askSubmit: 'Send',
   askAnswered: 'Answered',
+  askPending: 'Answer needed',
+  askJumpTo: 'Show in conversation',
 };
 
 /** The fenced info-string the agent tags its question block with. */
@@ -93,6 +99,47 @@ export function serializeAskUser(payload: AskUserPayload): string {
   return ['```ask-user', JSON.stringify(payload), '```'].join('\n');
 }
 
+/** The minimal message shape {@link selectPendingAskUser} needs — structural on
+ *  purpose, so this module stays free of a brain-embedded import. */
+interface AskUserMessageLike {
+  id: number;
+  role: string;
+  content: string;
+}
+
+/** An unanswered question and the message carrying it. */
+export interface PendingAskUser {
+  payload: AskUserPayload;
+  /** The assistant message the question rides in (lets a host reveal its card). */
+  messageId: number;
+}
+
+/** The DOM id of a rendered question card. ONE convention, shared by the timeline
+ *  that stamps it and any host that scrolls to it — so the two can never drift. */
+export function askUserAnchorId(messageId: number): string {
+  return `bf-ask-${messageId}`;
+}
+
+/**
+ * The question the conversation is currently BLOCKED on, or null when there is none.
+ * Walks back from the newest turn: the last assistant `ask-user` block wins, but a
+ * user turn after it means the question was already answered (answering posts the
+ * choice as the next user turn), so nothing is pending.
+ *
+ * Shared so a host never re-derives "is there an open question" — the same predicate
+ * drives the pinned banner and any host-side pending affordance.
+ */
+export function selectPendingAskUser(messages: readonly AskUserMessageLike[]): PendingAskUser | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role === 'user') return null;
+    if (msg.role !== 'assistant') continue;
+    const payload = parseAskUser(msg.content);
+    if (payload) return { payload, messageId: msg.id };
+  }
+  return null;
+}
+
 /**
  * A clarifying question rendered as clickable options. Single-select sends the
  * chosen label on click; multi-select collects checkboxes behind a submit button.
@@ -103,10 +150,13 @@ export function QuestionCard({
   payload,
   labels,
   onAnswer,
+  anchorId,
 }: {
   payload: AskUserPayload;
   labels?: Partial<AskUserLabels>;
   onAnswer: (answer: string) => void;
+  /** DOM id for scroll-to (see {@link askUserAnchorId}); omit when not targetable. */
+  anchorId?: string;
 }) {
   const lab = useMemo(() => ({ ...DEFAULT_ASK_USER_LABELS, ...labels }), [labels]);
   const [answered, setAnswered] = useState<string | null>(null);
@@ -131,7 +181,7 @@ export function QuestionCard({
   };
 
   return (
-    <div className={`bf-qcard${answered ? ' bf-qcard--done' : ''}`} role="group" aria-label={payload.question}>
+    <div id={anchorId} className={`bf-qcard${answered ? ' bf-qcard--done' : ''}`} role="group" aria-label={payload.question}>
       <div className="bf-qcard__q">{payload.question}</div>
       <div className="bf-qcard__opts">
         {payload.options.map((opt, i) =>
@@ -169,6 +219,42 @@ export function QuestionCard({
         </button>
       )}
       {answered && <div className="bf-qcard__answered">{`${lab.askAnswered}: ${answered}`}</div>}
+    </div>
+  );
+}
+
+/**
+ * The open question, pinned at the composer. A long transcript buries the agent's
+ * `ask_user` card, so a chat that is BLOCKED on an answer looks merely idle — this
+ * restates the live question where the user is already typing, and answers it through
+ * the very same <QuestionCard> (no second options UI to drift), so one click unblocks
+ * the run. `onReveal` scrolls the original card into view for the surrounding context.
+ *
+ * Pair with {@link selectPendingAskUser}; render nothing when it returns null.
+ */
+export function PendingQuestionBanner({
+  payload,
+  labels,
+  onAnswer,
+  onReveal,
+}: {
+  payload: AskUserPayload;
+  labels?: Partial<AskUserLabels>;
+  onAnswer: (answer: string) => void;
+  onReveal?: () => void;
+}) {
+  const lab = useMemo(() => ({ ...DEFAULT_ASK_USER_LABELS, ...labels }), [labels]);
+  return (
+    <div className="bf-qpend" role="region" aria-label={lab.askPending}>
+      <div className="bf-qpend__bar">
+        <span className="bf-qpend__badge">{lab.askPending}</span>
+        {onReveal && (
+          <button type="button" className="bf-qpend__jump" onClick={onReveal}>
+            {lab.askJumpTo}
+          </button>
+        )}
+      </div>
+      <QuestionCard payload={payload} labels={lab} onAnswer={onAnswer} />
     </div>
   );
 }

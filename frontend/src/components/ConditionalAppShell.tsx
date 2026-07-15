@@ -31,6 +31,7 @@ import { useIsFreelancer } from '@/lib/rbac';
 import { findActiveGroup, isFreelancerAllowedPath } from '@/lib/navGroups';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { convertVisitor } from '@/lib/marketingApi';
 
 const FOOTER_ONLY_PATHS = ['/login', '/register'];
 
@@ -195,6 +196,15 @@ function FreelancerRouteGuard() {
   return null;
 }
 
+/** Close anonymous Brain/tool attribution as soon as this browser authenticates. */
+function MarketingConversionTracker() {
+  const { isAuthenticated } = useAuth();
+  useEffect(() => {
+    if (isAuthenticated) convertVisitor();
+  }, [isAuthenticated]);
+  return null;
+}
+
 function AppBrainShell({ children }: { children: React.ReactNode }) {
   const content = useShellContent(children);
   const { hasTenant } = useAuth();
@@ -234,6 +244,7 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
           <BrainActionsProvider>
             <BrainContextProvider>
               {content}
+              <MarketingConversionTracker />
               <FreelancerRouteGuard />
               {/* Audited "click sense" capture — navigations + explicit signals
                   feed the billable-timecard pipeline. Signed-in users only. */}

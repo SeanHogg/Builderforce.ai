@@ -986,7 +986,11 @@
     "merging": "正在合并…"
   },
   "memberProfile": {
-    "tabs": { "overview": "概览", "timeLogs": "时间日志", "tasks": "任务" },
+    "tabs": {
+      "overview": "概览",
+      "timeLogs": "时间日志",
+      "tasks": "任务"
+    },
     "noTasks": "没有分配给此用户的任务。",
     "subtitle": "{kind} · 能力与可用性",
     "syncing": "正在同步…",
@@ -1737,7 +1741,12 @@
       "activeUsers": "活跃用户",
       "cost": "成本",
       "tokensSub": "所有模型合计",
-      "tokensByModel": "各模型令牌用量"
+      "tokensByModel": "各模型令牌用量",
+      "byIntegration": "各集成用量",
+      "platformKey": "Builderforce（平台密钥）",
+      "fundedOwnKey": "自有密钥",
+      "fundedPlatform": "平台",
+      "requests": "请求数"
     },
     "devexhub": {
       "title": "开发者体验",
@@ -3191,6 +3200,7 @@
       "aiModelShare": "模型运行占比",
       "aiMergeRate": "各模型合并率",
       "aiComparison": "多工具评估",
+      "aiByIntegration": "各集成用量",
       "aiShareTrend": "采用与占比趋势",
       "delivCycleTime": "周期时间",
       "delivVelocity": "速度",
@@ -3314,7 +3324,11 @@
       "bySource": "按来源成本",
       "spendSub": "预估，最近 7 天",
       "byProject": "按项目支出",
-      "noProjects": "暂无项目支出"
+      "noProjects": "暂无项目支出",
+      "byoFundedOnly": "无平台支出——所有用量均由你连接的密钥承担",
+      "sourceCloud": "云端",
+      "sourceOnPrem": "本地部署",
+      "sourceWeb": "Web / SDK"
     },
     "catalog": {
       "noInstalls": "暂无安装",
@@ -6995,6 +7009,7 @@
     "sub": {
       "health": "运行状况",
       "directory": "目录",
+      "sessions": "会话",
       "security": "安全",
       "emulation": "模拟会话",
       "tenants": "工作区",
@@ -7183,6 +7198,22 @@
         "colDuration": "时长",
         "durationActive": "活跃"
       }
+    },
+    "sessions": {
+      "title": "采用会话",
+      "subtitle": "匿名 Brain 和免费工具访客，包括账户和付费转化。",
+      "count": "{count} 个会话",
+      "empty": "未找到访客会话。",
+      "visitor": "访客",
+      "engagement": "互动",
+      "firstSeen": "首次访问",
+      "lastSeen": "最近访问",
+      "conversion": "转化",
+      "brainMessages": "{count} 条 Brain 消息",
+      "tokensAndTools": "{tokens} tokens · {tools} 次工具运行",
+      "guest": "访客",
+      "registered": "已注册",
+      "paid": "已付费"
     },
     "usage": {
       "aiAnalyze": "AI 分析",
@@ -7670,17 +7701,40 @@
       "meta": {
         "blurb": "粘贴 Meta AI API 密钥，在您自己的 Meta AI 账户上运行 MUSE 模型（muse-spark-1.1）。"
       },
-      "kimi": { "blurb": "粘贴 Kimi Code 订阅密钥或 Moonshot API 密钥。" },
-      "qwen": { "blurb": "粘贴阿里云 DashScope API 密钥以运行 Qwen 模型。" },
-      "minimax": { "blurb": "粘贴 MiniMax API 密钥以运行 MiniMax 模型。" }
-      ,"xai": { "blurb": "连接符合条件的 SuperGrok 订阅或粘贴 xAI API 密钥。", "subscription": "SuperGrok 订阅", "pastePrompt": "批准访问后，复制 xAI 页面显示的代码并粘贴到这里。", "pastePlaceholder": "粘贴 xAI 登录代码…" }
+      "kimi": {
+        "blurb": "粘贴 Kimi Code 订阅密钥或 Moonshot API 密钥。"
+      },
+      "qwen": {
+        "blurb": "粘贴阿里云 DashScope API 密钥以运行 Qwen 模型。"
+      },
+      "minimax": {
+        "blurb": "粘贴 MiniMax API 密钥以运行 MiniMax 模型。"
+      },
+      "xai": {
+        "blurb": "连接符合条件的 SuperGrok 订阅或粘贴 xAI API 密钥。",
+        "subscription": "SuperGrok 订阅",
+        "pastePrompt": "批准访问后，复制 xAI 页面显示的代码并粘贴到这里。",
+        "pastePlaceholder": "粘贴 xAI 登录代码…"
+      }
     }
   },
   "modelSelect": {
     "yourLlms": "您的 LLM",
     "connectedProviders": "已连接的提供商",
     "models": "模型",
-    "current": "{model}（当前）"
+    "current": "{model}（当前）",
+    "premiumModels": "高级 — 任意 OpenRouter 模型（成本 + 每次请求 1 美分）",
+    "premiumOption": "{name} · 输入 {price}/M",
+    "premiumUnlockTitle": "解锁高级模型",
+    "premiumUnlockCardBody": "验证银行卡即可选择任意付费 OpenRouter 模型。按 OpenRouter 原价另加每次请求 1 美分计费。验证不会产生任何扣款，仅确认该卡可用。",
+    "premiumUnlockUpgradeBody": "高级模型（任意付费 OpenRouter 模型，按 OpenRouter 成本另加每次请求 1 美分计费）需要付费方案并已验证银行卡。",
+    "premiumValidateCard": "验证银行卡",
+    "premiumValidating": "正在打开…",
+    "premiumPending": "等待确认",
+    "premiumPendingHint": "请在支付服务商处完成验证，然后重新加载。",
+    "premiumFailedHint": "该银行卡无法验证，请换一张。",
+    "premiumUpgrade": "升级到 Pro",
+    "premiumUnlockFailed": "无法启动银行卡验证。"
   },
   "runAgentControl": {
     "agentTitle": "智能体",

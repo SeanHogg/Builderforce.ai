@@ -27,7 +27,14 @@
  *   - Implement recurring billing schedule creation for subscriptions.
  */
 
-import type { PaymentProvider, CheckoutSessionOpts, CheckoutSessionResult, WebhookEvent } from './PaymentProvider';
+import type {
+  PaymentProvider,
+  CheckoutSessionOpts,
+  CheckoutSessionResult,
+  CardValidationSessionOpts,
+  CardValidationSessionResult,
+  WebhookEvent,
+} from './PaymentProvider';
 import { TenantPlan, TenantBillingCycle } from '../../domain/shared/types';
 
 interface HelcimConfig {
@@ -95,6 +102,44 @@ export class HelcimProvider implements PaymentProvider {
       checkoutUrl,
       externalCustomerId: `tenant-${opts.tenantId}`,
       externalSubscriptionId: null, // assigned after payment
+    };
+  }
+
+  async createCardValidationSession(opts: CardValidationSessionOpts): Promise<CardValidationSessionResult> {
+    // Helcim's `verify` payment type runs a $0 card verification (auth-only, no
+    // capture) — the equivalent of a Stripe SetupIntent. Completion fires the same
+    // transaction webhook, which parseWebhook maps to `card.validated`.
+    const res = await fetch(`${HELCIM_API_BASE}/payment/initialize`, {
+      method: 'POST',
+      headers: {
+        'api-token': this.config.apiToken,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        paymentType: 'verify',
+        amount: 0,
+        currency: 'USD',
+        customerCode: opts.externalCustomerId ?? `tenant-${opts.tenantId}`,
+        invoiceNumber: `bf-card-${opts.tenantId}-${Date.now()}`,
+        checkoutCustomize: {
+          redirectApprovedUrl: opts.successUrl,
+          redirectDeclinedUrl: opts.cancelUrl,
+        },
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Helcim card-validation error: ${res.status} ${err}`);
+    }
+
+    const data = await res.json() as { checkoutToken: string; url?: string };
+    return {
+      sessionId: data.checkoutToken,
+      checkoutUrl: data.url ?? `https://checkout.helcim.com/${data.checkoutToken}`,
+      externalCustomerId: opts.externalCustomerId ?? `tenant-${opts.tenantId}`,
+      validatedImmediately: false,
     };
   }
 

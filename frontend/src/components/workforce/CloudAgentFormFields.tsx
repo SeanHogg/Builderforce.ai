@@ -6,6 +6,7 @@ import { Select } from '@/components/Select';
 
 import type { AgentRuntimeSupport, AgentRuntimeSurface } from '@/lib/api';
 import { ModelSelect } from '@/components/llm/ModelSelect';
+import { PremiumModelUnlock } from '@/components/llm/PremiumModelUnlock';
 import PsychometricEditor from '@/components/PsychometricEditor';
 import type { PsychometricProfile } from '@/lib/psychometric';
 
@@ -150,6 +151,9 @@ export function CloudAgentRuntimeFields({ form, onChange }: FieldGroupProps) {
           style={inputStyle}
         />
         <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>{t('baseModelHelp')}</p>
+        {/* Renders only when premium is unlockable (paid plan + card, or upgrade) —
+            it decides its own visibility, so no entitlement prop-drilling here. */}
+        <div style={{ marginTop: 10 }}><PremiumModelUnlock /></div>
       </div>
     </div>
   );

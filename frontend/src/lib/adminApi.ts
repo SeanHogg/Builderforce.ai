@@ -89,6 +89,25 @@ export interface AdminHealth {
   timestamp: string;
 }
 
+export interface AdminGuestSession {
+  id: string;
+  visitorId: string;
+  guestChatCount: number;
+  guestChatTokens: number;
+  guestChatDay: string | null;
+  toolRuns: number;
+  lastToolId: string | null;
+  landingPath: string | null;
+  referrer: string | null;
+  converted: boolean;
+  convertedUserId: string | null;
+  convertedEmail: string | null;
+  convertedAt: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  isPaid: boolean;
+}
+
 export interface AdminSystemTable {
   name: string;
   totalBytes: number;
@@ -562,6 +581,11 @@ export const adminApi = {
   async users(): Promise<AdminUser[]> {
     const res = await adminRequest<{ users: AdminUser[] }>('/api/admin/users');
     return res.users;
+  },
+
+  async guestSessions(): Promise<AdminGuestSession[]> {
+    const res = await adminRequest<{ sessions: AdminGuestSession[] }>('/api/admin/guest-sessions');
+    return res.sessions;
   },
 
   async tenants(): Promise<AdminTenant[]> {
@@ -1159,9 +1183,24 @@ export const adminApi = {
   },
 
   async effectivePermissions(userId: string, tenantId: number): Promise<EffectivePermissions> {
-    return adminRequest<EffectivePermissions>(
+    const res = await adminRequest<Partial<EffectivePermissions> & { effectivePermissions?: unknown }>(
       `/api/admin/users/${encodeURIComponent(userId)}/effective-permissions?tenantId=${tenantId}`,
     );
+    const strings = (value: unknown): string[] =>
+      Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+
+    return {
+      userId: typeof res.userId === 'string' ? res.userId : userId,
+      tenantId: typeof res.tenantId === 'number' ? res.tenantId : tenantId,
+      role: typeof res.role === 'string' ? res.role : '',
+      // The API historically named this field `effectivePermissions`. Accept it
+      // so a new frontend remains compatible while API workers roll forward.
+      permissions: strings(res.permissions ?? res.effectivePermissions),
+      rolePermissions: strings(res.rolePermissions),
+      modulePermissions: strings(res.modulePermissions),
+      userGrants: strings(res.userGrants),
+      userRevocations: strings(res.userRevocations),
+    };
   },
 
   async userAdminAccess(userId: string): Promise<{ sessions: ImpersonationSession[] }> {

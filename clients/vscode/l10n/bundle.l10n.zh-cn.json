@@ -144,5 +144,7 @@
   "participants": "位参与者",
   "Sign in to BuilderForce first.": "请先登录 BuilderForce。",
   "Your connected {provider} account couldn’t be used this run (its token looks expired or revoked), so it ran on the shared model pool instead of your own model. Reconnect it in the web app under Settings ▸ API Keys.": "本次运行无法使用您已连接的 {provider} 账户（其令牌似乎已过期或被吊销），因此改用了共享模型池而非您自己的模型。请在网页应用的“设置 ▸ API 密钥”中重新连接。",
-  "Your {provider} account is connected in a DIFFERENT workspace, so this run used the shared model pool instead of your own model. Switch to that workspace, or connect it in this one under Settings ▸ API Keys.": "您的 {provider} 账户连接在另一个工作区中，因此本次运行使用了共享模型池而非您自己的模型。请切换到该工作区，或在当前工作区的“设置 ▸ API 密钥”中进行连接。"
+  "Your {provider} account is connected in a DIFFERENT workspace, so this run used the shared model pool instead of your own model. Switch to that workspace, or connect it in this one under Settings ▸ API Keys.": "您的 {provider} 账户连接在另一个工作区中，因此本次运行使用了共享模型池而非您自己的模型。请切换到该工作区，或在当前工作区的“设置 ▸ API 密钥”中进行连接。",
+  "Answer needed": "需要回答",
+  "Show in conversation": "在对话中显示"
 }
