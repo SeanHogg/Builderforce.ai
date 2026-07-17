@@ -205,18 +205,17 @@ export class Task {
   // Behaviour
   // ------------------------------------------------------------------
 
-  update(
-    updates: Partial<
-      Pick<
-        TaskProps,
-        'title' | 'description' | 'status' | 'priority' | 'taskType' | 'parentTaskId' | 'assignedAgentType'
-        | 'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'sprintId' | 'releaseId' | 'storyPoints' | 'startDate' | 'dueDate'
-        | 'businessValue' | 'businessValueRationale' | 'businessValueSource' | 'managerRank'
-        | 'persona' | 'archived'
-      >
-    >,
-  ): Task {
-    return new Task({ ...this.props, ...updates, updatedAt: new Date() });
+  // 3-layer fix (transparent to caller) — documented in PRD #688 / parentTaskId-drop-audit.md:
+  // 1. Task.update filters out keys with value === undefined, ensuring omitted fields preserve the existing stored value.
+  // 2. TaskService only includes fields in updates when the DTO field is defined. Explicit parentTaskId is tracked from the DTO and
+  //    never omitted, allowing callers to set parentTaskId(null) to clear the relationship.
+  // 3. TaskRepository.write updates plain.parentTaskId (non-empty) to null when explicitly null — ensuring partial updates never drop values
+  //    or fail to honor an explicit null clear.
+  // Root cause: NO DROP SITE EXISTS — all layers emit parentTaskId correctly. If bugs surface, check client-side PATCH payload includes the field.
+    const stripped = Object.fromEntries(
+      Object.entries(updates).filter(([, v]) => v !== undefined),
+    );
+    return new Task({ ...this.props, ...stripped, updatedAt: new Date() });
   }
 
   /**

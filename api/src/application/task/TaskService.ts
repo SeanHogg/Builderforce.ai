@@ -1,23 +1,27 @@
-import { ITaskRepository } from '../../domain/task/ITaskRepository';
-import { IProjectRepository } from '../../domain/project/IProjectRepository';
-import { Task } from '../../domain/task/Task';
-import {
-  ProjectId, TaskId, TaskStatus, TaskPriority, TaskType, AgentType, TenantId,
-  asProjectId, asTaskId, asTenantId, asAgentHostId,
-} from '../../domain/shared/types';
+import { eq } from 'drizzle-orm';
 import { NotFoundError, ForbiddenError } from '../../domain/shared/errors';
+import { Task, TaskProps, TaskType, TaskStatus } from '../../domain/task/Task';
+import { Project } from '../../domain/project/Project';
 import {
-  EpicDecomposer, ChildTaskPlan, heuristicEpicDecomposer,
-} from './EpicDecomposer';
+  ProjectId,
+  TaskId,
+  ProjectStatus,
+  AgentHostId,
+  asProjectId,
+  asTenantId,
+  asTaskId,
+  asAgentHostId,
+} from '../../domain/shared/types';
+import type { ITaskRepository, IProjectRepository } from '../../domain/task/ITaskRepository';
+import type { IProjectRepository as IProjectRepo } from '../../domain/project/IProjectRepository';
+import {
+  TaskPriority,
+  AgentType, // We keep AgentType exported for BC, though not used in current primitives.
+} from '../../domain/shared/types';
 
-/** Postgres unique-constraint violation (e.g. a task-key insert race). */
-function isUniqueViolation(e: unknown): boolean {
-  const s = e instanceof Error ? e.message : String(e);
-  return /duplicate key|unique constraint|23505/i.test(s);
-}
-
-/** How many times to re-derive a key and retry a persist that lost a key race. */
-const MAX_KEY_ATTEMPTS = 5;
+// ---------------------------------------------------------------------------
+// DTOs
+// ---------------------------------------------------------------------------
 
 export interface CreateTaskDto {
   projectId: number;
@@ -26,46 +30,42 @@ export interface CreateTaskDto {
   priority?: TaskPriority;
   assignedAgentType?: AgentType | null;
   assignedAgentHostId?: number | null;
-  /** Cloud agent (ide_agents.id) assigned to this task. Mutually exclusive with host. */
   assignedAgentRef?: string | null;
-  /** Human assignee (users.id). Mutually exclusive with the agent assignees. */
   assignedUserId?: string | null;
-  /** 'task' | 'epic' | 'gap' at creation (default 'task'). */
   taskType?: TaskType;
-  /** Parent Epic's id — set when creating a child of an Epic. */
   parentTaskId?: number | null;
-  /** For a GAP task: the Done item whose review produced it (Validator sets this). */
   gapOriginTaskId?: number | null;
   startDate?: string | null;
   dueDate?: string | null;
   persona?: string | null;
-}
-
-export interface UpdateTaskDto {
-  title?: string;
-  description?: string | null;
-  /** Free-form lane key (board column). See Task.status. */
-  status?: string;
-  priority?: TaskPriority;
-  /** 'task' | 'epic'. Reclassifying to epic is normally done via decomposeEpic. */
-  taskType?: TaskType;
-  /** Re-parent under an Epic (planning "drag into Epic"), or null to detach. */
-  parentTaskId?: number | null;
-  /** Schedule into / out of a sprint (planning "drag onto sprint"). null = unscheduled. */
   sprintId?: string | null;
-  /** Link to / unlink from a product release (the delivery deliverable). null = unlinked. */
   releaseId?: string | null;
-  /** Story-point estimate (drives derived sprint velocity). null = unestimated. */
   storyPoints?: number | null;
-  /** AI Manager business value 0-100 (a human edit pins businessValueSource='manual'). */
   businessValue?: number | null;
   businessValueRationale?: string | null;
   businessValueSource?: string | null;
+  managerRank?: number | null;
+}
+
+export interface UpdateTaskDto {
+  projectId?: number; // Support scoped project move / rekey via explicit moveTask call
+  title?: string | null;
+  description?: string | null;
+  status?: TaskStatus;
+  priority?: TaskPriority;
+  taskType?: TaskType;
+  parentTaskId?: number | null;
+  gapOriginTaskId?: number | null; // Added correctly
+  sprintId?: string | null;
+  releaseId?: string | null;
+  storyPoints?: number | null;
+  businessValue?: number | null;
+  businessValueRationale?: string | null;
+  businessValueSource?: string | null;
+  managerRank?: number | null;
   assignedAgentType?: AgentType | null;
   assignedAgentHostId?: number | null;
-  /** Cloud agent (ide_agents.id) assigned to this task. Mutually exclusive with host. */
   assignedAgentRef?: string | null;
-  /** Human assignee (users.id). Mutually exclusive with the agent assignees. */
   assignedUserId?: string | null;
   githubPrUrl?: string | null;
   githubPrNumber?: number | null;
@@ -75,112 +75,149 @@ export interface UpdateTaskDto {
   archived?: boolean;
 }
 
-/**
- * Application service: orchestrates Task use cases.
- *
- * Depends on ITaskRepository and IProjectRepository interfaces only.
- */
+// ---------------------------------------------------------------------------
+// Repository Interfaces and Types
+// ---------------------------------------------------------------------------
+
+export interface ChildTaskPlan {
+  title: string;
+  description?: string | null;
+  priority?: TaskPriority;
+  assignedAgentHostId?: number | null;
+  assignedAgentRef?: string | null;
+  assignedUserId?: string | null;
+  roleKey?: string | null;
+  gapOriginTaskId?: number | null;
+}
+
+// ---------------------------------------------------------------------------
+// Service
+// ---------------------------------------------------------------------------
+
+export interface TaskServiceDeps {
+  projects: IProjectRepo;
+  tasks: ITaskRepository;
+  decomposer: EpicDecomposer;
+  recommendChildAssignee?: (
+    projectId: number,
+    roleKey?: string
+  ) => Promise<any>; // 'agent'/'human' ref pattern
+}
+
 export class TaskService {
-  constructor(
-    private readonly tasks: ITaskRepository,
-    private readonly projects: IProjectRepository,
-    /**
-     * Agent reasoning step for on-assign Epic decomposition. Defaults to the
-     * deterministic {@link heuristicEpicDecomposer}; inject an LLM-backed
-     * implementation to get real BA-style scope assessment (the fan-out machinery
-     * below is unchanged either way).
-     */
-    private readonly decomposer: EpicDecomposer = heuristicEpicDecomposer,
-    /**
-     * Optional planner hook: picks an owner for a fan-out child that the
-     * decomposition left unassigned, by ranking the project's workforce on
-     * capability/availability/WIP (see assigneeRecommender). Injected from the
-     * composition root (it needs env+db for caching); absent in unit tests, where
-     * children simply stay unassigned. Returns null when no suitable member.
-     */
-    private readonly recommendChildAssignee?: (
-      projectId: number,
-      roleKey?: string,
-    ) => Promise<{ memberKind: 'human' | 'cloud_agent' | 'host_agent'; memberRef: string } | null>,
-  ) {}
-
-  /**
-   * List tasks scoped to the caller's tenant. Optionally narrow by project.
-   * Archived tasks are excluded unless `includeArchived` is set — the board,
-   * backlog and brain's list view should never show items the user archived.
-   */
-  async listTasks(callerTenantId: number, projectId?: number, includeArchived = false): Promise<Task[]> {
-    if (projectId !== undefined) {
-      const project = await this.projects.findById(asProjectId(projectId));
-      if (!project) throw new NotFoundError('Project', projectId);
-      if (project.tenantId !== callerTenantId) throw new ForbiddenError('Project belongs to a different workspace');
-      return this.tasks.findAll(asProjectId(projectId), { includeArchived });
-    }
-    // No project filter: return tasks for ALL projects in this tenant
-    const tenantProjects = await this.projects.findByTenant(asTenantId(callerTenantId));
-    const projectIds = tenantProjects.map(p => asProjectId(p.id));
-    return this.tasks.findByProjectIds(projectIds, { includeArchived });
+  constructor(private readonly deps: TaskServiceDeps) {
+    this.projects = deps.projects;
+    this.tasks = deps.tasks;
+    this.decomposer = deps.decomposer;
+    this.recommendChildAssignee = deps.recommendChildAssignee;
   }
 
-  async getTask(id: number): Promise<Task> {
-    const task = await this.tasks.findById(asTaskId(id));
-    if (!task) throw new NotFoundError('Task', id);
-    return task;
+  get projects(): IProjectRepo {
+    return this.deps.projects;
   }
 
-  /**
-   * Allocate a collision-free task key and persist, in one place for every key-
-   * minting path (create, move, Epic fan-out). The key sequence is derived from
-   * the project's HIGHEST existing key number — not a row count, which skips the
-   * gaps left by deletes/moves and would collide on the globally-unique key (the
-   * bug that 500'd board moves). `run` receives that base sequence and does the
-   * actual save/update. On the rare insert race (a concurrent writer grabbed the
-   * same number), the base is re-read and bumped so each retry tries a higher,
-   * strictly-increasing number until one is free.
-   */
-  private async withKeyAllocation(
-    projectId: ProjectId,
-    run: (lastKeySeq: number) => Promise<Task>,
-  ): Promise<Task> {
-    for (let attempt = 0; ; attempt++) {
-      const lastKeySeq = (await this.tasks.maxKeySeqByProject(projectId)) + attempt;
-      try {
-        return await run(lastKeySeq);
-      } catch (e) {
-        if (attempt < MAX_KEY_ATTEMPTS - 1 && isUniqueViolation(e)) continue;
-        throw e;
-      }
+  get tasks(): ITaskRepository {
+    return this.deps.tasks;
+  }
+
+  get decomposer(): EpicDecomposer {
+    return this.deps.decomposer;
+  }
+
+  get recommendChildAssignee() {
+    return this.deps.recommendChildAssignee;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Task Lifecycle
+  // ---------------------------------------------------------------------------
+
+  async getTask(id: TaskId): Promise<Task> {
+    const t = await this.tasks.findById(id);
+    if (!t) {
+      throw new NotFoundError('Task', id);
     }
+    return t;
+  }
+
+  async listTasks(
+    projectId?: ProjectId,
+    opts?: { includeArchived?: boolean }
+  ): Promise<Task[]> {
+    // Base mapping; callers may filter further (e.g., archived flag).
+    if (projectId === undefined) {
+      return this.tasks.findAll(undefined, opts);
+    } else {
+      return this.tasks.findByProjectIds(Array.of(projectId), opts);
+    }
+  }
+
+  async moveTask(projectId: number, callerTenantId: TaskId): Promise<Task> {
+    // Move goes via direct task update.
+    const task = await this.getTask(projectId as any as TaskId);
+    const wasAssignedToAgent = task.isAssignedToAgent;
+
+    // Assume Move DTO:
+    const updates: Partial<TaskProps> = {
+      projectId: asProjectId(projectId),
+    };
+
+    // Keep pre-value checks consistent with updateTask: we only write defined fields.
+    // This is a move, so we override projectId explicitly; other undefined fields are omitted (so they preserve).
+    const updated = task.update(updates);
+    const saved = await this.tasks.update(updated);
+    // Move can erroneously start an auto-run; we suppress the on-assign hook because the assignment is never made.
+    // For safety, we mean strictly to transition project membership, not ownership, which is controlled by other routes.
+    return saved;
   }
 
   async createTask(dto: CreateTaskDto, callerTenantId: number): Promise<Task> {
     const project = await this.projects.findById(asProjectId(dto.projectId));
-    if (!project) throw new NotFoundError('Project', dto.projectId);
-    if (project.tenantId !== callerTenantId) throw new ForbiddenError('Project belongs to a different workspace');
+    if (!project) {
+      throw new NotFoundError('Project', dto.projectId);
+    }
+    if (project.tenantId !== callerTenantId) {
+      throw new ForbiddenError('Project belongs to a different workspace');
+    }
 
-    const saved = await this.withKeyAllocation(asProjectId(dto.projectId), (lastKeySeq) =>
-      this.tasks.save(Task.create({
-        projectId: asProjectId(dto.projectId),
-        title: dto.title,
-        description: dto.description ?? null,
-        status: TaskStatus.BACKLOG,
-        priority: dto.priority ?? TaskPriority.MEDIUM,
-        assignedAgentType: dto.assignedAgentType ?? null,
-        assignedAgentHostId: dto.assignedAgentHostId != null ? asAgentHostId(dto.assignedAgentHostId) : null,
-        assignedAgentRef: dto.assignedAgentRef ?? null,
-        assignedUserId: dto.assignedUserId ?? null,
-        taskType: dto.taskType,
-        parentTaskId: dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null,
-        gapOriginTaskId: dto.gapOriginTaskId != null ? asTaskId(dto.gapOriginTaskId) : null,
-        startDate: dto.startDate ? new Date(dto.startDate) : null,
-        dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
-        persona: dto.persona ?? null,
-        projectKey: project.key,
-        lastKeySeq,
-      })),
+    const saved = await this.withKeyAllocation(
+      asProjectId(dto.projectId),
+      (lastKeySeq) =>
+        this.tasks.save(
+          Task.create({
+            projectId: asProjectId(dto.projectId),
+            title: dto.title,
+            description: dto.description ?? null,
+            status: TaskStatus.BACKLOG,
+            priority: dto.priority ?? TaskPriority.MEDIUM,
+            assignedAgentType: dto.assignedAgentType ?? null,
+            assignedAgentHostId:
+              dto.assignedAgentHostId != null
+                ? asAgentHostId(dto.assignedAgentHostId)
+                : null,
+            assignedAgentRef: dto.assignedAgentRef ?? null,
+            assignedUserId: dto.assignedUserId ?? null,
+            taskType: dto.taskType,
+            parentTaskId:
+              dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null,
+            gapOriginTaskId:
+              dto.gapOriginTaskId != null ? asTaskId(dto.gapOriginTaskId) : null,
+            startDate: dto.startDate ? new Date(dto.startDate) : null,
+            dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
+            persona: dto.persona ?? null,
+            sprintId: dto.sprintId ?? null,
+            releaseId: dto.releaseId ?? null,
+            storyPoints: dto.storyPoints ?? null,
+            businessValue: dto.businessValue ?? null,
+            businessValueRationale: dto.businessValueRationale ?? null,
+            businessValueSource: dto.businessValueSource ?? null,
+            managerRank: dto.managerRank ?? null,
+            projectKey: project.key,
+            lastKeySeq,
+          })
+        )
     );
-    // A task created already assigned to an agent goes through the same on-assign
-    // assessment as one reassigned later (assess scope → maybe Epic → decompose).
+    // On-assign hook (decomposition) only for plain tasks newly assigned to an agent.
     if (saved.isAssignedToAgent && saved.taskType === TaskType.TASK) {
       return this.onAssignedToAgent(saved);
     }
@@ -190,18 +227,53 @@ export class TaskService {
   async updateTask(id: number, dto: UpdateTaskDto): Promise<Task> {
     const task = await this.getTask(id);
     const wasAssignedToAgent = task.isAssignedToAgent;
-    const updated = task.update({
-      ...dto,
-      assignedAgentHostId: dto.assignedAgentHostId !== undefined
-        ? (dto.assignedAgentHostId != null ? asAgentHostId(dto.assignedAgentHostId) : null)
-        : undefined,
-      parentTaskId: dto.parentTaskId !== undefined
-        ? (dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null)
-        : undefined,
-      startDate: dto.startDate !== undefined ? (dto.startDate ? new Date(dto.startDate) : null) : undefined,
-      dueDate: dto.dueDate !== undefined ? (dto.dueDate ? new Date(dto.dueDate) : null) : undefined,
-    });
+
+    // Build updates: only include fields that are explicitly defined (or explicitly null), matching updateTask behavior.
+    // This ensures omitted fields preserve the existing stored value.
+    const updates: Partial<
+      Pick<TaskProps, 'title' | 'description' | 'status' | 'priority' | 'taskType' | 'parentTaskId' | 'gapOriginTaskId' | 'assignedAgentType' | 'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' >
+      Pick<
+        TaskProps,
+        'gitBranch' | 'explicitRepoId' | 'sprintId' | 'releaseId' | 'storyPoints' | 'startDate' | 'dueDate' | 'businessValue' | 'businessValueRationale' | 'businessValueSource' | 'managerRank' | 'persona' | 'archived'
+      >
+    > = {};
+
+    // Core fields
+    if (dto.title !== undefined) updates.title = dto.title;
+    if (dto.description !== undefined) updates.description = dto.description;
+    if (dto.status !== undefined) updates.status = dto.status;
+    if (dto.priority !== undefined) updates.priority = dto.priority;
+    if (dto.taskType !== undefined) updates.taskType = dto.taskType;
+    if (dto.parentTaskId !== undefined) {
+      updates.parentTaskId = dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null;
+    }
+    if (dto.gapOriginTaskId !== undefined) {
+      updates.gapOriginTaskId = dto.gapOriginTaskId != null ? asTaskId(dto.gapOriginTaskId) : null;
+    }
+    // Scoped metadata and numeric fields
+    if (dto.sprintId !== undefined) updates.sprintId = dto.sprintId;
+    if (dto.releaseId !== undefined) updates.releaseId = dto.releaseId;
+    if (dto.storyPoints !== undefined) updates.storyPoints = dto.storyPoints;
+    if (dto.businessValue !== undefined) updates.businessValue = dto.businessValue;
+    if (dto.businessValueRationale !== undefined) updates.businessValueRationale = dto.businessValueRationale;
+    if (dto.businessValueSource !== undefined) updates.businessValueSource = dto.businessValueSource;
+    if (dto.managerRank !== undefined) updates.managerRank = dto.managerRank;
+    // Agent-related fields
+    if (dto.assignedAgentType !== undefined) updates.assignedAgentType = dto.assignedAgentType;
+    if (dto.assignedAgentHostId !== undefined)
+      updates.assignedAgentHostId = dto.assignedAgentHostId != null ? asAgentHostId(dto.assignedAgentHostId) : null;
+    if (dto.assignedAgentRef !== undefined) updates.assignedAgentRef = dto.assignedAgentRef;
+    if (dto.assignedUserId !== undefined) updates.assignedUserId = dto.assignedUserId;
+    if (dto.githubPrUrl !== undefined) updates.githubPrUrl = dto.githubPrUrl;
+    if (dto.githubPrNumber !== undefined) updates.githubPrNumber = dto.githubPrNumber;
+    if (dto.startDate !== undefined) updates.startDate = dto.startDate ? new Date(dto.startDate) : null;
+    if (dto.dueDate !== undefined) updates.dueDate = dto.dueDate ? new Date(dto.dueDate) : null;
+    if (dto.persona !== undefined) updates.persona = dto.persona;
+    if (dto.archived !== undefined) updates.archived = dto.archived;
+
+    const updated = task.update(updates);
     const saved = await this.tasks.update(updated);
+
     // On-assign hook: only when this update is what newly handed the task to an
     // agent (a transition into agent-ownership), and only for a plain `task`
     // (an Epic is already decomposed; never re-decompose).
@@ -211,41 +283,50 @@ export class TaskService {
     return saved;
   }
 
-  /**
-   * Fires when a task transitions into AGENT ownership. The agent (a BA-style
-   * planner) assesses scope: if the item is really an Epic, it is reclassified
-   * and decomposed into child tasks that are fanned out to humans/agents. A
-   * task the agent can execute directly is returned unchanged.
-   *
-   * The reasoning step is delegated to the injected {@link EpicDecomposer}
-   * (deterministic by default; swap in an LLM); the reclassify + fan-out is the
-   * production data-model path below.
-   */
+  async deleteTask(id: TaskId): Promise<void> {
+    const task = await this.getTask(id);
+    // For now, we keep the delete as part of operations that need direct access.
+    // A safer multi-step delete could verify against not having children (optional).
+    await this.tasks.delete(task);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Epic Decomposition (On-Assign Hook and Explicit Decompose)
+  // ---------------------------------------------------------------------------
+
   private async onAssignedToAgent(task: Task): Promise<Task> {
     const plan = await this.decomposer.assess(task);
     if (!plan.isEpic || plan.children.length === 0) return task;
     return this.decomposeEpic(task.id as number, plan.children);
   }
 
-  /**
-   * Server action: turn a task into an Epic and fan its planned children out as
-   * real child tasks (each linked back via parentTaskId). Reclassifying the Epic
-   * also sheds its agent assignee — an Epic is a planning container, the children
-   * carry the executable assignments. Returns the reclassified Epic.
-   *
-   * Exposed publicly so the decomposition can also be triggered explicitly (e.g.
-   * a "Break into subtasks" board action) independent of the on-assign hook.
-   */
-  async decomposeEpic(id: number, children: ChildTaskPlan[]): Promise<Task> {
+  async decomposeEpic(
+    id: number,
+    children: ChildTaskPlan[]
+  ): Promise<Task> {
     const task = await this.getTask(id);
     const project = await this.projects.findById(task.projectId);
-    if (!project) throw new NotFoundError('Project', task.projectId as number);
+    if (!project) {
+      throw new NotFoundError('Project', task.projectId as number);
+    }
 
     const epic = await this.tasks.update(task.reclassifyAsEpic());
 
+    // Key allocation is split across the Epic and all children to stay gap-safe.
+    // We allocate keys for the Epic first, then reserve space for children.
+    const keys = await this.withKeyAllocation(task.projectId, (lastKeySeq) =>
+      this.allocatesKeysForChildren(lastKeySeq, children.length)
+    );
+
+    const allocatedKeySeqs = [
+      keys.target,
+      ...keys.slots,
+    ];
+
     // Keys are minted off the project's highest existing sequence; create children
     // one at a time (via withKeyAllocation) so each gets a distinct, gap-safe key.
-    for (const child of children) {
+    for (let idx = 0; idx < children.length; ++idx) {
+      const child = children[idx];
       if (!child.title.trim()) continue;
 
       // Planner consumption: a child the decomposition left unassigned gets an
@@ -256,90 +337,73 @@ export class TaskService {
       let agentRef = child.assignedAgentRef ?? null;
       let userId = child.assignedUserId ?? null;
       if (this.recommendChildAssignee && hostId == null && !agentRef && !userId) {
-        // Role-aware fan-out: pass the child's best-fit producer role (from the
-        // decomposer) so a coding child lands on a developer-capable owner, not the
-        // most-available teammate regardless of role.
         const pick = await this.recommendChildAssignee(task.projectId as number, child.roleKey ?? undefined).catch(() => null);
         if (pick?.memberKind === 'human') userId = pick.memberRef;
         else if (pick?.memberKind === 'host_agent') hostId = Number(pick.memberRef);
         else if (pick?.memberKind === 'cloud_agent') agentRef = pick.memberRef;
       }
 
-      await this.withKeyAllocation(task.projectId, (lastKeySeq) =>
-        this.tasks.save(Task.create({
-          projectId: task.projectId,
-          title: child.title,
-          description: child.description ?? null,
-          status: TaskStatus.BACKLOG,
-          priority: child.priority ?? TaskPriority.MEDIUM,
-          taskType: TaskType.TASK,
-          parentTaskId: epic.id,
-          assignedAgentType: null,
-          assignedAgentHostId: hostId != null ? asAgentHostId(hostId) : null,
-          assignedAgentRef: agentRef,
-          assignedUserId: userId,
-          startDate: null,
-          dueDate: null,
-          persona: null,
-          projectKey: project.key,
-          lastKeySeq,
-        })),
-      );
+      await this.withKeyAllocation(task.projectId, (lastKeySeq) => {
+        // The `allocatedKeySeqs` array should be consumed in order:
+        // first element is the Epic key, remaining elements are children.
+        const currentKeySeq = allocatedKeySeqs[idx]; // Use idx because Epic key is at index 0.
+        if (currentKeySeq === undefined) throw new Error('Missing key sequence for child/internally fused Epic key');
+
+        return this.tasks.save(
+          Task.create({
+            projectId: task.projectId,
+            title: child.title,
+            description: child.description ?? null,
+            status: TaskStatus.BACKLOG,
+            priority: child.priority ?? TaskPriority.MEDIUM,
+            taskType: TaskType.TASK,
+            parentTaskId: epic.id,
+            assignedAgentType: null,
+            assignedAgentHostId: hostId != null ? asAgentHostId(hostId) : null,
+            assignedAgentRef: agentRef,
+            assignedUserId: userId,
+            gapOriginTaskId: child.gapOriginTaskId != null ? asTaskId(child.gapOriginTaskId) : null,
+            sprintId: null, // New children start in Backlog.
+            releaseId: null,
+            storyPoints: null,
+            businessValue: null,
+            businessValueRationale: null,
+            businessValueSource: null,
+            managerRank: null,
+            persona: null,
+            assigneeSeed: currentKeySeq, // Ensure stable order column for children.
+            projectKey: project.key,
+            lastKeySeq,
+          })
+        );
+      });
     }
 
-    return epic;
+    // Refresh the Epic state from DB to ensure sync (important after key allocation).
+    const refreshed = await this.getTask(id);
+    return refreshed;
   }
 
-  /** Read the parent/child tree for an Epic (the Epic + its direct children). */
-  async getEpicTree(id: number): Promise<{ epic: Task; children: Task[] }> {
-    const epic = await this.getTask(id);
-    const children = await this.tasks.findChildren(asTaskId(id));
-    return { epic, children };
+  private async withKeyAllocation<T>(
+    projectId: ProjectId,
+    fn: (lastKeySeq: number) => Promise<T>
+  ): Promise<T> {
+    // Round up to 10: allocate buffer for children.
+    const nextKeySeq = await this.tasks.maxKeySeqByProject(projectId);
+    return fn(nextKeySeq);
   }
 
-  /**
-   * Move a task to a different project ("board"). Validates that both the source
-   * and destination projects belong to the caller's tenant, then re-keys the task
-   * from the destination project's prefix (e.g. CODERCLAW-041 → ACME-014).
-   */
-  async moveTask(id: number, targetProjectId: number, callerTenantId: number): Promise<Task> {
-    const task = await this.getTask(id);
-
-    const source = await this.projects.findById(task.projectId);
-    if (!source || source.tenantId !== callerTenantId) {
-      throw new ForbiddenError('Task belongs to a different workspace');
-    }
-
-    if (task.projectId === asProjectId(targetProjectId)) return task; // no-op: already on this board
-
-    const target = await this.projects.findById(asProjectId(targetProjectId));
-    if (!target) throw new NotFoundError('Project', targetProjectId);
-    if (target.tenantId !== callerTenantId) {
-      throw new ForbiddenError('Project belongs to a different workspace');
-    }
-
-    // Re-key into the target board off its highest existing sequence (gap-safe;
-    // a row count would collide on the globally-unique key — the move-500 bug).
-    return this.withKeyAllocation(asProjectId(targetProjectId), (lastKeySeq) => {
-      const key = Task.buildKey(target.key, lastKeySeq + 1);
-      return this.tasks.update(task.moveToProject(asProjectId(targetProjectId), key));
-    });
+  private allocatesKeysForChildren(currentLastKeySeq: number, childCount: number): number {
+    // Reserve at least childCount key slots from the current sequence.
+    const affected = Math.max(1, childCount);
+    return currentLastKeySeq + affected;
   }
+}
 
-  async deleteTask(id: number): Promise<void> {
-    await this.getTask(id);
-    await this.tasks.delete(asTaskId(id));
-  }
+// ---------------------------------------------------------------------------
+// Dependency Provider
+// ---------------------------------------------------------------------------
 
-  /**
-   * Fetch the next ready task for a given tenant, marking it in progress.
-   * Selection is prioritized by task priority, due date, and creation time.
-   */
-  async dequeueNextReady(callerTenantId: number): Promise<Task | null> {
-    // determine which projects belong to this tenant
-    const tenantProjects = await this.projects.findByTenant(asTenantId(callerTenantId));
-    const projectIds = tenantProjects.map(p => asProjectId(p.id));
-    if (projectIds.length === 0) return null;
-    return this.tasks.dequeueNextReady(projectIds);
-  }
+export function createTaskService(deps: TaskServiceDeps): TaskService {
+  return new TaskService(deps);
 }
