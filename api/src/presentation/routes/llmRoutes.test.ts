@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { Context } from 'hono';
 import type { HonoEnv } from '../../env';
+import type { TenantLlmCredentials } from '../../application/llm/tenantProviderKeyService';
 
 // Hoisted mocks — vi.mock must declare the spies via vi.hoisted so the
 // factory closures see them.
@@ -10,6 +11,15 @@ const mocks = vi.hoisted(() => ({
   signJwt:    vi.fn(),
   buildDatabase: vi.fn(),
   llmProxyForPlan: vi.fn(),
+  resolveTenantLlmCredentials: vi.fn<() => Promise<TenantLlmCredentials>>(async () => ({
+    anthropicOAuthToken: null,
+    openaiCodexAuth: null,
+    xaiOAuthToken: null,
+    vendorKeys: {},
+    configuredProviders: [],
+    unresolvedReasons: {},
+    vendorPriority: [],
+  })),
 }));
 
 vi.mock('../../infrastructure/auth/HashService', () => ({
@@ -36,12 +46,50 @@ vi.mock('../../application/llm/LlmProxyService', async (orig) => ({
 vi.mock('../../application/llm/tenantProviderKeyService', async (orig) => ({
   ...(await orig<typeof import('../../application/llm/tenantProviderKeyService')>()),
   resolveAnthropicOAuthToken: async () => null,
+  resolveTenantLlmCredentials: mocks.resolveTenantLlmCredentials,
 }));
 
 // Imports must follow the vi.mock calls above so the mocks are in place.
-const { requireTenantAccess } = await import('./llmRoutes');
+const { requireTenantAccess, byoModelsFor } = await import('./llmRoutes');
+const { vendorForModel } = await import('../../application/llm/vendors');
 const { sanitizeToolName, restoreToolName, sanitizeToolCallId, sanitizeRequestToolCalls, restoreResponseToolNames, StreamingToolNameRestorer } =
   await import('../../application/llm/toolNameSanitizer');
+
+beforeEach(() => {
+  mocks.resolveTenantLlmCredentials.mockResolvedValue({
+    anthropicOAuthToken: null,
+    openaiCodexAuth: null,
+    xaiOAuthToken: null,
+    vendorKeys: {},
+    configuredProviders: [],
+    unresolvedReasons: {},
+    vendorPriority: [],
+  });
+});
+
+describe('byoModelsFor', () => {
+  it('uses the bare direct-Anthropic ids, not the OpenRouter anthropic namespace', () => {
+    const models = byoModelsFor(['anthropic']);
+    expect(models.map((m) => m.id)).toContain('claude-sonnet-5');
+    expect(models.some((m) => m.id.startsWith('anthropic/'))).toBe(false);
+    expect(models.every((m) => vendorForModel(m.id) === 'anthropic')).toBe(true);
+  });
+
+  it('projects bespoke and OpenAI-compatible providers onto tenant-keyed routes', () => {
+    const cases = [
+      { provider: 'google' as const, vendor: 'googleai', prefix: 'googleai/' },
+      { provider: 'openai' as const, vendor: 'openai', prefix: 'direct/openai/' },
+      { provider: 'meta' as const, vendor: 'meta', prefix: 'direct/meta/' },
+      { provider: 'xai' as const, vendor: 'xai', prefix: 'direct/xai/' },
+    ];
+    for (const { provider, vendor, prefix } of cases) {
+      const models = byoModelsFor([provider]);
+      expect(models.length).toBeGreaterThan(0);
+      expect(models.every((m) => m.id.startsWith(prefix))).toBe(true);
+      expect(models.every((m) => vendorForModel(m.id) === vendor)).toBe(true);
+    }
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Tool-call sanitizer — one gateway-side pass that makes tool NAMES (reversible
@@ -389,6 +437,67 @@ const fakeExecutionCtx = {
   waitUntil: (_p: Promise<unknown>) => undefined,
   passThroughOnException: () => undefined,
 } as unknown as ExecutionContext;
+
+describe('POST /provider-keys/:provider/test', () => {
+  beforeEach(() => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(mockDb({
+      keyRow: { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'pro', billingStatus: 'active', tokenDailyLimitOverride: null },
+    }));
+    mocks.resolveTenantLlmCredentials.mockResolvedValue({
+      anthropicOAuthToken: null,
+      openaiCodexAuth: null,
+      xaiOAuthToken: null,
+      vendorKeys: { anthropic: 'sk-ant-test' },
+      configuredProviders: ['anthropic'],
+      unresolvedReasons: {},
+      vendorPriority: ['anthropic'],
+    });
+  });
+
+  it('returns a handled 200 result when the upstream credential test fails', async () => {
+    mocks.llmProxyForPlan.mockReturnValue({
+      complete: vi.fn(async () => ({
+        response: new Response(JSON.stringify({ error: { message: 'invalid x-api-key' } }), { status: 401 }),
+      })),
+    });
+    const req = new Request('http://test.local/provider-keys/anthropic/test', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer bfk_test' },
+    });
+
+    const res = await buildApp().request(req, {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      ok: false,
+      status: 'failed',
+      code: 'provider_test_failed',
+      error: 'anthropic connection test failed: invalid x-api-key',
+      details: { provider: 'anthropic', model: 'claude-sonnet-5', upstreamStatus: 401 },
+    });
+  });
+
+  it('returns a handled 200 result when the configured credential is unusable', async () => {
+    mocks.resolveTenantLlmCredentials.mockResolvedValue({
+      anthropicOAuthToken: null,
+      openaiCodexAuth: null,
+      xaiOAuthToken: null,
+      vendorKeys: {},
+      configuredProviders: ['anthropic'],
+      unresolvedReasons: { anthropic: 'revoked' },
+      vendorPriority: ['anthropic'],
+    });
+    const req = new Request('http://test.local/provider-keys/anthropic/test', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer bfk_test' },
+    });
+
+    const res = await buildApp().request(req, {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: false, status: 'revoked' });
+  });
+});
 
 describe('POST /v1/chat/completions strict-pin gate', () => {
   beforeEach(() => {
