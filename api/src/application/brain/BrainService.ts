@@ -18,6 +18,7 @@ import {
 import { ideProxy, explicitModelPreemptsByo, readProxyChoice, type LlmProxyService } from '../llm/LlmProxyService';
 import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
 import { classifyReplyAccount, buildReplyProvenance } from '../llm/replyProvenance';
+import { recordActivity, cloudAgentActor, buildModelActivityMetadata } from '../activity/activityLog';
 import { getProjectEvermindHead, recordEvermindServeOutcome } from '../llm/projectEvermind';
 import { looksLikeCoherentText, EVERMIND_ANSWER_MIN_CHARS } from '../llm/projectMemory';
 import { learnFromPersistedTurns } from './brainEvermindLearning';
@@ -1111,6 +1112,32 @@ export class BrainService {
       provenance,
     });
     const [posted] = await this.appendRaw(chatId, [{ role: 'assistant', content: text, metadata }]);
+
+    // Audit: an agent ACTED in this chat, and on WHICH MODEL. Previously a chat turn
+    // wrote no activity row at all, so the audit timeline could not answer "what model
+    // did this agent run on" — the provenance existed only on the chat message. Same
+    // `provenance` object, projected through the ONE shared metadata builder the gateway
+    // default-agent turn also uses. Best-effort by design (recordActivity swallows) —
+    // `llm_usage_log` remains the billing source of truth.
+    await recordActivity(env, this.db, {
+      tenantId,
+      projectId: projectHint,
+      actor: cloudAgentActor(input.agentRef, agentName),
+      verb: 'agent.replied',
+      targetType: 'chat',
+      targetId: chatId,
+      targetLabel: (chat as unknown as { title?: string | null }).title ?? null,
+      summary: `${agentName} replied in chat #${chatId}${provenance.model ? ` using ${provenance.model}` : ''}`,
+      metadata: buildModelActivityMetadata({
+        via: 'brain-chat',
+        model: provenance.model,
+        vendor: provenance.vendor,
+        account: provenance.account,
+        byoFunded: lastByoFunded,
+        evermind: provenance.evermind,
+        extra: { chatId },
+      }),
+    });
 
     // Contribute this @agent reply to the project's Evermind through the SAME
     // learn-on-persist path the Brain message route uses. Previously the addressed-reply

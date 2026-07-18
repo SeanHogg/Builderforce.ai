@@ -8,7 +8,7 @@ import { applyPromptCaching, modelSupportsExplicitCaching } from './promptCachin
 
 describe('modelSupportsExplicitCaching', () => {
   it('matches OpenRouter Anthropic catalog ids', () => {
-    expect(modelSupportsExplicitCaching('anthropic/claude-sonnet-4.6')).toBe(true);
+    expect(modelSupportsExplicitCaching('anthropic/claude-sonnet-5')).toBe(true);
     expect(modelSupportsExplicitCaching('anthropic/claude-haiku-4.5')).toBe(true);
   });
 
@@ -36,7 +36,7 @@ describe('applyPromptCaching — gating', () => {
 
   it('returns the input for empty messages', () => {
     const messages: Array<Record<string, unknown>> = [];
-    expect(applyPromptCaching(messages, 'anthropic/claude-sonnet-4.6')).toBe(messages);
+    expect(applyPromptCaching(messages, 'anthropic/claude-sonnet-5')).toBe(messages);
   });
 
   it('respects caller-managed cache_control and leaves placement untouched', () => {
@@ -44,7 +44,7 @@ describe('applyPromptCaching — gating', () => {
       { role: 'system', content: [{ type: 'text', text: 'sys', cache_control: { type: 'ephemeral' } }] },
       { role: 'user', content: 'hi' },
     ];
-    expect(applyPromptCaching(messages, 'anthropic/claude-sonnet-4.6')).toBe(messages);
+    expect(applyPromptCaching(messages, 'anthropic/claude-sonnet-5')).toBe(messages);
   });
 });
 
@@ -54,7 +54,7 @@ describe('applyPromptCaching — system prefix', () => {
       { role: 'system', content: 'You are a helpful agent.' },
       { role: 'user', content: 'hi' },
     ];
-    const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-4.6');
+    const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-5');
     expect(out[0]!.content).toEqual([
       { type: 'text', text: 'You are a helpful agent.', cache_control: { type: 'ephemeral' } },
     ]);
@@ -79,7 +79,7 @@ describe('applyPromptCaching — system prefix', () => {
       { role: 'system', content: 'sys' },
       { role: 'user', content: 'hi' },
     ];
-    const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-4.6');
+    const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-5');
     expect(out).not.toBe(messages);
     expect(messages[0]!.content).toBe('sys'); // original untouched
     expect(out[1]).toBe(messages[1]); // unmarked messages reused by reference
@@ -94,7 +94,7 @@ describe('applyPromptCaching — history boundary', () => {
       { role: 'assistant', content: 'a1' },
       { role: 'user', content: 'q2' },
     ];
-    const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-4.6');
+    const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-5');
     // system (index 0) and history boundary (index 2 = assistant a1) marked.
     expect(out[0]!.content).toEqual([{ type: 'text', text: 'sys', cache_control: { type: 'ephemeral' } }]);
     expect(out[2]!.content).toEqual([{ type: 'text', text: 'a1', cache_control: { type: 'ephemeral' } }]);
@@ -108,7 +108,7 @@ describe('applyPromptCaching — history boundary', () => {
       { role: 'tool', content: 'tool-result' },
       { role: 'user', content: 'q' },
     ];
-    const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-4.6');
+    const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-5');
     expect(out[1]!.content).toBe('tool-result'); // tool turn not marked
   });
 });
@@ -123,7 +123,7 @@ describe('applyPromptCaching — cache TTL', () => {
       { role: 'system', content: 'sys' },
       { role: 'user', content: 'hi' },
     ];
-    const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-4.6');
+    const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-5');
     expect(out[0]!.content).toEqual([{ type: 'text', text: 'sys', cache_control: { type: 'ephemeral' } }]);
   });
 
@@ -134,7 +134,7 @@ describe('applyPromptCaching — cache TTL', () => {
       { role: 'assistant', content: 'a1' },
       { role: 'user', content: 'q2' },
     ];
-    const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-4.6', '1h');
+    const out = applyPromptCaching(messages, 'anthropic/claude-sonnet-5', '1h');
     expect(out[0]!.content).toEqual([{ type: 'text', text: 'sys', cache_control: { type: 'ephemeral', ttl: '1h' } }]);
     expect(out[2]!.content).toEqual([{ type: 'text', text: 'a1', cache_control: { type: 'ephemeral', ttl: '1h' } }]);
     expect(out[3]!.content).toBe('q2'); // final turn still unmarked

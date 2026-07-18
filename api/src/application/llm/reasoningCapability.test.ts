@@ -4,11 +4,15 @@ import { detectReasoningSupport, reasoningParamsForModel } from './reasoningCapa
 describe('detectReasoningSupport', () => {
   it('classifies bare claude-* as direct-Anthropic thinking', () => {
     expect(detectReasoningSupport('claude-opus-4-8').kind).toBe('anthropic-thinking');
-    expect(detectReasoningSupport('claude-sonnet-4-6').kind).toBe('anthropic-thinking');
   });
 
   it('does NOT treat OpenRouter-routed anthropic/claude-* as thinking-capable (OpenAI shape)', () => {
-    expect(detectReasoningSupport('anthropic/claude-sonnet-4.6').kind).toBe('none');
+    expect(detectReasoningSupport('anthropic/claude-sonnet-5').kind).toBe('none');
+  });
+
+  it('does not send legacy manual thinking to adaptive-only Sonnet 5', () => {
+    expect(detectReasoningSupport('claude-sonnet-5').kind).toBe('none');
+    expect(reasoningParamsForModel('claude-sonnet-5', { reasoningLevel: 'on' })).toBeUndefined();
   });
 
   it('classifies OpenAI o-series / gpt-5 (bare or openai/ prefixed) as reasoning', () => {
@@ -34,7 +38,7 @@ describe('reasoningParamsForModel', () => {
   });
 
   it('emits Anthropic thinking (medium default) when only reasoningLevel is on', () => {
-    expect(reasoningParamsForModel('claude-sonnet-4-6', { reasoningLevel: 'on' })).toEqual({
+    expect(reasoningParamsForModel('claude-opus-4-8', { reasoningLevel: 'on' })).toEqual({
       thinking: { type: 'enabled', budget_tokens: 8192 },
     });
   });

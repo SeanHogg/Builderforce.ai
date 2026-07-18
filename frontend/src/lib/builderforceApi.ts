@@ -2520,6 +2520,16 @@ export interface ProviderDiagnostic {
   usage: { periodDays: number; requests: number; tokens: number; lastUsedAt: string | null };
 }
 
+export interface ProviderConnectionTestResult {
+  ok: boolean;
+  status: string;
+  model?: string;
+  testedAt?: string;
+  error?: string;
+  code?: string;
+  details?: { provider: LlmProvider; model: string; upstreamStatus: number };
+}
+
 export const providerKeysApi = {
   /** Configured providers + how each authenticates (no secrets returned). */
   list: (): Promise<{ providers: LlmProvider[]; details: ProviderKeySummary[] }> =>
@@ -2537,8 +2547,8 @@ export const providerKeysApi = {
   status: (provider: LlmProvider): Promise<ProviderDiagnostic> =>
     request<ProviderDiagnostic>(`/llm/provider-keys/${provider}/status`),
 
-  test: (provider: LlmProvider): Promise<{ ok: boolean; status: string; model?: string; testedAt?: string }> =>
-    request<{ ok: boolean; status: string; model?: string; testedAt?: string }>(`/llm/provider-keys/${provider}/test`, { method: 'POST' }),
+  test: (provider: LlmProvider): Promise<ProviderConnectionTestResult> =>
+    request<ProviderConnectionTestResult>(`/llm/provider-keys/${provider}/test`, { method: 'POST' }),
 
   /** Set the BYO precedence — the ordered provider list (most-preferred first) the
    *  auto-select cloud pin leads its connected flagships by (e.g. Meta first). */
