@@ -27,8 +27,15 @@ export type {
   StreamHandlers,
   StreamChatOptions,
   StreamChatResult,
+  CompletionMetadata,
   AssembledToolCall,
 } from './streamChatCompletion';
+
+// Composer Effort → real request params (max_tokens + vendor-neutral reasoning
+// intent) + the level's prose nudge. The ONE effort table: hosts render their
+// menu from it and the request builder consumes it, so they cannot drift.
+export { effortProfile, isEffort, reasoningForRun } from './effort';
+export type { Effort, EffortProfile, ReasoningLevel, ReasoningIntent } from './effort';
 
 // Client-side image prep for vision messages (downscale → inline data URL)
 export { prepareImageDataUrl } from './imagePrep';

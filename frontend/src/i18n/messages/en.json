@@ -7810,7 +7810,16 @@
       "system": "System",
       "unknown": "Unknown"
     },
+    "model": {
+      "tooltip": "Served by model {model}",
+      "accountOwn": "Your account",
+      "accountShared": "Shared pool",
+      "accountSharedUnused": "Shared pool (your account unused)"
+    },
     "verb": {
+      "agent": {
+        "replied": "replied in a chat"
+      },
       "task": {
         "created": "created a ticket",
         "updated": "updated a ticket",
