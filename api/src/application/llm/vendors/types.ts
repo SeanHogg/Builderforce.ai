@@ -63,7 +63,7 @@ export interface VendorEnv {
   /** Anthropic (Claude) API key — direct call to api.anthropic.com/v1/messages.
    *  The last-resort reliability floor for cloud CODING runs: when every
    *  OpenRouter-routed paid coder is unreachable, the coding cascade falls back to
-   *  Claude directly on this key (claude-sonnet-4-6 → claude-opus-4-8). */
+   *  Claude directly on this key (claude-sonnet-5 → claude-opus-4-8). */
   CLAUDE_API_KEY?: string | null;
   /** A connected tenant's Claude Pro/Max SUBSCRIPTION access token (OAuth). When
    *  set, the `anthropic` vendor authenticates with `Authorization: Bearer` + the

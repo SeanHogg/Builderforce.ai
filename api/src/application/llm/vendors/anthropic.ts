@@ -6,7 +6,7 @@
  * directly when every OpenRouter-routed paid coder is unreachable (OpenRouter
  * outage, key/credit exhausted).
  *
- * Why this exists separately from the `anthropic/claude-sonnet-4.6` OpenRouter
+ * Why this exists separately from the `anthropic/claude-sonnet-5` OpenRouter
  * slug already in the coding pool: that one is metered/served through OpenRouter
  * and shares OpenRouter's availability. This module is a vendor-diverse, fully
  * independent path on a dedicated Anthropic key — so an OpenRouter-wide failure
@@ -73,7 +73,7 @@ const MAX_OUTPUT_TOKENS = 32_000;
 // reliability floor, ordered cheapest-first in the fallback chain: Sonnet first,
 // Opus only if Sonnet is also down.
 const CATALOG: ReadonlyArray<VendorModelEntry> = [
-  { id: 'claude-sonnet-4-6', tier: 'PREMIUM', label: 'Claude Sonnet 4.6 (Anthropic direct)', brand: 'Anthropic', capabilities: ['tools', 'structured_output', 'vision'] },
+  { id: 'claude-sonnet-5',   tier: 'PREMIUM', label: 'Claude Sonnet 5 (Anthropic direct)',   brand: 'Anthropic', capabilities: ['tools', 'structured_output', 'vision'] },
   { id: 'claude-opus-4-8',   tier: 'ULTRA',   label: 'Claude Opus 4.8 (Anthropic direct)',   brand: 'Anthropic', capabilities: ['tools', 'structured_output', 'vision'] },
 ];
 

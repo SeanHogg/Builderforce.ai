@@ -27,6 +27,7 @@ export function resolveCloudSurface(agentSurface: string | undefined | null, has
 }
 
 export type CloudExecutor = 'container' | 'durable' | 'worker';
+export type CloudDispatchTarget = Exclude<CloudExecutor, 'worker'> | 'unavailable';
 
 /**
  * Decide which cloud executor a run lands on, given the resolved capabilities.
@@ -37,18 +38,19 @@ export type CloudExecutor = 'container' | 'durable' | 'worker';
  *   1. `container` — only when the run wants it, the binding exists, AND a health
  *      probe proved the container is actually live;
  *   2. `durable` (CloudRunnerDO) — the surviving serverless executor, whenever bound;
- *   3. `worker` — last-resort in-request loop (does NOT survive long runs); only
- *      when no durable runner is bound.
+ *   3. `unavailable` — no durable executor exists. Dispatch must fail fast rather
+ *      than start the in-request Worker loop, which cannot reliably survive a
+ *      multi-step run's background-execution wall.
  */
 export function chooseCloudExecutor(caps: {
   wantsContainer: boolean;
   hasContainerBinding: boolean;
   containerHealthy: boolean;
   hasCloudRunner: boolean;
-}): CloudExecutor {
+}): CloudDispatchTarget {
   if (caps.wantsContainer && caps.hasContainerBinding && caps.containerHealthy) return 'container';
   if (caps.hasCloudRunner) return 'durable';
-  return 'worker';
+  return 'unavailable';
 }
 
 /**

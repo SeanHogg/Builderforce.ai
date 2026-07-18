@@ -24,7 +24,7 @@ import type { VendorId } from '../../application/llm/vendors';
 
 const env: CooldownEnv = {}; // no KV → in-memory backend
 const VENDOR: VendorId = 'anthropic';
-const MODEL = 'claude-sonnet-4-6';
+const MODEL = 'claude-sonnet-5';
 const CAPACITY_HINT = `${CAPACITY_LIMIT_MARKER} (upstream 400): You have reached your specified API usage limits.`;
 
 beforeEach(() => _resetMemoryCooldowns());

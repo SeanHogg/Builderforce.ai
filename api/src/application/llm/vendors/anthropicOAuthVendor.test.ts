@@ -48,7 +48,7 @@ describe('anthropic vendor — apiKeyFrom', () => {
 describe('anthropic vendor — subscription (OAuth) call', () => {
   it('uses Bearer + oauth beta, drops x-api-key, and injects the Claude Code identity', async () => {
     const cap = capture();
-    await anthropicModule.call({ apiKey: 'oauth:sk-ant-oat-123', model: 'claude-sonnet-4-6', messages: baseMessages });
+    await anthropicModule.call({ apiKey: 'oauth:sk-ant-oat-123', model: 'claude-sonnet-5', messages: baseMessages });
 
     const h = cap.headers();
     expect(h['authorization']).toBe('Bearer sk-ant-oat-123');
@@ -68,14 +68,14 @@ describe('anthropic vendor — credential hygiene (code-0 root cause)', () => {
     // SYNCHRONOUSLY — the cascade records that as a code-0 "no response" network
     // failure. Trimming is what keeps the connected account usable.
     const cap = capture();
-    await anthropicModule.call({ apiKey: 'oauth:sk-ant-oat-123\n', model: 'claude-sonnet-4-6', messages: baseMessages });
+    await anthropicModule.call({ apiKey: 'oauth:sk-ant-oat-123\n', model: 'claude-sonnet-5', messages: baseMessages });
     expect(cap.headers()['authorization']).toBe('Bearer sk-ant-oat-123');
   });
 
   it('surfaces an EMPTY subscription token as a clear auth error (not a mystifying network throw)', async () => {
     capture();
     await expect(
-      anthropicModule.call({ apiKey: 'oauth:   ', model: 'claude-sonnet-4-6', messages: baseMessages }),
+      anthropicModule.call({ apiKey: 'oauth:   ', model: 'claude-sonnet-5', messages: baseMessages }),
     ).rejects.toMatchObject({ status: 401, vendorId: 'anthropic' });
   });
 });
@@ -83,7 +83,7 @@ describe('anthropic vendor — credential hygiene (code-0 root cause)', () => {
 describe('anthropic vendor — operator API-key call (unchanged)', () => {
   it('uses x-api-key, no Bearer/oauth beta, and no identity injection', async () => {
     const cap = capture();
-    await anthropicModule.call({ apiKey: 'sk-ant-key', model: 'claude-sonnet-4-6', messages: baseMessages });
+    await anthropicModule.call({ apiKey: 'sk-ant-key', model: 'claude-sonnet-5', messages: baseMessages });
 
     const h = cap.headers();
     expect(h['x-api-key']).toBe('sk-ant-key');

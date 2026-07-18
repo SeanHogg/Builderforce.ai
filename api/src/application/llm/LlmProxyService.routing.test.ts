@@ -17,9 +17,9 @@ const jsonObjectBody = {
   response_format: { type: 'json_object' },
 } as unknown as ChatCompletionRequest;
 
-// Verified tiers (see catalog): claude-sonnet-4.6 / gpt-4.1 / gemini-2.5-pro = PREMIUM,
+// Verified tiers (see catalog): claude-sonnet-5 / gpt-4.1 / gemini-2.5-pro = PREMIUM,
 // gemini-2.5-flash-lite / deepseek-v4-flash = STANDARD, *:free = FREE.
-const CLAUDE = 'anthropic/claude-sonnet-4.6';   // PREMIUM, high-ceiling, structured
+const CLAUDE = 'anthropic/claude-sonnet-5';     // PREMIUM, high-ceiling, structured
 const GPT = 'openai/gpt-4.1';                    // PREMIUM, high-ceiling, structured
 const GEMINI_LITE = 'google/gemini-2.5-flash-lite'; // STANDARD, LOW-ceiling
 const GEMINI_PRO = 'google/gemini-2.5-pro';      // PREMIUM, LOW-ceiling
@@ -32,7 +32,7 @@ describe('isLowSchemaCeilingModel', () => {
     expect(isLowSchemaCeilingModel('google/gemini-2.5-flash-lite')).toBe(true);
     expect(isLowSchemaCeilingModel('googleai/gemini-2.5-flash')).toBe(true);
     expect(isLowSchemaCeilingModel('google/gemini-2.5-pro')).toBe(true);
-    expect(isLowSchemaCeilingModel('anthropic/claude-sonnet-4.6')).toBe(false);
+    expect(isLowSchemaCeilingModel('anthropic/claude-sonnet-5')).toBe(false);
     expect(isLowSchemaCeilingModel('openai/gpt-4.1')).toBe(false);
   });
 });

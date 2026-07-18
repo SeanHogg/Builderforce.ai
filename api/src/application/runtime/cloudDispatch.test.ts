@@ -22,9 +22,10 @@ describe('chooseCloudExecutor', () => {
   it('uses durable for non-container runs (V1 / V2 durable)', () => {
     expect(chooseCloudExecutor({ wantsContainer: false, hasContainerBinding: false, containerHealthy: false, hasCloudRunner: true })).toBe('durable');
   });
-  it('falls to the in-request worker only when no durable runner is bound', () => {
-    expect(chooseCloudExecutor({ wantsContainer: false, hasContainerBinding: false, containerHealthy: false, hasCloudRunner: false })).toBe('worker');
-    expect(chooseCloudExecutor({ wantsContainer: true, hasContainerBinding: true, containerHealthy: false, hasCloudRunner: false })).toBe('worker');
+  it('fails closed when no durable runner is bound', () => {
+    // Never return the old in-request Worker executor: that multi-step loop times out.
+    expect(chooseCloudExecutor({ wantsContainer: false, hasContainerBinding: false, containerHealthy: false, hasCloudRunner: false })).toBe('unavailable');
+    expect(chooseCloudExecutor({ wantsContainer: true, hasContainerBinding: true, containerHealthy: false, hasCloudRunner: false })).toBe('unavailable');
   });
 });
 

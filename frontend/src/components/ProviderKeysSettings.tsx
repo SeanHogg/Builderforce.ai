@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { useToast } from '@/components/ToastProvider';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { ConsumptionMeterCard } from '@/components/UsageMeter';
 import { llmApi, providerKeysApi, type LlmUsageStats, type ProviderAuthType, type ProviderDiagnostic, type LlmProvider } from '@/lib/builderforceApi';
@@ -177,20 +178,27 @@ function ProviderConnectionCard({
   const [oauthState, setOauthState] = useState('');
   const [diagnostic, setDiagnostic] = useState<ProviderDiagnostic | null>(null);
   const [testing, setTesting] = useState(false);
-  const [testMessage, setTestMessage] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<{ message: string; ok: boolean } | null>(null);
   const confirm = useConfirm();
+  const toast = useToast();
 
   const loadDiagnostic = () => providerKeysApi.status(config.id).then(setDiagnostic).catch((e: Error) => setError(e.message));
   useEffect(() => { void loadDiagnostic(); }, [config.id, authType]);
 
   const testConnection = async () => {
-    setTesting(true); setTestMessage(null); setError(null);
+    setTesting(true); setTestResult(null); setError(null);
     try {
       const result = await providerKeysApi.test(config.id);
-      setTestMessage(result.ok ? `Connection verified${result.model ? ` with ${result.model}` : ''}.` : `Test failed: ${result.status}`);
+      const message = result.ok
+        ? `Connection verified${result.model ? ` with ${result.model}` : ''}.`
+        : result.error ?? `Connection test failed: ${result.status.replaceAll('_', ' ')}.`;
+      setTestResult({ message, ok: result.ok });
+      if (!result.ok) toast.error(message, { title: `${config.label} connection failed` });
       await loadDiagnostic();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Connection test failed');
+      const message = e instanceof Error ? e.message : 'Connection test failed';
+      setTestResult({ message, ok: false });
+      toast.error(message, { title: `${config.label} connection failed` });
     } finally { setTesting(false); }
   };
 
@@ -283,7 +291,14 @@ function ProviderConnectionCard({
           Last 30 days: {(diagnostic?.usage.requests ?? 0).toLocaleString()} requests · {(diagnostic?.usage.tokens ?? 0).toLocaleString()} tokens
           {diagnostic?.usage.lastUsedAt ? ` · Last used ${new Date(diagnostic.usage.lastUsedAt).toLocaleString()}` : ''}
         </div>
-        {testMessage && <div style={{ fontSize: 11.5, color: 'rgba(34,197,94,0.9)', marginTop: 7 }}>{testMessage}</div>}
+        {testResult && (
+          <div
+            role={testResult.ok ? 'status' : 'alert'}
+            style={{ fontSize: 11.5, color: testResult.ok ? 'rgba(34,197,94,0.9)' : 'var(--error, #ef4444)', marginTop: 7 }}
+          >
+            {testResult.message}
+          </div>
+        )}
       </div>
 
       {error && <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 10 }}>{t('errorPrefix', { message: error })}</div>}

@@ -34,7 +34,7 @@ describe('direct-Anthropic prompt caching', () => {
     const cap = captureBody();
     await anthropicModule.call({
       apiKey: 'sk-ant-test',
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-5',
       messages: [
         { role: 'system', content: 'Large stable coding instructions + repo context.' },
         { role: 'user', content: 'Add the avatar filter.' },

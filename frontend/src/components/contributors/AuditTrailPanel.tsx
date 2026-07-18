@@ -47,6 +47,41 @@ const VERB_COLOR: Record<string, string> = {
   'doc.published': '#0ea5e9',
 };
 
+/**
+ * The model-provenance slice an LLM-backed event carries on its free-form
+ * `metadata` — written by the api's `buildModelActivityMetadata` (the ONE builder
+ * shared by the Brain addressed-agent loop and the gateway default-agent turn), so
+ * these key names are the wire contract. Everything is optional: most activity
+ * rows (a human moving a ticket) have no model at all.
+ */
+interface ModelProvenance {
+  model?: string;
+  vendor?: string;
+  account?: string;
+  byoFunded?: boolean;
+}
+
+/** Narrow the `unknown` metadata to the model slice — no `any`, no trust in shape. */
+function readModelProvenance(metadata: unknown): ModelProvenance | null {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+  const m = metadata as Record<string, unknown>;
+  const model = typeof m.model === 'string' && m.model.trim() ? m.model.trim() : undefined;
+  if (!model) return null; // no model ⇒ nothing to chip
+  return {
+    model,
+    vendor: typeof m.vendor === 'string' && m.vendor.trim() ? m.vendor.trim() : undefined,
+    account: typeof m.account === 'string' ? m.account : undefined,
+    byoFunded: typeof m.byoFunded === 'boolean' ? m.byoFunded : undefined,
+  };
+}
+
+/** Strip the vendor/namespace prefix so the chip shows `claude-opus-4-8`, not
+ *  `direct/anthropic/claude-opus-4-8`, while the title keeps the full ref. */
+function shortModel(model: string): string {
+  const tail = model.split('/').pop() ?? model;
+  return tail.length > 34 ? `${tail.slice(0, 33)}…` : tail;
+}
+
 function initials(name: string | null): string {
   if (!name) return '·';
   const parts = name.trim().split(/\s+/).slice(0, 2);
@@ -153,6 +188,16 @@ export function AuditTrailPanel() {
           {events.map((e) => {
             const as = ACTOR_STYLE[e.actorType] ?? ACTOR_STYLE.system;
             const vColor = VERB_COLOR[e.verb] ?? 'var(--text-muted)';
+            const mp = readModelProvenance(e.metadata);
+            const accountLabel = mp
+              ? mp.byoFunded === true || mp.account === 'own'
+                ? t('model.accountOwn')
+                : mp.account === 'shared_byo_unused'
+                  ? t('model.accountSharedUnused')
+                  : mp.account === 'shared' || mp.byoFunded === false
+                    ? t('model.accountShared')
+                    : null
+              : null;
             return (
               <li
                 key={e.id}
@@ -200,6 +245,48 @@ export function AuditTrailPanel() {
                   <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2, wordBreak: 'break-word' }}>
                     {e.summary ?? e.targetLabel ?? '—'}
                   </div>
+                  {/* WHICH MODEL ran this turn. Only LLM-backed events carry it, so the
+                      row is absent (not empty) otherwise. Wraps at narrow widths and the
+                      model name itself truncates, so a long `direct/vendor/model` ref
+                      can never push the timeline into a horizontal scroll on mobile. */}
+                  {mp && (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 4, maxWidth: '100%' }}>
+                      <span
+                        title={t('model.tooltip', { model: mp.model ?? '' })}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%',
+                          fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 999,
+                          color: 'var(--text-secondary)',
+                          background: 'var(--bg-hover, rgba(127,127,127,0.08))',
+                          border: '1px solid var(--border-subtle)',
+                          minWidth: 0, overflow: 'hidden',
+                        }}
+                      >
+                        <span aria-hidden>◇</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {shortModel(mp.model ?? '')}
+                        </span>
+                      </span>
+                      {mp.vendor && (
+                        <span style={{
+                          fontSize: 10.5, fontWeight: 500, padding: '2px 7px', borderRadius: 999,
+                          color: 'var(--muted)', border: '1px solid var(--border-subtle)',
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {mp.vendor}
+                        </span>
+                      )}
+                      {accountLabel && (
+                        <span style={{
+                          fontSize: 10.5, fontWeight: 500, padding: '2px 7px', borderRadius: 999,
+                          color: 'var(--muted)', border: '1px dashed var(--border-subtle)',
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {accountLabel}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </li>
             );

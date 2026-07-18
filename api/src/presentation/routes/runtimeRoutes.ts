@@ -18,7 +18,7 @@ import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { enqueueExecutionMessage, listExecutionMessages, releasePendingSteers } from '../../application/runtime/executionSteering';
 import { subscribeExecution, unsubscribeExecution, notifyExecutionSubscribers } from '../../application/runtime/executionEvents';
 import {
-  runCloudExecution, markCloudExecutionRunning, prepareCloudRun, gitSecret, recordCloudToolEvent, recordPrdDirective,
+  markCloudExecutionRunning, prepareCloudRun, gitSecret, recordCloudToolEvent, recordPrdDirective,
   handleContainerOp, loadContainerRunContext, resolveCloudAgent, agentAllowsHostExecution, DEFAULT_CLOUD_REF,
 } from '../../application/runtime/cloudAgentEngine';
 import { CONTAINER_MAX_STEPS } from '../../application/runtime/cloudAgentTools';
@@ -642,20 +642,26 @@ async function startDispatchedExecution(
     // read this variable (not `effectivePayload`) so they carry the stamped copy.
     let dispatchPayload = effectivePayload;
 
-    const runWorkerFallback = async () => {
-      await runCloudExecution(env, runtimeService, db, execution.id, taskRow, tenantId, taskRow.projectId, agent.label ?? 'BuilderForce Agent', agent.ref, dispatchPayload, artifacts);
-      await notifyDone();
+    const failCloudRuntimeUnavailable = async (reason: string) => {
+      const msg = `Cloud execution could not start because no durable executor was available: ${reason}. `
+        + 'The unsafe in-request Worker fallback was not started because multi-step runs exceed its background-execution limit. '
+        + 'Verify the CLOUD_RUNNER Durable Object binding and deployment, then re-run the task.';
+      await runtimeService.update(execution.id, {
+        status: ExecutionStatus.FAILED,
+        errorMessage: msg,
+      }).catch(() => { /* already terminal/cancelled */ });
+      await recordCloudToolEvent(db, {
+        tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+        toolName: 'run.failed', category: 'error',
+        detail: { reason, phase: 'durable_kickoff' },
+        result: msg,
+      }).catch(() => { /* best-effort telemetry */ });
+      await notifyDone().catch(() => { /* best-effort live update */ });
     };
     const startDurable = async () => {
       const cloudRunner = env.CLOUD_RUNNER;
       if (!cloudRunner) {
-        await recordCloudToolEvent(db, {
-          tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
-          toolName: 'runtime.fallback', category: 'planning',
-          detail: { reason: 'no CLOUD_RUNNER binding', ranOn: 'worker' },
-          result: 'Durable Object binding (CLOUD_RUNNER) not configured — running on the interim Worker loop (may not survive long multi-step runs).',
-        });
-        await runWorkerFallback();
+        await failCloudRuntimeUnavailable('the CLOUD_RUNNER binding is not configured');
         return;
       }
       try {
@@ -670,22 +676,10 @@ async function startDispatchedExecution(
           }),
         });
         if (!res.ok) {
-          await recordCloudToolEvent(db, {
-            tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
-            toolName: 'runtime.fallback', category: 'planning',
-            detail: { reason: `CloudRunnerDO /start ${res.status}`, ranOn: 'worker' },
-            result: `Durable Object kickoff returned ${res.status} — running on the interim Worker loop instead.`,
-          });
-          await runWorkerFallback();
+          await failCloudRuntimeUnavailable(`CloudRunnerDO /start returned HTTP ${res.status}`);
         }
       } catch (e) {
-        await recordCloudToolEvent(db, {
-          tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
-          toolName: 'runtime.fallback', category: 'planning',
-          detail: { reason: e instanceof Error ? e.message : String(e), ranOn: 'worker' },
-          result: 'Durable Object kickoff threw — running on the interim Worker loop instead.',
-        });
-        await runWorkerFallback();
+        await failCloudRuntimeUnavailable(`CloudRunnerDO /start threw: ${e instanceof Error ? e.message : String(e)}`);
       }
     };
 
@@ -771,7 +765,9 @@ async function startDispatchedExecution(
       // spans one slow LLM step, so it must not be reaped at the serverless 90s wall
       // (execution #136). The row is what the reaper reads; the kickoff body carries the
       // same stamped copy so a self-heal re-dispatch keeps it.
-      dispatchPayload = withExecutor(effectivePayload, executor);
+      dispatchPayload = executor === 'unavailable'
+        ? effectivePayload
+        : withExecutor(effectivePayload, executor);
       await db.update(executions).set({ payload: dispatchPayload })
         .where(eq(executions.id, execution.id)).catch(() => { /* best-effort — reaper falls back to the long-lived ceiling on an unstamped payload */ });
 
@@ -785,25 +781,25 @@ async function startDispatchedExecution(
       // Explain a container→durable/worker downgrade so the timeline shows WHY.
       if (wantsContainer && executor !== 'container') {
         const why = !hasContainerBinding ? 'no long-lived Cloudflare Container is bound' : 'the Cloudflare Container is not live (health probe failed)';
+        const fallbackResult = executor === 'unavailable'
+          ? `${typeLabel}: ${why}, and no durable executor is available — failing without starting the unsafe in-request Worker loop.`
+          : `${typeLabel}: ${why} — running on the durable cloud executor instead, which executes the run to completion.`;
         await recordCloudToolEvent(db, {
           tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
           toolName: 'runtime.fallback', category: 'planning',
           detail: { requestedSurface: 'container', ranOn: executor, reason: !hasContainerBinding ? 'no AGENT_CONTAINER binding' : 'container /health unreachable' },
-          result: `${typeLabel}: ${why} — running on the ${executor} cloud executor instead, which executes the run to completion.`,
+          result: fallbackResult,
         });
       }
 
       if (executor === 'container' && stub) await startContainer(stub);
       else if (executor === 'durable') await startDurable();
-      else await runWorkerFallback();
+      else await failCloudRuntimeUnavailable('the CLOUD_RUNNER binding is not configured');
     };
-    // orchestrate() degrades container→durable→worker internally, but the terminal
-    // Worker fallback (runCloudExecution) has no guard: if it throws before writing a
-    // status the whole promise rejects and, because waitUntil swallows the rejection,
-    // the row is stranded PENDING until the 15-min queue reaper. Catch it here, fail
-    // the run + notify so the board/chip reflect it immediately. Guard on the LIVE
-    // status so we never clobber a run that DID start and reached its own terminal
-    // state before the throw (the reaper stays the backstop if this catch itself fails).
+    // orchestrate() degrades container→durable and fails fast when durable kickoff is
+    // unavailable. It never runs the multi-step loop inside waitUntil: that path is
+    // subject to the background-execution wall that caused the original timeouts.
+    // Catch any unexpected orchestration failure so the row is never stranded pending.
     waitUntil(orchestrate().catch(async (err) => {
       try {
         const current = await runtimeService.getExecution(execution.id);

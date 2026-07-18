@@ -4,7 +4,7 @@ import { ChatMessage, SECRET_KEY, fetchLimbicBlock } from "./gateway";
 import { getCurrentUserId, createBrainChat, appendBrainMessages, updateBrainChatProject } from "./bfApi";
 import { formatEvermindLearnStep } from "@seanhogg/builderforce-brain-embedded";
 import { getGroundingSummary } from "./grounding";
-import { getEditorContext } from "./editorContext";
+import { getEditorContextLive } from "./editorContext";
 import { editorContextDirective } from "./idePersona";
 import { resolveEffectiveModel } from "./modelState";
 import { getSelectedProject } from "./projectState";
@@ -56,9 +56,11 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
     // TONE, not just the affective appraisal. Best-effort; '' at rest or offline.
     const userId = (await getCurrentUserId(ctx.secrets)) ?? undefined;
     const limbicBlock = await fetchLimbicBlock(ctx.secrets, request.prompt, userId ? { userId } : undefined);
-    // Live editor context (active file / selection / open tabs) so the agent resolves
-    // "this file" / "the selection" to what's actually open — read fresh each turn.
-    const editorCtx = editorContextDirective(getEditorContext());
+    // Live editor context (active file / selection / open tabs) PLUS the absolute
+    // workspace root and its git repo, so the agent resolves "this file" / "the
+    // selection" to what's open and knows where the code lives instead of asking.
+    // Read fresh each turn; awaited so git is resolved on the very first turn.
+    const editorCtx = editorContextDirective(await getEditorContextLive());
     const messages: ChatMessage[] = [...buildSystemMessages(root, getGroundingSummary(), editorCtx, limbicBlock)];
     // Reconstruct prior turns from the native chat history.
     for (const turn of context.history) {

@@ -81,11 +81,11 @@ describe('openRouter catalog — Anthropic models', () => {
     expect(ids).not.toContain('anthropic/claude-3.7-sonnet');
   });
 
-  it('lists current-gen Claude Sonnet 4.6 as PREMIUM', () => {
-    const sonnet = openRouterModule.catalog.find((m) => m.id === 'anthropic/claude-sonnet-4.6');
+  it('lists current-gen Claude Sonnet 5 as PREMIUM', () => {
+    const sonnet = openRouterModule.catalog.find((m) => m.id === 'anthropic/claude-sonnet-5');
     expect(sonnet).toBeDefined();
     expect(sonnet!.tier).toBe('PREMIUM');
-    expect(openRouterModule.tierFor('anthropic/claude-sonnet-4.6')).toBe('PREMIUM');
+    expect(openRouterModule.tierFor('anthropic/claude-sonnet-5')).toBe('PREMIUM');
   });
 
   it('lists Claude Haiku 4.5 as a cheap STANDARD option', () => {

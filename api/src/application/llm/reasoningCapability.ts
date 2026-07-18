@@ -19,7 +19,9 @@
  * Detection is deliberately conservative and grounded in THIS gateway's model-id
  * conventions (see `CODING_MODEL_POOL` in LlmProxyService):
  *
- *   • Anthropic extended thinking — bare `claude-*` ids ONLY. Those dispatch to the
+ *   • Anthropic extended thinking — supported bare `claude-*` ids ONLY. Sonnet 5
+ *     uses adaptive thinking by default and rejects the legacy manual `thinking`
+ *     budget, so it is explicitly excluded. Other matched ids dispatch to the
  *     direct Anthropic Messages vendor (`vendors/anthropic.ts`), the one path whose
  *     translator we wire the `thinking` param through. OpenRouter-routed
  *     `anthropic/claude-*` slugs speak the OpenAI shape and don't accept Anthropic's
@@ -50,6 +52,7 @@ export type ModelReasoningSupport =
 // Bare `claude-*` ids only (the direct Anthropic Messages vendor). `anthropic/…`
 // (OpenRouter) and colon registry forms are intentionally excluded — see file docs.
 const ANTHROPIC_THINKING_RE = /^claude-/i;
+const ANTHROPIC_ADAPTIVE_ONLY_MODELS = new Set(['claude-sonnet-5']);
 
 // OpenAI reasoning families, with an optional `openai/` (OpenRouter) prefix:
 //   o1 | o3 | o4 | o4-mini | o3-mini | gpt-5 | gpt-5-mini | gpt-5-codex …
@@ -63,6 +66,7 @@ const OPENAI_REASONING_RE = /^(?:openai\/)?(?:o[1-9](?:-|$)|gpt-5)/i;
 export function detectReasoningSupport(modelId: string | undefined | null): ModelReasoningSupport {
   const id = (modelId ?? '').trim();
   if (!id) return { kind: 'none' };
+  if (ANTHROPIC_ADAPTIVE_ONLY_MODELS.has(id.toLowerCase())) return { kind: 'none' };
   if (ANTHROPIC_THINKING_RE.test(id)) return { kind: 'anthropic-thinking' };
   if (OPENAI_REASONING_RE.test(id)) return { kind: 'openai-reasoning' };
   return { kind: 'none' };

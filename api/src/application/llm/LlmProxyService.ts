@@ -154,7 +154,7 @@ export const CODING_MODEL_POOL: readonly string[] = [
   '@cf/qwen/qwen3-30b-a3b-fp8',                // 32K ctx, STANDARD — small/fast; great first pass for SMALL tasks
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast',  // 24K ctx, STANDARD — small/fast; great first pass for SMALL tasks
   // PAID, METERED — strong agentic coders reachable by Pro tenants on the credited key.
-  'anthropic/claude-sonnet-4.6',
+  'anthropic/claude-sonnet-5',
   'openai/gpt-4.1',
   'xiaomi/mimo-v2.5',                          // Programming #1 on OpenRouter, $0.14/$0.28
   'qwen/qwen3.7-plus',                         // agentic coder + vision, $0.40/$1.60
@@ -184,7 +184,7 @@ export const CODING_MODEL_POOL: readonly string[] = [
   // "degraded onto a non-coder" backstop) and so the capability-reorder sets treat
   // them as tool/structured-output capable. Routing onto them happens via
   // CODING_PREMIUM_FALLBACK_MODELS, never auto-selection.
-  'claude-sonnet-4-6',
+  'claude-sonnet-5',
   'claude-opus-4-8',
 ];
 
@@ -227,7 +227,7 @@ export const CODING_DEFAULT_MODEL: string =
  * backstop" — only Anthropic's direct floor had been hand-added to CODING_MODEL_POOL.
  */
 const BYO_FRONTIER_FLAGSHIPS: Readonly<Record<string, { agentic: string; chat: string }>> = {
-  anthropic: { agentic: 'claude-opus-4-8', chat: 'claude-sonnet-4-6' },
+  anthropic: { agentic: 'claude-opus-4-8', chat: 'claude-sonnet-5' },
   openai:    { agentic: 'direct/openai/gpt-4.1', chat: 'direct/openai/gpt-4.1' },
   'openai-codex': { agentic: 'openai-codex/gpt-5.3-codex', chat: 'openai-codex/gpt-5.3-codex' },
   'xai-oauth': { agentic: 'xai-oauth/grok-4.3', chat: 'xai-oauth/grok-4.3' },
@@ -510,7 +510,7 @@ export const CHEAPEST_PAID_CODER = 'deepseek/deepseek-v4-flash'; // $0.10/$0.20
  * reliable-first (DeepSeek → Xiaomi → OpenRouter-routed Claude), then the
  * DIRECT-ANTHROPIC last-resort floor: the OpenRouter-routed coders all share
  * OpenRouter's availability, so an OpenRouter-wide outage sinks them together —
- * `claude-sonnet-4-6` / `claude-opus-4-8` call Claude DIRECTLY on CLAUDE_API_KEY
+ * `claude-sonnet-5` / `claude-opus-4-8` call Claude DIRECTLY on CLAUDE_API_KEY
  * (independent availability), Sonnet first (cheaper). Any vendor whose key is
  * unbound no-key-skips at dispatch, so the chain degrades cleanly to whatever is
  * reachable and surfaces an honest exhaustion only if nothing is.
@@ -531,8 +531,8 @@ export const CODING_PREMIUM_FALLBACK_MODELS: readonly string[] = leadPoolWithVen
   '@cf/qwen/qwen3-30b-a3b-fp8',                // 32K ctx — small/fast failover
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast',  // 24K ctx — small/fast failover
   '@cf/moonshotai/kimi-k2.7-code',             // 256K ctx — slowest; huge-context last resort
-  'anthropic/claude-sonnet-4.6', // strongest agentic coder (via OpenRouter)
-  'claude-sonnet-4-6',           // direct-Anthropic last-resort floor (CLAUDE_API_KEY)
+  'anthropic/claude-sonnet-5',   // strongest agentic coder (via OpenRouter)
+  'claude-sonnet-5',             // direct-Anthropic last-resort floor (CLAUDE_API_KEY)
   'claude-opus-4-8',
 ], PAID_LEAD_VENDOR);
 
@@ -577,7 +577,7 @@ export const PREMIUM_FALLBACK_MODELS: readonly string[] = [
  * `paid_overflow_daily_cap`).
  *
  * By-id detection is deliberately conservative here: the *stronger* coding-floor
- * coders (`xiaomi/mimo-v2.5`, `anthropic/claude-sonnet-4.6`) are Pro plan-pool
+ * coders (`xiaomi/mimo-v2.5`, `anthropic/claude-sonnet-5`) are Pro plan-pool
  * models, so flagging them by id would mis-meter a Pro tenant's legitimate plan
  * usage as overflow. Their genuine overflow case — resolving via the funded
  * coding *backstop* — is metered directly by `complete()` (which sets
@@ -589,12 +589,12 @@ export const PAID_OVERFLOW_MODELS: ReadonlySet<string> = new Set<string>([
   ...PREMIUM_FALLBACK_MODELS,
   CHEAPEST_PAID_CODER,
   GUARANTEED_BACKSTOP_MODEL,
-  // Direct-Anthropic floor — unlike `anthropic/claude-sonnet-4.6` (a Pro plan-pool
+  // Direct-Anthropic floor — unlike `anthropic/claude-sonnet-5` (a Pro plan-pool
   // model whose normal use must NOT be metered as overflow), these bare-id direct
   // models live in NO plan pool: any resolution onto them is Builderforce funding a
   // call on its own CLAUDE_API_KEY, so they are overflow spend by id on every path
   // (primary appended-fallback OR credited backstop) and count against the cap.
-  'claude-sonnet-4-6',
+  'claude-sonnet-5',
   'claude-opus-4-8',
 ]);
 
@@ -2166,7 +2166,7 @@ export function codingDefaultForPlan(effectivePlan: EffectivePlan, premiumOverri
  *     `cerebras/*`, …) — those are plan-pool or BYO paths, not premium;
  *   • `:free` OpenRouter ids — the free tier;
  *   • ids already in the plan's auto-route pool (the curated PREMIUM coders like
- *     `anthropic/claude-sonnet-4.6` a paid plan already reaches for free).
+ *     `anthropic/claude-sonnet-5` a paid plan already reaches for free).
  * Everything else that resolves to the OpenRouter vendor is the premium long tail.
  *
  * Pure so the gateway gate, the surcharge decision, and any picker filter share ONE
@@ -2566,7 +2566,7 @@ const STRUCTURED_OUTPUT_MODELS: ReadonlySet<string> = RECOGNIZED_CODER_MODELS;
 
 /** Models with image-input (vision) capability. */
 const VISION_MODELS: ReadonlySet<string> = new Set([
-  'anthropic/claude-sonnet-4.6',
+  'anthropic/claude-sonnet-5',
   'openai/gpt-4.1',
   'google/gemini-2.5-pro',
   'nvidia/nemotron-nano-12b-v2-vl:free',

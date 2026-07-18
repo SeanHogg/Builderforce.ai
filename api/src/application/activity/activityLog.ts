@@ -63,6 +63,64 @@ export function cloudAgentActor(agentRef: string, name: string): ActorIdentity {
   return { type: 'cloud_agent', ref: agentRef, name };
 }
 
+// ── Model provenance on an activity row ─────────────────────────────────────
+
+/**
+ * The subset of an activity row's free-form `metadata` that answers "WHICH MODEL
+ * served this agent turn". Written by every LLM-backed emit site (the Brain
+ * addressed-agent loop, the gateway default-agent turn) and read verbatim by the
+ * audit timeline's model chip — so the key names here are the wire contract with
+ * `AuditTrailPanel`.
+ *
+ * NOTE: activity rows are best-effort (see {@link recordActivity}) — this is an
+ * OBSERVABILITY signal, never a billing one. `llm_usage_log` stays the single
+ * source of truth for metering.
+ */
+export interface ModelActivityMetadata extends Record<string, unknown> {
+  /** Emit site, e.g. 'brain-chat' | 'gateway' | 'mcp'. */
+  via?: string;
+  /** The model the proxy actually routed to (ProxyResult.resolvedModel). */
+  model?: string;
+  /** Resolved vendor id, e.g. 'anthropic' | 'openai' | 'googleai'. */
+  vendor?: string;
+  /** Which account served it — mirrors ReplyProvenance.account ('own' | 'shared' | 'shared_byo_unused'). */
+  account?: string;
+  /** True when the tenant's OWN connected credential paid for the turn. */
+  byoFunded?: boolean;
+  /** Set when the project's own Evermind generated the reply. */
+  evermind?: { version: number };
+}
+
+/**
+ * Build the model-provenance `metadata` payload for an activity row. ONE builder
+ * shared by every LLM emit site so the audit chip reads identical keys wherever
+ * the turn was served from. Nullish/empty fields are omitted rather than written
+ * as nulls, keeping the stored jsonb small and the chip's presence checks simple.
+ */
+export function buildModelActivityMetadata(args: {
+  via: string;
+  model?: string | null;
+  vendor?: string | null;
+  account?: string | null;
+  byoFunded?: boolean | null;
+  evermind?: { version: number } | null;
+  /** Extra emit-site-specific keys (e.g. `{ tool }`, `{ chatId }`). */
+  extra?: Record<string, unknown>;
+}): ModelActivityMetadata {
+  const model = args.model?.trim() || undefined;
+  const vendor = args.vendor?.trim() || undefined;
+  const account = args.account?.trim() || undefined;
+  return {
+    via: args.via,
+    ...(model ? { model } : {}),
+    ...(vendor ? { vendor } : {}),
+    ...(account ? { account } : {}),
+    ...(args.byoFunded == null ? {} : { byoFunded: args.byoFunded }),
+    ...(args.evermind ? { evermind: args.evermind } : {}),
+    ...(args.extra ?? {}),
+  };
+}
+
 export function activityLogVersionKey(tenantId: number | null): string {
   return `activity-log:tenant:${tenantId ?? 'global'}`;
 }

@@ -4,7 +4,7 @@ import { TOOL_DEFS } from "./fileTools";
 import { getBaseUrl, getWebBaseUrl, SECRET_KEY, fetchPersonalityBlock, fetchLimbicBlock, getSessionTabMode, type SessionTabMode } from "./gateway";
 import { attentionFor, sessionTabIcon, sessionTabPrefix } from "./attention";
 import { getGroundingSummary } from "./grounding";
-import { getEditorContext, watchEditorContext } from "./editorContext";
+import { getEditorContext, getEditorContextLive, watchEditorContext } from "./editorContext";
 import { resolveEffectiveModel } from "./modelState";
 import { getSelectedProject } from "./projectState";
 import { getProjectNames } from "./projectNames";
@@ -497,8 +497,22 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
 
   /** Push the current editor context (active file / selection / open tabs) to the
    *  React app so its ambient system channel stays in sync as the user navigates. */
+  /**
+   * Push the live editor context (active file / selection / open tabs / workspace
+   * root / git) to the React app. Driven by `watchEditorContext`, which now also
+   * fires on repository state changes, so a branch checkout re-pushes the branch the
+   * agent is told it is working on.
+   */
   private pushEditorContext(): void {
-    void this.panel.webview.postMessage({ type: "editorContext", editorContext: getEditorContext() });
+    const editorContext = getEditorContext();
+    void this.panel.webview.postMessage({
+      type: "editorContext",
+      editorContext,
+      // Mirrored at the top level so consumers reading workspace/git state off the
+      // init payload see the same fields on every update.
+      workspaceRoot: editorContext?.workspaceRoot,
+      git: editorContext?.git,
+    });
   }
 
   /** Hand the React app its config: gateway URL, tenant token, model, grounding, tools, labels. */
@@ -506,6 +520,9 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
     const signedIn = !!(await this.ctx.secrets.get(SECRET_KEY));
     const token = signedIn ? ((await getTenantJwt(this.ctx.secrets)) ?? null) : null;
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    // Awaited (not peeked) so the FIRST turn already knows the repo — the whole
+    // point of shipping this: the agent must not open a chat asking where the code is.
+    const editorContext = await getEditorContextLive();
     // `projectId → name` for every project, so the header can name the project an
     // existing chat belongs to (best-effort; falls back to "No project").
     const projectNames: Record<string, string> = {};
@@ -542,9 +559,14 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
       grounding: root ? getGroundingSummary() : undefined,
       // Live editor context (active file / selection / open tabs). Seeds the React
       // app's ambient system channel; refreshed via `editorContext` messages below.
-      editorContext: getEditorContext(),
+      editorContext,
       signedIn,
       hasWorkspace: !!root,
+      // WHERE THE CODE IS: the absolute root the local file tools resolve against,
+      // and the repository detected for it (branch / owner-repo / dirty state).
+      // `hasWorkspace` is kept — other consumers read it.
+      workspaceRoot: root,
+      git: editorContext?.git,
       // The sidebar's active project — injected into the system prompt (so the
       // Brain scopes platform tools without asking for a projectId) AND used to
       // scope newly-created chats. Re-pushed on project change via refresh().
