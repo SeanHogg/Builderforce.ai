@@ -26,6 +26,7 @@ import {
 } from '../../application/llm/LlmProxyService';
 import { normalizeByoProvider, resolvePaidOverflowCapMillicents, PREMIUM_REQUEST_SURCHARGE_MILLICENTS } from '../../application/llm/usageLedger';
 import { classifyReplyAccount } from '../../application/llm/replyProvenance';
+import { recordActivity, cloudAgentActor, buildModelActivityMetadata } from '../../application/activity/activityLog';
 import { USAGE_KIND } from '../../application/llm/usageSource';
 import { logTrace, backfillTraceUsage } from '../../application/llm/traceLogger';
 import { recordUsageRow, type UsageAttribution, type RecordUsageRow, type UsageSurface } from '../../application/llm/usageLedger';
@@ -191,14 +192,30 @@ function resolveUsageSurface(c: Context<HonoEnv>, access: TenantAccess): UsageSu
   return access.agentHostId != null ? 'on_prem' : 'web';
 }
 
-/** A tenant's connected-provider list → the pinnable BYO models (best-effort
- *  catalog projection) their picker should offer, as `<vendor>/<id>` refs. */
+/** Convert a catalog entry into the canonical route that uses the tenant's key.
+ *  Prefixing every model as `<vendor>/<id>` is incorrect:
+ *   - `anthropic/...` is OpenRouter's namespace, while direct Anthropic catalog
+ *     ids are bare (`claude-sonnet-5`);
+ *   - factory-built OpenAI-compatible vendors require `direct/<vendor>/...`;
+ *   - Google AI owns the bespoke `googleai/...` prefix.
+ *  Keep this projection at the provider boundary so the picker and connection
+ *  test cannot drift onto an operator-funded or unrecognised route. */
+function byoModelRef(entry: { id: string; vendor: string }): string {
+  if (entry.vendor === 'anthropic') return entry.id;
+  if (entry.vendor === 'googleai') return `googleai/${entry.id}`;
+  if (entry.vendor === 'openai-codex') return `openai-codex/${entry.id}`;
+  if (entry.vendor === 'xai-oauth') return `xai-oauth/${entry.id}`;
+  return `direct/${entry.vendor}/${entry.id}`;
+}
+
+/** A tenant's connected-provider list → the pinnable models served through that
+ *  provider's canonical tenant-keyed route. */
 export function byoModelsFor(providers: readonly LlmProvider[]): Array<{ id: string; vendor: string; tier: string; contextWindow?: number }> {
   const vendorIds = byoVendorIdSet(providers);
   if (vendorIds.size === 0) return [];
   return getCatalog()
     .filter((e) => vendorIds.has(e.vendor))
-    .map((e) => ({ id: `${e.vendor}/${e.id}`, vendor: e.vendor, tier: e.tier, ...(e.contextWindow ? { contextWindow: e.contextWindow } : {}) }));
+    .map((e) => ({ id: byoModelRef(e), vendor: e.vendor, tier: e.tier, ...(e.contextWindow ? { contextWindow: e.contextWindow } : {}) }));
 }
 
 /**
@@ -984,14 +1001,25 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     if (!isSupportedProvider(provider)) return c.json({ error: 'unsupported provider' }, 400);
     const creds = await resolveTenantLlmCredentials(c.env, access.tenantId);
     if (!providersFromCredentials(creds).includes(provider)) {
-      return c.json({ ok: false, status: creds.unresolvedReasons[provider] ?? 'not_connected' }, 409);
+      const status = creds.unresolvedReasons[provider] ?? 'not_connected';
+      return c.json({
+        ok: false,
+        status,
+        error: `${provider} connection test could not run: ${status.replaceAll('_', ' ')}.`,
+      });
     }
     const model = provider === 'openai' && creds.openaiCodexAuth
       ? 'openai-codex/gpt-5.3-codex'
       : provider === 'xai' && creds.xaiOAuthToken
         ? 'xai-oauth/grok-4.3'
         : byoModelsFor([provider])[0]?.id;
-    if (!model) return c.json({ ok: false, status: 'no_test_model' }, 409);
+    if (!model) {
+      return c.json({
+        ok: false,
+        status: 'no_test_model',
+        error: `${provider} connection test could not run because no current test model is configured.`,
+      });
+    }
     const body: ChatCompletionRequest = {
       model, modelStrict: true, max_tokens: 8,
       messages: [{ role: 'user', content: 'Reply OK.' }],
@@ -1012,11 +1040,14 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         const parsed = JSON.parse(payload) as { error?: { message?: string } | string; message?: string };
         upstreamMessage = typeof parsed.error === 'string' ? parsed.error : parsed.error?.message ?? parsed.message ?? upstreamMessage;
       } catch { /* retain bounded raw response */ }
+      const error = `${provider} connection test failed: ${upstreamMessage || `upstream HTTP ${result.response.status}`}`;
       return c.json({
-        error: `${provider} connection test failed: ${upstreamMessage || `upstream HTTP ${result.response.status}`}`,
+        ok: false,
+        status: 'failed',
+        error,
         code: 'provider_test_failed',
         details: { provider, model, upstreamStatus: result.response.status },
-      }, 502);
+      });
     }
     return c.json({ ok: true, status: 'ready', model: result.resolvedModel, testedAt: new Date().toISOString() });
   });
@@ -1861,6 +1892,43 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       upstreamHeaders.set('x-builderforce-monthly-tokens-remaining', String(Math.max(planMonthlyLimit - usageMonth, 0)));
     }
 
+    // Audit: when the caller identifies the Brain chat this completion is serving
+    // (`metadata.chatId`), record an activity row naming WHICH MODEL served the
+    // DEFAULT agent's turn — the gateway twin of the addressed-agent emit in
+    // `BrainService.agentReply`, sharing its ONE metadata builder so the audit
+    // timeline's model chip reads identical keys from either path. Turns without a
+    // chat id (SDK/on-prem/cloud traffic) are not chat activity and emit nothing.
+    // Best-effort by design — `llm_usage_log` stays the billing source of truth.
+    const recordBrainChatModelActivity = (): void => {
+      const meta = callerMetadata;
+      if (!meta || access.tenantId == null) return;
+      const rawChatId = meta.chatId ?? meta.brainChatId;
+      const chatId = typeof rawChatId === 'number' ? rawChatId : typeof rawChatId === 'string' && /^\d+$/.test(rawChatId) ? Number(rawChatId) : null;
+      if (chatId == null) return;
+      const agentRef = typeof meta.agentRef === 'string' && meta.agentRef ? meta.agentRef : 'brain-default';
+      const agentName = typeof meta.agentName === 'string' && meta.agentName ? meta.agentName : 'Brain';
+      const projectId = typeof meta.projectId === 'number' ? meta.projectId : null;
+      const byoFunded = result.byoFunded ?? false;
+      const promise = recordActivity(c.env, buildDatabase(c.env), {
+        tenantId: access.tenantId,
+        projectId,
+        actor: cloudAgentActor(agentRef, agentName),
+        verb: 'agent.replied',
+        targetType: 'chat',
+        targetId: chatId,
+        summary: `${agentName} replied in chat #${chatId}${result.resolvedModel ? ` using ${result.resolvedModel}` : ''}`,
+        metadata: buildModelActivityMetadata({
+          via: 'gateway',
+          model: result.resolvedModel,
+          vendor: result.resolvedVendor,
+          account: classifyReplyAccount(byoFunded, byoVendors.size > 0),
+          byoFunded,
+          extra: { chatId },
+        }),
+      });
+      c.executionCtx?.waitUntil?.(promise);
+    };
+
     // ── Streaming ────────────────────────────────────────────────────────────
     if (body.stream && result.response.body) {
       upstreamHeaders.set('cache-control', 'no-cache');
@@ -1899,6 +1967,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           });
           // Back-fill the streamed trace row (logged above with 0 tokens) [1298].
           backfillTraceUsage(c.env, c.executionCtx, traceId, usage);
+          recordBrainChatModelActivity();
         },
       );
 
@@ -1925,6 +1994,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       surface: resolveUsageSurface(c, access),
       premiumSurcharge: premiumServed,
     });
+    recordBrainChatModelActivity();
 
     // Surface the trace id inside the error envelope too, so a consumer hitting
     // a failure can quote `error.details.correlationId` straight back for a

@@ -46,7 +46,7 @@ export interface Env {
   GOOGLE_API_KEY?: string;
   /** Anthropic (Claude) API key — the last-resort reliability floor for cloud CODING
    *  runs. When every OpenRouter-routed paid coder is unreachable, the coding cascade
-   *  falls back to Claude DIRECTLY on api.anthropic.com (claude-sonnet-4-6 →
+   *  falls back to Claude DIRECTLY on api.anthropic.com (claude-sonnet-5 →
    *  claude-opus-4-8), vendor-diverse from OpenRouter. Unbound → the cascade simply
    *  skips the Anthropic floor. Set via `wrangler secret put CLAUDE_API_KEY` (or
    *  api/.env + `npm run secrets:from-env`). */

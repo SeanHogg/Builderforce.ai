@@ -136,8 +136,8 @@ describe('plan-aware coding routing', () => {
 });
 
 describe('direct-Anthropic coding floor', () => {
-  it('claude-sonnet-4-6 and claude-opus-4-8 are real catalog ids owned by the anthropic vendor', () => {
-    for (const id of ['claude-sonnet-4-6', 'claude-opus-4-8']) {
+  it('claude-sonnet-5 and claude-opus-4-8 are real catalog ids owned by the anthropic vendor', () => {
+    for (const id of ['claude-sonnet-5', 'claude-opus-4-8']) {
       expect(catalogEntry(id), `${id} must be a catalog model`).not.toBeNull();
       expect(vendorForModel(id)).toBe('anthropic');
     }
@@ -146,20 +146,20 @@ describe('direct-Anthropic coding floor', () => {
   it('is auto-route excluded — never in a plan pool or the user-facing coding picker', () => {
     for (const plan of ['free', 'pro', 'teams'] as const) {
       const picker = codingModelsForPlan(plan);
-      expect(picker).not.toContain('claude-sonnet-4-6');
+      expect(picker).not.toContain('claude-sonnet-5');
       expect(picker).not.toContain('claude-opus-4-8');
     }
     expect(autoRoutableModelsByTier('PREMIUM', 'ULTRA')).not.toContain('claude-opus-4-8');
   });
 
   it('is a recognised coder (not flagged as a non-coder degradation)', () => {
-    expect(CODING_MODEL_POOL).toContain('claude-sonnet-4-6');
+    expect(CODING_MODEL_POOL).toContain('claude-sonnet-5');
     expect(CODING_MODEL_POOL).toContain('claude-opus-4-8');
   });
 
   it('the direct-Anthropic floor is tried LAST — after the Cloudflare + OpenRouter paid coders', () => {
     const cf = CODING_PREMIUM_FALLBACK_MODELS.indexOf('@cf/qwen/qwen3-30b-a3b-fp8');
-    const sonnetDirect = CODING_PREMIUM_FALLBACK_MODELS.indexOf('claude-sonnet-4-6');
+    const sonnetDirect = CODING_PREMIUM_FALLBACK_MODELS.indexOf('claude-sonnet-5');
     const opusDirect = CODING_PREMIUM_FALLBACK_MODELS.indexOf('claude-opus-4-8');
     expect(cf).toBeGreaterThanOrEqual(0);
     expect(cf).toBeLessThan(sonnetDirect);   // Cloudflare surfaces before direct Claude
@@ -187,7 +187,7 @@ describe('byoAutoSeedModels (connected-account auto seed)', () => {
   it('Anthropic connected → Opus for agentic tool-loops, Sonnet for plain chat', () => {
     const s = new Set(['anthropic']);
     expect(byoAutoSeedModels(s, { agentic: true })).toEqual(['claude-opus-4-8']);
-    expect(byoAutoSeedModels(s, { agentic: false })).toEqual(['claude-sonnet-4-6']);
+    expect(byoAutoSeedModels(s, { agentic: false })).toEqual(['claude-sonnet-5']);
   });
 
   it('OpenAI-only → the DIRECT (tenant-keyed) flagship, never the bare OpenRouter slug', () => {
@@ -466,7 +466,7 @@ describe('Cloudflare paid coders', () => {
     // OpenRouter-routed Anthropic coder so the free daily neuron allowance is spent
     // before any metered coder.
     const firstCf = CODING_MODEL_POOL.findIndex((m) => vendorForModel(m) === 'cloudflare');
-    const meteredAnthropic = CODING_MODEL_POOL.indexOf('anthropic/claude-sonnet-4.6');
+    const meteredAnthropic = CODING_MODEL_POOL.indexOf('anthropic/claude-sonnet-5');
     expect(firstCf).toBe(0);                      // a Cloudflare coder is the pool leader
     expect(firstCf).toBeLessThan(meteredAnthropic); // …ahead of the metered Anthropic coder
   });
