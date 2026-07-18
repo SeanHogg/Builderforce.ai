@@ -7808,7 +7808,16 @@
       "system": "System",
       "unknown": "Unbekannt"
     },
+    "model": {
+      "tooltip": "Bereitgestellt vom Modell {model}",
+      "accountOwn": "Ihr Konto",
+      "accountShared": "Gemeinsamer Pool",
+      "accountSharedUnused": "Gemeinsamer Pool (Ihr Konto wurde nicht genutzt)"
+    },
     "verb": {
+      "agent": {
+        "replied": "hat in einem Chat geantwortet"
+      },
       "task": {
         "created": "hat ein Ticket erstellt",
         "updated": "hat ein Ticket aktualisiert",

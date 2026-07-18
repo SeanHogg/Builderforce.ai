@@ -140,7 +140,26 @@ function buildLabels(): Record<string, string> {
     "app.effortQuick": t("Quick"),
     "app.effortBalanced": t("Balanced"),
     "app.effortThorough": t("Thorough"),
+    // What each Effort level actually does. `{answer}` is the level's max answer
+    // tokens, substituted client-side (same convention as `app.forkTitle`'s
+    // `{title}`); `app.effortDescThinking` is appended only when Thinking is on,
+    // with `{thinking}` = the level's thinking budget.
+    "app.effortDesc.quick": t("Fastest and cheapest — short, direct answers. Up to {answer} answer tokens."),
+    "app.effortDesc.balanced": t("The default — normal depth. Up to {answer} answer tokens."),
+    "app.effortDesc.thorough": t("Deepest and slowest — exhaustive, verifies its work. Up to {answer} answer tokens."),
+    "app.effortDescThinking": t("+ {thinking} thinking tokens."),
     "app.thinking": t("Thinking"),
+    // Thinking toggle description — `{budget}` is the current effort's thinking budget.
+    "app.thinkingOnDesc": t("The model reasons before answering, with a {budget}-token thinking budget at this effort. Slower, better on hard problems."),
+    "app.thinkingOffDesc": t("Off — the model answers directly. Turn on for a reasoning pass before the answer."),
+    // "Model in use" block: which model is in force and which purse funds it.
+    // `{provider}` in the BYO line is the title-cased vendor (e.g. Anthropic).
+    "app.modelInUse": t("Model in use"),
+    "app.modelAuto": t("Auto — the gateway chooses"),
+    "app.modelFundingAuto": t("Routed per turn: your connected accounts first, then your plan."),
+    "app.modelFundingByo": t("Billed to your own {provider} account — no plan credit used."),
+    "app.modelFundingPlan": t("Included in your plan."),
+    "app.modelFundingPremium": t("Premium — metered at cost + 1¢ per request."),
     "app.accountSettings": t("Account settings"),
     "app.autoMode": t("Auto mode"),
     "app.autoModeHint": t("Auto-approve tool actions without asking"),

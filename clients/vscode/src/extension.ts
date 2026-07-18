@@ -955,31 +955,95 @@ async function signOut(
   meetings?.refresh();
 }
 
+/** Human-facing provider names for the BYO groups. Falls back to the raw key. */
+const BYO_PROVIDER_LABELS: Record<string, string> = {
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+  google: "Google",
+  meta: "Meta",
+  xai: "xAI",
+  mistral: "Mistral",
+  deepseek: "DeepSeek",
+};
+
+function byoProviderLabel(vendor: string): string {
+  return BYO_PROVIDER_LABELS[vendor] ?? vendor.replace(/^./, (ch) => ch.toUpperCase());
+}
+
 async function pickModel(context: vscode.ExtensionContext): Promise<void> {
   try {
-    const { models, canUsePremiumModels, premiumModels } = await getModels(context.secrets, true);
+    const { models, canUsePremiumModels, premiumModels, canChooseModel, byo } = await getModels(
+      context.secrets,
+      true,
+    );
     const auto = "(auto — let the gateway choose)";
 
-    // Separator-grouped QuickPick: the plan pool first, then the PREMIUM tier (any
-    // paid OpenRouter model) when the tenant has a paid plan + a validated card. An
-    // un-entitled tenant never sees the group, so the picker can only offer models
-    // the gateway will accept.
-    const items: vscode.QuickPickItem[] = [
-      { label: auto, description: "Default" },
-      { label: "Plan models", kind: vscode.QuickPickItemKind.Separator },
-      ...models.map((m) => ({ label: m })),
-    ];
+    // Model choice is a gated entitlement (frontier access: paid plan, superadmin,
+    // premium override, or a connected BYO account). Without it the gateway rejects a
+    // pinned model, so offering one would be a dead control — clear the pin instead.
+    if (!canChooseModel) {
+      setSelectedModel(undefined);
+      const action = await vscode.window.showInformationMessage(
+        "Model choice needs a paid plan or a connected provider account. Connect your own Anthropic/OpenAI key to pick models and have turns billed to your account.",
+        "Open settings",
+      );
+      if (action) void vscode.commands.executeCommand("builderforce.openSettings");
+      return;
+    }
+
+    // Separator-grouped QuickPick, ordered by what it COSTS the user:
+    //   1. BYO — their own connected account. Billed to their key, $0 to us, so it
+    //      leads. Grouped per provider ("BYO — Anthropic") because a tenant can
+    //      connect several and needs to know whose key a pick will spend.
+    //   2. Plan models — included in the plan.
+    //   3. Premium — any paid OpenRouter model, metered at cost + 1¢/request.
+    // Groups the tenant isn't entitled to never render, so the picker can only ever
+    // offer models the gateway will accept.
+    const items: vscode.QuickPickItem[] = [{ label: auto, description: "Default · gateway picks per turn" }];
+
+    // Group the BYO models by their serving provider, preserving catalog order.
+    const byVendor = new Map<string, typeof byo.models>();
+    for (const m of byo.models) {
+      const list = byVendor.get(m.vendor) ?? [];
+      list.push(m);
+      byVendor.set(m.vendor, list);
+    }
+    for (const [vendor, vendorModels] of byVendor) {
+      items.push(
+        {
+          label: `BYO — ${byoProviderLabel(vendor)} (billed to your own key)`,
+          kind: vscode.QuickPickItemKind.Separator,
+        },
+        ...vendorModels.map((m) => ({
+          label: m.id,
+          description: `your ${byoProviderLabel(vendor)} account · ${m.tier}`,
+          detail:
+            m.contextWindow != null
+              ? `${m.contextWindow.toLocaleString()} token context · no platform charge`
+              : "no platform charge",
+        })),
+      );
+    }
+
+    items.push(
+      { label: "Plan models — included in your plan", kind: vscode.QuickPickItemKind.Separator },
+      ...models.map((m) => ({ label: m, description: "included in your plan" })),
+    );
+
     if (canUsePremiumModels && premiumModels.length > 0) {
       items.push(
         { label: "Premium — any OpenRouter model (cost + 1¢/request)", kind: vscode.QuickPickItemKind.Separator },
-        ...premiumModels.map((m) => ({ label: m, description: "premium · +1¢/request" })),
+        ...premiumModels.map((m) => ({ label: m, description: "premium · metered at cost + 1¢/request" })),
       );
     }
 
     const pick = await vscode.window.showQuickPick(items, {
       title: "Select BuilderForce model",
-      placeHolder: "Pick a model for new turns",
+      placeHolder: byo.providers.length > 0
+        ? "Your connected accounts are listed first — those turns are billed to your own key"
+        : "Pick a model for new turns",
       matchOnDescription: true,
+      matchOnDetail: true,
     });
     if (pick === undefined) return;
     setSelectedModel(pick.label === auto ? undefined : pick.label);

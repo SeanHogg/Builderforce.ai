@@ -7808,7 +7808,16 @@
       "system": "Système",
       "unknown": "Inconnu"
     },
+    "model": {
+      "tooltip": "Servi par le modèle {model}",
+      "accountOwn": "Votre compte",
+      "accountShared": "Pool partagé",
+      "accountSharedUnused": "Pool partagé (votre compte n'a pas été utilisé)"
+    },
     "verb": {
+      "agent": {
+        "replied": "a répondu dans une conversation"
+      },
       "task": {
         "created": "a créé un ticket",
         "updated": "a mis à jour un ticket",

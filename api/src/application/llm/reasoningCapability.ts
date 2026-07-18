@@ -164,3 +164,62 @@ export function reasoningParamsForModel(
       return undefined;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Client-supplied (vendor-neutral) reasoning intent
+// ---------------------------------------------------------------------------
+
+/**
+ * The vendor-neutral levels a CLIENT may request via the gateway body's optional
+ * `reasoning: { level }` (the VS Code chat "Thinking" toggle). Deliberately a SUBSET
+ * of `AgentThinkLevel` member names so the parsed value feeds
+ * {@link reasoningParamsForModel} with NO second translation table — this module stays
+ * the one and only mapping. The toggle-off case OMITS the field entirely.
+ */
+const CLIENT_REASONING_LEVELS = new Set<AgentThinkLevel>(['low', 'medium', 'high']);
+
+/**
+ * Validate an untrusted client `reasoning` value into the SAME `AgentExecParams`
+ * lever shape the persona compiler emits, or `undefined` when absent/malformed/off.
+ *
+ * Everything unrecognised (a bad shape, an unknown or vendor-specific level, `off`)
+ * returns `undefined` → the request behaves exactly as it does today. Client input is
+ * never forwarded verbatim: only the matched union member is carried forward, so a
+ * caller cannot smuggle vendor params through this field.
+ */
+export function parseClientReasoningIntent(raw: unknown): AgentExecParams | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const level = (raw as { level?: unknown }).level;
+  if (typeof level !== 'string') return undefined;
+  const normalized = level.trim().toLowerCase() as AgentThinkLevel;
+  if (!CLIENT_REASONING_LEVELS.has(normalized)) return undefined;
+  return { thinkLevel: normalized };
+}
+
+/**
+ * Chain-safe variant of {@link reasoningParamsForModel} for the gateway cascade.
+ *
+ * The gateway builds `extraBody` ONCE for a whole candidate chain and hands that chain
+ * to the vendor dispatcher, which walks it internally on failover — so a param derived
+ * from the chain HEAD would still be on the body if the cascade lands on a
+ * Cloudflare/deepseek/qwen coder. Rather than risk that leak, this returns a param only
+ * when EVERY candidate the chain could serve resolves to the IDENTICAL param (a
+ * single-model chain — e.g. a strict pin — trivially qualifies). A mixed-family chain
+ * drops the lever, preserving the module's conservative default: when in doubt, send
+ * nothing.
+ */
+export function reasoningParamsForChain(
+  candidates: readonly string[],
+  execParams: AgentExecParams | undefined,
+  opts?: ReasoningParamOpts,
+): Record<string, unknown> | undefined {
+  if (!execParams || candidates.length === 0) return undefined;
+  const head = reasoningParamsForModel(candidates[0], execParams, opts);
+  if (!head) return undefined;
+  const signature = JSON.stringify(head);
+  for (let i = 1; i < candidates.length; i++) {
+    const params = reasoningParamsForModel(candidates[i], execParams, opts);
+    if (!params || JSON.stringify(params) !== signature) return undefined;
+  }
+  return head;
+}
