@@ -562,6 +562,10 @@ body {
   position: absolute;
   bottom: calc(100% + 6px);
   min-width: 210px;
+  /* Descriptive menu rows need room to breathe, but the panel can be as narrow as
+     ~300px — never let the popover push the composer into a horizontal scroll. */
+  width: max-content;
+  max-width: min(320px, calc(100vw - 24px));
   z-index: 20;
   padding: 5px;
   border-radius: 10px;
@@ -605,6 +609,55 @@ body {
 .bf-menu__lbl {
   flex: 1 1 auto;
   white-space: nowrap;
+}
+
+/* A row carrying an explanatory `desc` stacks label-over-description and lets both
+   wrap. Colours come from theme vars, so it reads in the editor's light AND dark
+   themes without a second rule. */
+.bf-menu__item--stacked {
+  align-items: flex-start;
+}
+
+.bf-menu__item--stacked .bf-menu__lbl {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  white-space: normal;
+}
+
+.bf-menu__desc {
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--bf-text-muted);
+  white-space: normal;
+}
+
+/* On hover the row inverts to the menu's selection colours — keep the description
+   legible against it rather than leaving it at the dimmer resting muted tone. */
+.bf-menu__item:hover .bf-menu__desc {
+  color: inherit;
+  opacity: 0.8;
+}
+
+/* A read-only informational row (e.g. "which model is in force"): same metrics as a
+   menu item so the list stays aligned, but not interactive. */
+.bf-menu__info {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 5px 9px 7px;
+  font-size: 12px;
+  color: inherit;
+}
+
+.bf-menu__info .bf-menu__lbl {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .bf-menu__hint {

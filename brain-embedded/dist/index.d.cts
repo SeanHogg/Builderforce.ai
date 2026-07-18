@@ -131,6 +131,88 @@ interface ChatInputAttachment {
 type BrainModality = string;
 
 /**
+ * The SINGLE source of truth for the composer's "Effort" control.
+ *
+ * Effort used to be prose-only (a system-prompt nudge), so picking Quick vs
+ * Thorough changed nothing measurable about the request. It now drives THREE
+ * things, and every consumer — the UI that describes an effort level to the
+ * user, and the request builder that puts it on the wire — reads them from
+ * here, so the numbers can never drift apart:
+ *
+ *   1. `maxTokens`  → the request's `max_tokens` (previously a hardcoded 4096
+ *                     for every turn regardless of effort).
+ *   2. `reasoningLevel` → the level sent when the Thinking toggle is ON.
+ *   3. the system-prompt nudge (kept — but no longer the ONLY effect).
+ *
+ * ── Why the wire field is VENDOR-NEUTRAL ────────────────────────────────────
+ * The client must NOT emit vendor-specific reasoning params. The gateway's
+ * `reasoningCapability.ts` is the one conservative registry mapping a model id
+ * to the CORRECT vendor param (Anthropic `thinking` for bare `claude-*` only;
+ * OpenAI `reasoning_effort` for o-series/gpt-5; everything else dropped), and a
+ * blanket Anthropic `thinking` sent to a strict OpenAI-compatible coder 400s the
+ * whole run. The client frequently does not even know the model — the picker's
+ * default is "auto (let the gateway choose)".
+ *
+ * So we send INTENT ONLY (`reasoning: { level }`) and the gateway maps it
+ * against the model it actually RESOLVED. {@link ReasoningLevel} deliberately
+ * uses the same member names as the server's `AgentThinkLevel` union so the
+ * gateway can feed it straight into `reasoningParamsForModel` with no second
+ * translation table.
+ *
+ * `balanced` + Thinking OFF is the neutral default and produces a request
+ * byte-identical to the pre-change one (max_tokens 4096, no `reasoning` key).
+ */
+/** How hard the model should work on the next turn — the composer's `/` menu. */
+type Effort = 'quick' | 'balanced' | 'thorough';
+/**
+ * Vendor-neutral reasoning intent. Member names match the server's
+ * `AgentThinkLevel` (from `@builderforce/agent-tools`) so the gateway maps them
+ * without translating. Intentionally NOT imported from that package: this SDK
+ * is published standalone and dependency-free.
+ */
+type ReasoningLevel = 'off' | 'low' | 'medium' | 'high';
+/** The vendor-neutral reasoning field carried on the wire. */
+interface ReasoningIntent {
+    level: ReasoningLevel;
+}
+/** Everything one effort level decides. */
+interface EffortProfile {
+    effort: Effort;
+    /** `max_tokens` for the completion — the answer-length/cost lever. */
+    maxTokens: number;
+    /** The level sent as `reasoning.level` when Thinking is ON. */
+    reasoningLevel: Exclude<ReasoningLevel, 'off'>;
+    /**
+     * The extended-thinking token budget the gateway's registry maps
+     * `reasoningLevel` to. Mirrors `THINK_BUDGET_TOKENS` in
+     * `api/src/application/llm/reasoningCapability.ts` (low 2048 / medium 8192 /
+     * high 16384). DISPLAY ONLY — never sent, so the client cannot drift the
+     * server's actual budget; it exists so the menu can tell the user what the
+     * toggle really costs.
+     */
+    thinkingBudgetTokens: number;
+    /**
+     * The system-prompt nudge for this level, or '' for the neutral default.
+     * Kept alongside the real params (belt and braces for models whose family the
+     * server registry drops the reasoning param for).
+     */
+    directive: string;
+}
+/** The profile for an effort level. Unknown/absent input falls back to `balanced`. */
+declare function effortProfile(effort: Effort | undefined): EffortProfile;
+/** Is this a known effort level? Guards a persisted/user-supplied string. */
+declare function isEffort(value: unknown): value is Effort;
+/**
+ * The vendor-neutral reasoning intent for a run, or `undefined` when Thinking is
+ * OFF — in which case the caller omits the field entirely and the request stays
+ * byte-identical to one from before this feature existed.
+ */
+declare function reasoningForRun(o: {
+    effort: Effort;
+    thinking: boolean;
+}): ReasoningIntent | undefined;
+
+/**
  * The single tool-capable, streaming chat-completion client for the Brain.
  *
  * Targets the OpenAI-compatible gateway `POST {baseUrl}/llm/v1/chat/completions`
@@ -151,6 +233,7 @@ type BrainModality = string;
  * those into the same structured shape (so they actually execute) and strips the
  * markup from the visible text — see `xmlToolCalls.ts`.
  */
+
 /** Injected auth + endpoint config. Built once by BrainProvider from BrainConfig.transport. */
 interface BrainTransport {
     /** Gateway base URL, e.g. https://api.builderforce.ai (no trailing slash). */
@@ -243,6 +326,16 @@ interface StreamChatOptions {
     model?: string;
     temperature?: number;
     maxTokens?: number;
+    /**
+     * Vendor-neutral reasoning INTENT for this completion. Emitted on the wire as
+     * `reasoning: { level }` and mapped SERVER-side against the model the gateway
+     * actually resolved (`reasoningParamsForModel`), which knows which families
+     * accept Anthropic `thinking` vs OpenAI `reasoning_effort` and drops it for the
+     * rest. The client must never emit a vendor param itself: the model is often
+     * `auto`, and an Anthropic-only `thinking` sent to an OpenAI-compatible coder
+     * 400s the run. Omit (or `{ level: 'off' }`) to leave the body unchanged.
+     */
+    reasoning?: ReasoningIntent;
     signal?: AbortSignal;
     /** Auth + endpoint. Injected by BrainProvider; callers via the hook never set this directly. */
     transport: BrainTransport;
@@ -1035,6 +1128,17 @@ interface UseBrainConversationOptions {
     systemPrompt?: string;
     /** Override the model (e.g. run the Brain as a specific assigned agent). */
     model?: string;
+    /**
+     * `max_tokens` for this conversation's completions — the host's Effort control
+     * (see `effort.ts`, the single effort→params map). Omit for the 4096 default.
+     */
+    maxTokens?: number;
+    /**
+     * Vendor-neutral reasoning intent (the host's Thinking toggle). Build it with
+     * `reasoningForRun({ effort, thinking })` so the level tracks Effort. Omit /
+     * `undefined` ⇒ no `reasoning` field on the wire at all.
+     */
+    reasoning?: ReasoningIntent;
     /** Tool specs from the page-action registry. */
     toolSpecs?: BrainToolSpec[];
     /** Dispatch a tool call to the registry. */
@@ -1217,6 +1321,18 @@ interface BrainRunRequest {
         args: unknown;
     }) => boolean;
     stream: BrainStreamFn;
+    /**
+     * `max_tokens` for this run's completions — the composer's Effort level (see
+     * `effort.ts`). Absent keeps `streamChatCompletion`'s 4096 default.
+     */
+    maxTokens?: number;
+    /**
+     * Vendor-neutral reasoning intent for this run (the composer's Thinking toggle,
+     * at the Effort level's intensity). Absent ⇒ no `reasoning` key on the wire.
+     * Applies to the MODEL-FACING turns only — the internal transcript summarizer
+     * is a mechanical compaction, never a "think harder" job.
+     */
+    reasoning?: ReasoningIntent;
     persistence: BrainRunPersistence;
     onActivity?: (chatId: number) => void;
     /** Seed the rich transcript from prior persisted history (first turn only). */
@@ -1662,4 +1778,4 @@ interface ChatDiagnosticsData {
  */
 declare function formatChatDiagnostics(d: ChatDiagnosticsData): string[];
 
-export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatInputAttachment, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, type McpToolResultInfo, type MentionToken, type MessageProvenance, NOT_STARTED_TASK_STATUSES, PROVENANCE_META_KEY, type PreparedImage, type ProvenanceAccount, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, accountUsedInTrace, activeMentionToken, attachEvermindLearn, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, chatWorkLinkingDirective, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, filterMentionCandidates, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, getGlobalRunState, getLastResolvedModel, getRunSnapshot, getRunTrace, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEvermindModel, isFailedToolResult, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, linkedTicketsToAdvance, mentionRecipient, modelsUsedInTrace, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, prepareImageDataUrl, resolveRecipient, resolveRunConfirm, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, setLastResolvedModel, startRun, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatInputAttachment, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, type McpToolResultInfo, type MentionToken, type MessageProvenance, NOT_STARTED_TASK_STATUSES, PROVENANCE_META_KEY, type PreparedImage, type ProvenanceAccount, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, accountUsedInTrace, activeMentionToken, attachEvermindLearn, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, chatWorkLinkingDirective, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, effortProfile, filterMentionCandidates, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, getGlobalRunState, getLastResolvedModel, getRunSnapshot, getRunTrace, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, linkedTicketsToAdvance, mentionRecipient, modelsUsedInTrace, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, prepareImageDataUrl, reasoningForRun, resolveRecipient, resolveRunConfirm, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, setLastResolvedModel, startRun, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };

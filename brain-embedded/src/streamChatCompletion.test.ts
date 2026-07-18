@@ -114,3 +114,44 @@ describe('streamChatCompletion transport injection', () => {
     expect(JSON.parse(result.toolCalls[0].args)).toEqual({ id: 75 });
   });
 });
+
+describe('caller metadata (gateway audit emit)', () => {
+  /** Parse the JSON body the mocked fetch was called with. */
+  const sentBody = (fetchMock: { mock: { calls: unknown[][] } }): Record<string, unknown> =>
+    JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+
+  it('emits metadata.chatId (and projectId) when the chat is known', async () => {
+    const fetchMock = vi.fn(async () => sseResponse(['data: [DONE]\n']));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamChatCompletion({
+      messages: [{ role: 'user', content: 'hi' }],
+      transport: baseTransport,
+      metadata: { chatId: 42, projectId: 7 },
+    });
+
+    expect(sentBody(fetchMock).metadata).toEqual({ chatId: 42, projectId: 7 });
+  });
+
+  it('omits the metadata key entirely when no chat id is known', async () => {
+    const fetchMock = vi.fn(async () => sseResponse(['data: [DONE]\n']));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamChatCompletion({ messages: [{ role: 'user', content: 'hi' }], transport: baseTransport });
+
+    expect(sentBody(fetchMock)).not.toHaveProperty('metadata');
+  });
+
+  it('omits the metadata key when every field is undefined', async () => {
+    const fetchMock = vi.fn(async () => sseResponse(['data: [DONE]\n']));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamChatCompletion({
+      messages: [],
+      transport: baseTransport,
+      metadata: { chatId: undefined, projectId: undefined },
+    });
+
+    expect(sentBody(fetchMock)).not.toHaveProperty('metadata');
+  });
+});

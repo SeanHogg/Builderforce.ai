@@ -104,12 +104,24 @@ function assistantMessage(
  * later step can act on an earlier tool's real output. Running off the end of the script
  * ends the turn with plain text, so a plan can never hang the loop.
  */
-function scriptedStreamFn(plan: readonly PlanStep[], trace: readonly ToolTrace[]): StreamFn {
+function scriptedStreamFn(
+  plan: readonly PlanStep[],
+  trace: readonly ToolTrace[],
+  onPlanError: (err: unknown) => void,
+): StreamFn {
   let turn = 0;
   return () => {
     const stream = new AssistantMessageEventStream();
     let step = plan[turn++];
-    while (typeof step === "function") step = step(trace);
+    try {
+      while (typeof step === "function") step = step(trace);
+    } catch (err) {
+      // A derived step that cannot be built (e.g. the tool it depends on returned
+      // nothing) must END the run so the failure surfaces as an error, not as a
+      // 120s test timeout on a loop awaiting a stream that never resolves.
+      onPlanError(err);
+      step = { text: "plan step failed" };
+    }
     const message =
       step === undefined
         ? assistantMessage([{ type: "text", text: "plan complete" }], "stop")
@@ -322,12 +334,21 @@ export async function runCodingEval(options: CodingEvalOptions): Promise<CodingE
       options.systemPrompt ??
       "You are a coding agent working in a checked-out repository. Use the provided tools to make the requested change. Read a file before editing it. Do not invent changes that were not asked for.",
   });
-  agent.streamFn = options.streamFn ?? scriptedStreamFn(options.plan ?? [], trace);
+  let planError: unknown;
+  agent.streamFn =
+    options.streamFn ??
+    scriptedStreamFn(options.plan ?? [], trace, (err) => {
+      planError ??= err;
+    });
 
   const events: AgentEvent[] = [];
   agent.subscribe((e) => events.push(e));
 
   const produced = await agent.prompt([{ role: "user", content: options.task, timestamp: 0 }]);
+  if (planError !== undefined) {
+    await rm(root, { recursive: true, force: true });
+    throw planError;
+  }
 
   const lastAssistant = produced.filter((m) => m.role === "assistant").at(-1) as
     | AssistantMessage

@@ -53,6 +53,7 @@ import {
   recordFailure,
 } from '../../infrastructure/auth/cooldownStore';
 import { validateJsonSchema } from './jsonSchemaValidator';
+import { parseClientReasoningIntent, reasoningParamsForChain } from './reasoningCapability';
 import { estimateTokensFromChars } from './tokenUsage';
 import type { ActionType } from './actionTypes';
 import { PROVIDER_VENDOR_MAP, type TenantVendorKeys } from './tenantProviderKeyService';
@@ -717,6 +718,12 @@ export interface ChatCompletionRequest {
    *  `model` with NO substitution — an unavailable model 503s rather than
    *  silently swapping. Normalized onto `modelStrict` by `resolveStrictPin`. */
   strict?: boolean;
+  /** OPTIONAL vendor-neutral reasoning intent (the VS Code chat "Thinking" toggle).
+   *  Omitted entirely when the toggle is off. The level names are `AgentThinkLevel`
+   *  members, so `reasoningCapability` maps them to the CORRECT vendor param for the
+   *  model that actually serves — or drops them for a family that can't accept one.
+   *  Gateway-only: consumed in `dispatch()`, never forwarded to a vendor. */
+  reasoning?: { level?: string };
   messages: ChatMessage[];
   temperature?: number;
   max_tokens?: number;
@@ -1544,6 +1551,22 @@ export class LlmProxyService {
     const sanitizedBody = sanitizeRequestToolCalls(body as unknown as Record<string, unknown>) as unknown as ChatCompletionRequest;
     const messages = sanitizedBody.messages as unknown as Array<Record<string, unknown>>;
     const extraBody = stripStandardFields(sanitizedBody);
+    // ── Client reasoning intent → vendor param ──────────────────────────────
+    // The optional vendor-neutral `reasoning: { level }` (VS Code "Thinking" toggle) is
+    // resolved HERE, not at the route, because only this seam knows the models that will
+    // actually be tried (`auto`/cascade resolution, plan pool, backstop chain — each
+    // re-enters dispatch() with its own candidates, so the param is re-derived per chain
+    // rather than pinned to the client's requested id). `reasoningParamsForChain` emits a
+    // param only when it is correct for EVERY candidate, so a mixed-family chain drops it
+    // instead of leaking e.g. `thinking` onto a Cloudflare/qwen coder.
+    // `isFirstTurn`: a request with no assistant turn yet is definitionally a planning
+    // turn (a tool-result continuation always carries one), which is what makes Anthropic
+    // extended thinking safe alongside tools — same rule the cloud loop uses.
+    const clientReasoning = reasoningParamsForChain(
+      candidates,
+      parseClientReasoningIntent((sanitizedBody as Record<string, unknown>).reasoning),
+      { isFirstTurn: !messages.some((m) => m.role === 'assistant') },
+    );
     // Timeout precedence: an explicit dispatch override (e.g. the paid backstop
     // forcing the premium budget) wins; otherwise a per-request caller override
     // (`_builderforce.vendorTimeoutMs`, clamped) lets even a free-plan one-off
@@ -1561,7 +1584,9 @@ export class LlmProxyService {
       ...(sanitizedBody.max_tokens  != null ? { maxTokens:   sanitizedBody.max_tokens  } : {}),
       ...(sanitizedBody.temperature != null ? { temperature: sanitizedBody.temperature } : {}),
       ...(sanitizedBody.top_p       != null ? { topP:        sanitizedBody.top_p       } : {}),
-      ...(Object.keys(extraBody).length > 0 ? { extraBody } : {}),
+      ...(Object.keys(extraBody).length > 0 || clientReasoning
+        ? { extraBody: { ...extraBody, ...clientReasoning } }
+        : {}),
       ...(cacheTtl ? { cacheTtl } : {}),
       title: this.productName,
       ...(effectiveTimeoutMs ? { timeoutMs: effectiveTimeoutMs } : {}),
@@ -2828,6 +2853,9 @@ const STANDARD_BODY_FIELDS: ReadonlySet<string> = new Set([
   'modelStrict', // strict-pin flag — gateway-only; controls failover behaviour
   'strict',      // public SDK alias for modelStrict — gateway-only; stripped here
   '_builderforce', // gateway-internal passthrough envelope (per-call vendorTimeoutMs override); consumed in dispatch(), never sent upstream
+  'reasoning',   // vendor-neutral client reasoning intent ({ level }); consumed in dispatch() via
+                 // reasoningCapability and translated to the per-family vendor param. Listed here so
+                 // the raw client value can NEVER reach a vendor as an unvalidated passthrough.
   // OpenAI-compatible pass-throughs (`tools`, `tool_choice`, `response_format`)
   // travel via the `extraBody` catch-all and reach the vendor verbatim.
   //

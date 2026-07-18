@@ -24,6 +24,7 @@ import {
   type ChatCompletionRequest,
   type LlmUsage,
 } from '../../application/llm/LlmProxyService';
+import { parseClientReasoningIntent } from '../../application/llm/reasoningCapability';
 import { normalizeByoProvider, resolvePaidOverflowCapMillicents, PREMIUM_REQUEST_SURCHARGE_MILLICENTS } from '../../application/llm/usageLedger';
 import { classifyReplyAccount } from '../../application/llm/replyProvenance';
 import { recordActivity, cloudAgentActor, buildModelActivityMetadata } from '../../application/activity/activityLog';
@@ -1561,6 +1562,26 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
       return c.json({ error: 'messages array is required' }, 400);
     }
+
+    // ── Client reasoning intent (VS Code chat "Thinking" toggle) ───────────
+    // OPTIONAL vendor-neutral `reasoning: { level: 'low'|'medium'|'high' }`, omitted
+    // entirely when the toggle is off (so today's requests stay byte-identical).
+    // Validate + CANONICALIZE here, at the trust boundary: only the matched level
+    // survives, so no arbitrary client-shaped `reasoning` object travels further, and a
+    // garbage value degrades to today's behaviour instead of erroring. The actual
+    // model-family mapping happens in the proxy's dispatch(), against the model the
+    // cascade RESOLVES rather than the id the client asked for.
+    //
+    // Cost: extended thinking bills as output tokens, so it is already bounded by the
+    // per-tenant daily + monthly gates in `enforceTokenCaps` below (and metered into
+    // llm_usage_log like any other output). No new gate is introduced here. NOTE the one
+    // interaction worth knowing: `vendors/anthropic.ts` raises max_tokens to fit an
+    // enabled thinking budget, so a thinking turn can exceed the plan's max_tokens clamp
+    // applied below — a plan-tier gate on `level: 'high'` is the natural hook if that
+    // ceiling ever needs to be hard.
+    const reasoningIntent = parseClientReasoningIntent((body as Record<string, unknown>).reasoning);
+    if (reasoningIntent) (body as Record<string, unknown>).reasoning = { level: reasoningIntent.thinkLevel };
+    else delete (body as Record<string, unknown>).reasoning;
 
     // ── Tenant "LLM" expansion (migration 0211) ────────────────────────────
     // A `tenant_model:<slug>` model ref expands into its configured base model +

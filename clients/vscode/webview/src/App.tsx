@@ -16,6 +16,10 @@ import {
   parseByoUnresolved,
   deriveChatTitle,
   DEFAULT_CHAT_TITLE,
+  effortProfile,
+  isEffort,
+  reasoningForRun,
+  type Effort,
   type BrainConfig,
   type BrainChat,
   type DirectedRecipient,
@@ -71,6 +75,27 @@ function makeT(labels: LabelBundle) {
 const MEMORY_KEY = (chatId: number) => `bf_brain_memory:${chatId}`;
 
 /**
+ * Composer run-shaping switches, persisted GLOBALLY (not per chat — they are a
+ * working preference, like a keyboard layout, not a property of a conversation)
+ * so they survive a webview reload.
+ */
+const EFFORT_KEY = 'bf_brain_effort';
+const THINKING_KEY = 'bf_brain_thinking';
+
+/**
+ * The ONE guarded localStorage accessor pair for the composer's persisted
+ * switches. `localStorage` can throw in a webview (storage partitioned/blocked),
+ * so every read/write is wrapped here rather than repeating a try/catch per
+ * switch — the memory toggle, effort, and thinking all go through these.
+ */
+function readStored(key: string): string | null {
+  try { return window.localStorage.getItem(key); } catch { return null; }
+}
+function writeStored(key: string, value: string): void {
+  try { window.localStorage.setItem(key, value); } catch { /* storage blocked */ }
+}
+
+/**
  * Best-effort decode of the tenant JWT's claims for the diagnostics dump — the api
  * mints `{ tid: tenantId, sub: userId }` (see `authMiddleware`). Pure client-side
  * base64url decode (no verification — this is display-only); returns {} on any malformed
@@ -123,9 +148,6 @@ function timelineLabels(labels: LabelBundle): Partial<BrainTimelineLabels> {
   };
 }
 
-/** How hard the model should work on the next turn — surfaced in the `/` menu. */
-type Effort = 'quick' | 'balanced' | 'thorough';
-
 /** A persisted Brain trace row as returned by GET /api/brain/chats/:id/trace. */
 interface PersistedTraceRow {
   turnSeq: number | null;
@@ -160,22 +182,102 @@ function persistedToTraceEvent(row: PersistedTraceRow): BrainTraceEvent {
 }
 
 /**
- * Turn the composer's Effort / Thinking / Browse-the-web toggles into extra
- * system-prompt directives. These ride the SAME `extraSystem` channel the web
- * Brain uses, so a toggle actually changes how the next turn runs (no hidden
- * model params needed). 'balanced' is the neutral default and adds nothing.
+ * Turn the composer's Effort / Browse-the-web toggles into extra system-prompt
+ * directives, riding the same `extraSystem` channel the web Brain uses.
+ *
+ * The Effort nudge comes from the SHARED effort table (`effortProfile`) that also
+ * decides this run's `max_tokens` and reasoning level, so the prose and the real
+ * params can never disagree. 'balanced' contributes nothing (the neutral default).
+ *
+ * Thinking is deliberately NOT here any more. It used to be a "reason step by
+ * step" sentence — pure theatre, since nothing on the wire changed. It is now a
+ * real, structured `reasoning.level` request field (see `reasoningForRun`), so the
+ * prose version was removed rather than left as a second, weaker mechanism.
  */
-function buildComposerDirectives(o: { effort: Effort; thinking: boolean; web: boolean }): string {
+function buildComposerDirectives(o: { effort: Effort; web: boolean }): string {
   const parts: string[] = [];
-  if (o.effort === 'quick')
-    parts.push('Effort: favour a fast, concise, direct answer. Keep exploration minimal unless the task truly requires more.');
-  if (o.effort === 'thorough')
-    parts.push('Effort: apply maximum rigor. Be exhaustive, consider edge cases, verify your work, and do not stop until the task is fully complete.');
-  if (o.thinking)
-    parts.push('Reason step by step before answering: work the problem through and lay out your plan before you act.');
+  const { directive } = effortProfile(o.effort);
+  if (directive) parts.push(directive);
   if (o.web)
     parts.push('You may browse the web: when a question needs current or external information, use the `web.fetch` tool to read the relevant URL(s) rather than relying on memory, and cite the sources you use.');
   return parts.join('\n\n');
+}
+
+/**
+ * The subset of `GET /llm/v1/models` the composer needs to say WHO PAYS for the
+ * active model. Same payload the extension's model picker consumes (see
+ * `gateway.ts`) — the webview reads it directly because the funding line is a
+ * per-render UI concern, not host state.
+ */
+interface ModelSurface {
+  data?: Array<{ id?: string }>;
+  byo?: { providers?: string[]; models?: Array<{ id?: string; vendor?: string }> };
+  canUsePremiumModels?: boolean;
+}
+
+/**
+ * One line describing what an Effort level ACTUALLY does, built from the shared
+ * effort table so the copy can never claim a budget the request doesn't send.
+ * The thinking budget is only mentioned when the Thinking toggle is on — that is
+ * the only case in which it is spent.
+ */
+function effortDesc(
+  level: Effort,
+  thinking: boolean,
+  t: (key: string, fallback: string) => string,
+): string {
+  const { maxTokens, thinkingBudgetTokens } = effortProfile(level);
+  const base = t(`app.effortDesc.${level}`, EFFORT_DESC_FALLBACK[level])
+    .replace('{answer}', maxTokens.toLocaleString());
+  if (!thinking) return base;
+  return `${base} ${t('app.effortDescThinking', '+ {thinking} thinking tokens.')
+    .replace('{thinking}', thinkingBudgetTokens.toLocaleString())}`;
+}
+
+/** English fallbacks for the effort descriptions (localized via the host bundle). */
+const EFFORT_DESC_FALLBACK: Record<Effort, string> = {
+  quick: 'Fastest and cheapest — short, direct answers. Up to {answer} answer tokens.',
+  balanced: 'The default — normal depth. Up to {answer} answer tokens.',
+  thorough: 'Deepest and slowest — exhaustive, verifies its work. Up to {answer} answer tokens.',
+};
+
+/** Title-case a provider key ('anthropic' → 'Anthropic') for display. */
+function providerLabel(vendor: string): string {
+  return vendor.replace(/^./, (ch) => ch.toUpperCase());
+}
+
+/**
+ * Explain the model currently in force: its name plus which purse funds it —
+ * the tenant's OWN connected account (BYO, billed to their key), the plan pool
+ * (included), or the premium tier (metered at cost + 1¢/request). Returns null
+ * for an unresolved surface so the caller renders nothing rather than guessing.
+ */
+function describeModelFunding(
+  model: string | undefined,
+  surface: ModelSurface | null,
+  t: (key: string, fallback: string) => string,
+): { name: string; funding: string } | null {
+  if (!surface) return null;
+  // No pinned model: the gateway routes each turn itself.
+  if (!model) {
+    return {
+      name: t('app.modelAuto', 'Auto — the gateway chooses'),
+      funding: t('app.modelFundingAuto', 'Routed per turn: your connected accounts first, then your plan.'),
+    };
+  }
+  const byoMatch = (surface.byo?.models ?? []).find((m) => m.id === model);
+  if (byoMatch?.vendor) {
+    return {
+      name: model,
+      funding: t('app.modelFundingByo', 'Billed to your own {provider} account — no plan credit used.')
+        .replace('{provider}', providerLabel(byoMatch.vendor)),
+    };
+  }
+  if ((surface.data ?? []).some((m) => m.id === model)) {
+    return { name: model, funding: t('app.modelFundingPlan', 'Included in your plan.') };
+  }
+  // Not in the plan pool and not BYO-servable ⇒ the premium (metered) tier.
+  return { name: model, funding: t('app.modelFundingPremium', 'Premium — metered at cost + 1¢ per request.') };
 }
 
 /* Toolbar glyphs — inline SVG so they render crisply in the editor's light AND
@@ -260,14 +362,27 @@ function PopoverMenu({
   );
 }
 
-/** One row in a {@link PopoverMenu}. `active` shows a trailing check. */
-function MenuItem({ icon, label, hint, active, onClick }: {
-  icon: React.ReactNode; label: string; hint?: string; active?: boolean; onClick: () => void;
+/**
+ * One row in a {@link PopoverMenu}. `active` shows a trailing check. `desc` adds a
+ * second, muted line explaining what the row actually DOES — the Effort levels and
+ * the Thinking toggle use it, because "Quick / Balanced / Thorough" on their own
+ * told the user nothing about the real effect (answer budget, thinking budget).
+ */
+function MenuItem({ icon, label, desc, hint, active, onClick }: {
+  icon: React.ReactNode; label: string; desc?: string; hint?: string; active?: boolean; onClick: () => void;
 }) {
   return (
-    <button type="button" role="menuitem" className={`bf-menu__item${active ? ' is-active' : ''}`} onClick={onClick}>
+    <button
+      type="button"
+      role="menuitem"
+      className={`bf-menu__item${active ? ' is-active' : ''}${desc ? ' bf-menu__item--stacked' : ''}`}
+      onClick={onClick}
+    >
       <span className="bf-menu__ico" aria-hidden="true">{icon}</span>
-      <span className="bf-menu__lbl">{label}</span>
+      <span className="bf-menu__lbl">
+        {label}
+        {desc != null && <span className="bf-menu__desc">{desc}</span>}
+      </span>
       {hint != null && <span className="bf-menu__hint">{hint}</span>}
       <span className="bf-menu__check" aria-hidden="true">{active ? '✓' : ''}</span>
     </button>
@@ -428,10 +543,27 @@ function Chat({ init }: { init: InitData }) {
   const [consolidating, setConsolidating] = useState(false);
   const [forking, setForking] = useState(false);
   // Composer run-shaping toggles (the `/` menu + the `+` menu's web option).
-  // They compile into `extraSystem` directives, so a toggle changes how the next
-  // turn actually runs. 'balanced' is the neutral default.
-  const [effort, setEffort] = useState<Effort>('balanced');
-  const [thinking, setThinking] = useState(false);
+  // Effort and Thinking are REAL request params — effort sets `max_tokens` and, with
+  // Thinking on, the `reasoning.level` intensity; effort also still contributes its
+  // system-prompt nudge. Both persist globally across webview reloads (same guarded
+  // storage helpers the per-chat memory switch uses). 'balanced' + thinking-off is the
+  // neutral default and yields a request identical to having no controls at all.
+  const [effort, setEffortState] = useState<Effort>(() => {
+    const stored = readStored(EFFORT_KEY);
+    return isEffort(stored) ? stored : 'balanced';
+  });
+  const setEffort = useCallback((next: Effort) => {
+    setEffortState(next);
+    writeStored(EFFORT_KEY, next);
+  }, []);
+  const [thinking, setThinkingState] = useState(() => readStored(THINKING_KEY) === '1');
+  const toggleThinking = useCallback(() => {
+    setThinkingState((prev) => {
+      const next = !prev;
+      writeStored(THINKING_KEY, next ? '1' : '0');
+      return next;
+    });
+  }, []);
   const [webBrowsing, setWebBrowsing] = useState(false);
   // The per-turn LIMBIC/affective block for the CURRENT turn — fetched from the host
   // (which calls the gateway's affective endpoint with the user's personality) on each
@@ -605,10 +737,38 @@ function Chat({ init }: { init: InitData }) {
   // participant; before the first send it falls back to the STATIC personality block
   // (host-fetched once per session). '' (a no-op) when the user has no profile.
   const extraSystem = useMemo(
-    () => [projectDirective, editorDirective, buildComposerDirectives({ effort, thinking, web: webBrowsing }), turnLimbic || init.personalityBlock || '']
+    () => [projectDirective, editorDirective, buildComposerDirectives({ effort, web: webBrowsing }), turnLimbic || init.personalityBlock || '']
       .filter(Boolean)
       .join('\n\n'),
-    [projectDirective, editorDirective, effort, thinking, webBrowsing, turnLimbic, init.personalityBlock],
+    [projectDirective, editorDirective, effort, webBrowsing, turnLimbic, init.personalityBlock],
+  );
+
+  // The REAL request params behind the `/` menu. `maxTokens` is a universal param so
+  // the client owns it; `reasoning` is deliberately vendor-NEUTRAL intent (the gateway
+  // maps it to Anthropic `thinking` / OpenAI `reasoning_effort` against the model it
+  // actually resolves — the client often can't know it, since the picker's default is
+  // "auto"). Memoized so a keystroke doesn't hand the run builder a fresh object.
+  const effortMaxTokens = effortProfile(effort).maxTokens;
+  const reasoning = useMemo(() => reasoningForRun({ effort, thinking }), [effort, thinking]);
+
+  // Which model is in force, and WHO PAYS for it. A BYO tenant connects their own
+  // provider key precisely so their turns stop drawing on the plan — but the composer
+  // never said which was happening, so "what do these do?" had no answer for the one
+  // thing that costs money. `GET /llm/v1/models` already returns the tenant's connected
+  // providers and their servable models; read it once and classify the active model.
+  // Purely informational: any failure just leaves the funding line off.
+  const [modelSurface, setModelSurface] = useState<ModelSurface | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    apiReq<ModelSurface>('/llm/v1/models')
+      .then((r) => { if (!cancelled) setModelSurface(r); })
+      .catch(() => { /* best-effort — the menu simply omits the funding line */ });
+    return () => { cancelled = true; };
+  }, [apiReq]);
+
+  const modelFunding = useMemo(
+    () => describeModelFunding(init.model, modelSurface, t),
+    [init.model, modelSurface, t],
   );
 
   // Project-Evermind memory hooks: recall the chat's project learnings before
@@ -671,15 +831,13 @@ function Chat({ init }: { init: InitData }) {
   const [memoryEnabled, setMemoryEnabled] = useState(true);
   useEffect(() => {
     if (chatId == null) { setMemoryEnabled(true); return; }
-    try {
-      const v = window.localStorage.getItem(MEMORY_KEY(chatId));
-      setMemoryEnabled(v == null ? true : v !== '0');
-    } catch { setMemoryEnabled(true); }
+    const v = readStored(MEMORY_KEY(chatId));
+    setMemoryEnabled(v == null ? true : v !== '0');
   }, [chatId]);
   const toggleMemory = useCallback((on: boolean) => {
     setMemoryEnabled(on);
     if (chatId == null) return;
-    try { window.localStorage.setItem(MEMORY_KEY(chatId), on ? '1' : '0'); } catch { /* storage blocked */ }
+    writeStored(MEMORY_KEY(chatId), on ? '1' : '0');
   }, [chatId]);
   // Gate the recall hook on the per-chat switch — off ⇒ no recall this chat.
   const gatedEvermind = memoryEnabled ? evermind : undefined;
@@ -693,6 +851,8 @@ function Chat({ init }: { init: InitData }) {
     // code without recording one.
     projectId: evermindProjectId,
     model: init.model,
+    maxTokens: effortMaxTokens,
+    reasoning,
     extraSystem,
     toolSpecs,
     runTool,
@@ -1556,22 +1716,60 @@ function Chat({ init }: { init: InitData }) {
             )}
           </PopoverMenu>
 
-          {/* / : effort, thinking, and account settings. */}
+          {/* / : effort, thinking, the model in force, and account settings.
+              Every row states its REAL effect (answer budget, thinking budget, who
+              pays) — the levels used to be bare adjectives that changed nothing but
+              prose, which is exactly why users couldn't tell what they did. */}
           <PopoverMenu align="left" title={t('app.options', 'Options')} trigger={<IconSlash />}>
             {(close) => (
               <>
                 <div className="bf-menu__group">{t('app.effort', 'Effort')}</div>
-                <MenuItem icon="🏃" label={t('app.effortQuick', 'Quick')} active={effort === 'quick'} onClick={() => setEffort('quick')} />
-                <MenuItem icon="⚖️" label={t('app.effortBalanced', 'Balanced')} active={effort === 'balanced'} onClick={() => setEffort('balanced')} />
-                <MenuItem icon="🎯" label={t('app.effortThorough', 'Thorough')} active={effort === 'thorough'} onClick={() => setEffort('thorough')} />
+                <MenuItem
+                  icon="🏃"
+                  label={t('app.effortQuick', 'Quick')}
+                  desc={effortDesc('quick', thinking, t)}
+                  active={effort === 'quick'}
+                  onClick={() => setEffort('quick')}
+                />
+                <MenuItem
+                  icon="⚖️"
+                  label={t('app.effortBalanced', 'Balanced')}
+                  desc={effortDesc('balanced', thinking, t)}
+                  active={effort === 'balanced'}
+                  onClick={() => setEffort('balanced')}
+                />
+                <MenuItem
+                  icon="🎯"
+                  label={t('app.effortThorough', 'Thorough')}
+                  desc={effortDesc('thorough', thinking, t)}
+                  active={effort === 'thorough'}
+                  onClick={() => setEffort('thorough')}
+                />
                 <div className="bf-menu__sep" />
                 <MenuItem
                   icon="💭"
                   label={t('app.thinking', 'Thinking')}
+                  desc={thinking
+                    ? t('app.thinkingOnDesc', 'The model reasons before answering, with a {budget}-token thinking budget at this effort. Slower, better on hard problems.')
+                        .replace('{budget}', effortProfile(effort).thinkingBudgetTokens.toLocaleString())
+                    : t('app.thinkingOffDesc', 'Off — the model answers directly. Turn on for a reasoning pass before the answer.')}
                   hint={thinking ? t('app.on', 'On') : t('app.off', 'Off')}
                   active={thinking}
-                  onClick={() => setThinking((v) => !v)}
+                  onClick={toggleThinking}
                 />
+                {modelFunding && (
+                  <>
+                    <div className="bf-menu__sep" />
+                    <div className="bf-menu__group">{t('app.modelInUse', 'Model in use')}</div>
+                    <div className="bf-menu__info">
+                      <span className="bf-menu__ico" aria-hidden="true">🧠</span>
+                      <span className="bf-menu__lbl">
+                        {modelFunding.name}
+                        <span className="bf-menu__desc">{modelFunding.funding}</span>
+                      </span>
+                    </div>
+                  </>
+                )}
                 <div className="bf-menu__sep" />
                 <MenuItem icon="⚙" label={t('app.accountSettings', 'Account settings')} onClick={() => { close(); post('settings'); }} />
               </>

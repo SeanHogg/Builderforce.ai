@@ -139,5 +139,17 @@
   "Your connected {provider} account couldn’t be used this run (its token looks expired or revoked), so it ran on the shared model pool instead of your own model. Reconnect it in the web app under Settings ▸ API Keys.": "Your connected {provider} account couldn’t be used this run (its token looks expired or revoked), so it ran on the shared model pool instead of your own model. Reconnect it in the web app under Settings ▸ API Keys.",
   "Your {provider} account is connected in a DIFFERENT workspace, so this run used the shared model pool instead of your own model. Switch to that workspace, or connect it in this one under Settings ▸ API Keys.": "Your {provider} account is connected in a DIFFERENT workspace, so this run used the shared model pool instead of your own model. Switch to that workspace, or connect it in this one under Settings ▸ API Keys.",
   "Answer needed": "Answer needed",
-  "Show in conversation": "Show in conversation"
+  "Show in conversation": "Show in conversation",
+  "Fastest and cheapest — short, direct answers. Up to {answer} answer tokens.": "Fastest and cheapest — short, direct answers. Up to {answer} answer tokens.",
+  "The default — normal depth. Up to {answer} answer tokens.": "The default — normal depth. Up to {answer} answer tokens.",
+  "Deepest and slowest — exhaustive, verifies its work. Up to {answer} answer tokens.": "Deepest and slowest — exhaustive, verifies its work. Up to {answer} answer tokens.",
+  "+ {thinking} thinking tokens.": "+ {thinking} thinking tokens.",
+  "The model reasons before answering, with a {budget}-token thinking budget at this effort. Slower, better on hard problems.": "The model reasons before answering, with a {budget}-token thinking budget at this effort. Slower, better on hard problems.",
+  "Off — the model answers directly. Turn on for a reasoning pass before the answer.": "Off — the model answers directly. Turn on for a reasoning pass before the answer.",
+  "Model in use": "Model in use",
+  "Auto — the gateway chooses": "Auto — the gateway chooses",
+  "Routed per turn: your connected accounts first, then your plan.": "Routed per turn: your connected accounts first, then your plan.",
+  "Billed to your own {provider} account — no plan credit used.": "Billed to your own {provider} account — no plan credit used.",
+  "Included in your plan.": "Included in your plan.",
+  "Premium — metered at cost + 1¢ per request.": "Premium — metered at cost + 1¢ per request."
 }

@@ -30,11 +30,13 @@ import type { BrainMessage } from './types';
 import type {
   BrainToolSpec,
   ChatCompletionMessage,
+  CompletionMetadata,
   ContentPart,
   StreamChatOptions,
   StreamHandlers,
   StreamChatResult,
 } from './streamChatCompletion';
+import type { ReasoningIntent } from './effort';
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
 import { withProvenanceMetadata, type ProvenanceAccount } from './provenance';
 import { setLastResolvedModel } from './lastResolvedModel';
@@ -199,6 +201,18 @@ export interface BrainRunRequest {
   /** Pure predicate: true → pause the loop for an explicit user confirmation. */
   needsConfirm?: (req: { name: string; args: unknown }) => boolean;
   stream: BrainStreamFn;
+  /**
+   * `max_tokens` for this run's completions — the composer's Effort level (see
+   * `effort.ts`). Absent keeps `streamChatCompletion`'s 4096 default.
+   */
+  maxTokens?: number;
+  /**
+   * Vendor-neutral reasoning intent for this run (the composer's Thinking toggle,
+   * at the Effort level's intensity). Absent ⇒ no `reasoning` key on the wire.
+   * Applies to the MODEL-FACING turns only — the internal transcript summarizer
+   * is a mechanical compaction, never a "think harder" job.
+   */
+  reasoning?: ReasoningIntent;
   persistence: BrainRunPersistence;
   onActivity?: (chatId: number) => void;
   /** Seed the rich transcript from prior persisted history (first turn only). */
@@ -1077,9 +1091,19 @@ async function autoLinkCreatedItem(
 export { startRun as runBrainLoop };
 
 async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promise<void> {
-  const { resolvedSystemPrompt, tools: toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind } = req;
+  const { resolvedSystemPrompt, tools: toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
   const convo = c.transcript;
   const tools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : undefined;
+  // Caller provenance for the gateway's audit emit — this is what makes the
+  // DEFAULT agent's turn show WHICH MODEL served it in the activity log (the
+  // server no-ops without a chat id). Built once and shared by every
+  // model-facing turn of this run. Deliberately NOT passed to the transcript
+  // summarizer (`summarizeMiddle`): that is mechanical compaction, not a reply,
+  // and auditing it would double-count the turn.
+  const metadata: CompletionMetadata = {
+    chatId,
+    ...(req.projectId != null ? { projectId: req.projectId } : {}),
+  };
 
   // Evermind recall — before the FIRST turn, ask the project's self-learning model
   // which learned memories are relevant to this request. When it returns some, we
@@ -1198,7 +1222,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     let result;
     try {
       result = await stream(
-        { messages: working, tools, tool_choice: tools ? 'auto' : undefined, model, signal: c.abort?.signal },
+        { messages: working, tools, tool_choice: tools ? 'auto' : undefined, model, maxTokens, reasoning, metadata, signal: c.abort?.signal },
         { onTextDelta: (d) => { if (firstTokenAt === undefined) firstTokenAt = nowMs(); c.streamingText += d; emit(c); } },
       );
     } catch (e) {
@@ -1469,7 +1493,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       let closeFirstTokenAt: number | undefined;
       const closing = await stream(
         // No `tools` → the model can't call another tool and must produce text.
-        { messages: working, model, signal: c.abort?.signal },
+        { messages: working, model, maxTokens, reasoning, metadata, signal: c.abort?.signal },
         { onTextDelta: (d) => { if (closeFirstTokenAt === undefined) closeFirstTokenAt = nowMs(); c.streamingText += d; emit(c); } },
       );
       accrueByoUnresolved(c, closing.byoUnresolved);

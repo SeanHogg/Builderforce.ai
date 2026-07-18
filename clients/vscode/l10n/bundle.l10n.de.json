@@ -146,5 +146,17 @@
   "Your connected {provider} account couldn’t be used this run (its token looks expired or revoked), so it ran on the shared model pool instead of your own model. Reconnect it in the web app under Settings ▸ API Keys.": "Dein verbundenes {provider}-Konto konnte in diesem Lauf nicht verwendet werden (das Token scheint abgelaufen oder widerrufen zu sein), daher wurde der gemeinsame Modell-Pool statt deines eigenen Modells genutzt. Verbinde es in der Web-App unter Einstellungen ▸ API-Schlüssel erneut.",
   "Your {provider} account is connected in a DIFFERENT workspace, so this run used the shared model pool instead of your own model. Switch to that workspace, or connect it in this one under Settings ▸ API Keys.": "Dein {provider}-Konto ist in einem ANDEREN Arbeitsbereich verbunden, daher hat dieser Lauf den gemeinsamen Modell-Pool statt deines eigenen Modells verwendet. Wechsle in diesen Arbeitsbereich oder verbinde es in diesem unter Einstellungen ▸ API-Schlüssel.",
   "Answer needed": "Antwort erforderlich",
-  "Show in conversation": "Im Gespräch anzeigen"
+  "Show in conversation": "Im Gespräch anzeigen",
+  "Fastest and cheapest — short, direct answers. Up to {answer} answer tokens.": "Am schnellsten und günstigsten – kurze, direkte Antworten. Bis zu {answer} Antwort-Tokens.",
+  "The default — normal depth. Up to {answer} answer tokens.": "Der Standard – normale Tiefe. Bis zu {answer} Antwort-Tokens.",
+  "Deepest and slowest — exhaustive, verifies its work. Up to {answer} answer tokens.": "Am gründlichsten und langsamsten – erschöpfend, prüft die eigene Arbeit. Bis zu {answer} Antwort-Tokens.",
+  "+ {thinking} thinking tokens.": "+ {thinking} Denk-Tokens.",
+  "The model reasons before answering, with a {budget}-token thinking budget at this effort. Slower, better on hard problems.": "Das Modell denkt vor der Antwort nach, mit einem Denkbudget von {budget} Tokens auf dieser Stufe. Langsamer, aber besser bei schwierigen Problemen.",
+  "Off — the model answers directly. Turn on for a reasoning pass before the answer.": "Aus – das Modell antwortet direkt. Schalte es ein, um vor der Antwort einen Denkschritt einzufügen.",
+  "Model in use": "Verwendetes Modell",
+  "Auto — the gateway chooses": "Automatisch – das Gateway entscheidet",
+  "Routed per turn: your connected accounts first, then your plan.": "Pro Zug geroutet: zuerst deine verbundenen Konten, dann dein Tarif.",
+  "Billed to your own {provider} account — no plan credit used.": "Wird deinem eigenen {provider}-Konto berechnet – kein Tarifguthaben wird verbraucht.",
+  "Included in your plan.": "In deinem Tarif enthalten.",
+  "Premium — metered at cost + 1¢ per request.": "Premium – nach Verbrauch abgerechnet: Selbstkosten + 1 ¢ pro Anfrage."
 }

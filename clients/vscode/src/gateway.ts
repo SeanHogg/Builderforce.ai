@@ -80,13 +80,63 @@ export function getWebBaseUrl(): string {
 let modelsCache: { ts: number; data: ModelChoices } | undefined;
 const MODELS_TTL_MS = 5 * 60_000;
 
-/** The model lists the picker offers: the tenant's plan pool, plus — only when the
- *  tenant is entitled — the PREMIUM tier (any paid OpenRouter model, billed at
- *  OpenRouter cost + a flat 1¢/request; needs a paid plan + a validated card). */
+/** One model served through a tenant's OWN connected provider account (BYO). Mirrors
+ *  `byoModelsFor()` in the API's llmRoutes — `vendor` is the provider key the settings
+ *  page uses (anthropic / openai / google / meta / xai …). */
+export interface ByoModel {
+  id: string;
+  vendor: string;
+  tier: string;
+  contextWindow?: number;
+}
+
+/** The tenant's connected-provider (BYO) surface from `GET /llm/v1/models`. */
+export interface ByoChoices {
+  /** Connected provider keys, e.g. ['anthropic', 'openai']. */
+  providers: string[];
+  /** The models those accounts can serve — billed to the TENANT's own key, $0 to us. */
+  models: ByoModel[];
+}
+
+/**
+ * The model lists the picker offers. THREE distinct funding tiers, which is why they
+ * are kept apart rather than flattened into one list:
+ *
+ *   - `models`        — the tenant's PLAN POOL. Included in the plan, no extra charge.
+ *   - `byo.models`    — served by the tenant's OWN connected provider account. Billed
+ *                       to their key; costs the platform nothing. Connecting a provider
+ *                       is ALSO what unlocks model choice on the free plan.
+ *   - `premiumModels` — any paid OpenRouter model, at OpenRouter cost + a flat
+ *                       1¢/request. Needs a paid plan AND a validated card, which is a
+ *                       STRICTER rule than frontier access (hence the separate flag).
+ *
+ * `canChooseModel` (server alias for `canUseFrontierModels`) gates the picker as a
+ * whole: false ⇒ the gateway will reject a pinned model, so we must not offer one.
+ * `teacherModels` are the frontier models eligible to distil into an Evermind.
+ *
+ * Every one of these was previously parsed away and dropped on the floor — the
+ * response has carried them all along.
+ */
 export interface ModelChoices {
   models: string[];
   canUsePremiumModels: boolean;
   premiumModels: string[];
+  /** False ⇒ the tenant may not pin a model at all; offer only "auto". */
+  canChooseModel: boolean;
+  canUseFrontierModels: boolean;
+  byo: ByoChoices;
+  /** Frontier models this tenant may teach an Evermind with. */
+  teacherModels: string[];
+}
+
+/** The subset of `GET /llm/v1/models` this client consumes. */
+interface ModelsResponse {
+  data?: Array<{ id?: string }>;
+  canUsePremiumModels?: boolean;
+  canChooseModel?: boolean;
+  canUseFrontierModels?: boolean;
+  teacherModels?: string[];
+  byo?: { providers?: string[]; models?: ByoModel[] };
 }
 
 /** One paid OpenRouter model from `GET /llm/v1/catalog`. `pool` is set when the free/
@@ -113,7 +163,7 @@ export async function getModels(
     headers: { authorization: `Bearer ${key}` },
   });
   if (!res.ok) throw new Error(`models_failed_${res.status}`);
-  const json = (await res.json()) as { data?: Array<{ id?: string }>; canUsePremiumModels?: boolean };
+  const json = (await res.json()) as ModelsResponse;
   const models = (json.data ?? []).map((m) => m.id).filter((id): id is string => !!id);
 
   // Premium is the whole paid OpenRouter catalog, so it is NOT inlined into
@@ -122,7 +172,25 @@ export async function getModels(
   const canUsePremiumModels = json.canUsePremiumModels === true;
   const premiumModels = canUsePremiumModels ? await getPremiumCatalog().catch(() => []) : [];
 
-  const data: ModelChoices = { models, canUsePremiumModels, premiumModels };
+  // BYO + entitlement flags. Tolerant of an older gateway that omits them: no BYO,
+  // and model choice defaults to whatever premium access says (the pre-existing
+  // behaviour), so the picker degrades instead of locking the user out.
+  const byo: ByoChoices = {
+    providers: (json.byo?.providers ?? []).filter((p): p is string => typeof p === 'string'),
+    models: (json.byo?.models ?? []).filter((m): m is ByoModel => !!m && typeof m.id === 'string'),
+  };
+  const canUseFrontierModels = json.canUseFrontierModels === true;
+  const canChooseModel = json.canChooseModel ?? (canUseFrontierModels || canUsePremiumModels || byo.providers.length > 0);
+
+  const data: ModelChoices = {
+    models,
+    canUsePremiumModels,
+    premiumModels,
+    canChooseModel,
+    canUseFrontierModels,
+    byo,
+    teacherModels: json.teacherModels ?? [],
+  };
   modelsCache = { ts: Date.now(), data };
   return data;
 }

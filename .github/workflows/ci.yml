@@ -35,3 +35,44 @@ jobs:
       - name: Track manifest valid + generated table in sync
         working-directory: api
         run: node scripts/check-track-manifest.mjs --check
+
+  # Can the agent actually code? `coding-eval.e2e.test.ts` drives the real native Agent
+  # loop over the real shared tool registry against a real temp git repo and asserts the
+  # resulting FILES (create / edit / search-then-edit / multi-file / sandbox refusal /
+  # no-change-needed). `packages/agent-tools` is the contract all four capability
+  # providers share and had no tests at all; its unit suite is pure and runs in <1s.
+  #
+  # Deterministic only: no network, no clock, no model. The live evals
+  # (`*.live.test.ts`, vitest.live.config.ts) need a funded key and NEVER run here —
+  # the e2e config's include list cannot pick them up.
+  agent-evals:
+    name: Agent coding evals · shared tool contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          # agent-runtime declares engines.node >=22.12.0.
+          node-version: 22
+      # `search_code`'s on-prem backend prefers ripgrep and falls back to GNU grep.
+      # Install rg so CI exercises the same searcher a real on-prem agent uses (the
+      # grep-fallback suite self-skips when rg is present).
+      - name: Install ripgrep
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+
+      - name: Install shared tool contract deps
+        working-directory: packages/agent-tools
+        run: pnpm install --frozen-lockfile
+      - name: Unit · shared tool contract (edit / glob / capability gating)
+        working-directory: packages/agent-tools
+        run: pnpm test
+
+      - name: Install agent-runtime deps
+        working-directory: agent-runtime
+        run: pnpm install --frozen-lockfile
+      - name: Eval · agent coding ability against a real temp repo
+        working-directory: agent-runtime
+        run: pnpm exec vitest run --config vitest.e2e.config.ts test/coding-eval.e2e.test.ts test/search-code-grep-fallback.e2e.test.ts

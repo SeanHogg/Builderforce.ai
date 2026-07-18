@@ -7808,7 +7808,16 @@
       "system": "系统",
       "unknown": "未知"
     },
+    "model": {
+      "tooltip": "由模型 {model} 提供服务",
+      "accountOwn": "自有账户",
+      "accountShared": "共享资源池",
+      "accountSharedUnused": "共享资源池（未使用自有账户）"
+    },
     "verb": {
+      "agent": {
+        "replied": "在对话中回复"
+      },
       "task": {
         "created": "创建了工单",
         "updated": "更新了工单",
