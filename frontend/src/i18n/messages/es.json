@@ -7808,7 +7808,16 @@
       "system": "Sistema",
       "unknown": "Desconocido"
     },
+    "model": {
+      "tooltip": "Servido por el modelo {model}",
+      "accountOwn": "Tu cuenta",
+      "accountShared": "Grupo compartido",
+      "accountSharedUnused": "Grupo compartido (no se usó tu cuenta)"
+    },
     "verb": {
+      "agent": {
+        "replied": "respondió en un chat"
+      },
       "task": {
         "created": "creó un ticket",
         "updated": "actualizó un ticket",

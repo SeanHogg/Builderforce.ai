@@ -28,6 +28,7 @@ import { useBrainConfig } from './config';
 import { isStepMessage, type BrainMessage, type BrainModality, type ChatInputAttachment } from './types';
 import type { BrainToolSpec, ChatCompletionMessage, ContentPart } from './streamChatCompletion';
 import type { EvermindRunHooks } from './evermindMemory';
+import type { ReasoningIntent } from './effort';
 import { prepareImageDataUrl } from './imagePrep';
 import { scopeToConsolidation } from './consolidation';
 import { withDirectedMetadata, isDirectedToParticipant, type DirectedRecipient } from './directedMessage';
@@ -59,6 +60,17 @@ export interface UseBrainConversationOptions {
   systemPrompt?: string;
   /** Override the model (e.g. run the Brain as a specific assigned agent). */
   model?: string;
+  /**
+   * `max_tokens` for this conversation's completions — the host's Effort control
+   * (see `effort.ts`, the single effort→params map). Omit for the 4096 default.
+   */
+  maxTokens?: number;
+  /**
+   * Vendor-neutral reasoning intent (the host's Thinking toggle). Build it with
+   * `reasoningForRun({ effort, thinking })` so the level tracks Effort. Omit /
+   * `undefined` ⇒ no `reasoning` field on the wire at all.
+   */
+  reasoning?: ReasoningIntent;
   /** Tool specs from the page-action registry. */
   toolSpecs?: BrainToolSpec[];
   /** Dispatch a tool call to the registry. */
@@ -187,6 +199,8 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     extraSystem,
     systemPrompt,
     model,
+    maxTokens,
+    reasoning,
     toolSpecs,
     runTool,
     needsConfirm,
@@ -291,6 +305,8 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       resolvedSystemPrompt: fullSystemPrompt,
       tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : undefined,
       model,
+      maxTokens,
+      reasoning,
       runTool,
       needsConfirm,
       stream,
@@ -302,7 +318,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       userTurn,
       projectId,
     }),
-    [fullSystemPrompt, toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId],
+    [fullSystemPrompt, toolSpecs, model, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId],
   );
 
   const send = useCallback(

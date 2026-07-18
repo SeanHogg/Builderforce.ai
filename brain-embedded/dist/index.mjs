@@ -157,6 +157,9 @@ async function streamChatCompletion(opts, handlers = {}) {
     body.tools = opts.tools;
     body.tool_choice = opts.tool_choice ?? "auto";
   }
+  if (opts.reasoning && opts.reasoning.level !== "off") {
+    body.reasoning = { level: opts.reasoning.level };
+  }
   const doFetch = transport.fetch ?? ((input, init) => fetch(input, init));
   const res = await doFetch(`${transport.baseUrl}/llm/v1/chat/completions`, {
     method: "POST",
@@ -307,6 +310,40 @@ function useBrainConfig() {
   const ctx = useContext(BrainConfigContext);
   if (!ctx) throw new Error("useBrainConfig must be used within a BrainProvider");
   return ctx;
+}
+
+// src/effort.ts
+var EFFORT_PROFILES = {
+  quick: {
+    effort: "quick",
+    maxTokens: 2048,
+    reasoningLevel: "low",
+    thinkingBudgetTokens: 2048,
+    directive: "Effort: favour a fast, concise, direct answer. Keep exploration minimal unless the task truly requires more."
+  },
+  balanced: {
+    effort: "balanced",
+    maxTokens: 4096,
+    reasoningLevel: "medium",
+    thinkingBudgetTokens: 8192,
+    directive: ""
+  },
+  thorough: {
+    effort: "thorough",
+    maxTokens: 16384,
+    reasoningLevel: "high",
+    thinkingBudgetTokens: 16384,
+    directive: "Effort: apply maximum rigor. Be exhaustive, consider edge cases, verify your work, and do not stop until the task is fully complete."
+  }
+};
+function effortProfile(effort) {
+  return EFFORT_PROFILES[effort] ?? EFFORT_PROFILES.balanced;
+}
+function isEffort(value) {
+  return value === "quick" || value === "balanced" || value === "thorough";
+}
+function reasoningForRun(o) {
+  return o.thinking ? { level: effortProfile(o.effort).reasoningLevel } : void 0;
 }
 
 // src/imagePrep.ts
@@ -1881,7 +1918,7 @@ async function autoLinkCreatedItem(chatId, c, persistence, runTool, toolName, ou
   });
 }
 async function runLoop(chatId, c, req) {
-  const { resolvedSystemPrompt, tools: toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind } = req;
+  const { resolvedSystemPrompt, tools: toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
   const convo = c.transcript;
   const tools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0;
   let systemPrompt = resolvedSystemPrompt;
@@ -1969,7 +2006,7 @@ ${chatWorkLinkingDirective(chatId)}`;
     let result;
     try {
       result = await stream(
-        { messages: working, tools, tool_choice: tools ? "auto" : void 0, model, signal: c.abort?.signal },
+        { messages: working, tools, tool_choice: tools ? "auto" : void 0, model, maxTokens, reasoning, signal: c.abort?.signal },
         { onTextDelta: (d) => {
           if (firstTokenAt === void 0) firstTokenAt = nowMs2();
           c.streamingText += d;
@@ -2175,7 +2212,7 @@ ${chatWorkLinkingDirective(chatId)}`;
       let closeFirstTokenAt;
       const closing = await stream(
         // No `tools` → the model can't call another tool and must produce text.
-        { messages: working, model, signal: c.abort?.signal },
+        { messages: working, model, maxTokens, reasoning, signal: c.abort?.signal },
         { onTextDelta: (d) => {
           if (closeFirstTokenAt === void 0) closeFirstTokenAt = nowMs2();
           c.streamingText += d;
@@ -2234,6 +2271,8 @@ function useBrainConversation(options) {
     extraSystem,
     systemPrompt,
     model,
+    maxTokens,
+    reasoning,
     toolSpecs,
     runTool,
     needsConfirm,
@@ -2312,6 +2351,8 @@ ${extraSystem}` : resolvedSystemPrompt;
       resolvedSystemPrompt: fullSystemPrompt,
       tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0,
       model,
+      maxTokens,
+      reasoning,
       runTool,
       needsConfirm,
       stream,
@@ -2323,7 +2364,7 @@ ${extraSystem}` : resolvedSystemPrompt;
       userTurn,
       projectId
     }),
-    [fullSystemPrompt, toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId]
+    [fullSystemPrompt, toolSpecs, model, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId]
   );
   const send = useCallback4(
     async (text, opts) => {
@@ -2688,6 +2729,7 @@ export {
   consolidationMetadata,
   countReconciledMemories,
   deriveChatTitle,
+  effortProfile,
   filterMentionCandidates,
   formatBrainDiagnostics,
   formatBrainProvenance,
@@ -2702,6 +2744,7 @@ export {
   isConnectedAccountUnused,
   isConsolidationMarker,
   isDirectedToParticipant,
+  isEffort,
   isEvermindModel,
   isFailedToolResult,
   isRunning,
@@ -2716,6 +2759,7 @@ export {
   parseMessageAuthor,
   parseMessageProvenance,
   prepareImageDataUrl,
+  reasoningForRun,
   resolveRecipient,
   resolveRunConfirm,
   startRun as runBrainLoop,
