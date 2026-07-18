@@ -339,6 +339,60 @@
   font-style: italic;
 }
 
+/* ---- pending ask_user question, pinned at the composer ---- */
+.bf-qpend {
+  border: 1px solid var(--bf-warning, #b7791f);
+  border-radius: 8px;
+  background: var(--bf-warning-bg, rgba(183, 121, 31, 0.12));
+  padding: 8px 10px 10px;
+  margin-bottom: 8px;
+}
+.bf-qpend__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 10px;
+  margin-bottom: 2px;
+}
+.bf-qpend__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--bf-warning, #b7791f);
+}
+.bf-qpend__badge::before {
+  content: '❓';
+  font-size: 0.85rem;
+}
+.bf-qpend__jump {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.76rem;
+  color: var(--bf-text-muted, #8a8a8a);
+  text-decoration: underline;
+  cursor: pointer;
+  /* Tap-friendly on a narrow panel without inflating the row. */
+  min-height: 24px;
+}
+.bf-qpend__jump:hover {
+  color: var(--bf-text, #e6e6e6);
+}
+/* The card supplies the options; the banner owns the frame around it. */
+.bf-qpend .bf-qcard {
+  margin-top: 0;
+  border: 0;
+  border-left: 0;
+  background: none;
+  padding: 0;
+}
+
 /* ---- images ---- */
 .bf-tl__images {
   display: flex;

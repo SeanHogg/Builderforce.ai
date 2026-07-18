@@ -66,8 +66,7 @@
 | Gap | Location | Severity | Resolution |
 |-----|----------|----------|------------|
 | Agent channels endpoint always returns `[]` (stub, no DB) | `clawRoutes.ts:1103` | HIGH | Needs a channel-registry table + schema design |
-| Helcim checkout creates no recurring billing schedule (one-time charges) | `HelcimProvider.ts:78` | HIGH | Call Helcim recurring-billing API after `APPROVED` webhook |
-| Helcim webhook mapping is a placeholder (all `APPROVED` → `subscription.activated`) | `HelcimProvider.ts:130` | HIGH | Needs Helcim webhook payload schema |
+| Paid marketplace listings cannot be bought (no one-off settlement) | `knowledgeRoutes.ts` `/listings/:id/checkout` | MEDIUM | Wire Stripe Checkout in `payment` mode; currently returns `requiresConfig` (previously granted the listing free whenever payments were unconfigured) |
 
 ## Risk Register
 
@@ -82,15 +81,56 @@
 
 ## Consolidated Gap Register
 
+### 🧪 Frontend test suite — 13 failures across 5 files (2026-07-14)
+
+> `cd frontend && npx vitest run` → 13 failed / 310 passed. Unrelated to payments or i18n; the API suite is fully green (2204/2204). Each fails on components **no current change touches**, so this is standing drift, not a regression from the Stripe-only cut.
+
+- **`AgentExecutionPanel.test.tsx` (8 failures).** `vi.mock('@/lib/builderforceApi')` auto-mocks the module and the test spies only a subset of methods; the component calls one that isn't stubbed, so the automock returns `undefined` → `TypeError: Cannot read properties of undefined (reading 'then')`. Unblocks: the execution-panel suite. Fixing means stubbing the missing call (or asserting which call is unstubbed) — note `builderforceApi.ts` is under active edit for quality-collector consumption, so reconcile before touching.
+- **`model-provider.test.ts` (1 failure).** `train() delegates to the REAL MambaTrainer.train` throws `[MambaModelProvider] engine not initialised — call init() first` — the test drives `train()` without an initialised WebGPU engine. Provably pre-existing: neither `model-provider.ts` nor its test is modified in the working tree. Unblocks: the SSM provider suite.
+- **`TaskMgmtContent.test.tsx` (2) + `TaskMgmtContent.live.test.tsx` (1) + `AgentCapabilitiesContent.test.tsx` (1).** Same shape as the execution-panel failures (board/list render + agent-capability scope switching). Unblocks: the board/capabilities suites.
+
+### 💳 Stripe card processing — Stripe-only as of 2026-07-14, awaiting secrets
+
+> The provider switch is GONE: `ManualProvider` + `HelcimProvider` are deleted and `PAYMENT_PROVIDER` / `HELCIM_*` are removed from `Env`. Stripe is the only path, plans activate only on a signed webhook, and the manual card-brand/last4 form is gone from `/pricing`. Secrets are validated lazily, so the remaining work is configuration only — the API boots and runs fine without them; billing routes return **503 `payment_not_configured`** until they are set.
+
+- **Stripe test-mode products/prices not created.** Needs the 4 recurring price IDs the provider reads (`STRIPE_PRICE_PRO_MONTHLY` $29/mo, `STRIPE_PRICE_PRO_YEARLY` $290/yr, `STRIPE_PRICE_TEAMS_MONTHLY` $20/seat/mo, `STRIPE_PRICE_TEAMS_YEARLY` $192/seat/yr). Blocked on the `stripe@claude-plugins-official` MCP, which needs a Claude Code restart to load. Unblocks: a real checkout session.
+- **Webhook endpoint not registered in Stripe.** Needs `https://api.builderforce.ai/api/webhooks/payment` subscribed to `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`, `setup_intent.setup_failed` → yields `STRIPE_WEBHOOK_SECRET`. Unblocks: activation-on-payment.
+- **Worker secrets not set.** The 6 `STRIPE_*` values need `wrangler secret put` against the account owning the `api.builderforce.ai` Worker. **Until then no tenant can upgrade at all** — the previous free-activation path is intentionally gone. Unblocks: the end-to-end test-card run.
+- **No end-to-end card verification yet.** The webhook parsing/mapping is unit-tested, but no test card has been driven through `POST /api/tenants/:id/subscription/checkout` → webhook → tenant activation. Unblocks: confidence before live mode.
+
+### 💳 BYO usage attribution — core fixed 2026-07-14 (api 2026.7.93), residual gaps
+
+> The AI Insights page now sources "models used" / token totals from `llm_usage_log` instead of the run-outcome matrix, and reports consumption per funding credential (`byo_provider`). `recordProxyUsage` now carries BYO provenance. Remaining:
+>
+- **Historical BYO rows are mis-attributed AND mis-billed.** Every row written via `completeForTenant` → `recordProxyUsage` before this fix landed has `byo = false` and a catalog-priced `cost_usd_millicents`, so tenants were charged for tokens their own key paid for, and those rows still render as platform-funded in `/insights/ai`. Fixing needs a backfill that re-infers BYO from `tenant_llm_provider_keys` + the row's model vendor and re-zeroes cost — inference is lossy (a key connected *after* the call would false-positive), so it needs an explicit operator decision on the cutoff. Unblocks: accurate historical spend + a truthful per-integration history.
+- **Usage cannot attribute to a specific API key, only to a provider.** `tenant_llm_provider_keys` is keyed `(tenant_id, provider)` with no surrogate id and is upserted `ON CONFLICT`, so a rotated key is indistinguishable from its predecessor and `llm_usage_log.byo_provider` is a denormalized string with no FK. The insights breakdown is therefore per-*integration*, not per-*key-instance*. Fixing needs a surrogate `id` on the credential table + a `byo_credential_id` FK on the usage log. Unblocks: per-key consumption + spend attribution across key rotations.
+- **`normalizeByoProvider` is lossy.** It collapses `openai-codex`→`openai`, `googleai`→`google`, `moonshot`→`kimi`, so an OAuth Codex subscription and a static OpenAI key report as one integration. Unblocks: distinguishing subscription-funded from key-funded spend.
+- **Orphaned usage rows vanish from every tenant surface.** `llm_usage_log.tenant_id` is nullable with `ON DELETE SET NULL`, so rows survive tenant deletion but match no `tenant_id = ?` filter — they still count in the untenanted admin rollup (`adminRoutes.ts`), so admin and tenant totals silently disagree. Unblocks: admin/tenant reconciliation.
+- **Model-share donut hides models used earlier in the window.** `summarizeModelShareTrend` computes share from the LAST week only, and `aiImpactWidgets.tsx` drops `currentSharePct === 0`, so a model used on day 1 of a 30-day window disappears from the donut while still appearing in the trend table. Unblocks: a donut that matches its own table.
+- **`summarizeComparison` joins models by raw string.** It looks tokens up from a map keyed on `llm_usage_log.model` using `run_model_outcomes.resolved_model`; any slug drift (`claude-sonnet-4-5` vs `anthropic/claude-sonnet-4-5`) silently yields `tokens = 0` in the evaluation matrix. Unblocks: a trustworthy multi-tool comparison.
+- **Image generation has no BYO path.** `imageProxyForPlan` never receives tenant vendor keys, so every image row is platform-funded even for a tenant with a connected provider. Unblocks: BYO-funded image generation + its attribution.
+
+### 💎 Premium (any-paid-OpenRouter) model tier — shipped 2026-07-14 (api 2026.7.94), residual gaps
+
+> A paid tenant with a **validated card** (mig 0342: `card_validated_at` / `card_validation_status`, set by a Stripe SetupIntent / Helcim `verify` → `card.validated` webhook) can now select ANY paid OpenRouter model, billed at OpenRouter cost + a flat 1¢/request (`PREMIUM_REQUEST_SURCHARGE_MILLICENTS`). Enforced by ONE rule (`evaluatePremiumModelAccess`) on both surfaces — the gateway route AND `pickCloudModel` (cloud runs never pass the HTTP gate). Residual:
+>
+- **Premium spend has no daily ceiling.** `resolvePaidOverflowCapMillicents` returns `-1` (unlimited) for pro/teams and premium turns aren't metered against any cap, so a runaway agent pinned to an expensive premium model (e.g. an Opus-class id at $75/M out) can bill without bound inside one UTC day. The free-plan `$0.50/day` overflow cap has no paid-plan analogue. Fixing needs a per-tenant premium/day $ cap (a `tenants.premium_daily_cap` sibling of `paid_overflow_daily_cap`) + a gate in the premium branch of `llmRoutes` and the cloud loop. Unblocks: cost safety on the metered long tail.
+- **A validated card never expires or revokes.** `card_validated_at` is stamped once and only `setup_intent.setup_failed` ever flips the status to `failed`. A card that later expires, is detached, or fails a real charge keeps premium unlocked indefinitely — Stripe's `payment_method.detached` / `customer.subscription.updated(past_due)` are not wired to clear it. Fixing needs those webhook events mapped to `card.validation_failed` plus a staleness window (re-validate after N months). Unblocks: premium can't run on a dead card.
+- **Container-surface runs cache premium entitlement for 10 min.** `resolveContainerRunContext` is `getOrSetCached(… kvTtlSeconds: 600)`, so `premiumEntitled` (like `effectivePlan`) is up to 10 minutes stale — a freshly validated card doesn't unlock container runs immediately. Same staleness profile as the plan itself, so it's consistent, but worth an explicit invalidate on `card.validated`. Unblocks: instant unlock after validation.
+- **No end-to-end card-validation run.** The SetupIntent flow is unit-tested at the evaluator/classifier level but no test card has been driven through `POST /api/tenants/:id/card-validation` → `checkout.session.completed(mode=setup)` → `card_validated_at`. Blocked on the same Stripe config as the section above (`PAYMENT_PROVIDER` is unset → `ManualProvider`, which validates immediately). Unblocks: confidence before live mode.
+
 ### 🧠 Evermind "Import from builderforce-memory" — shipped 2026-07-12, two follow-ups
 
 > The VS Code Evermind console now imports a local `builderforce-memory` JSON snapshot into the selected build's Evermind (batch `POST /api/projects/:id/evermind/extract-memories` → flush) and compacts absorbed facts to `[absorbed→Evermind vN]` stubs in place, shrinking the recall/digest context the memory MCP was eating. Residual gaps:
 > - **Live-store clobber.** Compaction rewrites the snapshot file, but if the `builderforce-memory` MCP stdio server is *running* it holds the full store in memory and re-snapshots (overwriting the stubs) on its next `remember`/`forget`. So stubs reliably take effect only after the MCP server respawns (next Claude Code session). Fix: have the MCP server watch its snapshot for external compaction and re-hydrate, or expose a first-class `memory_compact` tool the server itself runs so its in-memory store is stubbed too. Until then the importer should tell the user to restart Claude Code to apply compaction.
 > - **Markdown auto-memory not supported.** The importer targets the JSON snapshot only; the Claude Code markdown auto-memory (`MEMORY.md` + per-fact `*.md` with frontmatter) can't be imported/compacted through this path. Fix: teach `parseSnapshotArray` (or a sibling) to read a directory of frontmatter markdown facts and compact each `.md` body to a stub while keeping the `MEMORY.md` index pointer intact.
 
-### 🗂️ VSIX Sessions multi-tab — PRD written 2026-07-12, implementation pending
+### 🗂️ VSIX Sessions multi-tab — core shipped 2026-07-14 (VSIX 2026.7.80, see DONE.md), two follow-ups open
 
-> [PRD-vsix-session-tabs.md](./specs/builderforce/PRD-vsix-session-tabs.md) specifies a `builderforce.sessionTabs` setting (reuse one chat tab vs. one tab per session), live per-tab status (⏳ running / ❓ awaiting via title glyph + `iconPath` swap, since a webview tab can't host a `ThemeIcon` spinner), and a shared brain-ui `PendingQuestionBanner` surfacing the blocking `ask_user` at the composer. Two follow-on gaps the PRD itself flags: (1) **proposed chat-sessions API convergence** — `clients/vscode/src/chatSessions.ts` offers a native per-tab surface under `--enable-proposed-api`; if VS Code promotes `chatSessionsProvider` to stable, the two per-tab paths should merge onto one. (2) **Web chat parity** for `PendingQuestionBanner` — brain-ui is shared, so the web `BrainTimeline` host should pass the same next-intl labels rather than fork the component.
+> Built per [PRD-vsix-session-tabs.md](./specs/builderforce/PRD-vsix-session-tabs.md). Open:
+>
+> - **Proposed chat-sessions API convergence.** `clients/vscode/src/chatSessions.ts` offers a native per-tab chat surface under `--enable-proposed-api` (`chatSessionsProvider`), parallel to the per-session tabs now shipped on the stable `BrainWebview` path. If VS Code promotes that API to stable, the two per-tab implementations should converge onto one — leaving both risks drift in how a session tab is titled/statused. Fixing it unblocks retiring one of the two code paths.
+> - **Web chat parity for `PendingQuestionBanner`.** The pinned "answer needed" banner + `selectPendingAskUser` live in the SHARED `packages/brain-ui`, but only the VSIX webview (`clients/vscode/webview/src/App.tsx`) renders them; the web host (`frontend/src/components/brain/BrainPanel.tsx`) still leaves an open `ask_user` buried in the transcript. Fix = pass `askPending`/`askJumpTo` via next-intl (all 5 catalogs) + render the banner above the web composer — no component fork. Unblocks identical blocked-chat handling on both surfaces.
 
 ### 🧠 Evermind coherence — open follow-ups (core shipped 2026-07-12, see DONE.md)
 

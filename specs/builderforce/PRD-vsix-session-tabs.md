@@ -1,6 +1,7 @@
 # PRD — VSIX Sessions: multi-tab chats + live tab status + pending-question surfacing
 
-> Status: **Ready to implement (P1)** · Author: platform · Date: 2026-07-12 · Target VSIX: next after `2026.7.75`
+> Status: **SHIPPED 2026-07-14 in VSIX `2026.7.80`** (see [DONE.md](../../DONE.md)) · Author: platform · Date: 2026-07-12
+> Implementation note: built as specified, with ONE addition the PRD missed — the webview-local run overlay had to become **per-source** (`setLocalChatRuns(sourceId, runs)`), because several live panels each reporting only their own chat would otherwise clobber each other's runs through the single shared map.
 > Surface: the VS Code extension `Builderforce.ai/clients/vscode`. All three features are **additive** and gated behind one new user setting (default = today's behaviour). This PRD is written to be implemented by an agent with **no prior context** — every file, symbol, message type, and string is named.
 
 ---

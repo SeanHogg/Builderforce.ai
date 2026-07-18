@@ -11,6 +11,13 @@ import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import { buildPlanLimitsGuard, seatCapacityForTenant } from '../middleware/planLimitsGuard';
 import { canAddSeat } from '../../domain/tenant/PlanLimits';
 import { trialDaysRemaining } from '../../domain/tenant/effectivePlan';
+import { buildPaymentProvider } from '../../infrastructure/payment';
+import {
+  getCardValidation,
+  isCardValidated,
+  markCardPending,
+  markCardValidated,
+} from '../../application/tenant/cardValidationService';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
 import {
@@ -291,20 +298,15 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   /**
    * POST /api/tenants/:id/subscription/checkout
    *
-   * Initiate a Pro or Teams upgrade checkout session.
-   *
-   * For ManualProvider: activates immediately; returns { checkoutUrl: null }.
-   * For hosted providers (Stripe, Helcim): returns { checkoutUrl: "https://..." }
-   *   — the frontend should redirect the user to this URL.
-   *   The subscription becomes active once the provider fires a webhook.
+   * Initiate a Pro or Teams upgrade. Returns { checkoutUrl: "https://..." } — the
+   * frontend redirects the user there. The subscription becomes active only once
+   * Stripe fires the activation webhook, never from this request.
    *
    * Body:
    *   targetPlan          "pro" | "teams"        optional (defaults to "pro")
    *   seats               number                 required when targetPlan="teams"
    *   billingCycle        "monthly" | "yearly"   required
    *   billingEmail        string                 required
-   *   billingPaymentBrand string                 optional (manual provider only)
-   *   billingPaymentLast4 string (4 digits)      optional (manual provider only)
    *   successUrl          string                 optional (defaults to /pricing?success=1)
    *   cancelUrl           string                 optional (defaults to /pricing?cancelled=1)
    */
@@ -318,8 +320,6 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       seats?: number;
       billingCycle: TenantBillingCycle;
       billingEmail: string;
-      billingPaymentBrand?: string;
-      billingPaymentLast4?: string;
       successUrl?: string;
       cancelUrl?: string;
     }>();
@@ -340,8 +340,6 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       seats: body.seats,
       billingCycle: body.billingCycle,
       billingEmail: body.billingEmail,
-      billingPaymentBrand: body.billingPaymentBrand,
-      billingPaymentLast4: body.billingPaymentLast4,
       successUrl: body.successUrl ?? `${appUrl}/pricing?success=1`,
       cancelUrl: body.cancelUrl ?? `${appUrl}/pricing?cancelled=1`,
     });
@@ -350,42 +348,67 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   });
 
   /**
-   * POST /api/tenants/:id/subscription/pro  (kept for backward compatibility)
-   * Delegates to the checkout endpoint using ManualProvider semantics.
-   * New integrations should call /subscription/checkout instead.
+   * GET /api/tenants/:id/card-validation
+   *
+   * Current card-validation state — the gate on PREMIUM (any-paid-OpenRouter) model
+   * selection. `validated` is the same predicate the gateway enforces.
    */
-  router.post('/:id/subscription/pro', requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/:id/card-validation', async (c) => {
     const tenantId = Number(c.req.param('id'));
     const callerTenantId = c.get('tenantId') as number;
     if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
 
-    const body = await c.req.json<{
-      billingCycle: TenantBillingCycle;
-      billingEmail: string;
-      billingPaymentBrand: string;
-      billingPaymentLast4: string;
-    }>();
+    const state = await getCardValidation(c.env, tenantId);
+    return c.json({
+      status: state.status,
+      validated: isCardValidated(state),
+      validatedAt: state.validatedAt?.toISOString() ?? null,
+      brand: state.brand,
+      last4: state.last4,
+    });
+  });
 
-    if (!body.billingCycle || !body.billingEmail) {
-      return c.json({ error: 'billingCycle and billingEmail are required' }, 400);
-    }
+  /**
+   * POST /api/tenants/:id/card-validation
+   *
+   * Start the explicit card-validation flow (Stripe SetupIntent / $0 auth) that unlocks
+   * PREMIUM model selection — any paid OpenRouter model, billed at OpenRouter cost + a
+   * flat 1¢ per request.
+   *
+   * Returns { checkoutUrl } to redirect to; the card is stamped validated when Stripe
+   * fires the `card.validated` webhook.
+   *
+   * Body:
+   *   billingEmail  string   required
+   *   successUrl    string   optional
+   *   cancelUrl     string   optional
+   */
+  router.post('/:id/card-validation', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    const callerTenantId = c.get('tenantId') as number;
+    if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
+
+    const body = await c.req.json<{ billingEmail?: string; successUrl?: string; cancelUrl?: string }>()
+      .catch(() => ({} as { billingEmail?: string; successUrl?: string; cancelUrl?: string }));
+
+    const tenant = await tenantService.getTenant(tenantId);
+    const billingEmail = body.billingEmail ?? tenant.billingEmail;
+    if (!billingEmail) return c.json({ error: 'billingEmail is required' }, 400);
 
     const appUrl = c.env.APP_URL ?? 'https://builderforce.ai';
-    const result = await tenantService.createCheckoutSession(tenantId, {
-      billingCycle: body.billingCycle,
-      billingEmail: body.billingEmail,
-      billingPaymentBrand: body.billingPaymentBrand,
-      billingPaymentLast4: body.billingPaymentLast4,
-      successUrl: `${appUrl}/pricing?success=1`,
-      cancelUrl: `${appUrl}/pricing?cancelled=1`,
+    const payment = buildPaymentProvider(c.env);
+    const result = await payment.createCardValidationSession({
+      tenantId,
+      billingEmail,
+      externalCustomerId: tenant.externalCustomerId,
+      successUrl: body.successUrl ?? `${appUrl}/settings?card=validated`,
+      cancelUrl: body.cancelUrl ?? `${appUrl}/settings?card=cancelled`,
     });
 
-    // Legacy response shape: return updated tenant for in-place subscription activation
-    if (result.checkoutUrl === null) {
-      const sub = await tenantService.getSubscription(tenantId);
-      return c.json({ tenant: sub });
-    }
-    return c.json(result);
+    // Mark in-flight so the UI can show "awaiting confirmation" until Stripe's
+    // `card.validated` webhook lands.
+    await markCardPending(c.env, tenantId);
+    return c.json({ checkoutUrl: result.checkoutUrl, sessionId: result.sessionId, validated: false, status: 'pending' });
   });
 
   // POST /api/tenants/:id/subscription/free

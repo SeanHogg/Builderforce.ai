@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, type BrainMessage, type BrainTraceEvent, type MessageProvenance } from '@seanhogg/builderforce-brain-embedded';
 import { Markdown } from './Markdown';
 import { Avatar } from './ParticipantBadge';
-import { parseAskUser, stripAskUser, QuestionCard, DEFAULT_ASK_USER_LABELS } from './askUser';
+import { parseAskUser, stripAskUser, QuestionCard, askUserAnchorId, DEFAULT_ASK_USER_LABELS } from './askUser';
 import { buildSettledTimeline, formatDuration, formatPayload, streamingNode, type TimelineNode } from './timelineModel';
 
 export interface BrainTimelineLabels {
@@ -456,6 +456,7 @@ function BrainTimelineInner({
                       payload={card}
                       labels={{ askSubmit: labels.askSubmit, askAnswered: labels.askAnswered }}
                       onAnswer={onAnswerQuestion}
+                      anchorId={askUserAnchorId(node.message.id)}
                     />
                   )}
                   {renderAssistantActions && <div className="bf-tl__actions">{renderAssistantActions(node.message)}</div>}

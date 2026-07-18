@@ -56,6 +56,7 @@ __export(src_exports, {
   formatEvermindLearnStep: () => formatEvermindLearnStep,
   formatEvermindMemoryBlock: () => formatEvermindMemoryBlock,
   getGlobalRunState: () => getGlobalRunState,
+  getLastResolvedModel: () => getLastResolvedModel,
   getRunSnapshot: () => getRunSnapshot,
   getRunTrace: () => getRunTrace,
   isCodeChangeTool: () => isCodeChangeTool,
@@ -81,6 +82,7 @@ __export(src_exports, {
   runBrainLoop: () => startRun,
   savePendingPrompt: () => savePendingPrompt,
   scopeToConsolidation: () => scopeToConsolidation,
+  setLastResolvedModel: () => setLastResolvedModel,
   startRun: () => startRun,
   stopRun: () => stopRun,
   streamChatCompletion: () => streamChatCompletion,
@@ -620,10 +622,31 @@ function useRegisterBrainActions(actions) {
 
 // src/useMcpExtensions.ts
 var import_react3 = require("react");
+
+// src/lastResolvedModel.ts
+var lastResolvedModel;
+function setLastResolvedModel(model) {
+  const trimmed = typeof model === "string" ? model.trim() : "";
+  if (trimmed) lastResolvedModel = trimmed;
+}
+function getLastResolvedModel() {
+  return lastResolvedModel;
+}
+
+// src/useMcpExtensions.ts
 var CREATE_DEDUPE_MS = 8e3;
 var recentCreates = /* @__PURE__ */ new Map();
 function nowMs() {
   return typeof Date !== "undefined" ? Date.now() : 0;
+}
+var CURRENT_MODEL_TOOL = "session.current_model";
+function withObservedModel(tool, args) {
+  if (tool !== CURRENT_MODEL_TOOL) return args;
+  const observed = getLastResolvedModel();
+  if (!observed) return args;
+  const supplied = args ?? {};
+  if (typeof supplied.model === "string" && supplied.model.trim()) return args;
+  return { ...supplied, model: observed };
 }
 function stableStringify(value) {
   if (value == null || typeof value !== "object") return JSON.stringify(value) ?? "null";
@@ -679,7 +702,7 @@ function useMcpExtensions(options) {
           const res = await fetch(`${transport.baseUrl}/llm/v1/mcp/call`, {
             method: "POST",
             headers,
-            body: JSON.stringify({ extensionId: entry.extensionId, tool: entry.tool, arguments: args })
+            body: JSON.stringify({ extensionId: entry.extensionId, tool: entry.tool, arguments: withObservedModel(entry.tool, args) })
           });
           const body = await res.json().catch(() => ({}));
           const out = !res.ok ? { error: body.error ?? `MCP call failed (${res.status})` } : body.result ?? body;
@@ -2076,6 +2099,7 @@ ${chatWorkLinkingDirective(chatId)}`;
     accrueProviderCap(c, result.providerCap);
     const resolved = result.resolvedModel ?? model ?? "default";
     const requested = model ?? "default";
+    setLastResolvedModel(result.resolvedModel);
     if (requested !== "default" && resolved !== "default" && resolved !== requested) {
       pushTrace(c, {
         ts: nowIso(),
@@ -2778,6 +2802,7 @@ function formatChatDiagnostics(d) {
   formatEvermindLearnStep,
   formatEvermindMemoryBlock,
   getGlobalRunState,
+  getLastResolvedModel,
   getRunSnapshot,
   getRunTrace,
   isCodeChangeTool,
@@ -2803,6 +2828,7 @@ function formatChatDiagnostics(d) {
   runBrainLoop,
   savePendingPrompt,
   scopeToConsolidation,
+  setLastResolvedModel,
   startRun,
   stopRun,
   streamChatCompletion,

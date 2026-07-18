@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { useLlmModels } from '@/lib/useLlmModels';
+import { formatPricePerMillion } from '@/lib/modelCatalog';
 
 /**
  * ModelSelect — the ONE picker that merges the tenant's named "LLM" configs
@@ -41,11 +42,25 @@ export function ModelSelect({
   disabled,
 }: ModelSelectProps) {
   const t = useTranslations('modelSelect');
-  const { models, codingModels, tenantModels, byoModels } = useLlmModels();
+  const { models, codingModels, tenantModels, byoModels, canUsePremiumModels, premiumModels } = useLlmModels();
   const pool = variant === 'coding' && codingModels.length > 0 ? codingModels : models;
+  // Premium = any paid OpenRouter model, unlocked by a paid plan + a validated card.
+  // The hook only populates the list when the tenant is entitled, so rendering the
+  // group off `premiumModels.length` can never show a paywalled option. `useLlmModels`
+  // resolves entitlement from the SAME server rule the gateway enforces, so a selection
+  // offered here is always one the gateway will accept.
+  //
+  // The 'coding' variant pins ONE model for a whole agent tool-loop, so it must only
+  // offer premium models the gateway advertises as tool-capable — a non-tool model
+  // there would pin an agent to something that cannot call a single tool.
+  const premiumChoices = variant === 'coding'
+    ? premiumModels.filter((m) => m.supportedParameters?.includes('tools'))
+    : premiumModels;
+  const showPremium = canUsePremiumModels && premiumChoices.length > 0;
   const known = preserveValue
     && !pool.includes(preserveValue)
     && !byoModels.includes(preserveValue)
+    && !premiumModels.some((m) => m.id === preserveValue)
     && !tenantModels.some((m) => m.ref === preserveValue);
 
   return (
@@ -68,6 +83,18 @@ export function ModelSelect({
       {pool.length > 0 && (
         <optgroup label={t('models')}>
           {pool.map((m) => <option key={m} value={m}>{m}</option>)}
+        </optgroup>
+      )}
+      {/* Premium — any paid OpenRouter model, billed at OpenRouter's own price plus a
+          flat 1¢ per request. Only rendered for an entitled tenant (paid plan +
+          validated card); everyone else gets the unlock CTA from PremiumModelUnlock. */}
+      {showPremium && (
+        <optgroup label={t('premiumModels')}>
+          {premiumChoices.map((m) => (
+            <option key={m.id} value={m.id}>
+              {t('premiumOption', { name: m.name, price: formatPricePerMillion(m.pricing.prompt) })}
+            </option>
+          ))}
         </optgroup>
       )}
       {known && preserveValue && <option value={preserveValue}>{t('current', { model: preserveValue })}</option>}

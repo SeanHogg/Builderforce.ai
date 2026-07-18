@@ -48,6 +48,6 @@ export const recommendationsApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ recKey }),
     }),
-  space: (days = 30): Promise<SpaceMetrics> =>
-    apiRequest<SpaceMetrics>(`/api/insights/space?days=${days}`),
+  space: (days = 30, projectId?: number | null): Promise<SpaceMetrics> =>
+    apiRequest<SpaceMetrics>(`/api/insights/space?days=${days}${projectId != null ? `&projectId=${projectId}` : ''}`),
 };

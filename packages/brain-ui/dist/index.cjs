@@ -45,12 +45,14 @@ __export(src_exports, {
   HealthRing: () => HealthRing,
   Markdown: () => Markdown,
   ParticipantBadge: () => ParticipantBadge,
+  PendingQuestionBanner: () => PendingQuestionBanner,
   Project360View: () => Project360View,
   ProjectListView: () => ProjectListView,
   QuestionCard: () => QuestionCard,
   RUNNABLE_KINDS: () => RUNNABLE_KINDS,
   Sunburst: () => Sunburst,
   TICKET_KINDS: () => TICKET_KINDS,
+  askUserAnchorId: () => askUserAnchorId,
   attachmentsOf: () => attachmentsOf,
   avatarColor: () => avatarColor,
   buildSettledTimeline: () => buildSettledTimeline,
@@ -60,6 +62,7 @@ __export(src_exports, {
   healthRingColor: () => healthRingColor,
   initialsOf: () => initialsOf,
   parseAskUser: () => parseAskUser,
+  selectPendingAskUser: () => selectPendingAskUser,
   serializeAskUser: () => serializeAskUser,
   streamingNode: () => streamingNode,
   stripAskUser: () => stripAskUser,
@@ -209,7 +212,9 @@ var import_react2 = require("react");
 var import_jsx_runtime3 = require("react/jsx-runtime");
 var DEFAULT_ASK_USER_LABELS = {
   askSubmit: "Send",
-  askAnswered: "Answered"
+  askAnswered: "Answered",
+  askPending: "Answer needed",
+  askJumpTo: "Show in conversation"
 };
 var ASK_USER_FENCE = /```ask-user\s*\n([\s\S]*?)\n```/i;
 function coercePayload(raw) {
@@ -247,10 +252,24 @@ function stripAskUser(text2) {
 function serializeAskUser(payload) {
   return ["```ask-user", JSON.stringify(payload), "```"].join("\n");
 }
+function askUserAnchorId(messageId) {
+  return `bf-ask-${messageId}`;
+}
+function selectPendingAskUser(messages) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role === "user") return null;
+    if (msg.role !== "assistant") continue;
+    const payload = parseAskUser(msg.content);
+    if (payload) return { payload, messageId: msg.id };
+  }
+  return null;
+}
 function QuestionCard({
   payload,
   labels,
-  onAnswer
+  onAnswer,
+  anchorId
 }) {
   const lab = (0, import_react2.useMemo)(() => ({ ...DEFAULT_ASK_USER_LABELS, ...labels }), [labels]);
   const [answered, setAnswered] = (0, import_react2.useState)(null);
@@ -273,7 +292,7 @@ function QuestionCard({
     const picks = payload.options.filter((_, i) => checked.has(i)).map((o) => o.label);
     if (picks.length) commit(picks.join(", "));
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: `bf-qcard${answered ? " bf-qcard--done" : ""}`, role: "group", "aria-label": payload.question, children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { id: anchorId, className: `bf-qcard${answered ? " bf-qcard--done" : ""}`, role: "group", "aria-label": payload.question, children: [
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: "bf-qcard__q", children: payload.question }),
     /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: "bf-qcard__opts", children: payload.options.map(
       (opt, i) => multi ? /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("label", { className: `bf-qcard__opt bf-qcard__opt--check${checked.has(i) ? " is-checked" : ""}`, children: [
@@ -308,6 +327,21 @@ function QuestionCard({
     ) }),
     multi && !answered && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { type: "button", className: "bf-qcard__submit", disabled: checked.size === 0, onClick: submitMulti, children: lab.askSubmit }),
     answered && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { className: "bf-qcard__answered", children: `${lab.askAnswered}: ${answered}` })
+  ] });
+}
+function PendingQuestionBanner({
+  payload,
+  labels,
+  onAnswer,
+  onReveal
+}) {
+  const lab = (0, import_react2.useMemo)(() => ({ ...DEFAULT_ASK_USER_LABELS, ...labels }), [labels]);
+  return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "bf-qpend", role: "region", "aria-label": lab.askPending, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { className: "bf-qpend__bar", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { className: "bf-qpend__badge", children: lab.askPending }),
+      onReveal && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("button", { type: "button", className: "bf-qpend__jump", onClick: onReveal, children: lab.askJumpTo })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(QuestionCard, { payload, labels: lab, onAnswer })
   ] });
 }
 
@@ -732,7 +766,8 @@ function BrainTimelineInner({
                 {
                   payload: card,
                   labels: { askSubmit: labels.askSubmit, askAnswered: labels.askAnswered },
-                  onAnswer: onAnswerQuestion
+                  onAnswer: onAnswerQuestion,
+                  anchorId: askUserAnchorId(node.message.id)
                 }
               ),
               renderAssistantActions && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { className: "bf-tl__actions", children: renderAssistantActions(node.message) }),
@@ -2838,12 +2873,14 @@ function Row({ item, onAction }) {
   HealthRing,
   Markdown,
   ParticipantBadge,
+  PendingQuestionBanner,
   Project360View,
   ProjectListView,
   QuestionCard,
   RUNNABLE_KINDS,
   Sunburst,
   TICKET_KINDS,
+  askUserAnchorId,
   attachmentsOf,
   avatarColor,
   buildSettledTimeline,
@@ -2853,6 +2890,7 @@ function Row({ item, onAction }) {
   healthRingColor,
   initialsOf,
   parseAskUser,
+  selectPendingAskUser,
   serializeAskUser,
   streamingNode,
   stripAskUser,

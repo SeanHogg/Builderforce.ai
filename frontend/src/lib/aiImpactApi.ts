@@ -44,6 +44,27 @@ export interface ProductivityScore {
   deltaPct: number;
 }
 
+/** Stable id the server uses for platform-funded spend (Builderforce's own keys). */
+export const PLATFORM_PROVIDER_ID = 'builderforce';
+
+export interface ModelConsumption {
+  model: string;
+  requests: number;
+  tokens: number;
+  costUsd: number;
+  byo: boolean;
+  providers: string[];
+}
+
+export interface ProviderConsumption {
+  provider: string;
+  byo: boolean;
+  requests: number;
+  tokens: number;
+  costUsd: number;
+  models: string[];
+}
+
 export interface AiImpactInsights {
   windowDays: number;
   adoption: {
@@ -52,6 +73,17 @@ export interface AiImpactInsights {
     modelShareTrend: ModelShareTrend[];
   };
   comparison: ComparisonRow[];
+  /** Raw ledger consumption — covers every surface and both funding sources.
+   *  `comparison` only sees scored cloud runs, so it must NOT be used for
+   *  "which models are we using" or token totals. */
+  consumption: {
+    models: ModelConsumption[];
+    providers: ProviderConsumption[];
+    totalTokens: number;
+    totalRequests: number;
+    totalCostUsd: number;
+    byoTokens: number;
+  };
   productivity: ProductivityScore;
 }
 

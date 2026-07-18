@@ -1,7 +1,5 @@
 'use client';
 
-import { Select } from '@/components/Select';
-
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
@@ -26,7 +24,6 @@ interface Subscription {
   billingPaymentLast4: string | null;
   billingUpdatedAt: string | null;
   seatCount: number | null;
-  paymentProvider: string;
   pricing: {
     pro: { monthly: number; yearly: number; yearlySavingsPercent: number };
     teams: { perSeatMonthly: number; perSeatYearly: number; yearlySavingsPercent: number; minimumSeats: number };
@@ -142,8 +139,6 @@ export default function PricingPageClient() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [billingEmail, setBillingEmail] = useState('');
   const [seats, setSeats] = useState(3);
-  const [cardBrand, setCardBrand] = useState('visa');
-  const [cardLast4, setCardLast4] = useState('');
   const [upgrading, setUpgrading] = useState(false);
   const [upgradeError, setUpgradeError] = useState<string | null>(null);
   const [downgrading, setDowngrading] = useState(false);
@@ -184,7 +179,6 @@ export default function PricingPageClient() {
     setUpgradeTarget(target);
   }, [searchParams, tenantId]);
 
-  const isManualProvider = !sub || sub.paymentProvider === 'manual';
   const effectivePlan = sub?.effectivePlan ?? 'free';
   // Anonymous marketing visitor (no tenant) gets sales-tone copy; a signed-in
   // tenant gets the billing-console framing ("manage your subscription").
@@ -215,9 +209,6 @@ export default function PricingPageClient() {
     e.preventDefault();
     if (!tenantId || upgrading || !upgradeTarget) return;
     if (!billingEmail.trim()) { setUpgradeError(t('errorBillingEmailRequired')); return; }
-    if (isManualProvider && (!cardLast4.trim() || !/^\d{4}$/.test(cardLast4))) {
-      setUpgradeError(t('errorCardLast4')); return;
-    }
     setUpgrading(true);
     setUpgradeError(null);
     try {
@@ -230,17 +221,15 @@ export default function PricingPageClient() {
           billingCycle,
           billingEmail: billingEmail.trim(),
           ...(upgradeTarget === 'teams' && { seats }),
-          ...(isManualProvider && { billingPaymentBrand: cardBrand, billingPaymentLast4: cardLast4.trim() }),
         }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as { error?: string };
         throw new Error(body.error ?? `${res.status}`);
       }
-      const result = await res.json() as { checkoutUrl: string | null };
-      if (result.checkoutUrl) { window.location.href = result.checkoutUrl; return; }
-      setUpgradeTarget(null);
-      await fetchSub();
+      // Every checkout is hosted — Stripe always returns a URL to redirect to.
+      const result = await res.json() as { checkoutUrl: string };
+      window.location.href = result.checkoutUrl;
     } catch (e) {
       setUpgradeError(e instanceof Error ? e.message : t('errorUpgradeFailed'));
     } finally {
@@ -417,32 +406,9 @@ export default function PricingPageClient() {
                     style={{ width: '100%', padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, boxSizing: 'border-box' }} />
                 </div>
 
-                {isManualProvider && (
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    <div style={{ flex: 1 }}>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('labelCardBrand')}</label>
-                      <Select value={cardBrand} onChange={(e) => setCardBrand(e.target.value)}
-                        style={{ width: '100%', padding: '8px 10px', fontSize: 13, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8 }}>
-                        {['visa', 'mastercard', 'amex', 'discover', 'other'].map((b) => (
-                          <option key={b} value={b}>{b.charAt(0).toUpperCase() + b.slice(1)}</option>
-                        ))}
-                      </Select>
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('labelCardLast4')}</label>
-                      <input type="text" required value={cardLast4}
-                        onChange={(e) => setCardLast4(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                        placeholder="4242" maxLength={4}
-                        style={{ width: '100%', padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, boxSizing: 'border-box', fontFamily: 'var(--font-mono)' }} />
-                    </div>
-                  </div>
-                )}
-
-                {!isManualProvider && (
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 12px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
-                    {t('redirectNote')}
-                  </div>
-                )}
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 12px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
+                  {t('redirectNote')}
+                </div>
 
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', padding: '10px 14px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
                   {t('total', { price: upgradePrice, unit: billingCycle === 'yearly' ? t('unitYear') : t('unitMonth') })}
@@ -458,9 +424,7 @@ export default function PricingPageClient() {
                   </button>
                   <button type="submit" disabled={upgrading}
                     style={{ padding: '8px 18px', fontSize: 13, fontWeight: 600, background: upgradeTarget === 'teams' ? '#60a5fa' : 'var(--coral-bright, #f4726e)', color: '#fff', border: 'none', borderRadius: 8, cursor: upgrading ? 'wait' : 'pointer' }}>
-                    {upgrading
-                      ? (isManualProvider ? t('activating') : t('redirecting'))
-                      : (isManualProvider ? t('activatePlan', { plan: upgradeTarget === 'teams' ? 'Teams' : 'Pro' }) : t('continueToPayment'))}
+                    {upgrading ? t('redirecting') : t('continueToPayment')}
                   </button>
                 </div>
               </form>

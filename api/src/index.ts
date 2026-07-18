@@ -244,7 +244,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   const auditRepo     = new AuditRepository(db, env);
   const agentHostRepo      = new AgentHostRepository(db);
 
-  // --- Payment provider (selected by PAYMENT_PROVIDER env var, defaults to "manual") ---
+  // --- Payments (Stripe only; missing secrets fail per-route, never at boot) ---
   const paymentProvider = buildPaymentProvider(env);
 
   // --- Application ---

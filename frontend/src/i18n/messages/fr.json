@@ -986,7 +986,11 @@
     "merging": "Fusion…"
   },
   "memberProfile": {
-    "tabs": { "overview": "Aperçu", "timeLogs": "Temps enregistrés", "tasks": "Tâches" },
+    "tabs": {
+      "overview": "Aperçu",
+      "timeLogs": "Temps enregistrés",
+      "tasks": "Tâches"
+    },
     "noTasks": "Aucune tâche n’est assignée à cet utilisateur.",
     "subtitle": "{kind} · capacité et disponibilité",
     "syncing": "Synchronisation…",
@@ -1048,7 +1052,7 @@
       "cloud_runs": "Exécutions cloud",
       "ingestion": "Données",
       "error_events": "Erreurs",
-      "outbound_fetches": "Disponibilité"
+      "outbound_fetches": "Requêtes sortantes"
     },
     "unlimited": "Illimité",
     "freePerMo": "{amount} gratuit / mois",
@@ -1737,7 +1741,12 @@
       "activeUsers": "Utilisateurs actifs",
       "cost": "Coût",
       "tokensSub": "tous modèles confondus",
-      "tokensByModel": "Jetons par modèle"
+      "tokensByModel": "Jetons par modèle",
+      "byIntegration": "Consommation par intégration",
+      "platformKey": "Builderforce (clé de la plateforme)",
+      "fundedOwnKey": "Votre clé",
+      "fundedPlatform": "Plateforme",
+      "requests": "Requêtes"
     },
     "devexhub": {
       "title": "DevEx",
@@ -2785,6 +2794,7 @@
       "reopen": "Rouvrir"
     },
     "loadMore": "Charger plus",
+    "aggregateConsumption": "Erreurs · Tous les collecteurs",
     "setup": {
       "title": "Collecteurs d’erreurs",
       "subtitle": "Connectez l’origine de vos erreurs : un collecteur par projet.",
@@ -2797,6 +2807,7 @@
       "creating": "Création…",
       "tenantName": "Collecteur du locataire",
       "tenantScope": "Tous les projets (niveau locataire)",
+      "collectorConsumption": "Erreurs · {name}",
       "snippetNote": "Votre clé d’ingestion n’est affichée qu’une fois, à la création. Ajoutez ce snippet à chaque app du projet.",
       "sdkSnippet": "SDK navigateur",
       "otlpEndpoint": "Point de terminaison OTLP",
@@ -2808,6 +2819,10 @@
       "paused": "en pause",
       "pause": "Suspendre",
       "resume": "Reprendre",
+      "test": "Tester",
+      "testing": "Test en cours…",
+      "testSucceeded": "Erreur de test reçue. Ce collecteur est correctement configuré.",
+      "testFailed": "Le test du collecteur a échoué",
       "delete": "Supprimer",
       "confirmDelete": "Supprimer ce collecteur ? Les erreurs ingérées sont conservées.",
       "lastEvent": "dernier événement",
@@ -3191,6 +3206,7 @@
       "aiModelShare": "Part des modèles dans les exécutions",
       "aiMergeRate": "Taux de fusion par modèle",
       "aiComparison": "Évaluation multi-outils",
+      "aiByIntegration": "Consommation par intégration",
       "aiShareTrend": "Tendance d'adoption et de part",
       "delivCycleTime": "Temps de cycle",
       "delivVelocity": "Vélocité",
@@ -3314,7 +3330,11 @@
       "bySource": "Coût par source",
       "spendSub": "estimé, 7 derniers jours",
       "byProject": "Dépenses par projet",
-      "noProjects": "Aucune dépense par projet"
+      "noProjects": "Aucune dépense par projet",
+      "byoFundedOnly": "Aucune dépense de plateforme — tout l'usage a été exécuté sur vos clés connectées",
+      "sourceCloud": "Cloud",
+      "sourceOnPrem": "Sur site",
+      "sourceWeb": "Web / SDK"
     },
     "catalog": {
       "noInstalls": "Aucune installation",
@@ -5180,20 +5200,15 @@
     "labelSeats": "Postes",
     "labelBillingEmail": "E-mail de facturation",
     "placeholderBillingEmail": "facturation@exemple.com",
-    "labelCardBrand": "Type de carte",
-    "labelCardLast4": "4 derniers chiffres de la carte",
     "redirectNote": "Vous serez redirigé vers notre prestataire de paiement pour saisir vos informations de carte en toute sécurité.",
     "total": "Total : {price} $/{unit}",
     "totalForSeats": "{seats, plural, one {pour # poste} other {pour # postes}}",
     "unitYear": "an",
     "unitMonth": "mois",
     "errorBillingEmailRequired": "L'e-mail de facturation est requis.",
-    "errorCardLast4": "Les 4 derniers chiffres de la carte doivent comporter exactement 4 chiffres.",
     "errorUpgradeFailed": "Échec du changement de forfait",
     "cancel": "Annuler",
-    "activating": "Activation…",
     "redirecting": "Redirection…",
-    "activatePlan": "Activer {plan}",
     "continueToPayment": "Continuer vers le paiement",
     "planComparison": "Comparaison des forfaits",
     "colFeature": "Fonctionnalité",
@@ -6995,6 +7010,7 @@
     "sub": {
       "health": "État",
       "directory": "Annuaire",
+      "sessions": "Sessions",
       "security": "Sécurité",
       "emulation": "Émulation",
       "tenants": "Espaces",
@@ -7183,6 +7199,22 @@
         "colDuration": "Durée",
         "durationActive": "Active"
       }
+    },
+    "sessions": {
+      "title": "Sessions d’adoption",
+      "subtitle": "Visiteurs anonymes de Brain et des outils gratuits, avec conversion en compte et en offre payante.",
+      "count": "{count, plural, one {# session} other {# sessions}}",
+      "empty": "Aucune session invité trouvée.",
+      "visitor": "Visiteur",
+      "engagement": "Engagement",
+      "firstSeen": "Première visite",
+      "lastSeen": "Dernière visite",
+      "conversion": "Conversion",
+      "brainMessages": "{count} messages Brain",
+      "tokensAndTools": "{tokens} jetons · {tools} exécutions d’outils",
+      "guest": "invité",
+      "registered": "inscrit",
+      "paid": "payant"
     },
     "usage": {
       "aiAnalyze": "Analyse IA",
@@ -7670,17 +7702,40 @@
       "meta": {
         "blurb": "Collez une clé d'API Meta AI pour exécuter des modèles MUSE (muse-spark-1.1) sur votre propre compte Meta AI."
       },
-      "kimi": { "blurb": "Collez une clé d’abonnement Kimi Code ou une clé API Moonshot." },
-      "qwen": { "blurb": "Collez une clé API Alibaba DashScope pour utiliser les modèles Qwen." },
-      "minimax": { "blurb": "Collez une clé API MiniMax pour utiliser les modèles MiniMax." }
-      ,"xai": { "blurb": "Connectez un abonnement SuperGrok éligible ou une clé API xAI.", "subscription": "abonnement SuperGrok", "pastePrompt": "Après approbation, copiez le code affiché sur la page xAI et collez-le ici.", "pastePlaceholder": "Collez le code de connexion xAI…" }
+      "kimi": {
+        "blurb": "Collez une clé d’abonnement Kimi Code ou une clé API Moonshot."
+      },
+      "qwen": {
+        "blurb": "Collez une clé API Alibaba DashScope pour utiliser les modèles Qwen."
+      },
+      "minimax": {
+        "blurb": "Collez une clé API MiniMax pour utiliser les modèles MiniMax."
+      },
+      "xai": {
+        "blurb": "Connectez un abonnement SuperGrok éligible ou une clé API xAI.",
+        "subscription": "abonnement SuperGrok",
+        "pastePrompt": "Après approbation, copiez le code affiché sur la page xAI et collez-le ici.",
+        "pastePlaceholder": "Collez le code de connexion xAI…"
+      }
     }
   },
   "modelSelect": {
     "yourLlms": "Vos LLM",
     "connectedProviders": "Fournisseurs connectés",
     "models": "Modèles",
-    "current": "{model} (actuel)"
+    "current": "{model} (actuel)",
+    "premiumModels": "Premium — tout modèle OpenRouter (coût + 1 ¢/requête)",
+    "premiumOption": "{name} · {price}/M en entrée",
+    "premiumUnlockTitle": "Débloquer les modèles premium",
+    "premiumUnlockCardBody": "Validez une carte pour sélectionner n’importe quel modèle payant d’OpenRouter. Vous êtes facturé au prix d’OpenRouter plus 1 ¢ par requête. La validation n’effectue aucun débit : elle confirme seulement que la carte fonctionne.",
+    "premiumUnlockUpgradeBody": "Les modèles premium (tout modèle payant d’OpenRouter, facturé au coût OpenRouter plus 1 ¢ par requête) nécessitent une offre payante avec une carte validée.",
+    "premiumValidateCard": "Valider une carte",
+    "premiumValidating": "Ouverture…",
+    "premiumPending": "En attente de confirmation",
+    "premiumPendingHint": "Terminez la validation auprès de votre prestataire de paiement, puis rechargez.",
+    "premiumFailedHint": "Cette carte n’a pas pu être validée. Essayez-en une autre.",
+    "premiumUpgrade": "Passer à Pro",
+    "premiumUnlockFailed": "Impossible de lancer la validation de la carte."
   },
   "runAgentControl": {
     "agentTitle": "Agent",
@@ -8655,6 +8710,10 @@
   },
   "agentExecution": {
     "runThisTask": "Exécuter cette tâche",
+    "coordinateThisTicket": "Coordonner ce ticket",
+    "coordinateNow": "Assigner et lancer le rôle suivant",
+    "coordinating": "Coordination…",
+    "coordinateHint": "Le responsable coordonne ce cycle. BuilderForce vérifie le manifeste et lance le prochain rôle requis, jamais le responsable comme exécuteur par défaut.",
     "awaitingApproval": "En attente d'approbation avant de pouvoir s'exécuter : {reason}",
     "executions": "Exécutions",
     "ticketSpendTooltip": "Dépense du ticket sur toutes les exécutions : {tokens} jetons sur {requests} appel(s) LLM. Cumulé sur ce projet, puis sur le compte.",

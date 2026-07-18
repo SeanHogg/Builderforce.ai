@@ -249,6 +249,8 @@ export const kanbanApi = {
     request<{ created: number }>(`/api/kanban/tasks/${taskId}/participants/materialize`, { method: 'POST' }).then((r) => r.created),
   participantsSummary: (projectId: number): Promise<ParticipantsSummaryRow[]> =>
     request<{ summary: ParticipantsSummaryRow[] }>(`/api/kanban/projects/${projectId}/participants-summary`).then((r) => r.summary),
+  coordinate: (taskId: number): Promise<{ ok: boolean; status: string; dispatched: boolean; requiredOutstanding: number }> =>
+    request<{ ok: boolean; status: string; dispatched: boolean; requiredOutstanding: number }>(`/api/kanban/tasks/${taskId}/coordinate`, { method: 'POST' }),
 };
 
 // ---------------------------------------------------------------------------
@@ -1912,6 +1914,10 @@ export interface TaskFileChange {
   agent: string;
   executionId: number | null;
   createdAt: string;
+  /** Models observed in llm.complete telemetry for the execution that made this change. */
+  models?: string[];
+  /** Authoritative usage provenance: whether the tenant's own provider key served it. */
+  modelUsage?: Array<{ model: string; byo: boolean; provider: string | null }>;
 }
 
 /**
@@ -2167,6 +2173,8 @@ export interface MeterSnapshot {
   /** Month-to-date daily series (one entry per elapsed UTC day) for a sparkline;
    *  omitted for meters without a daily trend. */
   trend?: number[];
+  /** Optional month-to-date totals scoped beneath this meter. */
+  breakdown?: Array<{ key: string; used: number }>;
 }
 
 export interface ConsumptionSnapshot {
@@ -3202,9 +3210,27 @@ export interface ByoModel { id: string; vendor: string; tier: string; contextWin
  *  connected provider (BYO), so the model choices follow the connected providers. */
 export interface ByoModelInfo { providers: string[]; models: ByoModel[] }
 
+/** How a tenant's card-validation flow stands — the gate on PREMIUM model selection. */
+export type CardValidationStatus = 'none' | 'pending' | 'validated' | 'failed';
+
+/** PREMIUM (any-paid-OpenRouter) model selection: the tenant may pick ANY paid
+ *  OpenRouter model, billed at OpenRouter's own price + a flat per-request surcharge.
+ *  Stricter than frontier access — it needs a paid plan AND a validated card, because
+ *  it routes on Builderforce's metered key. `unlock` names the exact next step on a
+ *  miss so the UI shows "Upgrade" vs "Validate your card" rather than a generic wall.
+ *  Mirrors `evaluatePremiumModelAccess` (the api is the source of truth). */
+export interface PremiumModelInfo {
+  entitled: boolean;
+  reason: 'superadmin' | 'premium_override' | 'paid_card' | 'card_required' | 'plan_required';
+  unlock?: 'upgrade' | 'validate_card';
+  cardValidationStatus: CardValidationStatus;
+  /** Flat surcharge added per request, in millicents (1/100000 USD). 1000 = 1¢. */
+  surchargeMillicents: number;
+}
+
 export type LlmModelsResponse =
-  | { configured: false; product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; models: string[]; codingModels?: string[]; teacherModels?: string[]; canChooseModel?: boolean; canUseFrontierModels?: boolean; byo?: ByoModelInfo }
-  | { configured: true;  product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; object: 'list'; data: LlmModelStatus[]; codingModels?: string[]; teacherModels?: string[]; canChooseModel?: boolean; canUseFrontierModels?: boolean; byo?: ByoModelInfo };
+  | { configured: false; product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; models: string[]; codingModels?: string[]; teacherModels?: string[]; canChooseModel?: boolean; canUseFrontierModels?: boolean; canUsePremiumModels?: boolean; premiumInfo?: PremiumModelInfo; byo?: ByoModelInfo }
+  | { configured: true;  product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; object: 'list'; data: LlmModelStatus[]; codingModels?: string[]; teacherModels?: string[]; canChooseModel?: boolean; canUseFrontierModels?: boolean; canUsePremiumModels?: boolean; premiumInfo?: PremiumModelInfo; byo?: ByoModelInfo };
 
 /** Learned Model Routing (PRD 13) — closed action-type taxonomy. MIRRORS
  *  `api/src/application/llm/actionTypes.ts` (the api is the source of truth). */
@@ -3232,6 +3258,34 @@ export interface ModelAnalyticsResponse {
   updatedAt: string;
   byAction: ModelAnalyticsAction[];
 }
+
+/** Card-validation state — the gate on PREMIUM (any-paid-OpenRouter) model selection. */
+export interface CardValidationState {
+  status: CardValidationStatus;
+  validated: boolean;
+  validatedAt: string | null;
+  brand: string | null;
+  last4: string | null;
+  paymentProvider: string;
+}
+
+/**
+ * Explicit card validation (Stripe SetupIntent / Helcim $0 verify). A paid tenant runs
+ * this once to unlock premium model selection — no charge is made; it only proves the
+ * card is usable, since premium is metered per request rather than sold as a plan.
+ */
+export const cardValidationApi = {
+  get: (tenantId: number): Promise<CardValidationState> =>
+    request<CardValidationState>(`/api/tenants/${tenantId}/card-validation`),
+
+  /** Start validation. Hosted providers return a `checkoutUrl` to send the user to;
+   *  the manual provider validates immediately (`validated: true`). */
+  start: (tenantId: number, body?: { billingEmail?: string; successUrl?: string; cancelUrl?: string }) =>
+    request<{ checkoutUrl: string | null; sessionId: string; validated: boolean; status: CardValidationStatus }>(
+      `/api/tenants/${tenantId}/card-validation`,
+      { method: 'POST', body: JSON.stringify(body ?? {}) },
+    ),
+};
 
 export const llmApi = {
   usage: async (): Promise<LlmUsageStats> => {
@@ -4268,7 +4322,8 @@ export const sprintsApi = {
 
 /** Derived sprint velocity from real task story points (EMP-4). */
 export const agileMetricsApi = {
-  derivedVelocity: (): Promise<VelocityInsights> => request<VelocityInsights>('/api/agile/velocity/derived'),
+  derivedVelocity: (projectId?: number | null): Promise<VelocityInsights> =>
+    request<VelocityInsights>(`/api/agile/velocity/derived${projectId != null ? `?projectId=${projectId}` : ''}`),
 };
 
 // Planning Poker + Retrospectives (nested session models; /api/agile/*).
@@ -5337,8 +5392,10 @@ export interface PullRequestDetail {
   supported: boolean;
   state: string | null;
   merged: boolean;
+  draft: boolean;
   mergeable: boolean | null;
   mergeableState: string | null;
+  allowedMergeMethods: MergeMethod[] | null;
   additions: number | null;
   deletions: number | null;
   changedFiles: number | null;
@@ -5643,6 +5700,12 @@ export interface QualityStats {
   daily: { day: string; count: number }[];
 }
 
+/** Month-to-date event consumption attributable to one error collector. */
+export interface QualityCollectorConsumption {
+  used: number;
+  trend: number[];
+}
+
 export const qualityApi = {
   sourceCatalog: (): Promise<QualitySourceCatalogEntry[]> =>
     request<{ sources: QualitySourceCatalogEntry[] }>('/api/quality/source-catalog').then((r) => r.sources ?? []),
@@ -5654,6 +5717,10 @@ export const qualityApi = {
       request('/api/quality/collectors', { method: 'POST', body: JSON.stringify(body) }),
     update: (id: string, body: { name?: string; enabled?: boolean; status?: string; defaultProjectId?: number | null }): Promise<{ ok: true }> =>
       request(`/api/quality/collectors/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    test: (id: string): Promise<{ ok: true; accepted: number; dropped: number }> =>
+      request(`/api/quality/collectors/${id}/test`, { method: 'POST' }),
+    consumption: (id: string): Promise<QualityCollectorConsumption> =>
+      request(`/api/quality/collectors/${id}/consumption`),
     remove: (id: string): Promise<void> =>
       request<void>(`/api/quality/collectors/${id}`, { method: 'DELETE' }),
 
@@ -6311,10 +6378,16 @@ export const releasesApi = {
 export interface AllocationQuery { days?: number; period?: string; projectId?: number; teamId?: number }
 export interface AllocationHistoryQuery { months?: number; projectId?: number; teamId?: number }
 
+function insightScopeQuery(days: number, projectId?: number | null): string {
+  const q = new URLSearchParams({ days: String(days) });
+  if (projectId != null) q.set('projectId', String(projectId));
+  return q.toString();
+}
+
 export const insightsApi = {
   engineering: (days = 30): Promise<EngineeringInsights> => request<EngineeringInsights>(`/api/insights/engineering?days=${days}`),
-  dora: (days = 30): Promise<DoraInsights> => request<DoraInsights>(`/api/insights/dora?days=${days}`),
-  bottlenecks: (days = 30): Promise<BottleneckInsights> => request<BottleneckInsights>(`/api/insights/bottlenecks?days=${days}`),
+  dora: (days = 30, projectId?: number | null): Promise<DoraInsights> => request<DoraInsights>(`/api/insights/dora?${insightScopeQuery(days, projectId)}`),
+  bottlenecks: (days = 30, projectId?: number | null): Promise<BottleneckInsights> => request<BottleneckInsights>(`/api/insights/bottlenecks?${insightScopeQuery(days, projectId)}`),
   finance: (period?: string): Promise<FinanceInsights> => request<FinanceInsights>(`/api/insights/finance${period ? `?period=${period}` : ''}`),
   compliance: (days = 30): Promise<ComplianceSummary> => request<ComplianceSummary>(`/api/insights/compliance?days=${days}`),
   allocation: (q: AllocationQuery = {}): Promise<AllocationInsights> => {
@@ -6345,8 +6418,8 @@ export const insightsApi = {
     return request<ScenarioResponse>(`/api/insights/delivery/scenario?${p.toString()}`);
   },
   /** Time per SDLC phase + end-to-end lifecycle trend (Life Cycle Explorer). */
-  lifecycle: (days = 30): Promise<LifecycleInsights> =>
-    request<LifecycleInsights>(`/api/insights/delivery/lifecycle?days=${days}`),
+  lifecycle: (days = 30, projectId?: number | null): Promise<LifecycleInsights> =>
+    request<LifecycleInsights>(`/api/insights/delivery/lifecycle?${insightScopeQuery(days, projectId)}`),
   deliverableUpdates: {
     list: (scope: DeliverableScope, id: string): Promise<DeliverableUpdate[]> =>
       request<DeliverableUpdate[]>(`/api/insights/deliverable-updates?scope=${scope}&id=${encodeURIComponent(id)}`),
@@ -6484,10 +6557,14 @@ export const alertsApi = {
 };
 
 export const innovationApi = {
-  funnel: (initiativeId?: string): Promise<FunnelMetrics> =>
-    request<FunnelMetrics>(`/api/innovation/funnel${initiativeId ? `?initiative=${encodeURIComponent(initiativeId)}` : ''}`),
+  funnel: (initiativeId?: string, projectId?: number | null): Promise<FunnelMetrics> => {
+    const q = new URLSearchParams();
+    if (initiativeId) q.set('initiative', initiativeId);
+    if (projectId != null) q.set('projectId', String(projectId));
+    return request<FunnelMetrics>(`/api/innovation/funnel${q.size ? `?${q.toString()}` : ''}`);
+  },
   ideas: {
-    list: () => ideaTracker.list() as unknown as Promise<InnovationIdea[]>,
+    list: (projectId?: number | null) => request<InnovationIdea[]>(`/api/innovation/ideas${projectId != null ? `?projectId=${projectId}` : ''}`),
     create: (body: Partial<Omit<InnovationIdea, 'id'>>) => ideaTracker.create(body) as unknown as Promise<InnovationIdea>,
     update: (id: string, body: Partial<Omit<InnovationIdea, 'id'>>) => ideaTracker.update(id, body) as unknown as Promise<InnovationIdea>,
     remove: (id: string) => ideaTracker.remove(id),

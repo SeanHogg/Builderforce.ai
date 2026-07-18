@@ -13,6 +13,7 @@ import HealthPanel from '@/components/admin/panels/HealthPanel';
 import BillingPanel from '@/components/admin/panels/BillingPanel';
 import UsagePanel from '@/components/admin/panels/UsagePanel';
 import UsersPanel from '@/components/admin/panels/UsersPanel';
+import GuestSessionsPanel from '@/components/admin/panels/GuestSessionsPanel';
 import TenantsPanel from '@/components/admin/panels/TenantsPanel';
 import SecurityPanel from '@/components/admin/panels/SecurityPanel';
 import LegalPanel from '@/components/admin/panels/LegalPanel';
@@ -42,6 +43,7 @@ import TokenPanel from '@/components/admin/panels/TokenPanel';
 const ADMIN_PANELS: Record<string, () => React.JSX.Element> = {
   health: HealthPanel,
   directory: UsersPanel,
+  sessions: GuestSessionsPanel,
   security: SecurityPanel,
   emulation: ImpersonationSessionsPanel,
   tenants: TenantsPanel,

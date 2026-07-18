@@ -100,11 +100,14 @@ export function summarizeVelocity(
   };
 }
 
-export async function computeVelocityInsights(db: Db, tenantId: number): Promise<VelocityInsights> {
+export async function computeVelocityInsights(db: Db, tenantId: number, projectId?: number): Promise<VelocityInsights> {
   const metas = (await db
     .select({ id: sprints.id, name: sprints.name, status: sprints.status, endDate: sprints.endDate })
     .from(sprints)
-    .where(eq(sprints.tenantId, tenantId))
+    .where(and(
+      eq(sprints.tenantId, tenantId),
+      ...(projectId != null ? [eq(sprints.projectId, projectId)] : []),
+    ))
     .limit(MAX_SPRINTS)) as SprintMeta[];
 
   const tasksBySprint = new Map<string, VelocityTaskRow[]>();
@@ -113,7 +116,12 @@ export async function computeVelocityInsights(db: Db, tenantId: number): Promise
       .select({ sprintId: tasks.sprintId, storyPoints: tasks.storyPoints, completedAt: tasks.completedAt })
       .from(tasks)
       .innerJoin(projects, eq(projects.id, tasks.projectId))
-      .where(and(eq(projects.tenantId, tenantId), eq(tasks.archived, false), isNotNull(tasks.sprintId)))) as VelocityTaskRow[];
+      .where(and(
+        eq(projects.tenantId, tenantId),
+        ...(projectId != null ? [eq(tasks.projectId, projectId)] : []),
+        eq(tasks.archived, false),
+        isNotNull(tasks.sprintId),
+      ))) as VelocityTaskRow[];
     for (const r of taskRows) {
       if (!r.sprintId) continue;
       const list = tasksBySprint.get(r.sprintId) ?? [];

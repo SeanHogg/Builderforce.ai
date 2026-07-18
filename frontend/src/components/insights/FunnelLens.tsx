@@ -10,6 +10,7 @@ import { PmCard, PmEmpty, PmError, StatCard, ProgressBar, StatusPill } from '@/c
 import { Select } from '@/components/Select';
 import { KpiGrid } from './LensShell';
 import { pct, days as dDays } from './format';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 
 const FUNNEL_ORDER: FunnelStage[] = ['idea', 'validated', 'in_build', 'shipped', 'measured'];
 
@@ -47,13 +48,18 @@ function nextStage(stage: string): FunnelStage | null {
  *  conversion + the idea pipeline manager (the CEO "is innovation working" view). */
 export function FunnelLens() {
   const t = useTranslations('insights');
+  const { currentProjectId } = useProjectScope();
   const [busy, setBusy] = useState(false);
   const [newIdea, setNewIdea] = useState('');
   const [newLink, setNewLink] = useState('none');
   const [projects, setProjects] = useState<Project[]>([]);
   const [initiatives, setInitiatives] = useState<Initiative[]>([]);
-  const funnelQ = usePmData<FunnelMetrics>(() => innovationApi.funnel(), []);
-  const ideasQ = usePmData<InnovationIdea[]>(() => innovationApi.ideas.list(), []);
+  const funnelQ = usePmData<FunnelMetrics>(() => innovationApi.funnel(undefined, currentProjectId), [currentProjectId]);
+  const ideasQ = usePmData<InnovationIdea[]>(() => innovationApi.ideas.list(currentProjectId), [currentProjectId]);
+
+  useEffect(() => {
+    setNewLink(currentProjectId == null ? 'none' : `project:${currentProjectId}`);
+  }, [currentProjectId]);
 
   // Link targets: a project OR an initiative an idea can be tied to.
   useEffect(() => {
@@ -66,13 +72,13 @@ export function FunnelLens() {
   /** Shared link <Select> (used on create and per-idea). */
   const linkSelect = (value: string, onChange: (v: string) => void, ariaLabel: string) => (
     <Select style={{ ...inputStyle, flex: 'none', maxWidth: 170 }} value={value} onChange={(e) => onChange(e.target.value)} aria-label={ariaLabel}>
-      <option value="none">{t('funnel.linkNone')}</option>
+      {currentProjectId == null && <option value="none">{t('funnel.linkNone')}</option>}
       {projects.length > 0 && (
         <optgroup label={t('funnel.linkProjects')}>
-          {projects.map((p) => <option key={`p${p.id}`} value={`project:${p.id}`}>{p.name}</option>)}
+          {projects.filter((p) => currentProjectId == null || p.id === currentProjectId).map((p) => <option key={`p${p.id}`} value={`project:${p.id}`}>{p.name}</option>)}
         </optgroup>
       )}
-      {initiatives.length > 0 && (
+      {currentProjectId == null && initiatives.length > 0 && (
         <optgroup label={t('funnel.linkInitiatives')}>
           {initiatives.map((i) => <option key={`i${i.id}`} value={`initiative:${i.id}`}>{i.name}</option>)}
         </optgroup>
@@ -88,7 +94,7 @@ export function FunnelLens() {
   if (funnelQ.error) return <PmError message={funnelQ.error} />;
   if (!funnelQ.data) return <PmEmpty message={t('loading')} />;
   const f = funnelQ.data;
-  const ideas = ideasQ.data ?? [];
+  const ideas = (ideasQ.data ?? []).filter((idea) => currentProjectId == null || idea.linkedProjectId === currentProjectId);
   const stageLabel = (s: string) => t(`funnel.stage.${s}`);
 
   return (

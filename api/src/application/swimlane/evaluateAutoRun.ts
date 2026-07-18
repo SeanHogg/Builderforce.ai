@@ -18,6 +18,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { resolveArtifacts } from '../artifact/resolveArtifacts';
 import { isAgentRefRoleCapable } from '../kanban/roleCapability';
 import { decideLaneAutoRun, withOwnerAgentFallback, type LaneAgentLike, type LaneAutoRunDecision } from './laneAutoRun';
+import { findCanonicalBoard } from './canonicalBoard';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import { ExecutionStatus, TaskStatus } from '../../domain/shared/types';
 
@@ -175,7 +176,7 @@ export async function evaluateTaskAutoRun(
   // Done / terminal status: the ticket is finalized (commit + PR), never auto-run.
   if (args.status === TaskStatus.DONE) return base({ reason: 'terminal_lane', isTerminalLane: true });
 
-  const [board] = await db.select({ id: boards.id, lifecycleManaged: boards.lifecycleManaged }).from(boards).where(eq(boards.projectId, args.projectId)).limit(1);
+  const board = await findCanonicalBoard(db, args.projectId, args.tenantId);
   if (!board) return base({ reason: 'no_board' });
 
   const [lane] = await db

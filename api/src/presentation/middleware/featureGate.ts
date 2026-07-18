@@ -6,9 +6,12 @@ import { resolveTenantPlan } from '../routes/llmRoutes';
 import {
   evaluateFeatureEntitlement,
   evaluateFrontierAccess,
+  evaluatePremiumModelAccess,
+  premiumModelGateBody,
   type PlanFeature,
   type FeatureEntitlement,
   type FrontierAccess,
+  type PremiumModelAccess,
 } from '../../domain/tenant/planFeatures';
 import { listTenantProviderKeys } from '../../application/llm/tenantProviderKeyService';
 
@@ -140,6 +143,62 @@ export async function requireFrontierAccess(c: Context<HonoEnv>): Promise<Respon
     requiredPlan: TenantPlan.PRO,
     upgrade: true as const,
   }, 402);
+}
+
+// ---------------------------------------------------------------------------
+// Premium-MODEL access — the DB-touching wrapper over
+// {@link evaluatePremiumModelAccess}. STRICTER than frontier access: selecting any
+// paid OpenRouter model routes on OUR metered key (billed at OpenRouter cost + a
+// flat 1¢/request), so it needs a PAID plan AND a validated card on file — a
+// connected BYO account does NOT unlock it (that's frontier access, which routes on
+// the tenant's own key). THE one place every "can select a premium model" decision
+// is made, so the picker flag, the gateway gate, and the 402 copy never drift.
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve a caller's entitlement to PREMIUM (any-paid-OpenRouter) model selection.
+ * Composes the plan snapshot (which already carries `cardValidated`) + the caller's
+ * superadmin flag. `userId` optional — absent → superadmin dimension skipped.
+ */
+export async function resolvePremiumModelAccess(
+  env: Env,
+  tenantId: number,
+  userId: string | undefined | null,
+): Promise<PremiumModelAccess> {
+  const [access, isSuperadmin] = await Promise.all([
+    resolveTenantPlan(env, tenantId),
+    resolveIsSuperadmin(env, userId),
+  ]);
+  return evaluatePremiumModelAccess({
+    effectivePlan: toTenantPlan(access.effectivePlan),
+    premiumOverride: access.premiumOverride,
+    isSuperadmin,
+    cardValidated: access.cardValidated,
+  });
+}
+
+/** Boolean convenience — "may this tenant select any paid OpenRouter model?" */
+export async function tenantCanUsePremiumModels(
+  env: Env,
+  tenantId: number,
+  userId: string | undefined | null,
+): Promise<boolean> {
+  return (await resolvePremiumModelAccess(env, tenantId, userId)).entitled;
+}
+
+/**
+ * Route-handler gate for selecting a premium model. Returns `null` to proceed, or a
+ * **402** naming the exact unlock step:
+ *
+ *   const gate = await requirePremiumModelAccess(c);
+ *   if (gate) return gate;
+ */
+export async function requirePremiumModelAccess(c: Context<HonoEnv>): Promise<Response | null> {
+  const tenantId = c.get('tenantId') as number;
+  const userId = c.get('userId') as string | undefined;
+  const access = await resolvePremiumModelAccess(c.env, tenantId, userId);
+  if (access.entitled) return null;
+  return c.json(premiumModelGateBody(access), 402);
 }
 
 /**

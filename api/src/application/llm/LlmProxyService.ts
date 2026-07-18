@@ -810,6 +810,7 @@ export interface ProxyResult {
   candidateChain?: string[];
   /** success | cascade_exhausted | all_cooldown | subrequest_exhausted |
    *  strict_unavailable | schema_nonconforming | request_error |
+   *  byo_unavailable (BYO required but no connected provider can serve) |
    *  schema_too_complex (every candidate rejected the json_schema as too complex). */
   outcome?: string;
   /** Rolled-up failure class across attempts — rate_limit | timeout | auth |
@@ -960,6 +961,10 @@ export interface LlmProxyOptions {
    *  so the gateway completion seed leads with the owner's chosen account (e.g. Meta
    *  first), matching the cloud-agent pin. Empty/undefined = catalog-tier order. */
   byoVendorPriority?: readonly string[];
+  /** A tenant has selected BYO execution, even if every stored credential is
+   *  temporarily unresolved. Prevents an expired/revoked key from silently
+   *  changing the funding source to BuilderForce's shared pool. */
+  byoRequired?: boolean;
 }
 
 export class LlmProxyService {
@@ -978,6 +983,7 @@ export class LlmProxyService {
   private readonly xaiOAuthToken: string | null;
   private readonly tenantVendorKeys: TenantVendorKeys;
   private readonly byoVendorPriority: readonly string[];
+  private readonly byoRequired: boolean;
 
   constructor(env: ProxyEnv, options?: LlmProxyOptions) {
     this.env = env;
@@ -995,6 +1001,7 @@ export class LlmProxyService {
     this.xaiOAuthToken = options?.xaiOAuthToken ?? null;
     this.tenantVendorKeys = options?.tenantVendorKeys ?? {};
     this.byoVendorPriority = options?.byoVendorPriority ?? [];
+    this.byoRequired = options?.byoRequired ?? false;
     // Mark every vendor a BYO key overrides as tenant-funded up front, so any
     // resolution landing on that vendor this request is stamped byo (cost 0,
     // on-prem/VSIX exempt). vendorEnv() applies the matching key override.
@@ -1039,13 +1046,21 @@ export class LlmProxyService {
     return this.isSubscriptionFunded(result) || this.tenantFundedVendors.has(result.resolvedVendor);
   }
 
+  /** BYO is strict when configured OR when at least one credential resolved. */
+  private get byoStrict(): boolean {
+    return this.byoRequired || this.connectedByoVendors.size > 0;
+  }
+
   /** The premium fallback chain appended to every cascade — empty when the tenant
    *  has exhausted its paid-overflow cap, so the chain composer won't fall through
    *  to a funded model. A CODING run uses the coding-capable chain (paid coders)
    *  so it never resolves onto a general non-coder. Single source for both the
    *  cooldown-prefetch and the chain. */
   private get premiumFallback(): readonly string[] {
-    if (this.disablePaidOverflow) return [];
+    // A usable connected credential makes this a BYO-strict request. Never append
+    // BuilderForce-funded models behind the owner's account: an upstream failure
+    // must stay inside the owner's connected providers or surface honestly.
+    if (this.disablePaidOverflow || this.byoStrict) return [];
     return this.codingOnly ? CODING_PREMIUM_FALLBACK_MODELS : PREMIUM_FALLBACK_MODELS;
   }
 
@@ -1201,6 +1216,12 @@ export class LlmProxyService {
     // free pool and the connected account is tried last (or never). See composeFreeCappedCascade.
     const candidates = this.buildCandidateChain(seed, cooledSet, cooledVendors, pinnedHint, seedHead);
     if (candidates.length === 0) {
+      if (this.byoStrict) {
+        return this.finalize(
+          byoUnavailableResult(seed[0] ?? 'byo-required'),
+          tid, startedAt, [], 'byo_unavailable',
+        );
+      }
       // Every model in the seed + premium fallback list is on cooldown. The
       // guaranteed paid backstop (credited key) is the last chance before we
       // surface a hard failure — unless the tenant has exhausted its paid-overflow
@@ -1328,6 +1349,9 @@ export class LlmProxyService {
     requestHeaders?: Record<string, string>,
   ): Promise<ProxyResult> {
     const vendor = vendorForModel(model);
+    if (this.byoStrict && !this.connectedByoVendors.has(vendor)) {
+      return strictUnavailableResult(model, 'byo_provider_required');
+    }
     if (!vendorKeyBound(this.vendorEnv(), vendor)) {
       return strictUnavailableResult(model, 'vendor_key_unconfigured');
     }
@@ -1400,7 +1424,7 @@ export class LlmProxyService {
     pinnedModel?: string,
     head?: readonly string[],
   ): string[] {
-    return composeFreeCappedCascade({
+    const candidates = composeFreeCappedCascade({
       seed,
       ...(head && head.length ? { head } : {}),
       premiumFallback: this.premiumFallback,
@@ -1414,6 +1438,12 @@ export class LlmProxyService {
       }),
       cursor: chatRequestCursor,
     });
+    // BYO is an execution boundary, not merely a preference. Once at least one
+    // tenant credential resolves, remove every shared/operator-funded vendor from
+    // the chain. Multiple connected providers may still fail over among themselves.
+    return this.byoStrict
+      ? candidates.filter((model) => this.connectedByoVendors.has(vendorForModel(model)))
+      : candidates;
   }
 
   /** Synthesize the env passed to vendors — picks the Pro OpenRouter key when applicable. */
@@ -1489,6 +1519,7 @@ export class LlmProxyService {
     body: ChatCompletionRequest,
     requestHeaders?: Record<string, string>,
   ): Promise<ProxyResult | null> {
+    if (this.byoStrict) return null;
     const creditedEnv = this.creditedVendorEnv();
     if (!creditedEnv.OPENROUTER_API_KEY) return null; // no paid key to fall back to
     const result = await this.dispatch([...this.backstopModels], body, requestHeaders, {
@@ -2053,7 +2084,7 @@ export function llmProxyForPlan(
   env: ProxyEnv,
   effectivePlan: EffectivePlan,
   premiumOverride = false,
-  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; vendorCallTimeoutMs?: number; byoVendorPriority?: readonly string[] },
+  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; vendorCallTimeoutMs?: number; byoVendorPriority?: readonly string[]; byoRequired?: boolean },
 ): LlmProxyService {
   const routing = resolveRouting(effectivePlan, premiumOverride);
   const { productName, modelPool } = routing;
@@ -2091,6 +2122,7 @@ export function llmProxyForPlan(
     // Tenant BYO precedence — leads the connected-flagship seed with the owner's
     // chosen account (e.g. Meta first), matching the cloud-agent pin.
     ...(opts?.byoVendorPriority?.length ? { byoVendorPriority: opts.byoVendorPriority } : {}),
+    ...(opts?.byoRequired ? { byoRequired: true } : {}),
   });
 }
 
@@ -2119,6 +2151,37 @@ export function codingModelsForPlan(effectivePlan: EffectivePlan, premiumOverrid
  *  falling back to the global free default if the plan pool somehow excludes all. */
 export function codingDefaultForPlan(effectivePlan: EffectivePlan, premiumOverride = false): string {
   return codingModelsForPlan(effectivePlan, premiumOverride)[0] ?? CODING_DEFAULT_MODEL;
+}
+
+/**
+ * Is `model` a PREMIUM OpenRouter selection — i.e. an explicit pin on a PAID
+ * OpenRouter model that is NOT already in the tenant's curated in-plan pool? This
+ * is the "leverage OpenRouter → any paid model" tier: it routes on OUR metered
+ * OpenRouter key, so selecting it is gated behind premium access (paid plan + a
+ * validated card) and billed at OpenRouter cost + a flat 1¢/request.
+ *
+ * Excluded (return false):
+ *   • empty / no pin — nothing selected;
+ *   • non-OpenRouter vendors (`@cf/*`, `direct/*`, `googleai/*`, `evermind/*`,
+ *     `cerebras/*`, …) — those are plan-pool or BYO paths, not premium;
+ *   • `:free` OpenRouter ids — the free tier;
+ *   • ids already in the plan's auto-route pool (the curated PREMIUM coders like
+ *     `anthropic/claude-sonnet-4.6` a paid plan already reaches for free).
+ * Everything else that resolves to the OpenRouter vendor is the premium long tail.
+ *
+ * Pure so the gateway gate, the surcharge decision, and any picker filter share ONE
+ * definition of "premium selection".
+ */
+export function isPremiumModelSelection(
+  model: string | undefined | null,
+  effectivePlan: EffectivePlan,
+  premiumOverride = false,
+): boolean {
+  const id = typeof model === 'string' ? model.trim() : '';
+  if (!id) return false;
+  if (vendorForModel(id) !== 'openrouter') return false;
+  if (id.endsWith(':free')) return false;
+  return !modelPoolForPlan(effectivePlan, premiumOverride).includes(id);
 }
 
 /**
@@ -2222,6 +2285,18 @@ export interface PickCloudModelOptions {
    *  When set, the connected-flagship soft seed leads with the owner's chosen account
    *  (e.g. Meta first) instead of catalog-tier order. See {@link byoAutoSeedModels}. */
   byoVendorPriority?: readonly string[];
+  /**
+   * The tenant may select a PREMIUM model (any paid OpenRouter model outside the plan
+   * pool, billed at OpenRouter cost + a flat 1¢/request) — i.e. a paid plan WITH a
+   * validated card, per `evaluatePremiumModelAccess`. Defaults to false.
+   *
+   * A cloud run dispatches through the internal proxy, NOT the gateway HTTP route, so
+   * the route's premium gate never sees it. Without this, an agent whose `base_model`
+   * is a premium id would run ungated on our metered key. Mirrors the free-plan rule
+   * below: an un-entitled premium pin is IGNORED (the run falls back to the plan's
+   * coding default) rather than erroring a background run.
+   */
+  premiumEntitled?: boolean;
 }
 
 /** Headroom over the prompt estimate to reserve for the model's OUTPUT tokens +
@@ -2285,7 +2360,24 @@ export function pickCloudModel(
   const explicitIsByo = !!explicit && !!opts?.byoVendors?.has(vendorForModel(explicit.trim()));
   if (explicitModelPreemptsByo(explicit, opts?.byoVendors)) {
     const canChooseModel = premiumOverride || effectivePlan !== 'free' || explicitIsByo;
-    if (canChooseModel && isKnownModel(explicit)) return { model: (explicit as string).trim(), strict: true };
+    // A PREMIUM pin (paid OpenRouter model off the plan pool) additionally needs the
+    // card-validated entitlement — a cloud run never passes the route's premium gate,
+    // so it is enforced here or nowhere. Un-entitled → ignore the pin and use the
+    // plan's coding default (same shape as the free-plan gate: a background run
+    // degrades to a model it may use rather than failing).
+    const isPremiumPin = !explicitIsByo && isPremiumModelSelection(explicit, effectivePlan, premiumOverride);
+    const premiumBlocked = isPremiumPin && opts?.premiumEntitled !== true;
+    // `isKnownModel` normally guards against strict-pinning a typo'd/retired id (which
+    // would 503 with no failover). But a PREMIUM id is off our curated catalog BY
+    // DEFINITION — it's the paid OpenRouter long tail — so that guard would reject
+    // every premium pin and silently drop the run back to the plan default. An
+    // ENTITLED premium pin is therefore honoured on its own: it came from the
+    // OpenRouter-catalog-driven picker, and dispatch resolves a bare `<org>/<slug>` to
+    // the OpenRouter vendor.
+    const pinnable = isKnownModel(explicit) || (isPremiumPin && !premiumBlocked);
+    if (canChooseModel && !premiumBlocked && pinnable) {
+      return { model: (explicit as string).trim(), strict: true };
+    }
   }
 
   // No honored explicit pin: when the tenant has connected their OWN provider(s), lead
@@ -2351,7 +2443,7 @@ export function adminPoolProxy(
  */
 function strictUnavailableResult(
   model: string,
-  reason: 'cooldown' | 'vendor_key_unconfigured' | 'plan_tier' | 'vendor_outage',
+  reason: 'cooldown' | 'vendor_key_unconfigured' | 'plan_tier' | 'vendor_outage' | 'byo_provider_required',
 ): ProxyResult {
   const vendor = vendorForModel(model);
   const body = JSON.stringify({
@@ -2374,6 +2466,24 @@ function strictUnavailableResult(
     retries: 0,
     failovers: [],
     outcome: 'strict_unavailable',
+    attempts: [],
+  };
+}
+
+/** Fail-closed envelope when BYO is configured but none of its credentials can
+ * serve the request. This is deliberately a 503, not a shared-pool fallback. */
+function byoUnavailableResult(model: string): ProxyResult {
+  const vendor = vendorForModel(model);
+  return {
+    response: new Response(JSON.stringify({
+      error: 'BYO execution is required, but no configured provider is currently usable. Reconnect or repair the provider credential.',
+      code: 'byo_unavailable',
+    }), { status: 503, headers: { 'content-type': 'application/json' } }),
+    resolvedModel: model,
+    resolvedVendor: vendor,
+    retries: 0,
+    failovers: [],
+    outcome: 'byo_unavailable',
     attempts: [],
   };
 }

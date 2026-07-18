@@ -986,7 +986,11 @@
     "merging": "Merging…"
   },
   "memberProfile": {
-    "tabs": { "overview": "Overview", "timeLogs": "Time Logs", "tasks": "Tasks" },
+    "tabs": {
+      "overview": "Overview",
+      "timeLogs": "Time Logs",
+      "tasks": "Tasks"
+    },
     "noTasks": "No tasks are assigned to this user.",
     "subtitle": "{kind} · capability & availability",
     "syncing": "Syncing…",
@@ -1048,7 +1052,7 @@
       "cloud_runs": "Cloud runs",
       "ingestion": "Data",
       "error_events": "Errors",
-      "outbound_fetches": "Uptime"
+      "outbound_fetches": "Outbound fetches"
     },
     "unlimited": "Unlimited",
     "freePerMo": "{amount} free / mo",
@@ -1737,7 +1741,12 @@
       "activeUsers": "Active users",
       "cost": "Cost",
       "tokensSub": "across all models",
-      "tokensByModel": "Tokens by model"
+      "tokensByModel": "Tokens by model",
+      "byIntegration": "Consumption by integration",
+      "platformKey": "Builderforce (platform key)",
+      "fundedOwnKey": "Your key",
+      "fundedPlatform": "Platform",
+      "requests": "Requests"
     },
     "devexhub": {
       "title": "DevEx",
@@ -2785,6 +2794,7 @@
       "reopen": "Reopen"
     },
     "loadMore": "Load more",
+    "aggregateConsumption": "Errors · All collectors",
     "setup": {
       "title": "Error collectors",
       "subtitle": "Connect where your errors come from — one collector per project.",
@@ -2797,6 +2807,7 @@
       "creating": "Creating…",
       "tenantName": "Tenant collector",
       "tenantScope": "All projects (tenant-level)",
+      "collectorConsumption": "Errors · {name}",
       "snippetNote": "Your ingest key is shown only once, at creation. Drop this snippet into every app in the project.",
       "sdkSnippet": "Browser SDK",
       "otlpEndpoint": "OTLP endpoint",
@@ -2808,6 +2819,10 @@
       "paused": "paused",
       "pause": "Pause",
       "resume": "Resume",
+      "test": "Test",
+      "testing": "Testing…",
+      "testSucceeded": "Test error received. This collector is configured correctly.",
+      "testFailed": "Collector test failed",
       "delete": "Delete",
       "confirmDelete": "Delete this collector? Ingested errors are kept.",
       "lastEvent": "last event",
@@ -3191,6 +3206,7 @@
       "aiModelShare": "Model share of runs",
       "aiMergeRate": "Merge rate by model",
       "aiComparison": "Multi-tool evaluation",
+      "aiByIntegration": "Consumption by integration",
       "aiShareTrend": "Adoption & share trend",
       "delivCycleTime": "Cycle time",
       "delivVelocity": "Velocity",
@@ -3314,7 +3330,11 @@
       "bySource": "Cost by source",
       "spendSub": "estimated, last 7 days",
       "byProject": "Spend by project",
-      "noProjects": "No project spend"
+      "noProjects": "No project spend",
+      "byoFundedOnly": "No platform spend — all usage ran on your connected keys",
+      "sourceCloud": "Cloud",
+      "sourceOnPrem": "On-prem",
+      "sourceWeb": "Web / SDK"
     },
     "catalog": {
       "noInstalls": "No installs yet",
@@ -5180,20 +5200,15 @@
     "labelSeats": "Seats",
     "labelBillingEmail": "Billing Email",
     "placeholderBillingEmail": "billing@example.com",
-    "labelCardBrand": "Card Brand",
-    "labelCardLast4": "Card Last 4 Digits",
     "redirectNote": "You will be redirected to our payment provider to securely enter your card details.",
     "total": "Total: ${price}/{unit}",
     "totalForSeats": "{seats, plural, one {for # seat} other {for # seats}}",
     "unitYear": "yr",
     "unitMonth": "mo",
     "errorBillingEmailRequired": "Billing email is required.",
-    "errorCardLast4": "Card last 4 must be exactly 4 digits.",
     "errorUpgradeFailed": "Upgrade failed",
     "cancel": "Cancel",
-    "activating": "Activating…",
     "redirecting": "Redirecting…",
-    "activatePlan": "Activate {plan}",
     "continueToPayment": "Continue to Payment",
     "planComparison": "Plan Comparison",
     "colFeature": "Feature",
@@ -6997,6 +7012,7 @@
     "sub": {
       "health": "Health",
       "directory": "Directory",
+      "sessions": "Sessions",
       "security": "Security",
       "emulation": "Emulation",
       "tenants": "Workspaces",
@@ -7185,6 +7201,22 @@
         "colDuration": "Duration",
         "durationActive": "Active"
       }
+    },
+    "sessions": {
+      "title": "Adoption sessions",
+      "subtitle": "Anonymous Brain and free-tool visitors, including account and paid conversion.",
+      "count": "{count, plural, one {# session} other {# sessions}}",
+      "empty": "No guest sessions found.",
+      "visitor": "Visitor",
+      "engagement": "Engagement",
+      "firstSeen": "First seen",
+      "lastSeen": "Last seen",
+      "conversion": "Conversion",
+      "brainMessages": "{count} Brain messages",
+      "tokensAndTools": "{tokens} tokens · {tools} tool runs",
+      "guest": "guest",
+      "registered": "registered",
+      "paid": "paid"
     },
     "usage": {
       "aiAnalyze": "AI Analyze",
@@ -7693,7 +7725,19 @@
     "yourLlms": "Your LLMs",
     "connectedProviders": "Connected providers",
     "models": "Models",
-    "current": "{model} (current)"
+    "current": "{model} (current)",
+    "premiumModels": "Premium — any OpenRouter model (cost + 1¢/request)",
+    "premiumOption": "{name} · {price}/M in",
+    "premiumUnlockTitle": "Unlock premium models",
+    "premiumUnlockCardBody": "Validate a card to select any paid OpenRouter model. You are billed OpenRouter’s own price plus 1¢ per request. Validation places no charge — it only confirms the card works.",
+    "premiumUnlockUpgradeBody": "Premium models (any paid OpenRouter model, billed at OpenRouter cost plus 1¢ per request) need a paid plan with a validated card.",
+    "premiumValidateCard": "Validate a card",
+    "premiumValidating": "Opening…",
+    "premiumPending": "Awaiting confirmation",
+    "premiumPendingHint": "Finish validation with your payment provider, then reload.",
+    "premiumFailedHint": "That card could not be validated. Try another.",
+    "premiumUpgrade": "Upgrade to Pro",
+    "premiumUnlockFailed": "Could not start card validation."
   },
   "runAgentControl": {
     "agentTitle": "Agent",
@@ -8668,6 +8712,10 @@
   },
   "agentExecution": {
     "runThisTask": "Run this task",
+    "coordinateThisTicket": "Coordinate this ticket",
+    "coordinateNow": "Assign and run next role",
+    "coordinating": "Coordinating…",
+    "coordinateHint": "The assignee coordinates this lifecycle. BuilderForce verifies the manifest and dispatches the next required BA, architect, developer, reviewer, QA, or validator—never the assignee as the default executor.",
     "awaitingApproval": "Awaiting approval before this can run: {reason}",
     "executions": "Executions",
     "ticketSpendTooltip": "Ticket spend across all runs: {tokens} tokens over {requests} LLM call(s). Rolls up to this project, then the account.",

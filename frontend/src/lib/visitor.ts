@@ -44,6 +44,16 @@ export function getVisitorId(): string | null {
   return id;
 }
 
+/** Existing anonymous visitor id without minting one for an authenticated user. */
+export function getExistingVisitorId(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage.getItem(VISITOR_KEY) ?? readCookie(VISITOR_KEY);
+  } catch {
+    return readCookie(VISITOR_KEY);
+  }
+}
+
 /** First-touch attribution, captured once on the first tools visit. */
 export function getFirstTouch(): FirstTouch {
   if (typeof window === 'undefined') return { landingPath: '', referrer: '', utm: {} };

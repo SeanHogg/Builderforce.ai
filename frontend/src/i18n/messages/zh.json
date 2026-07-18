@@ -986,7 +986,11 @@
     "merging": "正在合并…"
   },
   "memberProfile": {
-    "tabs": { "overview": "概览", "timeLogs": "时间日志", "tasks": "任务" },
+    "tabs": {
+      "overview": "概览",
+      "timeLogs": "时间日志",
+      "tasks": "任务"
+    },
     "noTasks": "没有分配给此用户的任务。",
     "subtitle": "{kind} · 能力与可用性",
     "syncing": "正在同步…",
@@ -1048,7 +1052,7 @@
       "cloud_runs": "云端运行",
       "ingestion": "数据",
       "error_events": "错误",
-      "outbound_fetches": "在线率"
+      "outbound_fetches": "出站请求"
     },
     "unlimited": "无限制",
     "freePerMo": "每月免费 {amount}",
@@ -1737,7 +1741,12 @@
       "activeUsers": "活跃用户",
       "cost": "成本",
       "tokensSub": "所有模型合计",
-      "tokensByModel": "各模型令牌用量"
+      "tokensByModel": "各模型令牌用量",
+      "byIntegration": "各集成用量",
+      "platformKey": "Builderforce（平台密钥）",
+      "fundedOwnKey": "自有密钥",
+      "fundedPlatform": "平台",
+      "requests": "请求数"
     },
     "devexhub": {
       "title": "开发者体验",
@@ -2785,6 +2794,7 @@
       "reopen": "重新打开"
     },
     "loadMore": "加载更多",
+    "aggregateConsumption": "错误 · 所有采集器",
     "setup": {
       "title": "错误采集器",
       "subtitle": "连接错误的来源——每个项目一个采集器。",
@@ -2797,6 +2807,7 @@
       "creating": "创建中…",
       "tenantName": "租户采集器",
       "tenantScope": "所有项目（租户级）",
+      "collectorConsumption": "错误 · {name}",
       "snippetNote": "采集密钥仅在创建时显示一次。请将此片段嵌入项目中的每个应用。",
       "sdkSnippet": "浏览器 SDK",
       "otlpEndpoint": "OTLP 端点",
@@ -2808,6 +2819,10 @@
       "paused": "已暂停",
       "pause": "暂停",
       "resume": "恢复",
+      "test": "测试",
+      "testing": "测试中…",
+      "testSucceeded": "已收到测试错误。此采集器配置正确。",
+      "testFailed": "采集器测试失败",
       "delete": "删除",
       "confirmDelete": "删除此采集器？已采集的错误将保留。",
       "lastEvent": "最近事件",
@@ -3191,6 +3206,7 @@
       "aiModelShare": "模型运行占比",
       "aiMergeRate": "各模型合并率",
       "aiComparison": "多工具评估",
+      "aiByIntegration": "各集成用量",
       "aiShareTrend": "采用与占比趋势",
       "delivCycleTime": "周期时间",
       "delivVelocity": "速度",
@@ -3314,7 +3330,11 @@
       "bySource": "按来源成本",
       "spendSub": "预估，最近 7 天",
       "byProject": "按项目支出",
-      "noProjects": "暂无项目支出"
+      "noProjects": "暂无项目支出",
+      "byoFundedOnly": "无平台支出——所有用量均由你连接的密钥承担",
+      "sourceCloud": "云端",
+      "sourceOnPrem": "本地部署",
+      "sourceWeb": "Web / SDK"
     },
     "catalog": {
       "noInstalls": "暂无安装",
@@ -5180,20 +5200,15 @@
     "labelSeats": "席位",
     "labelBillingEmail": "账单邮箱",
     "placeholderBillingEmail": "billing@example.com",
-    "labelCardBrand": "卡片品牌",
-    "labelCardLast4": "卡号后 4 位",
     "redirectNote": "您将被重定向到我们的支付服务商，以安全地输入您的卡片详情。",
     "total": "合计：${price}/{unit}",
     "totalForSeats": "{seats, plural, one {共 # 个席位} other {共 # 个席位}}",
     "unitYear": "年",
     "unitMonth": "月",
     "errorBillingEmailRequired": "账单邮箱为必填项。",
-    "errorCardLast4": "卡号后 4 位必须正好是 4 位数字。",
     "errorUpgradeFailed": "升级失败",
     "cancel": "取消",
-    "activating": "正在激活…",
     "redirecting": "正在重定向…",
-    "activatePlan": "激活 {plan}",
     "continueToPayment": "继续付款",
     "planComparison": "套餐对比",
     "colFeature": "功能",
@@ -6995,6 +7010,7 @@
     "sub": {
       "health": "运行状况",
       "directory": "目录",
+      "sessions": "会话",
       "security": "安全",
       "emulation": "模拟会话",
       "tenants": "工作区",
@@ -7183,6 +7199,22 @@
         "colDuration": "时长",
         "durationActive": "活跃"
       }
+    },
+    "sessions": {
+      "title": "采用会话",
+      "subtitle": "匿名 Brain 和免费工具访客，包括账户和付费转化。",
+      "count": "{count} 个会话",
+      "empty": "未找到访客会话。",
+      "visitor": "访客",
+      "engagement": "互动",
+      "firstSeen": "首次访问",
+      "lastSeen": "最近访问",
+      "conversion": "转化",
+      "brainMessages": "{count} 条 Brain 消息",
+      "tokensAndTools": "{tokens} tokens · {tools} 次工具运行",
+      "guest": "访客",
+      "registered": "已注册",
+      "paid": "已付费"
     },
     "usage": {
       "aiAnalyze": "AI 分析",
@@ -7670,17 +7702,40 @@
       "meta": {
         "blurb": "粘贴 Meta AI API 密钥，在您自己的 Meta AI 账户上运行 MUSE 模型（muse-spark-1.1）。"
       },
-      "kimi": { "blurb": "粘贴 Kimi Code 订阅密钥或 Moonshot API 密钥。" },
-      "qwen": { "blurb": "粘贴阿里云 DashScope API 密钥以运行 Qwen 模型。" },
-      "minimax": { "blurb": "粘贴 MiniMax API 密钥以运行 MiniMax 模型。" }
-      ,"xai": { "blurb": "连接符合条件的 SuperGrok 订阅或粘贴 xAI API 密钥。", "subscription": "SuperGrok 订阅", "pastePrompt": "批准访问后，复制 xAI 页面显示的代码并粘贴到这里。", "pastePlaceholder": "粘贴 xAI 登录代码…" }
+      "kimi": {
+        "blurb": "粘贴 Kimi Code 订阅密钥或 Moonshot API 密钥。"
+      },
+      "qwen": {
+        "blurb": "粘贴阿里云 DashScope API 密钥以运行 Qwen 模型。"
+      },
+      "minimax": {
+        "blurb": "粘贴 MiniMax API 密钥以运行 MiniMax 模型。"
+      },
+      "xai": {
+        "blurb": "连接符合条件的 SuperGrok 订阅或粘贴 xAI API 密钥。",
+        "subscription": "SuperGrok 订阅",
+        "pastePrompt": "批准访问后，复制 xAI 页面显示的代码并粘贴到这里。",
+        "pastePlaceholder": "粘贴 xAI 登录代码…"
+      }
     }
   },
   "modelSelect": {
     "yourLlms": "您的 LLM",
     "connectedProviders": "已连接的提供商",
     "models": "模型",
-    "current": "{model}（当前）"
+    "current": "{model}（当前）",
+    "premiumModels": "高级 — 任意 OpenRouter 模型（成本 + 每次请求 1 美分）",
+    "premiumOption": "{name} · 输入 {price}/M",
+    "premiumUnlockTitle": "解锁高级模型",
+    "premiumUnlockCardBody": "验证银行卡即可选择任意付费 OpenRouter 模型。按 OpenRouter 原价另加每次请求 1 美分计费。验证不会产生任何扣款，仅确认该卡可用。",
+    "premiumUnlockUpgradeBody": "高级模型（任意付费 OpenRouter 模型，按 OpenRouter 成本另加每次请求 1 美分计费）需要付费方案并已验证银行卡。",
+    "premiumValidateCard": "验证银行卡",
+    "premiumValidating": "正在打开…",
+    "premiumPending": "等待确认",
+    "premiumPendingHint": "请在支付服务商处完成验证，然后重新加载。",
+    "premiumFailedHint": "该银行卡无法验证，请换一张。",
+    "premiumUpgrade": "升级到 Pro",
+    "premiumUnlockFailed": "无法启动银行卡验证。"
   },
   "runAgentControl": {
     "agentTitle": "智能体",
@@ -8655,6 +8710,10 @@
   },
   "agentExecution": {
     "runThisTask": "运行此任务",
+    "coordinateThisTicket": "协调此工单",
+    "coordinateNow": "分配并运行下一个角色",
+    "coordinating": "正在协调…",
+    "coordinateHint": "负责人协调此生命周期。BuilderForce 会验证清单并运行下一个必需角色，绝不会默认让负责人执行工作。",
     "awaitingApproval": "此任务需先获得批准方可运行：{reason}",
     "executions": "执行记录",
     "ticketSpendTooltip": "所有运行的工单花费：{requests} 次 LLM 调用共 {tokens} 个 token。汇总至此项目，再汇总至账户。",

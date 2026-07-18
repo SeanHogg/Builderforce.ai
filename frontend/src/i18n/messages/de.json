@@ -986,7 +986,11 @@
     "merging": "Wird zusammengeführt…"
   },
   "memberProfile": {
-    "tabs": { "overview": "Übersicht", "timeLogs": "Zeiterfassung", "tasks": "Aufgaben" },
+    "tabs": {
+      "overview": "Übersicht",
+      "timeLogs": "Zeiterfassung",
+      "tasks": "Aufgaben"
+    },
     "noTasks": "Diesem Benutzer sind keine Aufgaben zugewiesen.",
     "subtitle": "{kind} · Fähigkeiten & Verfügbarkeit",
     "syncing": "Wird synchronisiert…",
@@ -1048,7 +1052,7 @@
       "cloud_runs": "Cloud-Ausführungen",
       "ingestion": "Daten",
       "error_events": "Fehler",
-      "outbound_fetches": "Verfügbarkeit"
+      "outbound_fetches": "Ausgehende Abrufe"
     },
     "unlimited": "Unbegrenzt",
     "freePerMo": "{amount} kostenlos / Mon.",
@@ -1737,7 +1741,12 @@
       "activeUsers": "Aktive Nutzer",
       "cost": "Kosten",
       "tokensSub": "über alle Modelle",
-      "tokensByModel": "Tokens nach Modell"
+      "tokensByModel": "Tokens nach Modell",
+      "byIntegration": "Verbrauch nach Integration",
+      "platformKey": "Builderforce (Plattform-Schlüssel)",
+      "fundedOwnKey": "Ihr Schlüssel",
+      "fundedPlatform": "Plattform",
+      "requests": "Anfragen"
     },
     "devexhub": {
       "title": "DevEx",
@@ -2785,6 +2794,7 @@
       "reopen": "Wieder öffnen"
     },
     "loadMore": "Mehr laden",
+    "aggregateConsumption": "Fehler · Alle Kollektoren",
     "setup": {
       "title": "Fehler-Kollektoren",
       "subtitle": "Verbinden Sie, woher Ihre Fehler kommen – ein Kollektor pro Projekt.",
@@ -2797,6 +2807,7 @@
       "creating": "Wird erstellt…",
       "tenantName": "Mandanten-Kollektor",
       "tenantScope": "Alle Projekte (mandantenweit)",
+      "collectorConsumption": "Fehler · {name}",
       "snippetNote": "Ihr Ingest-Schlüssel wird nur einmal bei der Erstellung angezeigt. Fügen Sie dieses Snippet in jede App des Projekts ein.",
       "sdkSnippet": "Browser-SDK",
       "otlpEndpoint": "OTLP-Endpunkt",
@@ -2808,6 +2819,10 @@
       "paused": "pausiert",
       "pause": "Pausieren",
       "resume": "Fortsetzen",
+      "test": "Testen",
+      "testing": "Wird getestet…",
+      "testSucceeded": "Testfehler empfangen. Dieser Kollektor ist korrekt konfiguriert.",
+      "testFailed": "Kollektortest fehlgeschlagen",
       "delete": "Löschen",
       "confirmDelete": "Diesen Kollektor löschen? Erfasste Fehler bleiben erhalten.",
       "lastEvent": "letztes Ereignis",
@@ -3191,6 +3206,7 @@
       "aiModelShare": "Modellanteil an Läufen",
       "aiMergeRate": "Merge-Rate nach Modell",
       "aiComparison": "Multi-Tool-Bewertung",
+      "aiByIntegration": "Verbrauch nach Integration",
       "aiShareTrend": "Akzeptanz- & Anteilstrend",
       "delivCycleTime": "Durchlaufzeit",
       "delivVelocity": "Velocity",
@@ -3314,7 +3330,11 @@
       "bySource": "Kosten nach Quelle",
       "spendSub": "geschätzt, letzte 7 Tage",
       "byProject": "Ausgaben nach Projekt",
-      "noProjects": "Keine Projektausgaben"
+      "noProjects": "Keine Projektausgaben",
+      "byoFundedOnly": "Keine Plattformausgaben – die gesamte Nutzung lief über Ihre verbundenen Schlüssel",
+      "sourceCloud": "Cloud",
+      "sourceOnPrem": "On-Premise",
+      "sourceWeb": "Web / SDK"
     },
     "catalog": {
       "noInstalls": "Noch keine Installationen",
@@ -5180,20 +5200,15 @@
     "labelSeats": "Plätze",
     "labelBillingEmail": "Abrechnungs-E-Mail",
     "placeholderBillingEmail": "billing@example.com",
-    "labelCardBrand": "Kartentyp",
-    "labelCardLast4": "Letzte 4 Kartenziffern",
     "redirectNote": "Sie werden zu unserem Zahlungsanbieter weitergeleitet, um Ihre Kartendaten sicher einzugeben.",
     "total": "Gesamt: ${price}/{unit}",
     "totalForSeats": "{seats, plural, one {für # Platz} other {für # Plätze}}",
     "unitYear": "J.",
     "unitMonth": "Mon.",
     "errorBillingEmailRequired": "Abrechnungs-E-Mail ist erforderlich.",
-    "errorCardLast4": "Letzte 4 Kartenziffern müssen genau 4 Ziffern sein.",
     "errorUpgradeFailed": "Aufrüstung fehlgeschlagen",
     "cancel": "Abbrechen",
-    "activating": "Wird aktiviert…",
     "redirecting": "Wird weitergeleitet…",
-    "activatePlan": "{plan} aktivieren",
     "continueToPayment": "Weiter zur Zahlung",
     "planComparison": "Tarifvergleich",
     "colFeature": "Funktion",
@@ -6995,6 +7010,7 @@
     "sub": {
       "health": "Zustand",
       "directory": "Verzeichnis",
+      "sessions": "Sitzungen",
       "security": "Sicherheit",
       "emulation": "Emulation",
       "tenants": "Arbeitsbereiche",
@@ -7183,6 +7199,22 @@
         "colDuration": "Dauer",
         "durationActive": "Aktiv"
       }
+    },
+    "sessions": {
+      "title": "Adoptionssitzungen",
+      "subtitle": "Anonyme Brain- und Gratis-Tool-Besucher inklusive Konto- und Bezahlkonvertierung.",
+      "count": "{count, plural, one {# Sitzung} other {# Sitzungen}}",
+      "empty": "Keine Gastsitzungen gefunden.",
+      "visitor": "Besucher",
+      "engagement": "Interaktion",
+      "firstSeen": "Erstmals gesehen",
+      "lastSeen": "Zuletzt gesehen",
+      "conversion": "Konvertierung",
+      "brainMessages": "{count} Brain-Nachrichten",
+      "tokensAndTools": "{tokens} Tokens · {tools} Tool-Aufrufe",
+      "guest": "Gast",
+      "registered": "registriert",
+      "paid": "bezahlt"
     },
     "usage": {
       "aiAnalyze": "KI-Analyse",
@@ -7670,17 +7702,40 @@
       "meta": {
         "blurb": "Fügen Sie einen Meta-AI-API-Schlüssel ein, um MUSE-Modelle (muse-spark-1.1) mit Ihrem eigenen Meta-AI-Konto auszuführen."
       },
-      "kimi": { "blurb": "Fügen Sie einen Kimi-Code-Aboschlüssel oder Moonshot-API-Schlüssel ein." },
-      "qwen": { "blurb": "Fügen Sie einen Alibaba-DashScope-API-Schlüssel für Qwen-Modelle ein." },
-      "minimax": { "blurb": "Fügen Sie einen MiniMax-API-Schlüssel für MiniMax-Modelle ein." }
-      ,"xai": { "blurb": "Verbinden Sie ein berechtigtes SuperGrok-Abo oder einen xAI-API-Schlüssel.", "subscription": "SuperGrok-Abo", "pastePrompt": "Kopieren Sie nach der Freigabe den auf der xAI-Seite angezeigten Code und fügen Sie ihn hier ein.", "pastePlaceholder": "xAI-Anmeldecode einfügen…" }
+      "kimi": {
+        "blurb": "Fügen Sie einen Kimi-Code-Aboschlüssel oder Moonshot-API-Schlüssel ein."
+      },
+      "qwen": {
+        "blurb": "Fügen Sie einen Alibaba-DashScope-API-Schlüssel für Qwen-Modelle ein."
+      },
+      "minimax": {
+        "blurb": "Fügen Sie einen MiniMax-API-Schlüssel für MiniMax-Modelle ein."
+      },
+      "xai": {
+        "blurb": "Verbinden Sie ein berechtigtes SuperGrok-Abo oder einen xAI-API-Schlüssel.",
+        "subscription": "SuperGrok-Abo",
+        "pastePrompt": "Kopieren Sie nach der Freigabe den auf der xAI-Seite angezeigten Code und fügen Sie ihn hier ein.",
+        "pastePlaceholder": "xAI-Anmeldecode einfügen…"
+      }
     }
   },
   "modelSelect": {
     "yourLlms": "Ihre LLMs",
     "connectedProviders": "Verbundene Anbieter",
     "models": "Modelle",
-    "current": "{model} (aktuell)"
+    "current": "{model} (aktuell)",
+    "premiumModels": "Premium – jedes OpenRouter-Modell (Kosten + 1 ¢/Anfrage)",
+    "premiumOption": "{name} · {price}/M Eingabe",
+    "premiumUnlockTitle": "Premium-Modelle freischalten",
+    "premiumUnlockCardBody": "Validieren Sie eine Karte, um jedes kostenpflichtige OpenRouter-Modell auszuwählen. Abgerechnet wird der OpenRouter-Preis zuzüglich 1 ¢ pro Anfrage. Die Validierung löst keine Zahlung aus – sie bestätigt nur, dass die Karte funktioniert.",
+    "premiumUnlockUpgradeBody": "Premium-Modelle (jedes kostenpflichtige OpenRouter-Modell, abgerechnet zu OpenRouter-Kosten zuzüglich 1 ¢ pro Anfrage) erfordern einen kostenpflichtigen Tarif mit einer validierten Karte.",
+    "premiumValidateCard": "Karte validieren",
+    "premiumValidating": "Wird geöffnet…",
+    "premiumPending": "Warte auf Bestätigung",
+    "premiumPendingHint": "Schließen Sie die Validierung bei Ihrem Zahlungsanbieter ab und laden Sie dann neu.",
+    "premiumFailedHint": "Diese Karte konnte nicht validiert werden. Versuchen Sie eine andere.",
+    "premiumUpgrade": "Auf Pro upgraden",
+    "premiumUnlockFailed": "Kartenvalidierung konnte nicht gestartet werden."
   },
   "runAgentControl": {
     "agentTitle": "Agent",
@@ -8655,6 +8710,10 @@
   },
   "agentExecution": {
     "runThisTask": "Diese Aufgabe ausführen",
+    "coordinateThisTicket": "Dieses Ticket koordinieren",
+    "coordinateNow": "Nächste Rolle zuweisen und starten",
+    "coordinating": "Wird koordiniert…",
+    "coordinateHint": "Der Zuständige koordiniert diesen Lebenszyklus. BuilderForce prüft das Manifest und startet die nächste erforderliche Rolle – niemals den Zuständigen als Standardausführer.",
     "awaitingApproval": "Warten auf Genehmigung, bevor dies ausgeführt werden kann: {reason}",
     "executions": "Ausführungen",
     "ticketSpendTooltip": "Ticket-Ausgaben über alle Ausführungen: {tokens} Tokens bei {requests} LLM-Aufruf(en). Wird auf dieses Projekt und dann auf das Konto hochgerechnet.",

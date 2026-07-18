@@ -37,6 +37,7 @@ import type {
 } from './streamChatCompletion';
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
 import { withProvenanceMetadata, type ProvenanceAccount } from './provenance';
+import { setLastResolvedModel } from './lastResolvedModel';
 import { chatWorkLinkingDirective, isCodeChangeTool, isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, isReadOnlyPlatformTool } from './chatWorkLinking';
 import {
   formatEvermindMemoryBlock,
@@ -1226,6 +1227,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     // of leaving it buried in the model field — the diagnostics block counts it.
     const resolved = result.resolvedModel ?? model ?? 'default';
     const requested = model ?? 'default';
+    // Record what ACTUALLY served this turn so `builtin_session_current_model` can
+    // report the exact model (an MCP call is a separate request and can't see it).
+    setLastResolvedModel(result.resolvedModel);
     if (requested !== 'default' && resolved !== 'default' && resolved !== requested) {
       pushTrace(c, {
         ts: nowIso(),
