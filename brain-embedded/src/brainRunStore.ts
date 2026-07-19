@@ -1487,6 +1487,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         });
         // Cache only a SUCCESSFUL read so a failed read can be retried.
         if (isReadTool && !isFailedToolResult(out)) readDedupe.add(dedupeKey);
+        // Pin this tool into every later turn's selection — a multi-step task must
+        // never lose a tool it is mid-way through using.
+        usedTools.add(tc.name);
       }
       continue;
     }

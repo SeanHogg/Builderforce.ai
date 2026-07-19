@@ -191,4 +191,5 @@ export { STEP_MESSAGE_ROLE, isStepMessage, attachEvermindLearn, formatEvermindLe
 // "Copy diagnostics" — pure serializer for the chat's identity + Evermind wiring state
 export { formatChatDiagnostics, classifyModelFunding, allowanceState } from './chatDiagnostics';
 export { getMcpToolStatus, setMcpToolStatus, type McpToolStatus } from './mcpToolStatus';
+export { selectToolsForTurn, DEFAULT_TOOL_LIMIT, type ToolSelection } from './selectTools';
 export type { ChatDiagnosticsData, ChatDiagnosticsEvermind, ChatDiagnosticsAccount, ChatDiagnosticsMeter, AllowanceState } from './chatDiagnostics';
