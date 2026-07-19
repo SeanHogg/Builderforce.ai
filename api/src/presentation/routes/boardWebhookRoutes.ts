@@ -16,7 +16,7 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { boardConnections } from '../../infrastructure/database/schema';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { SyncEngine, type StoredConnection } from '../../application/boardsync/SyncEngine';
 import { createDrizzleStore, loadConnectionCredentials } from '../../application/boardsync/drizzleStore';

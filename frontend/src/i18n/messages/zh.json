@@ -3856,7 +3856,8 @@
     "membersTab": "成员",
     "agentsTab": "智能体",
     "auditTab": "SOC 2",
-    "subnavLabel": "安全分区"
+    "subnavLabel": "安全分区",
+    "policiesTab": "策略"
   },
   "catalogInsights": {
     "total": {
@@ -9906,5 +9907,65 @@
     "removeCardWarning": "高级模型将被关闭，我们也将不再存储您的银行卡。您的套餐和包含的模型不受影响。您可以随时重新添加银行卡。",
     "removeCardConfirm": "移除银行卡",
     "removeCardFailed": "无法移除银行卡，请重试。"
+  },
+  "policyPacks": {
+    "title": "策略包",
+    "subtitle": "约束智能体的治理关卡。关卡在其作用范围内的下一次运行时生效——运行时会在每次工具调用时强制执行。",
+    "newPack": "新建策略包",
+    "error": "错误：{message}",
+    "genericError": "出现了问题。",
+    "loading": "正在加载策略包…",
+    "empty": "尚无策略包。创建一个，开始管控智能体可以执行的操作。",
+    "effectiveTitle": "当前生效",
+    "effectiveEmpty": "没有关卡适用于全工作区范围的运行，智能体不受管控。",
+    "effectiveCount": "有 {count} 个关卡适用于全工作区范围的运行。",
+    "enabled": "已启用",
+    "disabled": "已停用",
+    "noGates": "此策略包中没有关卡。",
+    "remove": "移除",
+    "scopeTenant": "适用于所有项目和智能体",
+    "scopeProject": "项目：{project}",
+    "scopeAgent": "智能体：{agent}",
+    "scopeProjectAgent": "{project} · {agent}",
+    "anyTool": "任意工具",
+    "fieldName": "名称",
+    "fieldNamePlaceholder": "例如：生产环境安全",
+    "fieldDescription": "描述",
+    "fieldProject": "项目",
+    "allProjects": "所有项目",
+    "fieldAgent": "智能体",
+    "allAgents": "所有智能体",
+    "fieldEnabled": "启用此策略包",
+    "saving": "正在保存…",
+    "createPack": "创建策略包",
+    "savePack": "保存更改",
+    "deletePack": "删除策略包",
+    "deletePackTitle": "删除策略包",
+    "deletePackConfirm": "要删除“{name}”及其所有关卡吗？智能体将不再受其约束。",
+    "gatesTitle": "关卡",
+    "gatesHelp": "每个关卡匹配一次工具调用，并决定后续行为：给出指令、暂停等待审批，或直接拒绝。",
+    "addGateTitle": "添加关卡",
+    "fieldGateKey": "关卡 ID",
+    "fieldGateKeyPlaceholder": "例如：no-shell-in-prod",
+    "fieldTool": "工具",
+    "toolHelp": "使用 * 管控所有工具——这就是设置默认拒绝策略的方式。",
+    "fieldEffect": "效果",
+    "fieldDirective": "指令",
+    "fieldDirectivePlaceholder": "用通俗的语言说明智能体必须怎么做。",
+    "fieldReason": "原因",
+    "fieldReasonPlaceholder": "为何要管控——将展示给智能体和审批人。",
+    "addGate": "添加关卡",
+    "deleteGateTitle": "删除关卡",
+    "deleteGateConfirm": "要删除关卡“{key}”吗？",
+    "effect": {
+      "inject-directive": "指令",
+      "require-approval": "审批",
+      "block": "阻止"
+    },
+    "effectHelp": {
+      "inject-directive": "在智能体的提示中加入一条具有约束力的指令，工具仍会执行。",
+      "require-approval": "智能体在使用该工具前会暂停并请求人工批准。",
+      "block": "智能体将直接拒绝该工具并说明原因。"
+    }
   }
 }
