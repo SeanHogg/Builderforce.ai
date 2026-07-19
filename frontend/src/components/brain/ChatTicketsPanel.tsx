@@ -123,6 +123,11 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
     // Server-side typeahead per tier (debounced by the shared LinkForm) — replaces
     // the old "fetch every task/objective/initiative/portfolio/roadmap/spec up front".
     searchTickets: (kind, query, pid) => brain.searchTickets(kind, query, pid),
+    // The shared package can't read a tenant role, so the web host answers the
+    // capability probe for it. This is what actually DISABLES the Run affordance;
+    // the throw below stays as the enforcement backstop (a stale render, or a role
+    // that changed between paint and click, must still be refused).
+    canRunTicket: () => ({ allowed: canDispatchRun, reason: tc('requiresDeveloperRole') }),
     runTicket: async (kind, ref, agentRef) => {
       // "Tag to execute": ensure the agent participates, assign it to the ticket,
       // then start a run — reuses the board's dispatch (assignee + run-now).
