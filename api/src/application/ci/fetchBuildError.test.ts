@@ -96,7 +96,7 @@ describe('fetchBuildError — bitbucket', () => {
   const bb = { ...coords, provider: 'bitbucket', host: 'bitbucket.org', runId: null };
 
   it('summarizes failed steps, recovering the build number from the status URL', async () => {
-    const fetchSpy = vi.fn(async () => new Response(steps([['Build', 'SUCCESSFUL'], ['Test', 'FAILED']]), { status: 200 }));
+    const fetchSpy = vi.fn(async (_url: string) => new Response(steps([['Build', 'SUCCESSFUL'], ['Test', 'FAILED']]), { status: 200 }));
     vi.stubGlobal('fetch', fetchSpy);
     const be = await fetchBuildError(env, { ...bb, runUrl: 'https://bitbucket.org/ws/app/pipelines/results/123' });
     expect(be.failedJobs).toEqual(['Test']);
