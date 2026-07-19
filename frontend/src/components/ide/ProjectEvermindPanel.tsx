@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useFormatter, useTranslations } from 'next-intl';
 import {
   EvermindConsole,
@@ -9,6 +9,7 @@ import {
   type EvermindConsoleLabels,
 } from '@seanhogg/builderforce-brain-ui';
 import { usePermission } from '@/lib/rbac';
+import { fetchProject } from '@/lib/api';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { listEvermindModels } from '@/lib/studioModelsApi';
 import { useLlmModels } from '@/lib/useLlmModels';
@@ -37,9 +38,23 @@ export function ProjectEvermindPanel({ projectId, showRecent = true }: { project
   const format = useFormatter();
   const { allowed: canManage } = usePermission('project.manageEvermind');
   // Resolve the scoped project's name (DRY — from the shared projects list, no
-  // prop-drilling through the 5 host call sites) so the console header names WHICH
-  // project's Evermind this is. Undefined for a project not in the list (header omits it).
-  const projectName = useOptionalProjectScope()?.projects.find((p) => p.id === projectId)?.name;
+  // prop-drilling through the host call sites) so the console header names WHICH
+  // project's Evermind this is.
+  const scopedName = useOptionalProjectScope()?.projects.find((p) => p.id === projectId)?.name;
+  // IDE builds are backed by a hidden `is_ide_storage` project, which the shared
+  // list deliberately filters out — so every IDE host (Designer/Voice/Video/agent
+  // panel) fell through to a nameless header. Fetch the project directly in that
+  // case only; the list covers every other host with no request at all.
+  const [fetchedName, setFetchedName] = useState<string | undefined>();
+  useEffect(() => {
+    if (scopedName || !Number.isFinite(projectId)) return;
+    let cancelled = false;
+    fetchProject(projectId)
+      .then((p) => { if (!cancelled) setFetchedName(p.name); })
+      .catch(() => { /* header just omits the name */ });
+    return () => { cancelled = true; };
+  }, [scopedName, projectId]);
+  const projectName = scopedName ?? fetchedName;
   // Frontier teacher gate + options. Gate: the server's unified frontier-access rule
   // (superadmin || premium override || connected BYO account || paid plan) — NOT bare
   // `isPaid` — so a superadmin or a BYO tenant is never shown a false "paid plans only"
