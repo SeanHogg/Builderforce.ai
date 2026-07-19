@@ -70,7 +70,10 @@ export interface BrainCapabilityDef {
  */
 const ARTIFACT_CONTRACT = [
   'NEVER reply with only a title, a preamble, or a "here is the …" line. Either produce the artifact IN FULL in this same reply, or — if you genuinely cannot tell what it should cover — ask exactly ONE short clarifying question and nothing else.',
-  'Never describe data as fetched, loaded, or looked up unless you actually called a tool for it in this turn. If you need data you do not have, call the tool or say plainly that you do not have it.',
+  'Never describe data as fetched, loaded, or looked up unless you actually called a tool for it in this turn.',
+  // Observed failure: a turn that said "Calling the tool now." and then ENDED,
+  // with zero tool calls in the trace. Announcing an action is not performing it.
+  'NEVER announce a tool call you have not made — no "calling the tool now", "let me fetch that", or "one moment". Issue the tool call in THIS turn instead; the loop will hand you the result and let you continue. If the tool you need is not available to you, say exactly which data you are missing and answer with what you do have.',
 ].join('\n');
 
 const BASE_CAPABILITIES: BrainCapabilityDef[] = [

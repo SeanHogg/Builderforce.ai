@@ -98,10 +98,15 @@ export interface RepoWriteCapability {
   editFile(path: string, oldString: string, newString: string, replaceAll?: boolean): Promise<RepoEditResult>;
 }
 
-/** Fetch / search the public web (capability `web`). */
+/** Fetch / search the public web. The two halves are gated SEPARATELY — `fetch` by
+ *  capability `web`, `search` by `web.search` — because they need different backings:
+ *  fetching a known URL is just an HTTP client (every surface has one), while search
+ *  needs a search-engine vendor. So `search` is OPTIONAL: a surface that can fetch but
+ *  has no search vendor wired backs `fetch` only and omits `web.search` from its
+ *  capability set, and the registry then never surfaces `web_search` to the model. */
 export interface WebCapability {
   fetch(url: string): Promise<WebFetchResult>;
-  search(query: string): Promise<WebSearchResult>;
+  search?(query: string): Promise<WebSearchResult>;
 }
 
 /** Run a real shell command. Present only on surfaces with a true process (the

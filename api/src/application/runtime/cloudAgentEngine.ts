@@ -12,6 +12,7 @@ import { neon } from '@neondatabase/serverless';
 import { and, desc, eq, or, isNull } from 'drizzle-orm';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { buildCloudMemoryCapability } from './cloudMemory';
+import { buildCloudWebCapability } from './cloudWeb';
 import { isValidatorReviewPayload } from '../validation/validatorReviewMarker';
 import { recordActivity, SYSTEM_ACTOR } from '../activity/activityLog';
 import { isIncidentTriagePayload, incidentIdFromPayload } from '../incident/incidentTriageMarker';
@@ -43,7 +44,7 @@ import { notifyApprovalRequested } from '../approval/approvalNotifier';
 import {
   CLOUD_AGENT_TOOLS, CONTAINER_AGENT_TOOLS, CLOUD_SURFACE_CAPS, cloudToolRegistry,
   MAX_CLOUD_TOOL_STEPS, MAX_PLACEHOLDER_FINISH_BLOCKS,
-  CONTAINER_MAX_STEPS, assertsUnrunVerification, hasNoCodeDeliverable, type RawToolCall,
+  CONTAINER_MAX_STEPS, assertsUnrunVerification, hasNoCodeDeliverable, policyGateCallKey, type RawToolCall,
 } from './cloudAgentTools';
 import {
   CURRENT_ENGINE_ID, evaluatePolicyGate, filterByGlob, applyStringEdit,
@@ -1012,7 +1013,8 @@ async function heartbeatExecution(db: Db, executionId: number): Promise<void> {
  * Handle one container-op call from the long-lived Container executor. The container
  * runs the agent loop in its own process and delegates to the Worker for everything
  * that must stay server-side: the gateway LLM step (`llm`), per-file commit to the
- * ticket branch (`write`), arbitrary telemetry (`event`), the PR finalize
+ * ticket branch (`write`), arbitrary telemetry (`event`), the curated platform tools
+ * (`platform_tool`), durable cross-run memory (`memory`), the PR finalize
  * (`finalize`), a cheap cancel poll (`status`), and a liveness `heartbeat`. Reuses the
  * exact same helpers as the in-Worker loop, so there is ONE implementation of
  * metering, commit, and finalize. Authenticated by the per-run token (already verified
@@ -1078,6 +1080,47 @@ export async function handleContainerOp(
     await recordCloudToolEvent(db, {
       tenantId, cloudAgentRef, executionId,
       toolName: name, category: 'tool', detail: toolArgs,
+      result: JSON.stringify(result).slice(0, 300), durationMs: Date.now() - tStart,
+    });
+    return { status: 200, body: result };
+  }
+
+  // Durable cross-run memory relayed from the container (it holds no DB creds, the
+  // same reason `platform_tool` exists). Backed by the IDENTICAL capability the
+  // durable loop uses — `project_facts` for a project-scoped run, the tenant-wide
+  // `agent_memory` twin otherwise — so a fact remembered on one cloud surface is
+  // recalled on the other. `action` is 'recall' | 'remember'. Records a tool event so
+  // container memory calls appear on the timeline like the Worker loop's.
+  if (op === 'memory') {
+    const action = typeof args.action === 'string' ? args.action : '';
+    const memory = buildCloudMemoryCapability({ db, env, tenantId, projectId });
+    const tStart = Date.now();
+    let result: Record<string, unknown>;
+    let toolName = 'memory';
+    try {
+      if (action === 'recall') {
+        toolName = 'memory_recall';
+        const query = typeof args.query === 'string' ? args.query : '';
+        if (!query.trim()) return { status: 200, body: { ok: false, error: 'query is required' } };
+        const limit = typeof args.limit === 'number' && Number.isFinite(args.limit) ? args.limit : undefined;
+        result = (await memory.recall(query, limit)) as unknown as Record<string, unknown>;
+      } else if (action === 'remember') {
+        toolName = 'memory_remember';
+        const key = typeof args.key === 'string' ? args.key : '';
+        const content = typeof args.content === 'string' ? args.content : '';
+        if (!key.trim() || !content.trim()) return { status: 200, body: { ok: false, error: 'key and content are required' } };
+        const tags = Array.isArray(args.tags) ? args.tags.filter((t): t is string => typeof t === 'string') : undefined;
+        const importance = typeof args.importance === 'number' && Number.isFinite(args.importance) ? args.importance : undefined;
+        result = (await memory.remember(key, content, { tags, importance })) as unknown as Record<string, unknown>;
+      } else {
+        return { status: 200, body: { ok: false, error: `unknown memory action '${action}' (expected 'recall' or 'remember')` } };
+      }
+    } catch (e) {
+      result = { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+    await recordCloudToolEvent(db, {
+      tenantId, cloudAgentRef, executionId,
+      toolName, category: 'tool', detail: args,
       result: JSON.stringify(result).slice(0, 300), durationMs: Date.now() - tStart,
     });
     return { status: 200, body: result };
@@ -1270,13 +1313,21 @@ export interface CloudLoopState {
   /** ROADMAP #38: set once the empty-deliverable finish gate has fired, so the
    *  durable surface doesn't re-arm (and re-block) the same self-review every tick. */
   noDeliverableBlocked?: boolean;
+  /** How many finish attempts the anti-stub gate has already blocked this RUN. MUST be
+   *  persisted: the durable surface runs ONE step per alarm tick, so a loop-local
+   *  counter resets to 0 every tick and MAX_PLACEHOLDER_FINISH_BLOCKS could never be
+   *  reached — the gate would block a stub-shipping finish forever instead of relenting
+   *  after N attempts and opening the PR annotated-unverified. */
+  placeholderBlocks?: number;
   /** Compiled governance gates for this run (compile-primitive policy modality).
    *  Persisted on the first tick so every durable tick enforces the SAME gates
    *  without re-reading the payload (which a later tick may not carry). */
   policyGates?: PolicyGate[];
-  /** Gate ids whose `require-approval` has already been asked + answered (the run
-   *  parked on the human question and resumed). Persisted so a re-reached approval
-   *  gate proceeds instead of re-parking forever. */
+  /** Approved `require-approval` CALLS — one {@link policyGateCallKey} (gate id + tool
+   *  name + argument hash) per call the human already answered. Persisted so a retried
+   *  identical call proceeds instead of re-parking forever. Keyed per-call, NOT per
+   *  gate: a gate keyed by id alone stopped gating after its first approval, silently
+   *  pre-approving every later call it covered for the rest of the run. */
   policyAskedGates?: string[];
 }
 export interface CloudLoopOpts {
@@ -1334,8 +1385,9 @@ export interface CloudLoopResult {
 /**
  * The durable/Worker surface's {@link CapabilityProvider}: the concrete backing for
  * the capability-gated tool registry on Cloudflare. It exposes the repo over the git
- * API (no disk), a shell-free static validator, and human-in-the-loop via the
- * approvals queue — and OWNS the side effects of a write/delete (tracking the run's
+ * API (no disk), a shell-free static validator, human-in-the-loop via the approvals
+ * queue, durable cross-run memory, and bounded public-web reads — and OWNS the side
+ * effects of a write/delete (tracking the run's
  * written paths, recording a `task_file_changes` row, notifying subscribers) so each
  * tool stays a thin schema + result shaper. `repoCtx` and `writtenPaths` are the live
  * run state, so `readRef` (base before the first write, the ticket branch after) is
@@ -1474,6 +1526,11 @@ function buildCloudProvider(args: {
     // Durable cross-run memory. Project-scoped runs use the SHARED `project_facts`
     // store (recalled by every surface); else the tenant-wide `agent_memory` twin.
     memory: buildCloudMemoryCapability({ db, env, tenantId, projectId }),
+    // Read a public URL (docs / an API spec / a linked issue) so the agent isn't
+    // limited to what the repo already contains. Fetch-only: no search vendor is
+    // wired, so CLOUD_SURFACE_CAPS omits `web.search` and `web_search` is never
+    // advertised. The SSRF egress policy + byte cap + timeout live in cloudWeb.
+    web: buildCloudWebCapability({ env }),
   };
 }
 
@@ -1640,7 +1697,9 @@ export async function runCloudToolLoop(
   // Anti-stub gate: count finish attempts blocked because committed files still
   // contain placeholder/stub code, so the agent is forced to ship a real
   // implementation (or delete the dead file) — see MAX_PLACEHOLDER_FINISH_BLOCKS.
-  let placeholderBlocks = 0;
+  // Carried across DO ticks via resume state (the durable surface runs one step per
+  // tick, so a per-call counter would reset before the cap was ever reached).
+  let placeholderBlocks = opts?.resume?.placeholderBlocks ?? 0;
   // Pre-finish completeness self-review (ROADMAP #38): block a finish that produced
   // NO code deliverable exactly ONCE, re-prompting the agent to verify it met the
   // PRD requirements. A genuine "nothing to change" run finishes on the retry; a
@@ -1650,9 +1709,11 @@ export async function runCloudToolLoop(
 
   // Governance gates (compile-primitive policy modality). Resolved ONCE: a resumed
   // run reuses the gates persisted on its first tick (the payload may not survive
-  // to later ticks); a fresh run seeds them from the dispatch payload. `askedGates`
-  // tracks which require-approval gates have already been asked + answered, so a
-  // re-reached gate proceeds rather than re-parking the run forever.
+  // to later ticks); a fresh run seeds them from the dispatch payload.
+  // `policyAskedGates` holds one entry per already-approved CALL — keyed by
+  // {@link policyGateCallKey} (gate + tool + argument hash), NOT by gate id — so an
+  // approval covers exactly the call a human saw. A retried identical call proceeds;
+  // a different call through the same gate is asked again.
   const policyGates: PolicyGate[] = opts?.resume?.policyGates ?? opts?.policyGates ?? [];
   const policyAskedGates = new Set<string>(opts?.resume?.policyAskedGates ?? []);
 
@@ -1833,16 +1894,18 @@ export async function runCloudToolLoop(
           detail: { tool: name, gateId: gate.gateId, reason: gate.reason },
           result: `Blocked ${name}: ${gate.reason}`,
         });
-      } else if (gate.action === 'require-approval' && !policyAskedGates.has(gate.gateId)) {
-        // First encounter — ask a human and park. The answer resumes the run; the gate
-        // id is recorded (in resume state) so the re-reached gate proceeds (below).
+      } else if (gate.action === 'require-approval' && !policyAskedGates.has(policyGateCallKey(gate.gateId, name, parsed))) {
+        // First encounter OF THIS CALL — ask a human and park. The answer resumes the
+        // run; the call key is recorded (in resume state) so the re-reached identical
+        // call proceeds (below), while a DIFFERENT call through the same gate is asked
+        // on its own merits rather than riding the earlier approval.
         const question = `Approve the agent's use of "${name}"? ${gate.reason}`;
         const approvalId = await createCloudQuestion(env, db, {
           tenantId, cloudAgentRef, executionId, agentLabel,
           question,
-          context: `Governance gate "${gate.gateId}" requires human approval before this tool may run.`,
+          context: `Governance gate "${gate.gateId}" requires human approval before this tool may run with these arguments: ${JSON.stringify(parsed).slice(0, 500)}`,
         });
-        policyAskedGates.add(gate.gateId);
+        policyAskedGates.add(policyGateCallKey(gate.gateId, name, parsed));
         awaitingInput = { approvalId, question };
         toolResult = { ok: false, error: `Paused for human approval of "${name}" (governance gate ${gate.gateId}).` };
       } else {
@@ -1958,6 +2021,26 @@ export async function runCloudToolLoop(
     await cancelWatcher.catch(() => { /* ignore */ });
   }
 
+  // The ONE snapshot of everything the next durable tick must resume from. Both
+  // non-terminal exits (paused-on-a-question, per-tick budget spent) hand back the
+  // SAME shape — built here so a newly-persisted field can never be added to one exit
+  // and forgotten at the other (exactly how `placeholderBlocks` came to reset every
+  // tick, making its cap unreachable). Every counter/flag the loop carries ACROSS
+  // ticks belongs in here.
+  const resumeState = (): CloudLoopState => ({
+    messages,
+    writtenPaths: [...writtenPaths],
+    step,
+    pinnedModel: activeModel,
+    routing,
+    repoCtx,
+    repoMiss,
+    noDeliverableBlocked,
+    placeholderBlocks,
+    policyGates,
+    policyAskedGates: [...policyAskedGates],
+  });
+
   // Paused on a human question — do NOT finalize (no PR, not terminal). Hand back
   // the resume state + the awaiting marker so the surface parks the run in `paused`
   // and wakes the loop when the question is answered (the answer arrives as a steer).
@@ -1969,7 +2052,7 @@ export async function runCloudToolLoop(
       cancelled: false,
       finished: false,
       awaitingInput,
-      state: { messages, writtenPaths: [...writtenPaths], step, pinnedModel: activeModel, routing, repoCtx, repoMiss, noDeliverableBlocked, policyGates, policyAskedGates: [...policyAskedGates] },
+      state: resumeState(),
     };
   }
 
@@ -1985,7 +2068,7 @@ export async function runCloudToolLoop(
       output: '',
       cancelled,
       finished: false,
-      state: { messages, writtenPaths: [...writtenPaths], step, pinnedModel: activeModel, routing, repoCtx, repoMiss, noDeliverableBlocked, policyGates, policyAskedGates: [...policyAskedGates] },
+      state: resumeState(),
     };
   }
 
@@ -2509,116 +2592,3 @@ export async function markCloudExecutionRunning(runtimeService: RuntimeService, 
   });
 }
 
-/**
- * Run an execution server-side via the gateway (the interim `durable`-surface
- * executor when the CloudRunnerDO binding is absent). Standard flow:
- * (1) ensure a PRD exists (generate + persist + emit as first change), then
- * (2) produce the deliverable honoring the PRD + project rules. Never throws.
- */
-export async function runCloudExecution(
-  env: Env,
-  runtimeService: RuntimeService,
-  db: Db,
-  executionId: number,
-  taskRow: { id: number; title: string; description: string | null },
-  tenantId: number,
-  projectId: number,
-  agentLabel: string,
-  cloudAgentRef?: string,
-  payload?: string,
-  artifacts?: ResolvedArtifacts,
-): Promise<void> {
-  const model = parseModel(payload);
-
-  // Cross-isolate cancel check: the /cancel endpoint flips the DB row to
-  // CANCELLED from a different request/isolate; the background loop polls this
-  // between paid steps and stops instead of running to completion.
-  const isCancelled = async (): Promise<boolean> => {
-    try {
-      return (await runtimeService.getExecution(executionId)).status === ExecutionStatus.CANCELLED;
-    } catch { return false; }
-  };
-
-  try {
-    // Already cancelled before we even started running → don't transition or spend.
-    if (await isCancelled()) return;
-    await markCloudExecutionRunning(runtimeService, executionId);
-
-    const { systemPrompt, userContent, execParams, agentPsychometric } = await prepareCloudRun(
-      env, db, executionId, taskRow, tenantId, projectId, agentLabel, model, artifacts, cloudAgentRef, payload,
-    );
-    // Resolve the engine behind the shared seam (DI), then drive it with just the
-    // per-task input. Surface/runtime wiring lives in the engine, not this call site.
-    // There is ONE engine (the current V3 = tool loop + limbic always-on); no DB
-    // engine read, no per-agent selection.
-    const engine = resolveAgentEngine({
-      env, db, executionId, taskRow, tenantId, projectId, agentLabel, cloudAgentRef, isCancelled,
-      routingBias: parseRoutingBias(payload), artifacts, execParams, agentPsychometric,
-    });
-    const policyGates = parsePolicyGates(payload);
-    const { ok, output, cancelled, awaitingInput } = await engine.run({
-      systemPrompt, userContent, model,
-      ...(policyGates.length ? { policy: { gates: policyGates } } : {}),
-    });
-
-    // Run was cancelled mid-loop: the row is already CANCELLED (a terminal
-    // state). Don't attempt a COMPLETED/FAILED transition (it would throw) —
-    // just surface the partial output to subscribers and stop.
-    if (cancelled || (await isCancelled())) {
-      notifyExecutionSubscribers(executionId, {
-        type: 'message', executionId, role: 'assistant',
-        text: output || 'Run cancelled.', ts: new Date().toISOString(),
-      });
-      // Score the cancelled run (status is already CANCELLED → score 0). Best-effort.
-      await scoreRunOutcome(env, db, { executionId }).catch(() => { /* best-effort */ });
-      return;
-    }
-
-    // Paused on a human question: park the run in `paused` (NOT terminal) — the
-    // question is already in the human-requests queue. Set the status directly
-    // (RuntimeService.update only permits running/completed/failed), mirroring the
-    // CloudRunnerDO pause. The interim Worker surface has no persisted cursor to
-    // resume, so when the answer lands it is delivered as a steer and picked up by
-    // the follow-up run the answer triggers.
-    if (awaitingInput) {
-      await db.update(executions)
-        .set({ status: ExecutionStatus.PAUSED, updatedAt: new Date() })
-        .where(eq(executions.id, executionId))
-        .catch(() => { /* best-effort */ });
-      const paused = await runtimeService.getExecution(executionId).catch(() => null);
-      if (paused) {
-        notifyExecutionSubscribers(executionId, {
-          type: 'status_change', executionId, status: paused.status, execution: paused.toPlain(), ts: new Date().toISOString(),
-        });
-        // Narrate the pause into the ticket's linked chats (this direct write bypasses
-        // RuntimeService.update's milestone emission). Best-effort; never blocks the pause.
-        await runtimeService.postLifecycleMilestone(paused, 'paused').catch(() => { /* best-effort */ });
-      }
-      return;
-    }
-
-    notifyExecutionSubscribers(executionId, {
-      type: 'message',
-      executionId,
-      role: 'assistant',
-      text: output,
-      ts: new Date().toISOString(),
-    });
-    await runtimeService.update(
-      executionId,
-      ok
-        ? { status: ExecutionStatus.COMPLETED, result: output }
-        : { status: ExecutionStatus.FAILED, errorMessage: output },
-    );
-    // Learned Model Routing: Worker-surface terminal chokepoint. Best-effort.
-    await scoreRunOutcome(env, db, { executionId }).catch(() => { /* best-effort */ });
-  } catch (e) {
-    // Don't clobber a cancellation (terminal) with a FAILED transition.
-    if (await isCancelled()) return;
-    await runtimeService.update(executionId, {
-      status: ExecutionStatus.FAILED,
-      errorMessage: e instanceof Error ? e.message : String(e),
-    });
-    await scoreRunOutcome(env, db, { executionId }).catch(() => { /* best-effort */ });
-  }
-}

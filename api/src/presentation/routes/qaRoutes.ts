@@ -63,7 +63,7 @@ import {
   type QaFindingLike,
 } from '../../application/qa/QaFindingRouter';
 import { getProjectQualityTrend, QA_QUALITY_VERSION_KEY } from '../../application/qa/QaQualityService';
-import { maybeAutoRunOnLaneEntry } from './taskRoutes';
+import { onTaskLandedInLane } from '../../application/swimlane/laneEntryTrigger';
 import { dispatchQaRunner } from '../../application/qa/dispatchQaRunner';
 import {
   buildExplorationPlan,
@@ -716,8 +716,8 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
         // Move the ticket into the fix lane (the lane key IS the task status) and
         // fire the canonical lane auto-run trigger — same path as a board drag.
         await taskService.updateTask(taskId, { status: laneKey });
-        await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
-          tenantId, projectId, taskId, status: laneKey, submittedBy: 'system:qa-autoroute',
+        await onTaskLandedInLane(env, db, {
+          tenantId, projectId, taskId, status: laneKey, submittedBy: 'system:qa-autoroute', runtimeService,
         });
       } catch {
         // One finding's routing failure must not abort the rest of the batch.
@@ -1012,7 +1012,7 @@ export function createQaRoutes(db: Db, taskService: TaskService, runtimeService:
     }
 
     try {
-      const { taskId, plain, deduped } = await findingRouter.createTaskFromFinding(finding, tenantId);
+      const { taskId, plain, deduped } = await findingRouter.createTaskFromFinding(finding, tenantId, { env: c.env as Env });
       return c.json({ task: plain, deduped, finding: { ...finding, status: 'task_created', taskId } }, 201);
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : 'Failed to create task' }, 400);

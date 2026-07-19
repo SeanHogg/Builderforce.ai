@@ -35,7 +35,7 @@
  * sweep is also bounded by SWEEP_LIMIT rows per tick.
  */
 
-import { and, eq, isNotNull, lte, asc } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, lte, ne, or } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import {
   ceremonySchedules,
@@ -122,10 +122,23 @@ export function parseParticipants(raw: string | null | undefined): CeremonyRoste
 
 /**
  * Compute the next armed instant for a schedule. Falls back to +24h when the cron
- * is malformed or unsatisfiable, so a bad row paces out instead of wedging.
+ * is unsatisfiable (nextCronTime returns null, e.g. Feb 31) OR malformed
+ * (nextCronTime THROWS — parseCron rejects a wrong field count / bad range).
+ *
+ * The throw case matters: this is called from the watermark update, which runs
+ * outside the per-row try/catch's protection of the ceremony-opening work. An
+ * uncaught throw here would leave next_run_at unchanged and the row would be
+ * re-selected as due on EVERY subsequent tick — the exact wedge this guards.
+ * The CRUD route validates cron on write, but rows can predate that or arrive
+ * via another writer, so the sweep never trusts the stored value.
  */
 export function computeNextCeremonyRun(cron: string, timezone: string, now: Date): Date {
-  return nextCronTime(cron, now, timezone) ?? new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const fallback = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  try {
+    return nextCronTime(cron, now, timezone) ?? fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 type ScheduleRow = typeof ceremonySchedules.$inferSelect;
@@ -303,18 +316,27 @@ export async function dispatchCeremonyCompletion(
 ): Promise<{ candidates: number; dispatched: number }> {
   const runtimeService = buildRuntimeService(env, db);
 
-  // Agent-owned, non-terminal tickets on this project. The gate re-checks each
-  // one, so a generous filter here is safe.
+  // Agent-OWNED, non-done tickets on this project — the same population the client
+  // loop targeted ("humans keep their assignments; agents start running"). Filtering
+  // in SQL keeps the number of gate evaluations (each of which reads) bounded.
   const candidates = await db
     .select({ id: tasks.id, status: tasks.status })
     .from(tasks)
-    .where(and(eq(tasks.tenantId, args.tenantId), eq(tasks.projectId, args.projectId)))
-    .limit(200);
+    .where(
+      // `tasks` has no tenant_id — it is tenant-scoped through its project, and the
+      // caller has already verified this session (hence projectId) belongs to the tenant.
+      and(
+        eq(tasks.projectId, args.projectId),
+        ne(tasks.status, 'done'),
+        or(isNotNull(tasks.assignedAgentHostId), isNotNull(tasks.assignedAgentRef)),
+      ),
+    )
+    .orderBy(asc(tasks.id))
+    .limit(MAX_DISPATCH_PER_CEREMONY * 2);
 
   let dispatched = 0;
   for (const t of candidates) {
     if (dispatched >= MAX_DISPATCH_PER_CEREMONY) break;
-    if (t.status === 'done') continue;
     try {
       const started = await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
         tenantId: args.tenantId,

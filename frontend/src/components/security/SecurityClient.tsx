@@ -19,6 +19,7 @@ import { AgentAssignmentPanel } from '@/components/AgentAssignmentPanel';
 import { SessionList } from '@/components/security/SessionList';
 import { SecurityTicketAccessCard } from '@/components/security/SecurityTicketAccessCard';
 import { SecurityAuditPanel } from '@/components/security/SecurityAuditPanel';
+import PolicyPacksPanel from '@/components/security/PolicyPacksPanel';
 import PillTabs, { type PillTab } from '@/components/PillTabs';
 import PageContainer from '@/components/PageContainer';
 
@@ -99,6 +100,7 @@ export default function SecurityClient() {
     { id: '', label: t('membersTab'), icon: '👥', href: '/security' },
     { id: 'agents', label: t('agentsTab'), icon: '🛡', href: '/security?sub=agents' },
     { id: 'soc2', label: t('auditTab'), icon: '📋', href: '/security?sub=soc2' },
+    { id: 'policies', label: t('policiesTab'), icon: '⚖️', href: '/security?sub=policies' },
   ];
 
   const renderMembers = () => (
@@ -237,7 +239,10 @@ export default function SecurityClient() {
       ) : (
         <>
           <PillTabs tabs={subTabs} activeId={sub} ariaLabel={t('subnavLabel')} />
-          {sub === 'agents' ? renderAgents() : sub === 'soc2' ? renderSoc2() : renderMembers()}
+          {sub === 'agents' ? renderAgents()
+            : sub === 'soc2' ? renderSoc2()
+              : sub === 'policies' ? <PolicyPacksPanel />
+                : renderMembers()}
         </>
       )}
     </PageContainer>

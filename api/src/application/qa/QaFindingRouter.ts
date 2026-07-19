@@ -33,6 +33,8 @@ import {
   tasks,
 } from '../../infrastructure/database/schema';
 import type { QaFindingSeverity } from './qaTypes';
+import type { Env } from '../../env';
+import { onTaskLandedInLane } from '../swimlane/laneEntryTrigger';
 
 /** Severity ordering — higher is worse. The single source of truth for both the
  *  routing threshold and any severity-weighted quality scoring. */
@@ -127,7 +129,10 @@ export class QaFindingRouter {
   async createTaskFromFinding(
     finding: QaFindingLike,
     tenantId: number,
-    opts?: { autoRouted?: boolean },
+    /** `env` opts the new ticket into the canonical lane auto-run funnel; omit it
+     *  when the caller moves the ticket into a target lane and fires the trigger
+     *  itself (the auto-route batch), so the run is dispatched exactly once. */
+    opts?: { autoRouted?: boolean; env?: Env },
   ): Promise<CreatedFindingTask> {
     if (finding.projectId == null) {
       throw new Error('This finding has no project — self-test findings cannot create board tasks.');
@@ -156,6 +161,20 @@ export class QaFindingRouter {
     const plain = task.toPlain();
     const taskId = Number(plain.id);
     await this.linkFinding(finding.id, taskId, opts?.autoRouted ?? false);
+    // A fix ticket is a ticket LANDING IN A LANE — route it through the ONE funnel
+    // so a lane that is staffed and auto-gated starts its agent now. The auto-route
+    // path (qaRoutes.autoRouteFindings) moves the ticket into the configured fix lane
+    // and fires the trigger itself, so it passes no `env` here and there is no double
+    // dispatch; the manual `POST /findings/:id/task` path used to fire NOTHING at all.
+    if (opts?.env) {
+      await onTaskLandedInLane(opts.env, this.db, {
+        tenantId,
+        projectId:   finding.projectId,
+        taskId,
+        status:      String(plain.status),
+        submittedBy: 'system:qa-finding',
+      });
+    }
     return { taskId, plain, deduped: false };
   }
 

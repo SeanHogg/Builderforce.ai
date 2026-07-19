@@ -21,6 +21,7 @@ import {
   getRunTrace,
   formatChatDiagnostics,
   classifyModelFunding,
+  getMcpToolStatus,
   type BrainTraceEvent,
   type ChatDiagnosticsData,
 } from '@seanhogg/builderforce-brain-embedded';
@@ -950,6 +951,14 @@ export function BrainPanel({
           planModelCount: llmModels.models.length,
           byoProviders: llmModels.byoProviders,
         },
+        // What the model could actually CALL. The COUNT is the live registry the
+        // conversation runs on (`toolSpecs` — navigation + MCP catalog together),
+        // not just the MCP subset; the catalog status explains a zero (a failed
+        // MCP fetch used to collapse silently to no tools at all).
+        tools: (() => {
+          const mcp = getMcpToolStatus();
+          return { count: toolSpecs.length, error: mcp.error, loading: mcp.loading };
+        })(),
       };
       const diagBlock = formatChatDiagnostics(diagnostics).join('\n');
       await navigator.clipboard.writeText(`${diagBlock}\n\n${conv.buildTriageReport(personaLabel)}`);
@@ -958,7 +967,7 @@ export function BrainPanel({
       setCaptureState('error');
     }
     setTimeout(() => setCaptureState('idle'), 2000);
-  }, [conv, personaLabel, personaModel, llmModels, chats.activeChatId, chats.activeChat, projects, pinnedProjectId, viewingProjectId]);
+  }, [conv, personaLabel, personaModel, llmModels, toolSpecs, chats.activeChatId, chats.activeChat, projects, pinnedProjectId, viewingProjectId]);
 
   // Shared chrome for the "capture execution" icon button (page + docked headers).
   const captureButton = (

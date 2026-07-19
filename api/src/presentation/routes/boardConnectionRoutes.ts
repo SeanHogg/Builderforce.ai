@@ -176,7 +176,7 @@ export function createBoardConnectionRoutes(db: Db): Hono<HonoEnv> {
     const loaded = await loadConnectionCredentials(db, tenantId, conn.credentialId, secret);
     if (!loaded) return c.json({ error: 'Failed to load connection credentials' }, 400);
 
-    const store = createDrizzleStore(db);
+    const store = createDrizzleStore(db, c.env as Env);
 
     // ITSM connections (Freshservice/ServiceNow) feed support_tickets (the Quality
     // lens), NOT the task board — divert manual sync the same way the sweep does.

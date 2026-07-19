@@ -576,6 +576,15 @@ function getLastResolvedModel() {
   return lastResolvedModel;
 }
 
+// src/mcpToolStatus.ts
+var status = { count: 0, error: null, loading: true };
+function setMcpToolStatus(next) {
+  status = next;
+}
+function getMcpToolStatus() {
+  return status;
+}
+
 // src/useMcpExtensions.ts
 var CREATE_DEDUPE_MS = 8e3;
 var recentCreates = /* @__PURE__ */ new Map();
@@ -607,6 +616,7 @@ function useMcpExtensions(options) {
   const { transport } = useBrainConfig();
   const [entries, setEntries] = useState2([]);
   const [loading, setLoading] = useState2(true);
+  const [error, setError] = useState2(null);
   const skipKey = (options?.skipExtensionIds ?? []).join(",");
   const onToolResultRef = useRef2(options?.onToolResult);
   onToolResultRef.current = options?.onToolResult;
@@ -616,10 +626,17 @@ function useMcpExtensions(options) {
     const headers = { Accept: "application/json" };
     if (token) headers.Authorization = `Bearer ${token}`;
     const skip = new Set(skipKey ? skipKey.split(",") : []);
-    fetch(`${transport.baseUrl}/llm/v1/mcp/tools`, { headers }).then((res) => res.ok ? res.json() : { tools: [] }).then((body) => {
-      if (!cancelled) setEntries((body.tools ?? []).filter((t) => !skip.has(t.extensionId)));
-    }).catch(() => {
-      if (!cancelled) setEntries([]);
+    fetch(`${transport.baseUrl}/llm/v1/mcp/tools`, { headers }).then(async (res) => {
+      if (!res.ok) throw new Error(`tool catalog unavailable (HTTP ${res.status})`);
+      return await res.json();
+    }).then((body) => {
+      if (cancelled) return;
+      setEntries((body.tools ?? []).filter((t) => !skip.has(t.extensionId)));
+      setError(null);
+    }).catch((e) => {
+      if (cancelled) return;
+      setEntries([]);
+      setError(e instanceof Error ? e.message : "tool catalog fetch failed");
     }).finally(() => {
       if (!cancelled) setLoading(false);
     });
@@ -677,7 +694,10 @@ function useMcpExtensions(options) {
     [entries, transport]
   );
   useRegisterBrainActions(actions);
-  return { loading, toolCount: actions.length };
+  useEffect2(() => {
+    setMcpToolStatus({ count: actions.length, error, loading });
+  }, [actions.length, error, loading]);
+  return { loading, toolCount: actions.length, error };
 }
 
 // src/BrainContext.tsx
@@ -2737,6 +2757,18 @@ function diagnosticsSignals(d) {
   if ((d.agents?.length ?? 0) === 0) {
     out.push("\u2139\uFE0F No agents are invited into this chat (chats.list_agents is empty), so dispatched agents post nothing back here.");
   }
+  const tools = d.tools;
+  if (tools && !tools.loading) {
+    if (tools.error) {
+      out.push(
+        `\u26A0\uFE0F The MCP tool catalog FAILED to load (${tools.error}), so the Brain has ${tools.count} tools and cannot fetch project data. Turns will say "I don't have that data" or announce a tool call and stop \u2014 with 0 tool calls in the trace. This is a wiring fault, not a model fault.`
+      );
+    } else if (tools.count === 0) {
+      out.push(
+        '\u26A0\uFE0F The model has ZERO tools registered, so it cannot read tasks, projects, or any platform data \u2014 every data question can only be answered from the prompt. Expect "I don\'t have that data" and 0 tool calls. Check that McpExtensionsBridge is mounted and `/llm/v1/mcp/tools` returns a catalog.'
+      );
+    }
+  }
   const acct = d.account;
   const tokens = tokenMeter(acct);
   if (acct) {
@@ -2802,6 +2834,12 @@ function formatChatDiagnostics(d) {
     }
   } else {
     lines.push("- Plan / usage: not gathered (account snapshot unavailable \u2014 signed out, or the consumption endpoint failed)");
+  }
+  const tools = d.tools;
+  if (tools) {
+    lines.push(
+      `- Tools available to the model: ${tools.count}${tools.loading ? " (catalog still loading)" : ""}${tools.error ? ` \xB7 catalog error: ${tools.error}` : ""}`
+    );
   }
   const ev = d.evermind;
   if (ev) {
@@ -2880,6 +2918,7 @@ export {
   formatEvermindMemoryBlock,
   getGlobalRunState,
   getLastResolvedModel,
+  getMcpToolStatus,
   getRunSnapshot,
   getRunTrace,
   isCodeChangeTool,
@@ -2908,6 +2947,7 @@ export {
   savePendingPrompt,
   scopeToConsolidation,
   setLastResolvedModel,
+  setMcpToolStatus,
   startRun,
   stopRun,
   streamChatCompletion,
