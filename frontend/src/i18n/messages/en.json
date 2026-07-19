@@ -933,7 +933,9 @@
     "clearanceNeededBody": "This is a restricted security item. You don’t have clearance to view its details. Ask a workspace owner or manager for access.",
     "typeProduct": "Product",
     "typeDesign": "Design",
-    "typeIncident": "Incident"
+    "typeIncident": "Incident",
+    "requiresRoleHint": "{role, select, viewer {Requires Viewer role} developer {Requires Developer role} manager {Requires Manager role} owner {Requires Owner role} other {Requires {role} role}}",
+    "requiresDeveloperRole": "Requires Developer role"
   },
   "prdCreate": {
     "title": "New PRD",
@@ -2167,9 +2169,10 @@
     "surface": "Runtime surface",
     "surfaceLabel": {
       "durable": "Durable (cloud, on-demand serverless)",
-      "container": "Long-lived Cloudflare Container (for very long runs)"
+      "container": "Long-lived Cloudflare Container (for very long runs)",
+      "github_actions": "GitHub Actions (runs on your repo's runners)"
     },
-    "surfaceHelp": "Both run the full task in the cloud (all Cloudflare). Durable executes on-demand on a Durable Object (per step) — the default. Long-lived Cloudflare Container keeps a process running for very long, continuous tasks (falls back to Durable until Container infra is enabled).",
+    "surfaceHelp": "All run the full task remotely. Durable executes on-demand on a Durable Object (per step) — the default. Long-lived Cloudflare Container keeps a process running for very long, continuous tasks (falls back to Durable until Container infra is enabled). GitHub Actions runs the agent on your linked repo's own runners with a real filesystem and toolchain and a 60-minute limit — it requires the Builderforce agent workflow (.github/workflows/builderforce-agent.yml) committed to the repo, otherwise the run falls back to Durable.",
     "baseModel": "Base model (optional)",
     "baseModelDefault": "builderforce.ai default (best coding model)",
     "baseModelHelp": "The tool-calling + coding model this agent runs on — pick one of your LLMs or a model from the pool. A run pins one model for the whole task; leave default to use the plan's best coding model.",
@@ -9016,7 +9019,15 @@
     "noFileChangesYet": "No file changes yet.",
     "noFileChangesRecorded": "This run did not record any file changes.",
     "noToolCalls": "No tool calls recorded.",
-    "failedToRerun": "Failed to re-run"
+    "failedToRerun": "Failed to re-run",
+    "revert": "Revert run",
+    "reverting": "Reverting…",
+    "revertHint": "Close the pull request this run opened and delete the branch it wrote. Refused if anything else has touched them.",
+    "revertConfirmTitle": "Revert this run?",
+    "revertConfirmMessage": "This closes the pull request run #{id} opened and deletes the branch it wrote. This cannot be undone. It will be refused if the pull request was already merged or anything else changed the branch.",
+    "revertConfirmAction": "Revert run",
+    "revertDone": "Reverted — deleted branch {branch} ({commits} commit(s)).",
+    "failedToRevert": "Failed to revert this run"
   },
   "aiTraining": {
     "title": "AI Model Training",

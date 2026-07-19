@@ -1,20 +1,25 @@
 /**
  * GitHub webhook handler — /api/webhooks/github
  *
- * Three jobs, keyed off X-GitHub-Event:
+ * Four jobs, keyed off X-GitHub-Event:
  *   - CI/deploy events → feed build/deploy results back to the cloud execution
  *     (and auto-fix on failure).
  *   - push / pull_request / pull_request_review → INGEST engineering activity into
  *     activity_events (the producer side of the consolidation surface): commits,
  *     PRs, reviews — attributed to a contributor (auto-created on first sight) and a
  *     project (via the connected repo). Issues are ingested inline below too.
+ *   - code_scanning_alert / dependabot_alert → ingest GitHub's own security
+ *     scanners into the SAME findings pipeline the Security agent uses, so a
+ *     CodeQL/Dependabot hit becomes a SECURITY ticket on the board. See
+ *     application/security/githubAlerts.ts.
  *   - issues → auto-dispatch labelled/opened issues as BuilderForce Agents tasks.
  *
  * SETUP:
  *   1. In GitHub, create a webhook (App or repo level) pointing to:
  *        https://api.builderforce.ai/api/webhooks/github
  *      Content type: application/json
- *      Events: Pushes, Pull requests, Pull request reviews, Issues (+ CI events).
+ *      Events: Pushes, Pull requests, Pull request reviews, Issues (+ CI events),
+ *              Code scanning alerts, Dependabot alerts.
  *   2. Set the webhook secret, then:
  *        wrangler secret put GITHUB_WEBHOOK_SECRET
  *   3. Link the repo to a Builderforce project — either via project_repositories
@@ -40,6 +45,7 @@ import { handleCiEventOutcome } from '../../application/ci/handleCiEventOutcome'
 import { ciOutcomeDeps } from './ciOutcomeDeps';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import { ingestForRepo, type IngestEvent } from '../../application/contributors/activityIngest';
+import { ALERT_EVENTS, ingestAlertWebhook } from '../../application/security/githubAlerts';
 
 /** Labels that trigger auto-dispatch. Lower-cased for comparison. */
 const DISPATCH_LABELS = new Set(['coderclaw', 'ai-task', 'host', 'ai']);
@@ -296,6 +302,19 @@ export function createGitHubWebhookRoutes(db: Db, runtimeService: RuntimeService
         return c.json({ received: true, processed: false, reason: `no project linked to repo '${full}'` });
       }
       return c.json({ received: true, processed: true, inserted: out.inserted, skipped: out.skipped });
+    }
+
+    // Security alerts: GitHub's own scanners (CodeQL / Dependabot) feed the SAME
+    // findings pipeline as the Security agent, so a CodeQL hit lands on the board
+    // as a SECURITY ticket instead of sitting in the GitHub UI untriaged.
+    // Dedupe on repo + alert number lives in the ingest module (webhook redelivery
+    // would otherwise mint duplicates — recordFinding has no idempotency key).
+    if (event && ALERT_EVENTS.has(event)) {
+      let p: Record<string, unknown>;
+      try { p = JSON.parse(rawBody) as Record<string, unknown>; } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
+      const out = await ingestAlertWebhook(db, event, p);
+      if (!out.ok) return c.json({ received: true, processed: false, reason: out.reason });
+      return c.json({ received: true, processed: true, ingested: out.ingested, deduped: out.deduped, taskIds: out.taskIds });
     }
 
     if (event !== 'issues') {

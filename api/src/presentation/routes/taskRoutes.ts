@@ -3,7 +3,8 @@ import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import { TaskService, type UpdateTaskDto } from '../../application/task/TaskService';
 import { TaskPriority, AgentType, TaskStatus, TaskType } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
-import { authMiddleware } from '../middleware/authMiddleware';
+import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { TenantRole } from '../../domain/shared/types';
 import { projects, specs, taskSpecs, tasks, tenantMembers, users } from '../../infrastructure/database/schema';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { addDependency, deleteDependency, listProjectDependencies, isDepType } from '../../application/task/taskDependencies';
@@ -343,7 +344,12 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   // explicit human click is itself the approval — so it works on a human-gated lane
   // too). 409 when a run is already live; 400 when no agent can run the ticket
   // (`reason` lets the UI explain what to fix). Reuses the one dispatcher.
-  router.post('/:id/run-now', async (c) => {
+  //
+  // DEVELOPER+ — this starts a billable run, so it sits at the same dispatch tier as
+  // every route in runtimeRoutes. It used to carry no role gate at all, which made
+  // the UI's `runtime.execute` gate a UI-only lock a viewer could walk past by
+  // calling the API directly.
+  router.post('/:id/run-now', requireRole(TenantRole.DEVELOPER), async (c) => {
     const id = Number(c.req.param('id'));
     const row = await loadTenantTask(id, c.get('tenantId'));
     if (!row) return c.json({ error: 'Task not found' }, 404);

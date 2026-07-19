@@ -933,7 +933,9 @@
     "clearanceNeededBody": "这是一个受限的安全事项。您没有查看其详情的权限。请向工作区所有者或管理员申请访问权限。",
     "typeProduct": "产品",
     "typeDesign": "设计",
-    "typeIncident": "事件"
+    "typeIncident": "事件",
+    "requiresRoleHint": "{role, select, viewer {需要观察者角色} developer {需要开发者角色} manager {需要管理者角色} owner {需要所有者角色} other {需要 {role} 角色}}",
+    "requiresDeveloperRole": "需要开发者角色"
   },
   "prdCreate": {
     "title": "新建 PRD",
@@ -2167,9 +2169,10 @@
     "surface": "运行时载体",
     "surfaceLabel": {
       "durable": "持久（云端、按需无服务器）",
-      "container": "长时运行的 Cloudflare 容器（用于超长任务）"
+      "container": "长时运行的 Cloudflare 容器（用于超长任务）",
+      "github_actions": "GitHub Actions（在你仓库的运行器上执行）"
     },
-    "surfaceHelp": "两者都在云端（全部 Cloudflare）运行完整任务。持久型按需在 Durable Object 上逐步执行——默认选项。长时运行的 Cloudflare 容器会为超长、连续的任务保持进程运行（在容器基础设施启用前会回退到持久型）。",
+    "surfaceHelp": "三者都会在远端运行完整任务。持久型按需在 Durable Object 上逐步执行——默认选项。长时运行的 Cloudflare 容器会为超长、连续的任务保持进程运行（在容器基础设施启用前会回退到持久型）。GitHub Actions 会在你所关联仓库自己的运行器上执行智能体，拥有真实的文件系统与工具链，时限为 60 分钟——需要仓库中已提交 Builderforce 智能体工作流（.github/workflows/builderforce-agent.yml），否则该次运行会回退到持久型。",
     "baseModel": "基础模型（可选）",
     "baseModelDefault": "builderforce.ai 默认（最佳编码模型）",
     "baseModelHelp": "该智能体运行所用的工具调用 + 编码模型——选择你的某个 LLM 或模型池中的模型。一次运行会为整个任务固定一个模型；保留默认则使用套餐的最佳编码模型。",
@@ -9014,7 +9017,15 @@
     "noFileChangesYet": "尚无文件变更。",
     "noFileChangesRecorded": "此次运行未记录任何文件变更。",
     "noToolCalls": "未记录任何工具调用。",
-    "failedToRerun": "重新运行失败"
+    "failedToRerun": "重新运行失败",
+    "revert": "回滚运行",
+    "reverting": "正在回滚…",
+    "revertHint": "关闭本次运行创建的拉取请求并删除它写入的分支。若有其他改动，将被拒绝。",
+    "revertConfirmTitle": "要回滚此次运行吗？",
+    "revertConfirmMessage": "这将关闭运行 #{id} 创建的拉取请求，并删除它写入的分支。此操作无法撤销。如果拉取请求已合并，或分支被其他人改动过，操作将被拒绝。",
+    "revertConfirmAction": "回滚运行",
+    "revertDone": "已回滚 — 已删除分支 {branch}（{commits} 个提交）。",
+    "failedToRevert": "回滚此次运行失败"
   },
   "aiTraining": {
     "title": "AI 模型训练",

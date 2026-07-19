@@ -50,6 +50,28 @@ Both remaining card residuals shared ONE root cause: card validation persisted b
 
 ---
 
+## ✅ RESOLVED 2026-07-19 — GitHub-driven build & deploy pipeline (api 2026.7.107 · frontend 2026.7.82)
+
+Phase 1 of the operator's "GitHub now, container preview after" call. Publishing previously required the IDE open and a warm WebContainer, and left no record of how a build was produced; a project can now hand the build to GitHub instead. Phase 2 (Replit-parity live container preview) is in the roadmap.
+
+**1. Secretless authentication via GitHub Actions OIDC.** `application/ide/githubOidc.ts` verifies a workflow's OIDC token against GitHub's JWKS (RS256, cached, with a forced refresh on an unknown `kid`) and checks issuer, audience (`builderforce.ai/deploy`) and expiry with 60s skew leeway. The alternative — minting a deploy token per project and writing it into the user's repo secrets — would put a long-lived credential in infrastructure we don't control and make rotation our problem forever. Same trust model as the npm trusted publishing already used by `publish-npm-package.yml`. 14 tests sign tokens with a real per-run RSA key and assert every forgery path (wrong key, tampered payload, wrong audience, wrong issuer, expired, unknown/absent `kid`).
+
+**2. The deploy ingress.** `POST /api/deploy/github` (`presentation/routes/deployRoutes.ts`, mounted outside `authMiddleware` — a CI runner has no tenant JWT). The OIDC token proves WHICH REPOSITORY is calling; authorization is then the existing `project_repositories` binding, and the tenant is read from that row rather than the request, so a valid token for repo A can never publish to a project linked to repo B.
+
+**3. One publish core, two producers.** `application/ide/publishStaticSite.ts` now owns subdomain claiming, stale-asset cleanup, the `project_sites` upsert and cache invalidation; both the browser publish route and the GitHub ingress call it, so a project can switch between them with no change in the resulting site. The route's ~70 duplicated lines are gone.
+
+**4. The workflow itself.** `application/ide/deployWorkflow.ts` renders `.github/workflows/builderforce-deploy.yml` from one source (seeded, committed and previewed from the same function). Least-privilege permissions (`contents: read` + `id-token: write`), a concurrency guard so two deploys can't race the asset upload, `npm ci` with an `npm install` fallback for a project with no lockfile, and the API origin taken from the serving request so a staging API writes a workflow pointing at itself. `enableGitHubDeploys` (repoBridge) commits it to the DEFAULT branch — a workflow only runs from the branch it lives on, so putting it on the designer branch would have meant "enable deploys" silently doing nothing.
+
+**5. Designer/Mobile PRs finally get build feedback.** `ingestRepoCiEvent` correlated only `builderforce/task-<id>`; IDE-opened PRs (`builderforce/designer-<projectId>`, projectId + null taskId) fell through to the post-merge path, which matches by merged-PR SHA and so matched nothing. New `ingestDesignerEvent` + `findOpenPullRequestByProject` stamp build status and the failure reason on the PR row — deliberately WITHOUT auto-fix dispatch, since there is no ticket or assigned agent behind a human's IDE PR.
+
+**6. UI + localization.** `components/ide/GitHubDeployPanel.tsx` (self-gating: explains what to connect rather than showing a button that 400s) mounted in the Publish tab, which was itself unlocalized and is now fully routed through `ide.publish.*` / `ide.deploy.*` across all five catalogs.
+
+**7. A test-harness bug this surfaced.** `src/test/setup.ts` mocked `useAuth` but not `useOptionalAuth` — and `useRole` (so every `usePermission` / `<RoleGate>`) reads the optional hook. Gated controls therefore rendered disabled ("Requires Developer role") in tests while working in the app, so a failure looked like a broken control rather than a missing mock. Both hooks now return the same identity.
+
+Suites green: 283 API files / 2485 tests, 52 frontend files / 394 tests.
+
+---
+
 ## ✅ RESOLVED 2026-07-19 — Mobile modality + a green test suite (api 2026.7.106 · frontend 2026.7.77)
 
 **1. Mobile is a first-class IDE project type.** New `mobile` entry in the modality registry (`frontend/src/lib/modality.ts`), accepted by `ideProjectRoutes.ts` and the `create_project` MCP tool. It reuses Designer's whole WebContainer pipeline (Run, Check, Gate Run, publish-to-subdomain) and differs only in how the centre pane frames the preview.

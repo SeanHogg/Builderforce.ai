@@ -933,7 +933,9 @@
     "clearanceNeededBody": "Este es un elemento de seguridad restringido. No tienes autorización para ver sus detalles. Solicita acceso a un propietario o gerente del espacio.",
     "typeProduct": "Producto",
     "typeDesign": "Diseño",
-    "typeIncident": "Incidente"
+    "typeIncident": "Incidente",
+    "requiresRoleHint": "{role, select, viewer {Requiere el rol de Observador} developer {Requiere el rol de Desarrollador} manager {Requiere el rol de Gerente} owner {Requiere el rol de Propietario} other {Requiere el rol {role}}}",
+    "requiresDeveloperRole": "Requiere el rol de Desarrollador"
   },
   "prdCreate": {
     "title": "Nuevo PRD",
@@ -2167,9 +2169,10 @@
     "surface": "Superficie de ejecución",
     "surfaceLabel": {
       "durable": "Durable (nube, sin servidor bajo demanda)",
-      "container": "Contenedor de Cloudflare de larga duración (para ejecuciones muy largas)"
+      "container": "Contenedor de Cloudflare de larga duración (para ejecuciones muy largas)",
+      "github_actions": "GitHub Actions (se ejecuta en los ejecutores de tu repositorio)"
     },
-    "surfaceHelp": "Ambas ejecutan la tarea completa en la nube (todo Cloudflare). Durable se ejecuta bajo demanda en un Durable Object (por paso): la opción predeterminada. El contenedor de Cloudflare de larga duración mantiene un proceso en ejecución para tareas muy largas y continuas (recurre a Durable hasta que se habilite la infraestructura de contenedores).",
+    "surfaceHelp": "Todas ejecutan la tarea completa de forma remota. Durable se ejecuta bajo demanda en un Durable Object (por paso): la opción predeterminada. El contenedor de Cloudflare de larga duración mantiene un proceso en ejecución para tareas muy largas y continuas (recurre a Durable hasta que se habilite la infraestructura de contenedores). GitHub Actions ejecuta el agente en los ejecutores del repositorio vinculado, con un sistema de archivos y una cadena de herramientas reales y un límite de 60 minutos; requiere que el flujo de trabajo del agente de Builderforce (.github/workflows/builderforce-agent.yml) esté confirmado en el repositorio; de lo contrario, la ejecución recurre a Durable.",
     "baseModel": "Modelo base (opcional)",
     "baseModelDefault": "Predeterminado de builderforce.ai (mejor modelo de programación)",
     "baseModelHelp": "El modelo de llamada a herramientas y programación con el que se ejecuta este agente: elige uno de tus LLM o un modelo del grupo. Una ejecución fija un modelo para toda la tarea; deja el predeterminado para usar el mejor modelo de programación de tu plan.",
@@ -9014,7 +9017,15 @@
     "noFileChangesYet": "Aún no hay cambios en archivos.",
     "noFileChangesRecorded": "Esta ejecución no registró ningún cambio en archivos.",
     "noToolCalls": "No se registraron llamadas a herramientas.",
-    "failedToRerun": "Error al volver a ejecutar"
+    "failedToRerun": "Error al volver a ejecutar",
+    "revert": "Revertir ejecución",
+    "reverting": "Revirtiendo…",
+    "revertHint": "Cierra la pull request que abrió esta ejecución y elimina la rama que escribió. Se rechaza si algo más las ha modificado.",
+    "revertConfirmTitle": "¿Revertir esta ejecución?",
+    "revertConfirmMessage": "Esto cierra la pull request que abrió la ejecución n.º {id} y elimina la rama que escribió. No se puede deshacer. Se rechazará si la pull request ya se fusionó o si algo más modificó la rama.",
+    "revertConfirmAction": "Revertir ejecución",
+    "revertDone": "Revertida: se eliminó la rama {branch} ({commits} commit(s)).",
+    "failedToRevert": "No se pudo revertir esta ejecución"
   },
   "aiTraining": {
     "title": "Entrenamiento de modelos de IA",

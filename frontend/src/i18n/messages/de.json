@@ -933,7 +933,9 @@
     "clearanceNeededBody": "Dies ist ein eingeschränktes Sicherheitselement. Sie haben keine Freigabe, die Details zu sehen. Bitten Sie einen Workspace-Eigentümer oder Manager um Zugriff.",
     "typeProduct": "Produkt",
     "typeDesign": "Design",
-    "typeIncident": "Vorfall"
+    "typeIncident": "Vorfall",
+    "requiresRoleHint": "{role, select, viewer {Erfordert die Rolle „Betrachter“} developer {Erfordert die Rolle „Entwickler“} manager {Erfordert die Rolle „Manager“} owner {Erfordert die Rolle „Eigentümer“} other {Erfordert die Rolle „{role}“}}",
+    "requiresDeveloperRole": "Erfordert die Rolle „Entwickler“"
   },
   "prdCreate": {
     "title": "Neues PRD",
@@ -2167,9 +2169,10 @@
     "surface": "Laufzeitumgebung",
     "surfaceLabel": {
       "durable": "Durable (Cloud, serverlos auf Abruf)",
-      "container": "Langlebiger Cloudflare-Container (für sehr lange Läufe)"
+      "container": "Langlebiger Cloudflare-Container (für sehr lange Läufe)",
+      "github_actions": "GitHub Actions (läuft auf den Runnern deines Repos)"
     },
-    "surfaceHelp": "Beide führen die gesamte Aufgabe in der Cloud aus (komplett Cloudflare). Durable läuft auf Abruf auf einem Durable Object (pro Schritt) – die Standardoption. Der langlebige Cloudflare-Container hält einen Prozess für sehr lange, kontinuierliche Aufgaben am Laufen (fällt auf Durable zurück, bis die Container-Infrastruktur aktiviert ist).",
+    "surfaceHelp": "Alle führen die gesamte Aufgabe entfernt aus. Durable läuft auf Abruf auf einem Durable Object (pro Schritt) – die Standardoption. Der langlebige Cloudflare-Container hält einen Prozess für sehr lange, kontinuierliche Aufgaben am Laufen (fällt auf Durable zurück, bis die Container-Infrastruktur aktiviert ist). GitHub Actions führt den Agenten auf den eigenen Runnern deines verknüpften Repos aus – mit echtem Dateisystem und echter Toolchain und einem Limit von 60 Minuten. Dafür muss der Builderforce-Agent-Workflow (.github/workflows/builderforce-agent.yml) im Repo vorhanden sein, sonst fällt der Lauf auf Durable zurück.",
     "baseModel": "Basismodell (optional)",
     "baseModelDefault": "builderforce.ai-Standard (bestes Coding-Modell)",
     "baseModelHelp": "Das Tool-Calling- und Coding-Modell, auf dem dieser Agent läuft – wähle eines deiner LLMs oder ein Modell aus dem Pool. Ein Lauf legt ein Modell für die gesamte Aufgabe fest; lass den Standard, um das beste Coding-Modell deines Tarifs zu verwenden.",
@@ -9014,7 +9017,15 @@
     "noFileChangesYet": "Noch keine Dateiänderungen.",
     "noFileChangesRecorded": "Diese Ausführung hat keine Dateiänderungen aufgezeichnet.",
     "noToolCalls": "Keine Werkzeugaufrufe aufgezeichnet.",
-    "failedToRerun": "Erneute Ausführung fehlgeschlagen"
+    "failedToRerun": "Erneute Ausführung fehlgeschlagen",
+    "revert": "Lauf zurücknehmen",
+    "reverting": "Wird zurückgenommen…",
+    "revertHint": "Schließt den von diesem Lauf geöffneten Pull Request und löscht den Branch, den er geschrieben hat. Wird abgelehnt, wenn etwas anderes daran geändert hat.",
+    "revertConfirmTitle": "Diesen Lauf zurücknehmen?",
+    "revertConfirmMessage": "Dies schließt den von Lauf #{id} geöffneten Pull Request und löscht den Branch, den er geschrieben hat. Das lässt sich nicht rückgängig machen. Es wird abgelehnt, wenn der Pull Request bereits gemergt wurde oder etwas anderes den Branch geändert hat.",
+    "revertConfirmAction": "Lauf zurücknehmen",
+    "revertDone": "Zurückgenommen — Branch {branch} gelöscht ({commits} Commit(s)).",
+    "failedToRevert": "Lauf konnte nicht zurückgenommen werden"
   },
   "aiTraining": {
     "title": "KI-Modelltraining",

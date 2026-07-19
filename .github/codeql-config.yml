@@ -1,0 +1,41 @@
+name: Builderforce CodeQL config
+
+# Scope control for the CodeQL run. Without this the extractor walks vendored
+# and generated trees, which (a) roughly triples analysis time on this repo and
+# (b) produces alerts against code nobody here can fix — the fastest way to make
+# a security tool get ignored.
+
+paths-ignore:
+  # Dependencies and build output.
+  - '**/node_modules'
+  - '**/dist'
+  - '**/build'
+  - '**/out'
+  - '**/coverage'
+  - '**/.next'
+  - '**/.wrangler'
+  - '**/*.min.js'
+  - '**/*.bundle.js'
+  - '**/*.map'
+
+  # Vendored third-party trees — not ours to patch.
+  - 'agent-runtime/vendor'
+  - 'agent-runtime/Swabble'
+
+  # Generated / non-source.
+  - 'frontend/.next'
+  - 'docs-site/.vitepress/cache'
+
+# NOTE ON QUERY FILTERS — deliberately empty.
+#
+# The obvious candidate to suppress is the shell-command-injection family: the
+# agent runtime constructs and runs model-authored shell commands by design, and
+# those queries may well light up across api/container/server.mjs and
+# agent-runtime/. But "may well" is a guess until the first scan reports.
+#
+# Suppressing a shell-injection query repo-wide is a real reduction in coverage,
+# so it should be justified by an actual alert list and scoped to actual paths —
+# not pre-emptively pattern-matched. Run the first scan, read what it says, then
+# add `query-filters` with `exclude:` entries that cite the alert IDs they mute.
+# The agent sandbox boundary is the compensating control for that class; confirm
+# it is genuinely covered by tests before muting anything on those grounds.

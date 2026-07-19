@@ -135,6 +135,7 @@ import { buildPaymentProvider }    from './infrastructure/payment';
 import { createWebhookRoutes }     from './presentation/routes/webhookRoutes';
 import { createManagedAgentHostRoutes }     from './presentation/routes/managedAgentHostRoutes';
 import { createGitHubWebhookRoutes }   from './presentation/routes/githubWebhookRoutes';
+import { createGitHubActionsRoutes }   from './presentation/routes/githubActionsRoutes';
 import { createDeployRoutes }          from './presentation/routes/deployRoutes';
 import { createGitLabWebhookRoutes }   from './presentation/routes/gitlabWebhookRoutes';
 import { createBitbucketWebhookRoutes } from './presentation/routes/bitbucketWebhookRoutes';
@@ -420,6 +421,11 @@ export function buildApp(env: Env): Hono<HonoEnv> {
 
   // GitHub webhook — raw body required for HMAC verification, no JWT
   app.route('/api/webhooks', createGitHubWebhookRoutes(db, runtimeService));
+  // The GitHub Actions execution surface: the runner script it downloads, and the
+  // OIDC-authenticated op callback it drives the agent loop through. Deliberately
+  // NOT under authMiddleware — an Actions runner has no tenant JWT; it proves
+  // identity with a short-lived GitHub OIDC token instead (see the route file).
+  app.route('/api/runtime/github-actions', createGitHubActionsRoutes(db, runtimeService));
 
   // GitHub Actions deploy ingress — no JWT: a CI runner has no tenant token.
   // Authenticated by a GitHub OIDC token (which repo is calling) and authorized
