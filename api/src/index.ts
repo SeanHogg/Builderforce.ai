@@ -135,6 +135,7 @@ import { buildPaymentProvider }    from './infrastructure/payment';
 import { createWebhookRoutes }     from './presentation/routes/webhookRoutes';
 import { createManagedAgentHostRoutes }     from './presentation/routes/managedAgentHostRoutes';
 import { createGitHubWebhookRoutes }   from './presentation/routes/githubWebhookRoutes';
+import { createDeployRoutes }          from './presentation/routes/deployRoutes';
 import { createGitLabWebhookRoutes }   from './presentation/routes/gitlabWebhookRoutes';
 import { createBitbucketWebhookRoutes } from './presentation/routes/bitbucketWebhookRoutes';
 import { createCostForecastRoutes }    from './presentation/routes/costForecastRoutes';
@@ -178,6 +179,7 @@ import { runDueTriggers } from './application/workflow/runDueTriggers';
 import { processPendingCloudWorkflows } from './application/workflow/cloudExecutor';
 import { reapStaleExecutions } from './application/runtime/staleExecutionReaper';
 import { runAutonomousExecutionSweep } from './application/runtime/autonomousExecutionSweep';
+import { createTickDispatchBudget } from './application/runtime/tickDispatchBudget';
 import { runManagerSweep } from './application/manager/runManagerSweep';
 import { runWebhookRetrySweep } from './application/seams/webhookService';
 import { runBoardSyncSweep } from './application/boardsync/runBoardSyncSweep';
@@ -418,6 +420,11 @@ export function buildApp(env: Env): Hono<HonoEnv> {
 
   // GitHub webhook — raw body required for HMAC verification, no JWT
   app.route('/api/webhooks', createGitHubWebhookRoutes(db, runtimeService));
+
+  // GitHub Actions deploy ingress — no JWT: a CI runner has no tenant token.
+  // Authenticated by a GitHub OIDC token (which repo is calling) and authorized
+  // by the repo↔project binding. See deployRoutes.ts.
+  app.route('/api/deploy', createDeployRoutes());
 
   // GitLab + Bitbucket webhooks — ingest commits/MRs/PRs/issues into activity_events
   // (token / HMAC verified), the live twins of the cron poller, AND feed pipeline /
@@ -749,8 +756,13 @@ export default {
       // backstop that makes "agents work continuously in the cloud" true even when
       // the live lane-entry trigger's kickoff was dropped or a ticket was created
       // into a staffed lane while nothing was watching.
+      // ONE per-tenant dispatch ceiling for this whole tick, shared by every sweep
+      // below that can start a billable run. Each sweep used to enforce its own
+      // private 25/tenant, so the ceilings never composed and a tenant could take
+      // 25 from the executor plus more from the manager in the same five minutes.
+      const tickBudget = createTickDispatchBudget();
       ctx.waitUntil(
-        runAutonomousExecutionSweep(env)
+        runAutonomousExecutionSweep(env, tickBudget)
           .then((r) => {
             if (r.dispatched > 0 || r.tokenBlockedTenants > 0) {
               console.log(`[cron:auto-exec] dispatched=${r.dispatched} candidates=${r.candidates} tokenBlockedTenants=${r.tokenBlockedTenants} pendingUnderBlocked=${r.pendingUnderBlockedTenants} upgradeEmails=${r.upgradeEmailsSent}`);
@@ -766,7 +778,7 @@ export default {
       // so the team (human + agent) always works the highest-value, most-urgent
       // tickets first and PRs don't pile up waiting on a human.
       ctx.waitUntil(
-        runManagerSweep(env)
+        runManagerSweep(env, tickBudget)
           .then((r) => {
             if (r.managed > 0) {
               console.log(`[cron:manager] projects=${r.projects} managed=${r.managed} scored=${r.scored} ranked=${r.ranked} assigned=${r.assigned} prsConducted=${r.prsConducted} prsMerged=${r.prsMerged} dispatched=${r.dispatched} remediated=${r.remediated} remediationDeferred=${r.remediationDeferred} tokenBlocked=${r.tokenBlockedTenants}`);

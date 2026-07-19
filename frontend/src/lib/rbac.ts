@@ -61,6 +61,15 @@ export const CAPABILITIES = {
   // Workforce
   'agents.create':        'manager',
   'agents.manage':        'manager',
+
+  // Starting / cancelling / steering an agent run. Mirrors the API's
+  // requireRole(DEVELOPER) on every dispatch-tier route in runtimeRoutes (submit,
+  // cancel, messages, state, broadcast, telemetry). DEVELOPER — not manager —
+  // because running agents IS the developer's job (see ROLE_DESCRIPTION.developer);
+  // the manager control for a run is the SEPARATE governance approval gate, which
+  // holds high/urgent tickets for sign-off in /api/approvals. Keeping both at
+  // manager would collapse two distinct controls and make the approval queue moot.
+  'runtime.execute':      'developer',
   // Manage a project's self-learning Evermind model (seed base, flip inference /
   // learning mode). Mirrors the API's requireRole(MANAGER) on the evermind routes.
   'project.manageEvermind': 'manager',

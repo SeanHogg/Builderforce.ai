@@ -33,6 +33,7 @@ import {
   repoBranches,
 } from '../../infrastructure/database/schema';
 import { buildGitApiBaseUrl } from '../repos/gitProxy';
+import { renderDeployWorkflow, DEPLOY_WORKFLOW_PATH } from './deployWorkflow';
 
 /** Same precedence the cloud agent path uses for the integration-encryption secret. */
 function gitSecret(env: Env): string {
@@ -318,6 +319,64 @@ export async function createRemoteRepo(
 }
 
 /** Linked-repo status for the IDE — the default repo + import baseline, or unlinked. */
+/**
+ * Write the Builderforce deploy workflow into the repo, turning on the
+ * GitHub-driven build → deploy pipeline.
+ *
+ * Committed to the DEFAULT BRANCH on purpose: a workflow only runs from the
+ * branch it lives on, so putting it on the designer branch would mean it never
+ * fires until that PR merged — i.e. "enable deploys" would silently do nothing.
+ *
+ * Idempotent: re-running overwrites the file, which is how a subdomain or branch
+ * change is applied.
+ */
+export async function enableGitHubDeploys(
+  env: Env,
+  tenantId: number,
+  projectId: number,
+  repoId: string,
+  opts: { apiOrigin: string; subdomain?: string | null; distDir?: string },
+): Promise<RepoBridgeResult<{ path: string; branch: string; workflow: string }>> {
+  const db = buildDatabase(env);
+  const resolved = await resolveRepoCredential(db, gitSecret(env), tenantId, repoId);
+  if (isResolveError(resolved)) return { ok: false, status: resolved.status, error: resolved.error };
+  const { repo, token } = resolved;
+  if (repo.projectId !== projectId) return { ok: false, status: 400, error: 'Repository is not bound to this project' };
+  if (repo.provider !== 'github') {
+    return { ok: false, status: 400, error: 'GitHub Actions deploys require a GitHub repository.' };
+  }
+
+  const src = createRepoSource(repo.provider, { owner: repo.owner, repo: repo.repo, host: repo.host, token }, makeRepoFetch());
+  const base = repo.defaultBranch || (await src.getDefaultBranch().catch(() => 'main'));
+
+  const workflow = renderDeployWorkflow({
+    apiOrigin: opts.apiOrigin,
+    subdomain: opts.subdomain ?? null,
+    distDir: opts.distDir,
+    branch: base,
+  });
+
+  const res = await commitFileToRepo({
+    provider: repo.provider, host: repo.host, owner: repo.owner, repo: repo.repo, token,
+    branch: base, base,
+    path: DEPLOY_WORKFLOW_PATH,
+    content: workflow,
+    message: 'Builderforce: add deploy workflow',
+  });
+  if (!res.ok) {
+    return {
+      ok: false,
+      status: 502,
+      // The common cause is a credential without `workflow` scope — GitHub
+      // refuses workflow-file writes without it, and the raw error doesn't say so.
+      error: 'Could not write the workflow file. The GitHub credential needs the `workflow` scope '
+        + '(a fine-grained token needs Contents: read & write plus Workflows: read & write).',
+    };
+  }
+
+  return { ok: true, path: DEPLOY_WORKFLOW_PATH, branch: base, workflow };
+}
+
 export async function getRepoStatus(
   env: Env,
   tenantId: number,

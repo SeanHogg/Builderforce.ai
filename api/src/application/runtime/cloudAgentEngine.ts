@@ -52,7 +52,7 @@ import {
   applyDelta, appraiseAmygdala, homeostasis,
   type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type ToolControl, type LimbicState, type LimbicEvent, type PolicyGate, type AgentExecParams,
 } from '@builderforce/agent-tools';
-import { parseRemediation, parseFollowUp, parseCloudAgentRef, parseModel, parseRoutingBias, parsePolicyGates } from './cloudDispatch';
+import { parseRemediation, parseFollowUp, parseCloudAgentRef, parseModel } from './cloudDispatch';
 import { classifyTaskAction } from '../llm/classifyTask';
 import { deriveAllocationCategory } from '../llm/allocationCategories';
 import { normalizeActionType, learnedRoutingEnabled, type ActionType } from '../llm/actionTypes';
@@ -674,6 +674,13 @@ export async function resolveLearnedRoutingInputs(
  * approval id so the loop can carry it in the pause result. The run is parked in
  * `paused` by the caller. Best-effort on notify; the row insert is the durable part.
  */
+/**
+ * How long an unanswered agent question waits before the /escalate sweep expires it
+ * and alerts. Shorter than the 72h paused-run reap deadline on purpose: escalation
+ * should get a human's attention well BEFORE the backstop kills the run.
+ */
+export const CLOUD_QUESTION_ESCALATE_AFTER_MS = 24 * 60 * 60 * 1000;
+
 async function createCloudQuestion(
   env: Env,
   db: Db,
@@ -684,6 +691,16 @@ async function createCloudQuestion(
 ): Promise<string> {
   const approvalId = crypto.randomUUID();
   const now = new Date();
+  // An agent's question MUST carry an expiry. `expiresAt` is caller-supplied and has
+  // no default, and this path used to set none — so the /escalate sweep (which only
+  // sees `expiresAt < now`) could never escalate an unanswered agent question. It sat
+  // pending forever, and because `paused` counts as a LIVE run in evaluateTaskAutoRun
+  // + laneRequirementGate, one ignored question silently froze all future autonomy on
+  // that ticket. Escalation is the FIRST line here (it pings the manager); the 72h
+  // paused-run reaper in staleExecutionReaper is the backstop that eventually frees
+  // the ticket if nobody ever answers. Deliberately generous: a question asked on a
+  // Friday afternoon must still be answerable on Monday morning.
+  const expiresAt = new Date(now.getTime() + CLOUD_QUESTION_ESCALATE_AFTER_MS);
   const description = args.context?.trim()
     ? `${args.question.trim()}\n\nContext: ${args.context.trim()}`
     : args.question.trim();
@@ -698,6 +715,7 @@ async function createCloudQuestion(
     actionType:   'clarify.blocked',
     description,
     status:       'pending',
+    expiresAt,
     createdAt:    now,
     updatedAt:    now,
   });
