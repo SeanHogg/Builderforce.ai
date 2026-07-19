@@ -15,6 +15,15 @@ on:
   pull_request:
     branches: [main]
 
+# A new push to the same PR makes the in-flight run irrelevant; cancelling frees
+# runners for the run that actually matters.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   drift-guard:
     name: Schema drift · migrations · track manifest
@@ -76,3 +85,176 @@ jobs:
       - name: Eval · agent coding ability against a real temp repo
         working-directory: agent-runtime
         run: pnpm exec vitest run --config vitest.e2e.config.ts test/coding-eval.e2e.test.ts test/search-code-grep-fallback.e2e.test.ts
+
+  # ---------------------------------------------------------------------------
+  # Type + test gates.
+  #
+  # These did not exist before: CI ran only the file-based drift guards and the
+  # agent evals, so a type error or a failing unit test reached `main` and was
+  # caught at DEPLOY time, if at all. Every gate below was verified green against
+  # the tree at the time it was added — a gate that is red on arrival trains
+  # people to ignore CI, so nothing aspirational is enforced here.
+  #
+  # Jobs are split rather than chained so failures are attributable at a glance
+  # and the slow ones do not delay the fast ones. Every package carries its own
+  # lockfile (there is no root workspace), hence per-directory installs.
+  # ---------------------------------------------------------------------------
+
+  api:
+    name: api · types + unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: api/pnpm-lock.yaml
+      - name: Install
+        working-directory: api
+        run: pnpm install --frozen-lockfile
+      - name: Type-check
+        working-directory: api
+        run: pnpm run type-check
+      # `pnpm test` chains the four drift scripts (already covered by drift-guard)
+      # before vitest, so call vitest directly to avoid running them twice.
+      - name: Unit tests
+        working-directory: api
+        run: pnpm exec vitest run
+
+  frontend:
+    name: frontend · types + unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+      - name: Type-check
+        working-directory: frontend
+        run: pnpm run typecheck:native
+      - name: Unit tests
+        working-directory: frontend
+        run: pnpm test
+
+  # Split out: `eslint .` over the frontend takes ~3 minutes, several times any
+  # other gate. Its own job means it never sits in front of faster feedback.
+  frontend-lint:
+    name: frontend · lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        working-directory: frontend
+        run: pnpm run lint
+
+  # The published-library tier. All are small, fast and independent, so one
+  # matrix job covers them without meaningfully extending wall-clock.
+  packages:
+    name: ${{ matrix.pkg }} · types + tests
+    runs-on: ubuntu-latest
+    strategy:
+      # One package failing should not hide the state of the others.
+      fail-fast: false
+      matrix:
+        pkg:
+          - worker
+          - sdk
+          - studio
+          - studio-embedded
+          - brain-embedded
+          - builderforce-embedded
+          - browser-sdk
+          - voice
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ${{ matrix.pkg }}/pnpm-lock.yaml
+      - name: Install
+        working-directory: ${{ matrix.pkg }}
+        run: pnpm install --frozen-lockfile
+      - name: Type-check
+        working-directory: ${{ matrix.pkg }}
+        run: pnpm run type-check
+      - name: Tests
+        working-directory: ${{ matrix.pkg }}
+        run: pnpm test
+
+  vscode:
+    name: clients/vscode · types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: clients/vscode/pnpm-lock.yaml
+      - name: Install
+        working-directory: clients/vscode
+        run: pnpm install --frozen-lockfile
+      - name: Type-check (extension + webview)
+        working-directory: clients/vscode
+        run: pnpm run typecheck
+
+  # NOT a hard gate yet — deliberately.
+  #
+  # `test:fast` has 7 failing files on a Windows dev machine, and the failures
+  # look environment-specific (temp-dir ENOENT/ENOTEMPTY, a "keeps lock on linux"
+  # test, a collision with a real running gateway process) rather than like real
+  # regressions. They may well pass on ubuntu-latest, but that was never verified,
+  # and enforcing an unverified gate would block every PR on day one.
+  #
+  # Runs advisory so the Linux result becomes visible on real PRs. Once a few
+  # runs confirm it is green, delete `continue-on-error` and this comment. If it
+  # is genuinely red, fix it or drop the job — do not leave it advisory forever,
+  # which is just noise with a green tick.
+  agent-runtime-tests:
+    name: agent-runtime · unit tests (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        working-directory: agent-runtime
+        run: pnpm install --frozen-lockfile
+      - name: Unit tests
+        working-directory: agent-runtime
+        run: pnpm run test:fast
