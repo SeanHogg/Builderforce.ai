@@ -1,8 +1,8 @@
 import { Hono, type Context } from 'hono';
 import { and, eq, sql } from 'drizzle-orm';
-import type { HonoEnv, Env } from '../../env';
+import { resolveAppBaseUrl, type HonoEnv, type Env } from '../../env';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
-import { sendMagicLinkEmail } from '../../infrastructure/email/EmailService';
+import { sendMagicLinkEmail, sendWelcomeEmail } from '../../infrastructure/email/EmailService';
 import {
   users,
   oauthAccounts,
@@ -334,9 +334,7 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
   router.get('/oauth/:provider/callback', async (c) => {
     const name = c.req.param('provider').toLowerCase();
     const cfg = getProviderCfg(name, c.env);
-    const frontendBase = (c.env.APP_URL ?? 'https://builderforce.ai')
-      .split(',')[0]!
-      .trim();
+    const frontendBase = resolveAppBaseUrl(c.env);
 
     if (!cfg) return c.redirect(`${frontendBase}/login?error=provider_unavailable`);
 
@@ -442,6 +440,15 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
           emailVerifiedAt: sql`now()`,
         });
         userId = newId;
+        // Brand-new account (no provider link, no same-email user) — this is the
+        // only signup branch in this handler, so the welcome email belongs here.
+        // Fire-and-forget: a mail failure must never block the sign-in redirect.
+        void sendWelcomeEmail(
+          c.env,
+          normalizedEmail,
+          providerUser.name ?? '',
+          frontendBase,
+        );
       }
 
       // 4. Link this OAuth provider account
@@ -515,9 +522,7 @@ export function createOAuthRoutes(db: Db): Hono<HonoEnv> {
           redirect,
         });
 
-        const frontendBase = (c.env.APP_URL ?? 'https://builderforce.ai')
-          .split(',')[0]!
-          .trim();
+        const frontendBase = resolveAppBaseUrl(c.env);
         const magicUrl = `${frontendBase}/auth/magic-link?token=${encodeURIComponent(token)}`;
 
         void sendMagicLinkEmail(

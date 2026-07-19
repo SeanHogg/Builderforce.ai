@@ -44,8 +44,19 @@ export interface ProjectEvermindRecentEntry {
   weight: number;
   /** Readable snippet of the task prompt (text-path only). */
   prompt?: string;
-  /** Readable snippet of the run/exemplar text learned (text-path only). */
+  /** Readable snippet of the run/exemplar text learned (text-path only). Absent when a
+   *  pinned teacher failed on a teach-a-task — see `skipReason`. */
   text?: string;
+  /** True when a frontier teacher shaped what was learned (text-path only). */
+  distilled?: boolean;
+  /** The frontier model that distilled this entry (present when `distilled`). */
+  teacherModel?: string;
+  /** Why distillation did NOT happen — an `EvermindTeacherSkipReason`. */
+  skipReason?: string;
+  /** Operator-facing detail behind `skipReason` (HTTP status, exception message). */
+  skipDetail?: string;
+  /** The pinned teacher model that failed (present on a distillation fault). */
+  attemptedTeacherModel?: string;
 }
 
 /** The 8 affective (limbic) state dimensions the runtime models. Mirrors
