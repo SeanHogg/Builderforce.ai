@@ -26,6 +26,8 @@ import { computeCoverage, verdictSignature, type AuditSignals, type RequirementI
 import type { CoverageResult, UnmetRequirement } from './auditRules';
 import { requirementApplies } from '../kanban/types';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
+import { isReviewRole } from '../kanban/roleCatalog';
+import { publishSignoffToPr } from '../validation/publishReviewToPr';
 
 const flaggedKey = (tenantId: number) => `audit:flagged:${tenantId}`;
 
@@ -85,6 +87,24 @@ export class TicketAuditService {
       createdAt: new Date(),
     });
     const audit = await this.computeAudit(env, tenantId, input.taskId);
+
+    // Mirror the sign-off onto the ticket's pull request. A reviewer's verdict
+    // that lives only in the sign-off ledger is invisible to whoever is deciding
+    // whether to merge — which is the one moment it exists to inform. Only
+    // REVIEW-shaped verdicts are published: an 'approved' from a role that merely
+    // participated (e.g. the BA confirming scope) is accountability, not a code
+    // review, and posting every role's sign-off would bury the ones that matter.
+    //
+    // Best-effort and after the ledger write, so GitHub can never cost us the record.
+    if (isReviewRole(input.roleKey)) {
+      await publishSignoffToPr(env, this.db, tenantId, input.taskId, {
+        roleKey: input.roleKey,
+        verdict: input.verdict ?? 'approved',
+        summary: input.summary ?? null,
+        reviewerName: input.memberName ?? null,
+      }).catch(() => { /* best-effort */ });
+    }
+
     return { ...audit, signoffId };
   }
 

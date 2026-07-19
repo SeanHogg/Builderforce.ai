@@ -1,5 +1,5 @@
 import { parseSseDataFrames } from '../sseFrames';
-import { VendorFatalError, VendorRetryableError, pickUsage, type AiModelTier, type VendorCallParams, type VendorCallResult, type VendorEnv, type VendorModule, type VendorStreamResult } from './types';
+import { AUTH_STATUSES, VendorFatalError, VendorRetryableError, pickUsage, type AiModelTier, type VendorCallParams, type VendorCallResult, type VendorEnv, type VendorModule, type VendorStreamResult } from './types';
 
 const ENDPOINT = 'https://chatgpt.com/backend-api/codex/responses';
 
@@ -27,6 +27,17 @@ const ORIGINATOR = 'codex_cli_rs';
  *  test asks for a handful of tokens, so it must be floored rather than passed
  *  through verbatim. */
 const MIN_OUTPUT_TOKENS = 16;
+
+/**
+ * Stable marker embedded in the error a Codex 401/403 raises, so the failure is
+ * machine-recognisable downstream instead of being one more opaque status.
+ *
+ * The producer is `callResponses`; the consumer is `providerAuthAlerts`, which
+ * matches it on `FailoverEvent.detail` to raise the operator-facing "reconnect
+ * your ChatGPT account" prompt. Shared here so producer and consumer can't drift
+ * (same pattern as {@link CAPACITY_LIMIT_MARKER} in `vendors/types.ts`).
+ */
+export const CODEX_AUTH_MARKER = 'chatgpt account not entitled to codex';
 
 type PackedAuth = { accessToken: string; accountId: string };
 
@@ -164,6 +175,40 @@ async function callResponses(params: VendorCallParams): Promise<VendorCallResult
   });
   if (!response.ok) {
     const message = (await response.text()).slice(0, 500);
+    // AUTH class (401/403) is FATAL FOR THIS VENDOR, not a transient blip.
+    //
+    // A 403 here is the entitlement case: the ChatGPT account authenticated fine
+    // (the bearer token is live) but is not entitled to Codex — a lapsed plan, a
+    // plan without Codex access, or a stale `accountId` from a workspace the user
+    // left. Retrying is guaranteed to 403 again until the OPERATOR reconnects the
+    // account, so this must not look like an outage the cascade can outwait.
+    //
+    // We still raise a RETRYABLE error rather than `VendorFatalError`, because
+    // "fatal for this vendor" ≠ "fatal for the run": the dispatcher rethrows a
+    // VendorFatalError outside 400/422 and would kill an otherwise-servable
+    // request just because one connected BYO account lost entitlement. Raising it
+    // retryable lets the cascade advance to the tenant's other accounts / the plan
+    // pool, while `cooldownStore.classifyFailure` maps 401/403 to the `auth` class
+    // — which trips a 30-minute VENDOR-level cooldown on a single strike, i.e. this
+    // vendor genuinely stands down instead of being re-probed every request.
+    //
+    // The marker below is what makes the failure OBSERVABLE: it rides the attempt's
+    // `error` text through `kindForStatus` → `kind: 'auth'` → `FailoverEvent.detail`,
+    // where `providerAuthAlerts` picks it up and turns it into a "reconnect your
+    // ChatGPT account" prompt on Settings ▸ API Keys. Before this, an unentitled
+    // account was indistinguishable from a 502 and the operator was never told.
+    if (AUTH_STATUSES.has(response.status)) {
+      console.error(
+        `[vendors] openai-codex/${params.model} auth ${response.status} — connected ChatGPT account is ${response.status === 403 ? 'authenticated but NOT entitled to Codex (lapsed plan / no Codex access / stale accountId)' : 'unauthenticated (token expired or revoked)'}; reconnect it in Settings ▸ API Keys. Failing over to the next model.`,
+        message.slice(0, 200),
+      );
+      throw new VendorRetryableError(
+        'openai-codex',
+        params.model,
+        response.status,
+        `${CODEX_AUTH_MARKER} (upstream ${response.status}): ${message.slice(0, 200)}`,
+      );
+    }
     if (response.status === 400 || response.status === 422) throw new VendorFatalError('openai-codex', response.status, message);
     throw new VendorRetryableError('openai-codex', params.model, response.status, message);
   }

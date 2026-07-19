@@ -13,6 +13,7 @@
  * POST   /api/repos/pull-requests/:id/result           AgentHost callback: record PR number/url/status
  * POST   /api/repos/pull-requests/:id/merge            Approve & merge a recorded PR (in-product)
  * GET    /api/repos/projects/:projectId/pull-requests  List a project's pull requests
+ * GET    /api/repos/projects/:projectId/github-actions Agent-workflow presence per repo (surface readiness)
  *
  * Every query is tenant-scoped. The AGENT_HOST_RELAY dispatch mirrors runtimeRoutes.ts:
  *   env.AGENT_HOST_RELAY.get(env.AGENT_HOST_RELAY.idFromName(String(agentHostId))).fetch(...)
@@ -39,7 +40,7 @@ import { getPullRequestDetail } from '../../application/repos/getPullRequestDeta
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { resolveHostAuth } from '../../infrastructure/auth/agentHostAuth';
 import type { CreatePrMessage } from '../../application/repos/prDispatch';
-import { ensureAgentWorkflow } from '../../application/runtime/githubActionsDispatch';
+import { ensureAgentWorkflow, githubActionsAvailable } from '../../application/runtime/githubActionsDispatch';
 import { AGENT_WORKFLOW_PATH } from '../../application/runtime/githubActionsWorkflow';
 import { ingestOpenAlertsForRepo } from '../../application/security/githubAlerts';
 
@@ -555,6 +556,64 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       });
     })().catch(() => {}));
     return c.json({ ok: true, merged: result.merged, sha: result.sha, pullRequest: result.pullRequest });
+  });
+
+  /**
+   * GET /api/repos/projects/:projectId/github-actions
+   *
+   * Is the GitHub Actions execution surface actually usable for this project?
+   *
+   * This exists because picking the surface used to be a guess: an agent could be
+   * set to `github_actions` for a project whose repo has no agent workflow, and
+   * the only feedback was a silent downgrade to the durable executor, explained in
+   * the run timeline AFTER the fact. Both the repo settings panel (per-repo
+   * "Enable / Enabled" state) and the agent surface picker (gate + warning) read
+   * this ONE endpoint, so the two can never disagree about what "enabled" means.
+   *
+   * `ready` mirrors dispatch's own question — dispatch resolves the task's default
+   * repo, so a project whose DEFAULT repo lacks the workflow is not ready even if
+   * some other linked repo has it.
+   *
+   * Cached: each repo's answer is the read-through-cached
+   * {@link githubActionsAvailable} (L1 Map + L2 KV, invalidated by
+   * `ensureAgentWorkflow` on write), so the picker can poll this freely without
+   * spending a GitHub subrequest per keystroke, and enabling the surface shows up
+   * immediately rather than after a TTL.
+   */
+  router.get('/projects/:projectId/github-actions', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const projectId = Number(c.req.param('projectId'));
+    if (!Number.isFinite(projectId)) return c.json({ error: 'Invalid projectId' }, 400);
+
+    const rows = await db
+      .select({
+        id: projectRepositories.id,
+        provider: projectRepositories.provider,
+        owner: projectRepositories.owner,
+        repo: projectRepositories.repo,
+        isDefault: projectRepositories.isDefault,
+      })
+      .from(projectRepositories)
+      .where(and(eq(projectRepositories.projectId, projectId), eq(projectRepositories.tenantId, tenantId)));
+
+    const repositories = await Promise.all(rows.map(async (r) => ({
+      repoId: r.id,
+      // Only GitHub has Actions; a GitLab/Bitbucket repo is reported as
+      // unsupported rather than "not enabled", because there is nothing to enable.
+      supported: r.provider === 'github',
+      enabled: r.provider === 'github'
+        ? await githubActionsAvailable(c.env as Env, db, tenantId, r.id)
+        : false,
+      isDefault: r.isDefault,
+    })));
+
+    // No repo at all ⇒ not ready: dispatch has nothing to queue the workflow on.
+    const primary = repositories.find((r) => r.isDefault) ?? repositories[0];
+    return c.json({
+      ready: !!primary?.enabled,
+      workflowPath: AGENT_WORKFLOW_PATH,
+      repositories,
+    });
   });
 
   /**

@@ -41,6 +41,39 @@ export const BUILTIN_ROLES: JobRole[] = [
 
 const BY_KEY = new Map(BUILTIN_ROLES.map((r) => [r.key, r]));
 
+/**
+ * Roles whose sign-off is a JUDGEMENT ON THE CHANGE, as opposed to participation
+ * in producing it.
+ *
+ * This is the gate for publishing a sign-off to the pull request
+ * (see application/validation/publishReviewToPr.ts). Every role's sign-off is
+ * recorded in the ledger for accountability, but posting all of them to the PR
+ * would bury the ones a merge decision actually depends on — a business analyst
+ * confirming scope is not a review of the diff.
+ *
+ * `security` is included because a security sign-off is a gate on merging;
+ * `product-owner` because acceptance ("done-done") is precisely the judgement a
+ * reviewer wants to see before shipping. `developer`, `business-analyst`,
+ * `tech-writer`, `designer`, `devops` and `manager` are deliberately excluded —
+ * they are contributors or coordinators on the ticket, not arbiters of the diff.
+ *
+ * A custom (non-builtin) role key is not a review role: nothing is known about
+ * its semantics, and defaulting to "publish" would spam PRs as tenants add roles.
+ */
+const REVIEW_ROLE_KEYS: ReadonlySet<string> = new Set([
+  'code-reviewer',
+  'architect',
+  'qa-tester',
+  'security',
+  'validator',
+  'team-lead',
+  'product-owner',
+]);
+
+export function isReviewRole(key: string): boolean {
+  return REVIEW_ROLE_KEYS.has(key);
+}
+
 export function isBuiltinRoleKey(key: string): boolean {
   return BY_KEY.has(key);
 }

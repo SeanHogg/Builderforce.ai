@@ -13,7 +13,7 @@ vi.mock('./ingestRepoCiEvent', async (orig) => ({
 }));
 
 const { handleCiEventOutcome, AUTOFIX_SKIPPED_EVENT } = await import('./handleCiEventOutcome');
-const { AUTOFIX_DISPATCH_EVENT } = await import('./ingestRepoCiEvent');
+const { AUTOFIX_DISPATCH_EVENT, AUTOFIX_DEDUPED_REASON } = await import('./ingestRepoCiEvent');
 
 const EVT: RepoCiEvent = {
   eventType: 'pipeline', branch: 'builderforce/task-7', sha: 'abc',
@@ -40,7 +40,7 @@ describe('handleCiEventOutcome', () => {
   it('dispatches the auto-fix intent and records the loop-guard event', async () => {
     ingestMock.mockResolvedValue({
       processed: true, taskId: 7, tenantId: 3, executionId: 9, buildStatus: 'failure',
-      autoFix: { taskId: 7, tenantId: 3, attempt: 2, payload: '{"remediation":{}}' },
+      autoFix: { taskId: 7, tenantId: 3, attempt: 2, payload: '{"remediation":{}}', sha: 'abc', statusKey: 'PIPELINE' },
     });
     const { deps, inserts, dispatchRun, settle } = makeDeps();
 
@@ -54,12 +54,15 @@ describe('handleCiEventOutcome', () => {
     expect(ev?.executionId).toBe(55);
     expect(ev?.tenantId).toBe(3);
     expect(String(ev?.args)).toContain('"source":"gitlab"');
+    // The sha is load-bearing: the per-build de-dup reads it back off this row.
+    expect(String(ev?.args)).toContain('"sha":"abc"');
+    expect(String(ev?.args)).toContain('"statusKey":"PIPELINE"');
   });
 
   it('records no loop-guard event when the dispatch yields no execution', async () => {
     ingestMock.mockResolvedValue({
       processed: true, taskId: 7, tenantId: 3, buildStatus: 'failure',
-      autoFix: { taskId: 7, tenantId: 3, attempt: 1, payload: '{}' },
+      autoFix: { taskId: 7, tenantId: 3, attempt: 1, payload: '{}', sha: 'abc' },
     });
     const { deps, inserts, settle } = makeDeps(null);
     await handleCiEventOutcome(deps, EVT, 'bitbucket');
@@ -70,7 +73,7 @@ describe('handleCiEventOutcome', () => {
   it('a webhook stays 200 when the dispatch throws', async () => {
     ingestMock.mockResolvedValue({
       processed: true, taskId: 7, tenantId: 3, buildStatus: 'failure',
-      autoFix: { taskId: 7, tenantId: 3, attempt: 1, payload: '{}' },
+      autoFix: { taskId: 7, tenantId: 3, attempt: 1, payload: '{}', sha: 'abc' },
     });
     const { deps, settle } = makeDeps();
     deps.dispatchRun = vi.fn(async () => { throw new Error('boom'); });
@@ -99,6 +102,15 @@ describe('handleCiEventOutcome', () => {
     });
     const { deps, inserts } = makeDeps();
     await handleCiEventOutcome(deps, EVT, 'github');
+    expect(inserts.find((i) => i.toolName === AUTOFIX_SKIPPED_EVENT)).toBeUndefined();
+  });
+
+  it('stays silent for a de-duplicated sibling status key', async () => {
+    ingestMock.mockResolvedValue({
+      processed: true, taskId: 7, tenantId: 3, buildStatus: 'failure', reason: AUTOFIX_DEDUPED_REASON,
+    });
+    const { deps, inserts } = makeDeps();
+    await handleCiEventOutcome(deps, { ...EVT, statusKey: 'SONAR' }, 'bitbucket');
     expect(inserts.find((i) => i.toolName === AUTOFIX_SKIPPED_EVENT)).toBeUndefined();
   });
 
