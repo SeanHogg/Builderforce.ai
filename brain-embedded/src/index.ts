@@ -189,5 +189,5 @@ export type { BrainChat, BrainMessage, BrainModality, ChatInputAttachment, Everm
 export { STEP_MESSAGE_ROLE, isStepMessage, attachEvermindLearn, formatEvermindLearnStep } from './types';
 
 // "Copy diagnostics" — pure serializer for the chat's identity + Evermind wiring state
-export { formatChatDiagnostics, classifyModelFunding } from './chatDiagnostics';
-export type { ChatDiagnosticsData, ChatDiagnosticsEvermind, ChatDiagnosticsAccount, ChatDiagnosticsMeter } from './chatDiagnostics';
+export { formatChatDiagnostics, classifyModelFunding, allowanceState } from './chatDiagnostics';
+export type { ChatDiagnosticsData, ChatDiagnosticsEvermind, ChatDiagnosticsAccount, ChatDiagnosticsMeter, AllowanceState } from './chatDiagnostics';

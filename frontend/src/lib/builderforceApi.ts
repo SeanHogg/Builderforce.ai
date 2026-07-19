@@ -3293,6 +3293,16 @@ export const cardValidationApi = {
       `/api/tenants/${tenantId}/card-validation`,
       { method: 'POST', body: JSON.stringify(body ?? {}) },
     ),
+
+  /**
+   * Remove the card on file — detached at the processor, then cleared here. This
+   * REVOKES premium model selection, which is the point of removing it.
+   *
+   * 409 `card_backs_active_subscription` when a paid plan still bills this card:
+   * downgrade to Free first. Manager role required.
+   */
+  remove: (tenantId: number): Promise<CardValidationState> =>
+    request<CardValidationState>(`/api/tenants/${tenantId}/card-validation`, { method: 'DELETE' }),
 };
 
 export const llmApi = {

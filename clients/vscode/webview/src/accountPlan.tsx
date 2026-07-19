@@ -101,6 +101,25 @@ export function usePlanSnapshot(apiReq: AuthedFetch): PlanSnapshot | null {
   return plan;
 }
 
+/**
+ * Is this workspace on a PAID tier? The one predicate, so no surface invents its
+ * own answer.
+ *
+ * It reads the shared `/api/consumption` snapshot — the authoritative plan source,
+ * and the only one that also carries the allowance meters. The alternative reading
+ * (off `GET /llm/v1/models`) is a trap twice over: its `premium` field is the
+ * superadmin OVERRIDE flag rather than "has a paid plan", and its `effectivePlan`
+ * silently degrades to `'free'` when auth fails — so a transient blip downgrades
+ * the UI instead of surfacing an error.
+ *
+ * Fails CLOSED (false) when the plan can't be read: showing paid-only options to
+ * someone who can't use them is the worse error.
+ */
+export async function fetchIsPaidPlan(apiReq: AuthedFetch): Promise<boolean> {
+  const plan = await fetchPlanSnapshot(apiReq);
+  return plan != null && plan.plan.effective !== 'free';
+}
+
 /** The AI-token meter — the allowance a chat turn actually spends. */
 function tokenMeter(plan: PlanSnapshot | null): ChatDiagnosticsMeter | null {
   return plan?.meters.find((m) => m.key === 'ai_tokens') ?? null;
@@ -131,6 +150,8 @@ export function PlanBadge({
   if (!plan) return null;
 
   const tier = plan.plan.effective;
+  // Same rule as `fetchIsPaidPlan` — inverted here because the chip is written
+  // around the free case. One definition of "paid", one of "free".
   const isFree = tier === 'free';
   const meter = tokenMeter(plan);
   // "Available tokens" only means something on a metered plan; an unlimited or

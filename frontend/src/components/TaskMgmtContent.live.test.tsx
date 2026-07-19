@@ -40,6 +40,15 @@ vi.mock('@/lib/builderforceApi', () => ({
       ],
     }),
   },
+  // This factory REPLACES the module, so anything the component tree touches
+  // must be listed — an omitted export reads as `undefined` and blows up in an
+  // effect (e.g. `kanbanApi.assigneeProfiles().then(...)`). Only the calls that
+  // fire on mount need to be here; each returns its real empty shape.
+  kanbanApi: {
+    assigneeProfiles: vi.fn().mockResolvedValue({}),
+    participantsSummary: vi.fn().mockResolvedValue([]),
+    flaggedForProject: vi.fn().mockResolvedValue([]),
+  },
 }));
 
 vi.mock('@/lib/api', () => ({ fetchProjects: vi.fn().mockResolvedValue([{ id: 1, name: 'Demo' }]) }));

@@ -22,6 +22,7 @@ import { dailyTenantIngestionBytes, tenantIngestionBytesByProvider } from '../in
 import { dailyTenantErrorEvents } from '../quality/errorEventsLedger';
 import { dailyTenantOutboundFetches } from '../web/outboundFetchLedger';
 import { dailyTenantCloudRuns } from '../runtime/cloudRunLedger';
+import { resolveSuperadminUnlimited } from '../llm/tenantTokenAvailability';
 
 export type MeterKey = 'ai_tokens' | 'ingestion' | 'error_events' | 'outbound_fetches' | 'cloud_runs';
 export type MeterUnit = 'tokens' | 'bytes' | 'events' | 'fetches' | 'runs';
@@ -85,6 +86,34 @@ function makeMeter(key: MeterKey, unit: MeterUnit, used: number, limit: number, 
   };
 }
 
+/** Every meter's monthly allowance (-1 = unlimited). */
+export interface MeterLimits {
+  tokens: number;
+  ingestion: number;
+  errorEvents: number;
+  outboundFetches: number;
+  cloudRuns: number;
+}
+
+/**
+ * Resolve all five allowances from the SAME inputs the enforcement gates use.
+ * Pure, so the "what does this tenant actually get?" rule is testable without a
+ * database — and `isSuperadmin` cannot be dropped again without a test failing.
+ */
+export function resolveMeterLimits(input: {
+  effectivePlan: TenantPlan;
+  tokenDailyLimitOverride: number | null;
+  isSuperadmin: boolean;
+}): MeterLimits {
+  return {
+    tokens: resolveTokenLimits(input).monthlyLimit,
+    ingestion: resolveIngestionMonthlyBytes(input),
+    errorEvents: resolveErrorEventsMonthly(input),
+    outboundFetches: resolveOutboundFetchesMonthly(input),
+    cloudRuns: resolveCloudRunsMonthly(input),
+  };
+}
+
 /**
  * Build the full consumption snapshot for a tenant over the given calendar month.
  * One tenant read + each meter's window-sum, fanned out in parallel.
@@ -95,6 +124,9 @@ export async function buildConsumptionSnapshot(
   monthStart: Date,
   monthEnd: Date,
   env?: Env,
+  /** The signed-in principal, so a SUPERADMIN operating a tenant they are not a
+   *  member of sees the unlimited allowance the gate actually grants them. */
+  acting?: { actingUserId?: string | null; actingIsSuperadmin?: boolean },
 ): Promise<ConsumptionSnapshot> {
   const ingestionDb = env?.NEON_TRANSACTIONAL_DATABASE_URL ? buildTransactionalDatabase(env) : db;
   const [tokensDaily, ingestionDaily, ingestionByProvider, errorEventsDaily, outboundFetchesDaily, cloudRunsDaily, tenantRows] = await Promise.all([
@@ -125,11 +157,20 @@ export async function buildConsumptionSnapshot(
   });
   const override = tenantRow?.tokenDailyLimitOverride ?? null;
 
-  const { monthlyLimit: tokenLimit } = resolveTokenLimits({ effectivePlan, tokenDailyLimitOverride: override });
-  const ingestionLimit = resolveIngestionMonthlyBytes({ effectivePlan, tokenDailyLimitOverride: override });
-  const errorEventsLimit = resolveErrorEventsMonthly({ effectivePlan, tokenDailyLimitOverride: override });
-  const outboundFetchesLimit = resolveOutboundFetchesMonthly({ effectivePlan, tokenDailyLimitOverride: override });
-  const cloudRunsLimit = resolveCloudRunsMonthly({ effectivePlan, tokenDailyLimitOverride: override });
+  // A SUPERADMIN operator is never capped. Resolving limits here without that
+  // authority made this snapshot disagree with what is actually enforced: the
+  // operator was shown plain free-plan caps against real usage — "559,139,119 /
+  // 50,000 · 0 left" — while every turn sailed through the gate. The meter is the
+  // number members (and chat diagnostics) READ, so it resolves through the SAME
+  // rule the gate uses, acting principal included.
+  const isSuperadmin = await resolveSuperadminUnlimited(db, tenantId, acting, env);
+  const {
+    tokens: tokenLimit,
+    ingestion: ingestionLimit,
+    errorEvents: errorEventsLimit,
+    outboundFetches: outboundFetchesLimit,
+    cloudRuns: cloudRunsLimit,
+  } = resolveMeterLimits({ effectivePlan, tokenDailyLimitOverride: override, isSuperadmin });
 
   // Every meter comes back per-day; the month-to-date total is the day sum (one
   // grouped scan per meter does the work of the old single-total query) and the
