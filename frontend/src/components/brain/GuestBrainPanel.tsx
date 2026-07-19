@@ -19,8 +19,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { useBrainChats, useBrainConversation, isStepMessage } from '@/lib/brain';
+import { useBrainChats, useBrainConversation, isStepMessage, getBrainCapability, type BrainCapabilityId } from '@/lib/brain';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
+import { BrainCapabilityPicker } from '@/components/brain/BrainCapabilityPicker';
 import { mintGuestSession, getGuestUsage } from '@/lib/guestChatApi';
 
 interface GuestBrainPanelProps {
@@ -33,6 +34,7 @@ interface GuestBrainPanelProps {
 
 export function GuestBrainPanel({ variant, initialPrompt, onClose }: GuestBrainPanelProps) {
   const t = useTranslations('guestBrain');
+  const tBrainCaps = useTranslations('brain.capabilities');
 
   const [ready, setReady] = useState(false);          // guest token minted
   const [enabled, setEnabled] = useState(true);       // kill switch / mint ok
@@ -42,10 +44,18 @@ export function GuestBrainPanel({ variant, initialPrompt, onClose }: GuestBrainP
 
   const capReached = remaining !== null && remaining <= 0;
 
+  // Same capability tiles as the signed-in Brain Storm empty state — the first
+  // surface a visitor lands on should show what this thing can make. Guest chats
+  // are localStorage-only, so the choice is session state here rather than a
+  // persisted chat field; the system-prompt injection is identical.
+  const [capability, setCapability] = useState<BrainCapabilityId | null>(null);
+  const capabilityPrompt = getBrainCapability(capability)?.systemPrompt;
+
   const chats = useBrainChats({});
   const conv = useBrainConversation({
     chatId: chats.activeChatId,
     modality: 'llm',
+    extraSystem: capabilityPrompt,
     ensureChatId: async () => {
       const chat = await chats.create({ title: t('newChatTitle') });
       return chat?.id ?? null;
@@ -126,6 +136,16 @@ export function GuestBrainPanel({ variant, initialPrompt, onClose }: GuestBrainP
                 <div className="gb-empty-emoji">💡</div>
                 <div className="gb-empty-title">{t('emptyTitle')}</div>
                 <div className="gb-empty-body">{t('emptyBody')}</div>
+                <BrainCapabilityPicker
+                  surface="brainstorm"
+                  value={capability}
+                  onSelect={(id) => {
+                    setCapability(id);
+                    if (id) setInput((prev) => (prev.trim() ? prev : tBrainCaps(`${id}.starter`)));
+                  }}
+                  layout="tiles"
+                  disabled={capReached}
+                />
               </div>
             )}
             {conv.messages.filter((m) => !isStepMessage(m)).map((m) => (
@@ -182,7 +202,9 @@ export function GuestBrainPanel({ variant, initialPrompt, onClose }: GuestBrainP
         .gb-signup-link { font-size: 13px; font-weight: 600; color: var(--accent, #3b82f6); text-decoration: none; }
         .gb-close { background: transparent; border: none; color: var(--text-muted); font-size: 20px; line-height: 1; cursor: pointer; padding: 0 4px; }
         .gb-messages { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-        .gb-empty { margin: auto; text-align: center; max-width: 320px; display: flex; flex-direction: column; gap: 8px; color: var(--text-muted); }
+        /* Wide enough for the capability tiles to sit two-or-more across; the
+           tile grid is auto-fit so it collapses to one column on a phone. */
+        .gb-empty { margin: auto; text-align: center; max-width: 560px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--text-muted); }
         .gb-empty-emoji { font-size: 40px; }
         .gb-empty-title { font-size: 17px; font-weight: 600; color: var(--text-primary); }
         .gb-empty-body { font-size: 14px; line-height: 1.5; }

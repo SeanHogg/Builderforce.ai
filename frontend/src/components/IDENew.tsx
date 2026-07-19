@@ -1152,6 +1152,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
                 initialChatId={initialChatId}
                 initialPrompt={initialPrompt}
                 initialTicket={initialTicket}
+                capabilitySurface="ide"
               />
             </div>
           </div>

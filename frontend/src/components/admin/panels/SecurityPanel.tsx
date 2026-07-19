@@ -18,6 +18,7 @@ import {
   type AdminSecurityUser,
   type AdminSecurityDetails,
 } from '@/lib/adminApi';
+import { downloadText } from '@/lib/download';
 import { Select } from '@/components/Select';
 import { AdminError, errText, fmtDateTime } from '../adminShared';
 
@@ -328,12 +329,10 @@ export default function SecurityPanel() {
                           className="btn-ghost"
                           style={{ marginTop: 4 }}
                           onClick={() => {
-                            const blob = new Blob([securityRecoveryCodes.join('\n')], { type: 'text/plain' });
-                            const a = document.createElement('a');
-                            a.href = URL.createObjectURL(blob);
-                            a.download = `recovery-codes-${securityDetails.user.email}-${new Date().toISOString().slice(0, 10)}.txt`;
-                            a.click();
-                            URL.revokeObjectURL(a.href);
+                            downloadText(
+                              securityRecoveryCodes.join('\n'),
+                              `recovery-codes-${securityDetails.user.email}-${new Date().toISOString().slice(0, 10)}.txt`,
+                            );
                           }}
                         >
                           {t('security.downloadRecoveryCodes')}

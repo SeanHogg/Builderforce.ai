@@ -94,6 +94,8 @@ export interface ManagerRunSummary {
   flagged: number;
   /** Flagged tickets the manager actually acted on (Coordinator moved or dispatched). */
   remediated: number;
+  /** Flagged tickets left for the next pass because the per-pass cap was hit. */
+  remediationDeferred: number;
 }
 
 // ── config store ────────────────────────────────────────────────────────────
@@ -187,10 +189,22 @@ export async function recordManagerAction(
   }
 }
 
-/** The newest manager actions for a project (the activity feed). */
+export interface ManagerActionRow {
+  id: string; taskId: number | null; ticketKey: string | null; ticketTitle: string | null;
+  actionType: string; summary: string; detail: string | null; createdAt: Date;
+}
+
+/**
+ * The newest manager actions for a project (the activity feed).
+ *
+ * A 'flag' is a STATE ("this ticket is missing these checks"), not an event, so it
+ * is written only when the verdict actually changes (`verdictSignature`) — the feed
+ * carries one row per distinct verdict, not one per pass. Historical duplicates were
+ * collapsed by migration 0344, so this read needs no de-duplication.
+ */
 export async function listManagerActions(
   db: Db, tenantId: number, projectId: number, limit = 50,
-): Promise<Array<{ id: string; taskId: number | null; ticketKey: string | null; ticketTitle: string | null; actionType: string; summary: string; detail: string | null; createdAt: Date }>> {
+): Promise<ManagerActionRow[]> {
   return db
     .select({
       id: managerActions.id, taskId: managerActions.taskId, actionType: managerActions.actionType,
@@ -588,7 +602,7 @@ export async function runManagerForProject(
   const runTaskId = args.runTaskId ?? null;
   const summary: ManagerRunSummary = {
     projectId, skipped: false, scored: 0, ranked: 0, assigned: 0, prsConducted: 0, prsMerged: 0, dispatched: 0,
-    audited: 0, flagged: 0, remediated: 0,
+    audited: 0, flagged: 0, remediated: 0, remediationDeferred: 0,
   };
 
   const policy = await getEffectiveManagerPolicy(db, tenantId, projectId);
@@ -760,7 +774,11 @@ export async function runManagerForProject(
         summary.audited += 1;
         if (result.status !== 'flagged') continue;
         summary.flagged += 1;
-        if (!policy.autoAssign || summary.remediated >= MAX_REMEDIATIONS_PER_RUN) continue;
+        if (!policy.autoAssign) continue;
+        // Pacing is honest, not silent: a flagged ticket past the per-pass cap is
+        // COUNTED as deferred so the surface can say "N waiting for the next pass"
+        // instead of looking like the manager ignored it.
+        if (summary.remediated >= MAX_REMEDIATIONS_PER_RUN) { summary.remediationDeferred += 1; continue; }
 
         const outcome = await coordinateTicket(env, db, runtimeService, { tenantId, taskId: t.id });
         // Only journal a coordination that CHANGED something (rewound the lane or
@@ -783,6 +801,17 @@ export async function runManagerForProject(
           },
         });
       } catch { /* skip this ticket */ }
+    }
+    // Say so when the cap bit. One row per pass (not per deferred ticket) keeps the
+    // pacing visible without recreating the flood this whole change removed.
+    if (summary.remediationDeferred > 0) {
+      await recordManagerAction(db, {
+        tenantId, projectId, runTaskId, actionType: 'coordinate',
+        summary:
+          `Staffed ${summary.remediated} flagged ${summary.remediated === 1 ? 'ticket' : 'tickets'} this pass — ` +
+          `${summary.remediationDeferred} more queued for the next one (cap ${MAX_REMEDIATIONS_PER_RUN}/pass).`,
+        detail: { remediated: summary.remediated, deferred: summary.remediationDeferred, cap: MAX_REMEDIATIONS_PER_RUN },
+      });
     }
   }
 
@@ -819,11 +848,13 @@ export async function runManagerForProject(
         `assigned ${summary.assigned}, dispatched ${summary.dispatched}, ` +
         `PRs ${summary.prsConducted + summary.prsMerged}` +
         `${summary.flagged ? `, flagged ${summary.flagged}` : ''}` +
-        `${summary.remediated ? `, staffed ${summary.remediated}` : ''}.`,
+        `${summary.remediated ? `, staffed ${summary.remediated}` : ''}` +
+        `${summary.remediationDeferred ? ` (${summary.remediationDeferred} deferred)` : ''}.`,
       metadata: {
         scored: summary.scored, ranked: summary.ranked, assigned: summary.assigned,
         dispatched: summary.dispatched, prsConducted: summary.prsConducted,
-        prsMerged: summary.prsMerged, flagged: summary.flagged, remediated: summary.remediated,
+        prsMerged: summary.prsMerged, flagged: summary.flagged,
+        remediated: summary.remediated, remediationDeferred: summary.remediationDeferred,
         trigger: submittedBy, managerType: policy.managerType, coachingApplied: coachingDirectives.length,
       },
     });

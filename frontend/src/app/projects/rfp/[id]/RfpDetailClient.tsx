@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useRole, hasMinRole } from '@/lib/rbac';
+import { downloadText } from '@/lib/download';
 import {
   rfpApi, type RfpRequestRow, type RfpResponseRow, type RfpResponseBody, type RfpCostModel, type RfpPhase,
 } from '@/lib/builderforceApi';
@@ -326,13 +327,7 @@ function DependenciesSection({ body, t }: { body: RfpResponseBody; t: T }) {
 function DocumentSection({ docHtml, title, t }: { docHtml: string | null; title: string; t: T }) {
   const download = () => {
     if (!docHtml) return;
-    const blob = new Blob([docHtml], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${title.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'rfp'}-proposal.html`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadText(docHtml, `${title.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'rfp'}-proposal.html`, 'text/html');
   };
   if (!docHtml) return null;
   return (

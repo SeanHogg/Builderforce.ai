@@ -70,6 +70,7 @@ export default function DashboardPage() {
   const {
     show: showOnboarding,
     checked: onboardingChecked,
+    progress: onboardingProgress,
     complete: handleOnboardingComplete,
     dismiss: handleOnboardingDismiss,
   } = useOnboardingPrompt();
@@ -164,6 +165,7 @@ export default function DashboardPage() {
         tenantToken={tenantToken}
         tenant={tenant}
         existingProjectsCount={projects.length}
+        initialProgress={onboardingProgress}
         onWorkspaceCreated={handleOnboardingWorkspaceCreated}
         onComplete={handleOnboardingComplete}
         onDismiss={handleOnboardingDismiss}
@@ -185,6 +187,7 @@ export default function DashboardPage() {
           tenantToken={tenantToken}
           tenant={tenant}
           existingProjectsCount={projects.length}
+          initialProgress={onboardingProgress}
           onWorkspaceCreated={handleOnboardingWorkspaceCreated}
           onComplete={handleOnboardingComplete}
           onDismiss={handleOnboardingDismiss}

@@ -11,6 +11,7 @@ import {
   getStoredTenantToken,
   getStoredWebToken,
 } from './auth';
+import { downloadBlob, filenameFromResponse } from './download';
 import { planLimitErrorFromResponse } from './planLimitError';
 import { dispatchApiError } from './errors/apiErrorEvent';
 
@@ -325,25 +326,13 @@ export interface GenerateDeckResponse {
   downloadUrl: string;
 }
 
-/** Trigger a browser download of a Blob (the .pptx). */
-function saveBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
 export const decksApi = {
   /** List built-in + tenant deck templates. */
   listTemplates: (): Promise<DeckTemplateSummary[]> =>
     request<{ templates: DeckTemplateSummary[] }>('/api/decks/templates').then((r) => r.templates),
 
   /** Generate a deck (Brain path) — returns the id + warnings, no binary. */
-  generate: (args: { mode?: 'generative' | 'fill'; templateId?: string; quarter?: string; prompt?: string }): Promise<GenerateDeckResponse> =>
+  generate: (args: { mode?: 'generative' | 'fill'; templateId?: string; quarter?: string }): Promise<GenerateDeckResponse> =>
     request<GenerateDeckResponse>('/api/decks/generate', { method: 'POST', body: JSON.stringify(args) }),
 
   /** Promote an already-uploaded .pptx (brain upload key) into a tenant template. */
@@ -362,16 +351,14 @@ export const decksApi = {
     const res = await fetch(`${AUTH_API_URL}/api/decks/download?${q.toString()}`, { headers: authHeaders() });
     if (!res.ok) await throwApiError(res, 'GET', '/api/decks/download');
     const blob = await res.blob();
-    const cd = res.headers.get('content-disposition') ?? '';
-    const m = /filename="?([^"]+)"?/.exec(cd);
-    saveBlob(blob, m?.[1] ?? `deck-${args.quarter ?? 'latest'}.pptx`);
+    downloadBlob(blob, filenameFromResponse(res, `deck-${args.quarter ?? 'latest'}.pptx`));
   },
 
   /** Download a previously generated deck by id. */
   async downloadById(deckId: string, filename = 'deck.pptx'): Promise<void> {
     const res = await fetch(`${AUTH_API_URL}/api/decks/${encodeURIComponent(deckId)}/download`, { headers: authHeaders() });
     if (!res.ok) await throwApiError(res, 'GET', `/api/decks/${deckId}/download`);
-    saveBlob(await res.blob(), filename);
+    downloadBlob(await res.blob(), filename);
   },
 };
 
@@ -395,6 +382,9 @@ export interface BrainChat {
   projectId: number | null;
   /** Where the chat was created: 'brainstorm' | 'ide' | 'project'. Tells the page which tools to load. */
   origin?: string;
+  /** What the chat is making — a capability id (see lib/brain/capabilities.ts).
+   *  Shapes the system prompt and the export format; null = no capability. */
+  capability?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -421,7 +411,7 @@ export const brain = {
     return request<{ chats: BrainChat[] }>(`/api/brain/chats${query ? `?${query}` : ''}`).then((r) => r.chats);
   },
 
-  createChat: (body: { title?: string; projectId?: number | null }) =>
+  createChat: (body: { title?: string; projectId?: number | null; capability?: string | null }) =>
     request<BrainChat>('/api/brain/chats', { method: 'POST', body: JSON.stringify(body) }),
 
   /** Resolve-or-create the canonical TEAM chat for a scope: a project when
@@ -439,7 +429,7 @@ export const brain = {
 
   getChat: (id: number) => request<BrainChat>(`/api/brain/chats/${id}`),
 
-  updateChat: (id: number, body: { title?: string; projectId?: number | null; visibility?: 'shared' | 'locked' }) =>
+  updateChat: (id: number, body: { title?: string; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null }) =>
     request<BrainChat>(`/api/brain/chats/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
   deleteChat: (id: number) =>
@@ -1716,6 +1706,8 @@ export interface ManagerStats {
   unranked: number;
   unowned: number;
   openPullRequests: number;
+  /** Tickets whose required role/reviewer coverage is unmet (the manager staffs these). */
+  flagged: number;
   lastRunAt: string | null;
 }
 
@@ -2485,14 +2477,7 @@ export const empMetricsApi = {
     });
     if (!res.ok) throw new Error(`Export failed (${res.status})`);
     const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `member-metrics-${days}d-${new Date().toISOString().slice(0, 10)}.${format}`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `member-metrics-${days}d-${new Date().toISOString().slice(0, 10)}.${format}`);
   },
 };
 
@@ -3279,14 +3264,17 @@ export interface ModelAnalyticsResponse {
   byAction: ModelAnalyticsAction[];
 }
 
-/** Card-validation state — the gate on PREMIUM (any-paid-OpenRouter) model selection. */
+/** Card-validation state — the gate on PREMIUM (any-paid-OpenRouter) model selection.
+ *  Mirrors exactly what `GET /api/tenants/:id/card-validation` returns; a field the
+ *  route doesn't send has no business being declared here (a non-optional
+ *  `paymentProvider: string` used to be, so any reader would have got `undefined`
+ *  from a type that promised a string). */
 export interface CardValidationState {
   status: CardValidationStatus;
   validated: boolean;
   validatedAt: string | null;
   brand: string | null;
   last4: string | null;
-  paymentProvider: string;
 }
 
 /**

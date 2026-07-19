@@ -11,6 +11,7 @@ import PageContainer from '@/components/PageContainer';
 import RelatedArticles from '@/components/blog/RelatedArticles';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { PremiumModelUnlock } from '@/components/llm/PremiumModelUnlock';
+import { CardOnFile } from '@/components/llm/CardOnFile';
 import { pricingSchema } from '@/lib/structured-data';
 
 type Plan = 'free' | 'pro' | 'teams';
@@ -364,6 +365,12 @@ export default function PricingPageClient() {
               every non-model surface deep-link away from. Self-gating: renders
               nothing for an already-entitled tenant. */}
           <PremiumModelUnlock />
+
+          {/* The after state: the card premium access actually rides on, and the
+              only way to replace it. PremiumModelUnlock covers "no card yet"; this
+              covers pending / validated / failed. Both self-gate, so exactly one
+              renders for any given card status. */}
+          <CardOnFile />
           </>
           )}
 

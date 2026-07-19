@@ -51,6 +51,32 @@ function parsePsychometric(raw: string | null | undefined): unknown {
   try { return JSON.parse(raw) as unknown; } catch { return null; }
 }
 
+/** Resumable setup-wizard progress, recorded by STEP ID (see migration 0343). */
+export interface OnboardingProgress {
+  track: 'builder' | 'hired';
+  completed: string[];
+  activeStep: string | null;
+}
+
+const ONBOARDING_TRACKS = ['builder', 'hired'] as const;
+
+/** Parse + validate stored progress; anything malformed degrades to null so a bad
+ *  row can never break the wizard (it just restarts at step 1). */
+export function parseOnboardingProgress(raw: string | null | undefined): OnboardingProgress | null {
+  if (!raw) return null;
+  try {
+    const v = JSON.parse(raw) as Partial<OnboardingProgress>;
+    if (!ONBOARDING_TRACKS.includes(v.track as (typeof ONBOARDING_TRACKS)[number])) return null;
+    return {
+      track: v.track as OnboardingProgress['track'],
+      completed: Array.isArray(v.completed) ? v.completed.filter((s): s is string => typeof s === 'string').slice(0, 32) : [],
+      activeStep: typeof v.activeStep === 'string' ? v.activeStep : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 type TokenPayload = {
   sub: string;
   jti?: string;
@@ -1004,7 +1030,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     const user = await authService.getMe(userId);
     if (!user) return c.json({ error: 'User not found' }, 404);
     const [full] = await db
-      .select({ mfaEnabled: users.mfaEnabled, onboardingCompletedAt: users.onboardingCompletedAt, psychometric: users.psychometric, accountType: users.accountType, accountTypeSelectedAt: users.accountTypeSelectedAt, availableForHire: users.availableForHire })
+      .select({ mfaEnabled: users.mfaEnabled, onboardingCompletedAt: users.onboardingCompletedAt, onboardingProgress: users.onboardingProgress, psychometric: users.psychometric, accountType: users.accountType, accountTypeSelectedAt: users.accountTypeSelectedAt, availableForHire: users.availableForHire })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
@@ -1013,6 +1039,9 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         ...user,
         mfaEnabled: full?.mfaEnabled ?? false,
         onboardingCompletedAt: full?.onboardingCompletedAt ?? null,
+        // Which setup steps are already done — lets the wizard resume instead of
+        // restarting at step 1 (0343).
+        onboardingProgress: parseOnboardingProgress(full?.onboardingProgress),
         psychometric: parsePsychometric(full?.psychometric),
         // Account type + whether the user has explicitly chosen it (Build vs
         // Hired). The onboarding gate forces the choice when not yet selected.
@@ -1097,6 +1126,21 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       await Promise.all(memberships.map((m) => invalidateCached(c.env, assigneeProfilesCacheKey(m.tenantId))));
     }
     return c.json({ user: toUserResponse(row) });
+  });
+
+  // PUT /api/auth/me/onboarding/progress — records which setup steps are done, so
+  // a user who closes the wizard mid-way resumes where they left off (0343).
+  // Idempotent full-state write; validated so a malformed body can't poison the row.
+  router.put('/me/onboarding/progress', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as UserId;
+    const body = await c.req.json<Partial<OnboardingProgress>>().catch(() => ({} as Partial<OnboardingProgress>));
+    const progress = parseOnboardingProgress(JSON.stringify(body));
+    if (!progress) return c.json({ error: 'Invalid onboarding progress' }, 400);
+    await db
+      .update(users)
+      .set({ onboardingProgress: JSON.stringify(progress), updatedAt: sql`now()` })
+      .where(eq(users.id, userId));
+    return c.json({ progress });
   });
 
   // POST /api/auth/me/onboarding/complete — marks onboarding as done, stores intent

@@ -74,6 +74,9 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
         unscored: sql<number>`count(*) filter (where ${tasks.businessValue} is null)::int`,
         unranked: sql<number>`count(*) filter (where ${tasks.managerRank} is null)::int`,
         unowned: sql<number>`count(*) filter (where ${tasks.assignedUserId} is null and ${tasks.assignedAgentRef} is null and ${tasks.assignedAgentHostId} is null)::int`,
+        // Role/diagnostic coverage, read off the denormalised verdict on the task —
+        // free here (same aggregate) rather than a second pass over ticket_audits.
+        flagged: sql<number>`count(*) filter (where ${tasks.auditStatus} = 'flagged')::int`,
       })
       .from(tasks)
       .where(and(eq(tasks.projectId, projectId), eq(tasks.archived, false), inArray(tasks.status, NON_TERMINAL), notSystemTask));
@@ -143,6 +146,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
         unranked: counts?.unranked ?? 0,
         unowned: counts?.unowned ?? 0,
         openPullRequests: prCount?.open ?? 0,
+        flagged: counts?.flagged ?? 0,
         lastRunAt: config?.lastRunAt ?? null,
       },
       backlog,
@@ -236,7 +240,7 @@ export function createManagerRoutes(db: Db, runtimeService: RuntimeService): Hon
           ok,
           summary: summary ?? {
             projectId, skipped: !ok, scored: 0, ranked: 0, assigned: 0,
-            prsConducted: 0, prsMerged: 0, dispatched: 0, audited: 0, flagged: 0, remediated: 0,
+            prsConducted: 0, prsMerged: 0, dispatched: 0, audited: 0, flagged: 0, remediated: 0, remediationDeferred: 0,
           },
         });
       }

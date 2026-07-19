@@ -5715,6 +5715,74 @@
     "brainTitle": "Brain",
     "emptyHint": "Démarrez une nouvelle discussion ou choisissez-en une pour commencer.",
     "startNewChat": "Démarrer une nouvelle discussion",
+    "capabilities": {
+      "makingLabel": "Création",
+      "pickerAria": "Que voulez-vous créer ?",
+      "none": "Peu importe",
+      "tilesHintBrainstorm": "…ou partez de ce que vous voulez créer",
+      "tilesHintIde": "…ou partez de ce que vous voulez construire",
+      "document": {
+        "label": "Document",
+        "hint": "Rédigez un document structuré avec titres, sections et tableaux.",
+        "starter": "Rédige un document sur "
+      },
+      "slides": {
+        "label": "Diapositives",
+        "hint": "Composez une présentation, une diapositive par section.",
+        "starter": "Crée une présentation sur "
+      },
+      "dataviz": {
+        "label": "Visualisation de données",
+        "hint": "Transformez les données en graphiques intégrés, chiffres à l'appui.",
+        "starter": "Visualise "
+      },
+      "spreadsheet": {
+        "label": "Tableur",
+        "hint": "Modélisez les chiffres dans un tableau avec formules et totaux.",
+        "starter": "Crée un tableur qui "
+      },
+      "website": {
+        "label": "Site web",
+        "hint": "Construisez une application ou un site sous forme de vrais fichiers.",
+        "starter": "Construis un site web qui "
+      },
+      "design": {
+        "label": "Design",
+        "hint": "Concevez l'interface : mise en page, espacements, typographie et thème.",
+        "starter": "Conçois l'interface de "
+      },
+      "mobile": {
+        "label": "Mobile",
+        "hint": "Construisez une application pensée mobile d'abord, navigation native.",
+        "starter": "Construis une application mobile qui "
+      },
+      "animation": {
+        "label": "Animation",
+        "hint": "Ajoutez du mouvement utile, avec durées et courbes explicites.",
+        "starter": "Anime "
+      },
+      "game3d": {
+        "label": "Jeu 3D",
+        "hint": "Construisez un jeu 3D : scène, caméra, contrôles et boucle de jeu.",
+        "starter": "Construis un jeu 3D où "
+      },
+      "export": {
+        "docx": "Télécharger Word",
+        "pptx": "Télécharger PowerPoint",
+        "csv": "Télécharger CSV",
+        "working": "Préparation…",
+        "failed": "Échec de l'export",
+        "untitled": "Sans titre"
+      }
+    },
+    "messageActions": {
+      "copy": "Copier",
+      "copied": "Copié !",
+      "goodResponse": "Bonne réponse",
+      "badResponse": "Mauvaise réponse",
+      "thumbsUp": "J'aime",
+      "thumbsDown": "Je n'aime pas"
+    },
     "newProjectPlaceholder": "Nom du nouveau projet",
     "createAndAssign": "Créer et attribuer",
     "actingAs": "En tant que",
@@ -5743,7 +5811,17 @@
     "openInIde": "Ouvrir dans l'IDE →",
     "brainModality": "Brain — {modality}",
     "brainAs": "Brain en tant que {name}",
-    "chatHistory": "Historique des discussions"
+    "chatHistory": "Historique des discussions",
+    "upgrade": "Mettre à niveau",
+    "upgradeToPlan": "Passer à {plan}",
+    "addCard": "Ajouter une carte",
+    "cardValidationFailed": "Échec de la validation de la carte."
+  },
+  "chatMessage": {
+    "copy": "Copier",
+    "apply": "Appliquer →",
+    "createFile": "Créer le fichier",
+    "downloadAs": "Télécharger {ext}"
   },
   "modelExport": {
     "subtitle": "Exportez un modèle publié vers un artefact portable — un dépôt Hugging Face, ONNX, safetensors ou GGUF — et téléchargez-le. Le modèle est produit sur le serveur ; aucun jeton n’est nécessaire.",
@@ -6180,7 +6258,8 @@
       "unscored": "À évaluer",
       "unranked": "Non classés",
       "unowned": "Sans responsable",
-      "openPullRequests": "PR ouvertes"
+      "openPullRequests": "PR ouvertes",
+      "flagged": "Lacunes de couverture"
     },
     "chart": {
       "title": "Backlog par priorité",
@@ -6195,6 +6274,7 @@
       "policy": "Politique"
     },
     "insightNudge": "{unscored} tickets ont encore besoin d’une valeur métier et {unranked} ne sont pas classés — lancez le manager pour les mettre à jour.",
+    "coverageNudge": "{flagged} tickets n’ont pas de rôle ou de relecteur obligatoire — le manager les affectera automatiquement lors de son prochain passage.",
     "policy": {
       "title": "Comment ce backlog est géré",
       "subtitle": "Décidez qui gère le backlog et ce qui est fait automatiquement. Vous pouvez changer cela à tout moment.",
@@ -9746,5 +9826,34 @@
       "third_party": "Tierce partie"
     },
     "downloadDoc": "Télécharger"
+  },
+  "planBadge": {
+    "tier": {
+      "free": "Free",
+      "pro": "Pro",
+      "teams": "Teams"
+    },
+    "freeHint": "Vous êtes sur le forfait Free — les conversations utilisent les modèles BuilderForce inclus. Cliquez pour voir les forfaits et passer à la version supérieure.",
+    "paidHint": "Votre espace de travail utilise le forfait {plan}. Cliquez pour gérer votre forfait.",
+    "tokensLeft": "{count} jetons restants",
+    "noTokens": "plus de jetons",
+    "upgrade": "Mettre à niveau"
+  },
+  "billing": {
+    "cardOnFileTitle": "Carte enregistrée",
+    "cardOnFileHint": "L'accès aux modèles premium est vérifié avec cette carte. La remplacer lance une nouvelle vérification à 0 $.",
+    "cardPendingHint": "Nous attendons la confirmation de votre banque. Les modèles premium seront débloqués dès validation.",
+    "cardNoDetails": "Détails de la carte indisponibles",
+    "cardStatusValidated": "Vérifiée",
+    "cardStatusPending": "Vérification…",
+    "cardStatusFailed": "Échec de la vérification",
+    "replaceCard": "Remplacer la carte",
+    "retryCard": "Réessayer",
+    "cardWorking": "En cours…",
+    "replaceCardTitle": "Remplacer votre carte ?",
+    "replaceCardWarning": "Les modèles premium sont suspendus pendant la vérification de la nouvelle carte. Votre forfait et le reste continuent de fonctionner.",
+    "retryCardMessage": "Nous allons lancer une nouvelle vérification à 0 $. Votre carte n'est pas débitée.",
+    "replaceCardConfirm": "Continuer",
+    "cardValidationFailed": "Impossible de lancer la vérification de la carte. Veuillez réessayer."
   }
 }

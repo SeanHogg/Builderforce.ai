@@ -1,0 +1,14 @@
+-- Brain chat capability — "what is this chat making?" (document / slides /
+-- dataviz / spreadsheet on Brain Storm; website / design / mobile / animation /
+-- 3D game in the IDE). Picked from the Brain's empty-state tiles or the composer
+-- toolbar; folded into the chat's system prompt so the model shapes its output as
+-- that artifact, and read by the export actions to pick a file format.
+--
+-- Was client-only (localStorage) when the picker shipped, which meant the choice
+-- followed the browser rather than the chat — the same chat in the VS Code webview
+-- or on another device lost it. This makes it a property of the chat.
+--
+-- Free-form varchar on purpose: the capability catalogue is a client-side UI
+-- registry (frontend/src/lib/brain/capabilities.ts) and an unknown id resolves to
+-- "no capability" on read, so the server does not need a second copy to drift.
+ALTER TABLE brain_chats ADD COLUMN IF NOT EXISTS capability VARCHAR(64);

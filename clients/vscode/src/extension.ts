@@ -972,11 +972,26 @@ function byoProviderLabel(vendor: string): string {
 
 async function pickModel(context: vscode.ExtensionContext): Promise<void> {
   try {
-    const { models, canUsePremiumModels, premiumModels, canChooseModel, byo } = await getModels(
-      context.secrets,
-      true,
-    );
+    const { models, canUsePremiumModels, premiumModels, canChooseModel, byo, premiumInfo } =
+      await getModels(context.secrets, true);
     const auto = "(auto — let the gateway choose)";
+
+    // When premium is locked, the gateway tells us WHY and which step opens it.
+    // Same unlock vocabulary the chat error banner uses, so the picker and a failed
+    // turn name the same remedy.
+    const premiumUnlock = canUsePremiumModels
+      ? null
+      : premiumInfo?.unlock === "validate_card"
+        ? {
+            label: "$(credit-card) Add a card to unlock premium models",
+            detail: "Your plan allows premium; it needs a validated card on file",
+          }
+        : premiumInfo?.unlock === "upgrade"
+          ? {
+              label: "$(rocket) Upgrade to unlock premium models",
+              detail: "Any paid OpenRouter model, at cost + 1¢/request",
+            }
+          : null;
 
     // Model choice is a gated entitlement (frontier access: paid plan, superadmin,
     // premium override, or a connected BYO account). Without it the gateway rejects a
@@ -1035,6 +1050,15 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
         { label: "Premium — any OpenRouter model (cost + 1¢/request)", kind: vscode.QuickPickItemKind.Separator },
         ...premiumModels.map((m) => ({ label: m, description: "premium · metered at cost + 1¢/request" })),
       );
+    } else if (premiumUnlock) {
+      // Premium is off — SAY SO, and name the step that turns it on. Silently
+      // omitting the group made the picker look like it was missing models the web
+      // app plainly offers. Picking this row opens the page that unlocks it rather
+      // than pinning anything.
+      items.push(
+        { label: "Premium — any OpenRouter model", kind: vscode.QuickPickItemKind.Separator },
+        { label: premiumUnlock.label, description: premiumUnlock.detail },
+      );
     }
 
     const pick = await vscode.window.showQuickPick(items, {
@@ -1046,6 +1070,16 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
       matchOnDetail: true,
     });
     if (pick === undefined) return;
+    // The unlock row is a call to action, not a model — send them to the page that
+    // grants the entitlement and leave the current pin untouched.
+    if (premiumUnlock && pick.label === premiumUnlock.label) {
+      void vscode.env.openExternal(
+        vscode.Uri.parse(
+          `${getWebBaseUrl()}${premiumInfo?.unlock === "upgrade" ? "/pricing?upgrade=pro" : "/pricing"}`,
+        ),
+      );
+      return;
+    }
     setSelectedModel(pick.label === auto ? undefined : pick.label);
   } catch (e) {
     const message = (e as { message?: string }).message ?? String(e);

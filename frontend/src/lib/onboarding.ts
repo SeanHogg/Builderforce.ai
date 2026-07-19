@@ -15,7 +15,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
-import { AUTH_API_URL, checkUnauthorizedAndRedirect, getMe, getMyTenants } from './auth';
+import { AUTH_API_URL, checkUnauthorizedAndRedirect, getMe, getMyTenants, type OnboardingProgress } from './auth';
 
 export interface ActiveTermsDoc {
   documentType: 'terms';
@@ -46,6 +46,9 @@ export interface OnboardingPrompt {
   show: boolean;
   /** False while the decision is still resolving (callers may hold rendering). */
   checked: boolean;
+  /** Persisted step progress from the same `getMe` call — pass it to the stepper
+   *  so it resumes where the user left off without a second round-trip. */
+  progress: OnboardingProgress | null;
   /** Wizard finished — hide it for this session. */
   complete: () => void;
   /** Wizard dismissed — hide it and remember the dismissal. */
@@ -63,6 +66,7 @@ export function useOnboardingPrompt(): OnboardingPrompt {
   const { isAuthenticated, webToken, hasTenant, tenant } = useAuth();
   const [show, setShow] = useState(false);
   const [checked, setChecked] = useState(false);
+  const [progress, setProgress] = useState<OnboardingProgress | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated || !webToken || checked) return;
@@ -80,7 +84,10 @@ export function useOnboardingPrompt(): OnboardingPrompt {
     }
 
     getMe(webToken)
-      .then(({ onboardingCompletedAt }) => { if (!onboardingCompletedAt) setShow(true); })
+      .then(({ onboardingCompletedAt, onboardingProgress }) => {
+        setProgress(onboardingProgress);
+        if (!onboardingCompletedAt) setShow(true);
+      })
       .catch(() => { /* a failed check must never block the user */ })
       .finally(() => setChecked(true));
   }, [isAuthenticated, webToken, checked, hasTenant, tenant]);
@@ -92,7 +99,7 @@ export function useOnboardingPrompt(): OnboardingPrompt {
     setShow(false);
   }, []);
 
-  return { show, checked, complete, dismiss };
+  return { show, checked, progress, complete, dismiss };
 }
 
 export interface OnboardingState {

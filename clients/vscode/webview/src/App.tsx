@@ -33,14 +33,13 @@ import {
 import { authedFetch } from './authedFetch';
 import {
   BrainTimeline, ChatTicketsPanel, DEFAULT_CHAT_TICKETS_LABELS, Avatar, useChatParticipants,
-  useMentionAutocomplete,
+  useMentionAutocomplete, ChatErrorBanner,
   PendingQuestionBanner, selectPendingAskUser, askUserAnchorId,
   type BrainTimelineLabels,
 } from '@seanhogg/builderforce-brain-ui';
 import { createChatTicketsAdapter } from './chatTicketsAdapter';
 import { EvermindStatusBadge } from './EvermindStatusBadge';
-import { PlanBadge, fetchPlanSnapshot } from './accountPlan';
-import { ChatErrorBanner } from './ChatErrorBanner';
+import { PlanBadge, fetchPlanSnapshot, invalidatePlanSnapshot, openUpgrade } from './accountPlan';
 import {
   getToken,
   getEditorContext,
@@ -1563,11 +1562,20 @@ function Chat({ init }: { init: InitData }) {
       )}
 
       <ChatErrorBanner
+        className="bf-error"
         error={conv.error}
         action={conv.errorAction}
         onReconnect={reconnect}
+        onUpgrade={() => { invalidatePlanSnapshot(); openUpgrade('pricing'); }}
+        onValidateCard={() => { invalidatePlanSnapshot(); openUpgrade('billing'); }}
         onDismiss={conv.clearError}
-        t={t}
+        labels={{
+          reconnect: t('app.reconnect', 'Reconnect'),
+          upgrade: t('app.upgrade', 'Upgrade'),
+          upgradeToPlan: t('app.upgradeToPlan', 'Upgrade to {plan}'),
+          addCard: t('app.addCard', 'Add a card'),
+          dismiss: t('app.dismiss', 'Dismiss'),
+        }}
       />
 
       {conv.pendingConfirm && (

@@ -78,10 +78,10 @@ export function createDeckRoutes(db: Db): Hono<HonoEnv> {
   router.post('/generate', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = (c.get('userId') as string | undefined) ?? null;
-    const body = await c.req.json<{ mode?: string; templateId?: string; quarter?: string; prompt?: string }>();
+    const body = await c.req.json<{ mode?: string; templateId?: string; quarter?: string }>();
     const mode: DeckMode = body.mode === 'fill' ? 'fill' : 'generative';
     try {
-      const result = await generateDeck(db, c.env as Env, { tenantId, userId, mode, templateId: body.templateId, quarter: body.quarter, prompt: body.prompt });
+      const result = await generateDeck(db, c.env as Env, { tenantId, userId, mode, templateId: body.templateId, quarter: body.quarter });
       return c.json({ deckId: result.deckId, filename: result.filename, warnings: result.warnings, downloadUrl: `/api/decks/${result.deckId}/download` }, 201);
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : 'generation failed' }, 400);

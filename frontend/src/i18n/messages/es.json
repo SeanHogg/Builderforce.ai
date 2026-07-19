@@ -5715,6 +5715,74 @@
     "brainTitle": "Brain",
     "emptyHint": "Inicia un nuevo chat o elige uno para empezar.",
     "startNewChat": "Iniciar nuevo chat",
+    "capabilities": {
+      "makingLabel": "Creando",
+      "pickerAria": "¿Qué quieres crear?",
+      "none": "Cualquier cosa",
+      "tilesHintBrainstorm": "…o empieza por lo que quieres crear",
+      "tilesHintIde": "…o empieza por lo que quieres construir",
+      "document": {
+        "label": "Documento",
+        "hint": "Redacta un documento estructurado con títulos, secciones y tablas.",
+        "starter": "Escribe un documento sobre "
+      },
+      "slides": {
+        "label": "Diapositivas",
+        "hint": "Crea una presentación, una diapositiva por sección.",
+        "starter": "Crea una presentación sobre "
+      },
+      "dataviz": {
+        "label": "Visualización de datos",
+        "hint": "Convierte los datos en gráficos en línea con las cifras debajo.",
+        "starter": "Visualiza "
+      },
+      "spreadsheet": {
+        "label": "Hoja de cálculo",
+        "hint": "Modela los números en una tabla con fórmulas y totales.",
+        "starter": "Crea una hoja de cálculo que "
+      },
+      "website": {
+        "label": "Sitio web",
+        "hint": "Crea una app o sitio web como archivos reales listos para crear.",
+        "starter": "Crea un sitio web que "
+      },
+      "design": {
+        "label": "Diseño",
+        "hint": "Diseña la interfaz: maquetación, espaciado, tipografía y tokens de tema.",
+        "starter": "Diseña la interfaz de "
+      },
+      "mobile": {
+        "label": "Móvil",
+        "hint": "Crea una app pensada primero para el móvil, con navegación nativa.",
+        "starter": "Crea una app móvil que "
+      },
+      "animation": {
+        "label": "Animación",
+        "hint": "Añade movimiento con propósito, con duración y curvas explícitas.",
+        "starter": "Anima "
+      },
+      "game3d": {
+        "label": "Juego 3D",
+        "hint": "Crea un juego 3D: escena, cámara, controles y bucle de juego.",
+        "starter": "Crea un juego 3D en el que "
+      },
+      "export": {
+        "docx": "Descargar Word",
+        "pptx": "Descargar PowerPoint",
+        "csv": "Descargar CSV",
+        "working": "Preparando…",
+        "failed": "Error al exportar",
+        "untitled": "Sin título"
+      }
+    },
+    "messageActions": {
+      "copy": "Copiar",
+      "copied": "¡Copiado!",
+      "goodResponse": "Buena respuesta",
+      "badResponse": "Mala respuesta",
+      "thumbsUp": "Me gusta",
+      "thumbsDown": "No me gusta"
+    },
     "newProjectPlaceholder": "Nombre del nuevo proyecto",
     "createAndAssign": "Crear y asignar",
     "actingAs": "Actuando como",
@@ -5743,7 +5811,17 @@
     "openInIde": "Abrir en el IDE →",
     "brainModality": "Brain — {modality}",
     "brainAs": "Brain como {name}",
-    "chatHistory": "Historial de chats"
+    "chatHistory": "Historial de chats",
+    "upgrade": "Mejorar plan",
+    "upgradeToPlan": "Mejorar a {plan}",
+    "addCard": "Añadir una tarjeta",
+    "cardValidationFailed": "No se pudo validar la tarjeta."
+  },
+  "chatMessage": {
+    "copy": "Copiar",
+    "apply": "Aplicar →",
+    "createFile": "Crear archivo",
+    "downloadAs": "Descargar {ext}"
   },
   "modelExport": {
     "subtitle": "Exporta un modelo publicado a un artefacto portátil —un repositorio de Hugging Face, ONNX, safetensors o GGUF— y descárgalo. El modelo se genera en el servidor; no se necesita ningún token.",
@@ -6180,7 +6258,8 @@
       "unscored": "Sin valorar",
       "unranked": "Sin ordenar",
       "unowned": "Sin responsable",
-      "openPullRequests": "PR abiertos"
+      "openPullRequests": "PR abiertos",
+      "flagged": "Brechas de cobertura"
     },
     "chart": {
       "title": "Backlog por prioridad",
@@ -6195,6 +6274,7 @@
       "policy": "Política"
     },
     "insightNudge": "{unscored} tickets aún necesitan un valor de negocio y {unranked} sin ordenar: ejecuta el manager para ponerlos al día.",
+    "coverageNudge": "{flagged} tickets carecen de un rol o revisor obligatorio: el manager los asignará automáticamente en su próxima pasada.",
     "policy": {
       "title": "Cómo se gestiona este backlog",
       "subtitle": "Decide quién gestiona el backlog y cuánto hace automáticamente. Puedes cambiarlo cuando quieras.",
@@ -9746,5 +9826,34 @@
       "third_party": "Terceros"
     },
     "downloadDoc": "Descargar"
+  },
+  "planBadge": {
+    "tier": {
+      "free": "Free",
+      "pro": "Pro",
+      "teams": "Teams"
+    },
+    "freeHint": "Estás en el plan Free: los chats usan los modelos de BuilderForce incluidos. Haz clic para ver los planes y mejorarlo.",
+    "paidHint": "Tu espacio de trabajo está en el plan {plan}. Haz clic para gestionar tu plan.",
+    "tokensLeft": "Quedan {count} tokens",
+    "noTokens": "sin tokens disponibles",
+    "upgrade": "Mejorar plan"
+  },
+  "billing": {
+    "cardOnFileTitle": "Tarjeta registrada",
+    "cardOnFileHint": "El acceso a los modelos premium se verifica con esta tarjeta. Reemplazarla inicia una nueva verificación de 0 $.",
+    "cardPendingHint": "Estamos esperando que tu banco confirme esta tarjeta. Los modelos premium se activarán en cuanto se apruebe.",
+    "cardNoDetails": "Datos de la tarjeta no disponibles",
+    "cardStatusValidated": "Verificada",
+    "cardStatusPending": "Verificando…",
+    "cardStatusFailed": "Error de verificación",
+    "replaceCard": "Reemplazar tarjeta",
+    "retryCard": "Reintentar",
+    "cardWorking": "Procesando…",
+    "replaceCardTitle": "¿Reemplazar tu tarjeta?",
+    "replaceCardWarning": "Los modelos premium se pausarán mientras se verifica la nueva tarjeta. Tu plan y todo lo demás seguirán funcionando.",
+    "retryCardMessage": "Iniciaremos una nueva verificación de 0 $. No se cobrará nada a tu tarjeta.",
+    "replaceCardConfirm": "Continuar",
+    "cardValidationFailed": "No pudimos iniciar la verificación de la tarjeta. Inténtalo de nuevo."
   }
 }

@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Tenant } from '@/lib/types';
-import { createTenant, completeOnboarding } from '@/lib/auth';
+import { createTenant, completeOnboarding, saveOnboardingProgress, type OnboardingProgress } from '@/lib/auth';
 import { createProject } from '@/lib/api';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { InstallBuilderForceAgents } from './InstallBuilderForceAgents';
@@ -29,6 +29,9 @@ interface OnboardingStepperProps {
   tenantToken?: string | null;
   tenant?: Tenant | null;
   existingProjectsCount?: number;
+  /** Persisted step progress (from `useOnboardingPrompt`) — resumes the wizard
+   *  where the user left off. Ignored when it belongs to the other track. */
+  initialProgress?: OnboardingProgress | null;
   /** Builder track only — a hired account never creates a workspace. */
   onWorkspaceCreated?: (tenant: Tenant) => Promise<void>;
   onComplete: () => void;
@@ -70,6 +73,7 @@ export function OnboardingStepper({
   tenantToken = null,
   tenant = null,
   existingProjectsCount = 0,
+  initialProgress = null,
   onWorkspaceCreated,
   onComplete,
   onDismiss,
@@ -83,16 +87,31 @@ export function OnboardingStepper({
   const isHired = useIsFreelancer();
   const stepIds = stepsForAccountType(isHired);
   const workspaceAlreadyExists = !!tenant;
-  const projectAlreadyExists = workspaceAlreadyExists && existingProjectsCount > 0;
+  // The project count falls back to the globally-scoped list (already loaded by
+  // ProjectScopeProvider — no extra fetch) so a caller that doesn't pass it still
+  // gets the right "you already have projects" state.
+  const projectCount = existingProjectsCount || (projectScope?.projects.length ?? 0);
+  const projectAlreadyExists = workspaceAlreadyExists && projectCount > 0;
 
-  const initialCompleted = new Set<number>();
-  if (!isHired && workspaceAlreadyExists) initialCompleted.add(0);
-  if (!isHired && projectAlreadyExists) initialCompleted.add(1);
+  // Completion is tracked by STEP ID, not index — ids are stable across the two
+  // tracks and any reordering, which is also what gets persisted (migration 0343).
+  const track: OnboardingProgress['track'] = isHired ? 'hired' : 'builder';
+  const resumable = initialProgress?.track === track ? initialProgress : null;
 
-  const initialActiveStep = isHired ? 0 : projectAlreadyExists ? 2 : workspaceAlreadyExists ? 1 : 0;
+  const initialCompleted = new Set<StepId>(
+    (resumable?.completed ?? []).filter((id): id is StepId => (stepIds as string[]).includes(id)),
+  );
+  if (!isHired && workspaceAlreadyExists) initialCompleted.add('workspace');
+  if (!isHired && projectAlreadyExists) initialCompleted.add('project');
+
+  // Resume where the user left off; otherwise skip past whatever already exists.
+  const resumedIndex = resumable?.activeStep ? stepIds.indexOf(resumable.activeStep as StepId) : -1;
+  const initialActiveStep =
+    resumedIndex >= 0 ? resumedIndex : isHired ? 0 : projectAlreadyExists ? 2 : workspaceAlreadyExists ? 1 : 0;
 
   const [activeStep, setActiveStep] = useState<number>(initialActiveStep);
-  const [completedSteps, setCompletedSteps] = useState<Set<number>>(initialCompleted);
+  const [completedSteps, setCompletedSteps] = useState<Set<StepId>>(initialCompleted);
+  const currentStepId = stepIds[activeStep];
 
   // Step 1 – Workspace
   const [workspaceName, setWorkspaceName] = useState('');
@@ -111,13 +130,32 @@ export function OnboardingStepper({
   // Current workspace (may be passed in or created during step 1)
   const [currentTenant, setCurrentTenant] = useState<Tenant | null>(tenant);
 
-  const markComplete = (stepIndex: number) => {
-    setCompletedSteps((prev) => new Set([...prev, stepIndex]));
+  // Record progress server-side on every step transition so closing the wizard
+  // mid-way resumes here instead of restarting at step 1. Fire-and-forget: the
+  // helper swallows failures, which only ever cost the resume position.
+  const persistProgress = useCallback(
+    (completed: Set<StepId>, active: StepId | undefined) => {
+      void saveOnboardingProgress(webToken, {
+        track,
+        completed: [...completed],
+        activeStep: active ?? null,
+      });
+    },
+    [webToken, track],
+  );
+
+  const markComplete = (stepId: StepId | undefined, nextActive?: StepId) => {
+    if (!stepId) return;
+    // Compute the next set OUTSIDE the state updater — updaters must stay pure
+    // (React can call them twice in StrictMode, which would double the PUT).
+    const next = new Set([...completedSteps, stepId]);
+    setCompletedSteps(next);
+    persistProgress(next, nextActive ?? stepId);
   };
 
   // A builder must create a workspace before escaping the wizard; a hired
   // account has nothing mandatory, so it can close at any point.
-  const canClose = isHired || completedSteps.has(0) || workspaceAlreadyExists;
+  const canClose = isHired || completedSteps.has('workspace') || workspaceAlreadyExists;
 
   // ── Step 1: Create Workspace ─────────────────────────────────────────────
 
@@ -131,7 +169,7 @@ export function OnboardingStepper({
         const newTenant = await createTenant(webToken, workspaceName.trim());
         await onWorkspaceCreated?.(newTenant);
         setCurrentTenant(newTenant);
-        markComplete(0);
+        markComplete('workspace', 'project');
         setActiveStep(1);
       } catch (err) {
         setWorkspaceError(err instanceof Error ? err.message : t('workspaceCreateFailed'));
@@ -157,7 +195,7 @@ export function OnboardingStepper({
         // Make the brand-new project the active global scope, so the user lands
         // in it when the wizard closes instead of the all-projects view.
         if (created?.id) projectScope?.adoptProject(created);
-        markComplete(1);
+        markComplete('project');
       } catch (err) {
         setProjectError(err instanceof Error ? err.message : t('projectCreateFailed'));
       } finally {
@@ -176,14 +214,14 @@ export function OnboardingStepper({
   // ── Step navigation ──────────────────────────────────────────────────────
 
   const handleNext = () => {
-    markComplete(activeStep);
+    markComplete(currentStepId, stepIds[activeStep + 1] ?? currentStepId);
     if (activeStep < stepIds.length - 1) {
       setActiveStep((s) => s + 1);
     }
   };
 
   const handleFinish = async () => {
-    markComplete(activeStep);
+    markComplete(currentStepId);
     try {
       await completeOnboarding(webToken, selectedIntent.length > 0 ? selectedIntent : undefined);
     } catch {
@@ -203,7 +241,13 @@ export function OnboardingStepper({
 
   // ── Render ───────────────────────────────────────────────────────────────
 
-  const currentStepId = stepIds[activeStep];
+  // The ticketing / repos / audit / roster steps all act on ONE project. Prefer
+  // the project created in this wizard, then the globally-scoped project, then
+  // the first project in the workspace — otherwise a returning owner who already
+  // has projects would hit the "create a project first" placeholder on four
+  // consecutive steps and never reach those adoption hooks.
+  const activeProjectId =
+    createdProjectId ?? projectScope?.currentProjectId ?? projectScope?.projects[0]?.id ?? null;
 
   return (
     <div
@@ -281,13 +325,13 @@ export function OnboardingStepper({
           }}
         >
           {stepIds.map((stepId, i) => {
-            const done = completedSteps.has(i);
+            const done = completedSteps.has(stepId);
             const active = i === activeStep;
             return (
               <div key={stepId} style={{ display: 'flex', alignItems: 'center', flex: i < stepIds.length - 1 ? 1 : undefined }}>
                 <button
                   type="button"
-                  onClick={() => done && setActiveStep(i)}
+                  onClick={() => { if (done) { setActiveStep(i); persistProgress(completedSteps, stepId); } }}
                   disabled={!done && !active}
                   style={{
                     display: 'flex',
@@ -344,7 +388,7 @@ export function OnboardingStepper({
                     style={{
                       flex: 1,
                       height: 1,
-                      background: completedSteps.has(i) ? 'rgba(34,197,94,0.4)' : 'var(--border-subtle)',
+                      background: completedSteps.has(stepId) ? 'rgba(34,197,94,0.4)' : 'var(--border-subtle)',
                       margin: '0 4px',
                       marginBottom: 20,
                     }}
@@ -434,7 +478,7 @@ export function OnboardingStepper({
                 <div style={{ textAlign: 'center', padding: '20px 0' }}>
                   <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
                   <div style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)' }}>
-                    {t('projectsReady', { count: existingProjectsCount })}
+                    {t('projectsReady', { count: projectCount })}
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
                     {t('projectsExist')}
@@ -573,8 +617,8 @@ export function OnboardingStepper({
 
           {/* ── Step: Connect ticketing ── */}
           {currentStepId === 'ticketing' && (
-            createdProjectId != null ? (
-              <WizardTicketingStep projectId={createdProjectId} />
+            activeProjectId != null ? (
+              <WizardTicketingStep projectId={activeProjectId} />
             ) : (
               <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '20px 0', textAlign: 'center' }}>
                 {t('needProject')}
@@ -584,8 +628,8 @@ export function OnboardingStepper({
 
           {/* ── Step: Connect repositories ── */}
           {currentStepId === 'repos' && (
-            createdProjectId != null ? (
-              <WizardReposStep projectId={createdProjectId} />
+            activeProjectId != null ? (
+              <WizardReposStep projectId={activeProjectId} />
             ) : (
               <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '20px 0', textAlign: 'center' }}>
                 {t('needProject')}
@@ -595,8 +639,8 @@ export function OnboardingStepper({
 
           {/* ── Step: Run audits (the SOC 2 adoption hook) ── */}
           {currentStepId === 'audit' && (
-            createdProjectId != null ? (
-              <WizardAuditStep projectId={createdProjectId} />
+            activeProjectId != null ? (
+              <WizardAuditStep projectId={activeProjectId} />
             ) : (
               <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '20px 0', textAlign: 'center' }}>
                 {t('needProject')}
@@ -610,8 +654,8 @@ export function OnboardingStepper({
               <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-muted)' }}>
                 {t('rosterIntro')}
               </p>
-              {createdProjectId != null ? (
-                <KanbanRosterCard projectId={createdProjectId} />
+              {activeProjectId != null ? (
+                <KanbanRosterCard projectId={activeProjectId} />
               ) : (
                 <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '20px 0', textAlign: 'center' }}>
                   {t('rosterNeedProject')}
@@ -673,8 +717,8 @@ export function OnboardingStepper({
             (() => {
               // Only the builder track has mandatory steps (workspace, project).
               const nextDisabled =
-                (currentStepId === 'workspace' && !completedSteps.has(0) && !workspaceAlreadyExists) ||
-                (currentStepId === 'project' && !projectCreated && !completedSteps.has(1));
+                (currentStepId === 'workspace' && !completedSteps.has('workspace') && !workspaceAlreadyExists) ||
+                (currentStepId === 'project' && !projectCreated && !completedSteps.has('project'));
               return (
                 <button
                   type="button"

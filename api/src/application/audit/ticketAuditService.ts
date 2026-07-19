@@ -22,23 +22,12 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { recordManagerAction } from '../manager/ManagerService';
-import { computeCoverage, type AuditSignals, type RequirementInput } from './auditRules';
+import { computeCoverage, verdictSignature, type AuditSignals, type RequirementInput } from './auditRules';
 import type { CoverageResult, UnmetRequirement } from './auditRules';
 import { requirementApplies } from '../kanban/types';
 import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 
 const flaggedKey = (tenantId: number) => `audit:flagged:${tenantId}`;
-
-/** Stable identity of an audit verdict — the status plus the exact set of unmet
- *  checks. The manager re-audits every pass, so a 'flag' action is only worth
- *  journalling when this signature CHANGES; re-recording an unchanged verdict every
- *  pass floods the manager feed with duplicates of the same gap. */
-function verdictSignature(status: string, missing: UnmetRequirement[]): string {
-  return [
-    status,
-    ...missing.map((m) => `${m.laneKey}|${m.kind}|${m.ref}|${m.responsibility ?? ''}|${m.reason}`).sort(),
-  ].join('\n');
-}
 
 export interface TicketAuditResult extends CoverageResult {
   taskId: number;

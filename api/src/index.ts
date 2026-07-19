@@ -62,6 +62,7 @@ import { createDashboardsRoutes }  from './presentation/routes/dashboardsRoutes'
 import { createDashboardPinsRoutes } from './presentation/routes/dashboardPinsRoutes';
 import { createFinopsRoutes }      from './presentation/routes/finopsRoutes';
 import { createDeckRoutes }        from './presentation/routes/deckRoutes';
+import { createExportRoutes }      from './presentation/routes/exportRoutes';
 import { createAlertRoutes }       from './presentation/routes/alertRoutes';
 import { createInnovationRoutes }  from './presentation/routes/innovationRoutes';
 import { createSeamRoutes }        from './presentation/routes/seamRoutes';
@@ -501,6 +502,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/dashboard-pins', createDashboardPinsRoutes(db));
   app.route('/api/finops',     createFinopsRoutes(db));
   app.route('/api/decks',      createDeckRoutes(db));
+  app.route('/api/exports',    createExportRoutes());
   app.route('/api/alerts',     createAlertRoutes(db));
   app.route('/api/innovation', createInnovationRoutes(db));
   app.route('/api/bi',       createBiRoutes(db));
@@ -765,7 +767,7 @@ export default {
         runManagerSweep(env)
           .then((r) => {
             if (r.managed > 0) {
-              console.log(`[cron:manager] projects=${r.projects} managed=${r.managed} scored=${r.scored} ranked=${r.ranked} assigned=${r.assigned} prsConducted=${r.prsConducted} prsMerged=${r.prsMerged} dispatched=${r.dispatched} remediated=${r.remediated} tokenBlocked=${r.tokenBlockedTenants}`);
+              console.log(`[cron:manager] projects=${r.projects} managed=${r.managed} scored=${r.scored} ranked=${r.ranked} assigned=${r.assigned} prsConducted=${r.prsConducted} prsMerged=${r.prsMerged} dispatched=${r.dispatched} remediated=${r.remediated} remediationDeferred=${r.remediationDeferred} tokenBlocked=${r.tokenBlockedTenants}`);
             }
           })
           .catch((err) => {

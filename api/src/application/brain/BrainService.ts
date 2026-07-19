@@ -110,6 +110,7 @@ export interface CreateChatDto {
   userId: string;
   title?: string;
   projectId?: number | null;
+  capability?: string | null;
 }
 
 export interface UpdateChatDto {
@@ -117,6 +118,22 @@ export interface UpdateChatDto {
   projectId?: number | null;
   /** LOCK toggle (owner only): 'shared' = teammate-visible, 'locked' = private. */
   visibility?: 'shared' | 'locked';
+  /** What the chat is making (migration 0345) — a client-registry capability id,
+   *  or null to clear it. See {@link normalizeCapability}. */
+  capability?: string | null;
+}
+
+/**
+ * Sanitize an inbound capability id. The catalogue itself is a client-side UI
+ * registry (frontend/src/lib/brain/capabilities.ts) and an id the client no longer
+ * knows resolves to "no capability" on read, so the server stores it opaquely
+ * rather than keeping a second copy of the list that would drift. All we enforce is
+ * the column's shape: a short, plain identifier, or null.
+ */
+function normalizeCapability(v: string | null | undefined): string | null {
+  if (v == null) return null;
+  const s = String(v).trim();
+  return /^[a-z0-9_-]{1,64}$/i.test(s) ? s : null;
 }
 
 export interface AppendMessagesDto {
@@ -141,6 +158,7 @@ const chatColumns = {
   title: brainChats.title,
   ownerId: brainChats.userId,
   visibility: brainChats.visibility,
+  capability: brainChats.capability,
   createdAt: brainChats.createdAt,
   updatedAt: brainChats.updatedAt,
 } as const;
@@ -460,6 +478,7 @@ export class BrainService {
         origin: BRAIN_ORIGIN,
         projectId: dto.projectId ?? null,
         title,
+        capability: normalizeCapability(dto.capability),
       })
       .returning(chatColumns);
 
@@ -579,6 +598,7 @@ export class BrainService {
       projectId: brainChats.projectId,
       origin: brainChats.origin,
       title: brainChats.title,
+      capability: brainChats.capability,
       createdAt: brainChats.createdAt,
       updatedAt: brainChats.updatedAt,
       isArchived: brainChats.isArchived,
@@ -607,6 +627,7 @@ export class BrainService {
     if (dto.title !== undefined) updates.title = dto.title.trim() || 'New chat';
     if (dto.projectId !== undefined) updates.projectId = dto.projectId;
     if (dto.visibility === 'shared' || dto.visibility === 'locked') updates.visibility = dto.visibility;
+    if (dto.capability !== undefined) updates.capability = normalizeCapability(dto.capability);
 
     const [updated] = await this.db
       .update(brainChats)

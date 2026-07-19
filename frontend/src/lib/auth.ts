@@ -441,10 +441,18 @@ export async function resolveAndSelectTenant(webToken: string): Promise<Tenant |
   }
 }
 
+/** Resumable setup-wizard progress, recorded by STEP ID (API migration 0343). */
+export interface OnboardingProgress {
+  track: 'builder' | 'hired';
+  completed: string[];
+  activeStep: string | null;
+}
+
 /** Fetch the current user profile, including onboarding status, role-selection
  *  status, account type + personality. */
 export async function getMe(webToken: string): Promise<{
   onboardingCompletedAt: string | null;
+  onboardingProgress: OnboardingProgress | null;
   psychometric: PsychometricProfile | null;
   accountType: 'standard' | 'freelancer';
   accountTypeSelected: boolean;
@@ -454,10 +462,11 @@ export async function getMe(webToken: string): Promise<{
     headers: { Authorization: `Bearer ${webToken}` },
   });
   checkUnauthorizedAndRedirect(res, !!webToken);
-  if (!res.ok) return { onboardingCompletedAt: null, psychometric: null, accountType: 'standard', accountTypeSelected: true, availableForHire: false };
-  const data = await res.json() as { user?: { onboardingCompletedAt?: string | null; psychometric?: PsychometricProfile | null; accountType?: 'standard' | 'freelancer'; accountTypeSelected?: boolean; availableForHire?: boolean } };
+  if (!res.ok) return { onboardingCompletedAt: null, onboardingProgress: null, psychometric: null, accountType: 'standard', accountTypeSelected: true, availableForHire: false };
+  const data = await res.json() as { user?: { onboardingCompletedAt?: string | null; onboardingProgress?: OnboardingProgress | null; psychometric?: PsychometricProfile | null; accountType?: 'standard' | 'freelancer'; accountTypeSelected?: boolean; availableForHire?: boolean } };
   return {
     onboardingCompletedAt: data.user?.onboardingCompletedAt ?? null,
+    onboardingProgress: data.user?.onboardingProgress ?? null,
     psychometric: data.user?.psychometric ?? null,
     accountType: data.user?.accountType ?? 'standard',
     // Default to true on a missing field so an older API shape never traps a user
@@ -540,6 +549,22 @@ export async function completeOnboarding(webToken: string, intent?: string[]): P
     body: JSON.stringify({ intent }),
   });
   checkUnauthorizedAndRedirect(res, !!webToken);
+}
+
+/**
+ * Persist which setup-wizard steps are done, so closing the wizard mid-way
+ * resumes where the user left off instead of restarting at step 1. Fire-and-
+ * forget: a failed write only costs the resume position, never the flow.
+ */
+export async function saveOnboardingProgress(
+  webToken: string,
+  progress: OnboardingProgress,
+): Promise<void> {
+  await fetch(`${AUTH_API_URL}/api/auth/me/onboarding/progress`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${webToken}` },
+    body: JSON.stringify(progress),
+  }).catch(() => { /* resume position is best-effort */ });
 }
 
 /** Member row returned by GET /api/tenants/:id/security/users. */

@@ -25,6 +25,12 @@ export {
 } from './askUser';
 export type { AskUserPayload, AskUserOption, AskUserLabels, PendingAskUser } from './askUser';
 
+// The chat error banner: the message AND the remedy the server named (reconnect /
+// upgrade / add a card). Shared so the VS Code webview and the web app's BrainPanel
+// can't drift on what a given entitlement failure lets the user do about it.
+export { ChatErrorBanner, DEFAULT_CHAT_ERROR_LABELS } from './ChatErrorBanner';
+export type { ChatErrorBannerProps, ChatErrorBannerLabels } from './ChatErrorBanner';
+
 export { ConsolidateForkControl, DEFAULT_CONSOLIDATE_FORK_LABELS } from './ConsolidateForkControl';
 export type { ConsolidateForkControlProps, ConsolidateForkLabels } from './ConsolidateForkControl';
 

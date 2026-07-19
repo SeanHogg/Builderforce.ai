@@ -127,6 +127,29 @@ export interface ModelChoices {
   byo: ByoChoices;
   /** Frontier models this tenant may teach an Evermind with. */
   teacherModels: string[];
+  /**
+   * WHY premium is unavailable, and the exact step that unlocks it. The picker
+   * used to drop this and just omit the Premium group, so a tenant who could see
+   * premium models in the web app found them silently missing here with no reason
+   * given. Undefined only against an older gateway that doesn't send it.
+   *
+   * NOTE this is deliberately NOT a second source of the tenant's TIER — the plan
+   * chip reads `/api/consumption`, the only endpoint that also carries the
+   * allowance meters. This is the entitlement REASON, which lives nowhere else.
+   */
+  premiumInfo?: PremiumInfo;
+}
+
+/** The gateway's verdict on premium-model access (`evaluatePremiumModelAccess`). */
+export interface PremiumInfo {
+  entitled: boolean;
+  /** 'plan_required' | 'card_required' | 'entitled' | … — server vocabulary. */
+  reason?: string;
+  /** The unlock step: 'upgrade' (raise the plan) or 'validate_card'. Shares its
+   *  vocabulary with `ChatErrorAction.kind`, so the picker and the chat error
+   *  banner name the same remedy. */
+  unlock?: string;
+  cardValidationStatus?: string;
 }
 
 /** The subset of `GET /llm/v1/models` this client consumes. */
@@ -137,6 +160,7 @@ interface ModelsResponse {
   canUseFrontierModels?: boolean;
   teacherModels?: string[];
   byo?: { providers?: string[]; models?: ByoModel[] };
+  premiumInfo?: PremiumInfo;
 }
 
 /** One paid OpenRouter model from `GET /llm/v1/catalog`. `pool` is set when the free/
@@ -190,6 +214,7 @@ export async function getModels(
     canUseFrontierModels,
     byo,
     teacherModels: json.teacherModels ?? [],
+    ...(json.premiumInfo ? { premiumInfo: json.premiumInfo } : {}),
   };
   modelsCache = { ts: Date.now(), data };
   return data;

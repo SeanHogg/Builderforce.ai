@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi } from '@/lib/adminApi';
+import { downloadText } from '@/lib/download';
 import { errText, useAdminData, AdminError, AdminLoading } from '@/components/admin/adminShared';
 
 export default function PermissionsPanel() {
@@ -29,11 +30,7 @@ export default function PermissionsPanel() {
                 onClick={async () => {
                   try {
                     const csv = await adminApi.permissionsMatrixExport();
-                    const blob = new Blob([csv], { type: 'text/csv' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url; a.download = 'permissions-matrix.csv'; a.click();
-                    URL.revokeObjectURL(url);
+                    downloadText(csv, 'permissions-matrix.csv', 'text/csv');
                   } catch (e) { setError(errText(e)); }
                 }}
               >

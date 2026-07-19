@@ -4,6 +4,110 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-19 — Entitlement-error residuals closed (brain-ui 2026.7.32 · VSIX 2026.7.86 · frontend 2026.7.75)
+
+Follow-up on the four residuals from "Account type is visible in VSIX chat" (below). Three closed outright; the fourth is now blocked only on a live environment.
+
+**1. Web/VSIX banner parity — closed by making it ONE component.** `<ChatErrorBanner>` moved into `packages/brain-ui` (the shared, i18n-agnostic UI package) using the established `labels` + `DEFAULT_CHAT_ERROR_LABELS` convention, with `onReconnect`/`onUpgrade`/`onValidateCard` as OPTIONAL callbacks — a remedy is offered only when the host can actually perform it, so the web app correctly shows no Reconnect (its auth layer redirects instead) without a `canX` flag being drilled in. The VSIX's local copy was deleted; the web app's `BrainErrorBanner` is a thin adapter supplying next-intl copy, the router, and `useStartCardValidation`. One implementation, two hosts, verified by grep — and it covers all six web `BrainPanel` mount sites (IDE, floating drawer, embed, brainstorm, project details, meeting room).
+
+**2. `premiumInfo` no longer dropped.** `gateway.ts` parses it into `ModelChoices`, and the VSIX model picker now RENDERS the lock instead of silently omitting the Premium group: "Add a card to unlock premium models" / "Upgrade to unlock premium models" per `premiumInfo.unlock`, and selecting that row opens the unlock page rather than pinning a non-model. Same `unlock` vocabulary as `ChatErrorAction.kind`, so the picker and a failed turn name the same remedy. `effectivePlan` deliberately NOT parsed — the plan chip stays on `/api/consumption` (the only source carrying allowance meters) rather than adding a second tier source.
+
+**3. The unpinned-free-plan seam is tested, not just reasoned about.** `api/src/application/llm/LlmProxyService.unpinnedFreePlan.test.ts` (4 cases): an absent/blank model is non-premium on the free plan; the free and free-coder pools are non-empty; every model an unpinned free turn can land on itself passes the premium gate (so the fix doesn't just move the 402 into failover); plus a regression case asserting the old hardcoded `openai/gpt-4o-mini` fallback WAS premium on free — empirically confirming the original root-cause diagnosis.
+
+**4. Card-on-file management shipped.** New `<CardOnFile>` (mounted on `/pricing`) shows the card premium access actually rides on — brand ···· last4 + verified/verifying/failed — and offers Replace (or Try again after a failure) through the shared `useStartCardValidation`. It self-gates on `status === 'none'` so it and `PremiumModelUnlock` are mutually exclusive: between them every card status has exactly one home. Replace goes through `useConfirm` and states the real consequence up front — re-validation resets the tenant to `pending`, suspending premium until the webhook confirms. 15 `billing.*` keys added to all five catalogs with real translations.
+
+**Also fixed:** schema drift in `CardValidationState` — it declared a non-optional `paymentProvider: string` that `GET /api/tenants/:id/card-validation` never returns, so any reader would have got `undefined` from a type promising a string. Zero consumers; removed.
+
+**Verification.** frontend `tsc --noEmit` clean; brain-embedded 155/155; api premium-gate + new seam tests 14/14; brain-ui + VSIX build; VSIX packaged 2026.7.86. Remaining residuals (live 402 run, card REMOVE, dual plan-state sources) are in the roadmap.
+
+> **Note:** this pass overlapped with a concurrent session working the same list. Both arrived at the same shared-component design independently; the web adapter (`BrainErrorBanner`, `useCardValidation`, `useConsumption`) is that session's work, the shared `brain-ui` banner and §2–§4 are this one's.
+
+---
+
+## ✅ RESOLVED 2026-07-19 — Brain Storm scrolls, and a chat now knows what it is MAKING (api 2026.7.104 · frontend 2026.7.74 · brain-embedded 2026.7.38 · VSIX 2026.7.85 · migration 0345)
+
+**Ask.** "The /brainstorm side panel doesn't scroll — there are too many chats. And add capabilities under Start new chat: Document / Slides / Data Visualization / Spreadsheet for Brain Storm; Website / Design / Mobile / Animation / 3D Game for the IDE." Then: "close residuals."
+
+**Problem (scroll).** `.bs-chat-list` already had `overflow: auto`, so the obvious fix was already in place. The real cause was one level up: `.bs-sidebar` is a GRID ITEM of `.bs-shell`, and a grid item's automatic minimum size is its CONTENT size — so a long list grew the sidebar past its row instead of capping it, and `.bs-shell`'s `overflow: hidden` clipped the overflow with nothing scrollable. Fixed with `min-height: 0; overflow: hidden` on `.bs-sidebar`, `flex: 0 0 auto` on the header, `min-height: 0` on the list, plus `overflow: hidden` on `.bs-main`. Mobile got the stacked treatment (visible-overflow shell, sidebar capped at `45vh`).
+
+**What shipped (capabilities).**
+- **One registry** — `frontend/src/lib/brain/capabilities.ts`: nine capabilities split by SURFACE (authored artifacts on Brain Storm, built-and-run things in the IDE), each with a model-facing `systemPrompt` and an optional `exportFormat`. The surface picks the set (`capabilitySurface` prop; `IDENew` passes `"ide"`), so no surface inlines its own list.
+- **One component** — `BrainCapabilityPicker` renders both presentations of that list: responsive `auto-fit` tiles on the empty state and a compact `Select` in the composer toolbar. It self-gates (null when the surface offers none).
+- **Live end-to-end** — picking one creates the chat if needed, seeds the composer with a localized starter line, and pushes the capability block into `ambientSystem`, so the model actually shapes output as that artifact.
+
+**Residuals closed in the same pass.**
+1. **The capability is now a property of the CHAT, not the browser** — `brain_chats.capability` (migration 0345), projected through `chatColumns` + `getChat`, writable via POST/PATCH `/api/brain/chats` (owner-only, sanitized by `normalizeCapability`; free-form varchar on purpose so the client-side catalogue stays the single source and cannot drift). `brain-embedded` gained `BrainChat.capability` and an optimistic `useBrainChats.setCapability`, so the choice follows the conversation to the VS Code webview and every other device. The interim `localStorage` helpers were deleted.
+2. **Real Office exports** — new `/api/exports/{docx,pptx}` backed by `application/office/`: a shared markdown block parser, a `.docx` writer built on `fflate` (three OOXML parts, direct run properties so no `styles.xml` is needed), and a `.pptx` renderer on the pptxgenjs already used by the deck service — but taking ARBITRARY parsed slides rather than the fixed board-metrics shape. `BrainMessageExport` (in the shared `ChatMessageActions` bar) picks the format from the capability and hides itself when there is none; Spreadsheet/Data Viz save CSV client-side from the reply's own fence or table, with no round-trip. `ChatMessageContent` also grew a per-fence download for `csv`/`json`/`md`. Verified by tests that unzip the output and assert the parts, balanced XML, escaping, and slide count.
+3. **The logged-out surface has the tiles** — `GuestBrainPanel` renders the same picker and injects the same capability prompt via `extraSystem` (session state, since guest chats are localStorage-only).
+
+**Also in this pass.** `lib/download.ts` is now the ONE browser-download implementation (`downloadBlob` / `downloadText` / `downloadJson` / `filenameFromResponse` / `toCsv`); fifteen files that each inlined the Blob-URL-and-click dance were migrated to it, which also fixed a real CSV quote-escaping bug in `PermissionDebuggerPanel` and the synchronous `revokeObjectURL` that races downloads in Safari/Firefox. Dead `GenerateDeckInput.prompt` (accepted by the route, never read by `generateDeck`) was removed. `ChatMessageActions` and `ChatMessageContent` were localized in all five catalogs while being touched.
+
+---
+
+## ✅ RESOLVED 2026-07-19 — The AI Manager now RESOLVES the ticket audits it flags (api 2026.7.103 · frontend 2026.7.74 · migration 0344)
+
+**Ask.** "On the manager page I see lots of messages — the manager should be resolving these." The feed was a wall of `Ticket audit: N required checks unmet` rows naming missing BA / Architect / Developer / Product Owner / code-reviewer slots.
+
+**Problem.** Two independent defects produced one symptom.
+1. **The flag was a dead end.** `ManagerService` step 6 called `computeAudit()`, counted the verdict, and discarded `result.missing`. Nothing anywhere read `manager_actions.action_type='flag'` or `ticket_audits.missing` to remediate, so a ticket missing a required role stayed missing it forever. `coordinateTicket()` — which rewinds to the earliest unmet stage, resolves the role-capable participant and dispatches them — already existed but was wired only to sign-off and run-completion hooks, never to the manager pass.
+2. **The flag was re-journalled every pass.** A flag is a STATE, not an event, but each re-audit appended an identical row, so one unresolved ticket produced one duplicate per pass forever. That is why every message carried a timestamp seconds apart.
+
+**What shipped.**
+- **Remediation** — `ManagerService` step 6 is now AUDIT + REMEDIATE: a flagged ticket drives `coordinateTicket()`, gated on `policy.autoAssign`, capped at `MAX_REMEDIATIONS_PER_RUN = 10`. It journals a new `coordinate` action ONLY when the tick actually moved the lane or started a run, so a no-op cannot refill the feed.
+- **Change-gated flag writes** — `verdictSignature(status, missing)` in `application/audit/auditRules.ts` (the pure, unit-tested rule module) is the order-independent identity of a verdict; `ticketAuditService.computeAudit` reads the prior audit row before its upsert and records a flag only when that signature moves.
+- **Migration 0344** — window-function cleanup of the historical duplicates, keeping the newest row per `(tenant, project, task, summary, detail)`. Only byte-identical restatements of one unchanged verdict are removed; no distinct verdict is lost. This let the interim read-side collapse in `listManagerActions` be deleted rather than kept.
+- **Honest pacing** — `summary.remediationDeferred` counts flagged tickets past the per-pass cap and emits ONE feed row per pass ("staffed N … M more queued"), threaded through `ManagerRunSummary` → `runManagerSweep` → the cron log and the `manager.pass` activity event.
+- **Surface** — `/api/manager/:projectId` stats carry a live `flagged` count (free: `count(*) filter (where tasks.audit_status='flagged')` folded into the existing aggregate, no extra round-trip); the manager tab renders a "Coverage gaps" tile plus a nudge explaining the manager staffs them automatically. New `coordinate` action type + 🧭 icon, localized across all five catalogs.
+
+**Verification.** api + frontend typecheck clean; 2263 api tests pass (5 new `verdictSignature` cases); migration + schema-drift guards pass. Not driven end-to-end against a live board — that needs a running gateway + DB.
+
+## ✅ RESOLVED 2026-07-19 — Account type is visible in VSIX chat, and entitlement errors carry their fix (brain-embedded 2026.7.37 · VSIX 2026.7.84 · frontend)
+
+**Ask.** Show the account type in the VSIX chat (click → browser to upgrade); put an upgrade button on any error that tells the user to upgrade; and a free user with tokens left should auto-select the free BuilderForce models.
+
+**Problem.** A free-plan user's every turn died on `Premium models … require a validated card on file. Add and validate a card in Settings ▸ Billing to unlock.` Three separate defects stacked:
+1. **Root cause of the report** — `streamChatCompletion` fell back to a hardcoded `openai/gpt-4o-mini` when nothing was pinned. That is a PAID OpenRouter model, so an unpinned free-plan chat was silently pinned to the premium tier and 402'd on a model the user never chose.
+2. The gateway's fully structured 402 (`code`/`reason`/`unlock`/`requiredPlan`/`feature`, from `premiumModelGateBody`) was flattened to its message string at the fetch boundary, so the UI could only restate the problem — and pointed at `Settings ▸ Billing`, a page the panel never offered to open.
+3. Nothing in the chat said which plan was funding it, so the failure was indistinguishable from a broken install.
+
+**What shipped.**
+- `brain-embedded/src/chatError.ts` — `BrainRequestError` (keeps the structured fields) + `chatErrorAction()`, the ONE classifier mapping any failure to `auth` / `upgrade` / `validate_card`. Structured fields win; prose is a narrow fallback. Exported at the root AND as a React-free `./chatError` subpath so the extension host shares it without bundling React.
+- `streamChatCompletion` now OMITS `model` when nothing is pinned (gateway auto-select → the plan's own pool; free tenants get the free coder models) and maps errors through `brainRequestError`. `authedFetch` (VSIX webview) does the same for `/api/*`.
+- The verdict rides the run store (`BrainRunSnapshot.errorAction`) and `useBrainConversation`, so views read a verdict instead of regexing error text — the old `isAuthError` regex in `App.tsx` is gone.
+- `clients/vscode/webview/src/accountPlan.tsx` — `<PlanBadge>` (self-gating tier chip + remaining allowance, off a shared read-through `/api/consumption` cache the diagnostics copy now reuses) and the shared `openUpgrade()`; `ChatErrorBanner.tsx` renders Reconnect / Upgrade to {plan} / Add a card off the verdict. New `open.web` bridge case (path-constrained) opens the browser.
+- Native `@builderforce` participant: `AgentEvents.onError` now carries the original error, and `upgradeAction.ts#formatChatError` appends the same fix as a markdown link.
+- `gateway.ts#isModelAllowed` + `resolveEffectiveModel` drop a pin the plan can't use (stale pick, hand-edited `builderforce.defaultModel`, lapsed trial) and fall back to auto instead of 402'ing every turn.
+- `PremiumModelUnlock` now also mounts on `/pricing` (the billing console) — previously it existed only beside a `<ModelSelect>`, so "add a card" had no reachable destination. Both surfaces deep-link to `/pricing?upgrade=pro` / `/pricing`.
+- 7 new UI strings localized across all five VSIX l10n bundles (en/es/fr/de/zh-cn).
+
+**Tests.** `brain-embedded/src/chatError.test.ts` (new, 11 cases: structured precedence, plan-vs-card routing, 429 plan-limit vs provider rate-limit, prose fallback, no-action default) + 2 regression cases in `streamChatCompletion.test.ts` (model key omitted when unpinned; 402 fields survive and classify). Full suite 155/155; frontend `tsc --noEmit` clean; VSIX packaged 2026.7.84. Residuals in the roadmap's Gap Register (web Brain banner parity, `effectivePlan` duplication, no live signed-in run).
+
+---
+
+## ✅ RESOLVED 2026-07-19 — Onboarding stepper is now per account type, and resumable (frontend 2026.7.73 · api 2026.7.102)
+
+**Ask.** "The onboarding stepper should be different for the different account types."
+
+**Problem.** One hardcoded 8-step track (`STEP_IDS`) served everyone, and it was written entirely for a builder: create workspace → project → ticketing → repos → audits → roster → install agents → invite team. A **hired** account (`account_type = 'freelancer'`) has no workspace, no repos and no agent roster, so every step was inapplicable — and it never even saw the wizard, because the only mount was `/dashboard`, a route `ConditionalAppShell` blocks for freelancers (renders the shell with a null child).
+
+**Shipped.**
+- **Two tracks, one chooser.** `stepsForAccountType(isFreelancer)` in `frontend/src/components/OnboardingStepper.tsx` is the single place the track is decided; the stepper reads `useIsFreelancer()` itself, so no caller re-derives it. BUILDER = the existing 8 steps. HIRED = `talentProfile → resume → publish → findWork`. Workspace gating (pre-completed steps 0/1, the "create a workspace first" close-lock, the Next-button gate) now applies to the builder track only.
+- **Hired step bodies** (`components/onboarding/HiredWizardSteps.tsx`) drive the SAME endpoints as the `/freelancer/profile` editor, so anything set in the wizard is immediately live on the public profile: name/headline/discipline/availability/rate/skills → `PATCH /api/freelancers/me`; résumé upload + AI autofill from `getResumeSuggestions()`; visibility + publish with the public `/talent/<slug>` link; then Browse gigs / Log hours.
+- **One shared onboarding decision.** `useOnboardingPrompt()` (`lib/onboarding.ts`) now owns "does this user still need setup" — the dismissed key, the invited-member skip, the `getMe().onboardingCompletedAt` check, complete/dismiss. `/dashboard` was refactored onto it (~40 lines of inline logic deleted) and `/freelancer/dashboard` mounts the wizard through it.
+- **Perf.** Three hired steps edit the same profile; `components/freelance/useMyTalentProfile.ts` is a read-through cache (shared in-flight promise, invalidated on write), so a full wizard pass costs ONE GET instead of one per step.
+- **DRY.** Field styles and the discipline/availability option sets were duplicated between the profile page and the wizard — extracted to `components/freelance/formStyles.ts` + `talentFields.ts`, and the profile page now imports them.
+- **i18n.** New `onboarding.welcomeHired`/`subtitleHired`, four `steps.*` labels and the four step bodies' copy added with real translations to all five catalogs (en/zh/es/fr/de).
+
+**Verified.** `tsgo --noEmit` clean, eslint clean, `next build` compiled successfully with all 76 pages generated.
+
+**Follow-up same day — all three residuals closed (frontend 2026.7.73 · api 2026.7.102 · migration 0343).**
+
+1. **Builder steps 3–6 no longer dead-end.** `ticketing`/`repos`/`audit`/`roster` now act on `activeProjectId` = the in-wizard project → the globally-scoped project → the workspace's first project, so a returning owner with existing projects reaches the ticketing/repo/audit adoption hooks instead of four "create a project first" placeholders. `existingProjectsCount` also falls back to the already-loaded `ProjectScopeProvider` list (no extra fetch).
+2. **`localize-guard` no longer false-positives on type signatures.** `.claude/hooks/localize-guard.mjs` now skips `interface`/`type` bodies (brace-tracked) and any line whose only `<…>` is a generic type argument with no JSX tag — so `Promise<void>` / `Record<string, X>` stop reading as JSX text. Regression-probed: a file with a real `>Save changes<` and `placeholder="Enter your name"` is still flagged.
+3. **Onboarding is resumable.** New `users.onboarding_progress` (migration **0343**, JSON `{track, completed[], activeStep}`) + `PUT /api/auth/me/onboarding/progress`, returned by `GET /me`. The stepper's completion state moved from `Set<number>` indices to `Set<StepId>` — stable across both tracks and any reordering — is seeded from the persisted record (ignored when it belongs to the other track) and written on every step transition. `useOnboardingPrompt()` surfaces the progress from its existing `getMe` call, so resuming costs no extra round-trip. `parseOnboardingProgress` is the ONE validation boundary both directions: a malformed row degrades to "restart at step 1", a malformed body is a 400. Covered by `api/src/presentation/routes/onboardingProgress.test.ts` (9 tests, passing).
+
+**Verified (follow-up).** api + frontend `tsgo --noEmit` clean, eslint clean, `next build` full success, `check-migrations` + `check-schema-drift` pass, vitest 9/9. Not verified: driving the wizard as a signed-in user (needs live API credentials).
+
 ## ✅ RESOLVED 2026-07-19 — Unreadable native dropdown popups + "Create Agent" not filling its roster role (frontend 2026.7.71 · api 2026.7.99 · brain-ui 2026.7.31 · VSIX 2026.7.83)
 
 **Ask.** Onboarding step 6 (roster): the assignee dropdown rendered in the wrong theme, and "Create Agent" on a gap role did not produce an agent designated for that role. Follow-up: fix *all* remaining raw selects.
@@ -21,6 +125,29 @@
 **Localization.** Two files needed strings routed through next-intl to satisfy the localize guard: `WorkforceMetricsContent` (15 strings under `workforce.performance`) and `FinopsLens` (`finops.rd.optionalPh`). Real translations added to all five catalogs.
 
 **Verified.** `tsgo --noEmit` clean on frontend + api; `tsc --noEmit` clean on brain-ui; all five i18n catalogs parse with the new keys present. The packaged VSIX carries the new CSS rule. The 13 `vitest` failures in the frontend are pre-existing — confirmed by re-running them against the unmodified sources — and are logged in the roadmap.
+
+---
+
+## ✅ RESOLVED 2026-07-19 — Web Brain had no plan affordance; diagnostics re-fetched the model surface (frontend 2026.7.72)
+
+**Ask.** Close both residuals left by the chat-diagnostics pass below.
+
+**1 · The web Brain now states the plan up front.** New `frontend/src/components/PlanBadge.tsx` — tier + remaining AI-token allowance in both Brain headers (full page and docked drawer), mirroring the VSIX chip. Self-gating per the shared-component rule: it reads the cached snapshot itself and renders nothing until it knows a plan, so no consumer passes a `canX` prop and nobody sees a "Free" flash while loading. Free tier gets the CTA styling and the allowance readout; exhausted turns it to the error tone; a paid or unlimited plan shows the tier alone (never the raw `-1` sentinel). Click → `/pricing?upgrade=pro` (free) or `/pricing`, invalidating the snapshot on the way out since the user may return on a different tier.
+
+**2 · The diagnostics capture stopped re-fetching `/llm/v1/models`.** `LlmModelLists` gained `byoProviders` and a prebuilt `fundingSurface` — the vendor-tagged shape `classifyModelFunding` needs, which the old `byoModels: string[]` flattened away. That was the only reason `BrainPanel.captureExecution` called `llmApi.models()` directly; it now reads the module-cached hook the pickers already populate.
+
+**Also closed in this pass (same root cause: no plan affordance in the web chat).**
+- **`useConsumption` had no cache.** Every mounted surface (sidebar meter, dashboard tile, insights header, quality card, and now the badge) fired its own `GET /api/consumption` per mount. It now serves from a module-level 60s read-through cache with in-flight coalescing and a subscriber fan-out, mirroring the server's own 60s TTL, plus `invalidateConsumption()` for post-upgrade. New `fetchConsumptionSnapshot()` gives non-render callers (the diagnostics copy) the same cache, so the report and the chip cannot disagree.
+- **A 402/429 in the web chat was a dead end.** It rendered as raw prose telling the user to go somewhere the page never offered to take them. `BrainErrorBanner` now wires the SHARED `ChatErrorBanner` from `@seanhogg/builderforce-brain-ui` (the same component the VSIX renders) to web handlers, so both surfaces offer the same remedy for the same verdict. Deliberately no reconnect button: the web redirects to sign-in globally, and the shared banner omits a remedy the host can't perform.
+- **Card validation was inlined in one component.** Extracted to `lib/useCardValidation.ts` and reused by `PremiumModelUnlock` + the banner. There is no `/billing` route — validation is a $0 SetupIntent — so a second copy of that branch is precisely how a surface ends up linking to a 404.
+
+**Localization.** New `planBadge` namespace + `brain.{upgrade,upgradeToPlan,addCard,cardValidationFailed}` across all five catalogs with real translations. Note the shared banner substitutes `{plan}` itself via `.replace()`, which collides with next-intl's ICU parsing — the plan name is interpolated in the adapter and the finished sentence handed over.
+
+**Theme + responsive.** Chip and banner drive every colour from theme tokens (`--accent`, `--error-text`, `--text-muted`, `--error-bg`) with literal fallbacks; both Brain headers gained `flexWrap` so the added chip wraps instead of overflowing near 360px.
+
+**Tests.** `PlanBadge.test.tsx` (6) and `BrainErrorBanner.test.tsx` (9) — the states that matter: silent until known, allowance shown only when one bounds something, unlimited/absent meters, upgrade routes to pricing, a card verdict drives the SetupIntent rather than navigating, and an ordinary failure is never dressed up as a paywall.
+
+**Verified.** `tsgo --noEmit` and `eslint` clean; `next build` compiles and prerenders 76/76 (the first run warned `ChatErrorBanner is not exported` — a stale `.next` cache from before the brain-ui rebuild; clean rebuild is green). Frontend suite: 334 passing, +15 new. The 13 failures across 5 files are pre-existing and already logged in the roadmap — none of those suites import any module changed here.
 
 ---
 

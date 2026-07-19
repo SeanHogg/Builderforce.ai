@@ -192,6 +192,10 @@ export const users = pgTable('users', {
   availableForHire:       boolean('available_for_hire').notNull().default(false),
   sessionVersion:         integer('session_version').notNull().default(0),
   onboardingCompletedAt:  timestamp('onboarding_completed_at'),
+  /** JSON `{ track, completed[], activeStep }` — which setup-wizard steps are done,
+   *  by STEP ID so it survives track changes/reordering. Lets a user resume the
+   *  wizard where they left off instead of restarting at step 1. (0343) */
+  onboardingProgress:     text('onboarding_progress'),
   userIntent:             text('user_intent'), // JSON array of intent strings, set during onboarding
   /** JSON PsychometricProfile (Pro) — this human's OWN personality; null = none. Same
    *  shape agents/personas use, so a person and an agent are described the same way. */
@@ -1211,7 +1215,9 @@ export const managerActions = pgTable('manager_actions', {
    *  (0286). Set for actions taken during a "Run manager now" pass so the run task can
    *  show exactly what it changed; null for cron-sweep decisions (feed-only). */
   runTaskId:  integer('run_task_id').references(() => tasks.id, { onDelete: 'set null' }),
-  /** 'prioritize' | 'assign' | 'score_value' | 'dispatch' | 'merge_pr' | 'close_pr' | 'flag'. */
+  /** 'prioritize' | 'assign' | 'score_value' | 'dispatch' | 'merge_pr' | 'close_pr' |
+   *  'flag' (a required check is unmet — written only when the verdict CHANGES) |
+   *  'coordinate' (the manager staffed a flagged ticket's missing role/reviewer). */
   actionType: varchar('action_type', { length: 24 }).notNull(),
   summary:    text('summary').notNull(),
   /** Structured JSON payload for drill-in. */
@@ -2239,6 +2245,11 @@ export const brainChats = pgTable('brain_chats', {
   /** LOCK primitive (0288): 'shared' = visible/joinable by any tenant teammate
    *  (chats are global to project+tenant); 'locked' = private to owner + members. */
   visibility: varchar('visibility', { length: 16 }).notNull().default('shared'),
+  /** What this chat is MAKING (0345) — a capability id from the client-side
+   *  registry (document / slides / dataviz / spreadsheet / website / design /
+   *  mobile / animation / game3d). Shapes the system prompt and the export format.
+   *  NULL = no capability ("anything"). Free-form: an unknown id reads as NULL. */
+  capability: varchar('capability', { length: 64 }),
   /** Consolidation pointer (0266): when this chat was merged into another, the
    *  surviving chat's id. Set with isArchived=true so the source drops out of the
    *  list but any ticket still resolves to the one surviving conversation. */
