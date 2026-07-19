@@ -32,12 +32,11 @@ import { runParkAgeTimeoutSweep, type ParkAgeTimeoutResult } from '../maintenanc
 
 /** A self-hosted host run executing longer than this is treated as hung. */
 export const RUNNING_DEADLINE_MS = 30 * 60_000; // 30 min
-/** Candidate-pull floor for stale CLOUD runs: the SMALLEST cloud silence ceiling
- *  ({@link cloudSilenceCeilingMs} — the serverless 'worker' wall), so the SQL sweep
- *  surfaces every cloud run stale past 90s. Each candidate is then held against its
- *  OWN per-surface ceiling in the loop below: a 'worker' run fails at 90s, but a
- *  long-lived durable/container run gets the larger ceiling so a live tick mid-LLM-step
- *  is not reaped. Kept = CLOUD_SERVERLESS_SILENCE_MS (the read-path's tight ceiling). */
+/** Candidate-pull floor for stale CLOUD runs: a cheap SQL prefilter that surfaces every
+ *  cloud run silent for more than 90s. It is deliberately SMALLER than any real ceiling
+ *  — each candidate is then held against {@link cloudSilenceCeilingMs} in the loop
+ *  below, so a live durable/container tick mid-LLM-step is pulled here but spared
+ *  there. Only the true ceiling decides a run's fate; this value just bounds the scan. */
 export const CLOUD_RUNNING_DEADLINE_MS = 90_000; // 90s
 /** A run never picked up by any agent within this window is treated as dropped. */
 export const QUEUED_DEADLINE_MS = 15 * 60_000; // 15 min
@@ -112,8 +111,8 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
     // only once per alarm tick and a tick legitimately spans one slow LLM step. Spare a
     // durable/container run still inside its (larger) ceiling — it is mid-completion,
     // NOT silent — so we don't reap a live tick (execution #136: a 93s LLM call reaped at
-    // 90s, 2s before it returned). Only the 'worker' loop (and a genuinely stalled
-    // long-lived run past 5 min) falls through to self-heal/fail below.
+    // 90s, 2s before it returned). Only a genuinely stalled run (past 5 min) falls
+    // through to self-heal/fail below.
     const lastActivityMs = tsToMs(row.updated_at ?? row.created_at);
     if (lastActivityMs != null && nowMs - lastActivityMs <= cloudSilenceCeilingMs(parseExecutor(row.payload))) {
       continue;

@@ -452,7 +452,10 @@
     }
   },
   "ceremonies": {
-    "selectProject": "Select a project to start a ceremony."
+    "selectProject": "Select a project to start a ceremony.",
+    "viewLive": "Live round-table",
+    "viewSchedules": "Schedules",
+    "viewSwitchLabel": "Ceremony view"
   },
   "projectCard": {
     "details": "Details",
@@ -793,6 +796,36 @@
       "notPublishedTitle": "Nothing published yet",
       "notPublishedBody": "Publish this app to get a link your phone can open. It takes about a minute.",
       "goToPublish": "Go to Publish"
+    },
+    "publish": {
+      "title": "Publish to the web",
+      "description": "Build this app and host it at a subdomain. Static hosting — your app runs in the browser.",
+      "subdomain": "Subdomain",
+      "building": "Building…",
+      "uploading": "Uploading…",
+      "publish": "Publish",
+      "republish": "Re-publish",
+      "published": "Published ✓",
+      "liveSite": "Live site",
+      "preview": "preview",
+      "fileCount": "{count, plural, one {# file} other {# files}}",
+      "invalidSubdomain": "Enter a valid subdomain (letters, numbers and hyphens).",
+      "failed": "Publish failed"
+    },
+    "deploy": {
+      "title": "Deploy from GitHub",
+      "description": "Let GitHub Actions build this project on every push and deploy it here — no need to keep the IDE open.",
+      "checking": "Checking the connected repository…",
+      "needsRepo": "Connect a GitHub repository to this project first, from Settings → Repository.",
+      "needsGitHub": "This project is connected to a non-GitHub repository. GitHub Actions deploys need a GitHub repo.",
+      "repoLabel": "Repository:",
+      "enable": "Enable GitHub deploys",
+      "reapply": "Update the workflow",
+      "enabling": "Writing the workflow…",
+      "enableFailed": "Could not enable GitHub deploys.",
+      "enabledOn": "Added {path} on {branch}. The next push to that branch builds and deploys.",
+      "viewRuns": "View workflow runs on GitHub",
+      "viewWorkflow": "Show the workflow file"
     }
   },
   "tools": {
@@ -9969,5 +10002,51 @@
       "require-approval": "The agent pauses and asks a human before using the tool.",
       "block": "The agent refuses the tool outright and explains why."
     }
+  },
+  "ceremonySchedules": {
+    "title": "Recurring ceremonies",
+    "subtitle": "Run standups and plannings on a cadence. Each scheduled ceremony opens on its own with the round table already seated.",
+    "newSchedule": "New schedule",
+    "editSchedule": "Edit schedule",
+    "empty": "No recurring ceremonies yet. Add a schedule and your standup will start itself.",
+    "enabled": "Active",
+    "paused": "Paused",
+    "pause": "Pause",
+    "resume": "Resume",
+    "colKind": "Ceremony",
+    "colCadence": "Cadence",
+    "colNextRun": "Next run",
+    "colLastRun": "Last run",
+    "colStatus": "Status",
+    "colActions": "Actions",
+    "colRoster": "Round table",
+    "kind_standup": "Standup",
+    "kind_planning": "Planning",
+    "scope_members": "Project members",
+    "scope_roster": "Fixed list",
+    "preset_weekdays9": "Weekdays at 09:00",
+    "preset_weekdays10": "Weekdays at 10:00",
+    "preset_daily9": "Every day at 09:00",
+    "preset_mondays10": "Mondays at 10:00",
+    "preset_fridays16": "Fridays at 16:00",
+    "presetCustom": "Custom schedule…",
+    "fieldKind": "Ceremony",
+    "fieldCadence": "How often",
+    "fieldCron": "Cron expression",
+    "cronHelp": "Five fields: minute, hour, day of month, month, day of week. The preset above fills this in; edit it for anything more specific.",
+    "fieldTimezone": "Time zone",
+    "fieldRoster": "Who takes part",
+    "rosterHelp": "Project members seats everyone active on this project, quietest speaker first. A fixed list always seats the same people.",
+    "fieldMaxParticipants": "Maximum seats",
+    "fieldTurnSeconds": "Seconds per turn",
+    "turnSecondsPlaceholder": "Use the board default",
+    "fieldEnabled": "Schedule is active",
+    "enabledHelp": "A paused schedule keeps its settings but never opens a ceremony.",
+    "fieldAutoDispatch": "Start agent work when the ceremony ends",
+    "autoDispatchHelp": "When the session is completed, agent-owned tickets on this project are handed to their agents automatically.",
+    "confirmDelete": "Delete this recurring ceremony? Sessions that already ran are kept.",
+    "errorLoad": "Could not load the schedules.",
+    "errorSave": "Could not save the schedule.",
+    "errorDelete": "Could not delete the schedule."
   }
 }

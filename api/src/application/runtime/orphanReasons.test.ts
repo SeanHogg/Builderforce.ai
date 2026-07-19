@@ -40,23 +40,21 @@ describe('cloudOrphanReason', () => {
 });
 
 describe('cloudSilenceCeilingMs', () => {
-  it('only the serverless worker loop gets the tight 90s wall', () => {
-    expect(cloudSilenceCeilingMs('worker')).toBe(CLOUD_SERVERLESS_SILENCE_MS);
-    expect(CLOUD_SERVERLESS_SILENCE_MS).toBe(90_000);
-  });
-
-  it('long-lived executors get the larger ceiling (a 93s LLM tick must not be reaped — execution #136)', () => {
+  it('every executor gets the long-lived ceiling (a 93s LLM tick must not be reaped — execution #136)', () => {
     expect(cloudSilenceCeilingMs('durable')).toBe(CLOUD_LONG_LIVED_SILENCE_MS);
     expect(cloudSilenceCeilingMs('container')).toBe(CLOUD_LONG_LIVED_SILENCE_MS);
-    // 93s (the observed kimi completion) sits comfortably under the long-lived ceiling
-    // but OVER the old shared 90s wall that reaped it.
-    expect(93_000).toBeGreaterThan(CLOUD_SERVERLESS_SILENCE_MS);
+    // 93s (the observed kimi completion) sits comfortably under the ceiling but OVER
+    // the old 90s wall that reaped it.
+    expect(93_000).toBeGreaterThan(90_000);
     expect(93_000).toBeLessThan(CLOUD_LONG_LIVED_SILENCE_MS);
   });
 
   it('an unknown/unstamped executor is treated conservatively as long-lived (never reap a live tick)', () => {
     expect(cloudSilenceCeilingMs(undefined)).toBe(CLOUD_LONG_LIVED_SILENCE_MS);
     expect(cloudSilenceCeilingMs(null)).toBe(CLOUD_LONG_LIVED_SILENCE_MS);
+    // Includes the removed in-request 'worker' executor: a payload stamped before it
+    // was deleted must still get the generous ceiling, not a tight fast-fail.
+    expect(cloudSilenceCeilingMs('worker')).toBe(CLOUD_LONG_LIVED_SILENCE_MS);
     expect(cloudSilenceCeilingMs('bogus')).toBe(CLOUD_LONG_LIVED_SILENCE_MS);
   });
 });

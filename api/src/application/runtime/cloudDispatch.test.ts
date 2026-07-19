@@ -126,17 +126,21 @@ describe('executor stamping (per-surface orphan ceiling)', () => {
     const stamped = withExecutor('{"model":"x","cloudAgentRef":"a1"}', 'durable');
     expect(JSON.parse(stamped)).toEqual({ model: 'x', cloudAgentRef: 'a1', executor: 'durable' });
     // Absent/garbage payload → a fresh object carrying just the executor.
-    expect(JSON.parse(withExecutor(null, 'worker'))).toEqual({ executor: 'worker' });
+    expect(JSON.parse(withExecutor(null, 'container'))).toEqual({ executor: 'container' });
     expect(JSON.parse(withExecutor('not json', 'container'))).toEqual({ executor: 'container' });
     // Re-stamping overwrites (idempotent).
-    expect(parseExecutor(withExecutor(stamped, 'worker'))).toBe('worker');
+    expect(parseExecutor(withExecutor(stamped, 'container'))).toBe('container');
   });
 
   it('parseExecutor round-trips a stamped executor and rejects unknown/garbage', () => {
-    for (const e of ['durable', 'container', 'worker'] as const) {
+    for (const e of ['durable', 'container'] as const) {
       expect(parseExecutor(withExecutor(undefined, e))).toBe(e);
     }
     expect(parseExecutor('{"executor":"bogus"}')).toBeUndefined();
+    // The in-request Worker executor was removed; a payload stamped before that must
+    // parse as unknown, which the ceiling helper treats as long-lived (never a tight
+    // fast-fail on a run that may still be alive).
+    expect(parseExecutor('{"executor":"worker"}')).toBeUndefined();
     expect(parseExecutor('{"model":"x"}')).toBeUndefined();
     expect(parseExecutor('null')).toBeUndefined();
     expect(parseExecutor(undefined)).toBeUndefined();

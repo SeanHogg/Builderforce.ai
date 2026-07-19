@@ -11,10 +11,10 @@ import { ingestRepoCiEvent, type RepoCiEvent } from './ingestRepoCiEvent';
 vi.mock('../validation/validationDispatch', () => ({
   triggerFastValidatorReview: async () => null,
 }));
-import { pullRequests, tasks, executions, toolAuditEvents } from '../../infrastructure/database/schema';
+import { pullRequests, tasks, executions, toolAuditEvents, projects } from '../../infrastructure/database/schema';
 import type { Env } from '../../env';
 
-type TableRef = typeof pullRequests | typeof tasks | typeof executions | typeof toolAuditEvents;
+type TableRef = typeof pullRequests | typeof tasks | typeof executions | typeof toolAuditEvents | typeof projects;
 
 /**
  * Minimal chainable Drizzle fake: select().from(table) resolves to the rows queued
@@ -173,5 +173,86 @@ describe('ingestRepoCiEvent — pre-merge (PR-branch) build validation', () => {
     expect(res.buildStatus).toBe('success');
     expect(res.autoFix).toBeUndefined();
     expect(inserts.some((i) => i.values.toolName === 'build.result')).toBe(true);
+  });
+});
+
+/**
+ * Path 1b — the IDE bridge's own branch. Designer/Mobile PRs are opened by
+ * `repoBridge`, not by an agent working a ticket, so they carry a projectId and
+ * NO taskId. They used to fall through to the post-merge path, which correlates
+ * by merged-PR sha and therefore matched nothing: an IDE-opened PR showed no
+ * build status at all.
+ */
+describe('ingestRepoCiEvent — designer/mobile branch (IDE bridge)', () => {
+  const designerEvt: RepoCiEvent = {
+    ...baseEvt, branch: 'builderforce/designer-42', sha: 'designer-sha',
+  };
+  const projectRow = { id: 42, tenantId: 5 };
+  const designerPr = { id: 'pr-d1', tenantId: 5, taskId: null, projectId: 42, repoId: 'repo1', buildStatus: null };
+
+  it('records a green build on the project PR', async () => {
+    const { db, inserts } = makeFakeDb(new Map<TableRef, unknown[]>([
+      [projects, [projectRow]],
+      [pullRequests, [designerPr]],
+    ]));
+    const res = await ingestRepoCiEvent(db as never, env, 'secret', designerEvt);
+    expect(res.processed).toBe(true);
+    expect(res.buildStatus).toBe('success');
+    const build = inserts.find((i) => i.values.toolName === 'build.result');
+    expect(build?.values.sessionKey).toBe('project:42');
+  });
+
+  it('records a failing build with a reason', async () => {
+    const { db, inserts } = makeFakeDb(new Map<TableRef, unknown[]>([
+      [projects, [projectRow]],
+      [pullRequests, [designerPr]],
+    ]));
+    const res = await ingestRepoCiEvent(db as never, env, 'secret', {
+      ...designerEvt, outcome: 'failure', rawState: 'failure',
+    });
+    expect(res.processed).toBe(true);
+    expect(res.buildStatus).toBe('failure');
+    expect(String(inserts.find((i) => i.values.toolName === 'build.result')?.values.result)).toMatch(/failed/i);
+  });
+
+  // There is no ticket and no assigned agent behind an IDE-opened PR, so there is
+  // nothing to hand a failing build to — the feedback belongs on screen instead.
+  it('never dispatches an auto-fix run for a designer branch', async () => {
+    const { db } = makeFakeDb(new Map<TableRef, unknown[]>([
+      [projects, [projectRow]],
+      [pullRequests, [designerPr]],
+    ]));
+    const res = await ingestRepoCiEvent(db as never, env, 'secret', {
+      ...designerEvt, outcome: 'failure', rawState: 'failure',
+    });
+    expect(res.autoFix).toBeUndefined();
+  });
+
+  it('ignores a non-terminal (pending) build', async () => {
+    const { db } = makeFakeDb(new Map<TableRef, unknown[]>([
+      [projects, [projectRow]],
+      [pullRequests, [designerPr]],
+    ]));
+    const res = await ingestRepoCiEvent(db as never, env, 'secret', {
+      ...designerEvt, outcome: 'pending', rawState: 'in_progress',
+    });
+    expect(res.processed).toBe(false);
+  });
+
+  it('is a no-op when the project has no open PR', async () => {
+    const { db } = makeFakeDb(new Map<TableRef, unknown[]>([
+      [projects, [projectRow]],
+      [pullRequests, []],
+    ]));
+    const res = await ingestRepoCiEvent(db as never, env, 'secret', designerEvt);
+    expect(res.processed).toBe(false);
+    expect(res.reason).toMatch(/no open PR/);
+  });
+
+  it('is a no-op for an unknown project', async () => {
+    const { db } = makeFakeDb(new Map<TableRef, unknown[]>([[projects, []]]));
+    const res = await ingestRepoCiEvent(db as never, env, 'secret', designerEvt);
+    expect(res.processed).toBe(false);
+    expect(res.reason).toMatch(/no project/);
   });
 });

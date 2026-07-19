@@ -41,7 +41,7 @@ const json = (method: string, body: unknown) => ({
 
 /** Request a router with an empty Bindings env + a no-op executionCtx, the way
  *  the Worker supplies them in production. */
-const req = (app: { request: (...a: any[]) => Promise<Response> }, path: string, init?: RequestInit) =>
+const req = (app: any, path: string, init?: RequestInit): Promise<Response> =>
   app.request(path, init, {}, { waitUntil: () => {}, passThroughOnException: () => {} });
 
 // ---------------------------------------------------------------------------

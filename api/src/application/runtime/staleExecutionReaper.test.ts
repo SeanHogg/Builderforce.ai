@@ -193,7 +193,11 @@ describe('reapStaleExecutions — per-surface silence ceiling (execution #136)',
     expect(startMock).not.toHaveBeenCalled();
   });
 
-  it('REAPS a worker (serverless) run at the same 93s of silence — it never heartbeats past the wall', async () => {
+  it('SPARES a run stamped with the REMOVED serverless worker executor at 93s — an unknown executor gets the long-lived ceiling', async () => {
+    // The in-request 'worker' executor no longer exists, so nothing stamps this and
+    // `parseExecutor` reads it as unknown. A payload written before it was removed must
+    // therefore fall to the long-lived ceiling: there is no longer a surface that dies
+    // silently at ~30s, and reaping a possibly-live run is the worse failure mode.
     candidateRows = [{
       id: 200, tenant_id: 1, agent_host_id: null, payload: '{"executor":"worker","reaperRequeued":true}', error_message: null,
       task_id: 80, task_title: 'Quick', task_description: null,
@@ -203,8 +207,8 @@ describe('reapStaleExecutions — per-surface silence ceiling (execution #136)',
 
     const res = await reapStaleExecutions(envWithRunner(true), NOW);
 
-    expect(res.failedRunning).toBe(1);
-    expect(captured.failed).toContain(200);
+    expect(res.failedRunning).toBe(0);
+    expect(captured.failed).not.toContain(200);
   });
 
   it('REAPS a durable run that is genuinely silent (past the long-lived ceiling)', async () => {

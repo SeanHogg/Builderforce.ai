@@ -452,7 +452,10 @@
     }
   },
   "ceremonies": {
-    "selectProject": "选择一个项目以开始仪式。"
+    "selectProject": "选择一个项目以开始仪式。",
+    "viewLive": "实时圆桌",
+    "viewSchedules": "定期安排",
+    "viewSwitchLabel": "仪式视图"
   },
   "projectCard": {
     "details": "详情",
@@ -793,6 +796,36 @@
       "notPublishedTitle": "尚未发布",
       "notPublishedBody": "发布此应用以获得手机可以打开的链接，大约需要一分钟。",
       "goToPublish": "前往发布"
+    },
+    "publish": {
+      "title": "发布到网络",
+      "description": "构建此应用并托管在子域名上。静态托管——您的应用在浏览器中运行。",
+      "subdomain": "子域名",
+      "building": "正在构建…",
+      "uploading": "正在上传…",
+      "publish": "发布",
+      "republish": "重新发布",
+      "published": "已发布 ✓",
+      "liveSite": "线上站点",
+      "preview": "预览",
+      "fileCount": "{count, plural, other {# 个文件}}",
+      "invalidSubdomain": "请输入有效的子域名（字母、数字和连字符）。",
+      "failed": "发布失败"
+    },
+    "deploy": {
+      "title": "从 GitHub 部署",
+      "description": "让 GitHub Actions 在每次推送时构建此项目并部署到这里——无需保持 IDE 打开。",
+      "checking": "正在检查已连接的代码仓库…",
+      "needsRepo": "请先在“设置 → 代码仓库”中为此项目连接一个 GitHub 仓库。",
+      "needsGitHub": "此项目连接的不是 GitHub 仓库。GitHub Actions 部署需要 GitHub 仓库。",
+      "repoLabel": "仓库：",
+      "enable": "启用 GitHub 部署",
+      "reapply": "更新工作流",
+      "enabling": "正在写入工作流…",
+      "enableFailed": "无法启用 GitHub 部署。",
+      "enabledOn": "已在 {branch} 分支添加 {path}。下次推送到该分支时将构建并部署。",
+      "viewRuns": "在 GitHub 上查看工作流运行记录",
+      "viewWorkflow": "显示工作流文件"
     }
   },
   "tools": {
@@ -9967,5 +10000,51 @@
       "require-approval": "智能体在使用该工具前会暂停并请求人工批准。",
       "block": "智能体将直接拒绝该工具并说明原因。"
     }
+  },
+  "ceremonySchedules": {
+    "title": "周期性仪式",
+    "subtitle": "按固定节奏运行站会和规划会。每个排定的仪式都会自动开始，圆桌席位已就座。",
+    "newSchedule": "新建计划",
+    "editSchedule": "编辑计划",
+    "empty": "尚无周期性仪式。添加一个计划，你的站会就会自动开始。",
+    "enabled": "启用中",
+    "paused": "已暂停",
+    "pause": "暂停",
+    "resume": "恢复",
+    "colKind": "仪式",
+    "colCadence": "节奏",
+    "colNextRun": "下次运行",
+    "colLastRun": "上次运行",
+    "colStatus": "状态",
+    "colActions": "操作",
+    "colRoster": "圆桌",
+    "kind_standup": "站会",
+    "kind_planning": "规划会",
+    "scope_members": "项目成员",
+    "scope_roster": "固定名单",
+    "preset_weekdays9": "工作日 09:00",
+    "preset_weekdays10": "工作日 10:00",
+    "preset_daily9": "每天 09:00",
+    "preset_mondays10": "每周一 10:00",
+    "preset_fridays16": "每周五 16:00",
+    "presetCustom": "自定义计划…",
+    "fieldKind": "仪式",
+    "fieldCadence": "频率",
+    "fieldCron": "Cron 表达式",
+    "cronHelp": "五个字段：分钟、小时、日、月、星期。上方预设会自动填写；如需更精确的设置可自行修改。",
+    "fieldTimezone": "时区",
+    "fieldRoster": "参与人员",
+    "rosterHelp": "“项目成员”会让该项目所有活跃成员就座，发言最少的人优先。“固定名单”则始终安排同一批人。",
+    "fieldMaxParticipants": "最多席位",
+    "fieldTurnSeconds": "每轮发言秒数",
+    "turnSecondsPlaceholder": "使用看板默认值",
+    "fieldEnabled": "计划已启用",
+    "enabledHelp": "暂停的计划会保留设置，但不会开启仪式。",
+    "fieldAutoDispatch": "仪式结束后启动智能体工作",
+    "autoDispatchHelp": "会话完成后，本项目中由智能体负责的工单会自动交给对应的智能体。",
+    "confirmDelete": "要删除这个周期性仪式吗？已经运行过的会话会被保留。",
+    "errorLoad": "无法加载计划。",
+    "errorSave": "无法保存计划。",
+    "errorDelete": "无法删除计划。"
   }
 }

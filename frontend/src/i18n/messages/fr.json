@@ -452,7 +452,10 @@
     }
   },
   "ceremonies": {
-    "selectProject": "Sélectionnez un projet pour démarrer une cérémonie."
+    "selectProject": "Sélectionnez un projet pour démarrer une cérémonie.",
+    "viewLive": "Table ronde en direct",
+    "viewSchedules": "Planifications",
+    "viewSwitchLabel": "Vue de cérémonie"
   },
   "projectCard": {
     "details": "Détails",
@@ -793,6 +796,36 @@
       "notPublishedTitle": "Rien n'a encore été publié",
       "notPublishedBody": "Publiez cette application pour obtenir un lien que votre téléphone peut ouvrir. Cela prend environ une minute.",
       "goToPublish": "Aller à Publier"
+    },
+    "publish": {
+      "title": "Publier sur le web",
+      "description": "Compilez cette application et hébergez-la sur un sous-domaine. Hébergement statique : votre application s'exécute dans le navigateur.",
+      "subdomain": "Sous-domaine",
+      "building": "Compilation…",
+      "uploading": "Envoi…",
+      "publish": "Publier",
+      "republish": "Republier",
+      "published": "Publié ✓",
+      "liveSite": "Site en ligne",
+      "preview": "aperçu",
+      "fileCount": "{count, plural, one {# fichier} other {# fichiers}}",
+      "invalidSubdomain": "Saisissez un sous-domaine valide (lettres, chiffres et tirets).",
+      "failed": "Échec de la publication"
+    },
+    "deploy": {
+      "title": "Déployer depuis GitHub",
+      "description": "Laissez GitHub Actions compiler ce projet à chaque push et le déployer ici — sans garder l'IDE ouvert.",
+      "checking": "Vérification du dépôt connecté…",
+      "needsRepo": "Connectez d'abord un dépôt GitHub à ce projet, depuis Paramètres → Dépôt.",
+      "needsGitHub": "Ce projet est connecté à un dépôt qui n'est pas GitHub. Les déploiements GitHub Actions nécessitent un dépôt GitHub.",
+      "repoLabel": "Dépôt :",
+      "enable": "Activer les déploiements GitHub",
+      "reapply": "Mettre à jour le workflow",
+      "enabling": "Écriture du workflow…",
+      "enableFailed": "Impossible d'activer les déploiements GitHub.",
+      "enabledOn": "{path} a été ajouté sur {branch}. Le prochain push sur cette branche compilera et déploiera.",
+      "viewRuns": "Voir les exécutions du workflow sur GitHub",
+      "viewWorkflow": "Afficher le fichier du workflow"
     }
   },
   "tools": {
@@ -9967,5 +10000,51 @@
       "require-approval": "L’agent s’interrompt et demande l’accord d’un humain avant d’utiliser l’outil.",
       "block": "L’agent refuse purement et simplement l’outil et explique pourquoi."
     }
+  },
+  "ceremonySchedules": {
+    "title": "Cérémonies récurrentes",
+    "subtitle": "Lancez les mêlées et les plannings à intervalle régulier. Chaque cérémonie planifiée s’ouvre d’elle-même, table ronde déjà installée.",
+    "newSchedule": "Nouvelle planification",
+    "editSchedule": "Modifier la planification",
+    "empty": "Aucune cérémonie récurrente pour l’instant. Ajoutez une planification et votre mêlée démarrera toute seule.",
+    "enabled": "Active",
+    "paused": "En pause",
+    "pause": "Mettre en pause",
+    "resume": "Reprendre",
+    "colKind": "Cérémonie",
+    "colCadence": "Cadence",
+    "colNextRun": "Prochaine exécution",
+    "colLastRun": "Dernière exécution",
+    "colStatus": "Statut",
+    "colActions": "Actions",
+    "colRoster": "Table ronde",
+    "kind_standup": "Mêlée quotidienne",
+    "kind_planning": "Planification",
+    "scope_members": "Membres du projet",
+    "scope_roster": "Liste fixe",
+    "preset_weekdays9": "En semaine à 09h00",
+    "preset_weekdays10": "En semaine à 10h00",
+    "preset_daily9": "Tous les jours à 09h00",
+    "preset_mondays10": "Le lundi à 10h00",
+    "preset_fridays16": "Le vendredi à 16h00",
+    "presetCustom": "Planification personnalisée…",
+    "fieldKind": "Cérémonie",
+    "fieldCadence": "Fréquence",
+    "fieldCron": "Expression cron",
+    "cronHelp": "Cinq champs : minute, heure, jour du mois, mois, jour de la semaine. Le préréglage ci-dessus le remplit ; modifiez-le pour un cas plus précis.",
+    "fieldTimezone": "Fuseau horaire",
+    "fieldRoster": "Qui participe",
+    "rosterHelp": "« Membres du projet » installe toutes les personnes actives sur ce projet, celle qui a le moins parlé en premier. Une liste fixe installe toujours les mêmes personnes.",
+    "fieldMaxParticipants": "Nombre maximal de places",
+    "fieldTurnSeconds": "Secondes par tour de parole",
+    "turnSecondsPlaceholder": "Utiliser la valeur du tableau",
+    "fieldEnabled": "Planification active",
+    "enabledHelp": "Une planification en pause conserve ses réglages mais n’ouvre jamais de cérémonie.",
+    "fieldAutoDispatch": "Lancer le travail des agents à la fin de la cérémonie",
+    "autoDispatchHelp": "À la clôture de la session, les tickets de ce projet confiés à des agents leur sont automatiquement transmis.",
+    "confirmDelete": "Supprimer cette cérémonie récurrente ? Les sessions déjà tenues sont conservées.",
+    "errorLoad": "Impossible de charger les planifications.",
+    "errorSave": "Impossible d’enregistrer la planification.",
+    "errorDelete": "Impossible de supprimer la planification."
   }
 }

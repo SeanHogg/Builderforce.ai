@@ -167,6 +167,28 @@ export async function findMergedPullRequestBySha(db: Db, mergeSha: string) {
  *  deployment row: a failing post-merge build is a change failure; a later success
  *  closes MTTR by stamping restored_at on the still-open failure. (Pre-merge rows have
  *  no deployment_events row yet, so the DORA reconcile is a harmless no-op for them.) */
+/**
+ * The newest open PR for a PROJECT (no task). Designer/Mobile PRs are opened by
+ * the IDE bridge, not by an agent working a ticket, so they have a `projectId`
+ * and a null `taskId` — `findOpenPullRequestByTask` can never match them.
+ */
+export async function findOpenPullRequestByProject(db: Db, tenantId: number, projectId: number) {
+  const [row] = await db
+    .select({
+      id: pullRequests.id,
+      tenantId: pullRequests.tenantId,
+      taskId: pullRequests.taskId,
+      projectId: pullRequests.projectId,
+      repoId: pullRequests.repoId,
+      buildStatus: pullRequests.buildStatus,
+    })
+    .from(pullRequests)
+    .where(and(eq(pullRequests.projectId, projectId), eq(pullRequests.tenantId, tenantId), ne(pullRequests.status, 'merged')))
+    .orderBy(sql`${pullRequests.number} is not null desc`, desc(pullRequests.createdAt))
+    .limit(1);
+  return row ?? null;
+}
+
 export async function setPullRequestBuildStatus(db: Db, id: string, buildStatus: string, buildError: string | null = null) {
   await db
     .update(pullRequests)

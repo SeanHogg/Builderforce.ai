@@ -648,7 +648,7 @@ The default. Runs the Claude Agent SDK tool loop fully in the cloud across Durab
 - Per-tick overhead (alarm scheduling, state rehydrate) makes it less efficient for a single very long, chatty session than a persistent process.
 - Requires a tenant Anthropic key wired through the Gateway.
 
-> When the `CloudRunnerDO` binding is absent, an **interim Worker executor** (`runCloudExecution`) runs the whole loop inline. It works but dies at the ~30s `waitUntil` wall on long runs — it exists only as a fallback until the DO is deployed.
+> When the `CloudRunnerDO` binding is absent there is **no fallback executor** — dispatch resolves to `unavailable` and the run fails fast with that reason. An in-request Worker executor used to be documented here as an interim fallback, but it could not survive the ~30s `waitUntil` wall on a multi-step run, so it was never selectable and has been removed: a clear "no executor bound" error beats a run that silently dies mid-task and gets orphan-reaped.
 
 ### Cloud Agent (Node/Container) — surface `container`
 

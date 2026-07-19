@@ -15,6 +15,7 @@ import {
 } from '@/lib/builderforceApi';
 import { useLlmModels } from '@/lib/useLlmModels';
 import { ModelSelect } from '@/components/llm/ModelSelect';
+import { RoleGate } from '@/components/RoleGate';
 import { useTaskRunner, defaultRunTarget } from './useTaskRunner';
 
 /**

@@ -290,6 +290,15 @@ export const ideRepoApi = {
     projectsRequest(`${ideProjectBase(projectId)}/create-repo`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     }),
+
+  /** Write the GitHub Actions deploy workflow into the repo (idempotent). */
+  enableDeploys: (
+    projectId: number | string,
+    body: { repoId?: string; subdomain?: string; distDir?: string } = {},
+  ): Promise<{ path: string; branch: string; workflow: string }> =>
+    projectsRequest(`${ideProjectBase(projectId)}/enable-deploys`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }),
 };
 
 // ---------------------------------------------------------------------------
