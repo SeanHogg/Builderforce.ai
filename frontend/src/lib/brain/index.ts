@@ -87,7 +87,7 @@ export {
   type BrainCapabilityDef,
   type BrainCapabilitySurface,
 } from './capabilities';
-export { extractCsv, exportFilenameStem } from './messageExport';
+export { extractCsv, exportFilenameStem, replyHasArtifact } from './messageExport';
 
 // Model-authored "next step" buttons parsed out of a Brain reply.
 export { parseSuggestedActions, type SuggestedAction, type ParsedSuggestedActions } from './suggestedActions';

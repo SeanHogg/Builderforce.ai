@@ -23,7 +23,7 @@ import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { resolveCloudRunsMonthly } from '../../domain/tenant/PlanLimits';
 import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { utcMonthStart } from '../llm/tokenUsage';
-import { tenantHasSuperadminMember } from '../llm/tenantTokenAvailability';
+import { resolveSuperadminUnlimited } from '../llm/tenantTokenAvailability';
 
 /** Only cloud-surface usage rows that carry an execution id count as a run. */
 const cloudRunRow = and(eq(llmUsageLog.surface, 'cloud'), isNotNull(llmUsageLog.executionId));
@@ -97,9 +97,9 @@ export async function enforceCloudRunCap(db: Db, tenantId: number, env?: Env): P
     });
     if (limit < 0) return { allowed: true }; // plan-unlimited (Teams / -1 override)
 
-    // A superadmin OPERATOR is unlimited everywhere — same bypass, same source of
+    // A superadmin OPERATOR is unlimited on EVERY meter — same rule, same source of
     // truth as the token gate. Only consulted once the plan already caps the tenant.
-    if (await tenantHasSuperadminMember(db, tenantId, env)) return { allowed: true };
+    if (await resolveSuperadminUnlimited(db, tenantId, undefined, env)) return { allowed: true };
 
     const used = await sumTenantCloudRuns(db, tenantId, utcMonthStart());
     if (used >= limit) return { allowed: false, effectivePlan, used, limit };

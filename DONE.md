@@ -4,6 +4,70 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-19 — Evermind Knowledge Map: Neocortex showed "Nothing learned yet" against a live training readout
+
+**The bug.** Clicking Neocortex on the Knowledge Map always listed nothing, on a project sitting at v522 with 710 learnings and a training readout reporting loss 38.768 / 40,804 weights moved. A display-attribution defect, not data loss.
+
+`evermindRegions.ts` mapped regions to contribution kinds one-to-one: Neocortex ← `kind: 'delta'`, Hippocampus ← `kind: 'text'`. A `delta` row is only produced by `POST /evermind/learn` (the pre-diffed weight-delta door), which **has no caller in any repo**. Every real learning path — Brain chat, incident lessons, teach-a-task — goes through `/learn-text`. So Neocortex filtered a set that is empty by construction. The irony: the text path is precisely the one doing neocortical work — `ProjectEvermindCoordinatorDO.drain()` runs `EvermindLMTrainer.fit()` and pushes a checkpoint diff, which is where those 40,804 moved weights came from. It was all being credited to the Hippocampus.
+
+**The fix.** Region attribution is now many-to-many, mirroring hippocampal→neocortical consolidation: Hippocampus = the episodic record (`kind: 'text'`); Neocortex = every contribution whose weights were actually fitted into the merge. `EvermindBrainMap` now sources its node counts from the shared `recentForRegion` instead of re-inlining the same filters, so the map's counts and the Learnings list can no longer drift.
+
+**Attribution now rests on data, not statement order.** The coordinator stamps `fitted: true` on the merged meta at the point it pushes the checkpoint diff (`RecentEntry.fitted`, mirrored through `projectEvermind.ts` and `projectEvermindApi.ts`). Previously the invariant "a text row was fitted" held only because `mergedMeta.push` happened to run after `diffs.push` — true then, silently breakable by any later edit to the merge loop. Consumers read `fitted !== false` (never `=== true`) so the ~710 pre-flag ring entries, all of which were fitted, keep their credit.
+
+**Files:** `frontend/src/lib/evermindRegions.ts`, `frontend/src/components/ide/EvermindBrainMap.tsx`, `frontend/src/lib/projectEvermindApi.ts`, `api/src/infrastructure/relay/ProjectEvermindCoordinatorDO.ts`, `api/src/application/llm/projectEvermind.ts`. **Tests (5 new):** `frontend/src/lib/evermindRegions.test.ts` pins the regression — a fitted text contribution lands in both regions, a legacy row with no flag counts as fitted, an unfitted row is excluded from Neocortex but kept as a memory, a delta stays out of the Hippocampus, and state regions list nothing. No migration (DO storage is additive and backfill-safe).
+
+---
+
+## ✅ RESOLVED 2026-07-19 — Gap-free card replace + per-card detach (api 2026.7.106 · migration 0346)
+
+Both remaining card residuals shared ONE root cause: card validation persisted brand + last4 but never the processor's payment-method id, so the customer was the only handle we held. Migration 0346 adds `tenants.external_payment_method_id` (nullable, additive, no backfill) and both defects close together.
+
+**1. A replace no longer suspends premium.** `POST /card-validation` used to `markCardPending` unconditionally, which clears the validated verdict — right for a first-time validation (no access to lose), wrong for a replace, where it revoked a paying tenant's premium for however long the processor took, even though the old card was still perfectly good. Now: an already-validated tenant **keeps their verdict**, and the swap completes on the webhook — `markCardValidatedByCustomer` returns the displaced `paymentMethodId` (only when genuinely different, so re-validating the same card can't revoke it), and `webhookRoutes` detaches it *after* the new card is confirmed. Add-then-swap, never reset-then-add. The detach is best-effort: a failure orphans a card at the processor rather than 500ing a webhook whose row is already written.
+
+**2. Removal detaches exactly the card we recorded.** `detachCards()` now takes `{ paymentMethodId?, externalCustomerId? }` — by id when known, falling back to the customer-wide sweep only for pre-0346 rows (safe: those tenants predate multi-card support and hold one). `StripeProvider.fetchCard` reads the payment method's `id` alongside its brand/last4, so the two can't drift.
+
+**Tests (21 new).** `tenantRoutes.cardLifecycle.test.ts` (8) asserts the behaviours a type-checker can't see: pending IS marked on a first validation and is NOT on a replace; nothing is detached at request time; DELETE detaches by id, falls back to the sweep for legacy rows, 409s while a subscription is live without touching anything, does NOT clear our record when the processor call fails (detach-then-clear ordering), and blocks cross-tenant. `webhookRoutes.cardSwap.test.ts` (6) covers the swap: the displaced card is detached, a first-time validation detaches nothing, the pm id is passed through for persistence, a failed detach still ACKs, an unknown customer is reported unprocessed, and a DECLINED replacement never costs the tenant the card that still works. `StripeProvider.test.ts` (+2) covers detach-by-id and a card the processor no longer knows.
+
+**Also fixed:** `markCardValidated` (the by-tenant-id twin of the webhook writer) had zero callers — validation only ever arrives by webhook — so it's gone rather than left as a second way to write the same columns. The replace confirmation copy said premium would pause; it no longer does, so all five catalogs were rewritten to reassure instead of warn.
+
+**Verification.** Full api suite **2303/2303** across 268 files; `check:schema` (296 tables / 3828 columns, no new drift), `check:migrations` (288 files, sequence clean) and `check:tracks` all pass; frontend + extension `tsc` clean. Remaining residuals — the live deployed run, and a pre-existing overlap where `billing_payment_brand`/`last4` are shared by the validated card AND the subscription card — are in the roadmap.
+
+---
+
+## ✅ RESOLVED 2026-07-19 — Mobile modality + a green test suite (api 2026.7.106 · frontend 2026.7.77)
+
+**1. Mobile is a first-class IDE project type.** New `mobile` entry in the modality registry (`frontend/src/lib/modality.ts`), accepted by `ideProjectRoutes.ts` and the `create_project` MCP tool. It reuses Designer's whole WebContainer pipeline (Run, Check, Gate Run, publish-to-subdomain) and differs only in how the centre pane frames the preview.
+
+**2. The IDE reads its layout from the registry instead of branching on the modality id.** `ModalityDef` gained `center` (`code-preview | device | video | voice | evermind | finetune`), `dockBrain` and `publishPanel`; `IDENew.tsx` now switches on those. Removes the hardcoded `modality === 'designer' || modality === 'voice'` docked-Brain check and the `modality === 'designer' ? SitePublishPanel : AgentPublishPanel` branch, so adding a modality is again one registry entry.
+
+**3. Device simulator + scan-to-phone.** `ide/DevicePreview.tsx` renders the preview inside a phone bezel at the device's true viewport (5 presets in `lib/devicePresets.ts`, rotation, auto-scale-to-fit via ResizeObserver, reload, open-in-tab). `ide/MobileDevicePanel.tsx` is the "preview on your phone" slide-out: it QR-encodes the project's **published** URL (the WebContainer dev server is unreachable off-tab, and the copy says so) or points at Publish when nothing is published.
+
+**4. Dependency-free QR encoder.** `lib/qr.ts` — byte mode, EC level M, versions 1–10, ~213-byte capacity. No runtime dependency and no third-party image service seeing project URLs. Verified by a full round-trip decode plus an independent Reed-Solomon syndrome check (`lib/qr.test.ts`, 16 cases); two real bugs (mirrored format-info placement clobbering the dark module; wrong syndrome roots) were caught by those tests.
+
+**5. Mobile scaffold.** React Native rendered through `react-native-web` so it runs in the browser preview while staying portable to Expo — `MOBILE_TEMPLATE` in `api/.../projectTemplate.ts` mirrored by `MOBILE_DEFAULTS` in `frontend/src/lib/vanillaDefaults.ts`. Template selection is now per-modality (`templateForProject`, replacing `projectWantsVanilla`), and the project-less `templateNeedsBackfill` gate clears a complete workspace of **any** template — otherwise every healthy Mobile project would be flagged on every file-list and pay a project lookup forever.
+
+**6. The frontend and API suites are green (388 + 2289 passing).** Thirteen pre-existing frontend failures fixed: `ConfirmProvider`, `next/navigation` and a `ResizeObserver` stub added to `src/test/setup.ts` (alongside the existing next-intl/auth mocks); missing `kanbanApi` entries added to three test mocks; stale English assertions in `AgentExecutionPanel.test.tsx` updated to the key contract; and `model-provider.test.ts` now stubs the full tokenizer+model+trainer triad a ready provider holds. The test i18n stub now **appends interpolated values** after the key, so assertions like "shows $0.42 spent" keep their real coverage instead of degrading to "shows a spend element". Two API failures in `StripeProvider.test.ts` were a stale call signature — the tests passed `detachCards('cus_123')` while the implementation takes `{ externalCustomerId }`, so it silently returned 0 and four sibling tests passed only because they expected 0.
+
+Localized across all five catalogs (`ide.modality.mobile.*`, `ide.device.*`, `ide.centerPreview/centerCode`). Open follow-ups (no native runtime; QR needs a publish rather than hot reload) are in the roadmap.
+
+---
+
+## ✅ RESOLVED 2026-07-19 — Card removal, route-level 402 coverage, one plan-tier source (api 2026.7.105 · VSIX 2026.7.87 · frontend 2026.7.76)
+
+Closes the three items left open by the pass below.
+
+**1. The 402 path is now covered through the REAL route, not just helpers.** Three cases added to `llmRoutes.test.ts`, driving the actual Hono handler with a mocked free tenant: an unpinned body is **not** 402 (it reaches the missing-`OPENROUTER_API_KEY` 503, i.e. past every gate); the same turn with tools (the VSIX shape, which switches to the coding pool) is likewise not 402; and — the regression that matters — the **old hardcoded `openai/gpt-4o-mini` still IS a 402**, with `code: 'premium_model_not_allowed'`, a truthy `unlock` and `requiredPlan: 'pro'`. That reproduces the user's original report through the route and confirms the client fix addresses it. Only a run against the deployed gateway remains, which needs credentials.
+
+**2. Card removal shipped end to end.** New `PaymentProvider.detachCards(externalCustomerId)` + `StripeProvider` implementation (list `payment_methods`, detach each; an unknown customer / already-detached card is the desired end state, not an error — 6 tests). New `clearCardValidation()` resets status/timestamp/brand/last4. New `DELETE /api/tenants/:id/card-validation` (manager role, self-scope only) **detaches first, then clears** — so a processor failure changes nothing rather than revoking access while Stripe still holds the card. It **refuses with 409 `card_backs_active_subscription`** while a paid plan bills that card, naming the downgrade path instead of half-performing a removal that would break renewal billing. Wired through `cardValidationApi.remove` into `<CardOnFile>` with a `useConfirm` warning that states the real consequence (premium turns off), and invalidating the model + consumption caches so every surface stops offering models the tenant can no longer use. 5 more `billing.*` keys across all five catalogs.
+
+**3. One source for "what tier is this tenant?"** `EvermindScreen` was deriving `isPaid` from `/llm/v1/models` — doubly wrong, since that payload's `premium` is the superadmin OVERRIDE flag (not "paid") and its `effectivePlan` silently degrades to `'free'` when auth fails, so a transient blip would downgrade the UI instead of erroring. Replaced with a new shared `fetchIsPaidPlan()` in `accountPlan.tsx`, reading the cached `/api/consumption` snapshot and failing CLOSED. `/api/consumption` is now the sole tier source in the VSIX; `/llm/v1/models` remains the sole entitlement-REASON source. The now-unread `premium`/`effectivePlan` fields were dropped from the local response type.
+
+**Also fixed, found in passing:** `POST /card-validation` returned users to `/settings?card=validated` — a page with no card surface at all — now `/pricing`, the actual billing console. Dead `markCardValidated` import removed from `tenantRoutes`. `api/src/version.ts` had drifted to 2026.7.100 against a package.json on 2026.7.104 despite its own "update both together" contract; realigned.
+
+**Verification.** Full api suite **2282/2282** across 266 files; frontend `tsc --noEmit` clean; VSIX builds and packages 2026.7.87. Remaining residuals (replace still has an access gap, per-customer detach granularity, live deployed run) are in the roadmap.
+
+---
+
 ## ✅ RESOLVED 2026-07-19 — Entitlement-error residuals closed (brain-ui 2026.7.32 · VSIX 2026.7.86 · frontend 2026.7.75)
 
 Follow-up on the four residuals from "Account type is visible in VSIX chat" (below). Three closed outright; the fourth is now blocked only on a live environment.
@@ -21,6 +85,55 @@ Follow-up on the four residuals from "Account type is visible in VSIX chat" (bel
 **Verification.** frontend `tsc --noEmit` clean; brain-embedded 155/155; api premium-gate + new seam tests 14/14; brain-ui + VSIX build; VSIX packaged 2026.7.86. Remaining residuals (live 402 run, card REMOVE, dual plan-state sources) are in the roadmap.
 
 > **Note:** this pass overlapped with a concurrent session working the same list. Both arrived at the same shared-component design independently; the web adapter (`BrainErrorBanner`, `useCardValidation`, `useConsumption`) is that session's work, the shared `brain-ui` banner and §2–§4 are this one's.
+
+---
+
+## ✅ RESOLVED 2026-07-19 — "Superadmin ⇒ unlimited" is now ONE rule, reaching every meter and every gate (api 2026.7.109)
+
+**Report.** "I'm actually the superadmin — the fact it's showing a limit is also a bug." Correct, and the previous pass only half-fixed it.
+
+**What the previous pass got wrong.** It made the consumption meter superadmin-aware by calling `tenantHasSuperadminMember` directly — resolving only ONE of the three sources the gate uses. A superadmin operating a tenant they are not an active member of still saw plain plan caps. Worse, it created a SECOND place where the "superadmin ⇒ unlimited" rule lived, next to the comment in `tenantTokenAvailability` claiming to be "THE single place" — the exact drift that caused the original bug.
+
+**The rule is now one exported function.** `resolveSuperadminUnlimited(db, tenantId, { actingUserId, actingIsSuperadmin }, env)` resolves from all three sources in order — caller-resolved flag → acting user's `users.isSuperadmin` → tenant's active superadmin membership. `getTenantTokenAvailability` now delegates to it instead of inlining the logic, and every other surface calls the same function.
+
+**Two more divergences found while wiring it.**
+1. **Three enforcement gates never granted the bypass at all** — ingestion, outbound fetches, and error events resolved limits with no superadmin authority, so a superadmin genuinely WAS capped on those axes even though `PlanLimits` documents "a superadmin-unlimited tenant is unlimited across every meter". Had the meter been fixed alone, it would have promised unlimited while those gates blocked — the same shown≠enforced lie in the opposite direction. All three now consult the shared rule (only once the plan already caps the tenant, so unlimited tenants pay nothing), and `cloudRunLedger` was switched from the raw membership helper to the shared one.
+2. **The consumption cache could serve one caller's answer to another.** The key was tenant+month, but the payload now depends on WHO is asking. Superadmin status is resolved before the cache and folded into the key (`:sa` / `:plan`), so members still share one scan — two entries per tenant at most, rather than keying per user.
+
+**Verified.** 9 new tests in `superadminUnlimited.test.ts` cover each resolution source, the ordinary-user negative case, and the bypass reaching all three previously-broken gates without a usage scan. The existing gate tests passed throughout only because their drizzle mock lacked `innerJoin`, making the membership query throw and fail closed — the new mock models it, so this path is actually exercised now. Full api suite: 270 files, 2318 tests green.
+
+**Consequence.** On the reporting tenant every meter now reads "unlimited" — matching what the gateway has been doing all along.
+
+---
+
+## ✅ RESOLVED 2026-07-19 — The usage meter was reporting limits the gateway does not enforce (api 2026.7.107 · frontend 2026.7.78 · brain-embedded 2026.7.39 · brain-ui 2026.7.33 · VSIX 2026.7.88)
+
+**Trigger.** Chasing "the visualize button did nothing", the diagnostics dump claimed `AI tokens: 559,139,119 / 50,000 (100%) · 0 left` and `Cloud runs: 924 / 25 (100%)` — yet the turn completed normally (`finish: stop`, no 429). Both cannot be true.
+
+**The meter was lying, not the gate.** `application/consumption/meters.ts` resolved every allowance WITHOUT the superadmin authority `tenantTokenAvailability` enforces with: the gate treats a tenant with an active superadmin member as unlimited (`tenantHasSuperadminMember` → `dailyLimit/monthlyLimit = -1`, no usage scan), while the meter independently resolved plain free-plan caps and rendered them against real usage. The file's own header promises "the number a member SEES here equals the number ENFORCED" — that held for *usage* and was broken for *limits*. Every downstream reader inherited the false numbers: the sidebar Usage meter, `PlanBadge`, the AI-usage tile, and the chat-diagnostics signals.
+
+- **Fix.** `resolveMeterLimits()` — a new pure export resolving all five allowances from one input — is now called with `isSuperadmin` from the same cached `tenantHasSuperadminMember` helper the gate uses (5-min read-through cache; the route's own 60s cache is unchanged). Unit-tested so the flag cannot be silently dropped again: superadmin ⇒ all five unlimited, override `-1` ⇒ all five unlimited, positive token override ⇒ token axis only.
+- **Consequence for the reporting tenant:** the Brain Storm chat is NOT out of tokens and never was. That also means the earlier claim that free-pool routing explained the stub reply was based on a false reading.
+
+**Allowance banner (the logged gap), gated on the truth.** `AllowanceBanner` mounts in the Brain composer beside the existing provider-cap banner, warning at 80% and escalating when a real cap is spent, with Upgrade / Connect-your-own-account links and a content-keyed dismiss (a period reset or plan change re-arms it). Thresholds come from a new `allowanceState()` exported from brain-embedded — the SAME function the diagnostics signals now use, so banner and report can never disagree. It self-gates on `meter.unlimited`, so the tenant above correctly sees nothing.
+
+**Model attribution (the second logged gap) — the plumbing existed and was throwing data away.** `MessageProvenance.account` was REQUIRED, so `provenanceMetadata()` discarded the resolved model whenever the gateway omitted `x-builderforce-account` (older gateway, or the header not CORS-exposed) — dropping attribution entirely at precisely the moment a user asks "why is this answer so bad?". `account` is now optional: the model is persisted and the `ProvenanceChip` renders it with the account badge omitted rather than claiming something unverified. 9 new tests cover the parse/write paths and the allowance thresholds.
+
+---
+
+## ✅ RESOLVED 2026-07-19 — Clicking a capability tile no longer produces a stub reply (frontend 2026.7.75)
+
+**Report.** "I clicked the visualize button and it didn't do anything." Diagnostics: chat #70, one turn, `llm.complete → 0 tool calls · 77 chars · finish: stop`, assistant reply in full: `Project tasks status distribution (fetched for BuilderForce.AI / project 11):`. A title, no chart.
+
+**Root cause — mine, two defects.**
+1. **The starters were dangling sentence fragments.** The Data Visualization tile seeded the composer with the literal string `"Visualize "`, so the natural action was to press Send and ship a one-word prompt with no subject. Every starter had this shape ("Write a document about ", "Build a spreadsheet that "). All nine are now COMPLETE, sendable prompts grounded in the chat's project ("Chart how this project's tasks are distributed across statuses."), rewritten in all five catalogs.
+2. **Nothing pulled focus after seeding.** `ChatInput` gained a `focusToken` prop — bump it and the composer focuses with the caret at the END of the text, so a seeded line reads as a sentence to finish. `BrainPanel` bumps it when a capability is picked.
+
+**Root cause — the model's, now constrained.** A shared `ARTIFACT_CONTRACT` is appended to every capability prompt (baked once in the registry, same pattern as the modality registry's strategy note): never reply with only a title or preamble — produce the artifact in full, or ask exactly ONE clarifying question and nothing else; and never describe data as "fetched" without actually calling a tool for it that turn. The observed reply violated both halves.
+
+**And when it happens anyway.** `replyHasArtifact(capability, content)` (driven by a new `expects` field per capability: document / slides / chart / table / code) judges whether a reply delivered its artifact's SHAPE. `CapabilityArtifactNotice` renders on the newest assistant turn when it didn't: says what's missing and offers "Ask again", which re-sends an explicit request. Self-gating — no capability, artifact present, or still streaming means it renders nothing. Unit-tested against the exact 77-char stub above plus the pass/fail case for each capability (12 tests).
+
+**Not fixable in code — the dominant factor.** The reporting tenant's AI token allowance is at **559,139,119 / 50,000 for the period (~11,000× over)** on the free plan with no card, so turns route to the weakest model in the free pool. The prompt and UX fixes make a stub visible and retryable; they cannot make an exhausted free-pool model render an `xychart`.
 
 ---
 

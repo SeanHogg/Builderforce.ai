@@ -396,8 +396,8 @@ const CATALOG: BuiltinTool[] = [
   { tool: 'projects.get', mutates: false, description: 'Get one project by id.', parameters: obj({ id: N }, ['id']), run: (ctx, a) => ctx.projects.getProject(num(a.id), ctx.tenantId).then((p) => p.toPlain()) },
   {
     tool: 'projects.create', mutates: true,
-    description: 'Create a new project. modality: designer (app builder) | video | llm.',
-    parameters: obj({ name: S, description: S, template: S, modality: { type: 'string', enum: ['designer', 'video', 'llm'] } }, ['name']),
+    description: 'Create a new project. modality: designer (app builder) | mobile (phone app) | video | llm.',
+    parameters: obj({ name: S, description: S, template: S, modality: { type: 'string', enum: ['designer', 'mobile', 'video', 'llm'] } }, ['name']),
     run: async (ctx, a) => {
       const name = str(a.name).trim();
       if (!name) throw new Error('name is required');

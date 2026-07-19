@@ -90,6 +90,43 @@ function tierForAnthropicModel(modelId: string): AiModelTier {
 interface AnthropicBlock { type: string; [k: string]: unknown }
 interface AnthropicMessage { role: 'user' | 'assistant'; content: AnthropicBlock[] }
 
+/**
+ * JSON Schema keywords Anthropic's structured-outputs compiler REJECTS with a 400.
+ *
+ * Callers speak generic JSON Schema (the gateway's public surface is the OpenAI
+ * `response_format: json_schema` shape), which permits numeric/length/array
+ * constraints that Anthropic does not implement. Forwarding them verbatim 400s the
+ * whole request — e.g. a `{type:'integer', minimum: 1}` property is enough to sink
+ * an otherwise-valid call. The official Anthropic SDKs strip these client-side and
+ * validate them locally; this translator is that layer for our gateway.
+ *
+ * Stripping is SAFE: these keywords only narrow an already-valid shape, so the
+ * model still returns the right structure — the constraint just stops being
+ * machine-enforced. That is strictly better than a 400.
+ */
+const UNSUPPORTED_SCHEMA_KEYWORDS = new Set([
+  'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf',
+  'minLength', 'maxLength', 'pattern',
+  'minItems', 'maxItems', 'uniqueItems',
+  'minProperties', 'maxProperties',
+]);
+
+/**
+ * Recursively drop {@link UNSUPPORTED_SCHEMA_KEYWORDS} from a JSON Schema so
+ * Anthropic's structured-outputs compiler accepts it. Returns a new object —
+ * the caller's schema is never mutated (it may be a shared/frozen constant).
+ */
+export function sanitizeAnthropicJsonSchema(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(sanitizeAnthropicJsonSchema);
+  if (!schema || typeof schema !== 'object') return schema;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(schema as Record<string, unknown>)) {
+    if (UNSUPPORTED_SCHEMA_KEYWORDS.has(key)) continue;
+    out[key] = sanitizeAnthropicJsonSchema(value);
+  }
+  return out;
+}
+
 /** Map an OpenAI `tools[]` entry (or an already-Anthropic-shaped one) to the
  *  Anthropic tool schema. */
 function toAnthropicTool(t: unknown): Record<string, unknown> | null {
@@ -328,24 +365,23 @@ function prepareAnthropicRequest(
   //
   // Anthropic also requires `max_tokens > thinking.budget_tokens`, so the output cap is
   // bumped to fit when thinking is enabled.
-  const requestedThinking = (params.extraBody ?? {}).thinking as { type?: string; budget_tokens?: number } | undefined;
+  const requestedThinking = (params.extraBody ?? {}).thinking as { type?: string } | undefined;
   const hasTools = !!(tools && tools.length);
   const noPriorAssistantTurn = !req.messages.some((m) => m.role === 'assistant');
   const firstTurnHint = (params.extraBody ?? {}).firstTurn;
   const firstTurnWithTools = noPriorAssistantTurn && firstTurnHint !== false;
-  const enableThinking = requestedThinking?.type === 'enabled' && (!hasTools || firstTurnWithTools);
-  let thinking: Record<string, unknown> = { type: 'disabled' };
-  let effectiveMaxTokens = maxTokens;
-  if (enableThinking) {
-    // Clamp the budget so it stays strictly below the output cap (leaving room for the
-    // actual answer), then ensure max_tokens exceeds it.
-    const budget = Math.max(1024, Math.min(Number(requestedThinking!.budget_tokens ?? 8192) || 8192, MAX_OUTPUT_TOKENS - 1024));
-    effectiveMaxTokens = Math.min(Math.max(maxTokens, budget + 1024), MAX_OUTPUT_TOKENS);
-    thinking = { type: 'enabled', budget_tokens: budget };
-  }
+  const enableThinking = requestedThinking?.type === 'adaptive' && (!hasTools || firstTurnWithTools);
+  // ADAPTIVE thinking is the only on-mode on every model in CATALOG. The legacy
+  // manual form (`{type:'enabled', budget_tokens}`) is REMOVED on Sonnet 5 / Opus 4.8
+  // and 400s, so depth rides on `output_config.effort` instead of a token budget.
+  // `{type:'disabled'}` remains valid on both and stays the continuation-turn default.
+  const thinking: Record<string, unknown> = enableThinking ? { type: 'adaptive' } : { type: 'disabled' };
+  const thinkingEffort = enableThinking
+    ? ((params.extraBody ?? {}).thinkingEffort as string | undefined)
+    : undefined;
   const body: Record<string, unknown> = {
     model: params.model,
-    max_tokens: effectiveMaxTokens,
+    max_tokens: maxTokens,
     messages: req.messages,
     ...(system ? { system } : {}),
     ...(tools ? { tools } : {}),
@@ -353,10 +389,17 @@ function prepareAnthropicRequest(
     thinking,
     ...(stream ? { stream: true } : {}),
   };
+  // `output_config` carries BOTH structured-output format and thinking effort, so it
+  // is assembled once — assigning it twice would drop whichever landed first.
   const rf = (params.extraBody ?? {}).response_format as { type?: string; json_schema?: { schema?: unknown } } | undefined;
+  const outputConfig: Record<string, unknown> = {};
   if (rf?.type === 'json_schema' && rf.json_schema?.schema) {
-    body.output_config = { format: { type: 'json_schema', schema: rf.json_schema.schema } };
+    // Strip keywords Anthropic's structured-output compiler rejects (see
+    // `sanitizeAnthropicJsonSchema`) — forwarding e.g. `minimum` 400s the request.
+    outputConfig.format = { type: 'json_schema', schema: sanitizeAnthropicJsonSchema(rf.json_schema.schema) };
   }
+  if (thinkingEffort) outputConfig.effort = thinkingEffort;
+  if (Object.keys(outputConfig).length) body.output_config = outputConfig;
   const headers: Record<string, string> = {
     // Subscription tokens use Bearer + the oauth beta; API keys use x-api-key.
     ...(isOAuth

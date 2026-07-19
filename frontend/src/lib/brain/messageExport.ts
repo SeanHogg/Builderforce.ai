@@ -9,6 +9,7 @@
  */
 
 import { toCsv } from '@/lib/download';
+import { getBrainCapability } from './capabilities';
 
 const CSV_FENCE = /```csv\s*\n([\s\S]*?)```/i;
 const TABLE_DIVIDER = /^\|?[\s:|-]+\|[\s:|-]*$/;
@@ -40,6 +41,49 @@ export function extractCsv(markdown: string): string | null {
     return toCsv(head, rows);
   }
   return null;
+}
+
+const HAS_TABLE = /^\s*\|.*\|\s*$[\r\n]+^\s*\|?[\s:|-]+\|/m;
+const HAS_FENCE = /```[\w./+-]*\s*\n[\s\S]*?\n?```/;
+const HAS_MERMAID = /```mermaid\s*\n[\s\S]*?```/;
+const HAS_SLIDE_HEADING = /^##\s+\S/m;
+const HAS_HEADING = /^#{1,3}\s+\S/m;
+
+/**
+ * Did this reply actually DELIVER the capability's artifact?
+ *
+ * A weak model will answer a chart request with a title line and nothing else
+ * ("Project tasks status distribution:"), which renders as a near-empty bubble —
+ * the user clicks a capability, gets a stub, and has no idea what went wrong.
+ * The consumer uses this to say so and offer a retry.
+ *
+ * Conservative by design: it answers "is the expected SHAPE present", never
+ * "is the content good". No capability, or a reply that is still streaming,
+ * means no verdict — callers should skip the check.
+ */
+export function replyHasArtifact(capability: string | null | undefined, content: string): boolean {
+  const expects = getBrainCapability(capability)?.expects;
+  if (!expects) return true;
+  const text = content.trim();
+  if (!text) return false;
+
+  switch (expects) {
+    case 'chart':
+      // A chart, or at minimum the figures behind one.
+      return HAS_MERMAID.test(text) || HAS_TABLE.test(text) || extractCsv(text) != null;
+    case 'table':
+      return HAS_TABLE.test(text) || extractCsv(text) != null;
+    case 'slides':
+      return HAS_SLIDE_HEADING.test(text);
+    case 'code':
+      return HAS_FENCE.test(text);
+    case 'document':
+      // A document is prose, so the only honest floor is "more than a stub":
+      // a heading with body under it, or a few real sentences.
+      return HAS_HEADING.test(text) ? text.length > 200 : text.length > 400;
+    default:
+      return true;
+  }
 }
 
 /** A filename-safe stem derived from the chat title (or a fallback). */

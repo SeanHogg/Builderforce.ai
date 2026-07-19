@@ -12,7 +12,9 @@
 import { and, eq, gte, sql } from 'drizzle-orm';
 import { ingestionUsageLog, tenants } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
+import { resolveSuperadminUnlimited } from '../llm/tenantTokenAvailability';
 import { resolveIngestionMonthlyBytes } from '../../domain/tenant/PlanLimits';
 import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { utcMonthStart } from '../llm/tokenUsage';
@@ -109,6 +111,7 @@ export async function enforceIngestionCap(
   db: Db,
   tenantId: number,
   ingestionDb: Db = db,
+  env?: Env,
 ): Promise<IngestionCapResult> {
   try {
     const [tenantRow] = await db
@@ -131,7 +134,12 @@ export async function enforceIngestionCap(
       effectivePlan,
       tokenDailyLimitOverride: tenantRow?.tokenDailyLimitOverride ?? null,
     });
-    if (limit < 0) return { allowed: true }; // unlimited
+    if (limit < 0) return { allowed: true }; // plan-unlimited (Teams / -1 override)
+
+    // A superadmin OPERATOR is unlimited on EVERY meter — same rule, same source of
+    // truth as the token and cloud-run gates. Only consulted once the plan already
+    // caps the tenant, so unlimited tenants pay nothing for it.
+    if (await resolveSuperadminUnlimited(db, tenantId, undefined, env)) return { allowed: true };
 
     const used = await sumTenantIngestionBytes(ingestionDb, tenantId, utcMonthStart());
     if (used >= limit) return { allowed: false, effectivePlan, used, limit };

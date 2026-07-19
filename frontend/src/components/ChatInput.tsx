@@ -86,6 +86,13 @@ export interface ChatInputProps {
   /** Called when a participant is picked from the @-mention typeahead. */
   onMention?: (recipient: DirectedRecipient) => void;
   className?: string;
+  /**
+   * Change this to any new value to focus the composer and put the caret at the
+   * end of the text. Used when something else seeds the composer (e.g. picking a
+   * capability), so the seeded line reads as a sentence to finish rather than a
+   * finished message to send.
+   */
+  focusToken?: number | string;
 }
 
 /* Theme-aware: uses --chat-input-* from globals.css (light and dark) */
@@ -324,6 +331,7 @@ export function ChatInput({
   mentionables,
   onMention,
   className,
+  focusToken,
 }: ChatInputProps) {
   const t = useTranslations('chatInput');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -334,6 +342,16 @@ export function ChatInput({
   valueRef.current = value;
   const [recording, setRecording] = useState(false);
   const [focused, setFocused] = useState(false);
+  // Externally-seeded text: focus and drop the caret at the end so the user
+  // continues the sentence instead of sending the seed verbatim.
+  useEffect(() => {
+    if (focusToken == null) return;
+    const el = textareaRef.current;
+    if (!el) return;
+    el.focus();
+    const end = el.value.length;
+    el.setSelectionRange(end, end);
+  }, [focusToken]);
   const canSubmit = value.trim().length > 0 && !disabled;
   // "Activated" once the user is typing in / focused on the composer — the whole
   // box lights up in accent (blue), the same treatment as the VS Code composer so

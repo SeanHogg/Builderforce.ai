@@ -141,6 +141,7 @@ export async function planScene(
   const shots = normaliseShotBudget(
     sanitiseShots(planner.shots, director.characters),
     opts.totalFrames,
+    opts.request,
   );
 
   return {
@@ -286,15 +287,22 @@ function sanitiseShots(shots: PlannedShot[], characters: CharacterBible[]): Plan
  * the last shot so the engine gets a precise, non-zero budget per shot.
  *
  * Falls back to a single synthetic shot if the planner returned none — the
- * caller always gets an executable storyboard.
+ * caller always gets an executable storyboard. `fallbackPrompt` (the user's raw
+ * request) becomes that shot's diffusion prompt, so a DEGRADED plan — gateway
+ * unreachable, planner returned nothing — still renders the scene the user asked
+ * for instead of an empty prompt.
  */
-export function normaliseShotBudget(shots: PlannedShot[], total: number): PlannedShot[] {
+export function normaliseShotBudget(
+  shots: PlannedShot[],
+  total: number,
+  fallbackPrompt = '',
+): PlannedShot[] {
   const target = Math.max(1, Math.floor(total));
   if (shots.length === 0) {
     return [
       {
         id: 'shot-1',
-        prompt: '',
+        prompt: fallbackPrompt,
         characterIds: [],
         camera: 'static',
         action: '',
@@ -324,26 +332,43 @@ interface StructuredCallArgs {
   signal?: AbortSignal;
 }
 
-/** One structured gateway call returning parsed JSON, or null on any failure
- *  (empty body / non-JSON / abort handled by the caller's fallbacks). */
+/**
+ * One structured gateway call returning parsed JSON, or `null` on ANY failure —
+ * empty body, non-JSON, or the gateway itself being unreachable.
+ *
+ * Planning is an ENHANCEMENT over the local diffusion pipeline, never a prerequisite:
+ * the reasoning LLM is remote, the renderer is local WebGPU. A gateway outage (vendor
+ * cascade exhausted, 5xx, offline) used to propagate out of here and abort a render
+ * that needs no network at all. It now degrades to `null`, and the caller's existing
+ * fallbacks (treatment ← raw request, single synthetic shot) produce a valid
+ * single-shot storyboard the engine can render offline.
+ *
+ * An ABORT is re-thrown, not swallowed — the user cancelling is not a degraded plan.
+ */
 async function structuredCall<T>(
   client: BuilderforceClient,
   args: StructuredCallArgs,
 ): Promise<T | null> {
-  const completion = await client.chat.completions.create({
-    model: args.model,
-    messages: [
-      { role: 'system', content: args.system },
-      { role: 'user', content: args.user },
-    ],
-    response_format: {
-      type: 'json_schema',
-      json_schema: { name: args.schemaName, schema: args.schema, strict: true },
-    },
-    temperature: 0.7,
-    max_tokens: 1500,
-    signal: args.signal,
-  });
+  let completion: Awaited<ReturnType<typeof client.chat.completions.create>>;
+  try {
+    completion = await client.chat.completions.create({
+      model: args.model,
+      messages: [
+        { role: 'system', content: args.system },
+        { role: 'user', content: args.user },
+      ],
+      response_format: {
+        type: 'json_schema',
+        json_schema: { name: args.schemaName, schema: args.schema, strict: true },
+      },
+      temperature: 0.7,
+      max_tokens: 1500,
+      signal: args.signal,
+    });
+  } catch (err) {
+    if (args.signal?.aborted || (err as { name?: string })?.name === 'AbortError') throw err;
+    return null;
+  }
   const text = completion.choices?.[0]?.message?.content;
   if (!text || typeof text !== 'string') return null;
   try {

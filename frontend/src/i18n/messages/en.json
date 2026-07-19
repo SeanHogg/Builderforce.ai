@@ -686,6 +686,11 @@
         "label": "Voice",
         "tagline": "Clone and design a custom voice, then synthesize speech from it.",
         "runLabel": "Generate"
+      },
+      "mobile": {
+        "label": "Mobile",
+        "tagline": "Build a phone app and preview it in a device simulator, then scan to open it on your own handset.",
+        "runLabel": "Run"
       }
     },
     "all": "All",
@@ -760,7 +765,35 @@
     "recipeBlankDesc": "A minimal model you train from scratch in the Studio.",
     "recipeSeedModelLabel": "Published model to seed from",
     "recipeSeedSelect": "Select a model…",
-    "recipeSeedNoModels": "no published models yet"
+    "recipeSeedNoModels": "no published models yet",
+    "centerPreview": "Preview",
+    "centerCode": "Code",
+    "device": {
+      "simulateOnWeb": "Simulate on web",
+      "deviceLabel": "Device",
+      "rotate": "Rotate",
+      "reload": "Reload preview",
+      "openInTab": "Open in a new tab",
+      "tryOnDevice": "Try on device",
+      "previewTitle": "Mobile app preview",
+      "emptyTitle": "Nothing running yet",
+      "emptyHint": "Press Run to start the dev server and see your app here.",
+      "panelTitle": "Preview on your phone",
+      "panelIntro": "The simulator runs inside this browser tab, so your phone cannot reach it. Scan the published build instead.",
+      "checking": "Checking for a published build…",
+      "qrAlt": "QR code for the published app URL",
+      "copyLink": "Copy link",
+      "copied": "Copied",
+      "openLink": "Open",
+      "step1": "Open the camera app on your phone.",
+      "step2": "Point it at the QR code above.",
+      "step3": "Tap the notification to open your app.",
+      "lastPublished": "Last published {when}",
+      "republishHint": "Publish again after making changes — the QR code keeps working, it always points at the latest build.",
+      "notPublishedTitle": "Nothing published yet",
+      "notPublishedBody": "Publish this app to get a link your phone can open. It takes about a minute.",
+      "goToPublish": "Go to Publish"
+    }
   },
   "tools": {
     "outOf5": "out of 5.0",
@@ -5726,47 +5759,47 @@
       "document": {
         "label": "Document",
         "hint": "Write a structured document with headings, sections, and tables.",
-        "starter": "Write a document about "
+        "starter": "Write a document summarising where this project stands today."
       },
       "slides": {
         "label": "Slides",
         "hint": "Build a presentation, one slide per section.",
-        "starter": "Build a slide deck about "
+        "starter": "Build a slide deck summarising where this project stands today."
       },
       "dataviz": {
         "label": "Data Visualization",
         "hint": "Turn data into inline charts with the figures beneath them.",
-        "starter": "Visualize "
+        "starter": "Chart how this project's tasks are distributed across statuses."
       },
       "spreadsheet": {
         "label": "Spreadsheet",
         "hint": "Model numbers as a table with formulas and totals.",
-        "starter": "Build a spreadsheet that "
+        "starter": "Build a spreadsheet of this project's open tasks with owner, status and age."
       },
       "website": {
         "label": "Website",
         "hint": "Build a web app or site as real, ready-to-create files.",
-        "starter": "Build a website that "
+        "starter": "Build a landing page for this project."
       },
       "design": {
         "label": "Design",
         "hint": "Design the interface — layout, spacing, type, and theme tokens.",
-        "starter": "Design the interface for "
+        "starter": "Design the main screen for this project, with light and dark themes."
       },
       "mobile": {
         "label": "Mobile",
         "hint": "Build a phone-first app with native-feeling navigation.",
-        "starter": "Build a mobile app that "
+        "starter": "Build a mobile home screen for this project."
       },
       "animation": {
         "label": "Animation",
         "hint": "Add purposeful motion with explicit timing and easing.",
-        "starter": "Animate "
+        "starter": "Add an entrance animation to this project's main screen."
       },
       "game3d": {
         "label": "3D Game",
         "hint": "Build a 3D game — scene, camera, input, and game loop.",
-        "starter": "Build a 3D game where "
+        "starter": "Build a simple 3D scene I can move a camera around in."
       },
       "export": {
         "docx": "Download Word",
@@ -5775,6 +5808,11 @@
         "working": "Preparing…",
         "failed": "Export failed",
         "untitled": "Untitled"
+      },
+      "missing": {
+        "body": "This reply did not include the {capability} — the model returned only a heading.",
+        "retry": "Ask again",
+        "retryPrompt": "That reply had no {capability} in it. Produce the full {capability} now, in this reply."
       }
     },
     "messageActions": {
@@ -5817,7 +5855,14 @@
     "upgrade": "Upgrade",
     "upgradeToPlan": "Upgrade to {plan}",
     "addCard": "Add a card",
-    "cardValidationFailed": "Card validation failed."
+    "cardValidationFailed": "Card validation failed.",
+    "allowance": {
+      "exhausted": "Your AI token allowance for this period is spent ({used} of {limit}). Turns will fail or stop mid-answer until it resets on {resets}.",
+      "nearLimit": "AI token allowance is {percent}% used — {remaining} left until {resets}. Long answers may be cut off.",
+      "upgrade": "Upgrade",
+      "connectAccount": "Connect your own account",
+      "dismiss": "Dismiss"
+    }
   },
   "chatMessage": {
     "copy": "Copy",
@@ -9853,9 +9898,14 @@
     "retryCard": "Try again",
     "cardWorking": "Working…",
     "replaceCardTitle": "Replace your card?",
-    "replaceCardWarning": "Premium models are paused while the new card is verified. Your plan and everything else keep working.",
+    "replaceCardWarning": "Your current card keeps working until the new one is verified, so premium models are never interrupted. The old card is removed automatically once the new one is confirmed.",
     "retryCardMessage": "We will start a new $0 verification. Your card is not charged.",
     "replaceCardConfirm": "Continue",
-    "cardValidationFailed": "We could not start card verification. Please try again."
+    "cardValidationFailed": "We could not start card verification. Please try again.",
+    "removeCard": "Remove card",
+    "removeCardTitle": "Remove your card?",
+    "removeCardWarning": "Premium models will be turned off, and we will stop storing your card. Your plan and included models keep working. You can add a card again at any time.",
+    "removeCardConfirm": "Remove card",
+    "removeCardFailed": "We could not remove the card. Please try again."
   }
 }

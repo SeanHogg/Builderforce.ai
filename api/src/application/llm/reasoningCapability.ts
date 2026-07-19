@@ -19,9 +19,8 @@
  * Detection is deliberately conservative and grounded in THIS gateway's model-id
  * conventions (see `CODING_MODEL_POOL` in LlmProxyService):
  *
- *   • Anthropic extended thinking — supported bare `claude-*` ids ONLY. Sonnet 5
- *     uses adaptive thinking by default and rejects the legacy manual `thinking`
- *     budget, so it is explicitly excluded. Other matched ids dispatch to the
+ *   • Anthropic ADAPTIVE thinking — supported bare `claude-*` ids ONLY. Every such
+ *     model dispatches to the
  *     direct Anthropic Messages vendor (`vendors/anthropic.ts`), the one path whose
  *     translator we wire the `thinking` param through. OpenRouter-routed
  *     `anthropic/claude-*` slugs speak the OpenAI shape and don't accept Anthropic's
@@ -52,7 +51,9 @@ export type ModelReasoningSupport =
 // Bare `claude-*` ids only (the direct Anthropic Messages vendor). `anthropic/…`
 // (OpenRouter) and colon registry forms are intentionally excluded — see file docs.
 const ANTHROPIC_THINKING_RE = /^claude-/i;
-const ANTHROPIC_ADAPTIVE_ONLY_MODELS = new Set(['claude-sonnet-5']);
+
+/** Thinking depth levels Anthropic's `output_config.effort` accepts. */
+export type AnthropicEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 // OpenAI reasoning families, with an optional `openai/` (OpenRouter) prefix:
 //   o1 | o3 | o4 | o4-mini | o3-mini | gpt-5 | gpt-5-mini | gpt-5-codex …
@@ -66,21 +67,26 @@ const OPENAI_REASONING_RE = /^(?:openai\/)?(?:o[1-9](?:-|$)|gpt-5)/i;
 export function detectReasoningSupport(modelId: string | undefined | null): ModelReasoningSupport {
   const id = (modelId ?? '').trim();
   if (!id) return { kind: 'none' };
-  if (ANTHROPIC_ADAPTIVE_ONLY_MODELS.has(id.toLowerCase())) return { kind: 'none' };
   if (ANTHROPIC_THINKING_RE.test(id)) return { kind: 'anthropic-thinking' };
   if (OPENAI_REASONING_RE.test(id)) return { kind: 'openai-reasoning' };
   return { kind: 'none' };
 }
 
-/** Anthropic extended-thinking token budget per think level. Scales with intensity;
- *  `medium` is the default when only `reasoningLevel: 'on'` asked (no explicit level). */
-const THINK_BUDGET_TOKENS: Record<AgentThinkLevel, number> = {
-  off: 0,
-  minimal: 2048,
-  low: 2048,
-  medium: 8192,
-  high: 16384,
-  xhigh: 16384,
+/**
+ * Anthropic thinking DEPTH per think level, expressed as `output_config.effort`.
+ *
+ * Replaces the former `THINK_BUDGET_TOKENS` map: manual extended thinking
+ * (`thinking:{type:'enabled',budget_tokens}`) is REMOVED on every model this
+ * gateway calls directly (Sonnet 5, Opus 4.8) and returns HTTP 400. Depth is now
+ * a qualitative effort level paired with adaptive thinking, not a token count.
+ */
+const THINK_EFFORT: Record<AgentThinkLevel, AnthropicEffort> = {
+  off: 'low',
+  minimal: 'low',
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  xhigh: 'xhigh',
 };
 
 /** OpenAI `reasoning_effort` per think level. */
@@ -99,15 +105,20 @@ function reasoningSwitchedOn(execParams: AgentExecParams): boolean {
 }
 
 /**
- * Anthropic extended thinking is comparatively expensive, so it is gated tighter:
- * only when the think level is `high`/`xhigh` OR reasoning is explicitly switched on.
+ * Anthropic thinking is comparatively expensive, so it is gated tighter: only when
+ * the think level is `high`/`xhigh` OR reasoning is explicitly switched on.
+ *
+ * Emits ADAPTIVE thinking plus an effort level — Claude decides per request how much
+ * to think, bounded by `thinkingEffort`. The vendor translator turns `thinkingEffort`
+ * into `output_config.effort`; it is carried as a sibling field rather than inlined
+ * so the wire-shape decision stays in one place (`vendors/anthropic.ts`).
  */
 function anthropicThinkingParams(execParams: AgentExecParams): Record<string, unknown> | undefined {
   const level = execParams.thinkLevel;
   const wants = level === 'high' || level === 'xhigh' || reasoningSwitchedOn(execParams);
   if (!wants) return undefined;
-  const budget = level && level !== 'off' ? THINK_BUDGET_TOKENS[level] : THINK_BUDGET_TOKENS.medium;
-  return { thinking: { type: 'enabled', budget_tokens: budget } };
+  const effort = level && level !== 'off' ? THINK_EFFORT[level] : THINK_EFFORT.medium;
+  return { thinking: { type: 'adaptive' }, thinkingEffort: effort };
 }
 
 /**

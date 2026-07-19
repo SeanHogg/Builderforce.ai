@@ -36,20 +36,36 @@ export const REGION_HUE_VAR: Record<EvermindRegionKey, string> = {
   personality: '--ev-personality',
 };
 
-/** Which recent-contribution kind (if any) accretes into a region: `delta` runs →
- *  Neocortex, `text` (taught / run / chat) → Hippocampus. Limbic + Personality carry
- *  affective state, not a per-contribution list. */
-export function regionAccretes(key: EvermindRegionKey): ProjectEvermindRecentEntry['kind'] | null {
-  if (key === 'neocortex') return 'delta';
-  if (key === 'hippocampus') return 'text';
-  return null;
+/** Whether a region accretes a per-contribution list at all. Limbic + Personality
+ *  carry live affective state instead, so they list nothing. */
+export function regionAccretes(key: EvermindRegionKey): boolean {
+  return key === 'neocortex' || key === 'hippocampus';
 }
 
-/** The recent contributions that belong to a region (empty for non-accreting regions). */
+/**
+ * The recent contributions that belong to a region (empty for non-accreting regions).
+ *
+ * Attribution is MANY-TO-MANY, because one contribution genuinely lands in both
+ * memory regions — mirroring hippocampal→neocortical consolidation:
+ *
+ *  - **Hippocampus** = the episodic record of what was taught (`kind: 'text'`).
+ *  - **Neocortex** = every contribution whose weights were actually fitted into the
+ *    merge, which the coordinator stamps as `fitted` at the moment it pushes the
+ *    checkpoint diff. Text contributions qualify: the fit runs server-side in the
+ *    coordinator's merge alarm, so a taught memory IS neocortical weight movement.
+ *
+ * Filtering Neocortex to `kind: 'delta'` alone was the bug behind "Nothing learned in
+ * Neocortex yet." appearing next to a live training readout with real loss and
+ * weights-moved — every real learning path is the text path.
+ *
+ * `fitted !== false` (not `=== true`) is deliberate: ring entries written before the
+ * flag existed carry no value, and every one of them was fitted.
+ */
 export function recentForRegion(
   recent: readonly ProjectEvermindRecentEntry[],
   key: EvermindRegionKey,
 ): ProjectEvermindRecentEntry[] {
-  const kind = regionAccretes(key);
-  return kind ? recent.filter((e) => e.kind === kind) : [];
+  if (key === 'hippocampus') return recent.filter((e) => e.kind === 'text');
+  if (key === 'neocortex') return recent.filter((e) => e.fitted !== false);
+  return [];
 }

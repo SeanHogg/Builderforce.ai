@@ -220,3 +220,91 @@ describe('checkout.session.completed', () => {
     });
   });
 });
+
+/**
+ * Card removal. We store only brand + last4 of a validated card, never the
+ * payment-method id, so revoking means "detach whatever this CUSTOMER has" —
+ * list, then detach each. The states that matter are the ones where a naive
+ * implementation would throw at the user instead of completing their request.
+ */
+describe('detachCards', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** Stub fetch with an ordered script of [status, body] responses. */
+  function stubSequence(steps: Array<[number, unknown]>): { calls: Array<{ url: string; method?: string }> } {
+    const calls: Array<{ url: string; method?: string }> = [];
+    let i = 0;
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, method: init?.method });
+      const [status, body] = steps[Math.min(i++, steps.length - 1)]!;
+      return new Response(JSON.stringify(body), { status });
+    }));
+    return { calls };
+  }
+
+  it('detaches every card the customer has and reports the count', async () => {
+    const { calls } = stubSequence([
+      [200, { data: [{ id: 'pm_1' }, { id: 'pm_2' }] }],
+      [200, {}],
+      [200, {}],
+    ]);
+
+    await expect(makeProvider().detachCards({ externalCustomerId: 'cus_123' })).resolves.toBe(2);
+    expect(calls[0]!.url).toContain('/v1/payment_methods?customer=cus_123');
+    expect(calls[1]).toMatchObject({ url: expect.stringContaining('/pm_1/detach'), method: 'POST' });
+    expect(calls[2]).toMatchObject({ url: expect.stringContaining('/pm_2/detach'), method: 'POST' });
+  });
+
+  it('is a no-op for a customer with nothing stored', async () => {
+    stubSequence([[200, { data: [] }]]);
+    await expect(makeProvider().detachCards({ externalCustomerId: 'cus_empty' })).resolves.toBe(0);
+  });
+
+  it('treats an unknown customer as already-clean rather than an error', async () => {
+    // The caller's goal is "the processor no longer holds their card". A 404
+    // customer already satisfies that, so failing here would block a removal
+    // that has nothing left to do.
+    stubSequence([[404, { error: { message: 'No such customer' } }]]);
+    await expect(makeProvider().detachCards({ externalCustomerId: 'cus_gone' })).resolves.toBe(0);
+  });
+
+  it('tolerates an already-detached card (Stripe 400s on a re-detach)', async () => {
+    stubSequence([
+      [200, { data: [{ id: 'pm_1' }] }],
+      [400, { error: { message: 'already detached' } }],
+    ]);
+    // Desired end state reached, so no throw — but it wasn't detached by US.
+    await expect(makeProvider().detachCards({ externalCustomerId: 'cus_123' })).resolves.toBe(0);
+  });
+
+  it('skips the network entirely when there is no customer id', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(makeProvider().detachCards({ externalCustomerId: '' })).resolves.toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('detaches ONLY the named card when the payment-method id is known', async () => {
+    // The post-0346 path. Detaching by id is what makes a REPLACE safe (revoke the
+    // displaced card, not the one just validated) and what a multi-card tenant needs.
+    const { calls } = stubSequence([[200, {}]]);
+
+    await expect(makeProvider().detachCards({ paymentMethodId: 'pm_old', externalCustomerId: 'cus_123' }))
+      .resolves.toBe(1);
+
+    // One call, straight to the detach — the customer sweep must not run.
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ url: expect.stringContaining('/pm_old/detach'), method: 'POST' });
+    expect(calls[0]!.url).not.toContain('payment_methods?customer');
+  });
+
+  it('treats a card the processor no longer knows as already removed', async () => {
+    stubSequence([[404, { error: { message: 'No such PaymentMethod' } }]]);
+    await expect(makeProvider().detachCards({ paymentMethodId: 'pm_gone' })).resolves.toBe(0);
+  });
+
+  it('surfaces a real provider failure instead of silently reporting success', async () => {
+    stubSequence([[500, { error: { message: 'Stripe is down' } }]]);
+    await expect(makeProvider().detachCards({ externalCustomerId: 'cus_123' })).rejects.toThrow(/Stripe is down/);
+  });
+});

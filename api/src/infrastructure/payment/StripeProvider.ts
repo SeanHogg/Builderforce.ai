@@ -150,6 +150,55 @@ export class StripeProvider implements PaymentProvider {
     };
   }
 
+  /**
+   * Detach a stored card.
+   *
+   * A known `paymentMethodId` is one call and touches exactly that card. Without
+   * one (rows validated before migration 0346) we fall back to listing the
+   * customer's cards and detaching each — correct for those tenants because they
+   * predate multi-card support and hold exactly one.
+   *
+   * A missing/unknown customer or an empty list is a normal "nothing to do" (0),
+   * not an error: the caller's goal is "Stripe no longer holds their card", which
+   * is already true in that case.
+   */
+  async detachCards(opts: { paymentMethodId?: string | null; externalCustomerId?: string | null }): Promise<number> {
+    this.requireConfigured();
+
+    if (opts.paymentMethodId) return this.detachOne(opts.paymentMethodId);
+    if (!opts.externalCustomerId) return 0;
+
+    const listRes = await fetch(
+      `https://api.stripe.com/v1/payment_methods?customer=${encodeURIComponent(opts.externalCustomerId)}&type=card&limit=100`,
+      { headers: { Authorization: `Bearer ${this.config.secretKey}` } },
+    );
+    // A deleted/unknown customer has nothing attached — treat as already-clean
+    // rather than failing a removal the user asked for.
+    if (listRes.status === 404) return 0;
+    if (!listRes.ok) {
+      const err = await listRes.json() as { error?: { message?: string } };
+      throw new Error(`Stripe payment-method list error: ${err?.error?.message ?? listRes.status}`);
+    }
+    const { data = [] } = await listRes.json() as { data?: Array<{ id: string }> };
+
+    let detached = 0;
+    for (const pm of data) detached += await this.detachOne(pm.id);
+    return detached;
+  }
+
+  /** Detach one payment method. Returns 1 if WE detached it, 0 if it was already
+   *  gone (Stripe 400s on a re-detach — the desired end state either way). */
+  private async detachOne(paymentMethodId: string): Promise<number> {
+    const res = await fetch(
+      `https://api.stripe.com/v1/payment_methods/${encodeURIComponent(paymentMethodId)}/detach`,
+      { method: 'POST', headers: { Authorization: `Bearer ${this.config.secretKey}` } },
+    );
+    if (res.ok) return 1;
+    if (res.status === 400 || res.status === 404) return 0;
+    const err = await res.json() as { error?: { message?: string } };
+    throw new Error(`Stripe detach error: ${err?.error?.message ?? res.status}`);
+  }
+
   async cancelSubscription(externalSubscriptionId: string): Promise<void> {
     this.requireConfigured();
     const res = await fetch(
@@ -196,6 +245,8 @@ export class StripeProvider implements PaymentProvider {
             externalSubscriptionId: '',
             ...(card?.brand ? { paymentBrand: card.brand } : {}),
             ...(card?.last4 ? { paymentLast4: card.last4 } : {}),
+            // The handle a later remove/replace detaches by (migration 0346).
+            ...(card?.id ? { paymentMethodId: card.id } : {}),
             raw: event,
           };
         }
@@ -289,19 +340,23 @@ export class StripeProvider implements PaymentProvider {
    * cosmetic and must never fail an otherwise-good webhook, in which case the tenant's
    * existing brand/last4 is left untouched.
    */
-  private async fetchCard(url: string): Promise<{ brand?: string; last4?: string } | undefined> {
+  private async fetchCard(url: string): Promise<{ brand?: string; last4?: string; id?: string } | undefined> {
     try {
       const res = await fetch(url, { headers: { Authorization: `Bearer ${this.config.secretKey}` } });
       if (!res.ok) return undefined;
       const body = await res.json() as StripeCardCarrier;
-      const card =
-        body.payment_method?.card ??
-        body.default_payment_method?.card ??
-        body.latest_invoice?.payment_intent?.payment_method?.card;
+      // Keep the payment METHOD alongside its card details — the method's id is
+      // what a later detach needs, and reading it here means the two can't drift.
+      const pm =
+        body.payment_method ??
+        body.default_payment_method ??
+        body.latest_invoice?.payment_intent?.payment_method;
+      const card = pm?.card;
       if (!card) return undefined;
       return {
         ...(card.brand ? { brand: card.brand } : {}),
         ...(card.last4 ? { last4: card.last4 } : {}),
+        ...(pm?.id ? { id: pm.id } : {}),
       };
     } catch {
       return undefined;
@@ -310,6 +365,9 @@ export class StripeProvider implements PaymentProvider {
 }
 
 interface StripePaymentMethod {
+  /** The `pm_…` handle a detach targets (migration 0346). Present whenever the
+   *  payment method was expanded rather than returned as a bare id string. */
+  id?: string;
   card?: { brand?: string; last4?: string } | null;
 }
 

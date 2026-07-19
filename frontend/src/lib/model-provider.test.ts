@@ -78,6 +78,12 @@ describe('MambaModelProvider', () => {
     const realLosses = [2.31, 1.74, 1.12];
     const trainSpy = vi.fn().mockResolvedValue(realLosses);
     (provider as any)._ready = true;
+    // A ready provider holds the full tokenizer + model + trainer triad. Stub all
+    // three: `ensureModelForCorpus` only short-circuits when every one is present,
+    // and otherwise falls through to building a real engine model (which throws
+    // in jsdom, where there is no WebGPU).
+    (provider as any).tokenizer = { vocabSize: 256 };
+    (provider as any).model = {};
     (provider as any).trainer = { train: trainSpy };
 
     const epochCb = vi.fn();

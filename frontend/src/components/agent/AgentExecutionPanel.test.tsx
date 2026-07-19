@@ -45,6 +45,13 @@ describe('AgentExecutionPanel — steering echo', () => {
       execution: RUNNING_EXECUTION,
       trace: { source: 'test', usageSnapshots: [], toolEvents: [] },
     });
+    // Role-coordination status is fetched per task on mount. The module is
+    // automocked, so without this the call resolves to `undefined` and the
+    // panel throws reading `.requiredCount` off it.
+    vi.spyOn(builderforceApi.kanbanApi, 'accountability').mockResolvedValue({
+      taskId: 1, requiredCount: 0, completedCount: 0, percentComplete: 0,
+      participants: [], signoffs: [], gaps: [],
+    });
     // Simulate the per-isolate drop: the stream NEVER echoes the user message back.
     mockStream.mockReturnValue({
       status: 'running', execution: null, messages: [], fileChanges: [], connected: false,
@@ -58,9 +65,9 @@ describe('AgentExecutionPanel — steering echo', () => {
     );
 
     // Wait for the running execution to load (chatbox becomes active).
-    const box = await waitFor(() => getByPlaceholderText(/Send the agent a new direction/i));
+    const box = await waitFor(() => getByPlaceholderText('agentExecution.steerPlaceholder'));
     fireEvent.change(box, { target: { value: 'focus on the pricing page' } });
-    fireEvent.click(getByText('Send'));
+    fireEvent.click(getByText('agentExecution.send'));
 
     // The directive shows in the thread without waiting on a round-trip echo.
     expect(await findByText('focus on the pricing page')).toBeTruthy();
@@ -89,7 +96,7 @@ describe('AgentExecutionPanel — steering echo', () => {
     // Both narrations render (oldest-first), not the "working…" placeholder.
     expect(await findByText('Creating the plugin core logic.')).toBeTruthy();
     expect(await findByText('Now wiring the Outlook UI.')).toBeTruthy();
-    expect(queryByText(/output will stream here/i)).toBeNull();
+    expect(queryByText(/agentExecution.outputPlaceholder/i)).toBeNull();
   });
 
   it('shows a re-run action on a failed execution and re-submits with its target + payload', async () => {
@@ -133,15 +140,15 @@ describe('AgentExecutionPanel — steering echo', () => {
     const { findByText, findByTitle } = render(<AgentExecutionPanel task={task} agentHosts={[]} />);
 
     // The header shows the run's own agent name (not the task's current assignment)…
-    expect((await findByTitle('Agent that ran this execution')).textContent).toContain('Coder Agent');
+    expect((await findByTitle('agentExecution.agentThatRan')).textContent).toContain('Coder Agent');
     // …and the engine type it actually dispatched as, from its own telemetry.
-    expect(await findByText(/ran as Cloud Agent \(Node\/Container\)/)).toBeTruthy();
+    expect(await findByText(/agentExecution\.ranAs Cloud Agent \(Node\/Container\)/)).toBeTruthy();
   });
 
   it('shows ticket-level spend beside the Executions heading', async () => {
     vi.spyOn(builderforceApi.runtimeApi, 'taskCost').mockResolvedValue({ estimatedCostUsd: 0.42, totalTokens: 12345, requests: 7 });
     const { findByText } = render(<AgentExecutionPanel task={task} agentHosts={[]} />);
-    expect(await findByText(/\$0\.42 spent on this ticket/)).toBeTruthy();
+    expect(await findByText(/agentExecution\.spentOnTicket \$0\.42/)).toBeTruthy();
   });
 
   it('does not show a re-run action on a running execution', async () => {
@@ -161,7 +168,7 @@ describe('AgentExecutionPanel — steering echo', () => {
     const { findByText, getByText, getByTestId, queryByTestId } = render(<AgentExecutionPanel task={task} agentHosts={[]} />);
 
     // Open the Changes tab and click the file row.
-    fireEvent.click(await findByText(/^Changes/));
+    fireEvent.click(await findByText(/agentExecution.tabChanges/));
     expect(queryByTestId('file-change-viewer')).toBeNull();
     fireEvent.click(getByText('src/outlook-plugin.ts'));
 
@@ -179,13 +186,13 @@ describe('AgentExecutionPanel — steering echo', () => {
       <AgentExecutionPanel task={task} agentHosts={[]} />,
     );
 
-    const box = (await waitFor(() => getByPlaceholderText(/Send the agent a new direction/i))) as HTMLTextAreaElement;
+    const box = (await waitFor(() => getByPlaceholderText('agentExecution.steerPlaceholder'))) as HTMLTextAreaElement;
     fireEvent.change(box, { target: { value: 'retry me' } });
-    fireEvent.click(getByText('Send'));
+    fireEvent.click(getByText('agentExecution.send'));
 
     // After the failed post the thread echo (a "You" message) is removed and the
     // draft is restored for retry. ("You" only renders for a user thread message.)
-    await waitFor(() => expect(queryByText('You')).toBeNull());
+    await waitFor(() => expect(queryByText('agentExecution.you')).toBeNull());
     expect(box.value).toBe('retry me');
   });
 });

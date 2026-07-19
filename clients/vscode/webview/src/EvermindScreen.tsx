@@ -21,6 +21,7 @@ import {
   type EvermindConsoleLabels,
 } from '@seanhogg/builderforce-brain-ui';
 import { authedFetch } from './authedFetch';
+import { fetchIsPaidPlan } from './accountPlan';
 import { getToken, onRefresh, refreshToken, request, type InitData, type LabelBundle } from './vscodeBridge';
 
 /** Host reply to `evermind.pickMemory` — the parsed, learnable snapshot entries (or null
@@ -30,7 +31,9 @@ interface PickedMemory { path: string; fileName: string; entries: Array<{ key: s
 interface ExtractResponse { absorbed: string[]; skipped: Array<{ key: string; reason: string }>; merged: number; version: number }
 
 interface TenantModelRow { slug?: string; name?: string; baseModel?: string | null }
-interface LlmModelsResponse { codingModels?: string[]; premium?: boolean; effectivePlan?: string }
+/** Only the coder catalog is read from this payload — the plan/tier fields it also
+ *  carries are deliberately not consumed here (see `fetchIsPaidPlan`). */
+interface LlmModelsResponse { codingModels?: string[] }
 
 /** One row from GET /api/ide-projects — an IDE build. An LLM build's Evermind lives
  *  on its backing `storageProjectId`; `containerProjectId` is the Project it's grouped under. */
@@ -122,8 +125,15 @@ export function EvermindScreen({ init }: { init: InitData }) {
           .map((m) => ({ slug: m.slug, name: m.name?.trim() || m.slug }));
       },
       loadTeacherOptions: async () => {
-        const r = await req<LlmModelsResponse>('/llm/v1/models');
-        return { models: r.codingModels ?? [], isPaid: r.premium === true || (r.effectivePlan != null && r.effectivePlan !== 'free') };
+        // Models come from the gateway (it owns the coder catalog); the PAID verdict
+        // comes from the shared plan predicate, not from this payload — see
+        // `fetchIsPaidPlan` for why `premium`/`effectivePlan` here can't be trusted
+        // for that question.
+        const [r, isPaid] = await Promise.all([
+          req<LlmModelsResponse>('/llm/v1/models'),
+          fetchIsPaidPlan(req),
+        ]);
+        return { models: r.codingModels ?? [], isPaid };
       },
       seedFromModel: (slug) => req(`${base}/seed-from-model`, { method: 'POST', body: JSON.stringify({ slug }) }).then(() => undefined),
       setInference: (enabled) => req(`${base}/inference`, { method: 'PATCH', body: JSON.stringify({ enabled }) }).then(() => undefined),

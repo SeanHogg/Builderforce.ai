@@ -16,7 +16,7 @@ import {
   getCardValidation,
   isCardValidated,
   markCardPending,
-  markCardValidated,
+  clearCardValidation,
 } from '../../application/tenant/cardValidationService';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
@@ -401,14 +401,82 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       tenantId,
       billingEmail,
       externalCustomerId: tenant.externalCustomerId,
-      successUrl: body.successUrl ?? `${appUrl}/settings?card=validated`,
-      cancelUrl: body.cancelUrl ?? `${appUrl}/settings?card=cancelled`,
+      // Return to the BILLING CONSOLE, which is `/pricing` — that's where the card
+      // controls live (<PremiumModelUnlock> / <CardOnFile>). `/settings` has no card
+      // surface at all, so the old default dropped the user on a page that couldn't
+      // confirm what had just happened.
+      successUrl: body.successUrl ?? `${appUrl}/pricing?card=validated`,
+      cancelUrl: body.cancelUrl ?? `${appUrl}/pricing?card=cancelled`,
     });
 
-    // Mark in-flight so the UI can show "awaiting confirmation" until Stripe's
-    // `card.validated` webhook lands.
-    await markCardPending(c.env, tenantId);
-    return c.json({ checkoutUrl: result.checkoutUrl, sessionId: result.sessionId, validated: false, status: 'pending' });
+    // ADD-then-swap, never reset-then-add.
+    //
+    // Marking `pending` clears the validated verdict, which SUSPENDS premium model
+    // access. That's right for a first-time validation (there was no access to
+    // lose) but wrong for a REPLACE: it revoked a paying tenant's premium for as
+    // long as the processor took to confirm the new card, for no reason — the old
+    // card is still perfectly valid until the new one lands. So an already-validated
+    // tenant keeps their verdict, and the swap completes in the webhook, which
+    // overwrites the card and detaches the displaced one.
+    const existing = await getCardValidation(c.env, tenantId);
+    const replacing = isCardValidated(existing);
+    if (!replacing) await markCardPending(c.env, tenantId);
+
+    return c.json({
+      checkoutUrl: result.checkoutUrl,
+      sessionId: result.sessionId,
+      // A replace reports the state the tenant is actually still in — they remain
+      // validated on the OLD card until the new one is confirmed.
+      validated: replacing,
+      status: replacing ? existing.status : 'pending',
+    });
+  });
+
+  /**
+   * DELETE /api/tenants/:id/card-validation
+   *
+   * Remove the card on file: detach it at the processor, then clear our own record.
+   * Premium model selection goes with it — the gate reads `isCardValidated`, and
+   * continuing to sell premium off a card we no longer hold would be the bug.
+   *
+   * REFUSED while a paid subscription is live (409). Those cards are the renewal
+   * instrument; detaching one would break billing at the next cycle with no signal
+   * to the user. Downgrading to Free cancels the subscription and clears the way,
+   * so the response names that path rather than half-performing the removal.
+   *
+   * Order matters: detach FIRST, clear second. If the processor call fails we've
+   * changed nothing, and the tenant keeps the access they paid for — the opposite
+   * order would revoke premium while Stripe still held the card.
+   */
+  router.delete('/:id/card-validation', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    const forbidden = forbidCrossTenant(c, tenantId);
+    if (forbidden) return forbidden;
+
+    const tenant = await tenantService.getTenant(tenantId);
+
+    if (tenant.externalSubscriptionId && tenant.billingStatus === 'active') {
+      return c.json({
+        error: 'Cancel your paid plan before removing the card it bills. Downgrade to Free, then remove the card.',
+        code: 'card_backs_active_subscription',
+      }, 409);
+    }
+
+    // Detach the card WE recorded. Pre-0346 rows carry no payment-method id and
+    // fall back to a customer-wide sweep (safe: those tenants predate multi-card
+    // support). With neither handle there is nothing stored at the processor, but
+    // clearing our own record still matters — a stale `validated` status would
+    // keep premium open against a card we no longer have.
+    const { paymentMethodId } = await getCardValidation(c.env, tenantId);
+    if (paymentMethodId || tenant.externalCustomerId) {
+      await buildPaymentProvider(c.env).detachCards({
+        paymentMethodId,
+        externalCustomerId: tenant.externalCustomerId,
+      });
+    }
+    await clearCardValidation(c.env, tenantId);
+
+    return c.json({ status: 'none', validated: false, validatedAt: null, brand: null, last4: null });
   });
 
   // POST /api/tenants/:id/subscription/free

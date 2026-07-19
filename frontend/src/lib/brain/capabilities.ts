@@ -51,15 +51,36 @@ export interface BrainCapabilityDef {
    * "create file".
    */
   exportFormat?: 'docx' | 'pptx' | 'csv';
+  /**
+   * The shape a reply in this capability MUST contain to count as delivering the
+   * artifact. Read by {@link replyHasArtifact} so the UI can tell a real answer
+   * from a bare title line ("Project task distribution:" and nothing else) and
+   * offer a retry instead of leaving the user staring at a stub.
+   */
+  expects: 'document' | 'slides' | 'chart' | 'table' | 'code';
 }
 
-const CAPABILITIES: BrainCapabilityDef[] = [
+/**
+ * Appended to EVERY capability prompt (single source, same pattern as the
+ * modality registry's strategy note).
+ *
+ * Both halves are here because a weak model actually did both: it replied with
+ * the single line "Project tasks status distribution (fetched for …):" — a title,
+ * no chart — and claimed the data was "fetched" having made zero tool calls.
+ */
+const ARTIFACT_CONTRACT = [
+  'NEVER reply with only a title, a preamble, or a "here is the …" line. Either produce the artifact IN FULL in this same reply, or — if you genuinely cannot tell what it should cover — ask exactly ONE short clarifying question and nothing else.',
+  'Never describe data as fetched, loaded, or looked up unless you actually called a tool for it in this turn. If you need data you do not have, call the tool or say plainly that you do not have it.',
+].join('\n');
+
+const BASE_CAPABILITIES: BrainCapabilityDef[] = [
   // ---- Brain Storm: things you author -------------------------------------
   {
     id: 'document',
     surface: 'brainstorm',
     icon: '📄',
     exportFormat: 'docx',
+    expects: 'document',
     systemPrompt: [
       'CAPABILITY: DOCUMENT. The user is authoring a written document in this chat.',
       'Produce the document itself — not a description of one. Use markdown structure: a title heading, ordered sections with headings, short paragraphs, lists and tables where they carry meaning.',
@@ -71,6 +92,7 @@ const CAPABILITIES: BrainCapabilityDef[] = [
     surface: 'brainstorm',
     icon: '🖼',
     exportFormat: 'pptx',
+    expects: 'slides',
     systemPrompt: [
       'CAPABILITY: SLIDES. The user is building a presentation in this chat.',
       'Reply as a deck: one markdown `##` heading per slide, in order, each followed by at most 5 short bullets plus an optional one-line speaker note prefixed "Note:".',
@@ -82,6 +104,7 @@ const CAPABILITIES: BrainCapabilityDef[] = [
     surface: 'brainstorm',
     icon: '📊',
     exportFormat: 'csv',
+    expects: 'chart',
     systemPrompt: [
       'CAPABILITY: DATA VISUALIZATION. The user wants data made visible in this chat.',
       'Render charts as ```mermaid blocks (xychart-beta, pie, quadrantChart, gantt) so they draw inline, and put the underlying figures in a markdown table beneath each chart.',
@@ -93,6 +116,7 @@ const CAPABILITIES: BrainCapabilityDef[] = [
     surface: 'brainstorm',
     icon: '🧮',
     exportFormat: 'csv',
+    expects: 'table',
     systemPrompt: [
       'CAPABILITY: SPREADSHEET. The user is building a tabular model in this chat.',
       'Reply with a markdown table as the primary output: a header row, one row per record, consistent units, and a totals/summary row where it applies.',
@@ -105,6 +129,7 @@ const CAPABILITIES: BrainCapabilityDef[] = [
     id: 'website',
     surface: 'ide',
     icon: '🌐',
+    expects: 'code',
     systemPrompt: [
       'CAPABILITY: WEBSITE. The user is building a web app or site in this workspace.',
       'Produce real files, not snippets: use a code block whose language tag is the file path (```src/App.tsx, ```package.json) so each one can be created in a click.',
@@ -115,6 +140,7 @@ const CAPABILITIES: BrainCapabilityDef[] = [
     id: 'design',
     surface: 'ide',
     icon: '🎨',
+    expects: 'code',
     systemPrompt: [
       'CAPABILITY: DESIGN. The user is designing the interface before/while building it.',
       'Work at the design-system level: layout structure, spacing scale, type scale, and a token palette expressed as CSS custom properties with light and dark values.',
@@ -125,6 +151,7 @@ const CAPABILITIES: BrainCapabilityDef[] = [
     id: 'mobile',
     surface: 'ide',
     icon: '📱',
+    expects: 'code',
     systemPrompt: [
       'CAPABILITY: MOBILE. The user is building a mobile app in this workspace.',
       'Design for a phone first: single-column layouts, thumb-reachable actions, native-feeling navigation, offline and slow-network states.',
@@ -135,6 +162,7 @@ const CAPABILITIES: BrainCapabilityDef[] = [
     id: 'animation',
     surface: 'ide',
     icon: '✨',
+    expects: 'code',
     systemPrompt: [
       'CAPABILITY: ANIMATION. The user is building motion into this workspace.',
       'Specify motion concretely — trigger, duration, easing curve, and the property being animated — and implement it in real files (CSS keyframes, the Web Animations API, or the workspace\'s existing motion library).',
@@ -145,6 +173,7 @@ const CAPABILITIES: BrainCapabilityDef[] = [
     id: 'game3d',
     surface: 'ide',
     icon: '🎮',
+    expects: 'code',
     systemPrompt: [
       'CAPABILITY: 3D GAME. The user is building a 3D game in this workspace.',
       'Think in scene, camera, lighting, meshes, materials, input, and a game loop. Implement with WebGL/WebGPU via the library already in the workspace (Three.js unless told otherwise), in real path-tagged files.',
@@ -152,6 +181,13 @@ const CAPABILITIES: BrainCapabilityDef[] = [
     ].join('\n'),
   },
 ];
+
+/** The public registry — every capability prompt carries the shared artifact
+ *  contract, baked in once here so no entry can drift from it. */
+const CAPABILITIES: BrainCapabilityDef[] = BASE_CAPABILITIES.map((c) => ({
+  ...c,
+  systemPrompt: `${c.systemPrompt}\n${ARTIFACT_CONTRACT}`,
+}));
 
 /** Every capability offered on a surface, in display order. */
 export function capabilitiesForSurface(surface: BrainCapabilitySurface): BrainCapabilityDef[] {

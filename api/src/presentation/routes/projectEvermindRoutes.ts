@@ -47,6 +47,7 @@ import {
   projectEvermindRef,
   type ProjectEvermindMode,
   type MemoryExtractEntry,
+  resolveEffectiveEvermindProjectId,
 } from '../../application/llm/projectEvermind';
 
 /** Verify the project exists AND belongs to this tenant (IDOR guard). */
@@ -67,7 +68,9 @@ const json = (body: unknown, status = 200): Response =>
 
 async function headCore(env: Env, db: Db, tenantId: number, projectId: number): Promise<Response> {
   if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
-  const head = await getProjectEvermindHead(env, db, tenantId, projectId);
+  // An IDE build without its own Evermind inherits its container project's.
+  const effectiveId = await resolveEffectiveEvermindProjectId(env, db, tenantId, projectId);
+  const head = await getProjectEvermindHead(env, db, tenantId, effectiveId);
   return json({ version: head.version, ref: head.ref, mode: head.mode, name: head.name, contributions: head.contributions, inferenceEnabled: head.inferenceEnabled, teacherModel: head.teacherModel, lastLearnedAt: head.lastLearnedAt, seeded: head.version > 0, quarantinedAt: head.quarantinedAt, quarantineReason: head.quarantineReason });
 }
 
@@ -96,7 +99,10 @@ async function targetsCore(env: Env, db: Db, tenantId: number, projectId: number
 /** Read the inspection console payload: head summary + queued depth + recent-learned ring. */
 async function contributionsCore(env: Env, db: Db, tenantId: number, projectId: number): Promise<Response> {
   if (!(await ownsProject(db, tenantId, projectId))) return json({ error: 'project not found' }, 404);
-  return json(await getProjectEvermindContributions(env, db, tenantId, projectId));
+  // Same inheritance as headCore — the console must not report "Not set up" for an
+  // IDE build whose container project has a live Evermind.
+  const effectiveId = await resolveEffectiveEvermindProjectId(env, db, tenantId, projectId);
+  return json(await getProjectEvermindContributions(env, db, tenantId, effectiveId));
 }
 
 /**

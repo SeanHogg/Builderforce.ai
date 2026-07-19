@@ -76,7 +76,7 @@ export function EvermindLearnings({
   const [detail, setDetail] = useState<ListedEntry | null>(null);
 
   const recent = data?.recent ?? [];
-  const accretes = selectedRegion ? regionAccretes(selectedRegion) : null;
+  const accretes = selectedRegion != null && regionAccretes(selectedRegion);
   // Recall mode (a Validate ran) overrides the region filter entirely.
   const recallMode = highlight != null;
 

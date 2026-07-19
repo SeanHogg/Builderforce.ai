@@ -42,6 +42,11 @@ export interface ProjectEvermindRecentEntry {
   at: number;
   /** FedAvg sample weight. */
   weight: number;
+  /** True when this contribution's weights were fitted into the merge — i.e. it moved
+   *  the neocortex, which is what earns it a place in the Knowledge Map's Neocortex
+   *  region. Absent on ring rows written before the flag existed (all of which were
+   *  fitted), so read it as `fitted !== false` — never `fitted === true`. */
+  fitted?: boolean;
   /** Readable snippet of the task prompt (text-path only). */
   prompt?: string;
   /** Readable snippet of the run/exemplar text learned (text-path only). Absent when a

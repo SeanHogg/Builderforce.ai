@@ -686,6 +686,11 @@
         "label": "Voz",
         "tagline": "Clona y diseña una voz personalizada y luego sintetiza voz a partir de ella.",
         "runLabel": "Generar"
+      },
+      "mobile": {
+        "label": "Móvil",
+        "tagline": "Crea una app para el móvil y previsualízala en un simulador de dispositivo; después escanea para abrirla en tu propio teléfono.",
+        "runLabel": "Ejecutar"
       }
     },
     "all": "Todos",
@@ -760,7 +765,35 @@
     "recipeBlankDesc": "Un modelo mínimo que entrenas desde cero en el Studio.",
     "recipeSeedModelLabel": "Modelo publicado para inicializar",
     "recipeSeedSelect": "Selecciona un modelo…",
-    "recipeSeedNoModels": "aún no hay modelos publicados"
+    "recipeSeedNoModels": "aún no hay modelos publicados",
+    "centerPreview": "Vista previa",
+    "centerCode": "Código",
+    "device": {
+      "simulateOnWeb": "Simular en la web",
+      "deviceLabel": "Dispositivo",
+      "rotate": "Rotar",
+      "reload": "Recargar la vista previa",
+      "openInTab": "Abrir en una pestaña nueva",
+      "tryOnDevice": "Probar en el dispositivo",
+      "previewTitle": "Vista previa de la app móvil",
+      "emptyTitle": "Todavía no hay nada en ejecución",
+      "emptyHint": "Pulsa Ejecutar para iniciar el servidor de desarrollo y ver aquí tu app.",
+      "panelTitle": "Vista previa en tu teléfono",
+      "panelIntro": "El simulador se ejecuta dentro de esta pestaña del navegador, así que tu teléfono no puede acceder a él. Escanea la versión publicada en su lugar.",
+      "checking": "Buscando una versión publicada…",
+      "qrAlt": "Código QR de la URL de la app publicada",
+      "copyLink": "Copiar enlace",
+      "copied": "Copiado",
+      "openLink": "Abrir",
+      "step1": "Abre la app de cámara en tu teléfono.",
+      "step2": "Apúntala al código QR de arriba.",
+      "step3": "Toca la notificación para abrir tu app.",
+      "lastPublished": "Publicado por última vez el {when}",
+      "republishHint": "Vuelve a publicar después de hacer cambios: el código QR sigue funcionando, siempre apunta a la última versión.",
+      "notPublishedTitle": "Todavía no has publicado nada",
+      "notPublishedBody": "Publica esta app para obtener un enlace que tu teléfono pueda abrir. Tarda alrededor de un minuto.",
+      "goToPublish": "Ir a Publicar"
+    }
   },
   "tools": {
     "outOf5": "de 5,0",
@@ -5724,47 +5757,47 @@
       "document": {
         "label": "Documento",
         "hint": "Redacta un documento estructurado con títulos, secciones y tablas.",
-        "starter": "Escribe un documento sobre "
+        "starter": "Escribe un documento que resuma la situación actual de este proyecto."
       },
       "slides": {
         "label": "Diapositivas",
         "hint": "Crea una presentación, una diapositiva por sección.",
-        "starter": "Crea una presentación sobre "
+        "starter": "Crea una presentación que resuma la situación actual de este proyecto."
       },
       "dataviz": {
         "label": "Visualización de datos",
         "hint": "Convierte los datos en gráficos en línea con las cifras debajo.",
-        "starter": "Visualiza "
+        "starter": "Representa en un gráfico cómo se distribuyen las tareas de este proyecto por estado."
       },
       "spreadsheet": {
         "label": "Hoja de cálculo",
         "hint": "Modela los números en una tabla con fórmulas y totales.",
-        "starter": "Crea una hoja de cálculo que "
+        "starter": "Crea una hoja de cálculo con las tareas abiertas de este proyecto, con responsable, estado y antigüedad."
       },
       "website": {
         "label": "Sitio web",
         "hint": "Crea una app o sitio web como archivos reales listos para crear.",
-        "starter": "Crea un sitio web que "
+        "starter": "Crea una página de destino para este proyecto."
       },
       "design": {
         "label": "Diseño",
         "hint": "Diseña la interfaz: maquetación, espaciado, tipografía y tokens de tema.",
-        "starter": "Diseña la interfaz de "
+        "starter": "Diseña la pantalla principal de este proyecto, con temas claro y oscuro."
       },
       "mobile": {
         "label": "Móvil",
         "hint": "Crea una app pensada primero para el móvil, con navegación nativa.",
-        "starter": "Crea una app móvil que "
+        "starter": "Crea una pantalla de inicio móvil para este proyecto."
       },
       "animation": {
         "label": "Animación",
         "hint": "Añade movimiento con propósito, con duración y curvas explícitas.",
-        "starter": "Anima "
+        "starter": "Añade una animación de entrada a la pantalla principal de este proyecto."
       },
       "game3d": {
         "label": "Juego 3D",
         "hint": "Crea un juego 3D: escena, cámara, controles y bucle de juego.",
-        "starter": "Crea un juego 3D en el que "
+        "starter": "Crea una escena 3D sencilla por la que pueda mover una cámara."
       },
       "export": {
         "docx": "Descargar Word",
@@ -5773,6 +5806,11 @@
         "working": "Preparando…",
         "failed": "Error al exportar",
         "untitled": "Sin título"
+      },
+      "missing": {
+        "body": "Esta respuesta no incluyó {capability}: el modelo solo devolvió un título.",
+        "retry": "Pedir de nuevo",
+        "retryPrompt": "Esa respuesta no contenía {capability}. Genera ahora {capability} completo, en esta misma respuesta."
       }
     },
     "messageActions": {
@@ -5815,7 +5853,14 @@
     "upgrade": "Mejorar plan",
     "upgradeToPlan": "Mejorar a {plan}",
     "addCard": "Añadir una tarjeta",
-    "cardValidationFailed": "No se pudo validar la tarjeta."
+    "cardValidationFailed": "No se pudo validar la tarjeta.",
+    "allowance": {
+      "exhausted": "Has agotado tu asignación de tokens de IA de este periodo ({used} de {limit}). Los turnos fallarán o se detendrán a medias hasta que se reinicie el {resets}.",
+      "nearLimit": "Has usado el {percent}% de tu asignación de tokens de IA: quedan {remaining} hasta el {resets}. Las respuestas largas pueden cortarse.",
+      "upgrade": "Mejorar plan",
+      "connectAccount": "Conecta tu propia cuenta",
+      "dismiss": "Descartar"
+    }
   },
   "chatMessage": {
     "copy": "Copiar",
@@ -9851,9 +9896,14 @@
     "retryCard": "Reintentar",
     "cardWorking": "Procesando…",
     "replaceCardTitle": "¿Reemplazar tu tarjeta?",
-    "replaceCardWarning": "Los modelos premium se pausarán mientras se verifica la nueva tarjeta. Tu plan y todo lo demás seguirán funcionando.",
+    "replaceCardWarning": "Tu tarjeta actual seguirá funcionando hasta que se verifique la nueva, así que los modelos premium nunca se interrumpen. La tarjeta anterior se elimina automáticamente en cuanto se confirma la nueva.",
     "retryCardMessage": "Iniciaremos una nueva verificación de 0 $. No se cobrará nada a tu tarjeta.",
     "replaceCardConfirm": "Continuar",
-    "cardValidationFailed": "No pudimos iniciar la verificación de la tarjeta. Inténtalo de nuevo."
+    "cardValidationFailed": "No pudimos iniciar la verificación de la tarjeta. Inténtalo de nuevo.",
+    "removeCard": "Eliminar tarjeta",
+    "removeCardTitle": "¿Eliminar tu tarjeta?",
+    "removeCardWarning": "Se desactivarán los modelos premium y dejaremos de almacenar tu tarjeta. Tu plan y los modelos incluidos seguirán funcionando. Puedes añadir una tarjeta de nuevo cuando quieras.",
+    "removeCardConfirm": "Eliminar tarjeta",
+    "removeCardFailed": "No pudimos eliminar la tarjeta. Inténtalo de nuevo."
   }
 }

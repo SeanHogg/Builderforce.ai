@@ -551,12 +551,12 @@ var DEFAULT_TIMELINE_LABELS = {
 };
 function ProvenanceChip({ prov, labels }) {
   const unused = prov.account === "shared_byo_unused";
-  const badge = prov.account === "own" ? labels.accountOwn : unused ? labels.accountByoUnused : labels.accountShared;
+  const badge = prov.account === "own" ? labels.accountOwn : unused ? labels.accountByoUnused : prov.account === "shared" ? labels.accountShared : null;
   const variant = prov.account === "own" ? "bf-tl__prov--own" : unused ? "bf-tl__prov--unused" : "bf-tl__prov--shared";
   const modelTitle = prov.vendor ? `${prov.model} \xB7 ${prov.vendor}` : prov.model;
   return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: `bf-tl__prov ${variant}`, children: [
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__prov-model", title: modelTitle, children: prov.model }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__prov-badge", children: badge }),
+    badge && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__prov-badge", children: badge }),
     prov.evermind ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__prov-evermind", title: labels.ranOnEvermind, children: `\u{1F9E0} Evermind v${prov.evermind.version}` }) : null
   ] });
 }

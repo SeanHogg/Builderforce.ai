@@ -35,19 +35,32 @@ export async function expandPrompt(opts: ExpandPromptOptions): Promise<string> {
     baseUrl: opts.baseUrl,
   });
 
-  const completion = await client.chat.completions.create({
-    // Explicit lightweight model — the gateway still failovers across the
-    // cascade if this is cooled, but we avoid relying on undocumented
-    // "unknown id → substitute" behaviour that a future strict-pin mode
-    // would break. Override via `promptModel` if a different model is wanted.
-    model: opts.promptModel ?? 'googleai/gemini-2.5-flash-lite',
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: opts.prompt },
-    ],
-    max_tokens: 200,
-    temperature: 0.7,
-  });
+  // Prompt expansion is an ENHANCEMENT, not a prerequisite: diffusion is local and
+  // the raw prompt renders fine. A gateway outage (vendor cascade exhausted, 5xx,
+  // offline) must NOT abort a render that needs no network — degrade to the raw
+  // prompt instead. An abort is re-thrown: user cancellation is not a degraded run.
+  let completion: Awaited<ReturnType<typeof client.chat.completions.create>>;
+  try {
+    completion = await client.chat.completions.create({
+      // Explicit lightweight model — the gateway still failovers across the
+      // cascade if this is cooled, but we avoid relying on undocumented
+      // "unknown id → substitute" behaviour that a future strict-pin mode
+      // would break. Override via `promptModel` if a different model is wanted.
+      model: opts.promptModel ?? 'googleai/gemini-2.5-flash-lite',
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: opts.prompt },
+      ],
+      max_tokens: 200,
+      temperature: 0.7,
+      // Was accepted but never forwarded — a cancelled generation left this call
+      // running and its result was silently discarded.
+      signal: opts.signal,
+    });
+  } catch (err) {
+    if (opts.signal?.aborted || (err as { name?: string })?.name === 'AbortError') throw err;
+    return opts.prompt;
+  }
 
   const text = completion.choices?.[0]?.message?.content?.trim();
   if (!text) {

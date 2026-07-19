@@ -36,6 +36,8 @@ import { AttentionDot } from '@/components/AttentionDot';
 import { useAttention } from '@/lib/useAttention';
 import { RepoContextPicker, type RepoFileSource } from '@/components/brain/RepoContextPicker';
 import { BrainCapabilityPicker } from '@/components/brain/BrainCapabilityPicker';
+import { CapabilityArtifactNotice } from '@/components/brain/CapabilityArtifactNotice';
+import { AllowanceBanner } from '@/components/brain/AllowanceBanner';
 import { ThemeSelect } from '@/components/ThemeSelect';
 import { Select } from '@/components/Select';
 import { fetchProjects, createProject } from '@/lib/api';
@@ -200,6 +202,8 @@ export function BrainPanel({
   }, [scope]);
   const [searchQuery, setSearchQuery] = useState('');
   const [input, setInput] = useState('');
+  /** Bumped to pull focus into the composer after something seeds it. */
+  const [composerFocusToken, setComposerFocusToken] = useState(0);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -356,7 +360,12 @@ export function BrainPanel({
     } else {
       await chats.setCapability(chats.activeChatId, id);
     }
-    if (id) setInput((prev) => (prev.trim() ? prev : tBrain(`capabilities.${id}.starter`)));
+    if (id) {
+      setInput((prev) => (prev.trim() ? prev : tBrain(`capabilities.${id}.starter`)));
+      // Focus with the caret at the end: the starter is an editable opening line,
+      // not a finished message. (Sending the raw seed produced stub replies.)
+      setComposerFocusToken((n) => n + 1);
+    }
   }, [chats, tBrain]);
   const capabilityPrompt = getBrainCapability(capabilityId)?.systemPrompt;
 
@@ -1123,6 +1132,9 @@ export function BrainPanel({
         action={conv.error ? conv.errorAction : null}
         onDismiss={dismissError}
       />
+      {/* Spent/nearly-spent token allowance — the state that silently degrades or
+          truncates turns. Self-gating on the shared consumption snapshot. */}
+      <AllowanceBanner />
       {showProviderCapBanner && (
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, margin: '8px 12px 0', padding: '8px 12px', fontSize: 13, background: 'var(--warning-bg, rgba(234,179,8,0.12))', color: 'var(--warning-text, #d97706)', border: '1px solid var(--warning-border, rgba(234,179,8,0.3))', borderRadius: 8 }} role="status">
           <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
@@ -1335,6 +1347,7 @@ export function BrainPanel({
               onRemoveAttachment={conv.removeAttachment}
               mentionables={participants}
               onMention={setRecipientChoice}
+              focusToken={composerFocusToken}
             />
             {conv.uploading && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{tBrain('uploading')}</div>}
           </div>
@@ -1478,6 +1491,8 @@ function MessageActions({ msg, conv, projectId, capability, chatTitle, suggestio
   suggestions?: SuggestedAction[];
   onRunSuggestion?: (prompt: string) => void;
 }) {
+  // Only the newest assistant turn is worth judging/retrying for a missing artifact.
+  const lastAssistantId = [...conv.messages].reverse().find((m) => m.role === 'assistant' && !isStepMessage(m))?.id;
   return (
     <>
       {suggestions && suggestions.length > 0 && onRunSuggestion && (
@@ -1509,6 +1524,15 @@ function MessageActions({ msg, conv, projectId, capability, chatTitle, suggestio
           ))}
         </div>
       )}
+      {/* A capability reply that never produced its artifact reads as "nothing
+          happened" — say so, and offer to ask for it explicitly. */}
+      <CapabilityArtifactNotice
+        capability={capability}
+        content={msg.content}
+        streaming={conv.sending}
+        isLatest={msg.id === lastAssistantId}
+        onRetry={(prompt) => { void conv.send(prompt); }}
+      />
       <ChatMessageActions
         onCopy={() => conv.copyMessage(msg)}
         copied={conv.copiedMessageId === msg.id}

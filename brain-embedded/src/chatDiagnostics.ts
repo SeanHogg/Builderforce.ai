@@ -165,6 +165,28 @@ function tokenMeter(a: ChatDiagnosticsAccount | null | undefined): ChatDiagnosti
   return (a?.meters ?? []).find((m) => m.key === 'ai_tokens');
 }
 
+/** How close a metered allowance is to stopping turns. */
+export type AllowanceState = 'ok' | 'warn' | 'exhausted';
+
+/**
+ * Classify a token allowance. THE single definition of the thresholds — the
+ * diagnostics signals below and any host banner must agree on when to warn, or a
+ * user gets a scary banner and a calm report (or vice versa).
+ *
+ * Takes the structural meter shape, so hosts can pass their own
+ * `/api/consumption` snapshot meter without converting it.
+ *
+ * `unlimited` is authoritative: a tenant the gateway does not cap must never be
+ * told it is out of tokens, however large `used` grows.
+ */
+export function allowanceState(
+  meter: { unlimited: boolean; remaining: number; percentUsed: number } | null | undefined,
+): AllowanceState {
+  if (!meter || meter.unlimited) return 'ok';
+  if (meter.remaining <= 0) return 'exhausted';
+  return meter.percentUsed >= 80 ? 'warn' : 'ok';
+}
+
 /**
  * Compute the actionable "why isn't this working?" signals from the raw facts, so the
  * report NAMES the likely cause instead of leaving the reader to correlate numbers.
@@ -221,16 +243,15 @@ function diagnosticsSignals(d: ChatDiagnosticsData): string[] {
     if (acct.billingStatus === 'past_due') {
       out.push('⚠️ Billing status is past_due — plan entitlements may be suspended until payment succeeds, which reads as sudden model/quota downgrade.');
     }
-    if (tokens && !tokens.unlimited) {
-      if (tokens.remaining <= 0) {
-        out.push(
-          `⚠️ AI token allowance is EXHAUSTED (${tokens.used.toLocaleString('en-US')} / ${tokens.limit.toLocaleString('en-US')} this period). The gateway returns 429 \`plan_token_limit_exceeded\`, so turns fail or stop mid-answer until ${acct.resetsAt ?? 'the period resets'}.`,
-        );
-      } else if (tokens.percentUsed >= 80) {
-        out.push(
-          `⚠️ AI token allowance is ${tokens.percentUsed}% used (${tokens.remaining.toLocaleString('en-US')} left, resets ${acct.resetsAt ?? 'at period end'}). Long turns may be cut off by the cap before the model finishes.`,
-        );
-      }
+    const tokenState = allowanceState(tokens);
+    if (tokens && tokenState === 'exhausted') {
+      out.push(
+        `⚠️ AI token allowance is EXHAUSTED (${tokens.used.toLocaleString('en-US')} / ${tokens.limit.toLocaleString('en-US')} this period). The gateway returns 429 \`plan_token_limit_exceeded\`, so turns fail or stop mid-answer until ${acct.resetsAt ?? 'the period resets'}.`,
+      );
+    } else if (tokens && tokenState === 'warn') {
+      out.push(
+        `⚠️ AI token allowance is ${tokens.percentUsed}% used (${tokens.remaining.toLocaleString('en-US')} left, resets ${acct.resetsAt ?? 'at period end'}). Long turns may be cut off by the cap before the model finishes.`,
+      );
     }
     if (acct.modelFunding === 'premium' && acct.canUsePremiumModels === false) {
       out.push(
