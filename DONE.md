@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-07-19 — ✅ SHIPPED: Offload to GitHub — App auth, Checks write-back, alert ingest, Actions execution surface, real CI gates
+
+Six workstreams closing the gap between "the platform reads GitHub heavily" and "the platform uses GitHub". API 2589 tests / 288 files green, frontend 398 green, both typecheck clean. Open residuals in the roadmap's *GitHub offload* section.
+
+**GitHub App authentication** — `api/src/application/repos/githubApp.ts`: RS256 App JWT + installation-token exchange, entirely on `crypto.subtle` (no Octokit; it is not a dependency of this repo). The non-obvious part is that GitHub issues PKCS#1 private keys and WebCrypto only imports PKCS#8, so `pkcs1ToPkcs8` re-wraps the DER envelope by hand — verified by a round-trip test that generates a real RSA key, strips the genuine PKCS#8 envelope and asserts our rebuild is **byte-identical**. Installation tokens cached 45 min against a 1 h expiry. 11 tests.
+
+**One GitHub client** — `api/src/application/repos/githubClient.ts`. The authenticated request was hand-rolled in ~12 files (six different User-Agent strings, four inline re-implementations of the host→api-base mapping). `githubRequest` + `resolveRepoAuth` collapse that, and are what made App support a one-place change rather than a twelve-place paste. Auth order is App installation token → tenant user PAT; the fallback is load-bearing, not transitional.
+
+**Checks API write-back** — `api/src/application/checks/`. Agent run verdicts now land on the PR. Key constraint: `POST /check-runs` requires `checks:write`, which **only** an App installation token carries — a PAT gets a flat 403 and there is no scope to fix it. So `publishCheckRun` publishes a rich Check Run on an App token and degrades to a commit status on a user token; a visible degraded verdict beats an invisible rich one. Wired into `finalizeCloudRun`, the terminal chokepoint both cloud surfaces share, so durable and container both get it from one call site. Required exposing `headSha` on `PullRequestDetail` (previously fetched and discarded) with a cache-bust before publish, since a check on a superseded SHA is invisible.
+
+**PR comments** — `api/src/application/repos/postPrComment.ts`, with `<!-- builderforce:kind:scope -->` markers so webhook redelivery and retried finalizes dedupe instead of spamming the PR.
+
+**GitHub security alerts → findings** — `api/src/application/security/githubAlerts.ts` + a `code_scanning_alert`/`dependabot_alert` webhook branch, plus a pull-based backfill for repos where the webhook was never installed. Feeds the existing `SecurityAuditService`, so alerts become SECURITY tickets like agent-reported findings. `rule.severity` is mapped *downward* (`error→high`, not `critical`) because it is a lint scale, not a risk scale — mapping it up lets a non-security CodeQL quality rule mint URGENT tickets. Dedupe is by a `[gh:code-scanning:owner/repo#42]` title marker (no migration, greppable on the board). 27 tests.
+
+**GitHub Actions as a third execution surface** — `runtime_surface` widened to `durable | container | github_actions` (14 chars, fits the existing varchar(16); no migration). Follows the precedent already in this repo (`deployWorkflow.ts` + `githubOidc.ts`): the workflow holds **no secret**, requests a short-lived OIDC token on its own audience (`builderforce.ai/agent`, distinct from the deploy audience so neither is replayable as the other), and `githubActionsRoutes.ts` verifies it against GitHub's JWKS. Authorization is two-part and deliberately stricter than the deploy route's: the repo↔project binding, **plus** a check that the execution belongs to that binding's tenant AND project — without the second, any linked repo could drive any execution id. Once authenticated it delegates to the same `handleContainerOp` the container uses; only transport and auth differ. Dispatch inverts to `workflow_dispatch` (no inbound path to a runner), and the surface gets its own 20-min reaper ceiling because a queued run is silent through GitHub's schedule/boot/checkout window — the long-lived 5-min ceiling would have reaped essentially every Actions run before it started. Files: `githubActionsWorkflow.ts`, `githubActionsRunner.ts`, `githubActionsDispatch.ts`, `githubActionsRoutes.ts`, `orphanReasons.ts`, `cloudDispatch.ts`, `runtimeRoutes.ts`, frontend surface picker + all five i18n catalogs.
+
+**Real CI gates** — `.github/workflows/ci.yml` previously ran only file-based drift guards and agent evals; type errors and failing tests reached `main` and surfaced at deploy. Added api (types + 2589 tests), frontend (types + tests + lint as its own job — `eslint .` is ~3 min), an 8-package library matrix, and vscode types. Every gate was verified green before being enforced; `agent-runtime` runs advisory because its 7 local failures look Windows-specific and that was never confirmed on Linux.
+
+**Supply-chain + static analysis** — `.github/workflows/codeql.yml` (security-and-quality, weekly + per-PR), `.github/dependabot.yml` (grouped to avoid ~15 directories × weekly churn; TypeScript pinned out because a single-directory bump desyncs the compiler across the monorepo). Repo settings: Dependabot security updates and secret-scanning validity checks enabled. The repo is public, so CodeQL and Actions minutes are free.
+
+---
+
 ## 2026-07-19 — ✅ RESOLVED: Autonomy audit — all 15 findings closed
 
 A full review of the platform's autonomous functionality (capabilities + gaps), then every gap fixed in one pass. API 2589 tests green, frontend 398 green, both packages typecheck clean.
@@ -167,6 +189,32 @@ Follow-up on the four residuals from "Account type is visible in VSIX chat" (bel
 **Verification.** frontend `tsc --noEmit` clean; brain-embedded 155/155; api premium-gate + new seam tests 14/14; brain-ui + VSIX build; VSIX packaged 2026.7.86. Remaining residuals (live 402 run, card REMOVE, dual plan-state sources) are in the roadmap.
 
 > **Note:** this pass overlapped with a concurrent session working the same list. Both arrived at the same shared-component design independently; the web adapter (`BrainErrorBanner`, `useCardValidation`, `useConsumption`) is that session's work, the shared `brain-ui` banner and §2–§4 are this one's.
+
+---
+
+## ✅ RESOLVED 2026-07-19 — The web app could not read ANY gateway response header, and the Brain was sent 308 tools per turn (api 2026.7.114 · brain-embedded 2026.7.42 · frontend 2026.7.84 · VSIX 2026.7.91)
+
+**Two findings from one question: "the account has Grok as BYO — does this output indicate a free OpenRouter model?"**
+
+### 1. The answer was unknowable, because CORS hid it
+
+The trace recorded `{"model":"default","requestedModel":"default"}` — the *resolved* model was the literal placeholder. Root cause: `Access-Control-Expose-Headers` was set **only on the OPTIONS preflight** (`index.ts`) — a placement browsers ignore. The middleware that decorates every ACTUAL response (`middleware/cors.ts`) set `Allow-Origin` and `Vary` and nothing else.
+
+Consequence: on the web surface, JS could not read a single `x-builderforce-*` header the gateway sets. Everything that depends on them was silently dead:
+- `x-builderforce-model` → `resolvedModel` undefined → traces log `"default"`, and **no chip could ever say which model or account served a turn**;
+- `x-builderforce-account` → the provenance chip never rendered (the `account`-optional fix from earlier this session could not help, because the MODEL was unreadable too);
+- `x-builderforce-byo-unresolved` → the "your connected account wasn't used" warning could not fire on web;
+- `provider-cap`, `premium-surcharge`, `trace-id`, `retries` → all invisible.
+
+The VS Code webview was unaffected (not subject to browser CORS), which is why this never showed up there. Fixed by setting the list on the real response, with `EXPOSED_HEADERS` / `ALLOWED_REQUEST_HEADERS` as ONE shared constant used by both the middleware and the worker's preflight — they had already drifted (the preflight allowed three request headers the middleware's branch did not). 4 tests pin it, including that a disallowed origin still gets nothing.
+
+### 2. The Brain was advertising 308 tools on every turn
+
+The capture showed `Tools available to the model: 308` — 205 first-party `builtin_*` entries plus tenant MCP servers and navigation, all sent every turn with `tool_choice: 'auto'`, uncapped and unfiltered. Most providers degrade sharply past ~128 tool definitions, and a small free-pool model given 308 reliably emits **no tool calls at all** — matching the observed behaviour across three different phrasings ("Calling the tool now.", "I do not have the task status data", "What are the task counts per status?"), each with `toolCalls: 0`.
+
+`selectToolsForTurn()` now advertises a relevant subset (default 64): tools the run has already called are pinned so a multi-step task never loses one mid-flight, the rest are ranked by lexical relevance to the turn (tool NAME weighted 10× description, singular/plural-insensitive), and the remainder backfills in catalog order so a vague query still gets a stable, full set. Deterministic, no embeddings, no extra round trip; a catalog at or under the limit is returned untouched, so nothing changes for small deployments. Trimming is recorded as a `tools.selected` trace step. 8 tests, including that "Chart how this project's tasks are distributed across statuses" puts `builtin_tasks_*` in the first 10.
+
+**Verified.** 2593 api tests, 182 brain-embedded tests, frontend + VS Code typechecks all green.
 
 ---
 
