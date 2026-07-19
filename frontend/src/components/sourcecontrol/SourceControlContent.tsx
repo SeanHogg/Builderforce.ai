@@ -14,6 +14,7 @@ import {
 import { saveFile } from '@/lib/api';
 import { parseRepoIdentifier, isValidRepoSegment } from '@/lib/repoIdentifier';
 import { formatRepoDiagnostic } from '@/lib/repoDiagnostic';
+import { useGithubActionsReadiness } from '@/components/repos/githubActionsSurface';
 
 /**
  * Project "Source control" tab — manage the repositories a project's agents
@@ -38,6 +39,8 @@ const btnPrimary: React.CSSProperties = {
 const btnSubtle: React.CSSProperties = {
   padding: '6px 10px', fontSize: 12, fontWeight: 600, background: 'var(--bg-elevated)',
   color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: 'pointer',
+  // Keeps every action in this row a comfortable tap target on a phone.
+  minHeight: 32,
 };
 const iconBtn: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30,
@@ -85,6 +88,14 @@ export function SourceControlContent({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [importing, setImporting] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<Record<string, { ok: boolean; message: string }>>({});
+  // Two maintenance actions that used to be API-only (an operator had to POST
+  // them by hand): committing the agent workflow, and backfilling security alerts
+  // for a repo connected after its alerts had accumulated.
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [actionResult, setActionResult] = useState<Record<string, { ok: boolean; message: string }>>({});
+  // Shared with the cloud-agent surface picker, so "enabled" means exactly one
+  // thing across the app.
+  const { status: actionsStatus, refresh: refreshActions } = useGithubActionsReadiness(projectId);
 
   // Add/edit-form state (shared between linking a new repo and editing one)
   const [provider, setProvider] = useState<string>('github');
@@ -246,6 +257,44 @@ export function SourceControlContent({
     }
   };
 
+  /**
+   * Commit the Builderforce agent workflow into the repo's default branch — what
+   * makes the `github_actions` execution surface actually runnable for this
+   * project. Re-running it REWRITES a file the user is explicitly invited to edit,
+   * so re-enabling an already-enabled repo asks first; the first-time enable does
+   * not (there is nothing to overwrite).
+   */
+  const enableAgentRuns = async (r: ProjectRepository) => {
+    const already = actionsStatus?.repositories.find((s) => s.repoId === r.id)?.enabled ?? false;
+    if (already && !(await confirm(t('confirmReenableActions')))) return;
+    setBusyAction(`actions:${r.id}`);
+    try {
+      const res = await reposApi.enableGithubActions(r.id);
+      setActionResult((p) => ({ ...p, [r.id]: { ok: true, message: t('actionsEnabled', { path: res.path }) } }));
+      refreshActions();
+    } catch (e) {
+      // The overwhelmingly common failure is a credential without the `workflow`
+      // scope, and the server says so verbatim — surface it rather than flatten it.
+      setActionResult((p) => ({ ...p, [r.id]: { ok: false, message: e instanceof Error ? e.message : t('actionsEnableFailed') } }));
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  /** Pull every OPEN code-scanning / Dependabot alert in as a security finding.
+   *  Idempotent server-side (ingestion dedupes), so this needs no confirmation. */
+  const backfillAlerts = async (r: ProjectRepository) => {
+    setBusyAction(`alerts:${r.id}`);
+    try {
+      const res = await reposApi.backfillSecurityAlerts(r.id);
+      setActionResult((p) => ({ ...p, [r.id]: { ok: true, message: t('alertsBackfilled', { count: res.ingested ?? 0, deduped: res.deduped ?? 0 }) } }));
+    } catch (e) {
+      setActionResult((p) => ({ ...p, [r.id]: { ok: false, message: e instanceof Error ? e.message : t('alertsBackfillFailed') } }));
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
   const credName = (id: string | null) => creds.find((c) => c.id === id)?.name;
 
   // SCM credentials only (github/gitlab/bitbucket) for the picker
@@ -266,8 +315,13 @@ export function SourceControlContent({
           {repos.map((r) => {
             const result = testResult[r.id];
             const imp = importResult[r.id];
+            const act = actionResult[r.id];
+            const ghStatus = actionsStatus?.repositories.find((s) => s.repoId === r.id);
             return (
-              <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: '1px solid var(--border-subtle)' }}>
+              // flexWrap keeps the action row from overflowing on a phone: the
+              // buttons stack onto their own lines instead of forcing a sideways
+              // scroll of the whole panel.
+              <div key={r.id} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: '1px solid var(--border-subtle)' }}>
                 <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--coral-bright)', minWidth: 70 }}>{r.provider}</span>
                 <span style={{ fontSize: 13, color: 'var(--text-primary)', flex: 1 }}>
                   {r.owner}/{r.repo}
@@ -285,6 +339,11 @@ export function SourceControlContent({
                 {imp && (
                   <span style={{ fontSize: 11, color: imp.ok ? 'var(--success, #16a34a)' : 'var(--danger, #dc2626)' }}>
                     ● {imp.message}
+                  </span>
+                )}
+                {act && (
+                  <span style={{ fontSize: 11, color: act.ok ? 'var(--success, #16a34a)' : 'var(--danger, #dc2626)', flexBasis: '100%' }}>
+                    ● {act.message}
                   </span>
                 )}
                 <button type="button" style={btnSubtle} disabled={testing === r.id} onClick={() => test(r.id)}>
@@ -307,6 +366,32 @@ export function SourceControlContent({
                 >
                   {copiedId === r.id ? t('copied') : t('copy')}
                 </button>
+                {/* Only GitHub has Actions — a GitLab/Bitbucket repo has nothing
+                    to enable, so the affordance simply isn't there. */}
+                {ghStatus?.supported && (
+                  <button
+                    type="button"
+                    style={btnSubtle}
+                    disabled={busyAction === `actions:${r.id}`}
+                    title={ghStatus.enabled ? t('reenableAgentRunsTitle') : t('enableAgentRunsTitle')}
+                    onClick={() => enableAgentRuns(r)}
+                  >
+                    {busyAction === `actions:${r.id}`
+                      ? t('enablingAgentRuns')
+                      : ghStatus.enabled ? t('agentRunsEnabled') : t('enableAgentRuns')}
+                  </button>
+                )}
+                {ghStatus?.supported && (
+                  <button
+                    type="button"
+                    style={btnSubtle}
+                    disabled={busyAction === `alerts:${r.id}`}
+                    title={t('backfillAlertsTitle')}
+                    onClick={() => backfillAlerts(r)}
+                  >
+                    {busyAction === `alerts:${r.id}` ? t('backfillingAlerts') : t('backfillAlerts')}
+                  </button>
+                )}
                 {!r.isDefault && <button type="button" style={btnSubtle} onClick={() => setDefault(r.id)}>{t('setDefault')}</button>}
                 <button type="button" style={iconBtn} title={t('editRepository')} aria-label={t('editRepository')} onClick={() => openEdit(r)}>
                   <PencilIcon />

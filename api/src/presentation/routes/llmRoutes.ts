@@ -84,6 +84,11 @@ import {
 } from '../../application/llm/tenantProviderKeyService';
 import { CAPACITY_LIMIT_MARKER } from '../../application/llm/vendors/types';
 import {
+  clearProviderAuthAlert,
+  loadProviderAuthAlert,
+  recordProviderAuthAlerts,
+} from '../../application/llm/providerAuthAlerts';
+import {
   generatePkce,
   generateState,
   buildAuthorizeUrl,
@@ -157,6 +162,33 @@ function logFailovers(
       .values(failovers.map(f => ({ model: f.model, errorCode: f.code })))
       .catch(() => { /* never let logging fail the request */ }),
   );
+}
+
+/**
+ * Record any AUTH-class failover as a per-tenant "reconnect this account" alert,
+ * fire-and-forget alongside {@link logFailovers}.
+ *
+ * This is the seam that makes a rejected BYO credential VISIBLE. The cascade
+ * already handles it correctly — cool the vendor, fail over, succeed elsewhere —
+ * which is exactly why nothing ever reached the operator: the request looks fine
+ * and `llm_failover_log` persists only `model` + `errorCode` (no tenant, no kind),
+ * so the signal died at the DB boundary. Writing it here, where tenant identity is
+ * in scope and the typed `FailoverEvent` still carries `kind`/`detail`, is the
+ * last point at which the alert can be attributed to the account that needs fixing.
+ *
+ * `authAlertsFromFailovers` no-ops for a cascade with no auth attempts, so the
+ * common path costs one array scan and zero writes.
+ */
+function logProviderAuthAlerts(
+  env: HonoEnv['Bindings'],
+  ctx: ExecutionContext | undefined,
+  tenantId: number,
+  failovers: ReadonlyArray<FailoverEvent>,
+): void {
+  if (failovers.length === 0) return;
+  const promise = recordProviderAuthAlerts(env, tenantId, failovers)
+    .catch(() => { /* advisory — never let alerting fail the request */ });
+  if (ctx) ctx.waitUntil(promise); else void promise;
 }
 
 /** Write one row to llm_usage_log, fire-and-forget via ctx.waitUntil.
@@ -969,9 +1001,15 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     try { access = await requireTenantAccess(c); } catch (err) { return respondToAccessError(c, err); }
     const provider = c.req.param('provider');
     if (!isSupportedProvider(provider)) return c.json({ error: 'unsupported provider' }, 400);
-    const [details, creds] = await Promise.all([
+    // `authAlert` is the DISPATCH-observed health signal, and it answers a question
+    // `configured`/`usable` structurally cannot: those describe whether the stored
+    // credential RESOLVES, and a ChatGPT account whose plan lapsed still resolves
+    // perfectly — it just 403s on every call. Without this the card reads
+    // "● connected" forever while the account silently serves nothing.
+    const [details, creds, authAlert] = await Promise.all([
       listTenantProviderKeys(c.env, access.tenantId),
       resolveTenantLlmCredentials(c.env, access.tenantId),
+      loadProviderAuthAlert(c.env, access.tenantId, provider),
     ]);
     const configured = details.some((d) => d.provider === provider);
     const usable = providersFromCredentials(creds).includes(provider);
@@ -990,6 +1028,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     return c.json({
       provider, configured, usable,
       status: !configured ? 'not_connected' : usable ? 'ready' : (creds.unresolvedReasons[provider] ?? 'unavailable'),
+      // Only meaningful while the credential is still configured — a removed one has
+      // nothing to reconnect, and the alert is cleared on removal anyway.
+      ...(configured && authAlert ? { authAlert } : {}),
       usage: { periodDays: 30, requests: Number(row.requests ?? 0), tokens: Number(row.tokens ?? 0), lastUsedAt: row.last_used_at ?? null },
     });
   });
@@ -1089,6 +1130,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const apiKey = body.apiKey?.trim();
     if (!apiKey) return c.json({ error: 'apiKey is required' }, 400);
     await setTenantProviderKey(c.env, access.tenantId, provider, apiKey, access.userId);
+    // A replaced credential invalidates the old one's rejection notice — otherwise
+    // the card would keep telling the operator to reconnect an account they just did.
+    await clearProviderAuthAlert(c.env, access.tenantId, provider);
     return c.json({ ok: true, provider });
   });
 
@@ -1408,6 +1452,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const service = proxyForCompletion(c.env, access, openaiBody as unknown as ChatCompletionRequest, { disablePaidOverflow, tenantVendorKeys });
     const result = await service.complete(openaiBody as unknown as ChatCompletionRequest, undefined, traceId);
     logFailovers(c.env, c.executionCtx, result.failovers);
+    logProviderAuthAlerts(c.env, c.executionCtx, access.tenantId, result.failovers);
 
     if (streamed && result.response.body) {
       const encoder = createAnthropicStreamEncoder({ messageId, model: result.resolvedModel });
@@ -1970,6 +2015,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
 
       // Log any failovers that happened before this successful model
       logFailovers(c.env, c.executionCtx, result.failovers);
+      logProviderAuthAlerts(c.env, c.executionCtx, access.tenantId, result.failovers);
 
       // Full diagnostic trace (builder-side only). For streams the completion
       // body isn't captured here; identity, timing, attempts, and the chain are.
@@ -2016,6 +2062,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
 
     // Log any failovers, then log usage
     logFailovers(c.env, c.executionCtx, result.failovers);
+    logProviderAuthAlerts(c.env, c.executionCtx, access.tenantId, result.failovers);
     logUsage(c.env, c.executionCtx, {
       tenantId: access.tenantId, userId: access.userId, llmProduct,
       model: result.resolvedModel, retries: result.retries, streamed: false,
