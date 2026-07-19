@@ -686,6 +686,11 @@
         "label": "语音",
         "tagline": "克隆并设计自定义语音，然后用它合成语音。",
         "runLabel": "生成"
+      },
+      "mobile": {
+        "label": "移动端",
+        "tagline": "构建手机应用并在设备模拟器中预览，然后扫码在自己的手机上打开。",
+        "runLabel": "运行"
       }
     },
     "all": "全部",
@@ -760,7 +765,35 @@
     "recipeBlankDesc": "在工作室中从零开始训练的最小模型。",
     "recipeSeedModelLabel": "用于初始化的已发布模型",
     "recipeSeedSelect": "选择一个模型…",
-    "recipeSeedNoModels": "尚无已发布的模型"
+    "recipeSeedNoModels": "尚无已发布的模型",
+    "centerPreview": "预览",
+    "centerCode": "代码",
+    "device": {
+      "simulateOnWeb": "网页模拟",
+      "deviceLabel": "设备",
+      "rotate": "旋转",
+      "reload": "重新加载预览",
+      "openInTab": "在新标签页中打开",
+      "tryOnDevice": "在设备上试用",
+      "previewTitle": "移动应用预览",
+      "emptyTitle": "尚未运行",
+      "emptyHint": "点击“运行”启动开发服务器，即可在此查看您的应用。",
+      "panelTitle": "在手机上预览",
+      "panelIntro": "模拟器运行在当前浏览器标签页内，因此手机无法访问。请改为扫描已发布的构建版本。",
+      "checking": "正在检查已发布的构建…",
+      "qrAlt": "已发布应用网址的二维码",
+      "copyLink": "复制链接",
+      "copied": "已复制",
+      "openLink": "打开",
+      "step1": "在手机上打开相机应用。",
+      "step2": "对准上方的二维码。",
+      "step3": "点击通知即可打开您的应用。",
+      "lastPublished": "上次发布于 {when}",
+      "republishHint": "修改后请重新发布——二维码始终有效，它总是指向最新的构建版本。",
+      "notPublishedTitle": "尚未发布",
+      "notPublishedBody": "发布此应用以获得手机可以打开的链接，大约需要一分钟。",
+      "goToPublish": "前往发布"
+    }
   },
   "tools": {
     "outOf5": "满分 5.0",
@@ -5724,47 +5757,47 @@
       "document": {
         "label": "文档",
         "hint": "撰写包含标题、章节和表格的结构化文档。",
-        "starter": "撰写一份关于以下主题的文档："
+        "starter": "撰写一份文档，总结本项目当前的进展状况。"
       },
       "slides": {
         "label": "幻灯片",
         "hint": "制作演示文稿，每个章节一页幻灯片。",
-        "starter": "制作一份关于以下主题的幻灯片："
+        "starter": "制作一套幻灯片，总结本项目当前的进展状况。"
       },
       "dataviz": {
         "label": "数据可视化",
         "hint": "将数据转化为内嵌图表，并在下方附上数据。",
-        "starter": "可视化展示："
+        "starter": "用图表展示本项目任务在各状态中的分布。"
       },
       "spreadsheet": {
         "label": "电子表格",
         "hint": "用带公式与合计的表格建立数字模型。",
-        "starter": "制作一个电子表格，用于："
+        "starter": "制作一个电子表格，列出本项目的未完成任务及负责人、状态和已用时长。"
       },
       "website": {
         "label": "网站",
         "hint": "以可直接创建的真实文件构建网页应用或网站。",
-        "starter": "构建一个网站，用于："
+        "starter": "为本项目构建一个落地页。"
       },
       "design": {
         "label": "设计",
         "hint": "设计界面——布局、间距、字体与主题变量。",
-        "starter": "设计以下内容的界面："
+        "starter": "为本项目设计主界面，并同时支持浅色和深色主题。"
       },
       "mobile": {
         "label": "移动端",
         "hint": "构建移动优先、具有原生导航体验的应用。",
-        "starter": "构建一个移动应用，用于："
+        "starter": "为本项目构建一个移动端首页。"
       },
       "animation": {
         "label": "动画",
         "hint": "添加有目的的动效，明确时长与缓动曲线。",
-        "starter": "为以下内容添加动画："
+        "starter": "为本项目的主界面添加入场动画。"
       },
       "game3d": {
         "label": "3D 游戏",
         "hint": "构建 3D 游戏——场景、相机、输入与游戏循环。",
-        "starter": "构建一个 3D 游戏，玩法是："
+        "starter": "构建一个可以用相机自由移动查看的简单 3D 场景。"
       },
       "export": {
         "docx": "下载 Word",
@@ -5773,6 +5806,11 @@
         "working": "准备中……",
         "failed": "导出失败",
         "untitled": "未命名"
+      },
+      "missing": {
+        "body": "这条回复没有包含{capability}——模型只返回了一个标题。",
+        "retry": "重新请求",
+        "retryPrompt": "刚才的回复中没有{capability}。请在本次回复中直接给出完整的{capability}。"
       }
     },
     "messageActions": {
@@ -5815,7 +5853,14 @@
     "upgrade": "升级",
     "upgradeToPlan": "升级到 {plan}",
     "addCard": "添加银行卡",
-    "cardValidationFailed": "银行卡验证失败。"
+    "cardValidationFailed": "银行卡验证失败。",
+    "allowance": {
+      "exhausted": "本周期的 AI 令牌额度已用完（{used} / {limit}）。在 {resets} 重置前，对话会失败或中途停止。",
+      "nearLimit": "AI 令牌额度已使用 {percent}%——距 {resets} 还剩 {remaining}。较长的回答可能被截断。",
+      "upgrade": "升级",
+      "connectAccount": "连接你自己的账户",
+      "dismiss": "关闭"
+    }
   },
   "chatMessage": {
     "copy": "复制",
@@ -9851,9 +9896,14 @@
     "retryCard": "重试",
     "cardWorking": "处理中…",
     "replaceCardTitle": "要更换银行卡吗？",
-    "replaceCardWarning": "新卡验证期间，高级模型将暂停使用。您的套餐及其他功能不受影响。",
+    "replaceCardWarning": "在新卡通过验证之前，您当前的银行卡将继续有效，因此高级模型不会中断。新卡确认后，旧卡将被自动移除。",
     "retryCardMessage": "我们将启动新的 0 美元验证，不会向您的卡扣款。",
     "replaceCardConfirm": "继续",
-    "cardValidationFailed": "无法启动银行卡验证，请重试。"
+    "cardValidationFailed": "无法启动银行卡验证，请重试。",
+    "removeCard": "移除银行卡",
+    "removeCardTitle": "要移除您的银行卡吗？",
+    "removeCardWarning": "高级模型将被关闭，我们也将不再存储您的银行卡。您的套餐和包含的模型不受影响。您可以随时重新添加银行卡。",
+    "removeCardConfirm": "移除银行卡",
+    "removeCardFailed": "无法移除银行卡，请重试。"
   }
 }

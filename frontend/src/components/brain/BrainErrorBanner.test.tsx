@@ -60,8 +60,9 @@ describe('BrainErrorBanner', () => {
         onDismiss={vi.fn()}
       />,
     );
-    // The plan-specific CTA wins over the generic one.
-    expect(getByText('brain.upgradeToPlan')).toBeTruthy();
+    // The plan-specific CTA wins over the generic one, and names the plan the
+    // server asked for (the test i18n stub appends interpolated values).
+    expect(getByText(/brain\.upgradeToPlan Pro/)).toBeTruthy();
   });
 
   it('starts card validation instead of navigating on a card verdict', () => {

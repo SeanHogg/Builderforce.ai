@@ -55,7 +55,9 @@ describe('PlanBadge', () => {
     mockSnapshot(snapshot('free'));
     const { getByRole, getByText } = render(<PlanBadge />);
     expect(getByText('planBadge.tier.free')).toBeTruthy();
-    expect(getByText('planBadge.tokensLeft')).toBeTruthy();
+    // The test i18n stub appends interpolated values, so this also asserts the
+    // remaining allowance actually reaches the chip.
+    expect(getByText(/planBadge\.tokensLeft 249,000/)).toBeTruthy();
     expect(getByText('planBadge.upgrade')).toBeTruthy();
     expect(getByRole('link').getAttribute('href')).toBe('/pricing?upgrade=pro');
   });

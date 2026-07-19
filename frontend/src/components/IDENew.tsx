@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
-import { VANILLA_DEFAULTS } from '@/lib/vanillaDefaults';
+import { defaultsForModality } from '@/lib/vanillaDefaults';
 import { FileExplorer } from './FileExplorer';
 import { CodePane } from './CodePane';
 import { Terminal } from './Terminal';
@@ -19,6 +19,8 @@ import { TeamChatButton } from './brain/TeamChatButton';
 import { IdeSettingsPanel } from './IdeSettingsPanel';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { IdeAgentPanel } from './ide/IdeAgentPanel';
+import { DevicePreview } from './ide/DevicePreview';
+import { MobileDevicePanel } from './ide/MobileDevicePanel';
 import { useWebContainer } from '@/hooks/useWebContainer';
 import { useCollaboration } from '@/hooks/useCollaboration';
 import { useVideoVersions } from '@/hooks/useVideoVersions';
@@ -76,12 +78,13 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
   const confirm = useConfirm();
   // The IDE is scoped to its project's type: modality is fixed at creation, not
   // switchable in-session, so it's derived (and clamped) rather than state.
-  const modality: ProjectModality = getModality(project.modality).id;
+  const modalityDef = getModality(project.modality);
+  const modality: ProjectModality = modalityDef.id;
   // Localized modality copy (label / runLabel) for the header + run button.
   const modalityCopy = useModalityCopy()(modality);
-  // Modalities that dock the Brain in the left panel (vs. the floating drawer):
-  // the coding Designer and the Voice studio both drive work from the chat.
-  const hasDockedBrain = modality === 'designer' || modality === 'voice';
+  // Layout comes from the modality registry, not from `modality === '…'` checks
+  // scattered through this file — see the CenterPanel/dockBrain notes there.
+  const hasDockedBrain = modalityDef.dockBrain;
   const [videoPrompt, setVideoPrompt] = useState('');
   const [files, setFiles] = useState<FileEntry[]>(initialFiles);
   const [openFiles, setOpenFiles] = useState<string[]>([]);
@@ -98,6 +101,8 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
   const [isSavingTitle, setIsSavingTitle] = useState(false);
   const [projectsPanelOpen, setProjectsPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Mobile: the "preview on your phone" slide-out (QR of the published build).
+  const [devicePanelOpen, setDevicePanelOpen] = useState(false);
   const [terminalExpanded, setTerminalExpanded] = useState(true);
   const [isChecking, setIsChecking] = useState(false);
   const [checkResults, setCheckResults] = useState<CheckResult[] | null>(null);
@@ -125,7 +130,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
   }, [project.name]);
 
   // When modality changes, clamp the active right-panel tab to the allowed set.
-  const allowedRightTabs = getModality(modality).rightTabs;
+  const allowedRightTabs = modalityDef.rightTabs;
   useEffect(() => {
     if (!allowedRightTabs.includes(rightTab)) {
       setRightTab(allowedRightTabs[0]);
@@ -300,7 +305,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
     }
 
     const mount: Record<string, string> = { ...allContents };
-    for (const [path, content] of Object.entries(VANILLA_DEFAULTS)) {
+    for (const [path, content] of Object.entries(defaultsForModality(modality))) {
       if (!mount[path] || mount[path].trim() === '') {
         onLog?.(`  \x1b[33m⚠\x1b[0m ${path} is empty, using default for this run only\r\n`);
         mount[path] = content;
@@ -315,7 +320,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
       }
     }
     return mount;
-  }, [fileContents, files, project.id]);
+  }, [fileContents, files, project.id, modality]);
 
   /**
    * Run `npm install` only when package.json changed since the last install in
@@ -1001,7 +1006,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         {statusLabel && (
           <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{statusLabel}</span>
         )}
-        {getModality(modality).showChecks && checkResults && (() => {
+        {modalityDef.showChecks && checkResults && (() => {
           const failed = checkResults.filter(r => r.status === 'fail').length;
           const passed = checkResults.filter(r => r.status === 'pass').length;
           return (
@@ -1016,7 +1021,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
             </span>
           );
         })()}
-        {getModality(modality).showChecks && (
+        {modalityDef.showChecks && (
           <label
             title={t('blockOnFailHint')}
             style={{
@@ -1033,7 +1038,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
             Gate Run
           </label>
         )}
-        {getModality(modality).showChecks && (
+        {modalityDef.showChecks && (
           <button
             onClick={handleCheck}
             disabled={isChecking || isRunning}
@@ -1050,7 +1055,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
             {isChecking ? '⏳ Checking…' : '✓ Check'}
           </button>
         )}
-        {getModality(modality).showRunButton && (() => {
+        {modalityDef.showRunButton && (() => {
           // Voice generates speech (voice.synth); Designer runs the dev server.
           const isVoice = modality === 'voice';
           const label = modalityCopy.runLabel;
@@ -1088,6 +1093,17 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         projectId={projectIdNum}
         onImported={refreshFiles}
       />
+
+      {/* Mobile: scan-to-open-on-a-real-phone. Mounted only where the device
+          simulator is, since it hands off that modality's published build. */}
+      {modalityDef.center === 'device' && Number.isFinite(projectIdNum) && (
+        <MobileDevicePanel
+          open={devicePanelOpen}
+          onClose={() => setDevicePanelOpen(false)}
+          projectId={projectIdNum}
+          onGoToPublish={() => setRightTab('publish')}
+        />
+      )}
 
       {/* Brain-tool artifact reviews — the agent's generate_prd/generate_tasks
           surface here for confirm-before-save, matching the button-action path. */}
@@ -1159,7 +1175,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
         )}
         {/* Center panel — content depends on the active modality, chrome stays consistent */}
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-          {modality === 'video' ? (
+          {modalityDef.center === 'video' ? (
             <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
               <StudioPanel
                 authToken={getStoredTenantToken() ?? ''}
@@ -1173,20 +1189,24 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
               />
               {/* The project's self-learning Evermind — parity with the other
                   studios (self-gating, localized, theme-aware). */}
-              {projectIdNum != null && (
+              {/* `Number(project.id)` is NaN for a non-numeric id, and
+                  `NaN != null` is true — so guard on finiteness, matching the
+                  other project-id checks in this file, or a malformed id would
+                  mount the panel and request `/api/projects/NaN/...`. */}
+              {Number.isFinite(projectIdNum) && (
                 <div style={{ padding: '0 16px 16px' }}>
                   <ProjectEvermindPanel projectId={projectIdNum} />
                 </div>
               )}
             </div>
-          ) : modality === 'voice' ? (
+          ) : modalityDef.center === 'voice' ? (
             <VoiceOutput
               result={voice.result}
               audioUrl={voice.audioUrl}
               busy={voice.busy}
               unavailable={voice.unavailable}
             />
-          ) : modality === 'evermind' || modality === 'finetune' ? (
+          ) : modalityDef.center === 'evermind' || modalityDef.center === 'finetune' ? (
             activeFile ? (
               <CodePane
                 openFiles={openFiles}
@@ -1200,7 +1220,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
               />
             ) : (
               <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-                {modality === 'evermind' ? (
+                {modalityDef.center === 'evermind' ? (
                   <EvermindStudioPanel projectId={project.id} />
                 ) : (
                   <FinetuneStudioPanel
@@ -1231,9 +1251,16 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
                 }}
               >
                 {view === 'preview' ? (
-                  <>🌐 Preview {previewUrl && <span style={{ color: '#4ade80' }}>●</span>}</>
+                  <>
+                    <span aria-hidden>{modalityDef.center === 'device' ? '📱' : '🌐'}</span>
+                    {t('centerPreview')}
+                    {previewUrl && <span style={{ color: '#4ade80' }}>●</span>}
+                  </>
                 ) : (
-                  '💻 Code'
+                  <>
+                    <span aria-hidden>💻</span>
+                    {t('centerCode')}
+                  </>
                 )}
               </button>
             ))}
@@ -1243,8 +1270,14 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
             {/* Preview */}
             <div style={{ position: 'absolute', inset: 0, visibility: centerView === 'preview' ? 'visible' : 'hidden', pointerEvents: centerView === 'preview' ? 'auto' : 'none', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ flex: 1, overflow: 'hidden' }}>
-                <PreviewFrame url={previewUrl} />
+              <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
+                {/* Mobile previews inside a device bezel at the handset's real
+                    viewport size; every other code modality fills the pane. */}
+                {modalityDef.center === 'device' ? (
+                  <DevicePreview url={previewUrl} onOpenDevicePanel={() => setDevicePanelOpen(true)} />
+                ) : (
+                  <PreviewFrame url={previewUrl} />
+                )}
               </div>
             </div>
 
@@ -1367,7 +1400,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
               />
             </div>
             <div style={{ position: 'absolute', inset: 0, overflow: 'auto', visibility: rightTab === 'publish' ? 'visible' : 'hidden', pointerEvents: rightTab === 'publish' ? 'auto' : 'none' }}>
-              {modality === 'designer'
+              {modalityDef.publishPanel === 'site'
                 ? <SitePublishPanel projectId={project.id} projectName={project.name} onBuild={handlePublishBuild} />
                 : <AgentPublishPanel projectId={project.id} completedJobs={completedJobs} />}
             </div>

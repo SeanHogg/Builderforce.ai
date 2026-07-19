@@ -13,6 +13,7 @@ import type { PaymentProvider } from '../../infrastructure/payment/PaymentProvid
 import {
   markCardValidatedByCustomer,
   markCardValidationFailedByCustomer,
+  clearCardValidationByCustomer,
 } from '../../application/tenant/cardValidationService';
 
 export function createWebhookRoutes(
@@ -55,12 +56,31 @@ export function createWebhookRoutes(
     // `resolveTenantPlan` and the usage ledger already own their own columns.
     if (event.type === 'card.validated' || event.type === 'card.validation_failed') {
       try {
-        const known = event.type === 'card.validated'
-          ? await markCardValidatedByCustomer(c.env as Env, event.externalCustomerId, {
-              brand: event.paymentBrand ?? null,
-              last4: event.paymentLast4 ?? null,
-            })
-          : await markCardValidationFailedByCustomer(c.env as Env, event.externalCustomerId);
+        let known: boolean;
+        if (event.type === 'card.validated') {
+          const outcome = await markCardValidatedByCustomer(c.env as Env, event.externalCustomerId, {
+            brand: event.paymentBrand ?? null,
+            last4: event.paymentLast4 ?? null,
+            paymentMethodId: event.paymentMethodId ?? null,
+          });
+          known = outcome.known;
+
+          // A REPLACE completes here: the new card is confirmed and already on the
+          // row, so the displaced one can be detached with no gap in premium access
+          // (the reverse order would revoke access first and restore it only when
+          // this webhook arrived). Best-effort — a failed detach leaves an orphaned
+          // card at the processor, which is far better than failing the webhook and
+          // having the whole validation retried against an already-updated row.
+          if (outcome.replacedPaymentMethodId) {
+            try {
+              await paymentProvider.detachCards({ paymentMethodId: outcome.replacedPaymentMethodId });
+            } catch (detachErr) {
+              console.warn('[webhook] replaced card detach failed (orphaned at provider):', detachErr);
+            }
+          }
+        } else {
+          known = await markCardValidationFailedByCustomer(c.env as Env, event.externalCustomerId);
+        }
         if (!known) {
           console.warn(`[webhook] card event for unknown externalCustomerId: ${event.externalCustomerId}`);
         }
@@ -77,6 +97,32 @@ export function createWebhookRoutes(
       console.error('[webhook] handleWebhookEvent failed:', err);
       // Return 500 so the provider retries
       return c.json({ error: 'Processing failed' }, 500);
+    }
+
+    // A subscription that has ENDED takes the card with it.
+    //
+    // `DELETE /card-validation` refuses while a paid plan is live, because those
+    // cards bill the renewal — which left a tenant who cancelled mid-cycle unable
+    // to clear their card until the period elapsed, and then only by returning to
+    // do it by hand. Premium needs a paid plan, so a card kept past the
+    // subscription serves no purpose; it is released here instead.
+    //
+    // Runs AFTER the downgrade so it can't race the plan write, and is
+    // best-effort: the subscription change is what the provider is waiting on, and
+    // failing the webhook over card cleanup would have it retry a downgrade
+    // that already succeeded.
+    if (event.type === 'subscription.cancelled') {
+      try {
+        const { clearedPaymentMethodId } = await clearCardValidationByCustomer(
+          c.env as Env,
+          event.externalCustomerId,
+        );
+        if (clearedPaymentMethodId) {
+          await paymentProvider.detachCards({ paymentMethodId: clearedPaymentMethodId });
+        }
+      } catch (err) {
+        console.warn('[webhook] card release on subscription end failed:', err);
+      }
     }
 
     return c.json({ received: true, processed: true });

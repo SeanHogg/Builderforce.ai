@@ -685,6 +685,24 @@ export const tenants = pgTable('tenants', {
   cardValidationStatus:   varchar('card_validation_status', { length: 16 }).notNull().default('none').$type<'none' | 'pending' | 'validated' | 'failed'>(),
   externalCustomerId:     varchar('external_customer_id', { length: 255 }),
   externalSubscriptionId: varchar('external_subscription_id', { length: 255 }),
+  /**
+   * The VALIDATED card — the $0-SetupIntent card that unlocks PREMIUM model
+   * selection (migrations 0346/0347).
+   *
+   * Deliberately SEPARATE from `billing_payment_brand`/`billing_payment_last4`,
+   * which describe the card that bills the SUBSCRIPTION. The two are frequently
+   * the same card but need not be, and sharing one pair of columns meant whichever
+   * flow wrote last won — so the card shown to the user could disagree with the
+   * one `external_payment_method_id` would actually detach.
+   *
+   * `externalPaymentMethodId` is the processor handle: it lets us detach exactly
+   * this card rather than sweeping the customer, and swap a replacement in before
+   * revoking the old one. Null on rows validated before 0346 (customer-wide
+   * fallback).
+   */
+  externalPaymentMethodId: varchar('external_payment_method_id', { length: 255 }),
+  cardBrand:              varchar('card_brand', { length: 50 }),
+  cardLast4:              varchar('card_last4', { length: 4 }),
   seatCount:              integer('seat_count'),
   /**
    * When the introductory Pro trial ends (migration 0204). Set on tenant creation
@@ -2010,7 +2028,7 @@ export const ideProjects = pgTable('ide_projects', {
   /** The backing projects row holding this build's files/datasets/training/site/repo. */
   storageProjectId:    integer('storage_project_id').notNull().unique().references(() => projects.id, { onDelete: 'cascade' }),
   name:                varchar('name', { length: 255 }).notNull(),
-  /** 'designer' | 'video' | 'evermind' | 'finetune' | 'voice' (legacy: 'llm' → evermind). */
+  /** 'designer' | 'mobile' | 'video' | 'evermind' | 'finetune' | 'voice' (legacy: 'llm' → evermind). */
   modality:            text('modality').notNull().default('designer'),
   status:              text('status').notNull().default('active'),
   /** Optional automation workflow attached to this IDE project (any modality; the

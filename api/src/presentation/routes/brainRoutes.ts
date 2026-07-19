@@ -502,7 +502,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const { url } = await c.req.json<{ url?: string }>().catch(() => ({ url: undefined }));
     if (!url || typeof url !== 'string') return c.json({ error: 'A url is required' }, 400);
 
-    const cap = await enforceOutboundFetchCap(db, tenantId);
+    const cap = await enforceOutboundFetchCap(db, tenantId, c.env as Env);
     if (!cap.allowed) {
       return c.json(
         { error: 'Monthly outbound-fetch allowance reached for your plan.', used: cap.used, limit: cap.limit },

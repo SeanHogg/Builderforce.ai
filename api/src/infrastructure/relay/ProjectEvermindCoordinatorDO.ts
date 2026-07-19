@@ -144,6 +144,14 @@ interface RecentEntry {
   at: number;
   /** FedAvg sample weight (tokens learned / caller-supplied). */
   weight: number;
+  /** True when this contribution's weights were actually fitted and pushed into the
+   *  FedAvg batch — i.e. it MOVED the neocortex, not merely got recorded. Stamped at
+   *  the point the checkpoint diff is pushed, so region attribution in the Knowledge
+   *  Map rests on data rather than on the ordering of statements in {@link drain}.
+   *  Absent on rows written before this field existed; every such row was fitted (the
+   *  merge loop had no path that recorded an unfitted contribution), so consumers must
+   *  read `fitted !== false`, not `fitted === true`. */
+  fitted?: boolean;
   /** Readable snippet of the task prompt the run addressed (text-path only). */
   prompt?: string;
   /** Readable snippet of the run/exemplar text that was learned (text-path only).
@@ -601,6 +609,10 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
             id: e.id,
             kind: 'text',
             weight: e.weight,
+            // The diff for this entry went into the batch immediately above, so it
+            // provably moved neocortex weights. Recorded explicitly — the Knowledge
+            // Map credits the Neocortex off this flag, not off `kind`.
+            fitted: true,
             ...(e.prompt ? { prompt: e.prompt.slice(0, RECENT_PROMPT_CHARS) } : {}),
             ...(isEcho ? {} : { text: learnedText.slice(0, RECENT_TEXT_CHARS) }),
             distilled: training.distilled,

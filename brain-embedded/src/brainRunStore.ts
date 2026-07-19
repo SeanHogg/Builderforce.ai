@@ -53,16 +53,22 @@ import {
 /**
  * Build the provenance metadata for a persisted assistant turn from the stream
  * result — the resolved model + which account served it (`x-builderforce-account`,
- * captured as `result.account`). Returns `undefined` when the gateway reported no
- * account (older gateway / header not exposed), so the message simply carries no
- * provenance rather than a half-populated blob. Shared by both the mid-run
- * narration and the final-answer persist so the chip shows on every durable turn.
+ * captured as `result.account`).
+ *
+ * The MODEL alone is enough to record. An older gateway (or a CORS setup that
+ * doesn't expose the account header) reports no account, and requiring one used to
+ * throw away the model with it — leaving a turn with no attribution at all, which
+ * is exactly when a user asking "why is this answer so bad?" needs it most.
+ * Shared by both the mid-run narration and the final-answer persist so the chip
+ * shows on every durable turn.
  */
 function provenanceMetadata(result: StreamChatResult): string | undefined {
   const model = result.resolvedModel;
-  const account = result.account;
-  if (!model || (account !== 'own' && account !== 'shared' && account !== 'shared_byo_unused')) return undefined;
-  return withProvenanceMetadata({ model, account: account as ProvenanceAccount });
+  if (!model) return undefined;
+  const a = result.account;
+  const account: ProvenanceAccount | undefined =
+    a === 'own' || a === 'shared' || a === 'shared_byo_unused' ? a : undefined;
+  return withProvenanceMetadata({ model, ...(account ? { account } : {}) });
 }
 
 /**

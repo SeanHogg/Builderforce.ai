@@ -160,7 +160,7 @@ describe('dispatchVendor derives the reasoning param per failover attempt', () =
 
     // Anthropic attempt — native extended thinking at the `high` budget.
     expect(anthropic!.url).toBe(ANTHROPIC_ENDPOINT);
-    expect(anthropic!.body.thinking).toEqual({ type: 'enabled', budget_tokens: 16384 });
+    expect(anthropic!.body.thinking).toEqual({ type: 'adaptive' });
 
     // Cloudflare failover — no reasoning param of ANY kind, and no leaked hint.
     expect(cloudflare!.url).toContain('api.cloudflare.com');
@@ -180,7 +180,7 @@ describe('dispatchVendor derives the reasoning param per failover attempt', () =
 
     // Anthropic hop → thinking only (no reasoning_effort crossing over).
     expect(anthropic!.url).toBe(ANTHROPIC_ENDPOINT);
-    expect(anthropic!.body.thinking).toEqual({ type: 'enabled', budget_tokens: 16384 });
+    expect(anthropic!.body.thinking).toEqual({ type: 'adaptive' });
     expect(anthropic!.body.reasoning_effort).toBeUndefined();
   });
 
@@ -212,7 +212,7 @@ describe('dispatchVendor derives the reasoning param per failover attempt', () =
 
   it('isFirstTurn=true + tools → thinking stays ON for the Anthropic hop', async () => {
     const [anthropic] = await walk(['claude-opus-4-8'], HIGH, TOOLS);
-    expect(anthropic!.body.thinking).toEqual({ type: 'enabled', budget_tokens: 16384 });
+    expect(anthropic!.body.thinking).toEqual({ type: 'adaptive' });
     // The caller's own extraBody survives the per-attempt merge.
     expect(anthropic!.body.tools).toHaveLength(1);
   });
@@ -238,8 +238,9 @@ describe('level → vendor param per model family', () => {
     const high = parseClientReasoningIntent({ level: 'high' });
     const medium = parseClientReasoningIntent({ level: 'medium' });
     expect(reasoningParamsForModel('claude-opus-4-8', high))
-      .toEqual({ thinking: { type: 'enabled', budget_tokens: 16384 } });
-    expect(reasoningParamsForModel('claude-sonnet-5', high)).toBeUndefined();       // adaptive-only
+      .toEqual({ thinking: { type: 'adaptive' }, thinkingEffort: 'high' });
+    expect(reasoningParamsForModel('claude-sonnet-5', high))
+      .toEqual({ thinking: { type: 'adaptive' }, thinkingEffort: 'high' });
     expect(reasoningParamsForModel('anthropic/claude-sonnet-5', high)).toBeUndefined(); // OpenRouter shape
     expect(reasoningParamsForModel('gpt-5', medium)).toEqual({ reasoning_effort: 'medium' });
     expect(reasoningParamsForModel('@cf/qwen/qwen3-30b-a3b-fp8', high)).toBeUndefined();
@@ -257,18 +258,21 @@ describe('gateway chat/completions honours the client reasoning intent', () => {
     expect(withOff.body).toEqual(without.body);
   });
 
-  it('level=high + bare claude-* → Anthropic extended thinking at the high budget', async () => {
+  it('level=high + bare claude-* → Anthropic ADAPTIVE thinking at high effort', async () => {
     const { body } = await completePinned('claude-opus-4-8', { level: 'high' });
-    expect(body?.thinking).toEqual({ type: 'enabled', budget_tokens: 16384 });
-    // Anthropic requires max_tokens > budget — the vendor bumps it to fit.
-    expect(body?.max_tokens).toBeGreaterThan(16384);
+    expect(body?.thinking).toEqual({ type: 'adaptive' });
+    expect(body?.output_config?.effort).toBe('high');
+    // The legacy manual budget 400s on this model — it must never be emitted.
+    expect(JSON.stringify(body)).not.toContain('budget_tokens');
     // The raw client field never reaches the vendor.
     expect(body?.reasoning).toBeUndefined();
   });
 
-  it('level=high + claude-sonnet-5 (adaptive-only) → NO thinking param', async () => {
+  it('level=high + claude-sonnet-5 → ADAPTIVE thinking (never the legacy manual budget)', async () => {
     const { body } = await completePinned('claude-sonnet-5', { level: 'high' });
-    expect(body?.thinking).toEqual({ type: 'disabled' });
+    expect(body?.thinking).toEqual({ type: 'adaptive' });
+    expect(body?.output_config?.effort).toBe('high');
+    expect(JSON.stringify(body)).not.toContain('budget_tokens');
   });
 
   it('level=high + OpenRouter anthropic/claude-* → NO param (it speaks the OpenAI shape)', async () => {

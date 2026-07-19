@@ -10,9 +10,15 @@ describe('detectReasoningSupport', () => {
     expect(detectReasoningSupport('anthropic/claude-sonnet-5').kind).toBe('none');
   });
 
-  it('does not send legacy manual thinking to adaptive-only Sonnet 5', () => {
-    expect(detectReasoningSupport('claude-sonnet-5').kind).toBe('none');
-    expect(reasoningParamsForModel('claude-sonnet-5', { reasoningLevel: 'on' })).toBeUndefined();
+  // Sonnet 5 supports thinking — but ONLY the adaptive form. It used to be excluded
+  // from the thinking path wholesale to dodge the legacy manual budget's 400; now the
+  // emitted shape is adaptive, so it participates like every other `claude-*` id.
+  // The invariant that matters is the WIRE SHAPE, not the exclusion.
+  it('sends ADAPTIVE (never legacy manual budget) thinking to Sonnet 5', () => {
+    expect(detectReasoningSupport('claude-sonnet-5').kind).toBe('anthropic-thinking');
+    const params = reasoningParamsForModel('claude-sonnet-5', { reasoningLevel: 'on' });
+    expect(params).toEqual({ thinking: { type: 'adaptive' }, thinkingEffort: 'medium' });
+    expect(JSON.stringify(params)).not.toContain('budget_tokens');
   });
 
   it('classifies OpenAI o-series / gpt-5 (bare or openai/ prefixed) as reasoning', () => {
@@ -31,15 +37,15 @@ describe('detectReasoningSupport', () => {
 });
 
 describe('reasoningParamsForModel', () => {
-  it('emits Anthropic thinking with a budget scaled by think level (high)', () => {
+  it('emits Anthropic adaptive thinking with effort scaled by think level (high)', () => {
     expect(reasoningParamsForModel('claude-opus-4-8', { thinkLevel: 'high' })).toEqual({
-      thinking: { type: 'enabled', budget_tokens: 16384 },
+      thinking: { type: 'adaptive' }, thinkingEffort: 'high',
     });
   });
 
-  it('emits Anthropic thinking (medium default) when only reasoningLevel is on', () => {
+  it('emits Anthropic adaptive thinking (medium effort default) when only reasoningLevel is on', () => {
     expect(reasoningParamsForModel('claude-opus-4-8', { reasoningLevel: 'on' })).toEqual({
-      thinking: { type: 'enabled', budget_tokens: 8192 },
+      thinking: { type: 'adaptive' }, thinkingEffort: 'medium',
     });
   });
 
@@ -61,19 +67,19 @@ describe('reasoningParamsForModel', () => {
   });
 
   it('threads the first-turn hint ONLY onto the Anthropic thinking path', () => {
-    // First turn → firstTurn:true rides alongside the thinking budget.
+    // First turn → firstTurn:true rides alongside the adaptive thinking lever.
     expect(reasoningParamsForModel('claude-opus-4-8', { thinkLevel: 'high' }, { isFirstTurn: true })).toEqual({
-      thinking: { type: 'enabled', budget_tokens: 16384 },
+      thinking: { type: 'adaptive' }, thinkingEffort: 'high',
       firstTurn: true,
     });
     // Continuation turn → firstTurn:false (the vendor keeps thinking off with tools).
     expect(reasoningParamsForModel('claude-opus-4-8', { thinkLevel: 'high' }, { isFirstTurn: false })).toEqual({
-      thinking: { type: 'enabled', budget_tokens: 16384 },
+      thinking: { type: 'adaptive' }, thinkingEffort: 'high',
       firstTurn: false,
     });
     // No hint → unchanged shape (existing callers unaffected).
     expect(reasoningParamsForModel('claude-opus-4-8', { thinkLevel: 'high' }, {})).toEqual({
-      thinking: { type: 'enabled', budget_tokens: 16384 },
+      thinking: { type: 'adaptive' }, thinkingEffort: 'high',
     });
   });
 
