@@ -5914,6 +5914,7 @@
         "human_gate": "En attente d'approbation",
         "capability_mismatch": "Compétences requises manquantes",
         "run_cap_exhausted": "Trop d'exécutions en échec — en pause pour révision",
+        "cooldown_active": "Pause après une exécution en échec — nouvelle tentative sous peu",
         "no_agent": "Aucun agent assigné",
         "no_board": "Aucun tableau configuré",
         "no_lane": "Voie non configurée",
