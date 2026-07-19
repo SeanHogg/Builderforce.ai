@@ -8,7 +8,8 @@
  *
  * SETUP: Repository → Settings → Webhooks → URL https://api.builderforce.ai/api/webhooks/bitbucket,
  * Secret = BITBUCKET_WEBHOOK_SECRET (`wrangler secret put BITBUCKET_WEBHOOK_SECRET`),
- * triggers: Repository push, Pull request (created/updated/merged/declined), Issue.
+ * triggers: Repository push, Pull request (created/updated/merged/declined), Issue,
+ * Build status (created/updated) — the last one drives the CI feedback + auto-fix loop.
  */
 import { Hono } from 'hono';
 import type { HonoEnv, Env } from '../../env';
@@ -16,6 +17,10 @@ import type { Db } from '../../infrastructure/database/connection';
 import { verifyHmacSignature } from '../../application/workflow/verifySignature';
 import { ingestForRepo, type IngestEvent } from '../../application/contributors/activityIngest';
 import { mapBbCommit, mapBbPull } from '../../application/contributors/bitbucketActivitySource';
+import type { RepoCiEvent } from '../../application/ci/ingestRepoCiEvent';
+import { handleCiEventOutcome } from '../../application/ci/handleCiEventOutcome';
+import { ciOutcomeDeps } from './ciOutcomeDeps';
+import type { RuntimeService } from '../../application/runtime/RuntimeService';
 
 const g = (o: unknown, k: string): unknown => (o && typeof o === 'object' ? (o as Record<string, unknown>)[k] : undefined);
 const gs = (o: unknown, k: string): string | null => { const v = g(o, k); return typeof v === 'string' ? v : null; };
@@ -64,7 +69,49 @@ function issueEvents(p: Record<string, unknown>, full: string, short: string): I
   }];
 }
 
-export function createBitbucketWebhookRoutes(db: Db): Hono<HonoEnv> {
+// ── CI: commit/build status → RepoCiEvent ────────────────────────────────────
+
+/** Bitbucket commit-status state → the normalized outcome. */
+function toOutcome(state: string | null): RepoCiEvent['outcome'] {
+  const v = (state ?? '').toUpperCase();
+  if (v === 'SUCCESSFUL') return 'success';
+  if (v === 'FAILED' || v === 'ERROR') return 'failure';
+  if (v === 'INPROGRESS') return 'pending';
+  // STOPPED (cancelled) is not a build verdict — not actionable.
+  return null;
+}
+
+/**
+ * `repo:commit_status_created|updated` → {@link RepoCiEvent}. Exported for tests.
+ *
+ * Bitbucket carries NO numeric run id on a commit status, so `runId` is null and the
+ * GitHub default eligibility rule (`runId != null`) would silently make every
+ * Bitbucket build failure auto-fix ineligible. A commit status is however already a
+ * whole-build verdict — Bitbucket posts one terminal state per build key rather than
+ * a stream of per-check events — so we mark terminal states `authoritative` and stay
+ * genuinely eligible. `runId: null` only costs the failed-step detail from
+ * `fetchBuildError` (GitHub-only anyway); the summary degrades to the build URL.
+ */
+export function bitbucketNormalizeCiEvent(p: Record<string, unknown>): RepoCiEvent | null {
+  const st = g(p, 'commit_status') ?? g(p, 'build_status');
+  if (!st) return null;
+  const state = gs(st, 'state');
+  const outcome = toOutcome(state);
+  return {
+    eventType: 'commit_status',
+    // `refname` is present on branch builds; a status posted without it can only be
+    // correlated post-merge by sha (see the Consolidated Gap Register in ROADMAP.md).
+    branch: gs(st, 'refname') ?? gs(g(st, 'commit'), 'refname'),
+    sha: gs(g(st, 'commit'), 'hash'),
+    outcome,
+    rawState: state,
+    targetUrl: gs(st, 'url') ?? gs(g(g(st, 'links'), 'self'), 'href'),
+    runId: null,
+    authoritative: outcome === 'success' || outcome === 'failure',
+  };
+}
+
+export function createBitbucketWebhookRoutes(db: Db, runtimeService: RuntimeService): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
   router.post('/bitbucket', async (c) => {
@@ -78,10 +125,23 @@ export function createBitbucketWebhookRoutes(db: Db): Hono<HonoEnv> {
     let p: Record<string, unknown>;
     try { p = JSON.parse(rawBody) as Record<string, unknown>; } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
 
+    const key = c.req.header('X-Event-Key') ?? '';
+
+    // CI feedback: a build status posted against a commit is Bitbucket's build
+    // result — correlate it back to the cloud execution that pushed the ticket
+    // branch (build.result telemetry, PR build_status, merge-on-green, auto-fix).
+    // The post-ingest half is the shared, provider-independent handler.
+    if (key === 'repo:commit_status_created' || key === 'repo:commit_status_updated'
+        || key === 'repo:build_status_created' || key === 'repo:build_status_updated') {
+      const norm = bitbucketNormalizeCiEvent(p);
+      if (!norm) return c.json({ received: true, processed: false, reason: 'commit status not normalized' });
+      const res = await handleCiEventOutcome(ciOutcomeDeps(c, db, runtimeService), norm, 'bitbucket');
+      return c.json({ received: true, ...res, autoFix: res.autoFix ? { dispatched: res.autoFixDispatched, attempt: res.autoFix.attempt } : undefined });
+    }
+
     const { full, short } = repoNames(p);
     if (!full) return c.json({ received: true, processed: false, reason: 'no repository in payload' });
 
-    const key = c.req.header('X-Event-Key') ?? '';
     const events =
       key === 'repo:push' ? pushEvents(p, full, short ?? full)
       : key.startsWith('pullrequest:') ? pullEvents(p, full, short ?? full)

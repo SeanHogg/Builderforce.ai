@@ -10,7 +10,7 @@ import { and, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import {
   resolveCloudSurface, chooseCloudExecutor, probeContainerHealth, cloudAgentTypeLabel,
-  isTerminalExecutionStatus, parseCloudAgentRef, parseActAsRole, parseRepoId, buildFollowUpPayload, withDefaultModel, withExecutor,
+  isTerminalExecutionStatus, parseCloudAgentRef, parseRepoId, buildFollowUpPayload, withDefaultModel, withExecutor,
 } from '../../application/runtime/cloudDispatch';
 import { mintContainerRunToken, verifyContainerRunToken } from '../../application/runtime/containerRunToken';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
@@ -23,15 +23,16 @@ import {
 } from '../../application/runtime/cloudAgentEngine';
 import { CONTAINER_MAX_STEPS } from '../../application/runtime/cloudAgentTools';
 import { enforceCloudRunCap } from '../../application/runtime/cloudRunLedger';
-import { ExecutionStatus } from '../../domain/shared/types';
+import { evaluateExecutionApprovalGate } from '../../application/runtime/executionApprovalGate';
+import { ExecutionStatus, TenantRole } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import { millicentsToUsd } from '../../domain/shared/money';
 import { parseJsonArray } from '../../domain/shared/json';
 import type { Execution } from '../../domain/execution/Execution';
 import type { Env, HonoEnv } from '../../env';
-import { authMiddleware } from '../middleware/authMiddleware';
+import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
-import { agentHosts, boards, executions, projectInsightEvents, projectRepositories, projects, specs, tasks, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
+import { agentHosts, executions, projectInsightEvents, projectRepositories, projects, specs, tasks, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
 import { approvals, chatTicketLinks, projectManagerConfigs } from '../../infrastructure/database/schema';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { resolveProjectInferenceModel } from '../../application/llm/projectEvermind';
@@ -49,12 +50,38 @@ import { authorizeManagedTaskExecution } from '../../application/kanban/managedE
  * PATCH  /api/runtime/executions/:id/state   – agent callback: update state
  * GET    /api/runtime/tasks/:taskId/executions – history for a task
  * GET    /api/runtime/agents/:ref/tool-audit  – tool-audit timeline for one cloud agent
+ *
+ * AUTHORIZATION. Every route below `router.use('*', authMiddleware)` is tenant-
+ * authenticated. On top of that, each route carries an explicit role gate:
+ *   • READS (list / detail / timeline / cost / repo browsing) are member-level —
+ *     no extra gate, a VIEWER may observe the fleet.
+ *   • Anything that STARTS, cancels, steers, retries or reports on a billable run
+ *     is `requireRole(TenantRole.DEVELOPER)` — the platform's "build and run
+ *     agents" tier (see frontend ROLE_DESCRIPTION). This is what excludes a
+ *     read-only VIEWER from spending the tenant's cloud-run + token allowance.
+ *     It is deliberately NOT manager-level: the manager check for a run is the
+ *     separate GOVERNANCE gate (evaluateExecutionApprovalGate), which stops
+ *     high/urgent tickets and routes them to /api/approvals for MANAGER sign-off.
+ *     Machine tokens minted for on-prem agent hosts carry DEVELOPER (see
+ *     authRoutes agent-host key exchange), so host callbacks keep working.
+ * System/cron callers (autonomousExecutionSweep → maybeAutoRunOnLaneEntry, the CI
+ * auto-fix loop, incident/validation dispatch) never traverse these routes — they
+ * call the exported `dispatchCloudRunForTask` directly and so are unaffected by
+ * the gates. `/internal/container-op` is mounted ABOVE authMiddleware on purpose
+ * and authenticates with its own per-run HMAC token.
  */
 type RuntimeHonoEnv = HonoEnv & {
   Bindings: HonoEnv['Bindings'] & {
     AGENT_HOST_RELAY: DurableObjectNamespace<AgentHostRelayDO>;
   };
 };
+
+// The approval-gate primitives now live in the application layer so system callers
+// (autonomous lane trigger / cron sweep) can apply the SAME gate without a request
+// context — see application/runtime/executionApprovalGate.ts. Re-exported here
+// because existing importers reference them through this module.
+export { parseApprovalReplay, evaluateExecutionApprovalGate } from '../../application/runtime/executionApprovalGate';
+export type { ApprovalReplay, ApprovalGateTask, ExecutionApprovalGateResult } from '../../application/runtime/executionApprovalGate';
 
 /** ide_agents.base_model sentinel meaning "no explicit model — use the default"
  *  (mirrors cloudAgentEngine.AGENT_DEFAULT_MODEL_SENTINEL). */
@@ -125,15 +152,6 @@ type ExecutionTaskRow = {
   projectId: number;
 };
 
-type ExecutionApprovalGateResult =
-  | { allowed: true }
-  | {
-      allowed: false;
-      approvalId: string;
-      status: 'pending';
-      reason: string;
-    };
-
 type ExecutionTelemetryBody = {
   inputTokens?: number;
   outputTokens?: number;
@@ -148,155 +166,6 @@ function parseOptionalNumber(value: string | undefined | null): number | null {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return null;
   return parsed;
-}
-
-function parseApprovalTaskId(metadata: string | null): number | null {
-  if (!metadata) return null;
-  try {
-    const parsed = JSON.parse(metadata) as { taskId?: unknown };
-    const value = parsed.taskId;
-    if (typeof value === 'number' && Number.isFinite(value)) return value;
-    if (typeof value === 'string') {
-      const n = Number(value);
-      if (Number.isFinite(n)) return n;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Whether running this task must first open a manager-approval request.
- *
- * Only HIGH/URGENT priority tickets are gated. A manager can OVERRIDE the gate
- * per board (boards.require_execution_approval = false) so high/urgent work on
- * that board runs without approval — see the board "Require manager approval"
- * setting. The board flag is read directly (not cached) so flipping the toggle
- * takes effect on the very next run rather than after a cache TTL; it is a single
- * indexed lookup on the manual-execution path, alongside the gate's own
- * uncached approvals query.
- */
-async function requiresTaskExecutionApproval(db: Db, tenantId: number, task: ExecutionTaskRow): Promise<boolean> {
-  if (task.priority !== 'high' && task.priority !== 'urgent') return false;
-
-  const [board] = await db
-    .select({ requireExecutionApproval: boards.requireExecutionApproval })
-    .from(boards)
-    .where(and(eq(boards.tenantId, tenantId), eq(boards.projectId, task.projectId)))
-    .limit(1);
-
-  // No board row yet → keep the default governance behaviour (gate on).
-  return board?.requireExecutionApproval !== false;
-}
-
-/** Run context replayed when a `task.execution` approval is approved. */
-export interface ApprovalReplay {
-  taskId: number;
-  /** The original submit payload (carries the cloud-agent ref + model + repo pin). */
-  payload?: string;
-  /** A per-run pinned host, if the gated run targeted one. */
-  agentHostId?: number | null;
-}
-
-/**
- * Read the stored run context off a `task.execution` approval so approving it can
- * replay the original submit AS the same agent + model — the gate discards no run
- * detail (see {@link evaluateExecutionApprovalGate}). Returns null for approvals
- * without a parseable taskId (non-task.execution rows).
- */
-export function parseApprovalReplay(metadata: string | null): ApprovalReplay | null {
-  const taskId = parseApprovalTaskId(metadata);
-  if (taskId == null || !metadata) return null;
-  try {
-    const parsed = JSON.parse(metadata) as { payload?: unknown; agentHostId?: unknown };
-    const payload = typeof parsed.payload === 'string' ? parsed.payload : undefined;
-    const agentHostId =
-      typeof parsed.agentHostId === 'number' && Number.isFinite(parsed.agentHostId)
-        ? parsed.agentHostId
-        : null;
-    return { taskId, payload, agentHostId };
-  } catch {
-    return { taskId };
-  }
-}
-
-async function evaluateExecutionApprovalGate(
-  db: Db,
-  tenantId: number,
-  requestedBy: string,
-  task: ExecutionTaskRow,
-  requestedAgentHostId: number | null,
-  /** The original submit context, persisted so an approve replays the exact run. */
-  submitContext?: { payload?: string },
-): Promise<ExecutionApprovalGateResult> {
-  if (!(await requiresTaskExecutionApproval(db, tenantId, task))) {
-    return { allowed: true };
-  }
-
-  const now = new Date();
-  const recentApprovals = await db
-    .select({
-      id: approvals.id,
-      status: approvals.status,
-      metadata: approvals.metadata,
-      expiresAt: approvals.expiresAt,
-      createdAt: approvals.createdAt,
-    })
-    .from(approvals)
-    .where(
-      and(
-        eq(approvals.tenantId, tenantId),
-        eq(approvals.actionType, 'task.execution'),
-      ),
-    )
-    .orderBy(desc(approvals.createdAt))
-    .limit(100);
-
-  const latestForTask = recentApprovals.find((row) => parseApprovalTaskId(row.metadata) === task.id);
-  if (latestForTask) {
-    if (latestForTask.status === 'approved' && (!latestForTask.expiresAt || latestForTask.expiresAt > now)) {
-      return { allowed: true };
-    }
-    if (latestForTask.status === 'pending' && (!latestForTask.expiresAt || latestForTask.expiresAt > now)) {
-      return {
-        allowed: false,
-        approvalId: latestForTask.id,
-        status: 'pending',
-        reason: 'Task execution is waiting for manager approval.',
-      };
-    }
-  }
-
-  const approvalId = crypto.randomUUID();
-  await db.insert(approvals).values({
-    id: approvalId,
-    tenantId,
-    agentHostId: task.assignedAgentHostId ?? requestedAgentHostId,
-    requestedBy,
-    actionType: 'task.execution',
-    description: `Approve execution of task #${task.id}: ${task.title}`,
-    metadata: JSON.stringify({
-      taskId: task.id,
-      priority: task.priority,
-      // Persist the run context so approving the request replays the exact run
-      // (as the same cloud agent + model + repo pin) — see parseApprovalReplay.
-      payload: submitContext?.payload ?? null,
-      agentHostId: task.assignedAgentHostId ?? requestedAgentHostId,
-      // When this run is role-attributed (a reviewer/producer dispatch), record the
-      // role so a human APPROVAL of the gate records that role's sign-off (§5.8 bridge).
-      roleKey: parseActAsRole(submitContext?.payload ?? null) ?? null,
-    }),
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  return {
-    allowed: false,
-    approvalId,
-    status: 'pending',
-    reason: 'Task priority requires manager approval before execution.',
-  };
 }
 
 function normalizeCodeChanges(value: unknown): number | null {
@@ -902,13 +771,16 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // The original AgentHostLink transport adapter used /api/runtime/sessions and
   // /api/runtime/tasks/submit. These endpoints are kept for CLI/agent compatibility.
 
-  router.post('/sessions', async (c) => {
+  // Mints a session handle for a run the caller is about to submit — part of the
+  // dispatch path, so it carries the same run-tier gate as the submit itself.
+  router.post('/sessions', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const body = await c.req.json<{ sessionId?: string }>().catch(() => ({} as any));
     const sessionId = body.sessionId ?? crypto.randomUUID();
     return c.json({ sessionId }, 201);
   });
 
-  router.post('/tasks/submit', async (c) => {
+  // STARTS a billable run (legacy BuilderForce Link submit path).
+  router.post('/tasks/submit', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const body = await c.req.json<{
       taskId:   number;
       agentId?: number;

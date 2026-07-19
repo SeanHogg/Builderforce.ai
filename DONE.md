@@ -4,6 +4,22 @@
 
 ---
 
+## ✅ RESOLVED 2026-07-19 — The validated card and the subscription card are now separate records (api · migration 0347)
+
+Closes the last two code-side card residuals.
+
+**1. Two cards no longer share one pair of columns.** `billing_payment_brand`/`billing_payment_last4` were written by two unrelated flows — the card-validation webhook (the $0-SetupIntent card that unlocks premium) and `TenantService.handleWebhookEvent` (the card that bills the subscription). A tenant whose two cards differed saw whichever wrote last, so `<CardOnFile>` could display one card while `external_payment_method_id` pointed at another, and a Remove would name a card it wasn't going to detach. Migration 0347 adds `card_brand`/`card_last4` for the VALIDATED card and rewires `cardValidationService` to them; `billing_payment_*` now belongs solely to the subscription. Backfill is deliberately narrow — validated rows only — so a purely-subscription tenant's card is never mislabelled. Also dropped `billingUpdatedAt` from both card-validation writers: that timestamp describes the subscription's payment details and a card change doesn't touch them.
+
+**2. A cancelled subscription releases its card.** `DELETE /card-validation` refuses while a paid plan is live (those cards bill the renewal), which left a mid-cycle canceller unable to clear their card until the period elapsed — and then only by returning to do it by hand. `subscription.cancelled` now clears the record and detaches the card, via a new `clearCardValidationByCustomer()` that returns the payment-method id it cleared. Premium requires a paid plan, so a card kept past the subscription serves no purpose we could point at. It runs AFTER the downgrade so cleanup can't race the plan write, and is best-effort — the provider is waiting on the subscription change, and failing the webhook over card cleanup would have it retry a downgrade that already succeeded.
+
+**Tests (+5, 11 in the webhook file).** The card is cleared and detached on cancellation; the downgrade provably runs first (ordering asserted, not assumed); nothing is detached when no card was on file; a failed cleanup still ACKs; and `past_due` — a grace period, not an ending — leaves the card alone, because revoking a card mid-payment-failure would make recovery harder, not easier.
+
+**Verification.** Full api suite **2323/2323** across 270 files; `check:schema` (3830 columns, +2, no new drift) and `check:migrations` (289 files, sequence clean) pass; frontend `tsc` clean.
+
+**One item remains and it is not a code gap** — live end-to-end verification. `api/.env` turns out to hold a working `OPENROUTER_API_KEY` and `NEON_DATABASE_URL`, so the original "no credentials" blocker is gone; but that database is **production**, and no staging URL exists in the repo. A live run would create a test tenant in production data and spend real gateway credit, so it was not done unilaterally. See the roadmap for the two ways to clear it.
+
+---
+
 ## ✅ RESOLVED 2026-07-19 — Evermind Knowledge Map: Neocortex showed "Nothing learned yet" against a live training readout
 
 **The bug.** Clicking Neocortex on the Knowledge Map always listed nothing, on a project sitting at v522 with 710 learnings and a training readout reporting loss 38.768 / 40,804 weights moved. A display-attribution defect, not data loss.
@@ -87,6 +103,23 @@ Follow-up on the four residuals from "Account type is visible in VSIX chat" (bel
 **Verification.** frontend `tsc --noEmit` clean; brain-embedded 155/155; api premium-gate + new seam tests 14/14; brain-ui + VSIX build; VSIX packaged 2026.7.86. Remaining residuals (live 402 run, card REMOVE, dual plan-state sources) are in the roadmap.
 
 > **Note:** this pass overlapped with a concurrent session working the same list. Both arrived at the same shared-component design independently; the web adapter (`BrainErrorBanner`, `useCardValidation`, `useConsumption`) is that session's work, the shared `brain-ui` banner and §2–§4 are this one's.
+
+---
+
+## ✅ RESOLVED 2026-07-19 — Three source files were INVISIBLE to code search (api 2026.7.110)
+
+**How it surfaced.** The previous pass logged a gap claiming `enforceErrorEventsCap` had no production caller — "the platform advertises an error-events cap that nothing enforces". **That was wrong.** The gate is called from `application/quality/ingestEngine.ts:58`, the single write path every ingest source funnels through. Two separate greps for the symbol returned "no matches" on a file that plainly contained it.
+
+**Root cause.** `ingestEngine.ts` contained a raw NUL (0x00) byte — used as a Set-key separator in a template literal, ``  `${grp.id}\0${e.userKey}` ``. **One NUL anywhere in a file makes ripgrep classify the whole file as binary and skip it.** The file was invisible to every code search: audits, code review, `/code-review`, and agent greps all return "no matches" for symbols that are right there. A repo-wide scan found two more with the identical idiom — `insights/engineeringInsights.ts` (2) and `studio/voiceCloneService.ts` (3).
+
+**Fixed without changing behaviour.**
+- `engineeringInsights.ts` and `voiceCloneService.ts` keep the NUL as their separator — it is load-bearing in both (one `split`s the key back apart, the other hashes it into a SHA-256 cache-key digest) — but written as the ` ` ESCAPE. Byte-identical at runtime, so no key changes and no cached voice-synthesis digest is invalidated.
+- `ingestEngine.ts`'s key is in-memory batch dedupe only, never split or persisted, so it takes a plain space with a comment explaining why no collision is possible (`grp.id` is a fixed-format uuid).
+- All three files are now searchable; `enforceErrorEventsCap` shows up in a grep for the first time.
+
+**The actual residual, now closed.** With the file finally readable: `ingestEngine` called `enforceErrorEventsCap(db, tenantId)` **without `env`**, so the superadmin-unlimited lookup ran uncached — an extra membership query per batch on the hottest write path in the system, for every capped tenant. It now passes `env` and serves through the 5-min read-through cache.
+
+**Guard against recurrence.** `api/scripts/check-source-text.mjs` (`npm run check:source`, chained into `npm test` beside the schema/migration/track guards) scans every source tree in the repo — 1984 files — and fails the build on any raw NUL, naming the file and line. It caught ITSELF on first run: a draft of its own doc comment contained one.
 
 ---
 

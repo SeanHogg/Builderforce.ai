@@ -10,8 +10,12 @@ import {
   asExecutionId, asTaskId, asAgentId, asAgentHostId, asTenantId, TaskStatus,
 } from '../../domain/shared/types';
 import { NotFoundError, ForbiddenError } from '../../domain/shared/errors';
-import { cloudOrphanReason, cloudSilenceCeilingMs, HOST_ORPHAN_REASON } from './orphanReasons';
-import { parseExecutor, parseActAsRole } from './cloudDispatch';
+import {
+  cloudOrphanReason, cloudSilenceCeilingMs, HOST_ORPHAN_REASON,
+  PAUSED_DEADLINE_MS, PAUSED_ORPHAN_REASON,
+} from './orphanReasons';
+import { parseExecutor, parseActAsRole, parseCloudAgentRef } from './cloudDispatch';
+import type { PolicyGate } from '@builderforce/agent-tools';
 import type { RunMilestonePhase } from '../brain/ChatTicketService';
 
 export interface SubmitTaskDto {
@@ -157,7 +161,51 @@ export class RuntimeService {
       status: 'running' | 'completed' | 'failed'; fromStatus: string;
       actAsRole: string | null; laneServed: string | null;
     }) => Promise<{ managed: boolean; toStatus: string }>,
+    /**
+     * Governance-gate resolver. `submit` is the ONE funnel every execution passes
+     * through — board auto-run, a manual dispatch, an agent handoff, the workflow
+     * relay — so stamping the tenant's effective {@link PolicyGate}s onto the
+     * payload HERE is what makes an authored policy pack reach the engine's
+     * `evaluatePolicyGate` seam on every real run, without each dispatch call site
+     * remembering to resolve them. Wired at the composition root to
+     * {@link resolvePolicyGates} (read-through cached). Best-effort by contract:
+     * a resolver failure must never block a dispatch — it degrades to today's
+     * ungated behaviour, exactly as if no pack were authored.
+     */
+    private readonly resolvePolicyGates?: (scope: {
+      tenantId: number; projectId: number | null; agentRef: string | null;
+    }) => Promise<PolicyGate[]>,
   ) {}
+
+  /**
+   * Stamp the effective governance gates onto a dispatch payload. Returns the
+   * payload unchanged when nothing resolves, when the resolver is unwired, or when
+   * the caller ALREADY carried gates (a `deploy()`-and-dispatch run compiles its
+   * own onto the spec — the explicit spec wins over the ambient tenant policy).
+   */
+  private async withPolicyGates(
+    payload: string | undefined,
+    tenantId: number,
+    projectId: number | null,
+  ): Promise<string | undefined> {
+    if (!this.resolvePolicyGates) return payload;
+    try {
+      let obj: Record<string, unknown> = {};
+      if (payload) {
+        try { obj = JSON.parse(payload) as Record<string, unknown>; } catch { obj = {}; }
+      }
+      if (Array.isArray(obj.policyGates) && obj.policyGates.length > 0) return payload;
+
+      const gates = await this.resolvePolicyGates({
+        tenantId, projectId, agentRef: parseCloudAgentRef(payload) ?? null,
+      });
+      if (gates.length === 0) return payload;
+      obj.policyGates = gates;
+      return JSON.stringify(obj);
+    } catch {
+      return payload; // never block a dispatch on governance resolution
+    }
+  }
 
   /**
    * Post a `paused` | `cancelled` lifecycle milestone for an execution whose row is
@@ -190,6 +238,13 @@ export class RuntimeService {
       if (!agent.isActive) throw new ForbiddenError('Agent is not active');
     }
 
+    // Governance: stamp the tenant's effective policy gates onto the payload so the
+    // engine's `evaluatePolicyGate` seam enforces them. Done here — the single
+    // execution funnel — so EVERY dispatch path is gated, not just the ones that
+    // remembered to ask.
+    const projectId = (task.toPlain() as { projectId?: number }).projectId ?? null;
+    const payload = await this.withPolicyGates(dto.payload, dto.tenantId, projectId);
+
     const execution = await this.executions.save(
       Execution.create({
         taskId:      asTaskId(dto.taskId),
@@ -198,7 +253,7 @@ export class RuntimeService {
         tenantId:    asTenantId(dto.tenantId),
         submittedBy: dto.submittedBy,
         sessionId:   dto.sessionId ?? null,
-        payload:     dto.payload ?? null,
+        payload:     payload ?? null,
       }),
     );
 
@@ -272,6 +327,16 @@ export class RuntimeService {
   }
 
   private isOrphaned(e: Execution, nowMs: number): boolean {
+    // A run PAUSED on an `ask_human` question is live-but-idle: no executor is
+    // burning time, so the silence ceilings below would be nonsense. It gets its own
+    // GENEROUS deadline instead ({@link PAUSED_DEADLINE_MS}) — but it does get one.
+    // Both `evaluateTaskAutoRun` and `laneRequirementGate` count 'paused' as a LIVE
+    // run, and nothing used to reap one, so an unanswered question blocked every
+    // future auto-run on that ticket forever.
+    if (e.status === ExecutionStatus.PAUSED) {
+      const idleSince = (e.updatedAt ?? e.startedAt ?? e.createdAt).getTime();
+      return nowMs - idleSince > PAUSED_DEADLINE_MS;
+    }
     const live = e.status === ExecutionStatus.PENDING
       || e.status === ExecutionStatus.SUBMITTED
       || e.status === ExecutionStatus.RUNNING;

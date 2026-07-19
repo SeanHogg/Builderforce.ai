@@ -70,6 +70,10 @@ vi.mock('@/lib/api', () => ({
   deleteFile: vi.fn(),
   fetchFiles: vi.fn(async () => []),
   updateProject: vi.fn(async () => ({})),
+  // The Video centre pane embeds <ProjectEvermindPanel>, which resolves an IDE
+  // build's name by fetching it (IDE storage projects are hidden from the
+  // shared projects list).
+  fetchProject: vi.fn(async () => ({ id: 1, name: 'Test' })),
 }));
 vi.mock('@/lib/auth', () => ({ getStoredTenantToken: () => 'tok' }));
 vi.mock('@/lib/apiClient', () => ({ getApiBaseUrl: () => 'http://test' }));

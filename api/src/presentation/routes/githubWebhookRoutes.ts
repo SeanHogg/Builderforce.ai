@@ -30,14 +30,14 @@
  */
 
 import { Hono } from 'hono';
-import type { Context } from 'hono';
 import { and, eq } from 'drizzle-orm';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { projects, tasks, agentHosts, toolAuditEvents } from '../../infrastructure/database/schema';
+import { projects, tasks, agentHosts } from '../../infrastructure/database/schema';
 import { verifyHmacSignature } from '../../application/workflow/verifySignature';
-import { ingestRepoCiEvent, AUTOFIX_DISPATCH_EVENT, type RepoCiEvent, type AutoFixIntent } from '../../application/ci/ingestRepoCiEvent';
-import { dispatchCloudRunForTask } from './runtimeRoutes';
+import type { RepoCiEvent } from '../../application/ci/ingestRepoCiEvent';
+import { handleCiEventOutcome } from '../../application/ci/handleCiEventOutcome';
+import { ciOutcomeDeps } from './ciOutcomeDeps';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import { ingestForRepo, type IngestEvent } from '../../application/contributors/activityIngest';
 
@@ -244,34 +244,6 @@ export function createGitHubWebhookRoutes(db: Db, runtimeService: RuntimeService
   const router = new Hono<HonoEnv>();
 
   /**
-   * A build failed (pre-merge PR branch or post-merge deploy) → dispatch an auto-fix
-   * run for the task (the agent fixes the build → updated/new approval-gated PR). The
-   * loop-guard lives in `ingestRepoCiEvent` (it only returns an intent under the
-   * attempt cap); here we just start the run and record the `autofix.dispatch` event
-   * the guard counts.
-   */
-  const dispatchAutoFix = (c: Context<HonoEnv>, intent: AutoFixIntent): void => {
-    c.executionCtx.waitUntil((async () => {
-      try {
-        const executionId = await dispatchCloudRunForTask(
-          c.env as Env, db, runtimeService,
-          (p) => c.executionCtx.waitUntil(p),
-          { taskId: intent.taskId, tenantId: intent.tenantId, payload: intent.payload, submittedBy: 'system:autofix' },
-        );
-        if (executionId != null) {
-          await db.insert(toolAuditEvents).values({
-            tenantId: intent.tenantId, agentHostId: null, cloudAgentRef: null,
-            executionId, sessionKey: `exec:${executionId}`,
-            toolName: AUTOFIX_DISPATCH_EVENT, category: 'ci',
-            args: JSON.stringify({ taskId: intent.taskId, attempt: intent.attempt }),
-            result: `auto-fix run dispatched (attempt ${intent.attempt})`, ts: new Date(),
-          }).catch(() => { /* telemetry best-effort */ });
-        }
-      } catch { /* webhook stays 200 — never let a dispatch failure retry the hook */ }
-    })());
-  };
-
-  /**
    * POST /github
    * GitHub posts here for subscribed events. Signature verification is required.
    * Body must be read as raw text — do not use c.req.json() before verification.
@@ -301,12 +273,10 @@ export function createGitHubWebhookRoutes(db: Db, runtimeService: RuntimeService
       try { p = JSON.parse(rawBody) as Record<string, unknown>; } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
       const norm = normalizeCiEvent(event, p);
       if (!norm) return c.json({ received: true, processed: false, reason: `event '${event}' not normalized` });
-      const secret = c.env.INTEGRATION_ENCRYPTION_SECRET ?? c.env.JWT_SECRET ?? '';
-      const res = await ingestRepoCiEvent(db, c.env as Env, secret, norm);
-      // A build failed (pre-merge PR branch or post-merge deploy) and is under the
-      // attempt cap → kick off a fix run so the agent fixes the build it broke.
-      if (res.autoFix) dispatchAutoFix(c, res.autoFix);
-      return c.json({ received: true, ...res, autoFix: res.autoFix ? { dispatched: true, attempt: res.autoFix.attempt } : undefined });
+      // Post-ingest handling (dispatch, loop-guard telemetry, exhaustion, merge-on-green)
+      // is provider-independent — GitHub/GitLab/Bitbucket all go through this one helper.
+      const res = await handleCiEventOutcome(ciOutcomeDeps(c, db, runtimeService), norm, 'github');
+      return c.json({ received: true, ...res, autoFix: res.autoFix ? { dispatched: res.autoFixDispatched, attempt: res.autoFix.attempt } : undefined });
     }
 
     // Engineering-activity ingestion: connecting a repo makes its commits / PRs /

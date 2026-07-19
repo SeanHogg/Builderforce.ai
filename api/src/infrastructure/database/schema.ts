@@ -3581,6 +3581,8 @@ export const ceremonySessions = pgTable('ceremony_sessions', {
   turnStartedAt:  timestamp('turn_started_at'),
   startedAt:      timestamp('started_at').notNull().defaultNow(),
   endedAt:        timestamp('ended_at'),
+  /** Set when the frequent cron sweep auto-opened this session from a schedule (0349). */
+  scheduleId:     uuid('schedule_id'),
   createdAt:      timestamp('created_at').notNull().defaultNow(),
   updatedAt:      timestamp('updated_at').notNull().defaultNow(),
 });
@@ -3597,6 +3599,46 @@ export const ceremonyParticipants = pgTable('ceremony_participants', {
   durationMs:  integer('duration_ms').notNull().default(0),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Ceremony schedules (migration 0349) — the cadence layer that makes standups /
+// plannings run themselves. The frequent cron sweep (runDueCeremonies) opens a
+// ceremony_sessions row with its roster pre-seeded for every enabled row whose
+// nextRunAt has elapsed, then re-arms nextRunAt from the cron expression.
+//
+// Cadence is the SAME representation as qaSchedules / workflowTriggers (5-field
+// cron + IANA timezone via domain/workflowSchedule.nextCronTime) — one cadence
+// language across every scheduled subsystem. `kind` mirrors ceremonySessions.kind
+// exactly; retros are their own subsystem (retrospectives) and are not modelled here.
+// ---------------------------------------------------------------------------
+
+export const ceremonySchedules = pgTable('ceremony_schedules', {
+  id:               uuid('id').primaryKey().defaultRandom(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:        uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:        integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  kind:             varchar('kind', { length: 16 }).notNull().default('standup'),   // 'standup' | 'planning'
+  cron:             varchar('cron', { length: 120 }).notNull(),
+  timezone:         varchar('timezone', { length: 64 }).notNull().default('UTC'),
+  enabled:          boolean('enabled').notNull().default(true),
+  /** Stamped onto the auto-opened session; null inherits the board's setting. */
+  turnMode:         varchar('turn_mode', { length: 16 }),
+  turnSeconds:      integer('turn_seconds'),
+  /** 'members' (derive from project members) | 'roster' (explicit participants). */
+  participantScope: varchar('participant_scope', { length: 16 }).notNull().default('members'),
+  /** JSON array of { kind, ref, name }; used when participantScope = 'roster'. */
+  participants:     text('participants').notNull().default('[]'),
+  maxParticipants:  integer('max_participants').notNull().default(25),
+  /** Server-side dispatch when the opened session completes (was client-driven). */
+  autoDispatch:     boolean('auto_dispatch').notNull().default(false),
+  nextRunAt:        timestamp('next_run_at'),
+  lastRunAt:        timestamp('last_run_at'),
+  lastStatus:       varchar('last_status', { length: 24 }),
+  lastSessionId:    uuid('last_session_id'),
+  createdBy:        varchar('created_by', { length: 36 }),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
@@ -6828,3 +6870,51 @@ export const forecastAnomalyAcks = pgTable('forecast_anomaly_acks', {
   uqAck:    uniqueIndex('uq_forecast_anomaly_ack').on(t.tenantId, t.metric, t.pointDay),
   byMetric: index('idx_forecast_anomaly_ack_metric').on(t.tenantId, t.metric),
 }));
+
+// ---------------------------------------------------------------------------
+// Policy packs (migration 0348) — the authoring store behind `PolicyGate`
+// enforcement. `evaluatePolicyGate` was already hard-enforced at three tool-call
+// seams, but nothing wrote gates; these two tables are that missing writer.
+//
+// Scoping is NULL-as-wildcard: a pack with `projectId`/`agentRef` NULL applies
+// tenant-wide, so the resolver is one predicate rather than a scope discriminator.
+// `policyGates` mirrors the `PolicyGate` wire type field-for-field (gateKey = the
+// wire `id`), so resolution is a projection, not a translation.
+// ---------------------------------------------------------------------------
+export const policyPacks = pgTable('policy_packs', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  name:        varchar('name', { length: 200 }).notNull(),
+  description: text('description'),
+  enabled:     boolean('enabled').notNull().default(true),
+  /** NULL = every project. */
+  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  /** NULL = every agent. */
+  agentRef:    varchar('agent_ref', { length: 128 }),
+  createdBy:   varchar('created_by', { length: 64 }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_policy_packs_tenant').on(t.tenantId, t.enabled),
+  index('idx_policy_packs_project').on(t.tenantId, t.projectId),
+]);
+
+export const policyGates = pgTable('policy_gates', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  packId:    uuid('pack_id').notNull().references(() => policyPacks.id, { onDelete: 'cascade' }),
+  /** The `PolicyGate.id` on the wire — echoed back in a block/approval decision. */
+  gateKey:   varchar('gate_key', { length: 128 }).notNull(),
+  /** NULL or '*' governs EVERY tool (how a broad deny posture is authored). */
+  tool:      varchar('tool', { length: 128 }),
+  effect:    varchar('effect', { length: 20 }).notNull(),
+  directive: text('directive'),
+  reason:    text('reason'),
+  position:  integer('position').notNull().default(0),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_policy_gate_key').on(t.packId, t.gateKey),
+  index('idx_policy_gates_pack').on(t.packId, t.position),
+]);
