@@ -124,6 +124,13 @@ export interface ChatDiagnosticsData {
   tickets?: Array<{ kind: string; ref: string; label?: string; linkType?: string; status?: string }>;
   /** Plan, quota and model entitlement for the signed-in tenant (see the interface). */
   account?: ChatDiagnosticsAccount | null;
+  /**
+   * How many tools the model could actually call, and why not more. Without this
+   * a tool-less Brain ("I don't have that data", zero tool calls) is
+   * indistinguishable from a model that simply chose not to call anything — the
+   * exact ambiguity that made a silent MCP-catalog failure impossible to diagnose.
+   */
+  tools?: { count: number; error?: string | null; loading?: boolean } | null;
 }
 
 function fmtProject(id: number | null | undefined, name?: string | null): string {
@@ -225,6 +232,22 @@ function diagnosticsSignals(d: ChatDiagnosticsData): string[] {
     out.push('ℹ️ No agents are invited into this chat (chats.list_agents is empty), so dispatched agents post nothing back here.');
   }
 
+  // Tool availability outranks most other causes: with no tools the model CANNOT
+  // fetch anything, so every data question ends in "I don't have that" or an
+  // announced-but-never-made call, with zero tool calls in the trace.
+  const tools = d.tools;
+  if (tools && !tools.loading) {
+    if (tools.error) {
+      out.push(
+        `⚠️ The MCP tool catalog FAILED to load (${tools.error}), so the Brain has ${tools.count} tools and cannot fetch project data. Turns will say "I don't have that data" or announce a tool call and stop — with 0 tool calls in the trace. This is a wiring fault, not a model fault.`,
+      );
+    } else if (tools.count === 0) {
+      out.push(
+        '⚠️ The model has ZERO tools registered, so it cannot read tasks, projects, or any platform data — every data question can only be answered from the prompt. Expect "I don\'t have that data" and 0 tool calls. Check that McpExtensionsBridge is mounted and `/llm/v1/mcp/tools` returns a catalog.',
+      );
+    }
+  }
+
   // Account signals — the "it's not broken, you're on the free tier" class of cause.
   // A brand-new signup hits all of these at once, and every one of them presents as a
   // capability bug (weak model, refused request, turn that stops) unless it is named.
@@ -309,6 +332,18 @@ export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
     }
   } else {
     lines.push('- Plan / usage: not gathered (account snapshot unavailable — signed out, or the consumption endpoint failed)');
+  }
+
+  // Tool availability — the difference between "the model chose not to act" and
+  // "the model COULD not act". A zero here explains any number of turns that end
+  // in "I don't have that data".
+  const tools = d.tools;
+  if (tools) {
+    lines.push(
+      `- Tools available to the model: ${tools.count}`
+        + `${tools.loading ? ' (catalog still loading)' : ''}`
+        + `${tools.error ? ` · catalog error: ${tools.error}` : ''}`,
+    );
   }
 
   const ev = d.evermind;

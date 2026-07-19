@@ -418,10 +418,11 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // GitHub webhook — raw body required for HMAC verification, no JWT
   app.route('/api/webhooks', createGitHubWebhookRoutes(db, runtimeService));
 
-  // GitLab + Bitbucket activity webhooks — ingest commits/MRs/PRs/issues into
-  // activity_events (token / HMAC verified), the live twins of the cron poller.
-  app.route('/api/webhooks', createGitLabWebhookRoutes(db));
-  app.route('/api/webhooks', createBitbucketWebhookRoutes(db));
+  // GitLab + Bitbucket webhooks — ingest commits/MRs/PRs/issues into activity_events
+  // (token / HMAC verified), the live twins of the cron poller, AND feed pipeline /
+  // build-status results into the same CI → auto-fix loop as GitHub.
+  app.route('/api/webhooks', createGitLabWebhookRoutes(db, runtimeService));
+  app.route('/api/webhooks', createBitbucketWebhookRoutes(db, runtimeService));
 
   // Public workflow trigger entrypoints (webhook) — addressed by per-trigger
   // token, optional HMAC; no JWT. Mounted with the other public webhook routes.

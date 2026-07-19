@@ -38,8 +38,17 @@ export interface RepoCiEvent {
   /** Raw provider state/conclusion for the audit detail. */
   rawState: string | null;
   targetUrl: string | null;
-  /** Provider run id (GitHub Actions `workflow_run.id`) — for the failed-step fetch. */
+  /** Provider run id (GitHub Actions `workflow_run.id`, GitLab `pipeline.id`) — for the failed-step fetch. */
   runId: number | null;
+  /**
+   * Pre-merge auto-fix eligibility override. A ticket-branch failure only burns an
+   * auto-fix attempt when the event is an AUTHORITATIVE whole-build conclusion — on
+   * GitHub that is exactly "has a workflow_run id", which is why this defaults to
+   * `runId != null`. Providers whose terminal build event carries no numeric run id
+   * (Bitbucket commit statuses) set this explicitly so they are genuinely eligible
+   * rather than silently skipped.
+   */
+  authoritative?: boolean;
 }
 
 const TASK_BRANCH_RE = /^builderforce\/task-(\d+)\b/;
@@ -60,6 +69,8 @@ export interface IngestResult {
   processed: boolean;
   reason?: string;
   taskId?: number;
+  /** Owning tenant of the correlated task (set whenever `taskId` is). */
+  tenantId?: number;
   executionId?: number;
   merged?: boolean;
   buildStatus?: 'success' | 'failure' | 'pending';
@@ -155,15 +166,15 @@ async function applyBuildOutcome(
   }).catch(() => {});
 
   if (outcome === 'success') {
-    return { processed: true, taskId, executionId: execId, buildStatus: 'success' };
+    return { processed: true, taskId, tenantId, executionId: execId, buildStatus: 'success' };
   }
 
   // FAILURE → auto-fix (if eligible, enabled, and under the per-task attempt cap).
   if (!ctx.allowAutoFix) {
-    return { processed: true, taskId, executionId: execId, buildStatus: 'failure', reason: 'event not auto-fix eligible' };
+    return { processed: true, taskId, tenantId, executionId: execId, buildStatus: 'failure', reason: 'event not auto-fix eligible' };
   }
   if (!cloudAutofixOnBuildFailure(env)) {
-    return { processed: true, taskId, executionId: execId, buildStatus: 'failure', reason: 'auto-fix disabled' };
+    return { processed: true, taskId, tenantId, executionId: execId, buildStatus: 'failure', reason: 'auto-fix disabled' };
   }
   const priorAttempts = await autofixAttemptsSoFar(db, taskId, tenantId);
   if (priorAttempts >= MAX_AUTOFIX_ATTEMPTS) {
@@ -174,7 +185,7 @@ async function applyBuildOutcome(
       args: JSON.stringify({ phase, sha: evt.sha, attempts: priorAttempts }),
       result: `auto-fix exhausted after ${priorAttempts} attempt(s) — needs human`, ts: new Date(),
     }).catch(() => {});
-    return { processed: true, taskId, executionId: execId, buildStatus: 'failure', reason: 'auto-fix attempts exhausted' };
+    return { processed: true, taskId, tenantId, executionId: execId, buildStatus: 'failure', reason: 'auto-fix attempts exhausted' };
   }
 
   const attempt = priorAttempts + 1;
@@ -182,7 +193,7 @@ async function applyBuildOutcome(
     remediation: { kind: 'build_failure', phase, attempt, maxAttempts: MAX_AUTOFIX_ATTEMPTS, buildError, runUrl: evt.targetUrl },
   });
   return {
-    processed: true, taskId, executionId: execId, buildStatus: 'failure',
+    processed: true, taskId, tenantId, executionId: execId, buildStatus: 'failure',
     autoFix: { taskId, tenantId, attempt, payload },
   };
 }
@@ -237,7 +248,7 @@ async function ingestPreMergeEvent(db: Db, env: Env, secret: string, evt: RepoCi
       buildResult = await applyBuildOutcome(db, env, secret, {
         phase: 'pre_merge', taskId, tenantId: task.tenantId, execId,
         agentRef: task.assignedAgentRef ?? null, pr: { id: pr.id, repoId: pr.repoId },
-        evt, allowAutoFix: evt.runId != null,
+        evt, allowAutoFix: evt.authoritative ?? evt.runId != null,
       });
     }
   }
@@ -270,7 +281,7 @@ async function ingestPreMergeEvent(db: Db, env: Env, secret: string, evt: RepoCi
 
   // Carry the build status + any auto-fix intent (failure) up to the webhook, which
   // owns the run dispatch — same contract the post-merge path returns.
-  return { processed: true, taskId, executionId: execId, merged, buildStatus: buildResult?.buildStatus, autoFix: buildResult?.autoFix };
+  return { processed: true, taskId, tenantId: task.tenantId, executionId: execId, merged, buildStatus: buildResult?.buildStatus, autoFix: buildResult?.autoFix };
 }
 
 /** Path 2 — an event on the deploy branch (post-merge): validate + maybe auto-fix. */

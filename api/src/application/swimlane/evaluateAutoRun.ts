@@ -45,6 +45,7 @@ export type AutoRunReason =
   | 'capability_mismatch' // every candidate agent lacks the lane's required capabilities
   | 'already_running'     // a live run already exists (or a same-lane re-entry loop guard)
   | 'run_cap_exhausted'   // the ticket's last N consecutive runs all FAILED — autonomy stops re-dispatching (a human Run-now still overrides)
+  | 'cooldown_active'     // the ticket's last run failed too recently — backing off before the next autonomous attempt (a human Run-now still overrides)
   | 'not_executable';     // a system/coordination chore (e.g. an AI Manager run task) — never dispatched to an agent
 
 /**
@@ -76,6 +77,56 @@ export function trailingFailureStreak(execs: ReadonlyArray<{ status: string }>):
   return n;
 }
 
+/**
+ * Per-ticket re-run cooldown — the backpressure between the 3-strike circuit
+ * breaker and "no backpressure at all".
+ *
+ * Before this, a ticket whose run failed could be re-dispatched on the very next
+ * 5-minute sweep tick: the ONLY guards were {@link MAX_CONSECUTIVE_AUTORUN_FAILURES}
+ * (which allows 3 back-to-back failing runs first) and a per-tenant per-tick
+ * dispatch ceiling. Two failing runs a few seconds apart burn tokens for nothing —
+ * a transient cause (rate limit, provider blip, a locked branch) needs wall-clock
+ * time to clear, not an instant retry.
+ *
+ * So each consecutive failure doubles the wait before the NEXT autonomous attempt:
+ * BASE, 2×BASE, 4×BASE … capped at {@link AUTORUN_COOLDOWN_MAX_MS}. Deliberately
+ * short relative to the breaker (which halts the ticket entirely at 3 strikes) —
+ * this is a pause, not a stop. A human clicking "Run now" dispatches off `candidate`
+ * rather than `canRunNow`, so it is never subject to the cooldown, exactly like the
+ * breaker.
+ */
+export const AUTORUN_COOLDOWN_BASE_MS = 5 * 60_000;  // 5 min after the 1st failure
+export const AUTORUN_COOLDOWN_MAX_MS = 60 * 60_000;  // never back off more than an hour
+
+/** Cooldown window owed after `consecutiveFailures` back-to-back failed runs. 0 for
+ *  a ticket with no trailing failure (the common case — no backoff at all). Pure. */
+export function autoRunCooldownMs(consecutiveFailures: number): number {
+  if (consecutiveFailures <= 0) return 0;
+  const scaled = AUTORUN_COOLDOWN_BASE_MS * 2 ** (consecutiveFailures - 1);
+  return Math.min(scaled, AUTORUN_COOLDOWN_MAX_MS);
+}
+
+/** The end of a run, for cooldown math: when it finished, else its last update. */
+interface ExecTiming { status: string; completedAt?: Date | null; updatedAt?: Date | null; createdAt?: Date | null }
+
+/**
+ * How much of the per-ticket cooldown is still owed, from the SAME newest-first
+ * execution list the breaker counts (`ExecutionRepository.findByTask` orders
+ * createdAt DESC) — no second query, no N+1. Returns 0 when the ticket has no
+ * trailing failure or the window has already elapsed.
+ */
+export function autoRunCooldownRemainingMs(execs: ReadonlyArray<ExecTiming>, nowMs: number): number {
+  const streak = trailingFailureStreak(execs);
+  if (streak === 0) return 0;
+  const lastFailure = execs[0];
+  const endedAt = lastFailure?.completedAt ?? lastFailure?.updatedAt ?? lastFailure?.createdAt ?? null;
+  if (!endedAt) return 0; // untimestamped row — never block on missing data
+  const elapsed = nowMs - endedAt.getTime();
+  if (!Number.isFinite(elapsed)) return 0;
+  const remaining = autoRunCooldownMs(streak) - elapsed;
+  return remaining > 0 ? remaining : 0;
+}
+
 export interface AutoRunEvaluation {
   status: string;
   /** The ticket's owner agent (tasks.assigned_agent_ref), if any. */
@@ -99,6 +150,10 @@ export interface AutoRunEvaluation {
   /** True when autonomy would dispatch right now with no further input. */
   canRunNow: boolean;
   reason: AutoRunReason;
+  /** Milliseconds still owed on the per-ticket re-run cooldown (0 when none).
+   *  Non-zero only alongside `reason: 'cooldown_active'` — surfaced so the triage
+   *  UI can say WHEN the ticket resumes rather than just that it is waiting. */
+  cooldownRemainingMs: number;
 }
 
 /**
@@ -115,6 +170,8 @@ export function classifyResolvedAutoRun(input: {
   hasLiveExecution: boolean;
   /** Consecutive most-recent FAILED runs on the ticket (see {@link trailingFailureStreak}). */
   consecutiveFailures?: number;
+  /** Cooldown still owed since the last failed run (see {@link autoRunCooldownRemainingMs}). */
+  cooldownRemainingMs?: number;
 }): { reason: AutoRunReason; canRunNow: boolean } {
   if (input.gate === 'human') return { reason: 'human_gate', canRunNow: false };
   if (!input.decisionAutoRun) return { reason: input.hasCapabilityMismatch ? 'capability_mismatch' : 'no_agent', canRunNow: false };
@@ -124,6 +181,12 @@ export function classifyResolvedAutoRun(input: {
   // failed is halted so autonomy stops re-dispatching an identically-failing run. A
   // human Run-now still overrides (it dispatches off `candidate`, not `canRunNow`).
   if ((input.consecutiveFailures ?? 0) >= MAX_CONSECUTIVE_AUTORUN_FAILURES) return { reason: 'run_cap_exhausted', canRunNow: false };
+  // Per-ticket re-run cooldown: a ticket whose last run failed backs off (doubling
+  // per consecutive failure) before autonomy re-dispatches it, so a transient cause
+  // gets wall-clock time to clear instead of being retried on the next 5-min tick.
+  // Checked AFTER the breaker so a halted ticket reports the stronger reason. A human
+  // Run-now dispatches off `candidate`, not `canRunNow`, so it still overrides.
+  if ((input.cooldownRemainingMs ?? 0) > 0) return { reason: 'cooldown_active', canRunNow: false };
   return { reason: 'will_run', canRunNow: true };
 }
 
@@ -163,6 +226,7 @@ export async function evaluateTaskAutoRun(
     candidate: null,
     liveExecution: null,
     canRunNow: false,
+    cooldownRemainingMs: 0,
     ...over,
   });
 
@@ -255,6 +319,10 @@ export async function evaluateTaskAutoRun(
   const liveRow = plainExecs.find((e) => ACTIVE_STATUSES.has(e.status));
   const liveExecution = liveRow ? { id: liveRow.id, status: liveRow.status } : null;
 
+  // Both the breaker streak and the re-run cooldown are derived from THIS one
+  // newest-first list — no second query per ticket (the sweep evaluates hundreds).
+  const cooldownRemainingMs = autoRunCooldownRemainingMs(plainExecs, Date.now());
+
   const { reason, canRunNow } = classifyResolvedAutoRun({
     gate,
     decisionAutoRun: decision.autoRun,
@@ -262,6 +330,7 @@ export async function evaluateTaskAutoRun(
     sameLaneReentry: !!args.originLaneKey && args.originLaneKey === args.status,
     hasLiveExecution: !!liveExecution,
     consecutiveFailures: trailingFailureStreak(plainExecs),
+    cooldownRemainingMs,
   });
 
   return {
@@ -276,5 +345,6 @@ export async function evaluateTaskAutoRun(
     liveExecution,
     canRunNow,
     reason,
+    cooldownRemainingMs: reason === 'cooldown_active' ? cooldownRemainingMs : 0,
   };
 }
