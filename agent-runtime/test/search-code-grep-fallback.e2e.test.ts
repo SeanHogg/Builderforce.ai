@@ -19,10 +19,12 @@
  * `--exclude-dir` in the same vector DOES tolerate the separated form, which is why the
  * command looks plausible; only `--include` breaks it.
  *
- * The suite only runs where the fallback is actually live (no ripgrep on PATH). The
- * assertion below is the CORRECT expectation, marked `it.fails` so this file stays green
- * while the bug exists and turns RED the moment someone fixes `cbSearchKeyword` — at which
- * point it should be changed to a plain `it`.
+ * FIXED: `cbSearchKeyword` now emits the attached `--include=GLOB` form, and its catch
+ * distinguishes exit 1 ("searched fine, found nothing" — the only genuinely empty result)
+ * from exit >= 2 / ENOENT / timeout, which now propagate as an error instead of an empty
+ * result set. This suite is the standing regression lock for both halves.
+ *
+ * The suite only runs where the fallback is actually live (no ripgrep on PATH).
  */
 
 import { execFileSync } from "node:child_process";
@@ -63,7 +65,7 @@ describe.skipIf(hasRipgrep())("search_code · GNU grep fallback (no ripgrep on P
     expect(run(base)).not.toBe(2);
   });
 
-  it.fails("BUG: search_code finds a symbol that exists (currently returns 0 matches)", async () => {
+  it("search_code finds a symbol that exists on a grep-only host", async () => {
     let run: CodingEvalResult | undefined;
     try {
       run = await runCodingEval({
@@ -74,8 +76,42 @@ describe.skipIf(hasRipgrep())("search_code · GNU grep fallback (no ripgrep on P
       const search = run.trace[0];
       expect(search.data.ok).toBe(true);
       expect(search.data.total).toBeGreaterThan(0);
+      // The whole point: the hit must name the file that actually holds the symbol, so a
+      // "found something" pass can't be satisfied by an unrelated match.
+      expect(JSON.stringify(search.data)).toContain("pricing.ts");
     } finally {
       await run?.cleanup();
     }
+  });
+
+  it("reports hits in POSIX separators, matching list_files", async () => {
+    let run: CodingEvalResult | undefined;
+    try {
+      run = await runCodingEval({
+        files: FIXTURE,
+        task: "Find computeTotalPrice.",
+        plan: [{ tool: "search_code", args: { query: "computeTotalPrice" } }, { text: "searched" }],
+      });
+      const serialized = JSON.stringify(run.trace[0].data);
+      expect(serialized).toContain("src/pricing.ts");
+      // A Windows-native `src\pricing.ts` would disagree with list_files' own output.
+      expect(serialized).not.toContain("src\\\\pricing.ts");
+    } finally {
+      await run?.cleanup();
+    }
+  });
+
+  it("reports a broken search as an error rather than an empty result set", async () => {
+    // A non-existent project root makes the underlying search exit non-1. The contract
+    // that matters: the agent must never be told "no matches" when the search itself
+    // failed, because the tool turns that into "this symbol is not referenced".
+    const { runCodebaseSearch } = await import(
+      "../src/builderforce/shared-tools/node-code-tools.js"
+    );
+    const res = (await runCodebaseSearch("C:/definitely/not/a/real/path/xyzzy", {
+      query: "computeTotalPrice",
+    })) as Record<string, unknown>;
+    expect(res.error).toBeTruthy();
+    expect(res.results).toBeUndefined();
   });
 });

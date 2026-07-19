@@ -19,7 +19,7 @@ import { TicketAuditService, type SignoffVerdict, type SignoffContribution } fro
 import { TicketParticipantsService } from '../../application/kanban/ticketParticipants';
 import { isAgentRefRoleCapable, humanIsRoleCapable, resolveMemberDisplayName } from '../../application/kanban/roleCapability';
 import { BUILTIN_ROLES } from '../../application/kanban/roleCatalog';
-import { loadAssignableWorkforce } from '../../application/kanban/assignableWorkforce';
+import { loadAssignableWorkforce, assignableWorkforceCacheKey } from '../../application/kanban/assignableWorkforce';
 import { loadAssigneeProfiles, assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { recordActivity, cloudAgentActor, resolveHumanActor } from '../../application/activity/activityLog';
@@ -53,7 +53,7 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
   // agents (incl. marketplace-hired) + human members + active hires, in one read.
   router.get('/assignable', async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const key = `kanban:assignable:t:${tenantId}`;
+    const key = assignableWorkforceCacheKey(tenantId);
     const data = await getOrSetCached(env(c), key, () => loadAssignableWorkforce(db, tenantId), {
       kvTtlSeconds: 60, l1TtlMs: 15_000,
     });

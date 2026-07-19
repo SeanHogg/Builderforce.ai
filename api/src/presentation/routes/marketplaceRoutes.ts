@@ -17,7 +17,8 @@ import { signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
 import { hashPassword, verifyPassword } from '../../infrastructure/auth/HashService';
 import { invalidateCapabilityCache } from '../../application/artifact/capabilityContext';
 import { getOrSetCached, invalidateCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
-import type { Env, HonoEnv } from '../../env';
+import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
+import { sendWelcomeEmail } from '../../infrastructure/email/EmailService';
 
 /** Read-through cache key for a single published skill's SEO/SSR payload. */
 const skillSeoCacheKey = (slug: string): string => `mp:skill:seo:${slug}`;
@@ -147,6 +148,9 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
       displayName:  display_name ?? username,
       passwordHash,
     });
+
+    // Fire-and-forget: a mail failure must not fail the registration.
+    void sendWelcomeEmail(c.env, email, display_name ?? username, resolveAppBaseUrl(c.env));
 
     const token = await signWebJwt(
       { sub: userId, email, username },

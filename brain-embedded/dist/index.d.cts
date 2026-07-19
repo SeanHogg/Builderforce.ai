@@ -319,6 +319,21 @@ interface StreamHandlers {
     }): void;
     onDone?(finishReason: string | null): void;
 }
+/**
+ * Caller-supplied provenance for a completion, forwarded to the gateway as the
+ * request body's `metadata` object. Every field is optional; the server treats a
+ * missing `chatId` as "not chat traffic" and records nothing.
+ */
+interface CompletionMetadata {
+    /** The Brain chat this completion is serving — the audit emit's switch. */
+    chatId?: number;
+    /** The chat's project, when it has one (scopes the audit row). */
+    projectId?: number;
+    /** Stable identifier of the answering agent. Defaults server-side to `brain-default`. */
+    agentRef?: string;
+    /** Display name of the answering agent. Defaults server-side to `Brain`. */
+    agentName?: string;
+}
 interface StreamChatOptions {
     messages: ChatCompletionMessage[];
     tools?: BrainToolSpec[];
@@ -336,6 +351,19 @@ interface StreamChatOptions {
      * 400s the run. Omit (or `{ level: 'off' }`) to leave the body unchanged.
      */
     reasoning?: ReasoningIntent;
+    /**
+     * Caller identity for this completion, emitted verbatim as the wire body's
+     * `metadata` object. The gateway reads it in `recordBrainChatModelActivity`
+     * (`api/src/presentation/routes/llmRoutes.ts`) to write the audit-log row that
+     * names WHICH MODEL served this turn — the default-agent twin of the addressed
+     * agent's `BrainService.agentReply` emit. `chatId` is the key that switches the
+     * emit on; without it the server no-ops.
+     *
+     * Only populated fields should be set: an EMPTY object (or `undefined`) omits
+     * the `metadata` key from the body entirely, so anonymous/unsaved runs stay
+     * byte-identical to a pre-feature request (same discipline as `reasoning`).
+     */
+    metadata?: CompletionMetadata;
     signal?: AbortSignal;
     /** Auth + endpoint. Injected by BrainProvider; callers via the hook never set this directly. */
     transport: BrainTransport;
@@ -1778,4 +1806,4 @@ interface ChatDiagnosticsData {
  */
 declare function formatChatDiagnostics(d: ChatDiagnosticsData): string[];
 
-export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatInputAttachment, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, type McpToolResultInfo, type MentionToken, type MessageProvenance, NOT_STARTED_TASK_STATUSES, PROVENANCE_META_KEY, type PreparedImage, type ProvenanceAccount, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, accountUsedInTrace, activeMentionToken, attachEvermindLearn, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, chatWorkLinkingDirective, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, effortProfile, filterMentionCandidates, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, getGlobalRunState, getLastResolvedModel, getRunSnapshot, getRunTrace, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, linkedTicketsToAdvance, mentionRecipient, modelsUsedInTrace, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, prepareImageDataUrl, reasoningForRun, resolveRecipient, resolveRunConfirm, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, setLastResolvedModel, startRun, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, AUTHORED_BY_META_KEY, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatInputAttachment, type CompletionMetadata, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, type McpToolResultInfo, type MentionToken, type MessageProvenance, NOT_STARTED_TASK_STATUSES, PROVENANCE_META_KEY, type PreparedImage, type ProvenanceAccount, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, type TextContentPart, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, accountUsedInTrace, activeMentionToken, attachEvermindLearn, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, chatWorkLinkingDirective, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, effortProfile, filterMentionCandidates, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, getGlobalRunState, getLastResolvedModel, getRunSnapshot, getRunTrace, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, linkedTicketsToAdvance, mentionRecipient, modelsUsedInTrace, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, prepareImageDataUrl, reasoningForRun, resolveRecipient, resolveRunConfirm, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, setLastResolvedModel, startRun, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };

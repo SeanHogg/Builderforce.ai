@@ -2527,7 +2527,15 @@ export interface ProviderConnectionTestResult {
   testedAt?: string;
   error?: string;
   code?: string;
-  details?: { provider: LlmProvider; model: string; upstreamStatus: number };
+  /** `attempts` is the per-model failover breakdown — the only place the real
+   *  upstream status survives when the gateway collapses a retryable failure
+   *  into its cascade summary. */
+  details?: {
+    provider: LlmProvider;
+    model: string;
+    upstreamStatus: number;
+    attempts?: Array<{ model: string; vendor: string; code: number; durationMs: number; kind: string }>;
+  };
 }
 
 export const providerKeysApi = {

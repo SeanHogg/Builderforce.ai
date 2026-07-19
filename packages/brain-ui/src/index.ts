@@ -66,6 +66,8 @@ export type { TimelineNode, TimelineImage, BuildTimelineInput } from './timeline
 export { EvermindConsole } from './evermind/EvermindConsole';
 export type { EvermindConsoleProps } from './evermind/EvermindConsole';
 export { DEFAULT_EVERMIND_LABELS } from './evermind/types';
+export { evermindLearnedStatus } from './evermind/learnedStatus';
+export type { EvermindLearnedStatus, EvermindTeacherSkipReason, LearnedStatusInput } from './evermind/learnedStatus';
 export type {
   EvermindConsoleAdapter,
   EvermindConsoleLabels,

@@ -24,6 +24,7 @@ import {
   type EvermindTeacherOptions,
   type EvermindValidateResult,
 } from './types';
+import { evermindLearnedStatus } from './learnedStatus';
 
 export interface EvermindConsoleProps {
   adapter: EvermindConsoleAdapter;
@@ -570,21 +571,34 @@ function RecentList({ t, entries }: { t: EvermindConsoleLabels; entries: Evermin
 
 function RecentRow({ t, entry }: { t: EvermindConsoleLabels; entry: EvermindRecentEntry }) {
   const [open, setOpen] = useState(false);
-  const body = entry.kind === 'delta' ? t.deltaEntry : (entry.text ?? '');
+  const status = evermindLearnedStatus(entry);
+  // A pinned teacher that answered nothing leaves only the raw input behind — which on a
+  // teach-a-task IS the question. Showing it would present the question as its own
+  // answer, so the row reports the fault instead. [[evermind-learning-architecture]]
+  const faulted = status.state === 'fault';
+  const body = entry.kind === 'delta' ? t.deltaEntry : (faulted ? '' : (entry.text ?? ''));
   // A delta carries no inspectable text; only text contributions have detail to expand.
-  const hasDetail = entry.kind !== 'delta' && (!!entry.prompt || !!entry.text);
+  const hasDetail = entry.kind !== 'delta' && (!!entry.prompt || !!entry.text || faulted);
   return (
     <li style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 3 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         <span style={tag(entry.kind === 'delta')}>{entry.kind === 'delta' ? t.kindDelta : t.kindText}</span>
         <span style={{ fontSize: '0.68rem', color: C.text2 }}>{t.versionTag(entry.version)}</span>
         <span style={{ fontSize: '0.68rem', color: C.text2 }}>{t.weightTag(entry.weight)}</span>
+        {faulted && <span style={faultTag}>{t.notDistilled}</span>}
+        {status.state === 'distilled' && status.teacherModel && (
+          <span style={{ fontSize: '0.68rem', color: C.text2 }}>{t.distilledBy(status.teacherModel)}</span>
+        )}
         <span style={{ marginLeft: 'auto', fontSize: '0.68rem', color: C.text2 }}>{t.formatWhen(entry.at)}</span>
       </div>
       {entry.prompt && <div style={{ fontSize: '0.76rem', fontWeight: 600, color: C.text, wordBreak: 'break-word' }}>{entry.prompt}</div>}
       {open ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 2 }}>
-          {entry.text && (
+          {faulted ? (
+            <div style={{ fontSize: '0.74rem', color: C.text2, lineHeight: 1.5 }}>
+              {t.teacherFault(status.teacherModel ?? '', status.reason)}
+            </div>
+          ) : entry.text && (
             <div>
               <div style={{ fontSize: '0.62rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: C.text2 }}>{t.detailTextLabel}</div>
               <div style={{ fontSize: '0.74rem', color: C.text, lineHeight: 1.5, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{entry.text}</div>
@@ -602,6 +616,16 @@ function RecentRow({ t, entry }: { t: EvermindConsoleLabels; entry: EvermindRece
     </li>
   );
 }
+
+/** The "not distilled" warning tag. `--bf-warn-*` cascade from the host theme, with
+ *  literal fallbacks that stay legible on both light and dark surfaces. */
+const faultTag: React.CSSProperties = {
+  fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em',
+  padding: '1px 6px', borderRadius: 5,
+  color: 'var(--bf-warn-text, #92400e)',
+  background: 'var(--bf-warn-bg, #fef3c7)',
+  border: '1px solid var(--bf-warn-border, #f59e0b)',
+};
 
 /* ── Style atoms ──────────────────────────────────────────────────────────── */
 

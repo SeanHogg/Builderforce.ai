@@ -41,6 +41,13 @@ export interface ProjectScopeValue {
   setProject: (id: number | null) => void;
   /** Re-fetch the project list (e.g. after creating/deleting a project). */
   reload: () => void;
+  /**
+   * Adopt a just-created project: splice it into the list AND select it. Use
+   * this from every create path instead of `reload()` + `setProject()` — the
+   * optimistic splice is what stops the stale-selection cleanup from bouncing
+   * the new id back to null while the refetch is still in flight.
+   */
+  adoptProject: (project: Project) => void;
 }
 
 const ProjectScopeContext = createContext<ProjectScopeValue | null>(null);
@@ -145,6 +152,15 @@ export function ProjectScopeProvider({ children }: { children: React.ReactNode }
     [tenantId, router, pathname],
   );
 
+  const adoptProject = useCallback(
+    (project: Project) => {
+      setProjects((prev) => (prev.some((p) => p.id === project.id) ? prev : [...prev, project]));
+      setProject(project.id);
+      reload();
+    },
+    [setProject, reload],
+  );
+
   // Drop a stale selection (e.g. project deleted or belongs to another tenant)
   // once the list has loaded, so we never scope to a non-existent project.
   useEffect(() => {
@@ -160,8 +176,8 @@ export function ProjectScopeProvider({ children }: { children: React.ReactNode }
   );
 
   const value = useMemo<ProjectScopeValue>(
-    () => ({ projects, loading, currentProjectId, currentProject, setProject, reload }),
-    [projects, loading, currentProjectId, currentProject, setProject, reload],
+    () => ({ projects, loading, currentProjectId, currentProject, setProject, reload, adoptProject }),
+    [projects, loading, currentProjectId, currentProject, setProject, reload, adoptProject],
   );
 
   return <ProjectScopeContext.Provider value={value}>{children}</ProjectScopeContext.Provider>;

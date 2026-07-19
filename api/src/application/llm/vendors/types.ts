@@ -12,7 +12,10 @@
  */
 
 import { applyPromptCaching } from '../promptCaching';
+import type { ReasoningParamOpts } from '../reasoningCapability';
 import { parseSseDataLine } from '../sseFrames';
+
+import type { AgentExecParams } from '@builderforce/agent-tools';
 
 export type VendorId =
   // ── Bespoke wire-format vendors (hand-rolled modules)
@@ -167,6 +170,20 @@ export interface VendorCallParams {
   topP?: number;
   /** Vendor-specific passthrough. Last write wins over the standard fields above. */
   extraBody?: Record<string, unknown>;
+  /**
+   * Vendor-NEUTRAL reasoning intent (the `AgentExecParams` lever a persona or the
+   * client's `reasoning: { level }` produced) — NOT a pre-computed vendor param.
+   *
+   * A dispatch carries a model CHAIN, and `dispatchInternal` walks it on failover, so a
+   * param derived once from the chain head would ride onto whatever model the cascade
+   * lands on (a Cloudflare/deepseek/qwen coder would 400 on Anthropic `thinking`).
+   * Carrying the INTENT instead lets the chain walk derive the CORRECT param per
+   * candidate via the single `reasoningParamsForModel` mapping, merging it into that one
+   * attempt's `extraBody` — and emitting nothing at all for a family that doesn't
+   * support reasoning. `dispatchInternal` CONSUMES this field: it is stripped before the
+   * vendor call, so no `VendorModule` ever receives it.
+   */
+  reasoningIntent?: { execParams: AgentExecParams } & ReasoningParamOpts;
   /** Prompt-cache breakpoint retention for caching-capable (Anthropic-family)
    *  models: `'5m'` (default ephemeral) or `'1h'` (long retention, ~2x write
    *  cost). Carried from a caller's `_builderforce.cacheTtl` hint; only the

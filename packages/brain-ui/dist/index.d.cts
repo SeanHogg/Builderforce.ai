@@ -773,8 +773,19 @@ interface EvermindRecentEntry {
     weight: number;
     /** The task prompt the run addressed (text-path only). */
     prompt?: string;
-    /** The run/exemplar text that was learned (text-path only). */
+    /** The run/exemplar text that was learned (text-path only). Absent when a pinned
+     *  teacher failed on a teach-a-task — see `skipReason`. */
     text?: string;
+    /** True when a frontier teacher shaped what was learned (text-path only). */
+    distilled?: boolean;
+    /** The frontier model that distilled this entry (present when `distilled`). */
+    teacherModel?: string;
+    /** Why distillation did NOT happen — {@link EvermindTeacherSkipReason}. */
+    skipReason?: string;
+    /** Operator-facing detail behind `skipReason` (HTTP status, exception message). */
+    skipDetail?: string;
+    /** The pinned teacher model that failed (present on a distillation fault). */
+    attemptedTeacherModel?: string;
 }
 /** A scored recall match — a learned memory plus its 0..1 relevance to a task. */
 interface EvermindValidateMatch extends EvermindRecentEntry {
@@ -967,6 +978,12 @@ interface EvermindConsoleLabels {
     hideDetail: string;
     detailPromptLabel: string;
     detailTextLabel: string;
+    /** Badge on a row whose pinned teacher produced no exemplar. */
+    notDistilled: string;
+    /** Provenance note naming the frontier teacher that distilled the row. */
+    distilledBy: (model: string) => string;
+    /** The expanded explanation of a distillation fault (model may be empty). */
+    teacherFault: (model: string, reason: string) => string;
     refresh: string;
     errorGeneric: string;
 }
@@ -1018,6 +1035,58 @@ interface EvermindConsoleProps {
     onValidate?: (result: EvermindValidateResult | null) => void;
 }
 declare function EvermindConsole({ adapter, canManage, labels, refreshMs, projectName, showRecent, showHeaderRefresh, refreshSignal, onValidate }: EvermindConsoleProps): React__default.JSX.Element;
+
+/**
+ * Derive what a learned-memory row should SAY about its own provenance — the single
+ * source of truth shared by the web console's recent list and the frontend's
+ * <EvermindLearnings> detail panel, so the two can never disagree about whether a
+ * teach-a-task actually learned anything.
+ *
+ * The distinction that matters: a "Taught" row is only meaningful when a frontier
+ * TEACHER answered the task and the SSM learned that answer. When a pinned teacher
+ * produces nothing, the coordinator falls back to adapting on the raw input — which,
+ * for a teach-a-task, IS the question. Presenting that as "Learned" makes the model
+ * look like it echoed the question back as its own answer. This helper is what turns
+ * that silent fallback into a visible, named fault.
+ */
+/** Why distillation didn't happen (mirrors the API's `TeacherSkipReason`, plus the
+ *  `unknown` bucket for rows written before the reason was recorded). */
+type EvermindTeacherSkipReason = 'not_pinned' | 'budget_exhausted' | 'input_too_short' | 'gateway_error' | 'empty_output' | 'exception' | 'unknown';
+/** The provenance verdict for one learned memory. */
+type EvermindLearnedStatus = 
+/** A pre-diffed weight delta — no text provenance to report. */
+{
+    state: 'delta';
+}
+/** A frontier teacher answered and the model learned that answer. The good path. */
+ | {
+    state: 'distilled';
+    teacherModel?: string;
+}
+/** No teacher pinned: the model self-learned from real run output. Normal, not a fault. */
+ | {
+    state: 'self';
+}
+/** A teacher WAS pinned but produced nothing — actionable, surfaced as a warning. */
+ | {
+    state: 'fault';
+    reason: EvermindTeacherSkipReason;
+    teacherModel?: string;
+    detail?: string;
+};
+/** The subset of a recent entry this verdict reads (structural, so both hosts' entry
+ *  types satisfy it without importing each other). */
+interface LearnedStatusInput {
+    kind: 'text' | 'delta';
+    prompt?: string;
+    text?: string;
+    distilled?: boolean;
+    teacherModel?: string;
+    skipReason?: string;
+    skipDetail?: string;
+    attemptedTeacherModel?: string;
+}
+declare function evermindLearnedStatus(entry: LearnedStatusInput): EvermindLearnedStatus;
 
 /**
  * Project 360 model — the shape returned by `GET /api/projects/:id/360` and
@@ -1270,4 +1339,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, ConsolidateForkControl, type ConsolidateForkControlProps, type ConsolidateForkLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_CONSOLIDATE_FORK_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindMode, type EvermindRecentEntry, type EvermindSeedModel, type EvermindTeacherOptions, HealthRing, type HealthRingProps, type HealthTier, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, ParticipantBadge, type PendingAskUser, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, selectPendingAskUser, serializeAskUser, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };
+export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, ConsolidateForkControl, type ConsolidateForkControlProps, type ConsolidateForkLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_CONSOLIDATE_FORK_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindLearnedStatus, type EvermindMode, type EvermindRecentEntry, type EvermindSeedModel, type EvermindTeacherOptions, type EvermindTeacherSkipReason, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, ParticipantBadge, type PendingAskUser, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, evermindLearnedStatus, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, selectPendingAskUser, serializeAskUser, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };
