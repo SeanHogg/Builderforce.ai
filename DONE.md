@@ -106,6 +106,29 @@ Follow-up on the four residuals from "Account type is visible in VSIX chat" (bel
 
 ---
 
+## ✅ RESOLVED 2026-07-19 — A silent MCP-catalog failure left the Brain tool-less with no way to see it (brain-embedded 2026.7.40 · frontend 2026.7.79 · VSIX 2026.7.89)
+
+**Trigger.** Chat #71 answered a chart request with "Calling the tool now." and stopped, then — after the retry — "I do not have the task status data for project 11." Both turns: `toolCalls: 0`. The chat HAS a project and the project id was in the prompt, so "it doesn't know the project" was ruled out.
+
+**What the investigation exposed.** `useMcpExtensions` — the ONLY source of the Brain's data tools since the native manifest was retired — swallowed every catalog-fetch failure into an empty list:
+```ts
+.then((res) => (res.ok ? res.json() : { tools: [] }))   // 401/403/500 → zero tools, silently
+.catch(() => { setEntries([]); })                        // network error → zero tools, silently
+```
+A tool-less Brain answers every data question with "I don't have that", records zero tool calls, and is **indistinguishable from a weak model choosing not to act**. Nothing surfaced it: not the UI, not the diagnostics dump the user had already captured twice.
+
+**What shipped.**
+- **The failure is recorded, not swallowed** — a non-OK response now throws with its status, and the hook exposes `error` alongside `toolCount`.
+- **`mcpToolStatus` module singleton** (mirroring `lastResolvedModel`) publishes `{ count, error, loading }` so any surface can answer "how many tools did the model actually have?" after the fact.
+- **Chat diagnostics gained the missing line** — `- Tools available to the model: N · catalog error: …` — plus a top-priority signal that names a zero as *a wiring fault, not a model fault*, and explains the exact symptom it produces. The count is the live `toolSpecs` registry (navigation + catalog), not just the MCP subset.
+- **The prompt gap that allowed it** — the artifact contract forbade *claiming* data was fetched but not *announcing* a call and stopping. It now bans "calling the tool now" / "let me fetch that" outright: issue the call this turn, or state which data is missing and answer with what you have.
+
+**Verified.** 5 new tests assert the report distinguishes healthy / zero-tools / failed-catalog / still-loading / not-gathered. 169 brain-embedded tests, 31 frontend brain tests, VS Code typecheck all green.
+
+**Still open (logged).** This instrumentation does not itself prove which cause applied to chat #71 — a fresh capture on that chat now answers it in one line. The run-loop's tolerance of an announced-but-never-made tool call is logged separately; it is deliberately unfixed while the root cause is ambiguous, because it changes shared behaviour for every surface.
+
+---
+
 ## ✅ RESOLVED 2026-07-19 — Three source files were INVISIBLE to code search (api 2026.7.110)
 
 **How it surfaced.** The previous pass logged a gap claiming `enforceErrorEventsCap` had no production caller — "the platform advertises an error-events cap that nothing enforces". **That was wrong.** The gate is called from `application/quality/ingestEngine.ts:58`, the single write path every ingest source funnels through. Two separate greps for the symbol returned "no matches" on a file that plainly contained it.

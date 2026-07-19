@@ -13,6 +13,11 @@
  *   • `running`              — startedAt older than RUNNING_DEADLINE_MS
  *   • `pending`/`submitted`  — createdAt older than QUEUED_DEADLINE_MS (never
  *                              picked up by any agent)
+ *   • `paused`               — idle (updatedAt) older than PAUSED_DEADLINE_MS: a run
+ *                              parked on an `ask_human` question nobody answered.
+ *                              Nothing used to reap these, yet auto-run counts a
+ *                              paused run as LIVE — so one unanswered question
+ *                              blocked the ticket's autonomy forever.
  *
  * Idempotent and best-effort: it only touches rows past the deadline, so running
  * it every few minutes is safe.
@@ -20,7 +25,7 @@
 
 import { neon } from '@neondatabase/serverless';
 import type { Env } from '../../env';
-import { cloudOrphanReason, cloudSilenceCeilingMs } from './orphanReasons';
+import { cloudOrphanReason, cloudSilenceCeilingMs, PAUSED_DEADLINE_MS, PAUSED_ORPHAN_REASON } from './orphanReasons';
 import { markReaperRequeued, parseExecutor } from './cloudDispatch';
 import { isSelfHealEligible, buildDurableStartBody, dispatchDurableStart } from './cloudSelfHeal';
 import { runParkAgeTimeoutSweep, type ParkAgeTimeoutResult } from '../maintenance/parkAgeTimeout';
@@ -36,10 +41,19 @@ export const RUNNING_DEADLINE_MS = 30 * 60_000; // 30 min
 export const CLOUD_RUNNING_DEADLINE_MS = 90_000; // 90s
 /** A run never picked up by any agent within this window is treated as dropped. */
 export const QUEUED_DEADLINE_MS = 15 * 60_000; // 15 min
+/** A run PAUSED on an `ask_human` question whose answer never came. Deliberately
+ *  generous (72h — a question raised on Friday is still answerable Monday); the
+ *  policy + message live with the other orphan reasons so the read-path repair
+ *  ({@link ../runtime/RuntimeService}) applies the identical deadline. Re-exported
+ *  here so all four reaper deadlines read together. */
+export { PAUSED_DEADLINE_MS } from './orphanReasons';
 
 export interface ReapResult {
   failedRunning: number;
   failedQueued: number;
+  /** Runs parked on an unanswered `ask_human` question past PAUSED_DEADLINE_MS,
+   *  failed so the ticket they were blocking can auto-run again. */
+  failedPaused: number;
   /** Orphaned cloud runs re-queued ONCE on the durable executor (CloudRunnerDO)
    *  instead of being failed — self-healing for a run that died before completing. */
   requeuedCloud: number;
@@ -53,6 +67,7 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
   const runningCutoff = new Date(nowMs - RUNNING_DEADLINE_MS).toISOString();
   const cloudRunningCutoff = new Date(nowMs - CLOUD_RUNNING_DEADLINE_MS).toISOString();
   const queuedCutoff = new Date(nowMs - QUEUED_DEADLINE_MS).toISOString();
+  const pausedCutoff = new Date(nowMs - PAUSED_DEADLINE_MS).toISOString();
 
   // Hung HOST runs: a real long-lived process that went silent (crash / dropped
   // connection). Cloud runs (agent_host_id IS NULL) are handled below on a much
@@ -147,18 +162,41 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
     RETURNING id, tenant_id, agent_host_id, payload, error_message
   `) as ReapedRow[];
 
+  // Abandoned agent QUESTION: a run parked on `ask_human` that nobody answered
+  // within the (generous) paused deadline. Unlike the sweeps above this is not a
+  // hung process — it is a ticket held hostage: `evaluateTaskAutoRun` and
+  // `laneRequirementGate` both count a paused run as LIVE, so until this row goes
+  // terminal the ticket can never auto-run again. Measured from `updated_at` so a
+  // still-active back-and-forth on the question keeps the run alive.
+  const paused = (await sql`
+    UPDATE executions
+       SET status = 'failed',
+           error_message = ${PAUSED_ORPHAN_REASON},
+           completed_at = now(),
+           updated_at = now()
+     WHERE status = 'paused'
+       AND COALESCE(updated_at, started_at, created_at) < ${pausedCutoff}
+    RETURNING id, tenant_id, agent_host_id, payload, error_message
+  `) as ReapedRow[];
+
   // Mirror each reaped failure onto the Observability Logs/Timeline (derived only
   // from tool_audit_events). Without this the run just stops at its last
   // successful tool call and the timeout reason is invisible there — the same gap
   // RuntimeService.reapIfOrphaned / recordRunFailureEvent close on the read path.
-  await Promise.all([...running, ...cloudRunning, ...queued].map(async (r) => {
+  // A timed-out QUESTION gets its own tool name so "the ticket was released because
+  // nobody answered the agent" is distinguishable on the timeline from a crashed run.
+  const reaped: { row: ReapedRow; toolName: string }[] = [
+    ...[...running, ...cloudRunning, ...queued].map((row) => ({ row, toolName: 'run.failed' })),
+    ...paused.map((row) => ({ row, toolName: 'run.paused_timeout' })),
+  ];
+  await Promise.all(reaped.map(async ({ row: r, toolName }) => {
     try {
       await sql`
         INSERT INTO tool_audit_events
           (tenant_id, agent_host_id, cloud_agent_ref, execution_id, session_key, tool_name, category, result, ts)
         VALUES
           (${r.tenant_id}, ${r.agent_host_id}, ${cloudRefFromPayload(r.payload)}, ${r.id},
-           ${'exec:' + r.id}, 'run.failed', 'error', ${r.error_message ?? 'Run failed'}, now())
+           ${'exec:' + r.id}, ${toolName}, 'error', ${r.error_message ?? 'Run failed'}, now())
       `;
     } catch {
       /* telemetry is best-effort — never break the reap sweep on it */
@@ -176,7 +214,13 @@ export async function reapStaleExecutions(env: Env, nowMs = Date.now()): Promise
     console.error('[cron:park-age] sweep failed', err);
   }
 
-  return { failedRunning: running.length + cloudRunning.length, failedQueued: queued.length, requeuedCloud, parkAge };
+  return {
+    failedRunning: running.length + cloudRunning.length,
+    failedQueued: queued.length,
+    failedPaused: paused.length,
+    requeuedCloud,
+    parkAge,
+  };
 }
 
 interface ReapedRow {

@@ -191,6 +191,7 @@ import { runMonitorSweep } from './application/monitoring/runMonitorSweep';
 import { createMonitoringRoutes } from './presentation/routes/monitoringRoutes';
 import { createMonitorWebhookRoutes } from './presentation/routes/monitorWebhookRoutes';
 import { runDueReports } from './application/reports/runDueReports';
+import { runDueCeremonies } from './application/ceremony/runDueCeremonies';
 import { handleInboundEmail } from './application/workflow/inboundEmail';
 // ── Insights-everywhere + enterprise-lens extensions (integration batch) ──
 import { createCatalogAnalyticsRoutes } from './presentation/routes/catalogAnalyticsRoutes';
@@ -831,6 +832,17 @@ export default {
         dueSnapshots(env).catch((err) => {
           console.error('[cron:lens-snapshots] failed', err);
         }),
+      );
+      // Ceremony cadence — open a standup/planning session (roster pre-seeded from
+      // the existing member-metrics readers) for every due ceremony_schedules row,
+      // then re-arm next_run_at from its cron. Bounded to 25 schedules/tick and
+      // dispatches NO LLM work: agents are seated as participants, and any actual
+      // agent execution happens later on session completion via the token-gated
+      // lane-entry path. Same due-then-re-arm shape as runDueTriggers/runDueReports.
+      ctx.waitUntil(
+        runDueCeremonies(env)
+          .then((r) => { if (r.opened > 0 || r.errors > 0) console.log(`[cron:ceremonies] due=${r.due} opened=${r.opened} skipped=${r.skipped} errors=${r.errors}`); })
+          .catch((err) => { console.error('[cron:ceremonies] failed', err); }),
       );
     }
   },
