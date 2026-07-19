@@ -40,6 +40,7 @@ import type { ReasoningIntent } from './effort';
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
 import { chatErrorAction, type ChatErrorAction } from './chatError';
 import { withProvenanceMetadata, type ProvenanceAccount } from './provenance';
+import { selectToolsForTurn } from './selectTools';
 import { setLastResolvedModel } from './lastResolvedModel';
 import { chatWorkLinkingDirective, isCodeChangeTool, isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, isReadOnlyPlatformTool } from './chatWorkLinking';
 import {
@@ -1153,7 +1154,10 @@ export { startRun as runBrainLoop };
 async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promise<void> {
   const { resolvedSystemPrompt, tools: toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
   const convo = c.transcript;
-  const tools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : undefined;
+  const allTools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : undefined;
+  // Tools this run has actually called — pinned into every later turn's selection
+  // so a multi-step task never loses a tool it is mid-way through using.
+  const usedTools = new Set<string>();
   // Caller provenance for the gateway's audit emit — this is what makes the
   // DEFAULT agent's turn show WHICH MODEL served it in the activity log (the
   // server no-ops without a chat id). Built once and shared by every
@@ -1283,6 +1287,24 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     // whole turn. Stays undefined for a pure tool-call / empty turn.
     let firstTokenAt: number | undefined;
     let result;
+    // Advertise a RELEVANT subset rather than the whole catalog. ~300 tool
+    // definitions push most providers past the point where they reliably emit any
+    // tool call at all (observed: 308 tools → three consecutive turns with zero
+    // calls), besides dominating the prompt budget. No-ops for small catalogs.
+    const selection = selectToolsForTurn(allTools, {
+      query: latestUserText(working) ?? latestUserText(convo) ?? '',
+      pinned: usedTools,
+    });
+    const tools = selection.tools.length > 0 ? selection.tools : undefined;
+    if (selection.trimmed) {
+      pushTrace(c, {
+        ts: nowIso(),
+        category: 'message',
+        label: 'tools.selected',
+        args: { step: iter },
+        result: `${selection.tools.length} of ${selection.available} tools advertised this turn (relevance-selected; ${usedTools.size} pinned from earlier calls)`,
+      });
+    }
     try {
       result = await stream(
         { messages: working, tools, tool_choice: tools ? 'auto' : undefined, model, maxTokens, reasoning, metadata, signal: c.abort?.signal },

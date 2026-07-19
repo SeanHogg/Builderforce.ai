@@ -39,6 +39,9 @@ import { getPullRequestDetail } from '../../application/repos/getPullRequestDeta
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { resolveHostAuth } from '../../infrastructure/auth/agentHostAuth';
 import type { CreatePrMessage } from '../../application/repos/prDispatch';
+import { ensureAgentWorkflow } from '../../application/runtime/githubActionsDispatch';
+import { AGENT_WORKFLOW_PATH } from '../../application/runtime/githubActionsWorkflow';
+import { ingestOpenAlertsForRepo } from '../../application/security/githubAlerts';
 
 /** Read-through cache key for a project's repo list (the picker + SourceControl read
  *  this; it changes only on the CRUD routes below, which all invalidate it). */
@@ -552,6 +555,57 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       });
     })().catch(() => {}));
     return c.json({ ok: true, merged: result.merged, sha: result.sha, pullRequest: result.pullRequest });
+  });
+
+  /**
+   * POST /api/repos/repositories/:id/github-actions/enable
+   *
+   * Commit the Builderforce agent workflow into this repo's default branch,
+   * which is what makes the `github_actions` execution surface selectable for
+   * agents working in this project. Without the workflow present, dispatch
+   * degrades to the durable executor and says so in the run timeline.
+   *
+   * The likely failure here is permissions, and it is worth stating plainly in
+   * the response: writing under `.github/workflows/` needs the `workflow` scope
+   * on a PAT (or `workflows: write` on the GitHub App installation), which is
+   * separate from ordinary contents write — a credential that pushes code fine
+   * will still be refused.
+   */
+  router.post('/repositories/:id/github-actions/enable', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+
+    const result = await ensureAgentWorkflow(c.env as Env, db, tenantId, id);
+    if (!result.ok) {
+      return c.json({ error: result.reason, code: result.code }, result.code === 'unsupported' ? 400 : 502);
+    }
+    return c.json({ ok: true, created: result.created, path: AGENT_WORKFLOW_PATH });
+  });
+
+  /**
+   * POST /api/repos/repositories/:id/security/backfill-alerts
+   *
+   * Pull every OPEN GitHub code-scanning and Dependabot alert for this repo and
+   * file them as security findings.
+   *
+   * The webhook path already ingests alerts as they are raised, so this exists
+   * for the two cases the webhook cannot cover: a repo connected AFTER alerts
+   * had already accumulated, and a repo where the webhook was never installed or
+   * silently stopped delivering — the same gap that makes pollPrCiStatus
+   * necessary for CI status.
+   *
+   * Idempotent: ingestion dedupes against open findings, so re-running it is
+   * safe and mints nothing the second time.
+   */
+  router.post('/repositories/:id/security/backfill-alerts', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const id = c.req.param('id');
+
+    const result = await ingestOpenAlertsForRepo(c.env as Env, db, tenantId, id);
+    if (!result.ok) {
+      return c.json({ error: result.reason, code: result.code }, result.code === 'forbidden' ? 403 : 502);
+    }
+    return c.json(result);
   });
 
   return router;

@@ -4,6 +4,48 @@
 
 ---
 
+## 2026-07-19 — ✅ RESOLVED: Autonomy audit — all 15 findings closed
+
+A full review of the platform's autonomous functionality (capabilities + gaps), then every gap fixed in one pass. API 2589 tests green, frontend 398 green, both packages typecheck clean.
+
+**Agent capability & loop correctness**
+- **Cloud agents got internet.** New `api/src/application/runtime/cloudWeb.ts` — `web` added to `CLOUD_SURFACE_CAPS` + wired into `buildCloudProvider`. SSRF egress policy (`classifyWebEgress`) blocks loopback/RFC1918/link-local/`169.254.169.254`/CGNAT/IPv6 ULA + IPv4-mapped IPv6 in both spellings, re-checked on the FINAL redirected URL so an open redirector can't bounce to the metadata endpoint; 512 KB cap, 15s timeout, `getOrSetCached` by URL. `web.search` deliberately NOT advertised — no search vendor exists in-repo (residual logged separately).
+- **Container surface gained `memory`** — new `memory` container-op in `handleContainerOp` + `api/container/server.mjs`, reusing the identical `buildCloudMemoryCapability`. The durable surface had cross-run memory and the long-lived one silently didn't.
+- **Anti-stub finish gate now actually fires.** `placeholderBlocks` was a loop-local, so with `maxSteps:1` per DO alarm tick it reset every tick and `MAX_PLACEHOLDER_FINISH_BLOCKS=2` was unreachable — a stub-writing agent was blocked forever instead of released after 2 tries. Root cause was duplicated state literals at the two resume-return sites, so they were DRY-ed into one `resumeState()` builder.
+- **`require-approval` policy gates are per-CALL, not per-run.** New pure `policyGateCallKey(gateId, toolName, args)`; previously one approval on `write_file` licensed every later write for the whole run. Approval context widened to show the arguments.
+
+**Governance made real**
+- **Policy-pack store built** (mig `0348`) — `policy_packs` + `policy_gates`, NULL-as-wildcard scoping, `resolvePolicyGates` through `getOrSetCached` with a per-tenant version token. The `PolicyGate` evaluator was hard-enforced at three seams but had NO authoring source, so gates resolved to `[]` for every real run. Wired at `RuntimeService.submit` — the single funnel — so EVERY dispatch path is gated, not just the ones that remember to ask. `/policy-gates/effective` previews through the same resolver enforcement uses, so the UI can't disagree with reality. Manager-gated CRUD + localized `PolicyPacksPanel`. Allow-when-no-match default kept (flipping it with an empty store would freeze every agent); a `*`/`block` gate makes deny-by-default authorable.
+- **Autonomous path now hits the approval gate.** `evaluateExecutionApprovalGate` extracted to `application/runtime/executionApprovalGate.ts` and called from `laneEntryTrigger` after the payload is built (so a later approval replays THAT run, not a differently-shaped one). A high/urgent ticket dragged into a staffed lane, or swept by cron, previously started a billable run with no sign-off at all. New `auto_run_awaiting_approval` event.
+
+**Authorization holes closed**
+- **`/api/approvals/escalate` was fully open when `CRON_SECRET` was unset** (`secret !== env.CRON_SECRET && env.CRON_SECRET`) and it bulk-expires every tenant's pending approvals. Now fails closed via `requireCronSecret`. ⚠️ Needs `wrangler secret put CRON_SECRET` before deploy.
+- **Self-service approval bypass** — a client could `POST /api/approvals` with `actionType:'task.execution'`; matching an auto-approval rule inserted it already-`approved`, and the gate honours the newest approved row. Now rejected 400; those rows are only ever server-created.
+- **`POST /tasks/:taskId/broadcast` never called the approval gate at all** — a clean way to run a high/urgent ticket on every connected host with no sign-off. Now gated.
+- **`approvalRoutes` mount-order bug** — `authMiddleware` sat AFTER `POST /`, so the route was covered only by an inline call whose 428 short-circuit was silently discarded. Replaced with `buildApprovalAuth`; the agentHost key branch is scoped to POST only (hoisting it verbatim would have let a host key read the tenant's whole approval queue).
+- **`runtimeRoutes` had ZERO role gates.** All 9 dispatch-tier routes now `requireRole(DEVELOPER)`; reads stay member-level. Plus `POST /tasks/:id/run-now` and `POST /workflow-definitions/:id/run`, which were UI-only locks. DEVELOPER not MANAGER on purpose: the manager control for a run is the SEPARATE approval gate, and collapsing both would make the approval queue pointless.
+- UI caught up — `runtime.execute` + `runtime.revert` capabilities, with the gate pushed INTO the shared `RunTaskButton` / `RunAgentControl` / `ExecutionChip` rather than 8+ call sites. `RoleGate`'s hint was hardcoded English and is now `common.requiresRoleHint` (ICU select on the role key) in all five catalogs.
+
+**Trigger reliability**
+- **`maybeAutoRunOnLaneEntry` MOVED** out of `taskRoutes` into `application/swimlane/laneEntryTrigger.ts` (the route re-exports it) — application code no longer reaches through a route module to fire the trigger. FIVE writers that bypassed it now funnel through `onTaskLandedInLane`: board-sync inbound raw insert, `QaFindingRouter` (including the manual `POST /findings/:id/task`, which fired nothing at all), `repoAnalysisRoutes`, `qualityRoutes`.
+- **The trigger's bare `catch { return false }`** — a DB blip or dispatcher throw was indistinguishable from "lane not staffed" and left no trace, the exact blindness that hid the original dropped-dispatch bug. Now emits `auto_run_error` with message + stack.
+- **Per-ticket exponential re-run cooldown** in `evaluateTaskAutoRun` (5min → 60min), reusing the breaker's existing execution list (no second query), ordered AFTER the breaker so a halted ticket still reads the more specific `run_cap_exhausted`. Run-now still overrides via `candidate`. New localized `board.triage.reason.cooldown_active`.
+- **Paused runs can no longer block a ticket forever.** `paused` counted as a LIVE run in `evaluateTaskAutoRun` + `laneRequirementGate` but nothing ever reaped it, so one unanswered question froze all future autonomy on that ticket. Now `PAUSED_DEADLINE_MS` 72h + a distinct `run.paused_timeout`, measured from last activity so a live exchange stays alive — and `createCloudQuestion` finally sets `expiresAt` (24h, `CLOUD_QUESTION_ESCALATE_AFTER_MS`) so `/escalate` alerts a human BEFORE the backstop fires.
+- **Shared per-tick dispatch budget** — new `tickDispatchBudget.ts`. The autonomous executor and manager sweeps each held a private 25/tenant, so the ceilings never composed and a tenant could take both in one 5-minute window. One budget per cron tick now, threaded from `index.ts`.
+
+**CI → auto-fix parity**
+- GitLab (Pipeline Hook) + Bitbucket (commit-status) ingestion added; the provider-independent post-ingest half extracted to `handleCiEventOutcome` and GitHub's inline closure deleted in favour of it. Bitbucket has no numeric run id, so it would have been silently ineligible under the old `runId != null` rule — hence the explicit `authoritative` flag on terminal states. A red build with no fix run now emits `build.autofix_skipped` instead of returning a reason string into a webhook response nobody reads. GitLab Job Hook deliberately unhandled (fires per-job, would report red and burn an attempt before the pipeline concludes).
+
+**Rollback**
+- **Runs are revertable and artifacts torn down.** Shared pure `decideBranchTeardown` (one rule-set; `mode` is the only difference between teardown and revert) with 9 refusal conditions including `branch_is_default`, `foreign_commits`, `foreign_paths`, `branch_advanced`, `pull_request_merged`, and `commits_unverifiable` (truncation counts as unverifiable — refuse rather than guess). `deleteBranch`/`closePullRequest`/`listBranchCommits` across GitHub/GitLab/Bitbucket Cloud; Bitbucket Server returns a typed `unsupported`, never a silent no-op. `POST /executions/:id/revert` at MANAGER+ — a tier above dispatch, because destroying output a human may have reviewed is governance, not dispatch. Teardown fires on cancelled/crash only; a completed run with files but no PR is snapshotted as revertable, NOT swept.
+
+**Ceremony auto-execution** (mig `0349`) — `ceremony_schedules` + `runDueCeremonies` on the `*/5` tick, reusing the repo's existing cron+timezone cadence (`workflowSchedule.nextCronTime`) and the existing member-metrics readers rather than forking either. Bounded to 25 schedules/tick and dispatches no LLM work itself. Also moved the on-Complete dispatch server-side. `retro` deliberately excluded (separate subsystem with its own lifecycle).
+
+**Dead code** — `runCloudExecution` (~107 lines) deleted along with the `'worker'` executor branch, `CLOUD_SERVERLESS_SILENCE_MS`, and the README/comment drift that still described the removed path as live.
+
+---
+
+
 ## ✅ RESOLVED 2026-07-19 — The validated card and the subscription card are now separate records (api · migration 0347)
 
 Closes the last two code-side card residuals.
