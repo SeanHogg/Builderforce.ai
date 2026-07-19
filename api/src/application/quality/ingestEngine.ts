@@ -55,7 +55,10 @@ export async function ingestErrorEvents(
 
   // Monthly allowance gate — graceful backpressure: stored data stays usable,
   // only NEW ingestion stops. Fails open on a metering error (see the ledger).
-  const cap = await enforceErrorEventsCap(db, collector.tenantId);
+  // `env` matters here: it serves the superadmin-unlimited lookup through the
+  // 5-min read-through cache. Without it this ingest path — the hottest one in the
+  // system — ran an extra uncached membership query per batch on every capped tenant.
+  const cap = await enforceErrorEventsCap(db, collector.tenantId, env);
   if (!cap.allowed) return { accepted: 0, dropped: events.length, capExceeded: true };
 
   const now = new Date();
@@ -130,6 +133,11 @@ export async function ingestErrorEvents(
       });
 
       if (e.userKey) {
+        // Dedupe key for this batch. The separator is a plain space: `grp.id` is a
+        // fixed-format uuid that cannot contain one, so the first space is always
+        // the delimiter and no two distinct pairs can collide. (It was a raw NUL
+        // byte, which worked but made this whole FILE test as binary — ripgrep
+        // skips such files, so nothing in here was findable by code search.)
         const k = `${grp.id} ${e.userKey}`;
         if (!userPairKeys.has(k)) { userPairKeys.add(k); userPairs.push({ groupId: grp.id, userKey: e.userKey }); }
       }

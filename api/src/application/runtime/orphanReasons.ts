@@ -102,6 +102,29 @@ export function cloudCrashReason(detail: string): string {
   return `This cloud run's runtime crashed before reporting completion: ${trimmed || 'unknown error'}. Only the steps above ran. The run is re-queued once on the durable executor automatically; if it still fails, re-run the task — and if a container run keeps crashing here, the image or a tool call is unstable.`;
 }
 
+/**
+ * How long a run PAUSED on an `ask_human` question may wait for an answer before it
+ * is failed and its ticket unblocked.
+ *
+ * A paused run is legitimately long — the agent asked a real question and a human
+ * answers it when they next sit down — so this must NOT be aggressive: 72h clears a
+ * long weekend, so a question raised on Friday evening is still answerable Monday
+ * morning. But it cannot be infinite either: `evaluateTaskAutoRun` and
+ * `laneRequirementGate` both COUNT a paused run as LIVE, while nothing (neither
+ * `RuntimeService.isOrphaned` nor the cron reaper) ever reaped one — so a single
+ * unanswered question permanently blocked EVERY future auto-run on that ticket.
+ *
+ * Kept here with the other orphan policy so the read-path repair and the cron sweep
+ * apply the identical deadline and message.
+ */
+export const PAUSED_DEADLINE_MS = 72 * 60 * 60_000; // 72h
+
+/** A run that paused on an agent question nobody ever answered. Failing it is what
+ *  releases the ticket: a paused run counts as LIVE for auto-run, so leaving it
+ *  parked forever blocks all further autonomy on that ticket. */
+export const PAUSED_ORPHAN_REASON =
+  'This run paused on a question for a human and no answer arrived within 72 hours, so it was closed out and the ticket released for autonomy. Nothing was lost — re-run the task (answering the agent question inline) and it will continue from a fresh run.';
+
 /** A self-hosted host run that lost its process/connection mid-run. */
 export const HOST_ORPHAN_REASON =
   'Run did not report completion in time and was marked failed (orphaned run — the agent host stopped before writing a terminal status). Re-run the task.';

@@ -16,6 +16,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useBrainConfig } from './config';
 import { useRegisterBrainActions, type BrainAction } from './BrainActionsContext';
 import { getLastResolvedModel } from './lastResolvedModel';
+import { setMcpToolStatus } from './mcpToolStatus';
 
 interface McpToolEntry {
   extensionId: string;
@@ -113,10 +114,11 @@ function isErrorResult(out: unknown): boolean {
   return !!out && typeof out === 'object' && typeof (out as { error?: unknown }).error === 'string';
 }
 
-export function useMcpExtensions(options?: UseMcpExtensionsOptions): { loading: boolean; toolCount: number } {
+export function useMcpExtensions(options?: UseMcpExtensionsOptions): { loading: boolean; toolCount: number; error: string | null } {
   const { transport } = useBrainConfig();
   const [entries, setEntries] = useState<McpToolEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   // Stable key so the fetch effect doesn't re-run on every render from a fresh array.
   const skipKey = (options?.skipExtensionIds ?? []).join(',');
   // Read the result callback through a ref so the actions memo stays stable.
@@ -130,12 +132,24 @@ export function useMcpExtensions(options?: UseMcpExtensionsOptions): { loading: 
     if (token) headers.Authorization = `Bearer ${token}`;
     const skip = new Set(skipKey ? skipKey.split(',') : []);
 
+    // A failure here is NOT benign: it leaves the Brain with zero data tools, so
+    // every answer degrades to "I don't have that data" with no way to tell it
+    // apart from a weak model. Record WHY instead of collapsing to an empty list.
     fetch(`${transport.baseUrl}/llm/v1/mcp/tools`, { headers })
-      .then((res) => (res.ok ? res.json() : { tools: [] }))
-      .then((body: { tools?: McpToolEntry[] }) => {
-        if (!cancelled) setEntries((body.tools ?? []).filter((t) => !skip.has(t.extensionId)));
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`tool catalog unavailable (HTTP ${res.status})`);
+        return (await res.json()) as { tools?: McpToolEntry[] };
       })
-      .catch(() => { if (!cancelled) setEntries([]); })
+      .then((body) => {
+        if (cancelled) return;
+        setEntries((body.tools ?? []).filter((t) => !skip.has(t.extensionId)));
+        setError(null);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setEntries([]);
+        setError(e instanceof Error ? e.message : 'tool catalog fetch failed');
+      })
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
@@ -192,5 +206,11 @@ export function useMcpExtensions(options?: UseMcpExtensionsOptions): { loading: 
 
   useRegisterBrainActions(actions);
 
-  return { loading, toolCount: actions.length };
+  // Publish for the diagnostics reporter — "how many tools did the model actually
+  // have, and why not more?" must be answerable after the fact, from any surface.
+  useEffect(() => {
+    setMcpToolStatus({ count: actions.length, error, loading });
+  }, [actions.length, error, loading]);
+
+  return { loading, toolCount: actions.length, error };
 }

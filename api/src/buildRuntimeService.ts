@@ -28,6 +28,7 @@ import { ChatTicketService } from './application/brain/ChatTicketService';
 import { attributeRunToManifest } from './application/kanban/attributeRunToManifest';
 import { coordinateCompletedStage } from './application/manager/coordinateTicket';
 import { findCanonicalBoard } from './application/swimlane/canonicalBoard';
+import { resolvePolicyGates } from './application/governance/policyPackService';
 
 export function buildRuntimeService(env: Env, db: Db): RuntimeService {
   // eslint-disable-next-line prefer-const -- the lane-auto callback closes over the
@@ -95,6 +96,12 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
       });
       return { managed: result.managed, toStatus: result.toStatus };
     },
+    // Governance: resolve the tenant's effective policy gates for the run being
+    // submitted. This is what closes the loop between an authored policy pack
+    // (migration 0348) and `evaluatePolicyGate` at the engine's tool seam — the
+    // enforcement machinery already existed but never received gates. Cached
+    // read-through, invalidated on every pack/gate write.
+    (scope) => resolvePolicyGates(env, db, scope),
   );
   return runtimeService;
 }
