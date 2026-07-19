@@ -2376,8 +2376,8 @@ export async function finalizeCloudRun(
 }
 
 /**
- * Prep shared by both cloud surfaces (Worker `runCloudExecution` and the durable
- * `CloudRunnerDO`): ensure a task PRD, load governance + assigned capabilities (all
+ * Prep shared by both cloud surfaces (the durable `CloudRunnerDO` and the Cloudflare
+ * Container): ensure a task PRD, load governance + assigned capabilities (all
  * parallel reads), record the `context.prepare` + `capabilities.load` timeline
  * events, and build the system + user prompts the tool loop runs against. Returns
  * the two prompts. Never throws on the telemetry writes (best-effort).
@@ -2566,15 +2566,15 @@ export async function prepareCloudRun(
 }
 
 /**
- * The single PENDING/SUBMITTED → RUNNING transition for EVERY cloud surface
- * (Worker `runCloudExecution`, durable `CloudRunnerDO`, and the Cloudflare
- * Container kickoff). Routes through {@link RuntimeService.update} — the one routine
- * that also moves the ticket to In Progress, records metrics, and writes the audit
- * event — then announces the new status to live subscribers. Best-effort: a row
- * that already raced to a terminal/cancelled state makes `markRunning` throw, which
- * we swallow rather than clobber. Funnelling all three executors through here is
- * what stops them drifting (the container surface used to skip RUNNING entirely, so
- * its card sat on "pending" for the whole live run).
+ * The single PENDING/SUBMITTED → RUNNING transition for BOTH cloud surfaces (the
+ * durable `CloudRunnerDO` and the Cloudflare Container kickoff). Routes through
+ * {@link RuntimeService.update} — the one routine that also moves the ticket to In
+ * Progress, records metrics, and writes the audit event — then announces the new
+ * status to live subscribers. Best-effort: a row that already raced to a
+ * terminal/cancelled state makes `markRunning` throw, which we swallow rather than
+ * clobber. Funnelling both executors through here is what stops them drifting (the
+ * container surface used to skip RUNNING entirely, so its card sat on "pending" for
+ * the whole live run).
  */
 export async function markCloudExecutionRunning(runtimeService: RuntimeService, executionId: number): Promise<void> {
   let running: Awaited<ReturnType<RuntimeService['update']>>;

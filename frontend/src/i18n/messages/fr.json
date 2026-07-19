@@ -3856,7 +3856,8 @@
     "membersTab": "Membres",
     "agentsTab": "Agents",
     "auditTab": "SOC 2",
-    "subnavLabel": "Sections de sécurité"
+    "subnavLabel": "Sections de sécurité",
+    "policiesTab": "Politiques"
   },
   "catalogInsights": {
     "total": {
@@ -9906,5 +9907,65 @@
     "removeCardWarning": "Les modèles premium seront désactivés et nous cesserons de conserver votre carte. Votre forfait et les modèles inclus continuent de fonctionner. Vous pouvez ajouter une carte à tout moment.",
     "removeCardConfirm": "Supprimer la carte",
     "removeCardFailed": "Impossible de supprimer la carte. Veuillez réessayer."
+  },
+  "policyPacks": {
+    "title": "Packs de politiques",
+    "subtitle": "Les garde-fous de gouvernance imposés à vos agents. Un garde-fou s’applique dès la prochaine exécution de son périmètre — le runtime le fait respecter à chaque appel d’outil.",
+    "newPack": "Nouveau pack",
+    "error": "Erreur : {message}",
+    "genericError": "Une erreur est survenue.",
+    "loading": "Chargement des packs de politiques…",
+    "empty": "Aucun pack de politiques pour l’instant. Créez-en un pour encadrer ce que vos agents peuvent faire.",
+    "effectiveTitle": "En vigueur actuellement",
+    "effectiveEmpty": "Aucun garde-fou ne s’applique à une exécution à l’échelle de l’espace de travail. Les agents ne sont pas encadrés.",
+    "effectiveCount": "{count, plural, one {# garde-fou s’applique} other {# garde-fous s’appliquent}} à une exécution à l’échelle de l’espace de travail.",
+    "enabled": "Activé",
+    "disabled": "Désactivé",
+    "noGates": "Aucun garde-fou dans ce pack.",
+    "remove": "Retirer",
+    "scopeTenant": "S’applique à tous les projets et agents",
+    "scopeProject": "Projet : {project}",
+    "scopeAgent": "Agent : {agent}",
+    "scopeProjectAgent": "{project} · {agent}",
+    "anyTool": "N’importe quel outil",
+    "fieldName": "Nom",
+    "fieldNamePlaceholder": "ex. Sécurité en production",
+    "fieldDescription": "Description",
+    "fieldProject": "Projet",
+    "allProjects": "Tous les projets",
+    "fieldAgent": "Agent",
+    "allAgents": "Tous les agents",
+    "fieldEnabled": "Le pack est activé",
+    "saving": "Enregistrement…",
+    "createPack": "Créer le pack",
+    "savePack": "Enregistrer",
+    "deletePack": "Supprimer le pack",
+    "deletePackTitle": "Supprimer le pack de politiques",
+    "deletePackConfirm": "Supprimer « {name} » et tous ses garde-fous ? Les agents n’y seront plus soumis.",
+    "gatesTitle": "Garde-fous",
+    "gatesHelp": "Chaque garde-fou correspond à un appel d’outil et décide de la suite : une instruction, une pause pour approbation, ou un refus.",
+    "addGateTitle": "Ajouter un garde-fou",
+    "fieldGateKey": "Identifiant",
+    "fieldGateKeyPlaceholder": "ex. no-shell-in-prod",
+    "fieldTool": "Outil",
+    "toolHelp": "Utilisez * pour encadrer tous les outils — c’est ainsi qu’on définit une posture de refus par défaut.",
+    "fieldEffect": "Effet",
+    "fieldDirective": "Instruction",
+    "fieldDirectivePlaceholder": "Ce que l’agent doit faire, en langage clair.",
+    "fieldReason": "Motif",
+    "fieldReasonPlaceholder": "Pourquoi c’est encadré — affiché à l’agent et à l’approbateur.",
+    "addGate": "Ajouter",
+    "deleteGateTitle": "Supprimer le garde-fou",
+    "deleteGateConfirm": "Supprimer le garde-fou « {key} » ?",
+    "effect": {
+      "inject-directive": "Instruire",
+      "require-approval": "Approuver",
+      "block": "Bloquer"
+    },
+    "effectHelp": {
+      "inject-directive": "Ajoute une instruction contraignante au prompt de l’agent. L’outil s’exécute quand même.",
+      "require-approval": "L’agent s’interrompt et demande l’accord d’un humain avant d’utiliser l’outil.",
+      "block": "L’agent refuse purement et simplement l’outil et explique pourquoi."
+    }
   }
 }

@@ -3856,7 +3856,8 @@
     "membersTab": "Miembros",
     "agentsTab": "Agentes",
     "auditTab": "SOC 2",
-    "subnavLabel": "Secciones de seguridad"
+    "subnavLabel": "Secciones de seguridad",
+    "policiesTab": "Políticas"
   },
   "catalogInsights": {
     "total": {
@@ -9906,5 +9907,65 @@
     "removeCardWarning": "Se desactivarán los modelos premium y dejaremos de almacenar tu tarjeta. Tu plan y los modelos incluidos seguirán funcionando. Puedes añadir una tarjeta de nuevo cuando quieras.",
     "removeCardConfirm": "Eliminar tarjeta",
     "removeCardFailed": "No pudimos eliminar la tarjeta. Inténtalo de nuevo."
+  },
+  "policyPacks": {
+    "title": "Paquetes de políticas",
+    "subtitle": "Controles de gobernanza que rigen a tus agentes. Un control se aplica en la siguiente ejecución de su ámbito: el runtime lo impone en cada llamada a una herramienta.",
+    "newPack": "Nuevo paquete",
+    "error": "Error: {message}",
+    "genericError": "Algo salió mal.",
+    "loading": "Cargando paquetes de políticas…",
+    "empty": "Aún no hay paquetes de políticas. Crea uno para empezar a gobernar lo que pueden hacer tus agentes.",
+    "effectiveTitle": "Vigente ahora mismo",
+    "effectiveEmpty": "Ningún control se aplica a una ejecución en todo el espacio de trabajo. Los agentes no están restringidos.",
+    "effectiveCount": "{count, plural, one {# control se aplica} other {# controles se aplican}} a una ejecución en todo el espacio de trabajo.",
+    "enabled": "Activado",
+    "disabled": "Desactivado",
+    "noGates": "Este paquete no tiene controles.",
+    "remove": "Quitar",
+    "scopeTenant": "Se aplica a todos los proyectos y agentes",
+    "scopeProject": "Proyecto: {project}",
+    "scopeAgent": "Agente: {agent}",
+    "scopeProjectAgent": "{project} · {agent}",
+    "anyTool": "Cualquier herramienta",
+    "fieldName": "Nombre",
+    "fieldNamePlaceholder": "p. ej. Seguridad en producción",
+    "fieldDescription": "Descripción",
+    "fieldProject": "Proyecto",
+    "allProjects": "Todos los proyectos",
+    "fieldAgent": "Agente",
+    "allAgents": "Todos los agentes",
+    "fieldEnabled": "El paquete está activado",
+    "saving": "Guardando…",
+    "createPack": "Crear paquete",
+    "savePack": "Guardar cambios",
+    "deletePack": "Eliminar paquete",
+    "deletePackTitle": "Eliminar paquete de políticas",
+    "deletePackConfirm": "¿Eliminar «{name}» y todos sus controles? Los agentes dejarán de estar sujetos a ellos.",
+    "gatesTitle": "Controles",
+    "gatesHelp": "Cada control coincide con una llamada a una herramienta y decide qué ocurre: una instrucción, una pausa para aprobación o un rechazo.",
+    "addGateTitle": "Añadir un control",
+    "fieldGateKey": "ID del control",
+    "fieldGateKeyPlaceholder": "p. ej. no-shell-in-prod",
+    "fieldTool": "Herramienta",
+    "toolHelp": "Usa * para gobernar todas las herramientas: así se define una postura de denegación por defecto.",
+    "fieldEffect": "Efecto",
+    "fieldDirective": "Instrucción",
+    "fieldDirectivePlaceholder": "Lo que el agente debe hacer, en lenguaje claro.",
+    "fieldReason": "Motivo",
+    "fieldReasonPlaceholder": "Por qué está restringido: se muestra al agente y a quien aprueba.",
+    "addGate": "Añadir control",
+    "deleteGateTitle": "Eliminar control",
+    "deleteGateConfirm": "¿Eliminar el control «{key}»?",
+    "effect": {
+      "inject-directive": "Instruir",
+      "require-approval": "Aprobar",
+      "block": "Bloquear"
+    },
+    "effectHelp": {
+      "inject-directive": "Añade una instrucción vinculante al prompt del agente. La herramienta se sigue ejecutando.",
+      "require-approval": "El agente se detiene y pide aprobación humana antes de usar la herramienta.",
+      "block": "El agente rechaza la herramienta por completo y explica por qué."
+    }
   }
 }

@@ -1503,6 +1503,22 @@ function provenanceMetadata(result) {
   const account = a === "own" || a === "shared" || a === "shared_byo_unused" ? a : void 0;
   return withProvenanceMetadata({ model, ...account ? { account } : {} });
 }
+var ANNOUNCED_ACTION = new RegExp(
+  [
+    "calling (the|this|that|a|it|them|these) [\\w\\s-]*?(tool|function|api|now)",
+    "(i will|i'll|let me|going to|about to|now) (call|use|invoke|run|query|fetch|retrieve|look ?up|pull|check|get)\\b",
+    "(one|just a) (moment|second|sec)\\b",
+    "(fetching|retrieving|querying|loading|checking) (it|that|this|the data|now)\\b",
+    "stand ?by\\b"
+  ].join("|"),
+  "i"
+);
+function announcesUntakenAction(text) {
+  const t = text.trim();
+  if (!t) return false;
+  const tail = t.slice(-240);
+  return ANNOUNCED_ACTION.test(tail);
+}
 var MAX_TOOL_ITERATIONS = 25;
 var HISTORY_WINDOW = 80;
 var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files"]);
@@ -2053,6 +2069,7 @@ ${extra}`;
 
 ${chatWorkLinkingDirective(chatId)}`;
   const readDedupe = /* @__PURE__ */ new Set();
+  let usedAnnouncementRecovery = false;
   for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
     if (c.abort?.signal.aborted) return;
     c.streamingText = "";
@@ -2209,6 +2226,30 @@ ${chatWorkLinkingDirective(chatId)}`;
         });
         if (isReadTool && !isFailedToolResult(out)) readDedupe.add(dedupeKey);
       }
+      continue;
+    }
+    if (runTool && (toolSpecs?.length ?? 0) > 0 && !usedAnnouncementRecovery && announcesUntakenAction(result.text)) {
+      usedAnnouncementRecovery = true;
+      const narration = result.text.trim();
+      if (narration) {
+        const meta = provenanceMetadata(result);
+        const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: narration, ...meta ? { metadata: meta } : {} }]);
+        recordAppended(c, narrationMsg);
+      }
+      convo.push({ role: "assistant", content: result.text });
+      convo.push({
+        role: "user",
+        content: "You said you would call a tool but did not actually call one \u2014 your last turn made zero tool calls. Make the call NOW in this turn, then answer using its result. If no tool can give you that data, say plainly which data you are missing and answer with what you already have. Do not announce another call."
+      });
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: "loop.recover_announced_tool_call",
+        args: { step: iter },
+        result: "Model announced a tool call without making one \u2014 re-prompted once."
+      });
+      c.streamingText = "";
+      emit(c);
       continue;
     }
     const finalText = result.text.trim() || "No response.";
