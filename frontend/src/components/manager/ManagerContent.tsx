@@ -381,6 +381,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
         <StatTile label={t('stat.unscored')} value={stats.unscored} tone={stats.unscored > 0 ? 'warn' : undefined} />
         <StatTile label={t('stat.unranked')} value={stats.unranked} tone={stats.unranked > 0 ? 'warn' : undefined} />
         <StatTile label={t('stat.unowned')} value={stats.unowned} tone={stats.unowned > 0 ? 'warn' : undefined} />
+        <StatTile label={t('stat.flagged')} value={stats.flagged} tone={stats.flagged > 0 ? 'warn' : undefined} />
         <StatTile label={t('stat.openPullRequests')} value={stats.openPullRequests} />
       </div>
 
@@ -395,6 +396,11 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
         {(stats.unscored > 0 || stats.unranked > 0) && (
           <div style={{ marginTop: 12, fontSize: '0.8rem', color: 'var(--warning-fg, #b45309)' }}>
             💡 {t('insightNudge', { unscored: stats.unscored, unranked: stats.unranked })}
+          </div>
+        )}
+        {stats.flagged > 0 && (
+          <div style={{ marginTop: 8, fontSize: '0.8rem', color: 'var(--warning-fg, #b45309)' }}>
+            🚩 {t('coverageNudge', { flagged: stats.flagged })}
           </div>
         )}
       </div>

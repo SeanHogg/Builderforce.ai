@@ -79,6 +79,16 @@ export {
 } from './platformActions';
 export { PLATFORM_BRAIN_SYSTEM_PROMPT, BRAIN_AUTO_APPROVE_DIRECTIVE, buildComposerDirectives, type BrainEffort } from './platformPrompt';
 
+// Chat capabilities: what the chat is making (document / slides / site / game …).
+export {
+  capabilitiesForSurface,
+  getBrainCapability,
+  type BrainCapabilityId,
+  type BrainCapabilityDef,
+  type BrainCapabilitySurface,
+} from './capabilities';
+export { extractCsv, exportFilenameStem } from './messageExport';
+
 // Model-authored "next step" buttons parsed out of a Brain reply.
 export { parseSuggestedActions, type SuggestedAction, type ParsedSuggestedActions } from './suggestedActions';
 

@@ -1,10 +1,8 @@
 'use client';
 
-import { useCallback, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useAuth } from '@/lib/AuthContext';
-import { useLlmModels, invalidateLlmModels } from '@/lib/useLlmModels';
-import { cardValidationApi } from '@/lib/builderforceApi';
+import { useLlmModels } from '@/lib/useLlmModels';
+import { useStartCardValidation } from '@/lib/useCardValidation';
 
 /**
  * PremiumModelUnlock — the CTA that turns on PREMIUM model selection: any paid
@@ -23,36 +21,10 @@ import { cardValidationApi } from '@/lib/builderforceApi';
  */
 export function PremiumModelUnlock() {
   const t = useTranslations('modelSelect');
-  const { tenant } = useAuth();
   const { canUsePremiumModels, premiumInfo } = useLlmModels();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // `Tenant.id` is a string on the client but the API is numeric — same coercion the
-  // pricing/dashboard pages use.
-  const tenantId = tenant?.id != null && tenant.id !== '' ? Number(tenant.id) : null;
-
-  const startValidation = useCallback(async () => {
-    if (tenantId == null) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await cardValidationApi.start(tenantId);
-      if (res.checkoutUrl) {
-        // Hosted provider — the card is entered on the processor's page. The tenant
-        // returns via successUrl and the `card.validated` webhook flips entitlement.
-        window.location.href = res.checkoutUrl;
-        return;
-      }
-      // Manual provider validated synchronously — drop the cached model lists so the
-      // premium group appears immediately instead of after a reload.
-      invalidateLlmModels();
-      window.location.reload();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t('premiumUnlockFailed'));
-      setBusy(false);
-    }
-  }, [tenantId, t]);
+  // SHARED card-validation flow (see useStartCardValidation) — the chat error
+  // banner drives the identical unlock, so neither surface re-implements it.
+  const { start: startValidation, busy, error } = useStartCardValidation();
 
   // Already entitled → nothing to unlock. No payload yet → say nothing rather than
   // flash a paywall at someone who may well be entitled.
@@ -90,8 +62,10 @@ export function PremiumModelUnlock() {
         </a>
       )}
 
-      {error && (
-        <div role="alert" style={{ ...hintStyle, color: 'var(--danger, #ef4444)' }}>{error}</div>
+      {error !== null && (
+        <div role="alert" style={{ ...hintStyle, color: 'var(--danger, #ef4444)' }}>
+          {error || t('premiumUnlockFailed')}
+        </div>
       )}
     </div>
   );

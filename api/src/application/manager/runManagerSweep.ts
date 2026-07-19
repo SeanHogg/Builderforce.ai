@@ -42,6 +42,8 @@ export interface ManagerSweepResult {
   dispatched: number;
   /** Flagged tickets whose missing role/reviewer the manager actually staffed. */
   remediated: number;
+  /** Flagged tickets left for a later tick because a project hit its per-pass cap. */
+  remediationDeferred: number;
   tokenBlockedTenants: number;
 }
 
@@ -77,7 +79,8 @@ export async function runManagerSweep(env: Env): Promise<ManagerSweepResult> {
 
   const result: ManagerSweepResult = {
     projects: managed.length, managed: 0, scored: 0, ranked: 0, assigned: 0,
-    prsConducted: 0, prsMerged: 0, dispatched: 0, remediated: 0, tokenBlockedTenants: 0,
+    prsConducted: 0, prsMerged: 0, dispatched: 0, remediated: 0, remediationDeferred: 0,
+    tokenBlockedTenants: 0,
   };
 
   // Cache the per-tenant token verdict so N projects under one tenant cost one scan.
@@ -107,6 +110,7 @@ export async function runManagerSweep(env: Env): Promise<ManagerSweepResult> {
       result.prsMerged += s.prsMerged;
       result.dispatched += s.dispatched;
       result.remediated += s.remediated;
+      result.remediationDeferred += s.remediationDeferred;
     } catch (err) {
       console.error(`[cron:manager] project=${p.projectId} tenant=${p.tenantId} failed`, err);
     }
