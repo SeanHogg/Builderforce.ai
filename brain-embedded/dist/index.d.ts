@@ -14,6 +14,14 @@ interface BrainChat {
     projectId: number | null;
     /** Where the chat was created (e.g. 'brainstorm' | 'ide' | 'project'). */
     origin?: string;
+    /**
+     * What this chat is MAKING — a capability id from the host's registry
+     * ('document' | 'slides' | 'dataviz' | 'spreadsheet' | 'website' | 'design' |
+     * 'mobile' | 'animation' | 'game3d'). Shapes the system prompt and the export
+     * format. `null`/absent = no capability. Opaque here: the package stores and
+     * forwards it, the host owns the catalogue.
+     */
+    capability?: string | null;
     createdAt: string;
     updatedAt: string;
 }
@@ -452,11 +460,13 @@ interface BrainPersistenceAdapter {
     createChat(body: {
         title?: string;
         projectId?: number | null;
+        capability?: string | null;
     }): Promise<BrainChat>;
     updateChat(id: number, body: {
         title?: string;
         projectId?: number | null;
         visibility?: 'shared' | 'locked';
+        capability?: string | null;
     }): Promise<BrainChat>;
     deleteChat(id: number): Promise<unknown>;
     summarizeChat(id: number): Promise<{
@@ -813,8 +823,12 @@ interface UseBrainChats {
     create(opts?: {
         title?: string;
         projectId?: number | null;
+        capability?: string | null;
     }): Promise<BrainChat | null>;
     rename(id: number, title: string): Promise<void>;
+    /** Set (or clear, with null) what the chat is making. Persisted on the chat, so
+     *  the choice follows the conversation across surfaces instead of the browser. */
+    setCapability(id: number, capability: string | null): Promise<void>;
     /**
      * Auto-name a still-untitled chat (title === {@link DEFAULT_CHAT_TITLE}) from its
      * first user message, so "New chat" becomes the topic once the conversation begins.

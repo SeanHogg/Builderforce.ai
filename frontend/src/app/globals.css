@@ -1856,17 +1856,27 @@ textarea.input { resize: vertical; line-height: 1.5; }
   flex-direction: column;
   border-right: 1px solid var(--border);
   background: var(--bg-muted);
+  /* A grid item's automatic minimum size is its CONTENT size, so without this the
+     sidebar grows past the row and .bs-shell's `overflow: hidden` clips the chat
+     list instead of letting it scroll (many chats => unreachable rows). */
+  min-height: 0;
+  overflow: hidden;
 }
 
 .bs-sidebar-header {
   padding: 8px 10px;
   border-bottom: 1px solid var(--border);
+  /* Header keeps its size; the list below it absorbs the remaining height. */
+  flex: 0 0 auto;
 }
 
 .bs-chat-list {
-  flex: 1;
-  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 4px;
+  overscroll-behavior: contain;
 }
 
 .bs-chat-item {
@@ -1887,15 +1897,21 @@ textarea.input { resize: vertical; line-height: 1.5; }
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 .bs-empty {
   flex: 1;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-direction: column;
   gap: 12px;
+  padding: 16px 0;
+  /* The capability tiles make this taller than a short viewport — scroll here
+     rather than pushing the panel past its row. */
+  overflow-y: auto;
   color: var(--muted);
 }
 
@@ -2309,8 +2325,11 @@ textarea.input { resize: vertical; line-height: 1.5; }
 
   .page-inner { padding: 12px 8px; max-width: 100%; margin: 0; }
 
-  .bs-shell { grid-template-columns: 1fr; height: auto; min-height: 0; }
-  .bs-sidebar { max-height: 200px; border-right: none; border-bottom: 1px solid var(--border); }
+  /* Stacked on a phone: the sidebar becomes a capped, self-scrolling strip above
+     the conversation, and the shell grows with its content (the page scrolls). */
+  .bs-shell { grid-template-columns: 1fr; height: auto; min-height: 0; overflow: visible; }
+  .bs-sidebar { max-height: 45vh; border-right: none; border-bottom: 1px solid var(--border); }
+  .bs-main { overflow: visible; }
 
   /* Slide-out drawers go full-width on mobile so they don't leave a thin sliver
      of the page showing through on the left (the inline `width: min(…, 96vw)`

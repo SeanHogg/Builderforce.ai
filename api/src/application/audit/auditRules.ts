@@ -52,6 +52,21 @@ export interface UnmetRequirement {
   description?: string;
 }
 
+/**
+ * Stable identity of an audit verdict — the status plus the exact set of unmet
+ * checks, order-independent. The manager re-audits every pass, so a verdict is only
+ * worth journalling to the manager feed when this signature CHANGES; re-recording an
+ * unchanged verdict every pass buries the feed under duplicates of the same gap.
+ */
+export function verdictSignature(status: string, missing: UnmetRequirement[]): string {
+  return [
+    status,
+    ...missing
+      .map((m) => `${m.laneKey}|${m.kind}|${m.ref}|${m.responsibility ?? ''}|${m.reason}`)
+      .sort(),
+  ].join('\n');
+}
+
 export interface CoverageResult {
   status: 'pass' | 'flagged';
   requiredCount: number;

@@ -5715,6 +5715,74 @@
     "brainTitle": "Brain",
     "emptyHint": "开始一个新会话，或选择一个已有会话。",
     "startNewChat": "开始新会话",
+    "capabilities": {
+      "makingLabel": "创作",
+      "pickerAria": "你想创作什么？",
+      "none": "不限",
+      "tilesHintBrainstorm": "……或从你想创作的内容开始",
+      "tilesHintIde": "……或从你想构建的内容开始",
+      "document": {
+        "label": "文档",
+        "hint": "撰写包含标题、章节和表格的结构化文档。",
+        "starter": "撰写一份关于以下主题的文档："
+      },
+      "slides": {
+        "label": "幻灯片",
+        "hint": "制作演示文稿，每个章节一页幻灯片。",
+        "starter": "制作一份关于以下主题的幻灯片："
+      },
+      "dataviz": {
+        "label": "数据可视化",
+        "hint": "将数据转化为内嵌图表，并在下方附上数据。",
+        "starter": "可视化展示："
+      },
+      "spreadsheet": {
+        "label": "电子表格",
+        "hint": "用带公式与合计的表格建立数字模型。",
+        "starter": "制作一个电子表格，用于："
+      },
+      "website": {
+        "label": "网站",
+        "hint": "以可直接创建的真实文件构建网页应用或网站。",
+        "starter": "构建一个网站，用于："
+      },
+      "design": {
+        "label": "设计",
+        "hint": "设计界面——布局、间距、字体与主题变量。",
+        "starter": "设计以下内容的界面："
+      },
+      "mobile": {
+        "label": "移动端",
+        "hint": "构建移动优先、具有原生导航体验的应用。",
+        "starter": "构建一个移动应用，用于："
+      },
+      "animation": {
+        "label": "动画",
+        "hint": "添加有目的的动效，明确时长与缓动曲线。",
+        "starter": "为以下内容添加动画："
+      },
+      "game3d": {
+        "label": "3D 游戏",
+        "hint": "构建 3D 游戏——场景、相机、输入与游戏循环。",
+        "starter": "构建一个 3D 游戏，玩法是："
+      },
+      "export": {
+        "docx": "下载 Word",
+        "pptx": "下载 PowerPoint",
+        "csv": "下载 CSV",
+        "working": "准备中……",
+        "failed": "导出失败",
+        "untitled": "未命名"
+      }
+    },
+    "messageActions": {
+      "copy": "复制",
+      "copied": "已复制！",
+      "goodResponse": "回答很好",
+      "badResponse": "回答不佳",
+      "thumbsUp": "点赞",
+      "thumbsDown": "点踩"
+    },
     "newProjectPlaceholder": "新项目名称",
     "createAndAssign": "创建并分配",
     "actingAs": "身份",
@@ -5743,7 +5811,17 @@
     "openInIde": "在 IDE 中打开 →",
     "brainModality": "Brain — {modality}",
     "brainAs": "以 {name} 身份运行的 Brain",
-    "chatHistory": "会话历史"
+    "chatHistory": "会话历史",
+    "upgrade": "升级",
+    "upgradeToPlan": "升级到 {plan}",
+    "addCard": "添加银行卡",
+    "cardValidationFailed": "银行卡验证失败。"
+  },
+  "chatMessage": {
+    "copy": "复制",
+    "apply": "应用 →",
+    "createFile": "创建文件",
+    "downloadAs": "下载 {ext}"
   },
   "modelExport": {
     "subtitle": "将已发布的模型导出为可移植产物——Hugging Face 仓库、ONNX、safetensors 或 GGUF——并下载。模型在服务器端生成，无需令牌。",
@@ -6180,7 +6258,8 @@
       "unscored": "待评估",
       "unranked": "待排序",
       "unowned": "无负责人",
-      "openPullRequests": "开放的 PR"
+      "openPullRequests": "开放的 PR",
+      "flagged": "覆盖缺口"
     },
     "chart": {
       "title": "按优先级分组的待办",
@@ -6195,6 +6274,7 @@
       "policy": "策略"
     },
     "insightNudge": "还有 {unscored} 个工单待评估业务价值，{unranked} 个尚未排序——运行经理以补齐。",
+    "coverageNudge": "有 {flagged} 个工单缺少必需的角色或评审人——经理将在下一轮自动为其配置人员。",
     "policy": {
       "title": "如何管理此待办列表",
       "subtitle": "决定由谁运行待办列表以及自动化程度。您可随时更改。",
@@ -9746,5 +9826,34 @@
       "third_party": "第三方"
     },
     "downloadDoc": "下载"
+  },
+  "planBadge": {
+    "tier": {
+      "free": "免费版",
+      "pro": "专业版",
+      "teams": "团队版"
+    },
+    "freeHint": "您使用的是免费套餐 — 对话运行在 BuilderForce 内置模型上。点击查看套餐并升级。",
+    "paidHint": "您的工作区使用 {plan} 套餐。点击管理您的套餐。",
+    "tokensLeft": "剩余 {count} 个 token",
+    "noTokens": "token 已用完",
+    "upgrade": "升级"
+  },
+  "billing": {
+    "cardOnFileTitle": "已绑定的银行卡",
+    "cardOnFileHint": "高级模型访问权限通过此卡验证。更换将启动新的 0 美元验证。",
+    "cardPendingHint": "正在等待您的银行确认此卡。通过后将立即解锁高级模型。",
+    "cardNoDetails": "银行卡信息不可用",
+    "cardStatusValidated": "已验证",
+    "cardStatusPending": "验证中…",
+    "cardStatusFailed": "验证失败",
+    "replaceCard": "更换银行卡",
+    "retryCard": "重试",
+    "cardWorking": "处理中…",
+    "replaceCardTitle": "要更换银行卡吗？",
+    "replaceCardWarning": "新卡验证期间，高级模型将暂停使用。您的套餐及其他功能不受影响。",
+    "retryCardMessage": "我们将启动新的 0 美元验证，不会向您的卡扣款。",
+    "replaceCardConfirm": "继续",
+    "cardValidationFailed": "无法启动银行卡验证，请重试。"
   }
 }

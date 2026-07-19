@@ -81,12 +81,17 @@
 
 ## Consolidated Gap Register
 
-### 🩺 Chat diagnostics — account context residuals (2026-07-19)
+### 🌐 Unlocalized panels surfaced during the download-helper sweep (2026-07-19)
 
-> Shipped this pass (brain-embedded 2026.7.36 · VSIX 2026.7.83 · frontend 2026.7.71): "Copy chat diagnostics" now carries the ACCOUNT posture — plan, billing status (incl. "no payment method on file"), month-to-date usage vs allowance for every meter, model + which purse funds it, premium entitlement, connected BYO providers, and the client build/gateway — plus Signals that name the free-tier/quota/entitlement causes. Shared `classifyModelFunding` backs both the header funding line and the report. See DONE.md. Residuals:
+- **`components/PermissionDebuggerPanel.tsx` ships ~14 hardcoded English strings** ("Permission Debugger", "Copy All", "Export CSV", "Role:", …). Pre-existing, not introduced by the `lib/download.ts` migration that touched the file; left alone there because that pass was a behavior-preserving refactor. Fixing means a `permissionDebugger.*` namespace across all five catalogs. Unblocks: the localize-guard hook passing cleanly on that file.
 
-- **Web `BrainPanel.captureExecution` calls `llmApi.models()` directly instead of the shared `useLlmModels` cache.** The cached hook drops `byo.models[].vendor` and the raw `data[]`, which the shared `classifyModelFunding` needs, so the capture path re-fetches on each click (`frontend/src/components/brain/BrainPanel.tsx`). Fixing means widening `LlmModelLists` to retain the vendor-tagged surface. Unblocks: one cached model-surface read across the picker, the funding line, and the diagnostics report.
-- **The web Brain has no PlanBadge equivalent.** The VSIX header now shows tier + remaining allowance persistently (`clients/vscode/webview/src/accountPlan.tsx`); the web Brain still only surfaces plan state reactively, on a 402/429. Unblocks: a free web user seeing their allowance before a turn dies on it.
+### 💳 Actionable entitlement errors — residuals (2026-07-19)
+
+> The original four residuals are CLOSED (see DONE.md: shared `brain-ui` banner consumed by both hosts, `premiumInfo` parsed + a self-explaining picker, the unpinned-free-plan seam under test, and `<CardOnFile>` for view/replace). What remains:
+
+- **Still no live end-to-end run of the 402 path.** The seam is now covered server-side by `LlmProxyService.unpinnedFreePlan.test.ts` (an absent model is non-premium; the free pool is non-empty and every member passes the gate) and client-side by the classifier tests — but nothing has exercised a real signed-in free-tenant turn against the deployed gateway. **Blocked on credentials/a live environment, not on code.** Unblocks: confirming the free pool actually serves an unpinned VSIX chat end to end.
+- **No way to REMOVE a card, only replace it.** `<CardOnFile>` re-runs validation (the de-facto replace), but neither the API nor `PaymentProvider`/`StripeProvider` expose a detach/delete, so a tenant can't revoke a stored card — and a replace knocks them back to `pending`, suspending premium until the webhook confirms. Fixing means a `DELETE /api/tenants/:id/card-validation` plus a provider `detachPaymentMethod`. Unblocks: leaving the platform without support involvement, and replacing a card without an access gap.
+- **`/api/consumption` and `GET /llm/v1/models` both report plan state.** Deliberate for now — consumption is the only source carrying allowance meters, models the only one carrying the premium unlock reason — but "what tier is this tenant?" is answerable from two places and could drift. Unblocks: one authoritative entitlement read per client.
 
 ### 📧 Transactional email is English-only (2026-07-19)
 

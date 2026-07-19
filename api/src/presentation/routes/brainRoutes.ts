@@ -74,12 +74,13 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
 
   // POST /chats
   router.post('/chats', async (c) => {
-    const body = await c.req.json<{ title?: string; projectId?: number | null }>();
+    const body = await c.req.json<{ title?: string; projectId?: number | null; capability?: string | null }>();
     const result = await brainService.createChat({
       tenantId: c.get('tenantId') as number,
       userId: c.get('userId') as string,
       title: body.title,
       projectId: body.projectId,
+      capability: body.capability,
     });
     if (result && 'error' in result) return c.json({ error: result.error }, 404);
     return c.json(result, 201);
@@ -128,7 +129,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid chat id' }, 400);
 
-    const body = await c.req.json<{ title?: string; projectId?: number | null; visibility?: 'shared' | 'locked' }>();
+    const body = await c.req.json<{ title?: string; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null }>();
     const result = await brainService.updateChat(
       id,
       c.get('tenantId') as number,

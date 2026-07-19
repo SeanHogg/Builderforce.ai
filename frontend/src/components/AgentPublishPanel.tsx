@@ -8,6 +8,7 @@ import type { TrainingJob, AgentProfile, AgentPackage, MambaStateSnapshot } from
 import { publishAgent, validateAgent, ingestAgentKnowledge, type ValidateAgentResult } from '@/lib/api';
 import ModelApiSamples from '@/components/ModelApiSamples';
 import { MambaEngine } from '@/lib/mamba-engine';
+import { downloadJson, downloadText } from '@/lib/download';
 
 const INSTALL_COMMAND = 'iwr -useb https://builderforce.ai/install.ps1 | iex';
 
@@ -135,25 +136,12 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
   }, []);
 
   const handleDownload = useCallback(() => {
-    const json = JSON.stringify(pkg, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${profile.name.replace(/\s+/g, '-').toLowerCase() || 'agent'}-package.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadJson(pkg, `${profile.name.replace(/\s+/g, '-').toLowerCase() || 'agent'}-package.json`);
   }, [pkg, profile.name]);
 
   const handleDownloadResume = useCallback(() => {
     if (!profile.resumeMarkdown) return;
-    const blob = new Blob([profile.resumeMarkdown], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${profile.name.replace(/\s+/g, '-').toLowerCase() || 'agent'}-resume.md`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadText(profile.resumeMarkdown, `${profile.name.replace(/\s+/g, '-').toLowerCase() || 'agent'}-resume.md`, 'text/markdown');
   }, [profile.resumeMarkdown, profile.name]);
 
   const tp = useTranslations('agentPublish');

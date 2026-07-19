@@ -35,6 +35,7 @@ import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
 import { AttentionDot } from '@/components/AttentionDot';
 import { useAttention } from '@/lib/useAttention';
 import { RepoContextPicker, type RepoFileSource } from '@/components/brain/RepoContextPicker';
+import { BrainCapabilityPicker } from '@/components/brain/BrainCapabilityPicker';
 import { ThemeSelect } from '@/components/ThemeSelect';
 import { Select } from '@/components/Select';
 import { fetchProjects, createProject } from '@/lib/api';
@@ -53,6 +54,9 @@ import {
   mentionRecipient,
   resolveRecipient,
   isStepMessage,
+  getBrainCapability,
+  type BrainCapabilityId,
+  type BrainCapabilitySurface,
   type SuggestedAction,
   type BrainModality,
   type BrainEffort,
@@ -60,7 +64,11 @@ import {
   type RecipientChoice,
 } from '@/lib/brain';
 import type { BrainChat, BrainMessage, BrainChatTraceRow } from '@/lib/builderforceApi';
-import { agentAssignmentsApi, reposApi, runtimeApi, brain, consumptionApi, llmApi, type AgentAssignment, type ProjectRepository, type ChatAgentInvite, type ChatMemberInfo, type TicketKind } from '@/lib/builderforceApi';
+import { agentAssignmentsApi, reposApi, runtimeApi, brain, type AgentAssignment, type ProjectRepository, type ChatAgentInvite, type ChatMemberInfo, type TicketKind } from '@/lib/builderforceApi';
+import { fetchConsumptionSnapshot } from '@/lib/useConsumption';
+import { useLlmModels } from '@/lib/useLlmModels';
+import { PlanBadge } from '@/components/PlanBadge';
+import { BrainErrorBanner } from './BrainErrorBanner';
 import { dispatchBrainDataChanged } from '@/lib/brain/brainDataEvent';
 import { loadAgentPoolCached, type PoolAgent } from '@/lib/agentPool';
 import { getModality } from '@/lib/modality';
@@ -138,6 +146,13 @@ export interface BrainPanelProps {
    * task" flow. Handled once; ensures a chat exists, then reuses `brain.linkChatTicket`.
    */
   initialTicket?: { kind: string; ref: string };
+  /**
+   * Which capability set this surface offers ("what are we making?"). Brain
+   * Storm authors artifacts (document / slides / data viz / spreadsheet); the
+   * IDE builds and runs things (website / design / mobile / animation / 3D
+   * game). See lib/brain/capabilities.ts.
+   */
+  capabilitySurface?: BrainCapabilitySurface;
   /** Docked only: close handler for the drawer chrome. */
   onClose?: () => void;
 }
@@ -151,6 +166,7 @@ export function BrainPanel({
   initialChatId,
   initialPrompt,
   initialTicket,
+  capabilitySurface = 'brainstorm',
   onClose,
 }: BrainPanelProps) {
   const isPage = variant === 'page';
@@ -324,9 +340,30 @@ export function BrainPanel({
   // '' (a no-op) when they have no profile. This is the web half of Gap 2/3; the
   // VS Code surfaces inject the equivalent block via the gateway helper.
   const personalityBlock = usePersonalityBlock();
+
+  // ---- Capability ("what are we making?") ----------------------------------
+  // A property of the CHAT (migration 0345), so the choice follows the
+  // conversation to every surface instead of living in this browser. Picking one
+  // folds a capability block into the system prompt so the model shapes its
+  // output as that artifact, and seeds the composer with a starting line.
+  const capabilityId = (getBrainCapability(chats.activeChat?.capability)?.id ?? null) as BrainCapabilityId | null;
+  const selectCapability = useCallback(async (id: BrainCapabilityId | null) => {
+    // From the empty state there is no chat yet — start one carrying the choice
+    // (same path the "Start new chat" button takes, plus the capability).
+    if (chats.activeChatId == null) {
+      if (id == null) return;
+      await chats.create({ capability: id });
+    } else {
+      await chats.setCapability(chats.activeChatId, id);
+    }
+    if (id) setInput((prev) => (prev.trim() ? prev : tBrain(`capabilities.${id}.starter`)));
+  }, [chats, tBrain]);
+  const capabilityPrompt = getBrainCapability(capabilityId)?.systemPrompt;
+
   const ambientSystem = useMemo(() => {
     const parts: string[] = [];
     if (extraSystem) parts.push(extraSystem);
+    if (capabilityPrompt) parts.push(capabilityPrompt);
     if (personalityBlock) parts.push(personalityBlock);
     if (ctxProjectId != null) {
       const name = projects.find((p) => p.id === ctxProjectId)?.name;
@@ -340,7 +377,7 @@ export function BrainPanel({
     const composer = buildComposerDirectives({ effort, thinking, web: webBrowsing });
     if (composer) parts.push(composer);
     return parts.length > 0 ? parts.join('\n') : undefined;
-  }, [ctxProjectId, projects, extraSystem, autoApprove, effort, thinking, webBrowsing, personalityBlock]);
+  }, [ctxProjectId, projects, extraSystem, capabilityPrompt, autoApprove, effort, thinking, webBrowsing, personalityBlock]);
 
   // Per-turn limbic affect (VS Code webview parity). The static personality tone
   // above (`ambientSystem` ← personalityBlock) sets the user's baseline voice;
@@ -754,8 +791,8 @@ export function BrainPanel({
   // recomputes as the user types, so a callback that depends on them would change
   // identity every keystroke and defeat <BrainTimeline>'s memo. Read the latest
   // values from a ref instead, keeping the callbacks below referentially stable.
-  const timelineCtxRef = useRef({ conv, chats, recipient, projectId: chats.activeChat?.projectId ?? pinnedProjectId ?? undefined });
-  timelineCtxRef.current = { conv, chats, recipient, projectId: chats.activeChat?.projectId ?? pinnedProjectId ?? undefined };
+  const timelineCtxRef = useRef({ conv, chats, recipient, projectId: chats.activeChat?.projectId ?? pinnedProjectId ?? undefined, capability: chats.activeChat?.capability ?? null, chatTitle: chats.activeChat?.title });
+  timelineCtxRef.current = { conv, chats, recipient, projectId: chats.activeChat?.projectId ?? pinnedProjectId ?? undefined, capability: chats.activeChat?.capability ?? null, chatTitle: chats.activeChat?.title };
   const onAnswerTimelineQuestion = useCallback((answer: string) => {
     const { conv: c, recipient: r } = timelineCtxRef.current;
     void c.send(answer, { addressedTo: r });
@@ -775,12 +812,14 @@ export function BrainPanel({
     [],
   );
   const renderTimelineAssistantActions = useCallback((msg: BrainMessage) => {
-    const { conv: c, projectId } = timelineCtxRef.current;
+    const { conv: c, projectId, capability, chatTitle } = timelineCtxRef.current;
     return (
       <MessageActions
         msg={msg}
         conv={c}
         projectId={projectId}
+        capability={capability}
+        chatTitle={chatTitle}
         suggestions={parseSuggestedActions(msg.content).actions}
         onRunSuggestion={(prompt) => { void c.send(prompt); }}
       />
@@ -826,6 +865,9 @@ export function BrainPanel({
   // the clipboard — the Brain twin of the Observability/Logs "Copy triage info"
   // button, so a misbehaving run can be dropped straight into a bug report.
   const [captureState, setCaptureState] = useState<'idle' | 'copied' | 'error'>('idle');
+  // The shared (module-cached) model surface: the diagnostics report needs the plan
+  // pool + vendor-tagged BYO models to attribute WHO funds the active model.
+  const llmModels = useLlmModels();
   const modalityCopy = useModalityCopy();
   const localizedModalities = useLocalizedModalities();
   const personaLabel = useMemo(() => {
@@ -846,25 +888,16 @@ export function BrainPanel({
       // per source: a failed fetch degrades to null/[] so the copy never breaks.
       const chatId = chats.activeChatId;
       const chatProjectId = chats.activeChat?.projectId ?? null;
-      const [agents, tickets, contrib, consumption, modelSurface] = await Promise.all([
+      const [agents, tickets, contrib, consumption] = await Promise.all([
         chatId != null ? brain.listChatAgents(chatId).catch(() => []) : Promise.resolve([]),
         chatId != null ? brain.listChatTickets(chatId).catch(() => []) : Promise.resolve([]),
         chatProjectId != null ? getProjectEvermindContributions(chatProjectId).catch(() => null) : Promise.resolve(null),
-        // Plan + month-to-date allowance, and the model entitlement surface. Both are
-        // best-effort: a free/card-less tenant's report must SAY so rather than read as
-        // an unexplained capability failure, but neither fetch may block the copy.
-        consumptionApi.get().catch(() => null),
-        llmApi.models().catch(() => null),
+        // Plan + month-to-date allowance. Best-effort: a free/card-less tenant's report
+        // must SAY so rather than read as an unexplained capability failure, but the
+        // fetch may not block the copy. Shared cached snapshot — the same one the
+        // header's <PlanBadge/> shows, so the report and the chip can't disagree.
+        fetchConsumptionSnapshot(),
       ]);
-      // Normalize the two `/llm/v1/models` payload shapes (configured ⇒ `data[].model`,
-      // unconfigured ⇒ `models[]`) into the flat surface the shared funding classifier
-      // reads, so web and VS Code report the same `plan`/`byo:<vendor>`/`premium` key.
-      const surface = modelSurface
-        ? {
-            data: ('data' in modelSurface ? modelSurface.data.map((m) => m.model) : modelSurface.models).map((id) => ({ id })),
-            byo: { models: modelSurface.byo?.models ?? [] },
-          }
-        : null;
       const lastLearn = [...conv.messages].reverse().find((m) => m.role === 'assistant' && m.evermindLearn)?.evermindLearn ?? null;
       const tenant = getStoredTenant();
       const user = getStoredUser();
@@ -900,10 +933,13 @@ export function BrainPanel({
           resetsAt: consumption?.period.resetsAt ?? null,
           meters: consumption?.meters ?? [],
           model: personaModel ?? null,
-          modelFunding: surface ? classifyModelFunding(personaModel, surface) : null,
-          canUsePremiumModels: modelSurface?.canUsePremiumModels,
-          planModelCount: surface?.data.length,
-          byoProviders: modelSurface?.byo?.providers ?? [],
+          // Shared cached model surface — `fundingSurface` keeps the vendor tagging the
+          // classifier needs, so this reads the list the pickers already loaded instead
+          // of re-fetching /llm/v1/models on every capture.
+          modelFunding: classifyModelFunding(personaModel, llmModels.fundingSurface),
+          canUsePremiumModels: llmModels.canUsePremiumModels,
+          planModelCount: llmModels.models.length,
+          byoProviders: llmModels.byoProviders,
         },
       };
       const diagBlock = formatChatDiagnostics(diagnostics).join('\n');
@@ -913,7 +949,7 @@ export function BrainPanel({
       setCaptureState('error');
     }
     setTimeout(() => setCaptureState('idle'), 2000);
-  }, [conv, personaLabel, personaModel, chats.activeChatId, chats.activeChat, projects, pinnedProjectId, viewingProjectId]);
+  }, [conv, personaLabel, personaModel, llmModels, chats.activeChatId, chats.activeChat, projects, pinnedProjectId, viewingProjectId]);
 
   // Shared chrome for the "capture execution" icon button (page + docked headers).
   const captureButton = (
@@ -1078,20 +1114,15 @@ export function BrainPanel({
 
   const conversation = (
     <>
-      {error && (
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, margin: '8px 12px 0', padding: '8px 12px', fontSize: 13, background: 'var(--error-bg)', color: 'var(--error-text)', borderRadius: 8 }} role="alert">
-          <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{error}</span>
-          <button
-            type="button"
-            onClick={dismissError}
-            title={tCommon('dismiss')}
-            aria-label={tCommon('dismiss')}
-            style={{ flex: '0 0 auto', background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0 }}
-          >
-            ×
-          </button>
-        </div>
-      )}
+      {/* The message AND the fix: a 402/429 gets an Upgrade / Add-a-card action from
+          the shared verdict, instead of dead-ending on prose. The verdict only
+          applies to a CONVERSATION error — a chat-list failure isn't an entitlement
+          problem, so it gets the plain dismissible banner. */}
+      <BrainErrorBanner
+        error={error}
+        action={conv.error ? conv.errorAction : null}
+        onDismiss={dismissError}
+      />
       {showProviderCapBanner && (
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, margin: '8px 12px 0', padding: '8px 12px', fontSize: 13, background: 'var(--warning-bg, rgba(234,179,8,0.12))', color: 'var(--warning-text, #d97706)', border: '1px solid var(--warning-border, rgba(234,179,8,0.3))', borderRadius: 8 }} role="status">
           <span style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
@@ -1119,6 +1150,14 @@ export function BrainPanel({
           <button type="button" onClick={() => chats.create()} style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer' }}>
             {tBrain('startNewChat')}
           </button>
+          {/* …or start from what you want to make. Picking one opens a chat
+              already in that mode. */}
+          <BrainCapabilityPicker
+            surface={capabilitySurface}
+            value={capabilityId}
+            onSelect={selectCapability}
+            layout="tiles"
+          />
         </div>
       ) : (
         <>
@@ -1197,6 +1236,15 @@ export function BrainPanel({
                   </optgroup>
                 )}
               </Select>
+              {/* What this chat is making — same registry as the empty-state tiles,
+                  changeable (or clearable) mid-chat. */}
+              <BrainCapabilityPicker
+                surface={capabilitySurface}
+                value={capabilityId}
+                onSelect={selectCapability}
+                layout="compact"
+                disabled={conv.sending}
+              />
               {/* Recipient selector — only once the chat is multi-party. Routes the
                   next message to the BRAIN (executes) or a participant (talked to). */}
               {participants.length > 0 && (
@@ -1309,9 +1357,12 @@ export function BrainPanel({
       <div className="bs-shell" style={{ marginBottom: 0 }}>
         <div className="bs-sidebar">
           <div className="bs-sidebar-header">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 8 }}>
               <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-strong)' }}>{tBrain('brainStorm')}</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+                {/* Which plan funds this chat, and what's left of the allowance —
+                    stated up front rather than after a turn dies on the cap. */}
+                <PlanBadge />
                 {captureButton}
                 <button type="button" onClick={() => chats.create()} style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
                   {tBrain('newChat')}
@@ -1346,9 +1397,11 @@ export function BrainPanel({
   // Docked drawer
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-base)' }}>
-      <div style={{ flexShrink: 0, padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ flexShrink: 0, padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
         <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>🧠 {tBrain('brainTitle')}</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+          {/* Plan + remaining allowance (see the page header). */}
+          <PlanBadge />
           {captureButton}
           <button type="button" onClick={() => chats.create()} style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>{tBrain('newChat')}</button>
           <Link href="/brainstorm" title={tBrain('openFullBrainStorm')} style={{ fontSize: 12, color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)' }}>{tBrain('expand')}</Link>
@@ -1414,10 +1467,13 @@ function ToolConfirmBar({ req, onDecide, onApproveAll }: { req: { name: string; 
   );
 }
 
-function MessageActions({ msg, conv, projectId, suggestions, onRunSuggestion }: {
+function MessageActions({ msg, conv, projectId, capability, chatTitle, suggestions, onRunSuggestion }: {
   msg: BrainMessage;
   conv: ReturnType<typeof useBrainConversation>;
   projectId?: number;
+  /** The chat's capability — drives the reply's "Download as …" action. */
+  capability?: string | null;
+  chatTitle?: string;
   /** Model-authored next-step buttons parsed from this reply. */
   suggestions?: SuggestedAction[];
   onRunSuggestion?: (prompt: string) => void;
@@ -1459,6 +1515,8 @@ function MessageActions({ msg, conv, projectId, suggestions, onRunSuggestion }: 
         feedback={conv.feedbackMap[msg.id]}
         onFeedback={(value) => conv.submitFeedback(msg, value)}
         projectId={projectId}
+        capability={capability}
+        chatTitle={chatTitle}
         assistantContent={msg.content}
         conversationMessages={conv.messages.filter((m) => !isStepMessage(m)).map((m) => ({ role: m.role, content: m.content }))}
       />

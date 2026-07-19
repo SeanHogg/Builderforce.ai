@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { getStoredWebToken } from '@/lib/auth';
+import { downloadText } from '@/lib/download';
 import { AdminError, errText } from '../adminShared';
 
 export default function TokenPanel() {
@@ -60,16 +61,7 @@ export default function TokenPanel() {
       return;
     }
     try {
-      const blob = new Blob([`${buildEnvTemplate()}\n`], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'builderforce.superadmin.env';
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadText(`${buildEnvTemplate()}\n`, 'builderforce.superadmin.env');
       setDownloadedEnv(true);
       setTimeout(() => setDownloadedEnv(false), 2000);
     } catch (err) {

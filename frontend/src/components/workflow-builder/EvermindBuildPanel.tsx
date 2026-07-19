@@ -23,6 +23,7 @@ import {
 } from '@/lib/evermindBuild';
 import { seedProjectEvermindFromArtifact } from '@/lib/projectEvermindApi';
 import { buildSparkline } from '@/lib/sparkline';
+import { downloadBlob } from '@/lib/download';
 
 interface Props {
   open: boolean;
@@ -105,12 +106,10 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
     const buf: ArrayBuffer | null =
       raw instanceof ArrayBuffer ? raw : raw instanceof Uint8Array ? (raw.buffer as ArrayBuffer) : null;
     if (!buf) return;
-    const url = URL.createObjectURL(new Blob([buf], { type: 'application/octet-stream' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${workflowName.replace(/[^a-z0-9-_]+/gi, '_') || 'model'}.evermind`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(
+      new Blob([buf], { type: 'application/octet-stream' }),
+      `${workflowName.replace(/[^a-z0-9-_]+/gi, '_') || 'model'}.evermind`,
+    );
   }, [result, workflowName]);
 
   const firstFailLabel = result?.firstFailure?.label;

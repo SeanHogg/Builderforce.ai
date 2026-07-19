@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { llmApi, tenantModelApi, type PremiumModelInfo, type TenantModel } from './builderforceApi';
+import { llmApi, tenantModelApi, type ByoModel, type PremiumModelInfo, type TenantModel } from './builderforceApi';
 import { getPremiumModelCatalog, type ModelRecord } from './modelCatalog';
 
 /**
@@ -34,6 +34,15 @@ export interface LlmModelLists {
   /** Pinnable models the tenant's connected providers (BYO) can serve, as
    *  `<vendor>/<id>` refs — the model choices follow the connected providers. */
   byoModels: string[];
+  /** The tenant's connected provider keys ('anthropic', 'openai', …). Empty ⇒ every
+   *  turn is funded by the plan allowance rather than the tenant's own account. */
+  byoProviders: string[];
+  /** The vendor-tagged model surface the shared `classifyModelFunding` reads to say
+   *  WHICH purse funds a model. Built once here rather than reconstructed per caller:
+   *  {@link byoModels} flattens away the vendor, so a consumer that needs funding
+   *  attribution would otherwise have to re-fetch `/llm/v1/models` for the same data
+   *  this cache already holds. */
+  fundingSurface: { data: Array<{ id: string }>; byo: { models: ByoModel[] } };
   /** True when the tenant may pick a model at all: a paid plan OR at least one
    *  connected provider (BYO). The authoritative gate the server enforces in
    *  `pickCloudModel` / the strict-pin gate — this is the UI mirror. */
@@ -58,7 +67,7 @@ export interface LlmModelLists {
   premiumModels: ModelRecord[];
 }
 
-const EMPTY: LlmModelLists = { models: [], codingModels: [], teacherModels: [], tenantModels: [], isPaid: false, byoModels: [], canChooseModel: false, canUseFrontierModels: false, canUsePremiumModels: false, premiumModels: [] };
+const EMPTY: LlmModelLists = { models: [], codingModels: [], teacherModels: [], tenantModels: [], isPaid: false, byoModels: [], byoProviders: [], fundingSurface: { data: [], byo: { models: [] } }, canChooseModel: false, canUseFrontierModels: false, canUsePremiumModels: false, premiumModels: [] };
 
 let cache: LlmModelLists | null = null;
 let inflight: Promise<LlmModelLists> | null = null;
@@ -75,6 +84,12 @@ function load(): Promise<LlmModelLists> {
         const models = 'data' in res ? res.data.map((m) => m.model) : res.models;
         const isPaid = res.premium === true || res.effectivePlan !== 'free';
         const byoModels = res.byo?.models.map((m) => m.id) ?? [];
+        const byoProviders = res.byo?.providers ?? [];
+        // Keep the vendor-tagged shape the funding classifier needs (see the field doc).
+        const fundingSurface = {
+          data: (models ?? []).map((id) => ({ id })),
+          byo: { models: res.byo?.models ?? [] },
+        };
         // Server sends canChooseModel; fall back to isPaid || has-BYO for older payloads.
         const canChooseModel = res.canChooseModel ?? (isPaid || byoModels.length > 0);
         // Frontier access = the server's unified rule (superadmin || override || BYO ||
@@ -95,7 +110,7 @@ function load(): Promise<LlmModelLists> {
           : [];
         cache = {
           models: models ?? [], codingModels: res.codingModels ?? [], teacherModels, tenantModels,
-          isPaid, byoModels, canChooseModel, canUseFrontierModels,
+          isPaid, byoModels, byoProviders, fundingSurface, canChooseModel, canUseFrontierModels,
           canUsePremiumModels,
           ...(res.premiumInfo ? { premiumInfo: res.premiumInfo } : {}),
           premiumModels,

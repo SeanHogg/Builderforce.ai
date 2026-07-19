@@ -1,6 +1,6 @@
 import * as React from 'react';
 import React__default from 'react';
-import { BrainMessage, BrainTraceEvent, DirectedRecipient, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
+import { BrainMessage, BrainTraceEvent, ChatErrorAction, DirectedRecipient, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
 
 interface BrainTimelineLabels {
     /** Shown on the live thinking node while a turn streams. */
@@ -244,6 +244,62 @@ declare function PendingQuestionBanner({ payload, labels, onAnswer, onReveal, }:
     onAnswer: (answer: string) => void;
     onReveal?: () => void;
 }): React.JSX.Element;
+
+/**
+ * The chat's error banner — the message AND the fix.
+ *
+ * A turn that fails on an entitlement ("…require a validated card on file. Add
+ * and validate a card in Settings ▸ Billing to unlock.") is only actionable if
+ * the surface takes the user there. The verdict is decided ONCE, server-side,
+ * and carried through the run store as {@link ChatErrorAction} — so this
+ * component reads a verdict rather than pattern-matching error prose, and the
+ * button can never contradict the sentence above it.
+ *
+ * Shared because both chat surfaces hit the same wall: the VS Code webview and
+ * the web app's <BrainPanel> render the same failures from the same hook, and a
+ * user who upgrades from one and returns to the other should not find a
+ * different (or missing) remedy.
+ *
+ * Self-gating: renders nothing without an error, and decides its own actions from
+ * the verdict — the host passes handlers, never a `canX` flag.
+ */
+interface ChatErrorBannerLabels {
+    /** Re-exchange an expired session token. */
+    reconnect: string;
+    /** Upgrade CTA when the server named no specific plan. */
+    upgrade: string;
+    /** Upgrade CTA naming the plan — must contain the literal `{plan}` token. */
+    upgradeToPlan: string;
+    /** Billing CTA when the plan is fine but no validated card is on file. */
+    addCard: string;
+    dismiss: string;
+}
+declare const DEFAULT_CHAT_ERROR_LABELS: ChatErrorBannerLabels;
+interface ChatErrorBannerProps {
+    /** The message to show. Falsy ⇒ the banner renders nothing. */
+    error: string;
+    /** The server-decided remedy, from `useBrainConversation().errorAction`. */
+    action: ChatErrorAction | null;
+    onDismiss: () => void;
+    /**
+     * Re-authenticate. Omit on a surface with no in-place reconnect (the web app
+     * redirects to login instead) — the button then isn't offered.
+     */
+    onReconnect?: () => void;
+    /**
+     * Send the user somewhere they can raise their plan. Omit to suppress the
+     * button (e.g. a logged-out surface that owns its own sign-up upsell).
+     */
+    onUpgrade?: () => void;
+    /** Send the user somewhere they can put a validated card on file. */
+    onValidateCard?: () => void;
+    labels?: Partial<ChatErrorBannerLabels>;
+    /** Extra styles merged into the banner container, for host-specific chrome. */
+    style?: React__default.CSSProperties;
+    /** Class on the banner container — the VS Code webview styles via its own CSS. */
+    className?: string;
+}
+declare function ChatErrorBanner({ error, action, onDismiss, onReconnect, onUpgrade, onValidateCard, labels: labelOverrides, style, className, }: ChatErrorBannerProps): React__default.JSX.Element | null;
 
 /**
  * ConsolidateForkControl — the shared "compress this chat / branch it into a new
@@ -1339,4 +1395,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, ConsolidateForkControl, type ConsolidateForkControlProps, type ConsolidateForkLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_CONSOLIDATE_FORK_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindLearnedStatus, type EvermindMode, type EvermindRecentEntry, type EvermindSeedModel, type EvermindTeacherOptions, type EvermindTeacherSkipReason, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, ParticipantBadge, type PendingAskUser, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, evermindLearnedStatus, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, selectPendingAskUser, serializeAskUser, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };
+export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, ConsolidateForkControl, type ConsolidateForkControlProps, type ConsolidateForkLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_CONSOLIDATE_FORK_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_TIMELINE_LABELS, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindLearnedStatus, type EvermindMode, type EvermindRecentEntry, type EvermindSeedModel, type EvermindTeacherOptions, type EvermindTeacherSkipReason, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, ParticipantBadge, type PendingAskUser, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, evermindLearnedStatus, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, selectPendingAskUser, serializeAskUser, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };
