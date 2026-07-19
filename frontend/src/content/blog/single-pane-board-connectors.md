@@ -14,6 +14,8 @@ So Builderforce.ai doesn't ask. Its **board connectors** sync work two-ways with
 
 > Builderforce.ai connects two-ways to ten work systems across project management, ITSM and incident tooling — Linear, Jira, monday, Asana, ClickUp, ServiceNow, Freshservice, Sentry, PagerDuty and GitHub — so agents act on tickets and incidents wherever they originate, with no migration.
 
+![Central Builderforce board hub with two-way connector spokes to ten external systems grouped as work management, ITSM and incident tooling, with webhook and polling sync indicators](/blog/board-connectors.svg)
+
 ## Ten systems, four categories, one normalized ticket
 
 A board connection binds a project to a provider, a stored credential, and an external board id. Each provider implements the same contract — pull tickets changed since a cursor, push title/body/state changes back — and every external item is normalized to one ticket shape stamped with its source. What you connect:

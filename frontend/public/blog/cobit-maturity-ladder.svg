@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="820" viewBox="0 0 1600 820">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/>
+      <stop offset="55%" stop-color="#13152F"/>
+      <stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/>
+    </linearGradient>
+    <linearGradient id="rung" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#4F8BFF"/><stop offset="100%" stop-color="#5BF0BC"/>
+    </linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="rgba(139,108,255,0)"/>
+      <stop offset="50%" stop-color="rgba(139,108,255,0.55)"/>
+      <stop offset="100%" stop-color="rgba(61,214,245,0)"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="820" fill="url(#bgGlow)"/>
+
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#3DD6F5">MATURITY LADDER</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">From ad-hoc to optimizing</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- 5 ascending rungs -->
+  <!-- L1 -->
+  <rect x="120" y="640" width="1360" height="60" rx="12" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.10)"/>
+  <circle cx="168" cy="670" r="22" fill="rgba(122,128,153,0.35)"/><text x="168" y="678" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="900" fill="#EEF0FA">1</text>
+  <text x="216" y="666" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="24" font-weight="800" fill="#EEF0FA">Initial</text>
+  <text x="216" y="690" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#8891AE">Ad-hoc and reactive — outcomes depend on individuals, not process.</text>
+
+  <!-- L2 -->
+  <rect x="180" y="560" width="1300" height="60" rx="12" fill="rgba(255,255,255,0.05)" stroke="rgba(79,139,255,0.25)"/>
+  <circle cx="228" cy="590" r="22" fill="rgba(79,139,255,0.30)"/><text x="228" y="598" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="900" fill="#EEF0FA">2</text>
+  <text x="276" y="586" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="24" font-weight="800" fill="#EEF0FA">Managed</text>
+  <text x="276" y="610" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#8891AE">Decision rights and owners exist; a risk register is started.</text>
+
+  <!-- L3 -->
+  <rect x="240" y="480" width="1240" height="60" rx="12" fill="rgba(255,255,255,0.06)" stroke="rgba(61,214,245,0.28)"/>
+  <circle cx="288" cy="510" r="22" fill="rgba(61,214,245,0.30)"/><text x="288" y="518" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="900" fill="#EEF0FA">3</text>
+  <text x="336" y="506" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="24" font-weight="800" fill="#EEF0FA">Defined</text>
+  <text x="336" y="530" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#8891AE">The framework is documented and applied consistently to every investment.</text>
+
+  <!-- L4 -->
+  <rect x="300" y="400" width="1180" height="60" rx="12" fill="rgba(91,240,188,0.06)" stroke="rgba(91,240,188,0.28)"/>
+  <circle cx="348" cy="430" r="22" fill="rgba(91,240,188,0.30)"/><text x="348" y="438" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="900" fill="#EEF0FA">4</text>
+  <text x="396" y="426" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="24" font-weight="800" fill="#EEF0FA">Quantified</text>
+  <text x="396" y="450" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#8891AE">Value, risk and performance are measured against targets each period.</text>
+
+  <!-- L5 -->
+  <rect x="360" y="320" width="1120" height="60" rx="12" fill="rgba(91,240,188,0.12)" stroke="url(#rung)" stroke-width="2"/>
+  <circle cx="408" cy="350" r="22" fill="url(#rung)"/><text x="408" y="358" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="900" fill="#0A0B1E">5</text>
+  <text x="456" y="346" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="24" font-weight="800" fill="#EEF0FA">Optimizing</text>
+  <text x="456" y="370" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#A6ADC8">Governance refines itself from outcome data; compliance evidence on demand.</text>
+
+  <!-- ascending arrow -->
+  <path d="M1400,660 L1400,340" stroke="url(#rung)" stroke-width="4" fill="none" marker-end="url(#arw)"/>
+  <defs><marker id="arw" markerWidth="14" markerHeight="14" refX="7" refY="7" orient="auto"><path d="M2,2 L12,7 L2,12 Z" fill="#5BF0BC"/></marker></defs>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="775" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="782" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="781" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">Each objective is scored on the same five-level scale</text>
+</svg>

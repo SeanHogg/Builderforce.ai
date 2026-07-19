@@ -7,13 +7,17 @@
  *
  * SETUP: GitLab project/group → Settings → Webhooks → URL https://api.builderforce.ai/api/webhooks/gitlab,
  * Secret token = GITLAB_WEBHOOK_SECRET (`wrangler secret put GITLAB_WEBHOOK_SECRET`),
- * triggers: Push, Merge request, Issues events. Link the repo to a project
+ * triggers: Push, Merge request, Issues, Pipeline events. Link the repo to a project
  * (Project → Repositories, or sourceControlRepoFullName = "group/repo").
  */
 import { Hono } from 'hono';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { ingestForRepo, type IngestEvent } from '../../application/contributors/activityIngest';
+import type { RepoCiEvent } from '../../application/ci/ingestRepoCiEvent';
+import { handleCiEventOutcome } from '../../application/ci/handleCiEventOutcome';
+import { ciOutcomeDeps } from './ciOutcomeDeps';
+import type { RuntimeService } from '../../application/runtime/RuntimeService';
 
 const g = (o: unknown, k: string): unknown => (o && typeof o === 'object' ? (o as Record<string, unknown>)[k] : undefined);
 const gs = (o: unknown, k: string): string | null => { const v = g(o, k); return typeof v === 'string' ? v : null; };
@@ -111,9 +115,50 @@ function issueEvents(p: Record<string, unknown>): IngestEvent[] {
   }];
 }
 
+// ── CI: Pipeline Hook → RepoCiEvent ──────────────────────────────────────────
+// Pipeline Hook ONLY. A Job Hook (`object_kind: 'build'`) fires once per job and is
+// therefore never an authoritative whole-build conclusion — every failing job would
+// otherwise report a red build (and burn an auto-fix attempt) before the pipeline
+// itself concludes. The Pipeline Hook that follows carries the same signal, once.
+
+/** GitLab pipeline status → the normalized outcome. */
+function toOutcome(status: string | null): RepoCiEvent['outcome'] {
+  const v = (status ?? '').toLowerCase();
+  if (v === 'success' || v === 'passed') return 'success';
+  if (v === 'failed') return 'failure';
+  if (v === 'running' || v === 'pending' || v === 'created' || v === 'preparing' || v === 'waiting_for_resource' || v === 'scheduled') return 'pending';
+  // canceled / skipped / manual are not build verdicts — not actionable.
+  return null;
+}
+
+/**
+ * Pipeline Hook → {@link RepoCiEvent}. `object_attributes.id` IS GitLab's run id, so
+ * these events are auto-fix eligible on exactly the same terms as a GitHub
+ * `workflow_run` conclusion. Exported for tests.
+ */
+export function gitlabNormalizeCiEvent(p: Record<string, unknown>): RepoCiEvent | null {
+  const attrs = g(p, 'object_attributes');
+  if (!attrs) return null;
+  const id = g(attrs, 'id');
+  const runId = typeof id === 'number' ? id : null;
+  const ref = gs(attrs, 'ref');
+  const status = gs(attrs, 'status');
+  const projectWebUrl = gs(g(p, 'project'), 'web_url');
+  const url = gs(attrs, 'url') ?? (projectWebUrl && runId != null ? `${projectWebUrl}/-/pipelines/${runId}` : null);
+  return {
+    eventType: 'pipeline',
+    branch: ref,
+    sha: gs(attrs, 'sha'),
+    outcome: toOutcome(status),
+    rawState: status,
+    targetUrl: url,
+    runId,
+  };
+}
+
 export { pushEvents as gitlabPushEvents, mergeRequestEvents as gitlabMergeRequestEvents, issueEvents as gitlabIssueEvents };
 
-export function createGitLabWebhookRoutes(db: Db): Hono<HonoEnv> {
+export function createGitLabWebhookRoutes(db: Db, runtimeService: RuntimeService): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
   router.post('/gitlab', async (c) => {
@@ -126,6 +171,18 @@ export function createGitLabWebhookRoutes(db: Db): Hono<HonoEnv> {
     try { p = (await c.req.json()) as Record<string, unknown>; } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
 
     const event = c.req.header('X-Gitlab-Event');
+
+    // CI feedback: correlate a pipeline result back to the cloud execution that
+    // pushed the `builderforce/task-<id>` branch — build.result telemetry, PR
+    // build_status, merge-on-green and build-failure auto-fix, identical to GitHub
+    // (the post-ingest half is the shared `handleCiEventOutcome`).
+    if (event === 'Pipeline Hook') {
+      const norm = gitlabNormalizeCiEvent(p);
+      if (!norm) return c.json({ received: true, processed: false, reason: 'pipeline event not normalized' });
+      const res = await handleCiEventOutcome(ciOutcomeDeps(c, db, runtimeService), norm, 'gitlab');
+      return c.json({ received: true, ...res, autoFix: res.autoFix ? { dispatched: res.autoFixDispatched, attempt: res.autoFix.attempt } : undefined });
+    }
+
     const events =
       event === 'Push Hook' ? pushEvents(p)
       : event === 'Merge Request Hook' ? mergeRequestEvents(p)

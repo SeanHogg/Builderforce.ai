@@ -85,6 +85,122 @@ export function computeOutcomeScore(inputs: OutcomeScoreInputs): OutcomeScore {
   return { score, terms: { merge, ci, completion, efficiency } };
 }
 
+/**
+ * Coarse learn-contribution weight (0..1) from what's known at run FINALIZE — before
+ * CI/routing outcome is scored. This is the FedAvg sample weight for the run's Evermind
+ * contribution: a clean auto-merge teaches the model most, a no-op/failed run barely
+ * teaches. It is DISTINCT from {@link computeOutcomeScore} (which scores a CI-known run
+ * for model routing); it exists because the old learn path weighted by raw TEXT LENGTH,
+ * so a long, failed run taught exactly as hard as a short, merged one. Floored at 0.2 so
+ * the coordinator's `weight > 0` gate still accepts (and lightly learns from) a
+ * low-quality run instead of silently snapping it back to the default weight of 1.
+ */
+export function finalizeLearnWeight(s: {
+  merged: boolean;
+  prOpened: boolean;
+  autoMergeFailed: boolean;
+  producedChanges: boolean;
+}): number {
+  if (s.merged) return 1;             // shipped clean — the strongest signal
+  if (s.autoMergeFailed) return 0.3;  // opened a PR but the auto-merge broke
+  if (s.prOpened) return 0.7;         // real change, awaiting approval/CI
+  if (s.producedChanges) return 0.4;  // wrote files but no PR opened
+  return 0.2;                         // text-only / no-op
+}
+
+export type OutcomeSource = 'cloud' | 'onprem' | 'ide' | 'external';
+
+export interface ClientRunOutcome {
+  /** Caller's idempotency key — one outcome per clientRunId (partial-unique). */
+  clientRunId: string;
+  /** Where the run executed. Anything non-'cloud' has no execution row. */
+  source: OutcomeSource;
+  /** The model the run actually used (the gateway's resolved model). */
+  model: string;
+  /** Terminal status of the run. Non-'completed' scores 0 (see computeOutcomeScore). */
+  terminalStatus: TerminalStatus;
+  actionType?: string;
+  projectId?: number | null;
+  taskId?: number | null;
+  /** Optional richer signals when the client has them (else conservative defaults). */
+  merged?: boolean;
+  ciGreen?: boolean;
+  degraded?: boolean;
+  steps?: number;
+  costMc?: number;
+  approved?: boolean;
+}
+
+/**
+ * Record ONE outcome for a NON-cloud run (IDE-native / on-prem / external SDK) —
+ * the runs that never create a cloud `executions` row and so were invisible to
+ * the learner. Same 0..1 {@link computeOutcomeScore} basis and the same
+ * `applyOutcomeToRoutingTable` fold as {@link scoreRunOutcome}, so a client run
+ * teaches the routing table exactly like a cloud run does. Idempotent on
+ * `client_run_id`. Best-effort — never throws (a reporting failure must not break
+ * the caller's run). Respects the learned-routing kill switch implicitly via
+ * `applyOutcomeToRoutingTable` (which no-ops when routing is disabled).
+ */
+export async function recordClientRunOutcome(env: Env, db: Db, tenantId: number, o: ClientRunOutcome): Promise<void> {
+  try {
+    const clientRunId = o.clientRunId?.trim();
+    if (!clientRunId || !o.model?.trim()) return;
+    const actionType = normalizeActionType(o.actionType);
+    const steps = Math.max(0, Math.floor(o.steps ?? 0));
+    const costMc = Math.max(0, Math.floor(o.costMc ?? 0));
+    const { score } = computeOutcomeScore({
+      terminalStatus: o.terminalStatus,
+      merged: !!o.merged,
+      ciGreen: !!o.ciGreen,
+      degraded: !!o.degraded,
+      steps,
+      costMc,
+      approved: !!o.approved,
+    });
+    const plan = await resolveTenantPlan(env, tenantId).then((p) => p.effectivePlan).catch(() => 'free' as const);
+
+    const inserted = await db
+      .insert(runModelOutcomes)
+      .values({
+        tenantId,
+        projectId: o.projectId ?? null,
+        taskId: o.taskId ?? null,
+        executionId: null,
+        source: o.source,
+        clientRunId,
+        actionType,
+        resolvedModel: o.model,
+        plan,
+        score,
+        merged: !!o.merged,
+        ciGreen: !!o.ciGreen,
+        degraded: !!o.degraded,
+        steps,
+        costUsdMillicents: costMc,
+        terminalStatus: o.terminalStatus,
+      })
+      .onConflictDoNothing({ target: runModelOutcomes.clientRunId })
+      .returning({ id: runModelOutcomes.id });
+
+    // Only a first-seen outcome folds into the routing blob (the fold is not
+    // idempotent; a duplicate report must not double-count). No PR/CI signal on a
+    // client run, but completion + efficiency still carry real reliability signal.
+    if (inserted.length > 0) {
+      await applyOutcomeToRoutingTable(env, db, {
+        tenantId,
+        projectId: o.projectId ?? null,
+        actionType,
+        model: o.model,
+        score,
+        costMc,
+        merged: !!o.merged,
+      });
+    }
+  } catch {
+    // Never let outcome reporting fail the caller.
+  }
+}
+
 /** Most-frequent llm_usage_log.model for an execution — the model the run actually
  *  locked onto (the truth of what ran). Empty when the run produced no LLM calls. */
 async function resolveRunModel(db: Db, executionId: number): Promise<{ model: string; steps: number; costMc: number }> {
@@ -108,9 +224,10 @@ async function resolveRunModel(db: Db, executionId: number): Promise<{ model: st
   }
 }
 
-/** The latest PR row for a task → (merged, ciGreen). merged also covers a merged-by
- *  status without an explicit mergedAt timestamp. */
-async function resolveTaskPrSignal(db: Db, tenantId: number, taskId: number): Promise<{ merged: boolean; ciGreen: boolean }> {
+/** The latest PR row for a task → (merged, ciGreen, closedUnmerged). merged also covers
+ *  a merged-by status without an explicit mergedAt timestamp; closedUnmerged is a human
+ *  closing the PR without merging (a literal rejection of the deliverable). */
+async function resolveTaskPrSignal(db: Db, tenantId: number, taskId: number): Promise<{ merged: boolean; ciGreen: boolean; closedUnmerged: boolean }> {
   try {
     const [row] = await db
       .select({ status: pullRequests.status, mergedAt: pullRequests.mergedAt, buildStatus: pullRequests.buildStatus })
@@ -118,13 +235,36 @@ async function resolveTaskPrSignal(db: Db, tenantId: number, taskId: number): Pr
       .where(and(eq(pullRequests.taskId, taskId), eq(pullRequests.tenantId, tenantId)))
       .orderBy(sql`${pullRequests.number} is not null desc`, desc(pullRequests.createdAt))
       .limit(1);
-    if (!row) return { merged: false, ciGreen: false };
+    if (!row) return { merged: false, ciGreen: false, closedUnmerged: false };
+    const merged = row.status === 'merged' || row.mergedAt != null;
     return {
-      merged: row.status === 'merged' || row.mergedAt != null,
+      merged,
       ciGreen: row.buildStatus === 'success',
+      closedUnmerged: !merged && row.status === 'closed',
     };
   } catch {
-    return { merged: false, ciGreen: false };
+    return { merged: false, ciGreen: false, closedUnmerged: false };
+  }
+}
+
+/** Literal tool-use telemetry for a run: total tool calls (category='tool' audit rows
+ *  whose result is a JSON tool payload) and how many returned an error (`ok:false`).
+ *  ONE grouped query — no per-tool scan. */
+async function resolveToolCounts(db: Db, executionId: number): Promise<{ toolCalls: number; toolErrors: number }> {
+  try {
+    const [row] = await db
+      .select({
+        // Real tool executions stringify a JSON result (`{...}`); auxiliary 'tool'
+        // events (policy.blocked / finish.blocked) write plain-text results, excluded.
+        calls: sql<number>`count(*) FILTER (WHERE ${toolAuditEvents.result} LIKE '{%')::int`,
+        errors: sql<number>`count(*) FILTER (WHERE ${toolAuditEvents.result} LIKE '%"ok":false%')::int`,
+      })
+      .from(toolAuditEvents)
+      .where(and(eq(toolAuditEvents.executionId, executionId), eq(toolAuditEvents.category, 'tool')))
+      .limit(1);
+    return { toolCalls: Number(row?.calls) || 0, toolErrors: Number(row?.errors) || 0 };
+  } catch {
+    return { toolCalls: 0, toolErrors: 0 };
   }
 }
 
@@ -141,16 +281,22 @@ async function runWasDegraded(db: Db, executionId: number): Promise<boolean> {
   }
 }
 
-async function runWasApproved(db: Db, executionId: number): Promise<boolean> {
+/** Human review outcome for a run in ONE query: did a human APPROVE any bubbled-up
+ *  action (pins completion to full), and did a human REJECT one (a literal rejection
+ *  signal for trait reinforcement)? */
+async function resolveApprovalOutcome(db: Db, executionId: number): Promise<{ approved: boolean; rejected: boolean }> {
   try {
     const [row] = await db
-      .select({ n: sql<number>`count(*)::int` })
+      .select({
+        approved: sql<number>`count(*) FILTER (WHERE ${approvals.status} = 'approved')::int`,
+        rejected: sql<number>`count(*) FILTER (WHERE ${approvals.status} = 'rejected')::int`,
+      })
       .from(approvals)
-      .where(and(eq(approvals.executionId, executionId), eq(approvals.status, 'approved')))
+      .where(eq(approvals.executionId, executionId))
       .limit(1);
-    return (Number(row?.n) || 0) > 0;
+    return { approved: (Number(row?.approved) || 0) > 0, rejected: (Number(row?.rejected) || 0) > 0 };
   } catch {
-    return false;
+    return { approved: false, rejected: false };
   }
 }
 
@@ -191,13 +337,18 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       return lexicalEval({ question, answer });
     })();
 
-    const [{ model, steps, costMc }, pr, degraded, approved, plan] = await Promise.all([
+    const [{ model, steps, costMc }, pr, degraded, approval, toolCounts, plan] = await Promise.all([
       resolveRunModel(db, args.executionId),
       resolveTaskPrSignal(db, exec.tenantId, exec.taskId),
       runWasDegraded(db, args.executionId),
-      runWasApproved(db, args.executionId),
+      resolveApprovalOutcome(db, args.executionId),
+      resolveToolCounts(db, args.executionId),
       resolveTenantPlan(env, exec.tenantId).then((p) => p.effectivePlan).catch(() => 'free' as const),
     ]);
+    const approved = approval.approved;
+    // Literal human-rejection: a bubbled-up approval was rejected OR the PR was closed
+    // without merging. Consumed by trait reinforcement (was the cancelled-run proxy).
+    const humanRejected = approval.rejected || pr.closedUnmerged;
 
     const { score } = computeOutcomeScore({
       terminalStatus,
@@ -226,6 +377,10 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
       steps,
       costUsdMillicents: costMc,
       terminalStatus,
+      // Literal reinforcement signals (migration 0333).
+      toolCalls: toolCounts.toolCalls,
+      toolErrors: toolCounts.toolErrors,
+      humanRejected,
       faithfulness: evalScores?.faithfulness ?? null,
       answerRelevance: evalScores?.answerRelevance ?? null,
       hallucinationRate: evalScores?.hallucinationRate ?? null,
@@ -246,6 +401,8 @@ export async function scoreRunOutcome(env: Env, db: Db, args: { executionId: num
         .update(runModelOutcomes)
         .set({
           score, merged: pr.merged, ciGreen: pr.ciGreen, degraded, steps, costUsdMillicents: costMc, resolvedModel, plan,
+          // Refresh the literal signals on re-score too (a late PR-close / approval lands here).
+          toolCalls: toolCounts.toolCalls, toolErrors: toolCounts.toolErrors, humanRejected,
           // Re-evaluate on re-score too (the deliverable text may have settled).
           ...(evalScores
             ? {

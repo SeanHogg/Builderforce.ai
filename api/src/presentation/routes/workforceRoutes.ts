@@ -17,10 +17,14 @@
  */
 import { Hono } from 'hono';
 import { neon } from '@neondatabase/serverless';
-import { DEFAULT_ENGINE_ID } from '@builderforce/agent-tools';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { runtimeHiredAgentsCacheKey } from './runtimeRoutes';
+import { tenantHasFeature } from '../middleware/featureGate';
+import { sanitizePsychometricProfile } from '../../application/persona/psychometricCatalog';
+import { assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
+import { assignableWorkforceCacheKey } from '../../application/kanban/assignableWorkforce';
+import { parseJsonArray } from '../../domain/shared/json';
 import type { Env, HonoEnv } from '../../env';
 
 /** Cache key for a tenant's purchased (marketplace-acquired) agents. */
@@ -32,6 +36,17 @@ const purchasedCacheKey = (tenantId: number): string => `wf:purchased:${tenantId
  *  could appear in it (create/update/hire/delete), including an eval-score change. */
 export const PUBLIC_LIST_CACHE_KEY = 'wf:public:agents';
 const PUBLIC_LIST_CACHE_TTL_SECONDS = 120;
+
+/** Every cached read an agent create/update/delete can stale: the public listing,
+ *  this tenant's assignee-hovercard profiles, and the assignable-workforce union the
+ *  role/ticket pickers read (so a just-created agent is pickable immediately). */
+async function invalidateAgentCaches(env: Env, tenantId: number): Promise<void> {
+  await Promise.all([
+    invalidateCached(env, PUBLIC_LIST_CACHE_KEY),
+    invalidateCached(env, assigneeProfilesCacheKey(tenantId)),
+    invalidateCached(env, assignableWorkforceCacheKey(tenantId)),
+  ]);
+}
 
 /**
  * The PUBLIC projection of a marketplace agent. Marketing promises agents listed
@@ -56,12 +71,10 @@ const PERF_CACHE_TTL_SECONDS = 60;
 
 const RUNTIME_SUPPORT = ['cloud', 'host', 'both'] as const;
 const PRICING_MODELS = ['flat_fee', 'consumption'] as const;
-// V1 RETIRED (2026-06-13). Creatable engines: `builderforce-v2` (Claude Agent SDK
-// tool loop) and `builderforce-v3` (V2 + the limbic affective layer composed on
-// top). A legacy/unknown id in a request body is not in this set → falls to
-// DEFAULT_ENGINE_ID (v2).
-const AGENT_ENGINES = ['builderforce-v2', 'builderforce-v3'] as const;
-/** The two V2 cloud-agent execution surfaces (see migration 0105 / cloudDispatch). */
+// There is ONE agent engine — the current version (CURRENT_ENGINE_ID), resolved at run
+// time from the constant. It is not user-selectable and is not persisted (the vestigial
+// `ide_agents.engine` column was dropped in migration 0321).
+/** The two cloud-agent execution surfaces (see migration 0105 / cloudDispatch). */
 const RUNTIME_SURFACES = ['durable', 'container'] as const;
 
 /**
@@ -72,13 +85,14 @@ const RUNTIME_SURFACES = ['durable', 'container'] as const;
  */
 function mapAgentRow<T extends Record<string, unknown>>(row: T | null | undefined): T | null | undefined {
   if (row == null) return row;
-  const skills = row.skills;
-  const parsed = Array.isArray(skills)
-    ? skills
-    : typeof skills === 'string'
-      ? (() => { try { const v = JSON.parse(skills); return Array.isArray(v) ? v : []; } catch { return []; } })()
-      : [];
-  return { ...row, skills: parsed };
+  const parsed = parseJsonArray(row.skills);
+  // Parse the agent's own personality JSON so the editor round-trips it as an object
+  // (stored as text; mirrors how `skills` is parsed). null when unset.
+  const psy = row.psychometric;
+  const psychometric = typeof psy === 'string'
+    ? (() => { try { return JSON.parse(psy) as unknown; } catch { return null; } })()
+    : (psy ?? null);
+  return { ...row, skills: parsed, psychometric };
 }
 
 /**
@@ -267,6 +281,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
 
   router.post('/agents', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string | undefined;
     const body = await c.req.json<{
       name: string;
       title?: string;
@@ -275,12 +290,12 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       baseModel?: string;
       runtimeSupport?: string;
       preferredRuntime?: string | null;
-      engine?: string;
       runtimeSurface?: string;
       priceCents?: number;
       pricingModel?: string;
       priceUnit?: string | null;
       published?: boolean;
+      psychometric?: unknown;
     }>();
 
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
@@ -289,35 +304,38 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       ? body.runtimeSupport! : 'cloud';
     const pricingModel = (PRICING_MODELS as readonly string[]).includes(body.pricingModel ?? '')
       ? body.pricingModel! : 'flat_fee';
-    const engine = (AGENT_ENGINES as readonly string[]).includes(body.engine ?? '')
-      ? body.engine! : DEFAULT_ENGINE_ID;
-    // Which execution surface a V2 agent runs on (durable DO vs long-lived node).
+    // Which execution surface the agent runs on (durable DO vs long-lived node).
     const runtimeSurface = (RUNTIME_SURFACES as readonly string[]).includes(body.runtimeSurface ?? '')
       ? body.runtimeSurface! : 'durable';
     // preferred_runtime only meaningful when both are supported
     const preferredRuntime = runtimeSupport === 'both' ? (body.preferredRuntime ?? null) : null;
+    // Per-agent personality is a Pro feature — store none for free plans (rather than
+    // failing the create) so the agent still saves.
+    const psychometric = body.psychometric != null && (await tenantHasFeature(c.env, tenantId, userId, 'psychometricPersona'))
+      ? sanitizePsychometricProfile(body.psychometric)
+      : null;
 
     const id = crypto.randomUUID();
     const [row] = await sql(c.env)`
       INSERT INTO ide_agents
         (id, tenant_id, project_id, name, title, bio, skills, base_model,
-         status, hire_count, runtime_support, preferred_runtime, engine, runtime_surface,
-         price_cents, pricing_model, price_unit, published)
+         status, hire_count, runtime_support, preferred_runtime, runtime_surface,
+         price_cents, pricing_model, price_unit, published, psychometric)
       VALUES
         (${id}, ${tenantId}, NULL, ${body.name.trim()}, ${body.title?.trim() || body.name.trim()},
          ${body.bio ?? ''}, ${JSON.stringify(body.skills ?? [])}, ${body.baseModel || 'builderforce-default'},
-         'active', 0, ${runtimeSupport}, ${preferredRuntime}, ${engine}, ${runtimeSurface},
+         'active', 0, ${runtimeSupport}, ${preferredRuntime}, ${runtimeSurface},
          ${Math.max(0, Math.round(body.priceCents ?? 0))}, ${pricingModel}, ${body.priceUnit ?? null},
-         ${body.published ?? false})
+         ${body.published ?? false}, ${psychometric})
       RETURNING *
     `;
-    // A newly-created active/published agent can appear in the public listing.
-    await invalidateCached(c.env as Env, PUBLIC_LIST_CACHE_KEY);
+    await invalidateAgentCaches(c.env as Env, tenantId);
     return c.json(mapAgentRow(row), 201);
   });
 
   router.patch('/agents/:id', authMiddleware, async (c) => {
     const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string | undefined;
     const id = c.req.param('id');
     const body = await c.req.json<{
       name?: string;
@@ -327,13 +345,13 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       baseModel?: string;
       runtimeSupport?: string;
       preferredRuntime?: string | null;
-      engine?: string;
       runtimeSurface?: string;
       priceCents?: number;
       pricingModel?: string;
       priceUnit?: string | null;
       published?: boolean;
       status?: string;
+      psychometric?: unknown;
     }>();
 
     const [existing] = await sql(c.env)`
@@ -341,12 +359,19 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
     `;
     if (!existing) return c.json({ error: 'Agent not found' }, 404);
 
+    // Per-agent personality (Pro). `undefined` = field not sent → keep existing;
+    // `null` = explicit clear; an object = set (Pro-gated, sanitized).
+    let psychometric = existing.psychometric as string | null;
+    if (body.psychometric !== undefined) {
+      psychometric = body.psychometric != null && (await tenantHasFeature(c.env, tenantId, userId, 'psychometricPersona'))
+        ? sanitizePsychometricProfile(body.psychometric)
+        : null;
+    }
+
     const runtimeSupport = body.runtimeSupport != null && (RUNTIME_SUPPORT as readonly string[]).includes(body.runtimeSupport)
       ? body.runtimeSupport : existing.runtime_support;
     const pricingModel = body.pricingModel != null && (PRICING_MODELS as readonly string[]).includes(body.pricingModel)
       ? body.pricingModel : existing.pricing_model;
-    const engine = body.engine != null && (AGENT_ENGINES as readonly string[]).includes(body.engine)
-      ? body.engine : existing.engine;
     const runtimeSurface = body.runtimeSurface != null && (RUNTIME_SURFACES as readonly string[]).includes(body.runtimeSurface)
       ? body.runtimeSurface : (existing.runtime_surface ?? 'durable');
     const preferredRuntime = runtimeSupport === 'both'
@@ -362,20 +387,20 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
         base_model        = ${body.baseModel ?? existing.base_model},
         runtime_support   = ${runtimeSupport},
         preferred_runtime = ${preferredRuntime},
-        engine            = ${engine},
         runtime_surface   = ${runtimeSurface},
         price_cents       = ${body.priceCents != null ? Math.max(0, Math.round(body.priceCents)) : existing.price_cents},
         pricing_model     = ${pricingModel},
         price_unit        = ${body.priceUnit !== undefined ? body.priceUnit : existing.price_unit},
         published         = ${body.published ?? existing.published},
         status            = ${body.status ?? existing.status},
+        psychometric      = ${psychometric},
         updated_at        = NOW()
       WHERE id = ${id} AND tenant_id = ${tenantId}
       RETURNING *
     `;
     // Name/title/bio/skills/status/published — and the agent's eval score, if a
-    // training-publish flow patches it — all surface in the public listing.
-    await invalidateCached(c.env as Env, PUBLIC_LIST_CACHE_KEY);
+    // training-publish flow patches it — all surface in the cached reads.
+    await invalidateAgentCaches(c.env as Env, tenantId);
     return c.json(mapAgentRow(row));
   });
 
@@ -421,7 +446,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
         WHERE tenant_id = ${tenantId} AND scope = 'agent' AND scope_id = ${bridgeId}
       `;
     }
-    await invalidateCached(c.env as Env, PUBLIC_LIST_CACHE_KEY);
+    await invalidateAgentCaches(c.env as Env, tenantId);
     return c.json({ deleted: true });
   });
 

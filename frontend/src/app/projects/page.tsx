@@ -12,11 +12,14 @@ import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { PmVisualizersContent } from '@/components/pm/PmVisualizersContent';
 import { PmoContent } from '@/components/pm/PmoContent';
 import { CeremoniesContent } from '@/components/ceremony/CeremoniesContent';
+import { ManagerContent } from '@/components/manager/ManagerContent';
+import { KanbanTemplatesContent } from '@/components/KanbanTemplatesContent';
+import RfpContent from '@/components/rfp/RfpContent';
 import { RoleGate } from '@/components/RoleGate';
 import { usePublishNavCount } from '@/lib/navCounts';
 import { PROJECTS_COUNT_KEY } from '@/lib/navGroups';
 
-type Tab = 'projects' | 'tasks' | 'pm' | 'portfolio' | 'ceremonies';
+type Tab = 'projects' | 'tasks' | 'manager' | 'pm' | 'portfolio' | 'ceremonies' | 'templates' | 'rfp';
 
 /**
  * Projects — the single destination for all project work. Its sub-views are
@@ -27,8 +30,10 @@ type Tab = 'projects' | 'tasks' | 'pm' | 'portfolio' | 'ceremonies';
  *   - Planning   : PM visualizers (gantt/calendar) for the scoped project.
  *   - Portfolio  : the PMO / initiative / OKR cockpit (was /pmo).
  *   - Ceremonies : the standup/planning round-table (was /ceremonies).
- * The active tab is read from `?tab=` (single source of truth). Legacy /pmo and
- * /ceremonies redirect here.
+ *   - Templates  : the kanban board templates + roles + marketplace (was
+ *                  /kanban-templates).
+ * The active tab is read from `?tab=` (single source of truth). Legacy /pmo,
+ * /ceremonies and /kanban-templates redirect here.
  */
 export default function ProjectsTasksPage() {
   const router = useRouter();
@@ -53,9 +58,12 @@ export default function ProjectsTasksPage() {
   const tabParam = searchParams.get('tab');
   const activeTab: Tab =
     tabParam === 'tasks' ? 'tasks'
+    : tabParam === 'manager' ? 'manager'
     : tabParam === 'pm' ? 'pm'
     : tabParam === 'portfolio' ? 'portfolio'
     : tabParam === 'ceremonies' ? 'ceremonies'
+    : tabParam === 'templates' ? 'templates'
+    : tabParam === 'rfp' ? 'rfp'
     : 'projects';
   // Project scope comes from the global TopBar tenant→project selector
   // (useProjectScope), so the Planning/Tasks tabs no longer need their own
@@ -76,6 +84,7 @@ export default function ProjectsTasksPage() {
     <PageContainer style={{ padding: '20px 16px' }}>
       {activeTab === 'projects' && <ProjectsContent onCount={setProjectCount} />}
       {activeTab === 'tasks' && <TaskMgmtContent projectId={scopedProjectId} />}
+      {activeTab === 'manager' && <ManagerContent projectId={scopedProjectId} />}
       {activeTab === 'pm' && (
         <PmScopeProvider projectId={scopedProjectId ?? null}>
           <PmVisualizersContent />
@@ -87,6 +96,8 @@ export default function ProjectsTasksPage() {
         </RoleGate>
       )}
       {activeTab === 'ceremonies' && <CeremoniesContent />}
+      {activeTab === 'templates' && <KanbanTemplatesContent />}
+      {activeTab === 'rfp' && <RfpContent />}
     </PageContainer>
   );
 }

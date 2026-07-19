@@ -3,9 +3,11 @@ import path from "node:path";
 
 const DEFAULT_BUILDERFORCE_URL = "https://api.builderforce.ai";
 import { appendKnowledgeMemory } from "../builderforce/project-context.js";
+import { contributeProjectEvermindFromText, type ProjectEvermindSyncConfig } from "./project-evermind-sync.js";
+import { pushProjectFact, recallSharedProjectFacts } from "./project-facts-sync.js";
 import { logDebug } from "../logger.js";
 import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
-import { onAgentEvent } from "./agent-events.js";
+import { getAgentRunContext, onAgentEvent } from "./agent-events.js";
 import type { TeamMemoryEntry } from "./api-contract.js";
 import {
   syncBuilderForceAgentsDirectory,
@@ -101,6 +103,9 @@ type RunAccumulator = {
   filesCreated: string[];
   filesEdited: string[];
   toolNames: string[];
+  /** The run's initiating user prompt (the "ticket"), captured at accumulate time
+   *  from the run context so the project-Evermind teacher distils (task → answer). */
+  prompt?: string;
 };
 
 export function buildKnowledgeMemoryEntry(params: {
@@ -174,6 +179,16 @@ export class KnowledgeLoopService {
         lines.push(`- [${who}${when}] ${entry.summary ?? ""}`);
       }
       lines.push("[End Team Memory Context]");
+      // SHARED project facts — durable beliefs any surface (VS Code / cloud / prior
+      // on-prem run) wrote for this project, so on-prem recall sees them too.
+      const cfg = this.projectEvermindConfig();
+      if (cfg) {
+        const facts = await recallSharedProjectFacts(cfg, undefined, 6);
+        if (facts.length > 0) {
+          lines.push("[Project memory — durable facts recalled for this project]");
+          for (const f of facts) lines.push(`- ${f.content}`);
+        }
+      }
       return lines.join("\n") + "\n";
     });
     this.unsub = onAgentEvent((evt) => {
@@ -217,11 +232,15 @@ export class KnowledgeLoopService {
 
   private accumulate(runId: string, sessionKey: string, data: Record<string, unknown>): void {
     if (!this.runs.has(runId)) {
+      // Capture the initiating prompt NOW (during the run) — the run context is still
+      // registered here; by onRunComplete it may already be cleared.
+      const prompt = getAgentRunContext(runId)?.prompt;
       this.runs.set(runId, {
         sessionKey,
         filesCreated: [],
         filesEdited: [],
         toolNames: [],
+        ...(prompt ? { prompt } : {}),
       });
     }
     const acc = this.runs.get(runId)!;
@@ -298,10 +317,15 @@ export class KnowledgeLoopService {
           ...edited.map((file) => ({ file, action: "edited" as const })),
         ]) {
           try {
-            await ssmSvc.commitFact(`file:${file}`, `${file} was ${action} — ${summary}`, {
+            const factContent = `${file} was ${action} — ${summary}`;
+            await ssmSvc.commitFact(`file:${file}`, factContent, {
               tags: ["file-state"],
               importance: 0.55,
             });
+            // Mirror the belief to the SHARED project store so cloud/editor runs
+            // recall it too (best-effort — the local commit is the source of truth).
+            const cfg = this.projectEvermindConfig();
+            if (cfg) void pushProjectFact(cfg, `file:${file}`, factContent);
           } catch (err) {
             logDebug(`[ssm-memory] commitFact() failed for ${file}: ${String(err)}`);
           }
@@ -311,7 +335,40 @@ export class KnowledgeLoopService {
       }
     }
 
+    // Contribute a WEIGHT DELTA to the project's shared Evermind (concurrent
+    // learning): adapt the project model on this run's activity and push the diff
+    // to the coordinator. Fire-and-forget + fully guarded — a no-op unless the
+    // runtime is configured to reach a seeded, connected project model.
+    void this.contributeToProjectEvermind((entry ?? summary ?? "").trim(), acc?.prompt, created.length + edited.length > 0);
+
     await this.syncIfConfigured();
+  }
+
+  /** Build project-Evermind sync config from the loop's gateway opts (reuses the
+   *  same Bearer + X-AgentHost-Id auth `pushMemoryToMesh` uses). Null unless a
+   *  gateway key, numeric host id, and project id are all present. */
+  private projectEvermindConfig(): ProjectEvermindSyncConfig | null {
+    const { apiKey, baseUrl, agentNodeId, projectId } = this.opts;
+    const hostId = Number(agentNodeId);
+    if (!apiKey || !Number.isInteger(hostId) || hostId <= 0 || !projectId) return null;
+    return { gatewayUrl: baseUrl ?? DEFAULT_BUILDERFORCE_URL, apiKey, agentHostId: hostId, projectId: Number(projectId) };
+  }
+
+  /** Adapt-and-push a project-Evermind contribution (best-effort, non-fatal). The
+   *  `prompt` (the run's ticket) lets the coordinator's teacher distil (task → answer).
+   *  `producedChanges` weights the contribution by run quality: a run that actually
+   *  created/edited files teaches harder than a no-op one (0.7 vs 0.4), replacing the
+   *  old raw-text-length weight. */
+  private async contributeToProjectEvermind(text: string, prompt?: string, producedChanges = false): Promise<void> {
+    const cfg = this.projectEvermindConfig();
+    if (!cfg || text.length < 20) return;
+    try {
+      const res = await contributeProjectEvermindFromText(cfg, text, prompt, producedChanges ? 0.7 : 0.4);
+      if (res.ok) logDebug(`[project-evermind] contributed a delta (base v${res.version})`);
+      else logDebug(`[project-evermind] skipped: ${res.reason}`);
+    } catch (err) {
+      logDebug(`[project-evermind] contribution error: ${String(err)}`);
+    }
   }
 
   private async syncIfConfigured(): Promise<void> {

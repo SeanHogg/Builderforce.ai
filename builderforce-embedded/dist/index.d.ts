@@ -228,6 +228,12 @@ declare const EMBED_VIEWS: {
         readonly pillar: "agile";
         readonly available: true;
     };
+    readonly workforce: {
+        readonly key: "workforce";
+        readonly label: "Workforce";
+        readonly pillar: "agile";
+        readonly available: true;
+    };
     readonly soc2: {
         readonly key: "soc2";
         readonly label: "SOC 2 Tracker";

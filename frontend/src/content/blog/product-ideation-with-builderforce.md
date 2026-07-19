@@ -12,6 +12,8 @@ Every product starts with an idea and ends — if you're lucky — with somethin
 
 Builderforce is designed to collapse that gap. This post walks through a full ideation cycle using the platform's **Brainstorm** tool, **IDE**, **project management** features, and **hired agents from the Workforce** — from a raw idea to a structured, executable plan.
 
+![Ideation pipeline flowing from Brainstorm to IDE structuring to Timeline to hiring Workforce agents to review and ship](/blog/product-ideation.svg)
+
 ---
 
 ## The Scenario

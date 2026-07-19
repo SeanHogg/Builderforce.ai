@@ -12,7 +12,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { and, eq, desc, inArray, sql } from 'drizzle-orm';
-import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { authMiddleware, requireRole, isManager } from '../middleware/authMiddleware';
 import { TenantRole, hasMinRole } from '../../domain/shared/types';
 import {
   knowledgeDocuments,
@@ -22,6 +22,7 @@ import {
   knowledgeTrainingAssignments,
   knowledgeDocumentCollaborators,
   marketplaceKnowledge,
+  knowledgeListingPurchases,
   tenantMembers,
   users,
 } from '../../infrastructure/database/schema';
@@ -30,7 +31,13 @@ import {
   getCacheVersion,
   bumpCacheVersion,
 } from '../../infrastructure/cache/readThroughCache';
+import {
+  MARKET_VERSION_KEY,
+  parseListingTags,
+  browsePublicListings,
+} from '../../application/knowledge/knowledgeMarket';
 import { ideProxy, newTraceId } from '../../application/llm/LlmProxyService';
+import { tenantProxyForPlan } from '../../application/llm/tenantProxy';
 import { logTrace } from '../../application/llm/traceLogger';
 import {
   notifyCollaboratorInvited,
@@ -38,16 +45,14 @@ import {
   type KnowledgeNotifierEnv,
 } from '../../application/knowledge/knowledgeNotifier';
 import { STANDARD_LIBRARY, standardItem, computeCoverage } from '../../application/knowledge/standardLibrary';
+import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
+import { knowledgeVersionKey } from '../../application/insights/versionKeys';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
-const DOC_TYPES = ['sop', 'process', 'doc'] as const;
+const DOC_TYPES = ['sop', 'process', 'doc', 'postmortem', 'known_error'] as const;
 type DocType = (typeof DOC_TYPES)[number];
 const STATUSES = ['draft', 'published', 'archived'] as const;
-
-function knowledgeVersionKey(tenantId: number): string {
-  return `knowledge:${tenantId}`;
-}
 
 // ---------------------------------------------------------------------------
 // Pure helpers (unit-tested) — compliance / training rollups.
@@ -496,11 +501,10 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
   router.delete('/documents/:id', async (c) => {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string;
-    const role = c.get('role') as TenantRole;
     const id = c.req.param('id');
     const doc = await loadDoc(tenantId, id);
     if (!doc) return c.json({ error: 'Document not found' }, 404);
-    if (!hasMinRole(role, TenantRole.MANAGER) && doc.createdBy !== userId) {
+    if (!isManager(c) && doc.createdBy !== userId) {
       return c.json({ error: 'Only a manager or the creator can delete this document' }, 403);
     }
     await db
@@ -538,6 +542,21 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
       .where(and(eq(knowledgeDocuments.id, id), eq(knowledgeDocuments.tenantId, tenantId)));
 
     await bumpCacheVersion(c.env as Env, knowledgeVersionKey(tenantId));
+
+    // Unified audit stream: a knowledge/doc publish, attributed to its author.
+    c.executionCtx.waitUntil((async () => {
+      const actor = await resolveActorFromContext(c.env as Env, db, c);
+      await recordActivity(c.env as Env, db, {
+        tenantId,
+        actor,
+        verb: 'doc.published',
+        targetType: 'document',
+        targetId: id,
+        targetLabel: doc.title,
+        summary: `Published "${doc.title}" v${nextVersion}`,
+        metadata: { versionNumber: nextVersion, changeNote: body.changeNote?.trim() || null },
+      });
+    })().catch(() => {}));
     return c.json(await loadDoc(tenantId, id));
   });
 
@@ -934,9 +953,12 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
       temperature: 0.6,
     };
 
+    // Knowledge authoring is the tenant's own doc work → prefer their connected BYO
+    // account (connected flagship leads), else the operator pool.
+    const { proxy: draftProxy } = await tenantProxyForPlan(c.env, c.get('tenantId') as number);
     let result;
     try {
-      result = await ideProxy(c.env).complete(requestBody, undefined, traceId);
+      result = await draftProxy.complete(requestBody, undefined, traceId);
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : 'AI generation failed' }, 502);
     }
@@ -1000,9 +1022,11 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
       temperature: 0.4,
     };
 
+    // Document analysis is the tenant's own doc work → prefer their connected BYO account.
+    const { proxy: analyzeProxy } = await tenantProxyForPlan(c.env, c.get('tenantId') as number);
     let result;
     try {
-      result = await ideProxy(c.env).complete(requestBody, undefined, traceId);
+      result = await analyzeProxy.complete(requestBody, undefined, traceId);
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : 'Analysis failed' }, 502);
     }
@@ -1034,20 +1058,15 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
   // MARKETPLACE — sell knowledge documents (migration 0252).
   // A listing snapshots the doc's content so installing copies it into the
   // buyer's tenant as a fresh document. Browse reads are cached behind a global
-  // version token (cross-tenant) bumped on every listing write. Charging/checkout
-  // (priceCents) is a separate Stripe integration — install grants a copy.
+  // version token (cross-tenant) bumped on every listing write. PAID listings
+  // require a recorded purchase (POST /checkout) before install; free listings
+  // install directly. One-off Stripe settlement for paid listings is not wired yet,
+  // so /checkout reports `requiresConfig` and no purchase is ever recorded.
   // =====================================================================
-  const MARKET_VERSION_KEY = 'knowledge-market';
   const LISTING_VISIBILITIES = ['private', 'tenant', 'public'] as const;
-
-  function parseTags(json: string): string[] {
-    try {
-      const v = JSON.parse(json);
-      return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
-    } catch {
-      return [];
-    }
-  }
+  // Tag parsing + the market version token are shared with the PUBLIC
+  // knowledge-market router so both read identical data through one cache.
+  const parseTags = parseListingTags;
 
   // ---- LIST A DOC FOR SALE (publish / re-list) -------------------------
   router.post('/documents/:id/list', async (c) => {
@@ -1118,31 +1137,37 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
   });
 
   // ---- BROWSE PUBLIC LISTINGS (cross-tenant, cached) -------------------
+  // Delegates to the shared browse used by the PUBLIC /api/knowledge-market
+  // router — one query, one cache. Kept authed here for in-app callers that
+  // already hold a tenant token; logged-out browse uses the public router.
   router.get('/listings', async (c) => {
-    const env = c.env as Env;
-    const ver = await getCacheVersion(env, MARKET_VERSION_KEY);
-    const payload = await getOrSetCached(env, `knowledge-market:listings:v:${ver}`, async () => {
-      const rows = await db
-        .select()
-        .from(marketplaceKnowledge)
-        .where(eq(marketplaceKnowledge.visibility, 'public'))
-        .orderBy(desc(marketplaceKnowledge.installCount), desc(marketplaceKnowledge.createdAt));
-      return {
-        listings: rows.map((r) => ({
-          id: r.id,
-          title: r.title,
-          summary: r.summary,
-          docType: r.docType,
-          category: r.category,
-          tags: parseTags(r.tags),
-          priceCents: r.priceCents,
-          authorName: r.authorName,
-          installCount: r.installCount,
-          createdAt: r.createdAt,
-        })),
-      };
-    }, { kvTtlSeconds: 120, l1TtlMs: 30_000 });
-    return c.json(payload);
+    const listings = await browsePublicListings(c.env as Env, db);
+    return c.json({ listings });
+  });
+
+  // ---- CHECKOUT A PAID LISTING (records a purchase that unlocks install) ----
+  // Free listings need no checkout. PAID listings need one-off Stripe settlement
+  // (Checkout in `payment` mode), which is not wired yet — so this reports
+  // `requiresConfig` and never records a purchase. It previously recorded one
+  // immediately whenever PAYMENT_PROVIDER was unset, which handed paid listings out
+  // for free on every deploy that hadn't configured payments.
+  router.post('/listings/:listingId/checkout', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string;
+    const listingId = c.req.param('listingId');
+    const [listing] = await db.select().from(marketplaceKnowledge).where(eq(marketplaceKnowledge.id, listingId));
+    if (!listing) return c.json({ error: 'Listing not found' }, 404);
+    if (listing.priceCents <= 0) return c.json({ free: true });
+
+    const [existing] = await db
+      .select({ id: knowledgeListingPurchases.id })
+      .from(knowledgeListingPurchases)
+      .where(and(eq(knowledgeListingPurchases.listingId, listingId), eq(knowledgeListingPurchases.tenantId, tenantId)));
+    if (existing) return c.json({ purchased: true });
+
+    // Return a handled result (not an error) so the client shows a clear message
+    // rather than granting a paid item for free.
+    return c.json({ requiresConfig: true });
   });
 
   // ---- INSTALL A LISTING (copy into the caller's tenant) ---------------
@@ -1156,6 +1181,16 @@ export function createKnowledgeRoutes(db: Db): Hono<HonoEnv> {
     // Public listings install anywhere; non-public only within the owning tenant.
     if (listing.visibility !== 'public' && listing.tenantId !== tenantId) {
       return c.json({ error: 'Forbidden' }, 403);
+    }
+    // Paid listings require a recorded purchase for this tenant before installing.
+    if (listing.priceCents > 0) {
+      const [purchase] = await db
+        .select({ id: knowledgeListingPurchases.id })
+        .from(knowledgeListingPurchases)
+        .where(and(eq(knowledgeListingPurchases.listingId, listingId), eq(knowledgeListingPurchases.tenantId, tenantId)));
+      if (!purchase) {
+        return c.json({ error: 'Purchase required', checkoutRequired: true, priceCents: listing.priceCents }, 402);
+      }
     }
 
     const [doc] = await db

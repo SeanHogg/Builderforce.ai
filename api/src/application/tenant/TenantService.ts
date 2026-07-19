@@ -143,11 +143,6 @@ export class TenantService {
     await this.tenants.delete(asTenantId(id));
   }
 
-  /** Which payment provider is active (for informational display). */
-  get paymentProviderName(): string {
-    return this.payment.name;
-  }
-
   async getSubscription(tenantId: number): Promise<{
     plan: TenantPlan;
     effectivePlan: TenantPlan;
@@ -163,7 +158,6 @@ export class TenantService {
     trialEndsAt: Date | null;
     trialDaysRemaining: number | null;
     pricing: typeof TenantService.PRICING;
-    paymentProvider: string;
   }> {
     const tenant = await this.getTenant(tenantId);
     return {
@@ -181,16 +175,13 @@ export class TenantService {
       trialEndsAt: tenant.trialEndsAt,
       trialDaysRemaining: trialDaysRemaining(tenant.billingStatus, tenant.trialEndsAt),
       pricing: TenantService.PRICING,
-      paymentProvider: this.payment.name,
     };
   }
 
   /**
-   * Initiate checkout for Pro or Teams plan.
-   *
-   * For the ManualProvider: activates immediately and returns checkoutUrl=null.
-   * For hosted providers (Stripe): returns a URL to redirect the user to.
-   * The subscription is finalised when the provider fires a webhook.
+   * Initiate checkout for Pro or Teams plan. Returns the hosted Stripe Checkout URL to
+   * redirect the user to; the plan is only ever activated later, by the signed webhook
+   * confirming payment — never synchronously here, so no user input can grant a plan.
    */
   async createCheckoutSession(
     tenantId: number,
@@ -200,13 +191,10 @@ export class TenantService {
       billingEmail: string;
       /** Required for Teams plan */
       seats?: number;
-      /** For manual provider only — optional card details entered by user */
-      billingPaymentBrand?: string;
-      billingPaymentLast4?: string;
       successUrl: string;
       cancelUrl: string;
     },
-  ): Promise<{ checkoutUrl: string | null; sessionId: string }> {
+  ): Promise<{ checkoutUrl: string; sessionId: string }> {
     const targetPlan = input.targetPlan ?? TenantPlan.PRO;
 
     if (targetPlan === TenantPlan.TEAMS) {
@@ -227,29 +215,8 @@ export class TenantService {
       cancelUrl: input.cancelUrl,
     });
 
-    if (result.checkoutUrl === null) {
-      // ManualProvider — activate immediately with the user-supplied card details
-      const activated = targetPlan === TenantPlan.TEAMS
-        ? tenant.activateTeamsSubscription({
-            seats,
-            billingCycle: input.billingCycle,
-            billingEmail: input.billingEmail,
-            billingPaymentBrand: input.billingPaymentBrand ?? 'card',
-            billingPaymentLast4: input.billingPaymentLast4 ?? '',
-            externalCustomerId: result.externalCustomerId,
-            externalSubscriptionId: result.externalSubscriptionId,
-          })
-        : tenant.activateProSubscription({
-            billingCycle: input.billingCycle,
-            billingEmail: input.billingEmail,
-            billingPaymentBrand: input.billingPaymentBrand ?? 'card',
-            billingPaymentLast4: input.billingPaymentLast4 ?? '',
-            externalCustomerId: result.externalCustomerId,
-            externalSubscriptionId: result.externalSubscriptionId,
-          });
-      await this.tenants.update(activated);
-    } else if (result.externalCustomerId) {
-      // Hosted provider — store external IDs now; subscription activates via webhook
+    // Store the customer id now so the activation webhook can correlate back to us.
+    if (result.externalCustomerId) {
       const withIds = tenant.setExternalIds(result.externalCustomerId, result.externalSubscriptionId);
       await this.tenants.update(withIds);
     }

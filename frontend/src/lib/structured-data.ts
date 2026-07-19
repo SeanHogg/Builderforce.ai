@@ -160,7 +160,10 @@ export function blogIndexSchema(posts: { slug: string; title: string; date: stri
       },
       {
         '@type': 'ItemList',
-        itemListElement: posts.slice(0, 20).map((post, i) => ({
+        // Emit every published post (the index has 40+; a former 20-item cap
+        // dropped over half of them from the crawlable graph) [1596].
+        numberOfItems: posts.length,
+        itemListElement: posts.map((post, i) => ({
           '@type': 'ListItem',
           position: i + 1,
           url: `${BRAND.url}/blog/${post.slug}`,
@@ -210,6 +213,43 @@ export function marketplaceAgentsSchema(
       breadcrumbs(
         { name: 'Home', url: BRAND.url },
         { name: 'Marketplace', url: `${BRAND.url}/marketplace` },
+      ),
+    ],
+  };
+}
+
+/** Talent marketplace: CollectionPage + an ItemList of for-hire freelancers. */
+export function talentMarketplaceSchema(
+  freelancers: { userId: string; displayName?: string | null; headline?: string | null; discipline?: string | null; skills?: string[] | null }[],
+) {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'CollectionPage',
+        name: 'Talent Marketplace',
+        description: 'Hire vetted freelance developers, DBAs, designers and other specialists on Builderforce.ai — with résumés, skills and hourly rates.',
+        url: `${BRAND.url}/marketplace?category=talent`,
+        publisher: { '@id': `${BRAND.url}/#organization` },
+      },
+      {
+        '@type': 'ItemList',
+        itemListElement: freelancers.slice(0, 100).map((f, i) => ({
+          '@type': 'ListItem',
+          position: i + 1,
+          item: {
+            '@type': 'Person',
+            name: f.displayName ?? 'Freelancer',
+            url: `${BRAND.url}/talent/${encodeURIComponent(f.userId)}`,
+            ...(f.headline ? { description: f.headline } : {}),
+            ...(f.discipline ? { jobTitle: f.discipline } : {}),
+            ...(f.skills && f.skills.length > 0 ? { knowsAbout: f.skills.join(', ') } : {}),
+          },
+        })),
+      },
+      breadcrumbs(
+        { name: 'Home', url: BRAND.url },
+        { name: 'Talent', url: `${BRAND.url}/marketplace?category=talent` },
       ),
     ],
   };
@@ -344,6 +384,58 @@ export function evermindSchema() {
       breadcrumbs(
         { name: 'Home', url: BRAND.url },
         { name: 'Evermind', url },
+      ),
+    ],
+  };
+}
+
+/** SOC 2 / System Audits page: SoftwareApplication + ItemList of the audit types + FAQ + BreadcrumbList */
+export function soc2Schema() {
+  const url = `${BRAND.url}/soc2`;
+  const audits = [
+    { name: 'SOC 2 Readiness Audit', description: 'Scans your repositories and controls against the SOC 2 Common Criteria (CC1–CC9) and produces a prioritized readiness report.' },
+    { name: 'Architecture Analysis', description: 'Rates design-principle adherence (DRY, SOLID, DDD, patterns) across your codebase.' },
+    { name: 'Quality Audit', description: 'Checks testing, CI, and build-integrity signals across your repositories.' },
+    { name: 'Product Vision & Roadmap Audit', description: 'Measures product direction: objectives, key results, roadmap, and a documented vision.' },
+    { name: 'Privacy & Data-Law Compliance', description: 'Scans for GDPR, CCPA/CPRA, and CAN-SPAM readiness — privacy policy, cookie consent, unsubscribe, data export & erasure, and retention.' },
+  ];
+  const faq = [
+    { question: 'Is the SOC 2 audit a certification?', answer: 'No. It is a readiness audit: an automated, evidence-backed report that maps your repositories and controls to the SOC 2 Common Criteria (CC1–CC9) and tells you exactly what to close before a formal Type I/II examination.' },
+    { question: 'How does the audit run during signup?', answer: 'The onboarding wizard creates a project, connects your ticket system and repositories, then files a ticket for the security agent. The audit scores an instant report and dispatches the agent to open a remediation pull request. You are notified when the report is ready.' },
+    { question: 'Which repositories can it scan?', answer: 'GitHub, GitLab, Bitbucket, and Azure DevOps — one or many per project. Tokens stay server-side; the audit reads the repository tree to derive its signals.' },
+    { question: 'What other system audits are included?', answer: 'The same one-click flow runs an Architecture analysis, a Quality audit, a Product Vision & Roadmap audit, and a Privacy & Data-Law (GDPR/CCPA/CAN-SPAM) audit — each producing a scored project report.' },
+  ];
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      organization,
+      {
+        '@type': 'SoftwareApplication',
+        '@id': `${BRAND.url}/#soc2`,
+        name: `${BRAND.name} System Audits — SOC 2, Architecture, Quality, Privacy`,
+        description: 'Automated system-level audits that run during onboarding: SOC 2 readiness, architecture, quality, product vision, and privacy/data-law — each scored into a project report with an agent-opened remediation PR.',
+        url,
+        applicationCategory: 'DeveloperApplication',
+        operatingSystem: 'Web',
+        author: { '@id': `${BRAND.url}/#organization` },
+        dateModified: BRAND.dateModified,
+        featureList: audits.map((a) => a.name),
+      },
+      {
+        '@type': 'ItemList',
+        name: 'Builderforce system audits',
+        itemListElement: audits.map((a, i) => ({
+          '@type': 'ListItem',
+          position: i + 1,
+          name: a.name,
+          description: a.description,
+          url,
+        })),
+      },
+      faqSchema(faq),
+      breadcrumbs(
+        { name: 'Home', url: BRAND.url },
+        { name: 'SOC 2 & System Audits', url },
       ),
     ],
   };

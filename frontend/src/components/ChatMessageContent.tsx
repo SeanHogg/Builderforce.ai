@@ -4,7 +4,17 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { MermaidDiagram } from './MermaidDiagram';
+import { downloadText } from '@/lib/download';
+
+/** Fences whose content is a file the user will want to keep, → its extension. */
+const SAVEABLE_FENCE: Record<string, { ext: string; mime: string }> = {
+  csv: { ext: 'csv', mime: 'text/csv' },
+  json: { ext: 'json', mime: 'application/json' },
+  markdown: { ext: 'md', mime: 'text/markdown' },
+  md: { ext: 'md', mime: 'text/markdown' },
+};
 
 /** In-app link: same-origin absolute path (`/tasks`), not protocol-relative (`//host`). */
 function isInternalHref(href: string | undefined): href is string {
@@ -40,6 +50,7 @@ export function ChatMessageContent({
   onCreateFile,
 }: ChatMessageContentProps) {
   const router = useRouter();
+  const t = useTranslations('chatMessage');
   const components: Components = {
     code({ node, className, children, ...props }) {
       const isBlock = className != null;
@@ -52,6 +63,9 @@ export function ChatMessageContent({
           return <MermaidDiagram code={code} />;
         }
         const pathLike = isFilePathLike(lang);
+        // A data fence (the CSV the Spreadsheet capability emits, JSON, markdown)
+        // is a file the user wants to keep — offer it directly, no round-trip.
+        const saveable = SAVEABLE_FENCE[lang.trim().toLowerCase()];
         return (
           <div style={{ position: 'relative', margin: '8px 0', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-deep)', padding: '4px 10px', flexWrap: 'wrap', gap: 6 }}>
@@ -64,15 +78,25 @@ export function ChatMessageContent({
                   onClick={() => navigator.clipboard?.writeText(code)}
                   style={{ fontSize: '0.68rem', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 4 }}
                 >
-                  Copy
+                  {t('copy')}
                 </button>
+                {saveable && (
+                  <button
+                    type="button"
+                    onClick={() => downloadText(code, `${pathLike ? lang.trim() : `data.${saveable.ext}`}`, saveable.mime)}
+                    title={t('downloadAs', { ext: saveable.ext.toUpperCase() })}
+                    style={{ fontSize: '0.68rem', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', borderRadius: 4 }}
+                  >
+                    {t('downloadAs', { ext: saveable.ext.toUpperCase() })}
+                  </button>
+                )}
                 {onApplyCode && (
                   <button
                     type="button"
                     onClick={() => onApplyCode(code)}
                     style={{ fontSize: '0.68rem', color: 'var(--coral-bright)', background: 'var(--surface-coral-soft)', border: '1px solid var(--border-accent)', cursor: 'pointer', padding: '2px 8px', borderRadius: 4, fontFamily: 'var(--font-display)', fontWeight: 600 }}
                   >
-                    Apply →
+                    {t('apply')}
                   </button>
                 )}
                 {onCreateFile && pathLike && (
@@ -81,7 +105,7 @@ export function ChatMessageContent({
                     onClick={() => onCreateFile(lang.trim(), code)}
                     style={{ fontSize: '0.68rem', color: 'var(--coral-bright)', background: 'var(--surface-coral-soft)', border: '1px solid var(--border-accent)', cursor: 'pointer', padding: '2px 8px', borderRadius: 4, fontFamily: 'var(--font-display)', fontWeight: 600 }}
                   >
-                    Create file
+                    {t('createFile')}
                   </button>
                 )}
               </div>

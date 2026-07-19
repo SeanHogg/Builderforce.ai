@@ -2,11 +2,13 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   runtimeApi,
   cloudAgents as cloudAgentsApi,
   taskSpecsApi,
   approvalsApi,
+  kanbanApi,
   isAwaitingApprovalExecution,
   type Task,
   type AgentHost,
@@ -23,9 +25,10 @@ import { ApprovalResolveControl } from '../humanRequests/ApprovalResolveControl'
 import { ChatMessageBubble } from '../ChatMessageBubble';
 import { EXECUTION_STATUS_COLOR as STATUS_COLOR } from '../board/AgentChip';
 import { ExecutionChip } from './ExecutionChip';
+import { EvermindRunChip } from './EvermindRunChip';
 import { useExecutionStream, type ExecutionFileChange } from './useExecutionStream';
 import { ObservabilityContent } from '../ObservabilityContent';
-import { FileChangeViewer } from './FileChangeViewer';
+import { TaskChangesPanel } from './TaskChangesPanel';
 import { PullRequestPanel } from './PullRequestPanel';
 
 /**
@@ -123,46 +126,6 @@ function runProvenance(toolEvents: ExecutionTraceToolEvent[]): {
   return { dispatch, models: [...models.entries()].map(([m, n]) => `${m} ×${n}`), repo };
 }
 
-const CHANGE_COLOR: Record<ExecutionFileChange['change'], string> = {
-  created: 'var(--success, #16a34a)',
-  modified: 'var(--coral-bright)',
-  deleted: 'var(--danger, #dc2626)',
-};
-
-/**
- * One row in the Changes list. A button so it reads as clickable — selecting it
- * opens the file's diff in the Monaco viewer. Optional `agent` shows attribution
- * for the durable per-agent change rows.
- */
-function ChangeRow({
-  path,
-  change,
-  agent,
-  onOpen,
-}: {
-  path: string;
-  change: ExecutionFileChange['change'];
-  agent?: string;
-  onOpen: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      title="View this change in the editor"
-      style={{
-        display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
-        padding: '6px 4px', borderTop: '1px solid var(--border-subtle)', border: 'none',
-        borderTopColor: 'var(--border-subtle)', background: 'none', cursor: 'pointer',
-      }}
-    >
-      <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: CHANGE_COLOR[change], width: 64, flexShrink: 0 }}>{change}</span>
-      <span style={{ flex: 1, fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--coral-bright)', wordBreak: 'break-all' }}>{path}</span>
-      {agent && <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }} title="Agent that made this change">{agent}</span>}
-    </button>
-  );
-}
-
 type SubTab = 'output' | 'changes' | 'tools' | 'logs' | 'timeline' | 'pull-request';
 const card: React.CSSProperties = { border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 14, marginBottom: 12 };
 const RUNNING = new Set(['pending', 'submitted', 'running']);
@@ -198,11 +161,10 @@ function executionAgentName(
   return cloudAgentNames.get(ref) ?? 'Cloud agent';
 }
 
-/** The cloud-agent TYPE a run actually dispatched as (e.g. "V2 Cloud Agent
+/** The cloud-agent TYPE a run actually dispatched as (e.g. "Cloud Agent
  *  (Node/Container)"), read from the run's own `runtime.dispatch` telemetry — the
- *  authoritative per-run engine, independent of the agent's current V1/V2 config.
- *  This is why reopening a run no longer "reverts to V1": the type comes from what
- *  the run recorded, not from re-reading the agent's (possibly since-changed) engine. */
+ *  authoritative per-run surface, independent of anything on the agent since. The
+ *  type comes from what the run recorded, not from re-reading the agent's record. */
 function runDispatchType(toolEvents: ExecutionTraceToolEvent[]): string | undefined {
   const ev = toolEvents.find((e) => e.toolName === 'runtime.dispatch');
   if (!ev?.args) return undefined;
@@ -230,6 +192,7 @@ function isGenuineToolCall(ev: ExecutionTraceToolEvent): boolean {
 }
 
 export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task: Task; agentHosts: AgentHost[]; onTaskChanged?: () => void }) {
+  const t = useTranslations('agentExecution');
   const [executions, setExecutions] = useState<Execution[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [trace, setTrace] = useState<ExecutionTrace | null>(null);
@@ -239,8 +202,6 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   // inline instead of bouncing to the Workforce approvals queue.
   const [gateApproval, setGateApproval] = useState<Approval | null>(null);
   const [subTab, setSubTab] = useState<SubTab>('output');
-  // File whose diff is open in the Changes tab's Monaco viewer (null = list view).
-  const [openChange, setOpenChange] = useState<{ path: string; change: ExecutionFileChange['change'] } | null>(null);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   // Optimistic echoes of steering directions. The execution stream's subscriber
@@ -255,6 +216,8 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   const [rerunError, setRerunError] = useState<string | null>(null);
   // Ticket-level spend (finest grain of the ticket → project → account rollup).
   const [taskCost, setTaskCost] = useState<{ estimatedCostUsd: number; totalTokens: number; requests: number } | null>(null);
+  const [coordinated, setCoordinated] = useState(false);
+  const [coordinating, setCoordinating] = useState(false);
   // Cloud-agent ref → display name, for scoping the Logs/Timeline tabs to the
   // agent that actually executed (cloud runs carry no host name).
   const [cloudAgentNames, setCloudAgentNames] = useState<Map<string, string>>(new Map());
@@ -276,6 +239,13 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   }, [task.id, selectedId]);
 
   useEffect(() => { loadExecutions(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [task.id]);
+  useEffect(() => {
+    let live = true;
+    kanbanApi.accountability(task.id)
+      .then((report) => { if (live) setCoordinated(report.requiredCount > 0); })
+      .catch(() => { if (live) setCoordinated(false); });
+    return () => { live = false; };
+  }, [task.id]);
 
   // Pull the gated approval so the inline resolve control can render. Cleared when
   // the gate clears (a run started or the gate was resolved/rejected).
@@ -301,8 +271,8 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   useEffect(() => { loadTaskChanges(); }, [loadTaskChanges]);
 
   // Switching runs resets per-execution view state: optimistic echoes belong to
-  // the prior run, and its changes are a different file set than the new run's.
-  useEffect(() => { setSentMessages([]); setOpenChange(null); }, [selectedId]);
+  // the prior run. (The Changes panel resets its own open-file view via resetKey.)
+  useEffect(() => { setSentMessages([]); }, [selectedId]);
 
   useEffect(() => {
     if (selectedId == null) { setTrace(null); return; }
@@ -512,6 +482,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
     [selected, agentHosts, cloudAgentNames],
   );
   const runAgentType = useMemo(() => runDispatchType(toolEvents), [toolEvents]);
+  const evermindModels = useMemo(() => runProvenance(toolEvents).models, [toolEvents]);
 
   // Auto-scroll output to the newest content as it streams.
   const outputRef = useRef<HTMLDivElement>(null);
@@ -593,7 +564,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
       loadExecutions(true);
       onTaskChanged?.();
     } catch (err) {
-      setRerunError(err instanceof Error ? err.message : 'Failed to re-run');
+      setRerunError(err instanceof Error ? err.message : t('failedToRerun'));
     } finally {
       setRerunningId(null);
     }
@@ -603,16 +574,35 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
     <div style={{ padding: 20 }}>
       {/* Run control */}
       <div style={{ marginBottom: 16 }}>
-        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>Run this task</div>
-        <RunAgentControl
-          task={task}
-          agentHosts={agentHosts}
-          onRan={() => { setGate(null); loadExecutions(true); onTaskChanged?.(); }}
-          onAwaitingApproval={(g) => setGate({ approvalId: g.approvalId, reason: g.reason })}
-        />
+        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>{coordinated ? t('coordinateThisTicket') : t('runThisTask')}</div>
+        {coordinated ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              disabled={coordinating}
+              onClick={() => {
+                setCoordinating(true);
+                kanbanApi.coordinate(task.id)
+                  .then(() => { loadExecutions(true); onTaskChanged?.(); })
+                  .finally(() => setCoordinating(false));
+              }}
+              style={{ padding: '8px 14px', border: 'none', borderRadius: 8, background: 'var(--coral-bright)', color: '#fff', fontWeight: 600, cursor: coordinating ? 'default' : 'pointer', opacity: coordinating ? 0.65 : 1 }}
+            >
+              {coordinating ? t('coordinating') : t('coordinateNow')}
+            </button>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', flex: '1 1 260px' }}>{t('coordinateHint')}</span>
+          </div>
+        ) : (
+          <RunAgentControl
+            task={task}
+            agentHosts={agentHosts}
+            onRan={() => { setGate(null); loadExecutions(true); onTaskChanged?.(); }}
+            onAwaitingApproval={(g) => setGate({ approvalId: g.approvalId, reason: g.reason })}
+          />
+        )}
         {gate && (
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8, padding: 10, background: 'var(--bg-deep)', borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <span>Awaiting approval before this can run: {gate.reason}</span>
+            <span>{t('awaitingApproval', { reason: gate.reason })}</span>
             {/* Resolve inline — approving auto-starts the run (server replays it as
                 the same agent + model) and we follow the new execution. */}
             {gateApproval && (
@@ -636,20 +626,20 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
 
       {/* Executions */}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
-        <span style={{ fontWeight: 600, fontSize: 14 }}>Executions</span>
+        <span style={{ fontWeight: 600, fontSize: 14 }}>{t('executions')}</span>
         {taskCost && taskCost.requests > 0 && (
           <span
             style={{ fontSize: 12, color: 'var(--text-muted)' }}
-            title={`Ticket spend across all runs: ${taskCost.totalTokens.toLocaleString()} tokens over ${taskCost.requests} LLM call(s). Rolls up to this project, then the account.`}
+            title={t('ticketSpendTooltip', { tokens: taskCost.totalTokens.toLocaleString(), requests: taskCost.requests })}
           >
-            ~{taskCost.estimatedCostUsd < 0.01 ? '<$0.01' : `$${taskCost.estimatedCostUsd.toFixed(2)}`} spent on this ticket
+            {t('spentOnTicket', { amount: taskCost.estimatedCostUsd < 0.01 ? '<$0.01' : `$${taskCost.estimatedCostUsd.toFixed(2)}` })}
           </span>
         )}
       </div>
       {loading ? (
-        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</div>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>
       ) : executions.length === 0 ? (
-        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No executions yet. Use Run above to queue this task to an agent.</div>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('noExecutions')}</div>
       ) : (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: rerunError ? 6 : 12 }}>
           {executions.map((e) => {
@@ -677,43 +667,44 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
       {selected && (
         <div style={card}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 600, fontSize: 13 }}>Execution #{selected.id}</span>
+            <span style={{ fontWeight: 600, fontSize: 13 }}>{t('executionHeader', { id: selected.id })}</span>
             <span style={{ fontSize: 12, fontWeight: 600, color: STATUS_COLOR[status ?? ''] ?? 'var(--text-muted)' }}>{status}</span>
             {runAgentName && (
               <span
-                title="Agent that ran this execution"
+                title={t('agentThatRan')}
                 style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', padding: '2px 8px', borderRadius: 6, background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)' }}
               >
                 {runAgentName}
                 {runAgentType && !runAgentName.includes(runAgentType) && (
-                  <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}> · ran as {runAgentType}</span>
+                  <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>{t('ranAs', { type: runAgentType })}</span>
                 )}
               </span>
             )}
+            <EvermindRunChip models={evermindModels} projectId={task.projectId} />
             {isRunning && (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-muted)' }}>
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: stream.connected ? 'var(--success, #16a34a)' : 'var(--text-muted)' }} />
-                {stream.connected ? 'live' : 'polling'}
+                {stream.connected ? t('live') : t('polling')}
               </span>
             )}
             <div style={{ flex: 1 }} />
             {isRunning && (
               <button type="button" onClick={cancel} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                Cancel
+                {t('cancel')}
               </button>
             )}
           </div>
 
           {errorMessage && (
             <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--danger, #dc2626)', marginBottom: 4 }}>Error</div>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--danger, #dc2626)', marginBottom: 4 }}>{t('error')}</div>
               <div style={{ fontSize: 13, color: 'var(--danger, #dc2626)', whiteSpace: 'pre-wrap', lineHeight: 1.5, fontFamily: 'var(--font-mono)' }}>{errorMessage}</div>
             </div>
           )}
 
           {/* Sub-tabs */}
           <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border-subtle)', marginBottom: 10 }}>
-            {(() => { const changeCount = taskChanges.length || files.length; const base: Array<readonly [SubTab, string]> = [['output', 'Output'], ['changes', `Changes${changeCount ? ` (${changeCount})` : ''}`], ['tools', `Tools${realToolEvents.length ? ` (${realToolEvents.length})` : ''}`], ['logs', 'Logs'], ['timeline', 'Timeline']]; if (prUrl) base.push(['pull-request', 'Pull Request']); return base; })().map(([id, label]) => (
+            {(() => { const changeCount = taskChanges.length || files.length; const base: Array<readonly [SubTab, string]> = [['output', t('tabOutput')], ['changes', `${t('tabChanges')}${changeCount ? ` (${changeCount})` : ''}`], ['tools', `${t('tabTools')}${realToolEvents.length ? ` (${realToolEvents.length})` : ''}`], ['logs', t('tabLogs')], ['timeline', t('tabTimeline')]]; if (prUrl) base.push(['pull-request', t('tabPullRequest')]); return base; })().map(([id, label]) => (
               <button
                 key={id}
                 type="button"
@@ -740,7 +731,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
               >
                 {thread.length === 0 ? (
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 8 }}>
-                    {isRunning ? 'Agent is working… output will stream here.' : 'No output.'}
+                    {isRunning ? t('agentWorking') : t('noOutput')}
                   </div>
                 ) : (
                   thread.map((m, i) => (
@@ -748,7 +739,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                       key={i}
                       role={m.role}
                       content={m.text}
-                      label={m.role === 'assistant' ? (runAgentName || 'Agent') : 'You'}
+                      label={m.role === 'assistant' ? (runAgentName || t('agent')) : t('you')}
                       avatar={m.role === 'assistant' ? (runAgentName ? runAgentName.charAt(0).toUpperCase() : '🤖') : undefined}
                     />
                   ))
@@ -761,7 +752,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void send(); } }}
-                  placeholder={isRunning ? 'Send the agent a new direction… (⌘/Ctrl+Enter)' : 'Send a follow-up to start a new run with this directive… (⌘/Ctrl+Enter)'}
+                  placeholder={isRunning ? t('steerPlaceholder') : t('followUpPlaceholder')}
                   rows={2}
                   style={{ flex: 1, resize: 'vertical', padding: '8px 10px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily: 'inherit' }}
                 />
@@ -770,9 +761,9 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                   onClick={send}
                   disabled={!draft.trim() || sending || selectedId == null}
                   style={{ alignSelf: 'flex-end', padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: 'none', background: !draft.trim() || sending ? 'var(--bg-elevated)' : 'var(--coral-bright)', color: !draft.trim() || sending ? 'var(--text-muted)' : '#fff', cursor: !draft.trim() || sending ? 'default' : 'pointer' }}
-                  title={isRunning ? 'Steer the running agent with this direction' : 'Start a new run using this message as the directive'}
+                  title={isRunning ? t('steerTitle') : t('startRunTitle')}
                 >
-                  {sending ? (isRunning ? 'Sending…' : 'Starting…') : isRunning ? 'Send' : 'Start run'}
+                  {sending ? (isRunning ? t('sendingLabel') : t('startingLabel')) : isRunning ? t('send') : t('startRun')}
                 </button>
               </div>
 
@@ -780,9 +771,9 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                   full logs / tool calls / timeline to Observability. */}
               {selected?.agentHostId != null && (
                 <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
-                  Minimal view — for full agent logs, tool calls, and timeline,{' '}
+                  {t('minimalView')}{' '}
                   <Link href="/workforce?tab=logs" style={{ color: 'var(--coral-bright)' }}>
-                    open Workforce → Logs →
+                    {t('openWorkforceLogs')}
                   </Link>
                 </div>
               )}
@@ -790,58 +781,27 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
           )}
 
           {subTab === 'changes' && (
-            // List view scrolls within a capped pane (like Output); the open file
-            // diff renders at its natural height — FileChangeViewer owns its own
-            // scroll, so capping it here would nest a 420px editor in a 360px box.
-            <div style={openChange ? { minHeight: 80 } : { minHeight: 80, maxHeight: 360, overflow: 'auto' }}>
-              {openChange ? (
-                /* Detail: the selected file's diff in a read-only Monaco editor. */
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => setOpenChange(null)}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 8, padding: '4px 8px', fontSize: 12, border: 'none', background: 'none', color: 'var(--coral-bright)', cursor: 'pointer' }}
-                  >
-                    ‹ All changes
-                  </button>
-                  <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', wordBreak: 'break-all', marginBottom: 8 }}>
-                    <span style={{ fontWeight: 700, textTransform: 'uppercase', color: CHANGE_COLOR[openChange.change], marginRight: 8 }}>{openChange.change}</span>
-                    {openChange.path}
-                  </div>
-                  <FileChangeViewer taskId={task.id} path={openChange.path} />
-                </div>
-              ) : taskChanges.length > 0 ? (
-                /* Durable, per-agent attributed changes from the ticket workspace. */
-                taskChanges.map((f, i) => (
-                  <ChangeRow
-                    key={`${f.path}-${i}`}
-                    path={f.path}
-                    change={f.change}
-                    agent={f.agent}
-                    onOpen={() => setOpenChange({ path: f.path, change: f.change })}
-                  />
-                ))
-              ) : files.length === 0 ? (
-                <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 8 }}>
-                  {isRunning ? 'No file changes yet.' : 'This run did not record any file changes.'}
-                </div>
-              ) : (
-                files.map((f) => (
-                  <ChangeRow
-                    key={f.path}
-                    path={f.path}
-                    change={f.change}
-                    onOpen={() => setOpenChange({ path: f.path, change: f.change })}
-                  />
-                ))
-              )}
-            </div>
+            // Durable per-agent attributed changes from the ticket workspace, else
+            // the live execution file set. The shared panel owns the list + Monaco
+            // diff detail (same component as the first-class task Changes tab).
+            <TaskChangesPanel
+              taskId={task.id}
+              resetKey={selectedId ?? undefined}
+              changes={
+                taskChanges.length > 0
+                  ? taskChanges
+                      .filter((f) => selectedId == null || f.executionId === selectedId)
+                      .map((f) => ({ path: f.path, change: f.change, agent: f.agent, executionId: f.executionId, createdAt: f.createdAt, models: f.models, modelUsage: f.modelUsage }))
+                  : files.map((f) => ({ path: f.path, change: f.change }))
+              }
+              emptyLabel={isRunning ? t('noFileChangesYet') : t('noFileChangesRecorded')}
+            />
           )}
 
           {subTab === 'tools' && (
             <div style={{ minHeight: 80, maxHeight: 360, overflow: 'auto' }}>
               {realToolEvents.length === 0 ? (
-                <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 8 }}>No tool calls recorded.</div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 8 }}>{t('noToolCalls')}</div>
               ) : (
                 realToolEvents.map((ev) => (
                   <div key={ev.id} style={{ fontSize: 12, color: 'var(--text-secondary)', padding: '3px 0', borderTop: '1px solid var(--border-subtle)' }}>

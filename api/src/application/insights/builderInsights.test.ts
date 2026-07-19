@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computePctOfCap, pickTip } from './builderInsights';
+import { builderInsightsCacheKey, computePctOfCap, pickTip } from './builderInsights';
 
 describe('computePctOfCap', () => {
   it('returns null when there is no positive cap', () => {
@@ -20,6 +20,22 @@ describe('computePctOfCap', () => {
 
   it('clamps negative usage to 0', () => {
     expect(computePctOfCap(-100, 10_000)).toBe(0);
+  });
+});
+
+describe('builderInsightsCacheKey', () => {
+  it('scopes the key by project so per-project snapshots do not collide', () => {
+    const tenantOnly = builderInsightsCacheKey(7, 'u1');
+    const projectA = builderInsightsCacheKey(7, 'u1', 42);
+    const projectB = builderInsightsCacheKey(7, 'u1', 99);
+    expect(projectA).not.toBe(projectB);
+    expect(projectA).not.toBe(tenantOnly);
+    expect(projectA).toContain(':p:42:');
+  });
+
+  it('treats no project / null project as the same whole-tenant bucket', () => {
+    expect(builderInsightsCacheKey(7, 'u1')).toBe(builderInsightsCacheKey(7, 'u1', null));
+    expect(builderInsightsCacheKey(7, 'u1')).toContain(':p:-:');
   });
 });
 

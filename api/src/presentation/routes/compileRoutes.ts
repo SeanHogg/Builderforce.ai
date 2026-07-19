@@ -24,10 +24,13 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import { compile, type LlmComplete, type Need } from '../../application/compile';
+import type { RecallKnowledge } from '../../application/compile';
+import { recallSops } from '../../application/knowledge/recallSops';
 import { deploy, DEPLOY_SURFACES } from '../../application/deploy';
 import { deployAndDispatch, type CloudRunDispatcher } from '../../application/deploy/dispatch';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
 import { ideProxy } from '../../application/llm/LlmProxyService';
+import { completeForTenant } from '../../application/llm/tenantProxy';
 import { MODALITIES } from '../../application/compile';
 
 /** A gateway-backed {@link LlmComplete} for the modality adapters (free pool). */
@@ -46,6 +49,12 @@ function gatewayExtractor(env: HonoEnv['Bindings']): LlmComplete {
     const content = raw?.choices?.[0]?.message?.content;
     return typeof content === 'string' ? content : '';
   };
+}
+
+/** A tenant-scoped {@link RecallKnowledge} that grounds the diagnostic adapter in
+ *  the tenant's own published SOPs/processes. */
+function knowledgeRecaller(db: Db, tenantId: number): RecallKnowledge {
+  return (query, topK) => recallSops(db, tenantId, query, topK);
 }
 
 function isModality(m: unknown): m is Need['modality'] {
@@ -82,7 +91,10 @@ export function createCompileRoutes(db: Db, runtimeService: RuntimeService): Hon
 
     let spec;
     try {
-      spec = await compile(needs, { llm: gatewayExtractor(c.env) });
+      spec = await compile(needs, {
+        llm: gatewayExtractor(c.env),
+        recallKnowledge: knowledgeRecaller(db, c.get('tenantId') as number),
+      });
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : 'compile failed' }, 502);
     }
@@ -122,14 +134,17 @@ export function createCompileRoutes(db: Db, runtimeService: RuntimeService): Hon
     const needs = readNeeds(body);
     if ('error' in needs) return c.json(needs, 400);
 
+    const tenantId = c.get('tenantId') as number;
+
     let spec;
     try {
-      spec = await compile(needs, { llm: gatewayExtractor(c.env) });
+      spec = await compile(needs, {
+        llm: gatewayExtractor(c.env),
+        recallKnowledge: knowledgeRecaller(db, tenantId),
+      });
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : 'compile failed' }, 502);
     }
-
-    const tenantId = c.get('tenantId') as number;
 
     // A step-bearing spec (a process chart / a diagnostic's improvement flow) is a
     // RUNNABLE workflow — instantiate it for real on the workflow surface, rather than
@@ -155,16 +170,18 @@ export function createCompileRoutes(db: Db, runtimeService: RuntimeService): Hon
 
     const sample = (typeof body.sample === 'string' && body.sample.trim()) || 'Briefly introduce yourself and what you can do for me.';
     try {
-      const result = await ideProxy(c.env).complete({
+      // The compiled agent's first real turn → run on the tenant's connected BYO
+      // account when present; the compiled `runInput.model` is honored only when it
+      // preempts the BYO seed (its own account), else the connected flagship leads.
+      const result = await completeForTenant(c.env, tenantId, {
         messages: [
           { role: 'system', content: plan.runInput.systemPrompt },
           { role: 'user', content: sample },
         ],
-        ...(plan.runInput.model ? { model: plan.runInput.model } : {}),
         temperature: plan.execParams.temperature ?? 0.5,
         max_tokens: 600,
         useCase: 'agent_compile_run',
-      });
+      }, { meterUseCase: 'agent_compile_run', explicitModel: plan.runInput.model });
       if (result.response.status >= 400) return c.json({ spec, plan, error: `gateway ${result.response.status}` }, 502);
       const raw = (await result.response.json().catch(() => null)) as
         | { choices?: Array<{ message?: { content?: unknown } }> }

@@ -59,7 +59,7 @@ describe('buildOpenAIChatBody', () => {
   });
 
   it('injects prompt-cache breakpoints by default for a caching-capable model', () => {
-    const body = buildOpenAIChatBody(withSystem('anthropic/claude-sonnet-4.6'));
+    const body = buildOpenAIChatBody(withSystem('anthropic/claude-sonnet-5'));
     expect(JSON.stringify(body.messages)).toContain('cache_control');
   });
 
@@ -69,7 +69,7 @@ describe('buildOpenAIChatBody', () => {
   });
 
   it('noCache opts out even for a caching-capable model', () => {
-    const body = buildOpenAIChatBody(withSystem('anthropic/claude-sonnet-4.6'), { noCache: true });
+    const body = buildOpenAIChatBody(withSystem('anthropic/claude-sonnet-5'), { noCache: true });
     expect(JSON.stringify(body.messages)).not.toContain('cache_control');
   });
 });

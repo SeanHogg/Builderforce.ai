@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">CRITERIA-FIRST COMPARISON</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">The best AI coding agents, on the axes that decide</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- Builderforce column highlight -->
+  <rect x="1300" y="214" width="220" height="558" rx="18" fill="rgba(91,240,188,0.10)" stroke="rgba(91,240,188,0.45)" stroke-width="1.5"/>
+
+  <!-- header row -->
+  <text x="100" y="256" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" letter-spacing="2" font-weight="700" fill="#8891AE">DIMENSION</text>
+  <text x="548" y="256" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" font-weight="800" fill="#A6ADC8">Copilot</text>
+  <text x="764" y="256" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" font-weight="800" fill="#A6ADC8">Cursor / Windsurf</text>
+  <text x="980" y="256" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" font-weight="800" fill="#A6ADC8">Claude Code</text>
+  <text x="1196" y="256" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" font-weight="800" fill="#A6ADC8">Devin</text>
+  <text x="1410" y="256" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" font-weight="900" fill="#5BF0BC">Builderforce.ai</text>
+
+  <line x1="80" y1="286" x2="1520" y2="286" stroke="rgba(255,255,255,0.12)" stroke-width="1.5"/>
+  <line x1="440" y1="286" x2="440" y2="762" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+  <line x1="80" y1="380" x2="1520" y2="380" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
+  <line x1="80" y1="474" x2="1520" y2="474" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
+  <line x1="80" y1="568" x2="1520" y2="568" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
+  <line x1="80" y1="662" x2="1520" y2="662" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
+
+  <!-- Row 0: Self-hosted / MIT -->
+  <text x="100" y="345" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="700" fill="#EEF0FA">Self-hosted / open source</text>
+  <text x="548" y="348" text-anchor="middle" font-size="30" fill="#F0574A">&#10007;</text>
+  <text x="764" y="348" text-anchor="middle" font-size="30" fill="#F0574A">&#10007;</text>
+  <text x="980" y="348" text-anchor="middle" font-size="30" fill="#F0574A">&#10007;</text>
+  <text x="1196" y="348" text-anchor="middle" font-size="30" fill="#F0574A">&#10007;</text>
+  <text x="1410" y="345" text-anchor="middle" font-size="30" fill="#5BF0BC">&#10003;</text>
+  <text x="1410" y="368" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" font-weight="700" fill="#5BF0BC">MIT + air-gapped</text>
+
+  <!-- Row 1: Model freedom -->
+  <text x="100" y="439" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="700" fill="#EEF0FA">Any model provider</text>
+  <text x="548" y="440" text-anchor="middle" font-size="30" fill="#F0574A">&#10007;</text>
+  <text x="548" y="462" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" fill="#8891AE">GPT / Claude</text>
+  <text x="764" y="442" text-anchor="middle" font-size="28" fill="#FFCE6B">&#9888;</text>
+  <text x="980" y="440" text-anchor="middle" font-size="30" fill="#F0574A">&#10007;</text>
+  <text x="980" y="462" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" fill="#8891AE">Anthropic</text>
+  <text x="1196" y="440" text-anchor="middle" font-size="30" fill="#F0574A">&#10007;</text>
+  <text x="1410" y="439" text-anchor="middle" font-size="30" fill="#5BF0BC">&#10003;</text>
+  <text x="1410" y="462" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" font-weight="700" fill="#5BF0BC">30+ incl. Ollama</text>
+
+  <!-- Row 2: Orchestration -->
+  <text x="100" y="533" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="700" fill="#EEF0FA">Multi-agent orchestration</text>
+  <text x="548" y="534" text-anchor="middle" font-size="30" fill="#F0574A">&#10007;</text>
+  <text x="764" y="534" text-anchor="middle" font-size="30" fill="#F0574A">&#10007;</text>
+  <text x="980" y="534" text-anchor="middle" font-size="30" fill="#F0574A">&#10007;</text>
+  <text x="1196" y="534" text-anchor="middle" font-size="30" fill="#F0574A">&#10007;</text>
+  <text x="1410" y="533" text-anchor="middle" font-size="30" fill="#5BF0BC">&#10003;</text>
+  <text x="1410" y="556" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" font-weight="700" fill="#5BF0BC">7 roles + DAG</text>
+
+  <!-- Row 3: Governance -->
+  <text x="100" y="627" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="700" fill="#EEF0FA">Approval gates + audit</text>
+  <text x="548" y="628" text-anchor="middle" font-size="30" fill="#F0574A">&#10007;</text>
+  <text x="764" y="628" text-anchor="middle" font-size="30" fill="#F0574A">&#10007;</text>
+  <text x="980" y="628" text-anchor="middle" font-size="30" fill="#F0574A">&#10007;</text>
+  <text x="1196" y="630" text-anchor="middle" font-size="28" fill="#FFCE6B">&#9888;</text>
+  <text x="1196" y="652" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" fill="#8891AE">Basic</text>
+  <text x="1410" y="627" text-anchor="middle" font-size="30" fill="#5BF0BC">&#10003;</text>
+
+  <!-- Row 4: Memory -->
+  <text x="100" y="721" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="700" fill="#EEF0FA">Persistent project memory</text>
+  <text x="548" y="722" text-anchor="middle" font-size="30" fill="#F0574A">&#10007;</text>
+  <text x="764" y="724" text-anchor="middle" font-size="28" fill="#FFCE6B">&#9888;</text>
+  <text x="980" y="724" text-anchor="middle" font-size="28" fill="#FFCE6B">&#9888;</text>
+  <text x="1196" y="724" text-anchor="middle" font-size="28" fill="#FFCE6B">&#9888;</text>
+  <text x="1410" y="721" text-anchor="middle" font-size="30" fill="#5BF0BC">&#10003;</text>
+  <text x="1410" y="744" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" font-weight="700" fill="#5BF0BC">.builderforce/</text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">Others finish a line or drive one agent — only Builderforce ships the ticket with a governed workforce</text>
+</svg>

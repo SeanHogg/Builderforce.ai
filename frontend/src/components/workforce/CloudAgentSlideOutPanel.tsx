@@ -13,9 +13,16 @@ import {
 } from '@/lib/api';
 import type { PublishedAgent } from '@/lib/types';
 import { canDeleteAgent, isAgentOwner } from '@/lib/agentPermissions';
+import { useTranslations } from 'next-intl';
 import { CapabilitiesContent } from '@/components/CapabilitiesContent';
+import { useConfirm } from '@/components/ConfirmProvider';
+import PersonalitySummary from '@/components/PersonalitySummary';
+import PersonalityUsagePanel from '@/components/PersonalityUsagePanel';
+import { useAssignedRoles } from '@/lib/useAssignedRoles';
 import {
-  CloudAgentFormFields,
+  CloudAgentDetailsFields,
+  CloudAgentRuntimeFields,
+  CloudAgentPersonalityFields,
   cloudAgentFormToInput,
   inputStyle,
   labelStyle,
@@ -30,15 +37,13 @@ import {
  * follow it into any context — IDE, Workflow, on-prem or cloud.
  */
 
-export type CloudAgentPanelTab = 'details' | 'capabilities' | 'pricing' | 'performance';
+export type CloudAgentPanelTab = 'details' | 'runtime' | 'personality' | 'capabilities' | 'pricing' | 'performance';
 
-const BASE_TABS: { id: CloudAgentPanelTab; label: string }[] = [
-  { id: 'details', label: 'Details' },
-  { id: 'capabilities', label: 'Capabilities' },
-  { id: 'pricing', label: 'Pricing' },
-];
+/** Tabs shown to everyone. Details/Runtime/Personality split the old crowded
+ *  "Details" tab into three focused sections. Labels resolve via `cloudAgentForm.tab.*`. */
+const BASE_TAB_IDS: CloudAgentPanelTab[] = ['details', 'runtime', 'personality', 'capabilities', 'pricing'];
 /** Owner-only insight tab (gap [1247]) — appended only when the viewer owns the agent. */
-const OWNER_PERF_TAB: { id: CloudAgentPanelTab; label: string } = { id: 'performance', label: 'Performance' };
+const OWNER_PERF_TAB_ID: CloudAgentPanelTab = 'performance';
 
 const panelOverlayStyle: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 9998 };
 const panelDrawerStyle: React.CSSProperties = {
@@ -74,8 +79,8 @@ function formFromAgent(a: PublishedAgent): CloudAgentFormState {
     baseModel: a.base_model === 'builderforce-default' ? '' : a.base_model,
     runtimeSupport: a.runtime_support ?? 'cloud',
     preferredRuntime: (a.preferred_runtime as 'cloud' | 'host') ?? 'cloud',
-    engine: a.engine ?? 'builderforce-v2',
     runtimeSurface: a.runtime_surface ?? 'durable',
+    psychometric: a.psychometric ?? undefined,
   };
 }
 
@@ -99,10 +104,17 @@ export function CloudAgentSlideOutPanel({
   onSaved,
   onDeleted,
 }: CloudAgentSlideOutPanelProps) {
+  const t = useTranslations('cloudAgentForm');
+  const tc = useTranslations('common');
+  const confirm = useConfirm();
   const [activeTab, setActiveTab] = useState<CloudAgentPanelTab>(initialTab);
   const [form, setForm] = useState<CloudAgentFormState>(() => formFromAgent(agent));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // The workspace job-role(s) this agent is pinned to (Workforce → Roles). Shown
+  // in the header so the panel surfaces the assignment, not just its identity.
+  const assignedRoles = useAssignedRoles(agent.id);
 
   // Canonical (project-less) identity id — the scopeId for per-agent capabilities.
   const [bridgeId, setBridgeId] = useState<number | null>(null);
@@ -117,7 +129,8 @@ export function CloudAgentSlideOutPanel({
   // shared isAgentOwner rule (no prop-drilled canSeePerf) and only fetches/renders
   // the rollup for the agent's owner — the backend 404s for anyone else anyway.
   const owner = isAgentOwner(agent, tenantId);
-  const TABS = owner ? [...BASE_TABS, OWNER_PERF_TAB] : BASE_TABS;
+  const TABS: { id: CloudAgentPanelTab; label: string }[] = (owner ? [...BASE_TAB_IDS, OWNER_PERF_TAB_ID] : BASE_TAB_IDS)
+    .map((id) => ({ id, label: t(`tab.${id}`) }));
   const [perf, setPerf] = useState<AgentPerfRollup | null>(null);
   const [perfError, setPerfError] = useState('');
 
@@ -139,7 +152,7 @@ export function CloudAgentSlideOutPanel({
     setBridgeError('');
     ensureWorkforceAgentBridge(agent.id)
       .then((id) => { if (!cancelled) setBridgeId(id); })
-      .catch((e) => { if (!cancelled) setBridgeError(e instanceof Error ? e.message : 'Failed to load capabilities'); });
+      .catch((e) => { if (!cancelled) setBridgeError(e instanceof Error ? e.message : t('errLoadCapabilities')); });
     return () => { cancelled = true; };
   }, [open, agent.id]);
 
@@ -151,18 +164,18 @@ export function CloudAgentSlideOutPanel({
     setPerfError('');
     fetchAgentPerf(agent.id)
       .then((r) => { if (!cancelled) setPerf(r); })
-      .catch((e) => { if (!cancelled) setPerfError(e instanceof Error ? e.message : 'Failed to load performance'); });
+      .catch((e) => { if (!cancelled) setPerfError(e instanceof Error ? e.message : t('errLoadPerformance')); });
     return () => { cancelled = true; };
   }, [open, owner, activeTab, agent.id]);
 
   const saveDetails = useCallback(async () => {
-    if (!form.name.trim()) { setError('Name is required'); return; }
+    if (!form.name.trim()) { setError(t('errNameRequired')); return; }
     setSaving(true); setError('');
     try {
       await updateAgent(agent.id, cloudAgentFormToInput(form));
       onSaved();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setError(e instanceof Error ? e.message : t('errSaveFailed'));
     } finally {
       setSaving(false);
     }
@@ -180,34 +193,45 @@ export function CloudAgentSlideOutPanel({
       });
       onSaved();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setError(e instanceof Error ? e.message : t('errSaveFailed'));
     } finally {
       setSaving(false);
     }
   }, [agent.id, priceDollars, pricingModel, priceUnit, onSaved]);
 
   const remove = useCallback(async () => {
-    if (!confirm(`Delete agent "${agent.name}"? Its per-agent skills and personas will be cleared.`)) return;
+    if (!(await confirm(tc('deleteCloudAgentConfirm', { name: agent.name })))) return;
     setSaving(true);
     try {
       await deleteAgent(agent.id);
       onDeleted(agent.id);
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Delete failed');
+      setError(e instanceof Error ? e.message : t('errDeleteFailed'));
       setSaving(false);
     }
   }, [agent.id, agent.name, onDeleted, onClose]);
+
+  // Details/Runtime/Personality all edit one form and persist through the same
+  // save — one shared patch handler + footer keeps the three tabs identical.
+  const patchForm = useCallback((patch: Partial<CloudAgentFormState>) => setForm((f) => ({ ...f, ...patch })), []);
+  const saveFooter = (
+    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 18 }}>
+      <button type="button" onClick={saveDetails} disabled={saving || !form.name.trim()} style={btnPrimary}>
+        {saving ? t('saving') : t('save')}
+      </button>
+    </div>
+  );
 
   if (!open) return null;
 
   return (
     <>
       <div className="project-panel-overlay slide-panel-overlay" role="presentation" style={panelOverlayStyle} onClick={onClose} aria-hidden />
-      <div className="project-panel-drawer slide-panel-drawer" style={panelDrawerStyle} role="dialog" aria-label="Cloud agent">
+      <div className="project-panel-drawer slide-panel-drawer" style={panelDrawerStyle} role="dialog" aria-label={t('ariaPanel')}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0, flexWrap: 'wrap' }}>
-          <button type="button" onClick={onClose} aria-label="Close panel" style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+          <button type="button" onClick={onClose} aria-label={t('ariaClose')} style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
             <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
@@ -218,12 +242,25 @@ export function CloudAgentSlideOutPanel({
             {agent.title && agent.title !== agent.name && (
               <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{agent.title}</div>
             )}
+            {/* Assigned workspace role(s) — surfaces the roster pin right in the header. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+              <span style={{ fontSize: 11, color: 'var(--muted)' }}>{t('roleLabel')}</span>
+              {assignedRoles.length === 0 ? (
+                <span style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic' }}>{t('roleNone')}</span>
+              ) : (
+                assignedRoles.map((r) => (
+                  <span key={r.assignmentId} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>
+                    {r.icon && <span aria-hidden>{r.icon}</span>}{r.name}
+                  </span>
+                ))
+              )}
+            </div>
           </div>
           {agent.published
-            ? <span className="badge-green">PUBLISHED</span>
-            : <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 9999, background: 'var(--bg-elevated)', color: 'var(--muted)' }}>DRAFT</span>}
+            ? <span className="badge-green">{t('statusPublished')}</span>
+            : <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 9999, background: 'var(--bg-elevated)', color: 'var(--muted)' }}>{t('statusDraft')}</span>}
           {canDeleteAgent(agent) && (
-            <button type="button" onClick={remove} disabled={saving} style={{ ...btnSubtle, color: 'var(--error-text)' }}>Delete</button>
+            <button type="button" onClick={remove} disabled={saving} style={{ ...btnSubtle, color: 'var(--error-text)' }}>{tc('delete')}</button>
           )}
         </div>
 
@@ -242,11 +279,31 @@ export function CloudAgentSlideOutPanel({
 
           {activeTab === 'details' && (
             <>
-              <CloudAgentFormFields form={form} onChange={(patch) => setForm((f) => ({ ...f, ...patch }))} />
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 18 }}>
-                <button type="button" onClick={saveDetails} disabled={saving || !form.name.trim()} style={btnPrimary}>
-                  {saving ? 'Saving…' : 'Save'}
-                </button>
+              <CloudAgentDetailsFields form={form} onChange={patchForm} />
+              {saveFooter}
+            </>
+          )}
+
+          {activeTab === 'runtime' && (
+            <>
+              <CloudAgentRuntimeFields form={form} onChange={patchForm} />
+              {saveFooter}
+            </>
+          )}
+
+          {activeTab === 'personality' && (
+            <>
+              {/* At-a-glance readout (self-hides when none is set) above the editor. */}
+              <div style={{ marginBottom: 16 }}>
+                <PersonalitySummary profile={form.psychometric} />
+              </div>
+              <CloudAgentPersonalityFields form={form} onChange={patchForm} />
+              {saveFooter}
+              {/* Personality LEARNING + TRACKING (Gaps 6 & 7): which personality this
+                  agent applied to recent runs, and outcome-driven reinforcement
+                  suggestions the owner can Apply/Dismiss. */}
+              <div style={{ marginTop: 20, paddingTop: 18, borderTop: '1px solid var(--border-subtle)' }}>
+                <PersonalityUsagePanel agentId={agent.id} canApply={owner} onApplied={onSaved} />
               </div>
             </>
           )}
@@ -255,11 +312,11 @@ export function CloudAgentSlideOutPanel({
             bridgeError ? (
               <div style={{ fontSize: 13, color: 'var(--error-text)', padding: 16 }}>{bridgeError}</div>
             ) : bridgeId == null ? (
-              <div style={{ color: 'var(--muted)', fontSize: 13, padding: 16 }}>Loading capabilities…</div>
+              <div style={{ color: 'var(--muted)', fontSize: 13, padding: 16 }}>{t('loadingCapabilities')}</div>
             ) : (
               <>
                 <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 0, marginBottom: 14 }}>
-                  Skills and personas assigned here travel with this agent everywhere it runs — IDE, Workflow, on-prem or cloud — independent of any project.
+                  {t('capabilitiesHint')}
                 </p>
                 <CapabilitiesContent
                   scope="agent"
@@ -274,31 +331,31 @@ export function CloudAgentSlideOutPanel({
           {activeTab === 'pricing' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <p style={{ fontSize: 13, color: 'var(--muted)', margin: 0 }}>
-                Set a price to publish <strong>{agent.name}</strong> to the marketplace. Use 0 to list it for free.
+                {t.rich('pricingIntro', { name: agent.name, strong: (chunks) => <strong>{chunks}</strong> })}
               </p>
               <div>
-                <label style={labelStyle}>Pricing model</label>
+                <label style={labelStyle}>{t('pricingModel')}</label>
                 <Select style={inputStyle} value={pricingModel} onChange={(e) => setPricingModel(e.target.value as AgentPricingModel)}>
-                  <option value="flat_fee">Flat fee</option>
-                  <option value="consumption">Consumption (per unit)</option>
+                  <option value="flat_fee">{t('pricingFlatFee')}</option>
+                  <option value="consumption">{t('pricingConsumption')}</option>
                 </Select>
               </div>
               <div>
-                <label style={labelStyle}>Price (USD)</label>
+                <label style={labelStyle}>{t('priceUsd')}</label>
                 <input style={inputStyle} type="number" min="0" step="0.01" value={priceDollars} onChange={(e) => setPriceDollars(e.target.value)} />
               </div>
               {pricingModel === 'consumption' && (
                 <div>
-                  <label style={labelStyle}>Per unit</label>
-                  <input style={inputStyle} value={priceUnit} onChange={(e) => setPriceUnit(e.target.value)} placeholder="request, 1k tokens, task…" />
+                  <label style={labelStyle}>{t('perUnit')}</label>
+                  <input style={inputStyle} value={priceUnit} onChange={(e) => setPriceUnit(e.target.value)} placeholder={t('perUnitPlaceholder')} />
                 </div>
               )}
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 {agent.published && (
-                  <button type="button" onClick={() => savePricing(false)} disabled={saving} style={btnSubtle}>Unpublish</button>
+                  <button type="button" onClick={() => savePricing(false)} disabled={saving} style={btnSubtle}>{t('unpublish')}</button>
                 )}
                 <button type="button" onClick={() => savePricing(true)} disabled={saving} style={btnPrimary}>
-                  {saving ? 'Saving…' : agent.published ? 'Save price' : 'Publish'}
+                  {saving ? t('saving') : agent.published ? t('savePrice') : t('publish')}
                 </button>
               </div>
             </div>
@@ -308,23 +365,23 @@ export function CloudAgentSlideOutPanel({
             perfError ? (
               <div style={{ fontSize: 13, color: 'var(--error-text)', padding: 16 }}>{perfError}</div>
             ) : perf == null ? (
-              <div style={{ color: 'var(--muted)', fontSize: 13, padding: 16 }}>Loading performance…</div>
+              <div style={{ color: 'var(--muted)', fontSize: 13, padding: 16 }}>{t('loadingPerformance')}</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
                 <p style={{ fontSize: 12, color: 'var(--muted)', margin: 0 }}>
-                  How <strong>{agent.name}</strong> is performing for the {perf.hiredTenants} workspace{perf.hiredTenants === 1 ? '' : 's'} currently hiring it. Visible only to you, the owner.
+                  {t.rich('performanceIntro', { name: agent.name, count: perf.hiredTenants, strong: (chunks) => <strong>{chunks}</strong> })}
                 </p>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
-                  <PerfStat label="Success rate" value={perf.successRate == null ? '—' : `${Math.round(perf.successRate * 100)}%`} />
-                  <PerfStat label="Runs" value={`${perf.totalRuns}`} sub={`${perf.completedRuns} ok / ${perf.failedRuns} failed`} />
-                  <PerfStat label="Avg latency" value={perf.avgLatencyMs == null ? '—' : formatLatency(perf.avgLatencyMs)} />
-                  <PerfStat label="Avg rating" value={perf.avgRating == null ? '—' : `${perf.avgRating.toFixed(1)}★`} sub={`${perf.ratingCount} rating${perf.ratingCount === 1 ? '' : 's'}`} />
+                  <PerfStat label={t('perfSuccessRate')} value={perf.successRate == null ? '—' : `${Math.round(perf.successRate * 100)}%`} />
+                  <PerfStat label={t('perfRuns')} value={`${perf.totalRuns}`} sub={t('perfRunsSub', { ok: perf.completedRuns, failed: perf.failedRuns })} />
+                  <PerfStat label={t('perfAvgLatency')} value={perf.avgLatencyMs == null ? '—' : formatLatency(perf.avgLatencyMs)} />
+                  <PerfStat label={t('perfAvgRating')} value={perf.avgRating == null ? '—' : `${perf.avgRating.toFixed(1)}★`} sub={t('perfRatingSub', { count: perf.ratingCount })} />
                 </div>
 
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-strong)', marginBottom: 8 }}>Buyer feedback</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-strong)', marginBottom: 8 }}>{t('buyerFeedback')}</div>
                   {perf.feedback.length === 0 ? (
-                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>No feedback yet from buyers.</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('noFeedback')}</div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {perf.feedback.map((f, i) => (

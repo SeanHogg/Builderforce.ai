@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
+import { useConfirm } from '@/components/ConfirmProvider';
 import Link from 'next/link';
 import { useAuth } from '@/lib/AuthContext';
 import { contrastText } from '@/lib/contrastText';
@@ -13,49 +15,67 @@ import {
   type ArtifactStats,
   type PublicPersona,
 } from '@/lib/builderforceApi';
-import { BUILTIN_PERSONAS, userPersonasKey, type Persona, type UserPersona } from '@/lib/marketplaceData';
+import { BUILTIN_PERSONAS, type Persona, type UserPersona } from '@/lib/marketplaceData';
 import ArtifactAssigner from '@/components/ArtifactAssigner';
 import { CatalogInsightsBar, type CatalogInsightsItem } from '@/components/CatalogInsightsBar';
 import PsychometricEditor from '@/components/PsychometricEditor';
 import type { PsychometricProfile } from '@/lib/psychometric';
 import PageContainer from '@/components/PageContainer';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { PersonaAssignmentsContent } from '@/components/PersonaAssignmentsContent';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 
-function loadUserPersonas(tenantId: string): UserPersona[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    return JSON.parse(localStorage.getItem(userPersonasKey(tenantId)) ?? '[]');
-  } catch {
-    return [];
-  }
+/** Map a server-owned persona (from GET /api/personas/mine) into the flat display
+ *  shape the "My Personas" tab renders. `shared` = the persona is published (public). */
+function serverToUserPersona(p: PublicPersona): UserPersona {
+  const b = p.persona ?? {};
+  return {
+    id: p.id,
+    name: p.name,
+    slug: p.slug,
+    description: p.description ?? '',
+    voice: b.voice ?? '',
+    perspective: b.perspective ?? '',
+    decisionStyle: b.decisionStyle ?? '',
+    outputPrefix: b.outputPrefix ?? '',
+    capabilities: b.capabilities ?? [],
+    tags: p.tags ?? [],
+    shared: p.visibility === 'public',
+    image: b.image,
+    likes: p.likeCount ?? 0,
+    downloads: p.installCount ?? 0,
+    createdAt: p.updatedAt ?? new Date().toISOString(),
+    psychometric: p.psychometric ?? undefined,
+  };
 }
 
-function saveUserPersonas(tenantId: string, personas: UserPersona[]) {
-  localStorage.setItem(userPersonasKey(tenantId), JSON.stringify(personas));
-}
-
-/** Map a server-published persona into the marketplace display shape (`Persona`). */
+/** Map a server-published persona into the marketplace display shape (`Persona`).
+ *  The behaviour fields live NESTED under `persona` (server contract), not flat. */
 function publicToPersona(p: PublicPersona): Persona {
+  const b = p.persona ?? {};
   return {
     name: p.slug || p.name,
     description: p.description ?? '',
-    voice: p.voice ?? '—',
-    perspective: p.perspective ?? '—',
-    decisionStyle: p.decisionStyle ?? '—',
-    outputPrefix: p.outputPrefix ?? '',
-    capabilities: p.capabilities ?? [],
+    voice: b.voice || '—',
+    perspective: b.perspective || '—',
+    decisionStyle: b.decisionStyle || '—',
+    outputPrefix: b.outputPrefix ?? '',
+    capabilities: b.capabilities ?? [],
     source: 'user-global',
     tags: p.tags ?? [],
-    author: p.author ?? 'Community',
-    image: p.image,
-    likes: p.likes,
-    downloads: p.downloads,
+    author: p.authorName ?? 'Community',
+    image: b.image,
+    likes: p.likeCount,
+    downloads: p.installCount,
+    psychometric: p.psychometric ?? undefined,
   };
 }
 
 export default function PersonasPage() {
+  const t = useTranslations('personasPage');
+  const tc = useTranslations('common');
+  const confirm = useConfirm();
   const { tenant } = useAuth();
   const tenantId = tenant?.id ?? '';
   const tenantNum = Number(tenantId);
@@ -93,13 +113,17 @@ export default function PersonasPage() {
     setLoading(true);
     setError('');
     try {
-      const [all, agentHostList, pub] = await Promise.all([
+      const [all, agentHostList, pub, mine] = await Promise.all([
         tenantNum ? artifactAssignments.list('tenant', tenantNum, 'persona').catch(() => []) : [],
         agentHosts.list().catch(() => []),
         // Public registry is best-effort: [] on 404/older backend so builtins still render.
         personasApi.listPublic().catch(() => [] as PublicPersona[]),
+        // My Personas are server-backed (private marketplace_personas rows) — durable +
+        // cross-device, and they reach execution via the same capability path.
+        personasApi.listMine().catch(() => [] as PublicPersona[]),
       ]);
       setAssigned(all);
+      setUserPersonas(mine.map(serverToUserPersona));
       setHasAgentHosts(agentHostList.length > 0);
       setInstalledSlugs(new Set(all.map((a) => a.artifactSlug)));
       // Server personas first, then builtins not already present (dedup by slug/name).
@@ -119,7 +143,6 @@ export default function PersonasPage() {
   }, [tenantNum]);
 
   useEffect(() => {
-    setUserPersonas(loadUserPersonas(tenantId));
     load();
   }, [tenantId, load]);
 
@@ -164,41 +187,45 @@ export default function PersonasPage() {
     }
   };
 
-  const savePersona = () => {
+  const savePersona = async () => {
     const name = createForm.name.trim();
     if (!name) return;
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    const persona: UserPersona = {
-      id: crypto.randomUUID(),
-      name,
-      slug,
-      description: createForm.description.trim(),
-      voice: createForm.voice.trim() || 'neutral and helpful',
-      perspective: createForm.perspective.trim() || 'balanced and pragmatic',
-      decisionStyle: createForm.decisionStyle.trim() || 'collaborative',
-      outputPrefix: createForm.outputPrefix.trim() || `${slug.toUpperCase()}:`,
-      capabilities: createForm.capabilities.split(',').map((c) => c.trim()).filter(Boolean),
-      tags: createForm.tags.split(',').map((t) => t.trim()).filter(Boolean),
-      shared: false,
-      image: createForm.image.trim() || undefined,
-      likes: 0,
-      downloads: 0,
-      createdAt: new Date().toISOString(),
-      psychometric: createPsychometric,
-    };
-    setUserPersonas((prev) => [...prev, persona]);
-    saveUserPersonas(tenantId, [...userPersonas, persona]);
-    setCreateOpen(false);
-    setCreateForm({ name: '', description: '', voice: '', perspective: '', decisionStyle: '', outputPrefix: '', capabilities: '', tags: '', image: '' });
-    setCreatePsychometric(undefined);
-    setTab('my-personas');
+    setError('');
+    try {
+      await personasApi.create({
+        name,
+        description: createForm.description.trim() || undefined,
+        tags: createForm.tags.split(',').map((t) => t.trim()).filter(Boolean),
+        persona: {
+          voice: createForm.voice.trim() || 'neutral and helpful',
+          perspective: createForm.perspective.trim() || 'balanced and pragmatic',
+          decisionStyle: createForm.decisionStyle.trim() || 'collaborative',
+          outputPrefix: createForm.outputPrefix.trim() || `${slug.toUpperCase()}:`,
+          capabilities: createForm.capabilities.split(',').map((c) => c.trim()).filter(Boolean),
+          image: createForm.image.trim() || undefined,
+        },
+        psychometric: createPsychometric,
+      });
+      setCreateOpen(false);
+      setCreateForm({ name: '', description: '', voice: '', perspective: '', decisionStyle: '', outputPrefix: '', capabilities: '', tags: '', image: '' });
+      setCreatePsychometric(undefined);
+      setTab('my-personas');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('createFailed'));
+    }
   };
 
-  const deleteUserPersona = (id: string) => {
-    if (!confirm('Delete this persona?')) return;
-    const next = userPersonas.filter((p) => p.id !== id);
-    setUserPersonas(next);
-    saveUserPersonas(tenantId, next);
+  const deleteUserPersona = async (id: string) => {
+    if (!(await confirm(t('confirmDelete')))) return;
+    setError('');
+    try {
+      await personasApi.remove(id);
+      setUserPersonas((prev) => prev.filter((p) => p.id !== id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('deleteFailed'));
+    }
   };
 
   /** Publish a local draft persona to the public server registry (POST /api/personas),
@@ -209,24 +236,13 @@ export default function PersonasPage() {
     setPublishingId(p.id);
     setError('');
     try {
-      await personasApi.publish({
-        name: p.name,
-        slug: p.slug,
-        description: p.description,
-        voice: p.voice,
-        perspective: p.perspective,
-        decisionStyle: p.decisionStyle,
-        outputPrefix: p.outputPrefix,
-        capabilities: p.capabilities,
-        tags: p.tags,
-        image: p.image,
-      });
-      const next = userPersonas.map((u) => (u.id === p.id ? { ...u, shared: true } : u));
-      setUserPersonas(next);
-      saveUserPersonas(tenantId, next);
+      // My Personas are already server rows — publishing just flips visibility to
+      // public (PATCH), rather than creating a duplicate.
+      await personasApi.update(p.id, { visibility: 'public' });
+      setUserPersonas((prev) => prev.map((u) => (u.id === p.id ? { ...u, shared: true } : u)));
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Publish failed');
+      setError(e instanceof Error ? e.message : t('publishFailed'));
     } finally {
       setPublishingId(null);
     }
@@ -254,11 +270,11 @@ export default function PersonasPage() {
 
   const sourceBadge = (source: Persona['source']) => {
     const map: Record<string, { label: string; color: string }> = {
-      builtin: { label: 'Built-in', color: 'var(--accent,#6366f1)' },
-      agenthub: { label: 'AgentHostHub', color: '#22c55e' },
-      'project-local': { label: 'Project', color: '#f59e0b' },
-      'user-global': { label: 'User', color: '#06b6d4' },
-      'agentlink-assigned': { label: 'Assigned', color: '#ec4899' },
+      builtin: { label: t('sourceBuiltin'), color: 'var(--accent,#6366f1)' },
+      agenthub: { label: t('sourceAgenthub'), color: '#22c55e' },
+      'project-local': { label: t('sourceProject'), color: '#f59e0b' },
+      'user-global': { label: t('sourceUser'), color: '#06b6d4' },
+      'agentlink-assigned': { label: t('sourceAssigned'), color: '#ec4899' },
     };
     const m = map[source] ?? { label: source, color: 'var(--muted)' };
     return <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: m.color, color: contrastText(m.color), textTransform: 'uppercase' }}>{m.label}</span>;
@@ -268,13 +284,13 @@ export default function PersonasPage() {
     <PageContainer width="readable">
       <div className="page-header" style={{ marginBottom: 24 }}>
         <div>
-          <h1 className="page-title" style={{ margin: 0 }}>Personas</h1>
+          <h1 className="page-title" style={{ margin: 0 }}>{t('title')}</h1>
           <p className="page-sub" style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>
-            Agent personas shape identity, tone, and decision-making for every sub-agent in a workflow
+            {t('subtitle')}
           </p>
         </div>
         <button type="button" className="btn btn-primary" onClick={() => setCreateOpen(true)}>
-          + New persona
+          {t('newPersona')}
         </button>
       </div>
 
@@ -284,13 +300,13 @@ export default function PersonasPage() {
 
       <div style={{ display: 'flex', gap: 4, marginBottom: 20, alignItems: 'center' }}>
         <button type="button" className={`btn ${tab === 'assigned' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('assigned')}>
-          Assigned ({assigned.length})
+          {t('tabAssigned', { n: assigned.length })}
         </button>
         <button type="button" className={`btn ${tab === 'marketplace' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('marketplace')}>
-          Marketplace ({marketplacePersonas.length})
+          {t('tabMarketplace', { n: marketplacePersonas.length })}
         </button>
         <button type="button" className={`btn ${tab === 'my-personas' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('my-personas')}>
-          My Personas ({userPersonas.length})
+          {t('tabMyPersonas', { n: userPersonas.length })}
         </button>
         {tab !== 'assigned' && (
           <div style={{ marginLeft: 'auto' }}>
@@ -300,23 +316,23 @@ export default function PersonasPage() {
       </div>
 
       {loading && tab !== 'assigned' ? (
-        <div style={{ color: 'var(--muted)', fontSize: 13 }}>Loading…</div>
+        <div style={{ color: 'var(--muted)', fontSize: 13 }}>{t('loading')}</div>
       ) : tab === 'assigned' ? (
         tenantNum ? (
           <PersonaAssignmentsContent scope="tenant" scopeId={tenantNum} />
         ) : (
           <div className="empty-state">
             <div className="empty-state-icon">🔗</div>
-            <div className="empty-state-title">No tenant selected</div>
+            <div className="empty-state-title">{t('noTenant')}</div>
           </div>
         )
       ) : tab === 'my-personas' ? (
         userPersonas.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-icon">🎭</div>
-            <div className="empty-state-title">No custom personas yet</div>
-            <div className="empty-state-sub">Create your own persona to shape how your agents think and communicate</div>
-            <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setCreateOpen(true)}>New persona</button>
+            <div className="empty-state-title">{t('noCustomTitle')}</div>
+            <div className="empty-state-sub">{t('noCustomSub')}</div>
+            <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setCreateOpen(true)}>{t('newPersonaShort')}</button>
           </div>
         ) : viewMode === 'card' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
@@ -333,7 +349,7 @@ export default function PersonasPage() {
                           {p.tags.slice(0, 3).map((t) => (
                             <span key={t} className="badge badge-gray">{t}</span>
                           ))}
-                          {p.shared && <span className="badge badge-green">Shared</span>}
+                          {p.shared && <span className="badge badge-green">{t('shared')}</span>}
                         </div>
                       </div>
                     </div>
@@ -341,9 +357,9 @@ export default function PersonasPage() {
                   {p.description && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, margin: '8px 0' }}>{p.description}</div>}
                   <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                     <button type="button" className="btn btn-primary btn-sm" disabled={publishingId === p.id} onClick={() => publishPersona(p)}>
-                      {publishingId === p.id ? 'Publishing…' : p.shared ? 'Re-publish' : 'Publish to Registry'}
+                      {publishingId === p.id ? t('publishing') : p.shared ? t('rePublish') : t('publishToRegistry')}
                     </button>
-                    <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteUserPersona(p.id)}>Delete</button>
+                    <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteUserPersona(p.id)}>{tc('delete')}</button>
                     <ArtifactAssigner artifactType="persona" artifactSlug={p.slug} artifactName={p.name} />
                   </div>
                 </div>
@@ -355,10 +371,10 @@ export default function PersonasPage() {
             <table style={tableStyle}>
               <thead>
                 <tr style={theadRowStyle}>
-                  <th style={thStyle}>Name</th>
-                  <th style={thStyle}>Description</th>
-                  <th style={thStyle}>Tags</th>
-                  <th style={thStyle}>Actions</th>
+                  <th style={thStyle}>{t('colName')}</th>
+                  <th style={thStyle}>{t('colDescription')}</th>
+                  <th style={thStyle}>{t('colTags')}</th>
+                  <th style={thStyle}>{t('colActions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -366,7 +382,7 @@ export default function PersonasPage() {
                   <tr key={p.id} style={trStyle}>
                     <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: 'nowrap' }}>
                       <span style={{ marginRight: 6 }}>🎭</span>{p.name}
-                      {p.shared && <span className="badge badge-green" style={{ marginLeft: 6 }}>Shared</span>}
+                      {p.shared && <span className="badge badge-green" style={{ marginLeft: 6 }}>{t('shared')}</span>}
                     </td>
                     <td style={tdMutedStyle}>{p.description || '—'}</td>
                     <td style={tdMutedStyle}>
@@ -376,8 +392,8 @@ export default function PersonasPage() {
                     </td>
                     <td style={tdStyle}>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <button type="button" className="btn btn-primary btn-sm" disabled={publishingId === p.id} onClick={() => publishPersona(p)}>{publishingId === p.id ? 'Publishing…' : p.shared ? 'Re-publish' : 'Publish'}</button>
-                        <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteUserPersona(p.id)}>Delete</button>
+                        <button type="button" className="btn btn-primary btn-sm" disabled={publishingId === p.id} onClick={() => publishPersona(p)}>{publishingId === p.id ? t('publishing') : p.shared ? t('rePublish') : t('publishShort')}</button>
+                        <button type="button" className="btn btn-danger btn-sm" onClick={() => deleteUserPersona(p.id)}>{tc('delete')}</button>
                         <ArtifactAssigner artifactType="persona" artifactSlug={p.slug} artifactName={p.name} />
                       </div>
                     </td>
@@ -395,13 +411,13 @@ export default function PersonasPage() {
               type="search"
               className="input"
               style={{ maxWidth: 320 }}
-              placeholder="Search personas…"
+              placeholder={t('searchPlaceholder')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
           {filteredMarketplace.length === 0 ? (
-            <div className="empty-state"><div className="empty-state-title">No personas found</div></div>
+            <div className="empty-state"><div className="empty-state-title">{t('noPersonasFound')}</div></div>
           ) : viewMode === 'card' ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
               {filteredMarketplace.map((p) => {
@@ -426,45 +442,45 @@ export default function PersonasPage() {
                       </div>
                       {p.description && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, margin: '8px 0' }}>{p.description}</div>}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: 'var(--muted)', margin: '4px 0 8px' }}>
-                        <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? 'Unlike' : 'Like'} onClick={(e) => { e.stopPropagation(); toggleLike(p.name); }}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
-                        <span title="Installs">⬇️ {stat.installs}</span>
-                        {p.author && <span>by {p.author}</span>}
+                        <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={(e) => { e.stopPropagation(); toggleLike(p.name); }}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
+                        <span title={t('installsTitle')}>⬇️ {stat.installs}</span>
+                        {p.author && <span>{t('byAuthor', { author: p.author })}</span>}
                       </div>
                       {isOpen && (
                         <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 12, display: 'grid', gap: 10 }}>
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
                             <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 8 }}>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>Voice</div>
+                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>{t('voiceLabel')}</div>
                               <div style={{ fontSize: 12, color: 'var(--text)' }}>{p.voice}</div>
                             </div>
                             <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 8 }}>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>Perspective</div>
+                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>{t('perspectiveLabel')}</div>
                               <div style={{ fontSize: 12, color: 'var(--text)' }}>{p.perspective}</div>
                             </div>
                             <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 8 }}>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>Decision Style</div>
+                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 3 }}>{t('decisionStyleLabel')}</div>
                               <div style={{ fontSize: 12, color: 'var(--text)' }}>{p.decisionStyle}</div>
                             </div>
                           </div>
                           <div>
-                            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 4 }}>Capabilities</div>
+                            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 4 }}>{t('capabilitiesLabel')}</div>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>{p.capabilities.map((c) => <span key={c} className="badge badge-gray">{c}</span>)}</div>
                           </div>
-                          <div style={{ fontSize: 12, color: 'var(--muted)' }}>Output prefix: <code style={{ background: 'var(--surface-2)', padding: '1px 6px', borderRadius: 4, fontSize: 11 }}>{p.outputPrefix}</code></div>
+                          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t('outputPrefixLabel')} <code style={{ background: 'var(--surface-2)', padding: '1px 6px', borderRadius: 4, fontSize: 11 }}>{p.outputPrefix}</code></div>
                         </div>
                       )}
                     </div>
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '0 0 4px' }} onClick={(e) => e.stopPropagation()}>
                       {installed ? (
                         <>
-                          <button type="button" className="btn btn-danger btn-sm" onClick={() => unassignPersona(p.name)}>Uninstall</button>
+                          <button type="button" className="btn btn-danger btn-sm" onClick={() => unassignPersona(p.name)}>{t('uninstall')}</button>
                           <ArtifactAssigner artifactType="persona" artifactSlug={p.name} artifactName={p.name} />
                         </>
                       ) : (
                         <>
-                          <button type="button" className="btn btn-primary btn-sm" onClick={() => assignPersona(p.name)}>Install</button>
+                          <button type="button" className="btn btn-primary btn-sm" onClick={() => assignPersona(p.name)}>{t('install')}</button>
                           <ArtifactAssigner artifactType="persona" artifactSlug={p.name} artifactName={p.name} />
-                          <Link href={`/personas/${encodeURIComponent(p.name)}`} className="btn btn-secondary btn-sm">View</Link>
+                          <Link href={`/personas/${encodeURIComponent(p.name)}`} className="btn btn-secondary btn-sm">{tc('view')}</Link>
                         </>
                       )}
                     </div>
@@ -477,11 +493,11 @@ export default function PersonasPage() {
               <table style={tableStyle}>
                 <thead>
                   <tr style={theadRowStyle}>
-                    <th style={thStyle}>Name</th>
-                    <th style={thStyle}>Description</th>
-                    <th style={thStyle}>Source / Tags</th>
-                    <th style={thStyle}>Stats</th>
-                    <th style={thStyle}>Actions</th>
+                    <th style={thStyle}>{t('colName')}</th>
+                    <th style={thStyle}>{t('colDescription')}</th>
+                    <th style={thStyle}>{t('colSourceTags')}</th>
+                    <th style={thStyle}>{t('colStats')}</th>
+                    <th style={thStyle}>{t('colActions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -501,21 +517,21 @@ export default function PersonasPage() {
                           </div>
                         </td>
                         <td style={{ ...tdMutedStyle, whiteSpace: 'nowrap' }}>
-                          <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? 'Unlike' : 'Like'} onClick={() => toggleLike(p.name)}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
+                          <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={() => toggleLike(p.name)}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
                           <span style={{ marginLeft: 10, fontSize: 11 }}>⬇️ {stat.installs}</span>
                         </td>
                         <td style={tdStyle}>
                           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                             {installed ? (
                               <>
-                                <button type="button" className="btn btn-danger btn-sm" onClick={() => unassignPersona(p.name)}>Uninstall</button>
+                                <button type="button" className="btn btn-danger btn-sm" onClick={() => unassignPersona(p.name)}>{t('uninstall')}</button>
                                 <ArtifactAssigner artifactType="persona" artifactSlug={p.name} artifactName={p.name} />
                               </>
                             ) : (
                               <>
-                                <button type="button" className="btn btn-primary btn-sm" onClick={() => assignPersona(p.name)}>Install</button>
+                                <button type="button" className="btn btn-primary btn-sm" onClick={() => assignPersona(p.name)}>{t('install')}</button>
                                 <ArtifactAssigner artifactType="persona" artifactSlug={p.name} artifactName={p.name} />
-                                <Link href={`/personas/${encodeURIComponent(p.name)}`} className="btn btn-secondary btn-sm">View</Link>
+                                <Link href={`/personas/${encodeURIComponent(p.name)}`} className="btn btn-secondary btn-sm">{tc('view')}</Link>
                               </>
                             )}
                           </div>
@@ -530,61 +546,53 @@ export default function PersonasPage() {
         </>
       )}
 
-      {createOpen && (
-        <div className="modal-overlay" onClick={() => setCreateOpen(false)}>
-          <div className="card" style={{ maxWidth: 540, width: '100%', padding: 24 }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div className="modal-title">New persona</div>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setCreateOpen(false)}>✕</button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <SlideOutPanel open={createOpen} onClose={() => setCreateOpen(false)} title={t('newPersonaShort')} width="min(560px, 96vw)">
+        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
-                <label className="label">Name *</label>
-                <input className="input" placeholder="e.g. security-auditor" value={createForm.name} onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))} />
+                <label className="label">{t('formName')}</label>
+                <input className="input" placeholder={t('formNamePlaceholder')} value={createForm.name} onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))} />
               </div>
               <div>
-                <label className="label">Description</label>
-                <textarea className="input" rows={2} placeholder="What does this persona do?" value={createForm.description} onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))} />
+                <label className="label">{t('formDescription')}</label>
+                <textarea className="input" rows={2} placeholder={t('formDescPlaceholder')} value={createForm.description} onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))} />
               </div>
               <div style={{ display: 'flex', gap: 12 }}>
                 <div style={{ flex: 1 }}>
-                  <label className="label">Voice</label>
-                  <input className="input" placeholder="e.g. cautious and thorough" value={createForm.voice} onChange={(e) => setCreateForm((f) => ({ ...f, voice: e.target.value }))} />
+                  <label className="label">{t('formVoice')}</label>
+                  <input className="input" placeholder={t('formVoicePlaceholder')} value={createForm.voice} onChange={(e) => setCreateForm((f) => ({ ...f, voice: e.target.value }))} />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label className="label">Output Prefix</label>
-                  <input className="input" placeholder="e.g. SECURITY:" value={createForm.outputPrefix} onChange={(e) => setCreateForm((f) => ({ ...f, outputPrefix: e.target.value }))} />
+                  <label className="label">{t('formOutputPrefix')}</label>
+                  <input className="input" placeholder={t('formOutputPrefixPlaceholder')} value={createForm.outputPrefix} onChange={(e) => setCreateForm((f) => ({ ...f, outputPrefix: e.target.value }))} />
                 </div>
               </div>
               <div>
-                <label className="label">Perspective</label>
-                <input className="input" placeholder="How this persona views the world" value={createForm.perspective} onChange={(e) => setCreateForm((f) => ({ ...f, perspective: e.target.value }))} />
+                <label className="label">{t('formPerspective')}</label>
+                <input className="input" placeholder={t('formPerspectivePlaceholder')} value={createForm.perspective} onChange={(e) => setCreateForm((f) => ({ ...f, perspective: e.target.value }))} />
               </div>
               <div>
-                <label className="label">Decision Style</label>
-                <input className="input" placeholder="How this persona makes decisions" value={createForm.decisionStyle} onChange={(e) => setCreateForm((f) => ({ ...f, decisionStyle: e.target.value }))} />
+                <label className="label">{t('formDecisionStyle')}</label>
+                <input className="input" placeholder={t('formDecisionStylePlaceholder')} value={createForm.decisionStyle} onChange={(e) => setCreateForm((f) => ({ ...f, decisionStyle: e.target.value }))} />
               </div>
               <div>
-                <label className="label">Capabilities (comma-separated)</label>
-                <input className="input" placeholder="e.g. Vulnerability scanning, Threat modeling" value={createForm.capabilities} onChange={(e) => setCreateForm((f) => ({ ...f, capabilities: e.target.value }))} />
+                <label className="label">{t('formCapabilities')}</label>
+                <input className="input" placeholder={t('formCapabilitiesPlaceholder')} value={createForm.capabilities} onChange={(e) => setCreateForm((f) => ({ ...f, capabilities: e.target.value }))} />
               </div>
               <div>
-                <label className="label">Tags (comma-separated)</label>
-                <input className="input" placeholder="e.g. security, compliance" value={createForm.tags} onChange={(e) => setCreateForm((f) => ({ ...f, tags: e.target.value }))} />
+                <label className="label">{t('formTags')}</label>
+                <input className="input" placeholder={t('formTagsPlaceholder')} value={createForm.tags} onChange={(e) => setCreateForm((f) => ({ ...f, tags: e.target.value }))} />
               </div>
               <div>
-                <label className="label">Cover Image URL</label>
+                <label className="label">{t('formCoverImage')}</label>
                 <input className="input" placeholder="https://example.com/image.jpg" value={createForm.image} onChange={(e) => setCreateForm((f) => ({ ...f, image: e.target.value }))} />
               </div>
               <PsychometricEditor value={createPsychometric} onChange={setCreatePsychometric} />
-            </div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setCreateOpen(false)}>Cancel</button>
-              <button type="button" className="btn btn-primary" onClick={savePersona} disabled={!createForm.name.trim()}>Save Persona</button>
-            </div>
-          </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setCreateOpen(false)}>{t('cancel')}</button>
+                <button type="button" className="btn btn-primary" onClick={savePersona} disabled={!createForm.name.trim()}>{t('savePersona')}</button>
+              </div>
         </div>
-      )}
+      </SlideOutPanel>
     </PageContainer>
   );
 }

@@ -12,6 +12,8 @@ Run a thought experiment. Walk the org chart of any technology organization and 
 
 Builderforce.ai starts from a different place. Because every action — human or agent — is instrumented, costed, and attributed, every role's view is a *projection of one source of truth* rather than a separate report someone maintains. Here is what that means, role by role.
 
+![Hub-and-lens diagram: one instrumented source of truth at the center, with spokes to a distinct operating-picture lens for each role — CEO innovation throughput, CTO DORA and AI effectiveness, CFO cost-per-outcome, PMO portfolio rollup, CISO immutable audit trail, and managers' blended human-plus-agent board — governed by role-based access](/blog/role-operating-picture.svg)
+
 ## The CEO: is innovation working?
 
 The CEO doesn't want a burndown chart; they want to know whether the organization is converting ideas into shipped value and what the whole AI investment returns. With idea → validated → in-build → shipped → measured tracked as a funnel, and cost attached to each initiative, the headline view is real: *we ran 34 initiatives this quarter, spent X, Y% of ideas reached production, and lead time fell 60%.* That is innovation throughput, not vanity metrics.

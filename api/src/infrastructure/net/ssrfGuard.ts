@@ -35,23 +35,39 @@ export function isBlockedIpv4(host: string): boolean {
   );
 }
 
+/** Reject an IPv6 literal in a loopback / link-local / unique-local / IPv4-mapped
+ *  private range. Input should be lower-cased + de-bracketed. Returns false for a
+ *  non-matching / non-IPv6 string. */
+export function isBlockedIpv6(host: string): boolean {
+  return (
+    host === '::1' || host === '::' ||
+    host.startsWith('fe80:') ||           // link-local
+    host.startsWith('fc') || host.startsWith('fd') || // fc00::/7 unique-local
+    host.startsWith('::ffff:127.') ||     // IPv4-mapped loopback
+    host.startsWith('::ffff:10.') || host.startsWith('::ffff:192.168.') ||
+    host.startsWith('::ffff:169.254.')    // IPv4-mapped link-local / metadata
+  );
+}
+
 /** True if a (already lower-cased, de-bracketed) host is an internal/loopback/
  *  private/metadata target that must never be fetched server-side. */
 export function isBlockedHost(host: string): boolean {
   const blockedNames = new Set(['localhost', 'metadata.google.internal']);
   const blockedSuffixes = ['.local', '.internal', '.lan', '.localhost'];
-  const isBlockedIpv6 =
-    host === '::1' || host === '::' ||
-    host.startsWith('fe80:') ||           // link-local
-    host.startsWith('fc') || host.startsWith('fd') || // fc00::/7 unique-local
-    host.startsWith('::ffff:127.') ||     // IPv4-mapped loopback
-    host.startsWith('::ffff:10.') || host.startsWith('::ffff:192.168.');
   return (
     blockedNames.has(host) ||
     blockedSuffixes.some((s) => host.endsWith(s)) ||
     isBlockedIpv4(host) ||
-    isBlockedIpv6
+    isBlockedIpv6(host)
   );
+}
+
+/** Thrown when a URL/host resolves (literally or via DNS) to a blocked address. */
+export class BlockedUrlError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BlockedUrlError';
+  }
 }
 
 /**
@@ -80,3 +96,64 @@ export function assertSafeUrl(rawUrl: string, opts: { allowHttp?: boolean } = {}
   }
   return u;
 }
+
+/**
+ * DNS-rebinding guard (best-effort). Closes the residual documented above: a
+ * PUBLIC hostname that DNS-resolves to a PRIVATE IP passes {@link assertSafeUrl}
+ * (which only sees the literal name) but must never be fetched. The Workers
+ * runtime doesn't expose fetch-time IP pinning, so we resolve the name OURSELVES
+ * over DNS-over-HTTPS (Cloudflare `dns-query`, JSON), then run the same
+ * {@link isBlockedIpv4}/{@link isBlockedIpv6} range checks on every answer.
+ *
+ * FAILS OPEN by design: a DoH lookup that errors/times out does NOT block the
+ * request — {@link assertSafeUrl} already rejects literal private IPs and internal
+ * names, so this is a defence-in-depth layer, not the primary guard. It throws
+ * {@link BlockedUrlError} ONLY when it positively resolves a private address.
+ *
+ * @throws {BlockedUrlError} when any resolved A/AAAA record is a private/blocked IP.
+ */
+export async function resolveAndAssertPublic(hostname: string): Promise<void> {
+  const host = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  // A literal IP is already covered by assertSafeUrl — no name to resolve.
+  if (isBlockedIpv4(host) || isBlockedIpv6(host) || host === 'localhost') return;
+
+  const ips = await resolveHostIps(host);
+  // Empty = the DoH lookup failed or returned nothing → fail OPEN (see doc above).
+  for (const ip of ips) {
+    const norm = ip.toLowerCase();
+    if (isBlockedIpv4(norm) || isBlockedIpv6(norm)) {
+      throw new BlockedUrlError(
+        `Host ${host} resolves to a private address (${ip}) — refusing to fetch (possible DNS rebinding).`,
+      );
+    }
+  }
+}
+
+/** Resolve a hostname's A + AAAA records via DNS-over-HTTPS. Returns [] on any
+ *  failure (network error, timeout, non-OK, malformed) so callers fail OPEN. */
+async function resolveHostIps(host: string): Promise<string[]> {
+  const query = async (type: 'A' | 'AAAA'): Promise<string[]> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), DOH_TIMEOUT_MS);
+    try {
+      const res = await fetch(
+        `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(host)}&type=${type}`,
+        { headers: { Accept: 'application/dns-json' }, signal: controller.signal },
+      );
+      if (!res.ok) return [];
+      const body = (await res.json()) as { Answer?: Array<{ type?: number; data?: string }> };
+      // A = record type 1, AAAA = 28. Only take address answers (skip CNAME chains).
+      return (body.Answer ?? [])
+        .filter((a) => (type === 'A' ? a.type === 1 : a.type === 28) && typeof a.data === 'string')
+        .map((a) => (a.data as string).trim());
+    } catch {
+      return [];
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  const [a, aaaa] = await Promise.all([query('A'), query('AAAA')]);
+  return [...a, ...aaaa];
+}
+
+const DOH_TIMEOUT_MS = 3_000;

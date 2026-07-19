@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type { Task } from '@/lib/builderforceApi';
+import { useIsMobile } from '@/lib/useIsMobile';
 import { CeremonyTaskCard } from './CeremonyTaskCard';
 import { DRAG_TASK } from './types';
 
@@ -13,17 +15,20 @@ import { DRAG_TASK } from './types';
  */
 export function BacklogRail({
   tasks,
-  title = 'Backlog',
+  title,
   onOpen,
   onReturn,
 }: {
   tasks: Task[];
-  title?: string;
+  /** Localized rail heading, supplied by the caller. */
+  title: string;
   onOpen: (task: Task) => void;
   /** Drop a task here to return it to the backlog (unassign / unschedule). */
   onReturn?: (taskId: number) => void;
 }) {
   const [over, setOver] = useState(false);
+  const isMobile = useIsMobile();
+  const t = useTranslations('ceremony');
   return (
     <div
       onDragOver={onReturn ? (e) => { e.preventDefault(); setOver(true); } : undefined}
@@ -35,7 +40,7 @@ export function BacklogRail({
         if (id) onReturn(id);
       } : undefined}
       style={{
-        width: 240,
+        width: isMobile ? '100%' : 240,
         flexShrink: 0,
         display: 'flex',
         flexDirection: 'column',
@@ -44,7 +49,7 @@ export function BacklogRail({
         borderRadius: 12,
         background: over ? 'var(--surface-coral-soft)' : 'var(--bg-deep)',
         border: `1px ${over ? 'dashed var(--coral-bright)' : 'solid var(--border-subtle)'}`,
-        maxHeight: '100%',
+        maxHeight: isMobile ? 260 : '100%',
         overflowY: 'auto',
       }}
     >
@@ -56,7 +61,7 @@ export function BacklogRail({
       </div>
       {tasks.length === 0 ? (
         <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '12px 0', textAlign: 'center' }}>
-          Nothing here
+          {t('nothingHere')}
         </div>
       ) : (
         tasks.map((t) => <CeremonyTaskCard key={t.id} task={t} onOpen={onOpen} />)

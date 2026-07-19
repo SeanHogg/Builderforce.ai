@@ -21,6 +21,7 @@ import { RoleGate } from '@/components/RoleGate';
 import { usePermission } from '@/lib/rbac';
 import { DeliveryVerdict } from './DeliveryVerdict';
 import { DaysWindowSelect } from './LensShell';
+import { ExportMenu } from './ExportMenu';
 import { useDeliveryPanel } from './DeliveryPanelProvider';
 import { DELIVERY_PANEL_IDS, DELIVERY_PANELS, isDeliveryPanelId, type DeliveryPanelDef, type DeliveryPanelId } from './deliveryPanels';
 
@@ -76,7 +77,8 @@ export function DeliveryDashboard() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, alignItems: 'center' }}>
+        <ExportMenu days={days} />
         <DaysWindowSelect value={days} onChange={setDays} />
       </div>
 

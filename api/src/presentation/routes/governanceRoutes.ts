@@ -11,6 +11,19 @@
  * POST  /api/governance/soc2/seed              – seed the CC1–CC9 baseline once (manager+)
  * PATCH /api/governance/soc2/controls/:id      – update a control's status (manager+)
  * POST  /api/governance/soc2/controls/:id/evidence – attach evidence (manager+)
+ *
+ * It also hosts the POLICY-PACK store (migration 0348) — the authoring surface
+ * behind the runtime's `PolicyGate` enforcement. Reads are member-level (anyone
+ * may see the posture they run under); every write is manager+.
+ *
+ * GET    /api/governance/policy-packs                 – packs + their gates
+ * POST   /api/governance/policy-packs                 – create a pack (manager+)
+ * PATCH  /api/governance/policy-packs/:id             – rename/scope/enable (manager+)
+ * DELETE /api/governance/policy-packs/:id             – delete a pack (manager+)
+ * POST   /api/governance/policy-packs/:id/gates       – add a gate (manager+)
+ * PATCH  /api/governance/policy-gates/:gateId         – edit a gate (manager+)
+ * DELETE /api/governance/policy-gates/:gateId         – delete a gate (manager+)
+ * GET    /api/governance/policy-gates/effective       – resolved wire gates (preview)
  */
 
 import { Hono } from 'hono';
@@ -24,6 +37,11 @@ import {
   securityTrainings, complianceEvents, dataSubjectRequests, dataSuppressionList,
   accessReviews, vulnerabilityScans,
 } from '../../infrastructure/database/schema';
+import {
+  createPolicyGate, createPolicyPack, deletePolicyGate, deletePolicyPack,
+  listPolicyPacks, resolvePolicyGates, updatePolicyGate, updatePolicyPack,
+  type PolicyGateInput, type PolicyPackInput,
+} from '../../application/governance/policyPackService';
 import type { HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -131,6 +149,48 @@ export function createGovernanceRoutes(db: Db): Hono<HonoEnv> {
     return c.json(updated);
   });
 
+  // Export the segment's SOC 2 controls WITH their attached evidence as one
+  // structured JSON audit package (SEC-1 evidence export). Read for any member —
+  // an auditor/host pulls the whole posture in a single call. Segment-threaded
+  // like every other governance read, so a segmented tenant exports only the
+  // active segment's controls + evidence.
+  router.get('/soc2/export', async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const [controls, evidence] = await Promise.all([
+      db
+        .select()
+        .from(socControls)
+        .where(and(eq(socControls.tenantId, tenantId), eq(socControls.segmentId, segmentId))),
+      db
+        .select()
+        .from(socEvidence)
+        .where(and(eq(socEvidence.tenantId, tenantId), eq(socEvidence.segmentId, segmentId))),
+    ]);
+
+    // Group evidence under its control so the package is control-centric.
+    const byControl = new Map<string, Array<Record<string, unknown>>>();
+    for (const e of evidence as Array<Record<string, unknown>>) {
+      const cid = String(e.controlId);
+      const list = byControl.get(cid) ?? [];
+      list.push(e);
+      byControl.set(cid, list);
+    }
+    const controlsWithEvidence = (controls as Array<Record<string, unknown>>).map((ctl) => ({
+      ...ctl,
+      evidence: byControl.get(String(ctl.id)) ?? [],
+    }));
+
+    return c.json({
+      framework: 'SOC 2',
+      exportedAt: new Date().toISOString(),
+      tenantId,
+      segmentId,
+      controlCount: controlsWithEvidence.length,
+      evidenceCount: (evidence as unknown[]).length,
+      controls: controlsWithEvidence,
+    });
+  });
+
   // Attach evidence to a control.
   router.post('/soc2/controls/:id/evidence', requireRole(TenantRole.MANAGER), async (c) => {
     const { tenantId, segmentId } = scope(c);
@@ -160,6 +220,71 @@ export function createGovernanceRoutes(db: Db): Hono<HonoEnv> {
       })
       .returning();
     return c.json(evidence, 201);
+  });
+
+  // -------------------------------------------------------------------------
+  // Policy packs — the authoring store the runtime's PolicyGate enforcement reads.
+  // Reads are member-level; every write is manager+ and invalidates the tenant's
+  // resolution cache (inside the service, so no route can forget).
+  // -------------------------------------------------------------------------
+
+  router.get('/policy-packs', async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    return c.json(await listPolicyPacks(db, tenantId, segmentId));
+  });
+
+  // Preview EXACTLY what the runtime would receive for a scope — the same
+  // resolver dispatch calls, so the UI can never disagree with enforcement.
+  router.get('/policy-gates/effective', async (c) => {
+    const tenantId = c.get('tenantId');
+    const projectRaw = c.req.query('project');
+    const projectId = projectRaw != null && Number.isFinite(Number(projectRaw)) ? Number(projectRaw) : null;
+    const gates = await resolvePolicyGates(c.env, db, {
+      tenantId, projectId, agentRef: c.req.query('agent') ?? null,
+    });
+    return c.json({ gates });
+  });
+
+  router.post('/policy-packs', requireRole(TenantRole.MANAGER), async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const body = await c.req.json<PolicyPackInput>();
+    const res = await createPolicyPack(c.env, db, tenantId, segmentId ?? null, {
+      ...body, createdBy: c.get('userId'),
+    });
+    return 'error' in res ? c.json(res, 400) : c.json(res, 201);
+  });
+
+  router.patch('/policy-packs/:id', requireRole(TenantRole.MANAGER), async (c) => {
+    const body = await c.req.json<PolicyPackInput>();
+    const res = await updatePolicyPack(c.env, db, c.get('tenantId'), c.req.param('id'), body);
+    if ('error' in res) return c.json(res, res.error === 'pack not found' ? 404 : 400);
+    return c.json(res);
+  });
+
+  router.delete('/policy-packs/:id', requireRole(TenantRole.MANAGER), async (c) => {
+    const res = await deletePolicyPack(c.env, db, c.get('tenantId'), c.req.param('id'));
+    if ('error' in res) return c.json(res, 404);
+    return c.json(res);
+  });
+
+  router.post('/policy-packs/:id/gates', requireRole(TenantRole.MANAGER), async (c) => {
+    const body = await c.req.json<PolicyGateInput>();
+    const res = await createPolicyGate(c.env, db, c.get('tenantId'), c.req.param('id'), body);
+    if ('error' in res) return c.json(res, res.error === 'pack not found' ? 404 : 400);
+    return c.json(res, 201);
+  });
+
+  router.patch('/policy-gates/:gateId', requireRole(TenantRole.MANAGER), async (c) => {
+    const body = await c.req.json<PolicyGateInput>();
+    const res = await updatePolicyGate(c.env, db, c.get('tenantId'), c.req.param('gateId'), body);
+    if ('error' in res) return c.json(res, res.error === 'gate not found' ? 404 : 400);
+    return c.json(res);
+  });
+
+  router.delete('/policy-gates/:gateId', requireRole(TenantRole.MANAGER), async (c) => {
+    const res = await deletePolicyGate(c.env, db, c.get('tenantId'), c.req.param('gateId'));
+    if ('error' in res) return c.json(res, 404);
+    return c.json(res);
   });
 
   // Every other tracker is the same segment-scoped CRUD — one factory, mounted N times.

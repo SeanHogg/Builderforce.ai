@@ -7,6 +7,7 @@ import { usePmData } from '@/lib/pm/usePmData';
 import { usePmScope } from '@/lib/pm/scope';
 import { COST_CLASS_COLORS, formatUsd } from '@/lib/pm/costClass';
 import { parseDate, startOfDay, formatShort } from '@/lib/schedule';
+import { downloadText } from '@/lib/download';
 import { PmEmpty, PmError } from './pmShared';
 
 /**
@@ -52,10 +53,7 @@ export function PlanningSpineGantt() {
 
   const exportCsv = async () => {
     const csv = await pmoApi.exportSpineCsv({ projectId });
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-    const a = document.createElement('a');
-    a.href = url; a.download = 'capex-opex.csv'; a.click();
-    URL.revokeObjectURL(url);
+    downloadText(csv, 'capex-opex.csv', 'text/csv');
   };
 
   const { childrenByParent, roots } = useMemo(() => {

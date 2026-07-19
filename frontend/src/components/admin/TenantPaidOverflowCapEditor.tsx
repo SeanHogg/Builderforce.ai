@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { adminApi } from '@/lib/adminApi';
 import { TenantIntegerOverrideEditor } from './TenantIntegerOverrideEditor';
 
@@ -24,18 +25,19 @@ interface Props {
 }
 
 export function TenantPaidOverflowCapEditor({ tenantId, value, onChange }: Props) {
+  const t = useTranslations('admin');
   return (
     <TenantIntegerOverrideEditor
       tenantId={tenantId}
       value={value}
       onChange={onChange}
       config={{
-        label: 'Funded overflow cap',
+        label: t('tenants.overflowCap.label'),
         fieldKey: 'pofc',
         summary: (v) =>
-          v === null ? 'Plan default (free $0.50/day · pro unlimited)'
-          : v === -1 ? 'Unlimited (gate skipped)'
-          : `$${millicentsToUsdStr(v)} / day`,
+          v === null ? t('tenants.overflowCap.summaryPlanDefault')
+          : v === -1 ? t('tenants.overflowCap.summaryUnlimited')
+          : t('tenants.overflowCap.summaryCustom', { value: millicentsToUsdStr(v) }),
         toInput: (stored) => millicentsToUsdStr(stored),
         fromInput: (input) => {
           const dollars = Number(input);
@@ -43,8 +45,8 @@ export function TenantPaidOverflowCapEditor({ tenantId, value, onChange }: Props
           return Math.round(dollars * MILLICENTS_PER_USD);
         },
         customPrefix: '$',
-        customSuffix: '/ day',
-        placeholder: 'e.g. 0.50',
+        customSuffix: t('tenants.overflowCap.suffix'),
+        placeholder: t('tenants.overflowCap.placeholder'),
         step: 0.25,
         save: async (id, next) => (await adminApi.setTenantPaidOverflowCap(id, next)).paidOverflowDailyCap,
       }}

@@ -9,6 +9,8 @@ import {
   boards,
   swimlanes,
   swimlaneAgentAssignments,
+  swimlaneRequirements,
+  ticketRoleSignoffs,
   ticketRuns,
   swimlaneTransitions,
   agentDispatches,
@@ -247,6 +249,23 @@ export class DrizzleCoordinatorStore implements CoordinatorStore {
       .limit(1);
     return row?.stageSeq ?? 0;
   }
+
+  async hasUnmetRequiredReviewers(taskId: number, swimlaneId: string, tenantId: number): Promise<boolean> {
+    // Required reviewer checks on THIS lane (a 'review', or a 'role' the reviewer owns).
+    const reqs = await this.db
+      .select({ kind: swimlaneRequirements.kind, ref: swimlaneRequirements.ref, responsibility: swimlaneRequirements.responsibility })
+      .from(swimlaneRequirements)
+      .where(and(eq(swimlaneRequirements.swimlaneId, swimlaneId), eq(swimlaneRequirements.tenantId, tenantId), eq(swimlaneRequirements.isRequired, true)));
+    const required = reqs.filter((r) => r.kind === 'review' || (r.kind === 'role' && r.responsibility === 'reviewer'));
+    if (required.length === 0) return false;
+    // Which reviewer roles carry an APPROVED sign-off for the ticket.
+    const signoffs = await this.db
+      .select({ roleKey: ticketRoleSignoffs.roleKey, verdict: ticketRoleSignoffs.verdict })
+      .from(ticketRoleSignoffs)
+      .where(and(eq(ticketRoleSignoffs.taskId, taskId), eq(ticketRoleSignoffs.tenantId, tenantId)));
+    const approved = new Set(signoffs.filter((s) => s.verdict === 'approved').map((s) => s.roleKey));
+    return required.some((r) => !approved.has(r.ref));
+  }
 }
 
 type LaneRow = typeof swimlanes.$inferSelect;
@@ -267,6 +286,7 @@ function toLane(l: LaneRow): LaneLite {
     successPolicy: l.successPolicy,
     successThreshold: l.successThreshold,
     failurePolicy: l.failurePolicy,
+    requirementGate: l.requirementGate,
   };
 }
 

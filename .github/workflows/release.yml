@@ -19,6 +19,11 @@ jobs:
   deploy-api:
     name: Deploy API (api.builderforce.ai)
     runs-on: ubuntu-latest
+    # Dogfood: the API consumes the PUBLISHED @seanhogg/builderforce-quality just
+    # like any customer, so the publish must land before its npm install resolves
+    # the pinned version. (Version-gated: a no-op publish on unchanged versions
+    # still succeeds, so this never permanently blocks a deploy.)
+    needs: publish-quality
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -48,6 +53,7 @@ jobs:
         working-directory: api
         env:
           NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          NEON_TRANSACTIONAL_DATABASE_URL: ${{ secrets.NEON_TRANSACTIONAL_DATABASE_URL }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: npm run db:migrate
@@ -61,6 +67,9 @@ jobs:
 
   build-and-deploy:
     runs-on: ubuntu-latest
+    # Dogfood: the frontend consumes the PUBLISHED @seanhogg/builderforce-quality
+    # (not a local link:), so the publish must land before pnpm install resolves it.
+    needs: publish-quality
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -96,6 +105,22 @@ jobs:
         working-directory: studio-embedded
         run: npm install --no-audit --no-fund
 
+      # brain-embedded's committed dist/ can drift or be deleted; its `prepare`
+      # script (tsup) rebuilds dist/ on install so the frontend `link:` dep
+      # (@seanhogg/builderforce-brain-embedded) always resolves.
+      - name: Install + build Brain embedded
+        working-directory: brain-embedded
+        run: npm install --no-audit --no-fund
+
+      # Must follow brain-embedded — brain-ui link:-depends on it for its DTS.
+      # Uses pnpm (not npm): brain-ui has a `link:` dep npm can't parse, and its
+      # own pnpm-lock.yaml. `pnpm install` runs its `prepare` (tsup) to build
+      # dist/*.d.ts so the frontend `link:` dep (@seanhogg/builderforce-brain-ui)
+      # resolves types instead of `any`.
+      - name: Install + build Brain UI
+        working-directory: packages/brain-ui
+        run: pnpm install --frozen-lockfile || pnpm install
+
       - name: Install dependencies
         working-directory: frontend
         run: pnpm install --frozen-lockfile || pnpm install
@@ -104,6 +129,9 @@ jobs:
         working-directory: frontend
         env:
           NEXT_PUBLIC_WORKER_URL: https://worker.builderforce.ai
+          # Public bfq_ ingest key baked into the statically-rendered root layout so
+          # the web app self-reports browser errors to the Product Quality pillar.
+          NEXT_BUILDERFORCE_ERROR_API_KEY: ${{ secrets.BUILDERFORCE_ERROR_API_KEY }}
         run: pnpm exec next build
 
       - name: Generate Cloudflare Worker (next-on-pages)
@@ -180,6 +208,15 @@ jobs:
     with:
       package-dir: voice
       package-name: '@seanhogg/builderforce-voice'
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-quality:
+    name: Publish Quality SDK (@seanhogg/builderforce-quality)
+    uses: ./.github/workflows/publish-npm-package.yml
+    with:
+      package-dir: browser-sdk
+      package-name: '@seanhogg/builderforce-quality'
     secrets:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 

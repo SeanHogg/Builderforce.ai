@@ -6,6 +6,7 @@
 import { getApiBaseUrl } from './apiClient';
 import { checkUnauthorizedAndRedirect, getStoredWebToken } from './auth';
 import type { LlmModelStatus, VendorId } from './builderforceApi';
+import type { PsychometricProfile } from './psychometric';
 
 export type { LlmModelStatus, VendorId };
 
@@ -86,6 +87,77 @@ export interface AdminHealth {
     premiumFallback?: LlmModelStatus[];
   };
   timestamp: string;
+}
+
+export interface AdminGuestSession {
+  id: string;
+  visitorId: string;
+  guestChatCount: number;
+  guestChatTokens: number;
+  guestChatDay: string | null;
+  toolRuns: number;
+  lastToolId: string | null;
+  landingPath: string | null;
+  referrer: string | null;
+  converted: boolean;
+  convertedUserId: string | null;
+  convertedEmail: string | null;
+  convertedAt: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  isPaid: boolean;
+}
+
+export interface AdminSystemTable {
+  name: string;
+  totalBytes: number;
+  estimatedRows: number;
+  insertsSinceStatsReset: number;
+  updatesSinceStatsReset: number;
+  deletesSinceStatsReset: number;
+  lastAutovacuum: string | null;
+  lastAnalyze: string | null;
+}
+
+export interface AdminSystemDatabase {
+  name: 'primary' | 'transactional';
+  ok: boolean;
+  latencyMs: number;
+  databaseName: string | null;
+  totalBytes: number;
+  tables: AdminSystemTable[];
+  error?: string;
+}
+
+export interface AdminSystemHealth {
+  timestamp: string;
+  worker: {
+    version: string;
+    environment: string;
+    bindings: Record<string, boolean>;
+  };
+  runtime: {
+    agentHosts: number;
+    onlineAgentHosts: number;
+    activeExecutions: number;
+    failedExecutions24h: number;
+  };
+  databases: AdminSystemDatabase[];
+}
+
+/** One zero-filled daily point (matches the API MetricPoint). */
+export interface AdminMetricPoint { day: string; value: number; }
+
+export interface AdminPlatformRollup {
+  windowDays: number;
+  totals: { newUsers: number; newTenants: number; tokens: number; spendUsd: number; errorEvents: number };
+  series: {
+    newUsers: AdminMetricPoint[];
+    newTenants: AdminMetricPoint[];
+    tokens: AdminMetricPoint[];
+    spendUsd: AdminMetricPoint[];
+    errorEvents: AdminMetricPoint[];
+  };
 }
 
 export interface AdminError {
@@ -227,6 +299,17 @@ export interface AdminLegalCurrent {
   privacy: LegalDocument;
 }
 
+export interface LegalDocVersion {
+  id: number;
+  documentType: 'terms' | 'privacy';
+  version: string;
+  title: string;
+  content: string;
+  changeKind: 'publish' | 'amend';
+  changedBy: string | null;
+  createdAt: string;
+}
+
 export interface AdminNewsletterSubscriber {
   id: number;
   userId: string | null;
@@ -341,6 +424,8 @@ export interface AdminPlatformPersona {
   source: string;
   author: string | null;
   active: boolean;
+  /** JSON PsychometricProfile (Pro trait vector) compiled into behaviour at run time; null = none. */
+  psychometric: PsychometricProfile | null;
   createdAt: string | null;
   updatedAt: string | null;
 }
@@ -498,6 +583,11 @@ export const adminApi = {
     return res.users;
   },
 
+  async guestSessions(): Promise<AdminGuestSession[]> {
+    const res = await adminRequest<{ sessions: AdminGuestSession[] }>('/api/admin/guest-sessions');
+    return res.sessions;
+  },
+
   async tenants(): Promise<AdminTenant[]> {
     const res = await adminRequest<{ tenants: AdminTenant[] }>('/api/admin/tenants');
     return res.tenants ?? [];
@@ -585,9 +675,29 @@ export const adminApi = {
     return adminRequest<AdminHealth>('/api/admin/health');
   },
 
+  async systemHealth(): Promise<AdminSystemHealth> {
+    return adminRequest<AdminSystemHealth>('/api/admin/system-health');
+  },
+
+  async systemMaintenance(input: {
+    action: 'purge_expired' | 'vacuum_analyze';
+    target?: 'primary' | 'transactional';
+    table?: string;
+  }): Promise<{ ok: boolean }> {
+    return adminRequest('/api/admin/system-health/maintenance', {
+      method: 'POST', body: JSON.stringify(input),
+    });
+  },
+
   async errors(): Promise<AdminError[]> {
     const res = await adminRequest<{ errors: AdminError[] }>('/api/admin/errors');
     return res.errors;
+  },
+
+  /** Platform-wide historical trends (growth / LLM usage / errors) for the
+   *  superadmin Health/Usage charts. */
+  async platformRollup(days = 30): Promise<AdminPlatformRollup> {
+    return adminRequest<AdminPlatformRollup>(`/api/admin/platform-rollup?days=${days}`);
   },
 
   async listLlmTraces(params: {
@@ -643,6 +753,12 @@ export const adminApi = {
   async legalCurrent(): Promise<AdminLegalCurrent> {
     return adminRequest<AdminLegalCurrent>('/api/admin/legal/current');
   },
+  /** Full publish + amend audit trail (newest first); scope with docType. */
+  async legalHistory(docType?: 'terms' | 'privacy'): Promise<LegalDocVersion[]> {
+    const qs = docType ? `?docType=${docType}` : '';
+    const res = await adminRequest<{ versions: LegalDocVersion[] }>(`/api/admin/legal/history${qs}`);
+    return res.versions;
+  },
   async publishLegal(
     docType: 'terms' | 'privacy',
     data: { version: string; title?: string; content: string },
@@ -658,6 +774,16 @@ export const adminApi = {
   ): Promise<{ document: LegalDocument }> {
     return adminRequest(`/api/admin/legal/${docType}`, {
       method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+  /** AI-draft or improve a legal document; returns clean Markdown (nothing is saved). */
+  async enhanceLegal(
+    docType: 'terms' | 'privacy',
+    data: { content: string; instruction?: string; title?: string },
+  ): Promise<{ content: string }> {
+    return adminRequest(`/api/admin/legal/${docType}/enhance`, {
+      method: 'POST',
       body: JSON.stringify(data),
     });
   },
@@ -847,6 +973,7 @@ export const adminApi = {
     source?: string;
     author?: string | null;
     active?: boolean;
+    psychometric?: PsychometricProfile | null;
   }): Promise<{ persona: AdminPlatformPersona }> {
     return adminRequest('/api/admin/personas', { method: 'POST', body: JSON.stringify(data) });
   },
@@ -865,6 +992,7 @@ export const adminApi = {
       source: string;
       author: string | null;
       active: boolean;
+      psychometric: PsychometricProfile | null;
     }>
   ): Promise<{ persona: AdminPlatformPersona }> {
     return adminRequest(`/api/admin/personas/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
@@ -1055,9 +1183,24 @@ export const adminApi = {
   },
 
   async effectivePermissions(userId: string, tenantId: number): Promise<EffectivePermissions> {
-    return adminRequest<EffectivePermissions>(
+    const res = await adminRequest<Partial<EffectivePermissions> & { effectivePermissions?: unknown }>(
       `/api/admin/users/${encodeURIComponent(userId)}/effective-permissions?tenantId=${tenantId}`,
     );
+    const strings = (value: unknown): string[] =>
+      Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+
+    return {
+      userId: typeof res.userId === 'string' ? res.userId : userId,
+      tenantId: typeof res.tenantId === 'number' ? res.tenantId : tenantId,
+      role: typeof res.role === 'string' ? res.role : '',
+      // The API historically named this field `effectivePermissions`. Accept it
+      // so a new frontend remains compatible while API workers roll forward.
+      permissions: strings(res.permissions ?? res.effectivePermissions),
+      rolePermissions: strings(res.rolePermissions),
+      modulePermissions: strings(res.modulePermissions),
+      userGrants: strings(res.userGrants),
+      userRevocations: strings(res.userRevocations),
+    };
   },
 
   async userAdminAccess(userId: string): Promise<{ sessions: ImpersonationSession[] }> {

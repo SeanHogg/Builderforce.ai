@@ -17,6 +17,7 @@ import { Hono } from 'hono';
 import { eq, and, asc } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { workflows, workflowTasks, telemetrySpans, projects, agentHosts } from '../../infrastructure/database/schema';
+import { MILLICENTS_PER_USD } from '../../domain/shared/money';
 import {
   resolveHostAuth,
   verifyAgentHostApiKey,
@@ -359,7 +360,7 @@ export function createWorkflowRoutes(db: Db): Hono<WorkflowHonoEnv> {
       else if (span.kind === 'task.error') statusFromSpan = 'failed';
 
       const estimatedCostUsd = span.estimatedCostUsd != null
-        ? span.estimatedCostUsd / 100_000
+        ? span.estimatedCostUsd / MILLICENTS_PER_USD
         : undefined;
 
       if (!existing) {

@@ -3,7 +3,7 @@ import type { Context } from 'hono';
 import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { TenantService } from '../../application/tenant/TenantService';
 import { TenantRole, TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
-import type { Env, HonoEnv } from '../../env';
+import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { invalidateJwtMembershipCache } from '../../infrastructure/auth/keyResolutionCache';
@@ -11,6 +11,13 @@ import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import { buildPlanLimitsGuard, seatCapacityForTenant } from '../middleware/planLimitsGuard';
 import { canAddSeat } from '../../domain/tenant/PlanLimits';
 import { trialDaysRemaining } from '../../domain/tenant/effectivePlan';
+import { buildPaymentProvider } from '../../infrastructure/payment';
+import {
+  getCardValidation,
+  isCardValidated,
+  markCardPending,
+  clearCardValidation,
+} from '../../application/tenant/cardValidationService';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
 import {
@@ -25,6 +32,32 @@ import {
   users,
 } from '../../infrastructure/database/schema';
 import { sendWorkspaceInviteEmail } from '../../infrastructure/email/EmailService';
+import { countActiveSessionsAndTokens } from '../../application/security/sessionCounts';
+import { provisionBuiltinAgents } from '../../application/agent/provisionBuiltinAgents';
+import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
+
+/** Best-effort audit emit for a membership mutation (invite / add), attributed to
+ *  the acting manager. Off the response path; never throws. */
+function emitMemberActivity(
+  c: Context<HonoEnv>,
+  db: Db,
+  verb: string,
+  o: { targetId: string; targetLabel: string; summary: string; metadata?: Record<string, unknown> },
+): void {
+  c.executionCtx.waitUntil((async () => {
+    const actor = await resolveActorFromContext(c.env as Env, db, c);
+    await recordActivity(c.env as Env, db, {
+      tenantId: c.get('tenantId') as number,
+      actor,
+      verb,
+      targetType: 'member',
+      targetId: o.targetId,
+      targetLabel: o.targetLabel,
+      summary: o.summary,
+      metadata: o.metadata ?? null,
+    });
+  })().catch(() => {}));
+}
 
 type SourceControlProvider = 'github' | 'bitbucket';
 
@@ -176,6 +209,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const body   = await c.req.json<{ name: string }>();
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
     const tenant = await tenantService.createTenant({ name: body.name, ownerUserId: userId });
+    await provisionBuiltinAgents(db, tenant.id).catch(() => {});   // seed Validator + Security
     return c.json(tenant.toPlain(), 201);
   });
 
@@ -264,20 +298,15 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   /**
    * POST /api/tenants/:id/subscription/checkout
    *
-   * Initiate a Pro or Teams upgrade checkout session.
-   *
-   * For ManualProvider: activates immediately; returns { checkoutUrl: null }.
-   * For hosted providers (Stripe, Helcim): returns { checkoutUrl: "https://..." }
-   *   — the frontend should redirect the user to this URL.
-   *   The subscription becomes active once the provider fires a webhook.
+   * Initiate a Pro or Teams upgrade. Returns { checkoutUrl: "https://..." } — the
+   * frontend redirects the user there. The subscription becomes active only once
+   * Stripe fires the activation webhook, never from this request.
    *
    * Body:
    *   targetPlan          "pro" | "teams"        optional (defaults to "pro")
    *   seats               number                 required when targetPlan="teams"
    *   billingCycle        "monthly" | "yearly"   required
    *   billingEmail        string                 required
-   *   billingPaymentBrand string                 optional (manual provider only)
-   *   billingPaymentLast4 string (4 digits)      optional (manual provider only)
    *   successUrl          string                 optional (defaults to /pricing?success=1)
    *   cancelUrl           string                 optional (defaults to /pricing?cancelled=1)
    */
@@ -291,8 +320,6 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       seats?: number;
       billingCycle: TenantBillingCycle;
       billingEmail: string;
-      billingPaymentBrand?: string;
-      billingPaymentLast4?: string;
       successUrl?: string;
       cancelUrl?: string;
     }>();
@@ -313,8 +340,6 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       seats: body.seats,
       billingCycle: body.billingCycle,
       billingEmail: body.billingEmail,
-      billingPaymentBrand: body.billingPaymentBrand,
-      billingPaymentLast4: body.billingPaymentLast4,
       successUrl: body.successUrl ?? `${appUrl}/pricing?success=1`,
       cancelUrl: body.cancelUrl ?? `${appUrl}/pricing?cancelled=1`,
     });
@@ -323,42 +348,135 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
   });
 
   /**
-   * POST /api/tenants/:id/subscription/pro  (kept for backward compatibility)
-   * Delegates to the checkout endpoint using ManualProvider semantics.
-   * New integrations should call /subscription/checkout instead.
+   * GET /api/tenants/:id/card-validation
+   *
+   * Current card-validation state — the gate on PREMIUM (any-paid-OpenRouter) model
+   * selection. `validated` is the same predicate the gateway enforces.
    */
-  router.post('/:id/subscription/pro', requireRole(TenantRole.MANAGER), async (c) => {
+  router.get('/:id/card-validation', async (c) => {
     const tenantId = Number(c.req.param('id'));
     const callerTenantId = c.get('tenantId') as number;
     if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
 
-    const body = await c.req.json<{
-      billingCycle: TenantBillingCycle;
-      billingEmail: string;
-      billingPaymentBrand: string;
-      billingPaymentLast4: string;
-    }>();
+    const state = await getCardValidation(c.env, tenantId);
+    return c.json({
+      status: state.status,
+      validated: isCardValidated(state),
+      validatedAt: state.validatedAt?.toISOString() ?? null,
+      brand: state.brand,
+      last4: state.last4,
+    });
+  });
 
-    if (!body.billingCycle || !body.billingEmail) {
-      return c.json({ error: 'billingCycle and billingEmail are required' }, 400);
-    }
+  /**
+   * POST /api/tenants/:id/card-validation
+   *
+   * Start the explicit card-validation flow (Stripe SetupIntent / $0 auth) that unlocks
+   * PREMIUM model selection — any paid OpenRouter model, billed at OpenRouter cost + a
+   * flat 1¢ per request.
+   *
+   * Returns { checkoutUrl } to redirect to; the card is stamped validated when Stripe
+   * fires the `card.validated` webhook.
+   *
+   * Body:
+   *   billingEmail  string   required
+   *   successUrl    string   optional
+   *   cancelUrl     string   optional
+   */
+  router.post('/:id/card-validation', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    const callerTenantId = c.get('tenantId') as number;
+    if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
+
+    const body = await c.req.json<{ billingEmail?: string; successUrl?: string; cancelUrl?: string }>()
+      .catch(() => ({} as { billingEmail?: string; successUrl?: string; cancelUrl?: string }));
+
+    const tenant = await tenantService.getTenant(tenantId);
+    const billingEmail = body.billingEmail ?? tenant.billingEmail;
+    if (!billingEmail) return c.json({ error: 'billingEmail is required' }, 400);
 
     const appUrl = c.env.APP_URL ?? 'https://builderforce.ai';
-    const result = await tenantService.createCheckoutSession(tenantId, {
-      billingCycle: body.billingCycle,
-      billingEmail: body.billingEmail,
-      billingPaymentBrand: body.billingPaymentBrand,
-      billingPaymentLast4: body.billingPaymentLast4,
-      successUrl: `${appUrl}/pricing?success=1`,
-      cancelUrl: `${appUrl}/pricing?cancelled=1`,
+    const payment = buildPaymentProvider(c.env);
+    const result = await payment.createCardValidationSession({
+      tenantId,
+      billingEmail,
+      externalCustomerId: tenant.externalCustomerId,
+      // Return to the BILLING CONSOLE, which is `/pricing` — that's where the card
+      // controls live (<PremiumModelUnlock> / <CardOnFile>). `/settings` has no card
+      // surface at all, so the old default dropped the user on a page that couldn't
+      // confirm what had just happened.
+      successUrl: body.successUrl ?? `${appUrl}/pricing?card=validated`,
+      cancelUrl: body.cancelUrl ?? `${appUrl}/pricing?card=cancelled`,
     });
 
-    // Legacy response shape: return updated tenant for in-place subscription activation
-    if (result.checkoutUrl === null) {
-      const sub = await tenantService.getSubscription(tenantId);
-      return c.json({ tenant: sub });
+    // ADD-then-swap, never reset-then-add.
+    //
+    // Marking `pending` clears the validated verdict, which SUSPENDS premium model
+    // access. That's right for a first-time validation (there was no access to
+    // lose) but wrong for a REPLACE: it revoked a paying tenant's premium for as
+    // long as the processor took to confirm the new card, for no reason — the old
+    // card is still perfectly valid until the new one lands. So an already-validated
+    // tenant keeps their verdict, and the swap completes in the webhook, which
+    // overwrites the card and detaches the displaced one.
+    const existing = await getCardValidation(c.env, tenantId);
+    const replacing = isCardValidated(existing);
+    if (!replacing) await markCardPending(c.env, tenantId);
+
+    return c.json({
+      checkoutUrl: result.checkoutUrl,
+      sessionId: result.sessionId,
+      // A replace reports the state the tenant is actually still in — they remain
+      // validated on the OLD card until the new one is confirmed.
+      validated: replacing,
+      status: replacing ? existing.status : 'pending',
+    });
+  });
+
+  /**
+   * DELETE /api/tenants/:id/card-validation
+   *
+   * Remove the card on file: detach it at the processor, then clear our own record.
+   * Premium model selection goes with it — the gate reads `isCardValidated`, and
+   * continuing to sell premium off a card we no longer hold would be the bug.
+   *
+   * REFUSED while a paid subscription is live (409). Those cards are the renewal
+   * instrument; detaching one would break billing at the next cycle with no signal
+   * to the user. Downgrading to Free cancels the subscription and clears the way,
+   * so the response names that path rather than half-performing the removal.
+   *
+   * Order matters: detach FIRST, clear second. If the processor call fails we've
+   * changed nothing, and the tenant keeps the access they paid for — the opposite
+   * order would revoke premium while Stripe still held the card.
+   */
+  router.delete('/:id/card-validation', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    const forbidden = forbidCrossTenant(c, tenantId);
+    if (forbidden) return forbidden;
+
+    const tenant = await tenantService.getTenant(tenantId);
+
+    if (tenant.externalSubscriptionId && tenant.billingStatus === 'active') {
+      return c.json({
+        error: 'Cancel your paid plan before removing the card it bills. Downgrade to Free, then remove the card.',
+        code: 'card_backs_active_subscription',
+      }, 409);
     }
-    return c.json(result);
+
+    // Detach the card WE recorded. Pre-0346 rows carry no payment-method id and
+    // fall back to a customer-wide sweep (safe: those tenants predate multi-card
+    // support). With neither handle there is nothing stored at the processor, but
+    // clearing our own record still matters — a stale `validated` status would
+    // keep premium open against a card we no longer have.
+    const { paymentMethodId } = await getCardValidation(c.env, tenantId);
+    if (paymentMethodId || tenant.externalCustomerId) {
+      await buildPaymentProvider(c.env).detachCards({
+        paymentMethodId,
+        externalCustomerId: tenant.externalCustomerId,
+      });
+    }
+    await clearCardValidation(c.env, tenantId);
+
+    return c.json({ status: 'none', validated: false, validatedAt: null, brand: null, last4: null });
   });
 
   // POST /api/tenants/:id/subscription/free
@@ -458,34 +576,43 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       ? rows.filter((row) => isAgentHostOnline(row))
       : rows;
 
-    const hostRows = await Promise.all(
-      filtered.map(async (row) => {
-        const associatedProjects = await db
-          .select({ projectId: agentHostProjects.projectId })
+    // Fetch every host's project links in ONE query (grouped in JS) instead of an
+    // N+1 per-host round-trip.
+    const hostIds = filtered.map((row) => row.id);
+    const projectLinks = hostIds.length
+      ? await db
+          .select({ agentHostId: agentHostProjects.agentHostId, projectId: agentHostProjects.projectId })
           .from(agentHostProjects)
-          .where(
-            and(
-              eq(agentHostProjects.tenantId, tenantId),
-              eq(agentHostProjects.agentHostId, row.id),
-            ),
-          );
-        const capabilities: string[] = row.capabilities
-          ? (JSON.parse(row.capabilities) as string[])
-          : [];
-        const online = isAgentHostOnline(row);
-        return {
-          ...row,
-          online,
-          capabilities,
-          capabilitySummary: {
-            distributed: online && associatedProjects.length > 1,
-            remoteDispatch: online && capabilities.includes('remote-dispatch'),
-            projectCount: associatedProjects.length,
-          },
-          projectIds: associatedProjects.map((p) => p.projectId),
-        };
-      }),
-    );
+          .where(and(
+            eq(agentHostProjects.tenantId, tenantId),
+            inArray(agentHostProjects.agentHostId, hostIds),
+          ))
+      : [];
+    const projectsByHost = new Map<number, number[]>();
+    for (const link of projectLinks) {
+      const list = projectsByHost.get(link.agentHostId) ?? [];
+      list.push(link.projectId);
+      projectsByHost.set(link.agentHostId, list);
+    }
+
+    const hostRows = filtered.map((row) => {
+      const associatedProjects = projectsByHost.get(row.id) ?? [];
+      const capabilities: string[] = row.capabilities
+        ? (JSON.parse(row.capabilities) as string[])
+        : [];
+      const online = isAgentHostOnline(row);
+      return {
+        ...row,
+        online,
+        capabilities,
+        capabilitySummary: {
+          distributed: online && associatedProjects.length > 1,
+          remoteDispatch: online && capabilities.includes('remote-dispatch'),
+          projectCount: associatedProjects.length,
+        },
+        projectIds: associatedProjects,
+      };
+    });
 
     return c.json({ agentHosts: hostRows });
   });
@@ -636,6 +763,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const body   = await c.req.json<{ name: string }>();
     if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400);
     const tenant = await tenantService.createTenant({ name: body.name, ownerUserId: userId });
+    await provisionBuiltinAgents(db, tenant.id).catch(() => {});   // seed Validator + Security
     return c.json(tenant.toPlain(), 201);
   });
 
@@ -689,6 +817,10 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       const tenant = await tenantService.addMember(id, actorUserId, found.id, role);
       await invalidateTaskAssignees(c.env as Env, id);
       await invalidateJwtMembershipCache(c.env as Env, id, found.id).catch(() => {});
+      emitMemberActivity(c, db, 'member.added', {
+        targetId: found.id, targetLabel: found.email,
+        summary: `Added ${found.email} as ${role}`, metadata: { role, userId: found.id },
+      });
       return c.json({ ok: true, status: 'added', tenant: tenant.toPlain(), addedUser: { id: found.id, email: found.email } });
     }
 
@@ -717,6 +849,11 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
 
     await invalidateInvitations(c.env as Env, id);
 
+    emitMemberActivity(c, db, 'member.invited', {
+      targetId: email, targetLabel: email,
+      summary: `Invited ${email} as ${role}`, metadata: { role, email },
+    });
+
     // Tell the cold invitee they were invited (best-effort — no-ops without
     // RESEND_API_KEY). The signup link pre-fills the invited address so the
     // pending invitation auto-converts on first login (see GET /mine). [1248]
@@ -726,7 +863,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
         db.select({ displayName: users.displayName, email: users.email })
           .from(users).where(eq(users.id, actorUserId)).limit(1),
       ]);
-      const frontendBase = ((c.env as Env).APP_URL ?? 'https://builderforce.ai').split(',')[0]!.trim();
+      const frontendBase = resolveAppBaseUrl(c.env as Env);
       const signupUrl = `${frontendBase}/register?email=${encodeURIComponent(email)}`;
       await sendWorkspaceInviteEmail(c.env as Env, email, {
         workspaceName: tenantRow?.name ?? 'a Builderforce workspace',
@@ -832,6 +969,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
         displayName: users.displayName,
         mfaEnabled: users.mfaEnabled,
         mfaEnabledAt: users.mfaEnabledAt,
+        psychometric: users.psychometric,
         role: tenantMembers.role,
         joinedAt: tenantMembers.joinedAt,
       })
@@ -841,33 +979,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
 
     const userIds = memberRows.map((row) => row.userId);
 
-    const sessionCounts = userIds.length
-      ? await db
-        .select({ userId: authUserSessions.userId, count: sql<number>`COUNT(*)` })
-        .from(authUserSessions)
-        .where(and(inArray(authUserSessions.userId, userIds), eq(authUserSessions.isActive, true)))
-        .groupBy(authUserSessions.userId)
-      : [];
-
-    const tokenCounts = userIds.length
-      ? await db
-        .select({ userId: authTokens.userId, count: sql<number>`COUNT(*)` })
-        .from(authTokens)
-        .where(
-          and(
-            inArray(authTokens.userId, userIds),
-            isNull(authTokens.revokedAt),
-            gt(authTokens.expiresAt, new Date()),
-          ),
-        )
-        .groupBy(authTokens.userId)
-      : [];
-
-    const sessionsByUser = new Map<string, number>();
-    for (const row of sessionCounts) sessionsByUser.set(row.userId, Number(row.count));
-
-    const tokensByUser = new Map<string, number>();
-    for (const row of tokenCounts) tokensByUser.set(row.userId, Number(row.count));
+    const { sessionsByUser, tokensByUser } = await countActiveSessionsAndTokens(db, userIds);
 
     return c.json({
       users: memberRows.map((row) => ({
@@ -877,6 +989,8 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
         displayName: row.displayName,
         mfaEnabled: row.mfaEnabled,
         mfaEnabledAt: row.mfaEnabledAt,
+        // A person's personality (parsed) — displayed on their card, self-hides when unset.
+        psychometric: row.psychometric ? (JSON.parse(row.psychometric) as unknown) : null,
         role: row.role,
         joinedAt: row.joinedAt,
         activeSessions: sessionsByUser.get(row.userId) ?? 0,

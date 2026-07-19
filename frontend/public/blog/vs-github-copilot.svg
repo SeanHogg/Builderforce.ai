@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">WHEN YOU'VE OUTGROWN AUTOCOMPLETE</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">Copilot finishes your line. Builderforce ships your ticket.</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- Left card: GitHub Copilot -->
+  <rect x="80" y="230" width="680" height="540" rx="24" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="80" y="230" width="6" height="540" rx="3" fill="url(#coolGrad)"/>
+  <text x="118" y="278" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" letter-spacing="2" font-weight="700" fill="#4F8BFF">GITHUB COPILOT</text>
+  <text x="118" y="322" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="34" font-weight="900" fill="#EEF0FA">Single-agent autocomplete</text>
+
+  <text x="120" y="400" font-size="26" fill="#F0574A">&#10007;</text>
+  <text x="162" y="400" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" fill="#A6ADC8">Single agent &#8212; no team on the task</text>
+  <text x="120" y="468" font-size="26" fill="#F0574A">&#10007;</text>
+  <text x="162" y="468" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" fill="#A6ADC8">IDE-bound &#8212; lives in VS Code</text>
+  <text x="120" y="536" font-size="26" fill="#F0574A">&#10007;</text>
+  <text x="162" y="536" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" fill="#A6ADC8">Model-locked &#8212; GPT / Claude only</text>
+  <text x="120" y="604" font-size="26" fill="#F0574A">&#10007;</text>
+  <text x="162" y="604" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" fill="#A6ADC8">Stateless &#8212; context dies with the session</text>
+  <text x="120" y="672" font-size="26" fill="#F0574A">&#10007;</text>
+  <text x="162" y="672" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" fill="#A6ADC8">No approval gates, no audit trail</text>
+  <text x="118" y="732" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#717892">Excellent in-editor flow &#8212; that stops at the file boundary</text>
+
+  <!-- Right card: Builderforce -->
+  <rect x="840" y="230" width="680" height="540" rx="24" fill="rgba(91,240,188,0.07)" stroke="rgba(91,240,188,0.40)" stroke-width="1.5"/>
+  <rect x="840" y="230" width="6" height="540" rx="3" fill="url(#mintGrad)"/>
+  <text x="878" y="278" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" letter-spacing="2" font-weight="700" fill="#5BF0BC">BUILDERFORCE.AI</text>
+  <text x="878" y="322" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="34" font-weight="900" fill="#EEF0FA">Governed multi-agent workforce</text>
+
+  <text x="880" y="400" font-size="26" fill="#5BF0BC">&#10003;</text>
+  <text x="922" y="400" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" fill="#EEF0FA">7 specialist roles + dependency DAG</text>
+  <text x="880" y="468" font-size="26" fill="#5BF0BC">&#10003;</text>
+  <text x="922" y="468" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" fill="#EEF0FA">Kanban board, CLI, 15+ channels, VS Code</text>
+  <text x="880" y="536" font-size="26" fill="#5BF0BC">&#10003;</text>
+  <text x="922" y="536" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" fill="#EEF0FA">30+ providers incl. local Ollama</text>
+  <text x="880" y="604" font-size="26" fill="#5BF0BC">&#10003;</text>
+  <text x="922" y="604" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" fill="#EEF0FA">Persistent memory in .builderforce/</text>
+  <text x="880" y="672" font-size="26" fill="#5BF0BC">&#10003;</text>
+  <text x="922" y="672" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" fill="#EEF0FA">Approval gates + full audit trail</text>
+  <text x="878" y="732" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" fill="#717892">Self-hosted, MIT &#8212; or keep Copilot and layer this over MCP</text>
+
+  <!-- VS badge -->
+  <circle cx="800" cy="500" r="42" fill="url(#violetGrad)"/>
+  <circle cx="800" cy="500" r="42" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="2"/>
+  <text x="800" y="510" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="26" font-weight="900" fill="#0A0B1E">VS</text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">One agent that helps you code vs. an AI team that ships the feature</text>
+</svg>

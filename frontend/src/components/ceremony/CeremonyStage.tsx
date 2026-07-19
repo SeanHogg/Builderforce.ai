@@ -1,10 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
+import { useIsMobile } from '@/lib/useIsMobile';
+import { useMediaRoom } from '@/lib/useMediaRoom';
+import { VideoGrid } from '@/components/video/VideoGrid';
+import { MediaControls } from '@/components/video/MediaControls';
 import {
-  tasksApi, sprintsApi, runtimeApi, ceremonySessionsApi, membersApi,
-  type Task, type Sprint, type Execution, type CeremonySession, type CeremonySessionDetail, type CeremonyParticipant, type MemberProfile,
+  tasksApi, sprintsApi, ceremonySessionsApi, membersApi,
+  type Task, type Sprint, type CeremonySession, type CeremonySessionDetail, type CeremonyParticipant, type MemberProfile,
 } from '@/lib/builderforceApi';
 import { listTeamsByProject, getTeam, listWorkforceDirectory } from '@/lib/teams';
 import { useAuth } from '@/lib/AuthContext';
@@ -25,9 +30,6 @@ export type CeremonyMode = 'standup' | 'planning';
 const ACTIVE_STATUSES = new Set(['in_progress', 'in_review', 'ready']);
 /** Default per-member WIP cap when no member profile sets one. */
 const DEFAULT_CAP = 8;
-/** Execution statuses that mean a run is already in-flight or done (skip re-dispatch). */
-const LIVE_OR_DONE = new Set(['pending', 'submitted', 'running', 'completed']);
-
 /** Resolve the round-table seats: the project's attached team(s), else the whole workforce. */
 async function loadProjectMembers(projectId: number): Promise<CeremonyMember[]> {
   try {
@@ -73,6 +75,13 @@ export function CeremonyStage({
   onClose?: () => void;
 }) {
   const { user } = useAuth();
+  const tMeet = useTranslations('meetings');
+  const t = useTranslations('ceremony');
+  // Narrow viewports can't fit the two 240px rails + the absolute round table side
+  // by side, so on mobile the stage stacks vertically and the seats render as a
+  // centered wrap-grid instead of the (overlapping) circle.
+  const isMobile = useIsMobile();
+  const [camerasOn, setCamerasOn] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [members, setMembers] = useState<CeremonyMember[]>([]);
   const [sprints, setSprints] = useState<Sprint[]>([]);
@@ -85,7 +94,6 @@ export function CeremonyStage({
   const [session, setSession] = useState<CeremonySession | null>(null);
   const [participants, setParticipants] = useState<CeremonyParticipant[]>([]);
   const [sessionBusy, setSessionBusy] = useState(false);
-  const [executions, setExecutions] = useState<Execution[]>([]);
   const [profiles, setProfiles] = useState<MemberProfile[]>([]);
   // Slide-out targets (scorecard / assigned work) for a clicked seat.
   const [scorecardMember, setScorecardMember] = useState<CeremonyMember | null>(null);
@@ -94,12 +102,11 @@ export function CeremonyStage({
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [tasksData, sprintsData, memberData, sessionData, execData, profileData] = await Promise.all([
+      const [tasksData, sprintsData, memberData, sessionData, profileData] = await Promise.all([
         tasksApi.list(projectId),
         sprintsApi.list(projectId).catch(() => [] as Sprint[]),
         loadProjectMembers(projectId),
         ceremonySessionsApi.active(projectId, mode).catch((): CeremonySessionDetail => ({ session: null })),
-        runtimeApi.listRecent().catch(() => [] as Execution[]),
         membersApi.profiles().then((r) => r.profiles).catch(() => [] as MemberProfile[]),
       ]);
       setTasks(tasksData);
@@ -107,17 +114,16 @@ export function CeremonyStage({
       setMembers(memberData);
       setSession(sessionData.session ?? null);
       setParticipants(sessionData.participants ?? []);
-      setExecutions(execData);
       setProfiles(profileData);
       setActiveSprintId((prev) =>
         prev || sprintsData.find((s) => s.status === 'active')?.id || sprintsData[0]?.id || '',
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load');
+      setError(e instanceof Error ? e.message : t('errorLoad'));
     } finally {
       setLoading(false);
     }
-  }, [projectId, mode]);
+  }, [projectId, mode, t]);
 
   useEffect(() => { reload(); }, [reload]);
 
@@ -135,6 +141,14 @@ export function CeremonyStage({
     }
   }, []);
   const { peers, connected, send } = useCeremonyRoom(projectId, me, { onChange: reload, onFrame });
+
+  // Live cameras/mics for the round-table — one media room per project ceremony.
+  // Mesh P2P; joins only while the user turns cameras on (no forced capture).
+  const media = useMediaRoom(
+    camerasOn ? `ceremony-${projectId}` : null,
+    { name: me.name, ref: me.ref },
+    { enabled: camerasOn },
+  );
 
   // Seats that are "live": connected peers matched by identity, plus myself.
   const presentKeys = useMemo(() => {
@@ -196,18 +210,6 @@ export function CeremonyStage({
     return p ? memberKey({ kind: p.memberKind, ref: p.memberRef }) : null;
   }, [session?.currentTurn, participants]);
 
-  // Latest execution per task → dedupe auto-dispatch on Complete.
-  const latestExecByTask = useMemo(() => {
-    const m = new Map<number, Execution>();
-    for (const e of executions) {
-      const prev = m.get(e.taskId);
-      const ec = e.createdAt ? new Date(e.createdAt).getTime() : 0;
-      const pc = prev?.createdAt ? new Date(prev.createdAt).getTime() : -1;
-      if (!prev || ec >= pc) m.set(e.taskId, e);
-    }
-    return m;
-  }, [executions]);
-
   const isFacilitator = !session || session.facilitatorId === (user?.id ?? '');
 
   // --- mutations (all broadcast `changed` so peers re-fetch) ----------------
@@ -219,10 +221,10 @@ export function CeremonyStage({
         setDrawerTask((d) => (d?.id === id ? updated : d));
         send({ type: 'changed' });
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Update failed');
+        setError(e instanceof Error ? e.message : t('errorUpdate'));
       }
     },
-    [send],
+    [send, t],
   );
 
   const assignToMember = useCallback(
@@ -238,28 +240,28 @@ export function CeremonyStage({
   const setStatus = useCallback((id: number, status: string) => mutate(id, { status }), [mutate]);
 
   const createEpic = useCallback(async () => {
-    const title = window.prompt('New epic title');
+    const title = window.prompt(t('newEpicPrompt'));
     if (!title?.trim()) return;
     try {
       const epic = await tasksApi.create({ projectId, title: title.trim(), taskType: 'epic' });
       setTasks((prev) => [epic, ...prev]);
       send({ type: 'changed' });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Create epic failed');
+      setError(e instanceof Error ? e.message : t('errorCreateEpic'));
     }
-  }, [projectId, send]);
+  }, [projectId, send, t]);
 
   const createSprint = useCallback(async () => {
-    const name = window.prompt('New sprint name');
+    const name = window.prompt(t('newSprintPrompt'));
     if (!name?.trim()) return;
     try {
       const sprint = await sprintsApi.create({ name: name.trim(), status: 'active', projectId });
       setSprints((prev) => [sprint, ...prev]);
       setActiveSprintId(sprint.id);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Create sprint failed');
+      setError(e instanceof Error ? e.message : t('errorCreateSprint'));
     }
-  }, [projectId]);
+  }, [projectId, t]);
 
   // --- session lifecycle (start / advance turn / complete) -----------------
   const applySession = useCallback((d: { session: CeremonySession | null; participants?: CeremonyParticipant[] }) => {
@@ -274,11 +276,11 @@ export function CeremonyStage({
       const parts = members.map((m) => ({ kind: m.kind, ref: m.ref, name: m.name }));
       applySession(await ceremonySessionsApi.start(projectId, mode, parts));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not start session');
+      setError(e instanceof Error ? e.message : t('errorStart'));
     } finally {
       setSessionBusy(false);
     }
-  }, [members, projectId, mode, applySession]);
+  }, [members, projectId, mode, applySession, t]);
 
   const advanceTurn = useCallback(async (nextTurn: number) => {
     if (!session) return;
@@ -286,40 +288,30 @@ export function CeremonyStage({
     try {
       applySession(await ceremonySessionsApi.advanceTurn(session.id, nextTurn));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not advance turn');
+      setError(e instanceof Error ? e.message : t('errorAdvance'));
     } finally {
       setSessionBusy(false);
     }
-  }, [session, applySession]);
+  }, [session, applySession, t]);
 
-  // On Complete: end the session, then auto-dispatch agent-assigned work (mirrors
-  // the board's lane auto-run). Humans keep their assignments; agents start running.
+  // On Complete: just end the session. The auto-dispatch of agent-owned work now
+  // happens SERVER-SIDE inside POST /sessions/:id/complete, through the canonical
+  // lane-entry gate (which applies the capability/cooldown/token/live-run checks
+  // this client loop used to approximate with its own execution-dedupe map).
+  // Previously this ran here, so the automation depended on the tab staying open,
+  // only saw the tasks this client had fetched, and swallowed every failure.
   const completeSession = useCallback(async () => {
     if (!session) return;
     setSessionBusy(true);
     try {
       applySession(await ceremonySessionsApi.complete(session.id));
-      const agentTasks = tasks.filter((t) => {
-        if (t.assignedAgentHostId == null && !t.assignedAgentRef) return false;
-        if (t.status === 'done') return false;
-        const last = latestExecByTask.get(t.id);
-        return !(last && LIVE_OR_DONE.has(last.status));
-      });
-      await Promise.all(agentTasks.map((t) =>
-        runtimeApi.submitExecution({
-          taskId: t.id,
-          agentHostId: t.assignedAgentHostId ?? undefined,
-          payload: t.assignedAgentRef ? JSON.stringify({ cloudAgentRef: t.assignedAgentRef }) : undefined,
-        }).catch(() => null),
-      ));
-      send({ type: 'changed' });
       reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not complete session');
+      setError(e instanceof Error ? e.message : t('errorComplete'));
     } finally {
       setSessionBusy(false);
     }
-  }, [session, tasks, latestExecByTask, applySession, send, reload]);
+  }, [session, applySession, reload, t]);
 
   // --- cursor broadcast (throttled) ----------------------------------------
   const lastCursor = useRef(0);
@@ -351,20 +343,37 @@ export function CeremonyStage({
             value={mode}
             onChange={(m) => onModeChange(m as CeremonyMode)}
             options={[
-              { value: 'standup', label: 'Standup' },
-              { value: 'planning', label: 'Planning' },
+              { value: 'standup', label: t('standup') },
+              { value: 'planning', label: t('planning') },
             ]}
           />
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            {members.length} at the table
+            {t('atTable', { count: members.length })}
             {connected && (
               <span style={{ marginLeft: 8, color: 'var(--cyan-bright)' }}>
-                ● {peers.length + 1} live
+                ● {t('live', { count: peers.length + 1 })}
               </span>
             )}
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => setCamerasOn((v) => !v)}
+            aria-pressed={camerasOn}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '6px 12px', fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
+              background: camerasOn ? 'var(--coral-bright)' : 'var(--bg-deep)',
+              color: camerasOn ? 'var(--bg-deep)' : 'var(--text-secondary)',
+              border: `1px solid ${camerasOn ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
+            }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M23 7l-7 5 7 5V7z" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+            </svg>
+            {camerasOn ? tMeet('cameraOn') : tMeet('joinWithCamera')}
+          </button>
           {members.length > 0 && (
             <StandupControls
               session={session}
@@ -391,7 +400,7 @@ export function CeremonyStage({
               cursor: 'pointer',
             }}
           >
-            Close
+            {t('close')}
           </button>
           )}
         </div>
@@ -403,14 +412,37 @@ export function CeremonyStage({
         </div>
       )}
 
+      {camerasOn && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 10, borderRadius: 12, background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)' }}>
+          {media.mediaError ? (
+            <div style={{ fontSize: 12, color: 'var(--error-text)' }}>{tMeet('cameraError', { error: media.mediaError })}</div>
+          ) : (
+            <VideoGrid
+              self={{ name: me.name, stream: media.localStream, camOn: media.camOn, micOn: media.micOn }}
+              tiles={media.tiles}
+              compact
+            />
+          )}
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <MediaControls
+              camOn={media.camOn}
+              micOn={media.micOn}
+              onToggleCam={media.toggleCam}
+              onToggleMic={media.toggleMic}
+              onLeave={() => setCamerasOn(false)}
+            />
+          </div>
+        </div>
+      )}
+
       {loading ? (
-        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{t('loading')}</div>
       ) : (
-        <div style={{ display: 'flex', gap: 12, flex: 1, minHeight: 0 }}>
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 12, flex: 1, minHeight: 0 }}>
           {/* Backlog rail */}
           <BacklogRail
             tasks={backlogTasks}
-            title={mode === 'standup' ? 'To discuss' : 'Backlog'}
+            title={mode === 'standup' ? t('toDiscuss') : t('backlog')}
             onOpen={setDrawerTask}
             onReturn={returnToBacklog}
           />
@@ -437,7 +469,7 @@ export function CeremonyStage({
                 }}
               >
                 <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>
-                  Sprint
+                  {t('sprint')}
                 </span>
                 {sprints.length > 0 ? (
                   <Select
@@ -450,11 +482,11 @@ export function CeremonyStage({
                     ))}
                   </Select>
                 ) : (
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No sprint yet</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('noSprint')}</span>
                 )}
                 {activeSprint && (
                   <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                    {sprintTaskCount} scheduled · drop a ticket to add
+                    {t('sprintScheduled', { count: sprintTaskCount })}
                   </span>
                 )}
                 <button
@@ -462,24 +494,30 @@ export function CeremonyStage({
                   onClick={createSprint}
                   style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--coral-bright)', background: 'none', border: 'none', cursor: 'pointer' }}
                 >
-                  + New sprint
+                  {t('newSprint')}
                 </button>
               </div>
             )}
 
             <div
-              onMouseMove={onTableMouseMove}
+              onMouseMove={isMobile ? undefined : onTableMouseMove}
               style={{
                 position: 'relative',
                 flex: 1,
-                minHeight: 360,
+                minHeight: isMobile ? 'auto' : 360,
                 borderRadius: 16,
                 background: 'radial-gradient(circle at 50% 50%, var(--surface-card), var(--bg-deep))',
                 border: '1px solid var(--border-subtle)',
                 overflow: 'hidden',
+                // On mobile the seats flow as a centered wrap-grid rather than an
+                // absolute circle (which collapses/overlaps at narrow widths).
+                ...(isMobile
+                  ? { display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', alignContent: 'flex-start', padding: 12 }
+                  : {}),
               }}
             >
-              {/* Center disc */}
+              {/* Center disc (desktop) / full-width banner (mobile). On standup it's a
+                  drop target that marks a dropped ticket Done. */}
               <div
                 onDragOver={mode === 'standup' ? (e) => e.preventDefault() : undefined}
                 onDrop={mode === 'standup' ? (e) => {
@@ -487,7 +525,18 @@ export function CeremonyStage({
                   const id = Number(e.dataTransfer.getData(DRAG_TASK));
                   if (id) setStatus(id, 'done');
                 } : undefined}
-                style={{
+                style={isMobile ? {
+                  flexBasis: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  padding: '8px 12px',
+                  borderRadius: 12,
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border-subtle)',
+                  textAlign: 'center',
+                } : {
                   position: 'absolute',
                   left: '50%',
                   top: '50%',
@@ -506,46 +555,54 @@ export function CeremonyStage({
                   padding: 12,
                 }}
               >
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', textTransform: 'capitalize' }}>
-                  {mode}
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {t(mode)}
                 </span>
                 {mode === 'standup' ? (
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Drop a ticket here to mark Done</span>
+                  // Drag-to-Done is a desktop-only affordance (HTML5 DnD doesn't fire
+                  // on touch), so the hint is hidden on mobile.
+                  isMobile ? null : <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('dropToDone')}</span>
                 ) : (
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{backlogTasks.length} in backlog</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('inBacklog', { count: backlogTasks.length })}</span>
                 )}
               </div>
 
-              {/* Seats around the ellipse */}
+              {/* Seats: absolute around the ellipse on desktop, wrap-grid on mobile. */}
               {members.map((m, i) => {
+                const k = memberKey(m);
+                const owned = ownedByMember(m);
+                const seat = (
+                  <CeremonySeat
+                    member={m}
+                    stackTasks={tasksForMember(m)}
+                    assignedTasks={owned}
+                    activeLoad={owned.filter((t) => ACTIVE_STATUSES.has(t.status)).length}
+                    cap={capByKey.get(k) ?? DEFAULT_CAP}
+                    present={presentKeys.has(k)}
+                    isCurrentTurn={currentSpeakerKey === k}
+                    showStack={mode === 'standup'}
+                    onDropTask={(id) => assignToMember(id, m)}
+                    onOpen={setDrawerTask}
+                    onOpenScorecard={() => setScorecardMember(m)}
+                    onOpenAssigned={() => setAssignedMember(m)}
+                  />
+                );
+                if (isMobile) return <div key={k}>{seat}</div>;
                 const angle = (2 * Math.PI * i) / Math.max(members.length, 1) - Math.PI / 2;
                 const x = 50 + 42 * Math.cos(angle);
                 const y = 50 + 40 * Math.sin(angle);
-                const k = memberKey(m);
-                const owned = ownedByMember(m);
                 return (
                   <div key={k} style={{ position: 'absolute', left: `${x}%`, top: `${y}%`, transform: 'translate(-50%, -50%)' }}>
-                    <CeremonySeat
-                      member={m}
-                      stackTasks={tasksForMember(m)}
-                      assignedTasks={owned}
-                      activeLoad={owned.filter((t) => ACTIVE_STATUSES.has(t.status)).length}
-                      cap={capByKey.get(k) ?? DEFAULT_CAP}
-                      present={presentKeys.has(k)}
-                      isCurrentTurn={currentSpeakerKey === k}
-                      showStack={mode === 'standup'}
-                      onDropTask={(id) => assignToMember(id, m)}
-                      onOpen={setDrawerTask}
-                      onOpenScorecard={() => setScorecardMember(m)}
-                      onOpenAssigned={() => setAssignedMember(m)}
-                    />
+                    {seat}
                   </div>
                 );
               })}
 
               {members.length === 0 && (
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
-                  No team members — add a team to this project, or invite teammates.
+                <div style={isMobile
+                  ? { flexBasis: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13, padding: '24px 0', textAlign: 'center' }
+                  : { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+                  {t('noMembers')}
                 </div>
               )}
 
@@ -583,27 +640,27 @@ export function CeremonyStage({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 16, fontSize: 13, color: 'var(--text-secondary)' }}>
             <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{drawerTask.key}</div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <span style={{ textTransform: 'capitalize' }}>Priority: {drawerTask.priority}</span>
-              <span style={{ textTransform: 'capitalize' }}>· Status: {drawerTask.status}</span>
+              <span style={{ textTransform: 'capitalize' }}>{t('priority', { priority: drawerTask.priority })}</span>
+              <span style={{ textTransform: 'capitalize' }}>· {t('status', { status: drawerTask.status })}</span>
             </div>
             {drawerTask.description && <p style={{ color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{drawerTask.description}</p>}
             <a
               href={`/projects?tab=tasks&project=${drawerTask.projectId}`}
               style={{ color: 'var(--coral-bright)', fontWeight: 600, textDecoration: 'none' }}
             >
-              Open on the board →
+              {t('openOnBoard')}
             </a>
           </div>
         )}
       </SlideOutPanel>
 
       {/* Scorecard (agile stats) for a clicked seat — power meter "expanded". */}
-      <SlideOutPanel open={!!scorecardMember} onClose={() => setScorecardMember(null)} title={scorecardMember ? `Scorecard · ${scorecardMember.name}` : ''}>
+      <SlideOutPanel open={!!scorecardMember} onClose={() => setScorecardMember(null)} title={scorecardMember ? t('scorecardTitle', { name: scorecardMember.name }) : ''}>
         {scorecardMember && <ScorecardPanel member={scorecardMember} />}
       </SlideOutPanel>
 
       {/* Assigned work (briefcase) for a clicked seat. */}
-      <SlideOutPanel open={!!assignedMember} onClose={() => setAssignedMember(null)} title={assignedMember ? `Assigned · ${assignedMember.name}` : ''}>
+      <SlideOutPanel open={!!assignedMember} onClose={() => setAssignedMember(null)} title={assignedMember ? t('assignedTitle', { name: assignedMember.name }) : ''}>
         {assignedMember && (
           <AssignedWorkPanel
             member={assignedMember}

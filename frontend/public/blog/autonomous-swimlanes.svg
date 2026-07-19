@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="amberGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFCE6B"/><stop offset="100%" stop-color="#F5A623"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+    <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8891AE"/></marker>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">AUTONOMOUS SWIMLANE EXECUTION</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">A Kanban board that drives itself</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- advance arrows between lanes -->
+  <g fill="none" stroke="rgba(169,139,255,0.5)" stroke-width="2.5">
+    <line x1="386" y1="486" x2="442" y2="486" marker-end="url(#arw)"/>
+    <line x1="756" y1="486" x2="812" y2="486" marker-end="url(#arw)"/>
+    <line x1="1126" y1="486" x2="1140" y2="486" marker-end="url(#arw)"/>
+    <line x1="1170" y1="486" x2="1184" y2="486" marker-end="url(#arw)"/>
+  </g>
+
+  <!-- LANE 1 Backlog (amber = queued) -->
+  <rect x="80" y="230" width="300" height="470" rx="18" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.09)" stroke-width="1.5"/>
+  <rect x="80" y="230" width="300" height="6" rx="3" fill="url(#amberGrad)"/>
+  <text x="104" y="278" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">Backlog</text>
+  <text x="104" y="306" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" letter-spacing="2" font-weight="700" fill="#F5A623">HUMAN DROP</text>
+  <rect x="104" y="330" width="252" height="90" rx="12" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.12)"/>
+  <text x="122" y="362" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="700" fill="#EEF0FA">TICKET-482</text>
+  <text x="122" y="386" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#A6ADC8">Add invoice export</text>
+  <text x="122" y="408" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" fill="#8891AE">waiting to dispatch</text>
+
+  <!-- LANE 2 Build (mint) -->
+  <rect x="450" y="230" width="300" height="470" rx="18" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.09)" stroke-width="1.5"/>
+  <rect x="450" y="230" width="300" height="6" rx="3" fill="url(#mintGrad)"/>
+  <text x="474" y="278" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">Build</text>
+  <text x="474" y="306" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" letter-spacing="2" font-weight="700" fill="#5BF0BC">CODER EMP &#183; MODEL PINNED</text>
+  <rect x="474" y="330" width="252" height="90" rx="12" fill="rgba(91,240,188,0.08)" stroke="rgba(91,240,188,0.35)"/>
+  <text x="492" y="362" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="700" fill="#EEF0FA">TICKET-481</text>
+  <text x="492" y="386" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#A6ADC8">clone &#183; edit &#183; build</text>
+  <text x="492" y="408" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" fill="#5BF0BC">running &#183; opens PR</text>
+
+  <!-- LANE 3 Review (cool) -->
+  <rect x="820" y="230" width="300" height="470" rx="18" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.09)" stroke-width="1.5"/>
+  <rect x="820" y="230" width="300" height="6" rx="3" fill="url(#coolGrad)"/>
+  <text x="844" y="278" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">Review</text>
+  <text x="844" y="306" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" letter-spacing="2" font-weight="700" fill="#3DD6F5">REVIEWER EMP</text>
+  <rect x="844" y="330" width="252" height="90" rx="12" fill="rgba(61,214,245,0.08)" stroke="rgba(61,214,245,0.35)"/>
+  <text x="862" y="362" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="700" fill="#EEF0FA">TICKET-479</text>
+  <text x="862" y="386" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#A6ADC8">checks the diff</text>
+  <text x="862" y="408" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" fill="#3DD6F5">approved &#8594; merge</text>
+
+  <!-- APPROVAL GATE between Review and Done -->
+  <circle cx="1155" cy="486" r="22" fill="rgba(240,87,74,0.15)" stroke="url(#coralGrad)" stroke-width="2.5"/>
+  <rect x="1147" y="481" width="16" height="12" rx="2" fill="#FF8F7A"/>
+  <path d="M1150,481 v-4 a5,5 0 0 1 10,0 v4" fill="none" stroke="#FF8F7A" stroke-width="2"/>
+  <text x="1155" y="538" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" letter-spacing="1" font-weight="700" fill="#FF8F7A">APPROVAL</text>
+  <text x="1155" y="554" text-anchor="middle" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="12.5" letter-spacing="1" font-weight="700" fill="#FF8F7A">GATE</text>
+
+  <!-- LANE 4 Done (violet) -->
+  <rect x="1190" y="230" width="300" height="470" rx="18" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.09)" stroke-width="1.5"/>
+  <rect x="1190" y="230" width="300" height="6" rx="3" fill="url(#violetGrad)"/>
+  <text x="1214" y="278" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">Done</text>
+  <text x="1214" y="306" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" letter-spacing="2" font-weight="700" fill="#A98BFF">MERGED &amp; SHIPPED</text>
+  <rect x="1214" y="330" width="252" height="90" rx="12" fill="rgba(169,139,255,0.08)" stroke="rgba(169,139,255,0.35)"/>
+  <text x="1232" y="362" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15" font-weight="700" fill="#EEF0FA">TICKET-476</text>
+  <text x="1232" y="386" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#A6ADC8">PR merged</text>
+  <text x="1232" y="408" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" fill="#A98BFF">on the record</text>
+
+  <!-- caption card -->
+  <rect x="80" y="596" width="1040" height="88" rx="14" fill="rgba(169,139,255,0.08)" stroke="rgba(169,139,255,0.3)" stroke-width="1.5"/>
+  <text x="112" y="636" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="19" font-weight="800" fill="#A98BFF">You manage outcomes, not prompts</text>
+  <text x="112" y="664" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="15.5" fill="#A6ADC8">Tickets dispatch automatically &#183; the board advances lane &#8594; lane &#183; execution stops only at the gates you choose.</text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">Assign an agent to a lane and the board ships the ticket &#8212; human-in-the-loop at the gates</text>
+</svg>

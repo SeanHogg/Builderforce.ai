@@ -14,7 +14,7 @@
 
 import type { Env } from '../../env';
 import { ACTION_TYPES, type ActionType, normalizeActionType, learnedRoutingEnabled } from './actionTypes';
-import { ideProxy } from './LlmProxyService';
+import { ideProxy, readProxyChoice } from './LlmProxyService';
 
 export interface TaskClassification {
   actionType: ActionType;
@@ -82,11 +82,8 @@ export async function classifyTaskAction(
     });
 
     if (result.response.status >= 400) return { actionType: 'other', confidence: 0 };
-    const raw = (await result.response.json().catch(() => null)) as
-      | { choices?: Array<{ message?: { content?: unknown } }> }
-      | null;
-    const content = raw?.choices?.[0]?.message?.content;
-    if (typeof content !== 'string') return { actionType: 'other', confidence: 0 };
+    const { content } = await readProxyChoice(result);
+    if (!content) return { actionType: 'other', confidence: 0 };
 
     let parsed: unknown;
     try {

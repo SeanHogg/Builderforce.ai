@@ -5,22 +5,28 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { WorkforceAgents } from '@/components/workforce/WorkforceAgents';
+import { RolesView } from '@/components/workforce/RolesView';
+import { TalentView } from '@/components/talent/TalentView';
 import { TeamsView } from '@/components/teams/TeamsView';
 import { ChatsView } from '@/components/chats/ChatsView';
 import { HumanRequestsView } from '@/components/humanRequests/HumanRequestsView';
 import { ObservabilityContent } from '@/components/ObservabilityContent';
 import { PerformanceView } from '@/components/workforce/PerformanceView';
+import { WorkforcePlanView } from '@/components/workforce/WorkforcePlanView';
 import { QaContent } from '@/components/QaContent';
 import { ActiveRunsPanel } from '@/components/ActiveRunsPanel';
+import { TeamChatButton } from '@/components/brain/TeamChatButton';
+import { MeetingsCalendar } from '@/components/meetings/MeetingsCalendar';
+import MeetingsContent from '@/components/meetings/MeetingsContent';
 import PageContainer from '@/components/PageContainer';
 
 // Workforce sub-views are declared as query tabs in navGroups; the shell
 // <SectionTabs> bar renders the tab bar. Here we just read `?tab=` to pick the
 // body and the per-tab sub-label, mirroring the /quality surface.
-type WorkforceTab = 'workforce' | 'teams' | 'performance' | 'chats' | 'approvals' | 'logs' | 'qa';
+type WorkforceTab = 'workforce' | 'roles' | 'teams' | 'meetings' | 'calendar' | 'talent' | 'performance' | 'plan' | 'chats' | 'approvals' | 'logs' | 'qa';
 
 const TAB_IDS: ReadonlyArray<WorkforceTab> = [
-  'workforce', 'teams', 'performance', 'chats', 'approvals', 'logs', 'qa',
+  'workforce', 'roles', 'teams', 'meetings', 'calendar', 'talent', 'performance', 'plan', 'chats', 'approvals', 'logs', 'qa',
 ];
 
 function WorkforcePageInner() {
@@ -41,17 +47,29 @@ function WorkforcePageInner() {
 
   return (
     <PageContainer>
-      <div className="page-header" style={{ marginBottom: 16 }}>
+      <div className="page-header" style={{ marginBottom: 16, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
           <h1 className="page-title" style={{ margin: 0 }}>{t('title')}</h1>
           <p className="page-sub" style={{ fontSize: 13, color: 'var(--muted)', margin: '4px 0 0' }}>{t(`sub.${tab}`)}</p>
         </div>
+        {/* Message the broader team — the tenant-wide team chat (humans + agents). */}
+        <TeamChatButton variant="labeled" />
       </div>
 
-      {tab === 'teams' ? (
+      {tab === 'roles' ? (
+        <RolesView />
+      ) : tab === 'talent' ? (
+        <TalentView />
+      ) : tab === 'teams' ? (
         <TeamsView />
+      ) : tab === 'meetings' ? (
+        <MeetingsContent embedded basePath="/workforce?tab=meetings" />
+      ) : tab === 'calendar' ? (
+        <MeetingsCalendar />
       ) : tab === 'performance' ? (
         <PerformanceView />
+      ) : tab === 'plan' ? (
+        <WorkforcePlanView />
       ) : tab === 'chats' ? (
         <ChatsView />
       ) : tab === 'approvals' ? (

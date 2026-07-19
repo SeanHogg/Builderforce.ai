@@ -8,9 +8,12 @@ import {
   agentHosts,
   cloudAgents as cloudAgentsApi,
   workflows,
+  vscodeConnections,
+  isVscodeConnectionOnline,
   type AgentHost,
   type ToolAuditEvent,
   type Workflow,
+  type VscodeConnection,
 } from '@/lib/builderforceApi';
 import { AgentHostGateway } from '@/lib/agentHostGateway';
 import { loadAgentPool, type PoolAgent } from '@/lib/agentPool';
@@ -59,11 +62,13 @@ export interface ObservabilityContentProps {
   reportTransaction?: () => Promise<string>;
 }
 
-/** Both self-hosted hosts and cloud agents are agents — one unified directory. */
-type AgentKind = 'host' | 'cloud';
+/** Self-hosted hosts, cloud agents, and connected VS Code editors — one unified
+ *  directory. VS Code connections are presence-only (no tool-audit telemetry, so no
+ *  timeline tracks); they appear as directory chips with a live/offline pill. */
+type AgentKind = 'host' | 'cloud' | 'vscode';
 
 interface UnifiedAgent {
-  /** Stable selection key: `host:<id>` or `cloud:<ref>`. */
+  /** Stable selection key: `host:<id>`, `cloud:<ref>`, or `vscode:<id>`. */
   key: string;
   kind: AgentKind;
   /** agent_hosts.id for kind 'host'. */
@@ -71,7 +76,7 @@ interface UnifiedAgent {
   /** ide_agents.id (cloud ref) for kind 'cloud'. */
   cloudRef?: string;
   name: string;
-  /** Live-connection status — hosts only. */
+  /** Live-connection status — hosts and vscode connections. */
   online?: boolean;
 }
 
@@ -145,6 +150,7 @@ function colorForKey(selectedKeys: string[], key: string): string {
 const KIND_PILL: Record<AgentKind, { label: string; bg: string; color: string }> = {
   host: { label: 'ON-PREM', bg: 'var(--bg-elevated)', color: 'var(--text-secondary)' },
   cloud: { label: 'CLOUD', bg: 'var(--surface-coral-soft)', color: 'var(--accent)' },
+  vscode: { label: 'VS CODE', bg: 'var(--bg-elevated)', color: 'var(--text-secondary)' },
 };
 
 function pillStyle(bg: string, color: string): React.CSSProperties {
@@ -183,6 +189,7 @@ export function ObservabilityContent({
   // Directory: self-hosted hosts + cloud agents, merged into one list.
   const [agentHostList, setAgentHostList] = useState<AgentHost[]>([]);
   const [cloudAgentList, setCloudAgentList] = useState<{ ref: string; name: string }[]>([]);
+  const [vscodeConnList, setVscodeConnList] = useState<VscodeConnection[]>([]);
   const [dirLoading, setDirLoading] = useState(true);
   const [dirError, setDirError] = useState<string | null>(null);
 
@@ -220,6 +227,7 @@ export function ObservabilityContent({
     : [
         ...agentHostList.map((h) => ({ key: `host:${h.id}`, kind: 'host' as const, hostId: h.id, name: h.name, online: h.online })),
         ...cloudAgentList.map((a) => ({ key: `cloud:${a.ref}`, kind: 'cloud' as const, cloudRef: a.ref, name: a.name })),
+        ...vscodeConnList.map((c) => ({ key: `vscode:${c.id}`, kind: 'vscode' as const, name: c.machineName, online: isVscodeConnectionOnline(c) })),
       ];
   const agentByKey = new Map(unifiedAgents.map((a) => [a.key, a]));
 
@@ -249,14 +257,17 @@ export function ObservabilityContent({
       // …plus cloud agents that have ACTUALLY run (incl. the gateway-default
       // bucket) — so every cloud run is attributable to a chip, named or not.
       cloudAgentsApi.list().catch(() => [] as { ref: string; name: string }[]),
+      // Connected VS Code editors — presence chips (no telemetry / timeline).
+      vscodeConnections.list().catch(() => [] as VscodeConnection[]),
     ])
-      .then(([hosts, pool, ran]) => {
+      .then(([hosts, pool, ran, vscode]) => {
         setAgentHostList(hosts);
         // Merge by ref; a "ran" entry wins (its name reflects the actual run).
         const byRef = new Map<string, { ref: string; name: string }>();
         for (const a of pool) byRef.set(a.ref, { ref: a.ref, name: a.name });
         for (const a of ran) byRef.set(a.ref, { ref: a.ref, name: a.name });
         setCloudAgentList([...byRef.values()]);
+        setVscodeConnList(vscode);
       })
       .finally(() => setDirLoading(false));
   }, [scoped]);
@@ -645,7 +656,7 @@ export function ObservabilityContent({
                   )}
                   {a.name}
                   <span style={pillStyle(pill.bg, pill.color)}>{pill.label}</span>
-                  {a.kind === 'host' && (
+                  {(a.kind === 'host' || a.kind === 'vscode') && (
                     <span
                       style={pillStyle(
                         a.online ? 'rgba(34,197,94,0.15)' : 'var(--bg-elevated)',

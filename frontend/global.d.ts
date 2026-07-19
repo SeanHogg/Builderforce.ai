@@ -8,8 +8,8 @@ declare module '*.md' {
 // errors (TS2882) on side-effect imports lacking a module declaration; TS 5.x did not.
 declare module '*.css';
 
-// @seanhogg/builderforce-memory-engine (formerly mambacode.js) ships its own
-// TypeScript declarations, so no `declare module` shim is needed here.
+// @seanhogg/builderforce-memory-engine ships its own TypeScript declarations,
+// so no `declare module` shim is needed here.
 
 // WebGPU global type declarations for TypeScript
 // These types are available in browsers supporting WebGPU

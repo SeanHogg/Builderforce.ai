@@ -29,6 +29,19 @@ custom_domain = true
 pattern = "*.builderforce.ai/*"
 zone_name = "builderforce.ai"
 
+# Same-origin gateway path. Corporate networks frequently whitelist the primary
+# apex (builderforce.ai) but block the `api.` subdomain, so direct calls to
+# api.builderforce.ai fail on some users' machines. `builderforce.ai/gateway/*`
+# lands on THIS worker instead — a more-specific path route overrides the frontend
+# worker's apex `custom_domain` for this prefix only (everything else still serves
+# the Next.js app). The worker strips the `/gateway` prefix (see `stripGatewayPrefix`
+# in src/index.ts) so every route/middleware is byte-identical to api.builderforce.ai.
+# This is the ONE whitelisted host all clients (VS Code extension + integrations)
+# should target; nobody needs to reach the api.* subdomain directly.
+[[routes]]
+pattern = "builderforce.ai/gateway/*"
+zone_name = "builderforce.ai"
+
 [vars]
 # Overridden by Cloudflare dashboard secrets for production.
 CORS_ORIGINS = "*"
@@ -43,6 +56,7 @@ NOTIFICATION_EMAIL_FROM = "Builderforce <notifications@builderforce.ai>"
 #   Cloudflare (PAID_LEAD_VENDOR, free daily neurons) was dead on every call and
 #   coding overflow floored to the metered Anthropic key.
 # NEON_DATABASE_URL must be set via: wrangler secret put NEON_DATABASE_URL
+# NEON_TRANSACTIONAL_DATABASE_URL must be set via: wrangler secret put NEON_TRANSACTIONAL_DATABASE_URL
 # JWT_SECRET must be set via: wrangler secret put JWT_SECRET
 # OPENROUTER_API_KEY must be set via: wrangler secret put OPENROUTER_API_KEY
 # OPENROUTER_API_KEY_PRO must be set via: wrangler secret put OPENROUTER_API_KEY_PRO
@@ -71,6 +85,10 @@ name = "CLOUD_RUNNER"
 class_name = "CloudRunnerDO"
 
 [[durable_objects.bindings]]
+name = "PROJECT_EVERMIND"
+class_name = "ProjectEvermindCoordinatorDO"
+
+[[durable_objects.bindings]]
 name = "AGENT_CONTAINER"
 class_name = "AgentContainerDO"
 
@@ -78,7 +96,7 @@ class_name = "AgentContainerDO"
 name = "QA_RUNNER_CONTAINER"
 class_name = "QaRunnerContainerDO"
 
-# Long-lived Cloudflare Container for "V2 Cloud Agent (Node/Container)" runs — a
+# Long-lived Cloudflare Container for "Cloud Agent (Node/Container)" runs — a
 # persistent Node process with a real shell (build/test/lint). The image lives in
 # api/container; build context is that dir. Requires a Workers Paid plan with
 # Containers enabled. `max_instances` caps concurrent containers (cost guard).
@@ -158,12 +176,24 @@ tag = "v8"
 # browser-exploration runner). Container-control DOs are SQLite-backed.
 new_sqlite_classes = ["QaRunnerContainerDO"]
 
+[[migrations]]
+tag = "v9"
+# ProjectEvermindCoordinatorDO is the single serialized writer for a project's
+# self-learning Evermind model — it batches concurrent learning pushes via a
+# storage alarm and FedAvg-merges weight deltas. Alarms require SQLite-backed DOs.
+new_sqlite_classes = ["ProjectEvermindCoordinatorDO"]
+
 # Cron triggers — see scheduled() in src/index.ts
 #   "0 9 * * *"   09:00 UTC daily: probe every LLM vendor; email superadmins on status change.
 #   "*/5 * * * *" every 5 min: fire due schedule + rss workflow triggers, then advance
-#                 pending cloud-runtime workflows. Schedules finer than 5 min coalesce to it.
+#                 pending cloud-runtime workflows; reap stale runs; AND run the always-on
+#                 autonomous executor (start every agent-owned pending ticket across all
+#                 tenants, token-gated). Schedules finer than 5 min coalesce to it.
+#   "0 8 * * 1" weekly (Mon 08:00 UTC): Security-agent SOC 2 audit sweep — one audit
+#                 per tenant that has a Security agent (heavier than the daily passes,
+#                 so weekly). No-op for tenants without a Security agent.
 [triggers]
-crons = ["0 9 * * *", "*/5 * * * *"]
+crons = ["0 9 * * *", "0 8 * * 1", "*/5 * * * *"]
 
 # Inbound-email workflow trigger (the `inbound-email` trigger type) is delivered to
 # the email() handler in src/index.ts. It requires Cloudflare Email Routing to be

@@ -40,6 +40,21 @@ export interface TaskProps {
   /** Story-point estimate (0246), or null when unestimated — the leaf source for
    *  derived sprint velocity. */
   storyPoints: number | null;
+  /** AI Manager (0265): business value 0-100, null when unscored. */
+  businessValue: number | null;
+  /** One-line justification for {@link businessValue}. */
+  businessValueRationale: string | null;
+  /** How the score was set: 'ai' | 'rice' | 'manual' (a manual edit pins it). */
+  businessValueSource: string | null;
+  /** The manager's computed backlog rank (1 = do first), null when unranked. */
+  managerRank: number | null;
+  /** Validator review bookkeeping (0270): how many review passes this task has had,
+   *  when the last pass ran, and its verdict ('complete' | 'gaps' | null). */
+  reviewCount: number;
+  lastReviewedAt: Date | null;
+  lastReviewVerdict: string | null;
+  /** For a GAP-typed task: the Done item whose review produced it (null otherwise). */
+  gapOriginTaskId: TaskId | null;
   startDate: Date | null;
   dueDate: Date | null;
   persona: string | null;
@@ -73,7 +88,7 @@ export class Task {
   static create(
     props: Omit<
       TaskProps,
-      'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubIssueNumber' | 'githubIssueUrl' | 'githubPrUrl' | 'githubPrNumber' | 'archived' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'taskType' | 'parentTaskId' | 'sprintId' | 'releaseId' | 'storyPoints'
+      'id' | 'key' | 'createdAt' | 'updatedAt' | 'githubIssueNumber' | 'githubIssueUrl' | 'githubPrUrl' | 'githubPrNumber' | 'archived' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'taskType' | 'parentTaskId' | 'sprintId' | 'releaseId' | 'storyPoints' | 'businessValue' | 'businessValueRationale' | 'businessValueSource' | 'managerRank' | 'reviewCount' | 'lastReviewedAt' | 'lastReviewVerdict' | 'gapOriginTaskId'
     > & {
       projectKey: string;
       /** Highest existing key sequence in the project; this task gets the next one. */
@@ -85,6 +100,8 @@ export class Task {
       /** Type at creation (default `task`). A decomposed child passes the Epic's id as parent. */
       taskType?: TaskType;
       parentTaskId?: TaskId | null;
+      /** For a GAP task: the Done item whose review produced it (Validator sets this). */
+      gapOriginTaskId?: TaskId | null;
     },
   ): Task {
     if (!props.title.trim()) throw new ValidationError('Task title is required');
@@ -115,6 +132,14 @@ export class Task {
       sprintId: null,
       releaseId: null,
       storyPoints: null,
+      businessValue: null,
+      businessValueRationale: null,
+      businessValueSource: null,
+      managerRank: null,
+      reviewCount: 0,
+      lastReviewedAt: null,
+      lastReviewVerdict: null,
+      gapOriginTaskId: props.gapOriginTaskId ?? null,
       startDate: props.startDate ?? null,
       dueDate: props.dueDate ?? null,
       persona: props.persona ?? null,
@@ -160,6 +185,15 @@ export class Task {
   get sprintId(): string | null { return this.props.sprintId; }
   get releaseId(): string | null { return this.props.releaseId; }
   get storyPoints(): number | null { return this.props.storyPoints; }
+  get businessValue(): number | null { return this.props.businessValue; }
+  get businessValueRationale(): string | null { return this.props.businessValueRationale; }
+  get businessValueSource(): string | null { return this.props.businessValueSource; }
+  get managerRank(): number | null { return this.props.managerRank; }
+  get reviewCount(): number { return this.props.reviewCount; }
+  get lastReviewedAt(): Date | null { return this.props.lastReviewedAt; }
+  get lastReviewVerdict(): string | null { return this.props.lastReviewVerdict; }
+  get gapOriginTaskId(): TaskId | null { return this.props.gapOriginTaskId; }
+  get isGap(): boolean { return this.props.taskType === TaskType.GAP; }
   get startDate(): Date | null { return this.props.startDate; }
   get dueDate(): Date | null { return this.props.dueDate; }
   get persona(): string | null { return this.props.persona; }
@@ -177,6 +211,7 @@ export class Task {
         TaskProps,
         'title' | 'description' | 'status' | 'priority' | 'taskType' | 'parentTaskId' | 'assignedAgentType'
         | 'githubPrUrl' | 'githubPrNumber' | 'assignedAgentHostId' | 'assignedAgentRef' | 'assignedUserId' | 'gitBranch' | 'explicitRepoId' | 'sprintId' | 'releaseId' | 'storyPoints' | 'startDate' | 'dueDate'
+        | 'businessValue' | 'businessValueRationale' | 'businessValueSource' | 'managerRank'
         | 'persona' | 'archived'
       >
     >,

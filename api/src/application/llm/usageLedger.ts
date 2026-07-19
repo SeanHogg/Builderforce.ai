@@ -17,6 +17,7 @@ import type { Env } from '../../env';
 import { llmUsageLog } from '../../infrastructure/database/schema';
 import type { LlmUsage } from './LlmProxyService';
 import { getCatalogCached } from './modelCatalog';
+import { buildTransactionalDatabase } from '../../infrastructure/database/connection';
 
 /** Cache-tier multipliers relative to the base input (prompt) price. cache_read
  *  is billed ~0.1x input, cache_creation ~1.25x — both are subsets of
@@ -29,6 +30,13 @@ export const CACHE_CREATION_MULTIPLIER = 1.25;
  *  as effectively unlimited unless they set an explicit cap. See migration 0130
  *  and the gateway overflow gate. */
 export const DEFAULT_PAID_OVERFLOW_CAP_MILLICENTS = 50_000; // $0.50
+
+/** Flat surcharge (millicents, 1/100000 USD) added on top of the metered OpenRouter
+ *  token cost for a PREMIUM model selection — the "any paid OpenRouter model" tier a
+ *  paid tenant with a validated card unlocks. 1¢ = 1000 millicents. Applied once per
+ *  request (not per token), so the billed cost is exactly "OpenRouter cost + a penny".
+ *  See `isPremiumModelSelection` (the gate) and the gateway `premiumSurcharge` flag. */
+export const PREMIUM_REQUEST_SURCHARGE_MILLICENTS = 1_000; // $0.01 / request
 
 /**
  * Resolve a tenant's effective daily paid-overflow cap (millicents) from its
@@ -92,6 +100,29 @@ export function computeCostMillicents(
 }
 
 /**
+ * Which agent modality produced a usage row. Set on every row so metering can
+ * apply the BYO exemption (own-machine on-prem/VSIX BYO usage is free; cloud BYO
+ * is charged) — see tokenUsage.ts.
+ *   • web      → the web app (Brain chat, dashboards) or an unattributed call.
+ *   • vsix     → the VS Code extension (own machine).
+ *   • on_prem  → a self-hosted agent host (own machine).
+ *   • cloud    → a cloud agent run (Durable Object / container) on our infra.
+ *   • sdk      → a direct SDK/API caller.
+ */
+export type UsageSurface = 'web' | 'vsix' | 'on_prem' | 'cloud' | 'sdk';
+
+/** Map internal gateway vendor ids to the stable provider ids shown in the BYO
+ * integrations UI. */
+export function normalizeByoProvider(vendor: string): string {
+  const aliases: Record<string, string> = {
+    googleai: 'google',
+    'openai-codex': 'openai',
+    moonshot: 'kimi',
+  };
+  return aliases[vendor] ?? vendor;
+}
+
+/**
  * Who produced a usage row. Exactly one of the agent dimensions is set in
  * practice:
  *   • agentHostId      → a self-hosted (on-prem) agent host's gateway call.
@@ -129,12 +160,32 @@ export interface RecordUsageRow {
    *  fallback / backstop on Builderforce's key, not a plan-pool model). Metered
    *  against the per-tenant `paid_overflow_daily_cap`. See isPaidOverflowModel. */
   paidOverflow?: boolean | null;
+  /** True when the tenant's OWN provider credential (BYO key / connected
+   *  subscription) served the call. Forces `cost_usd_millicents = 0` (the
+   *  platform paid nothing) and, combined with an on-prem/VSIX `surface`, exempts
+   *  the row from the plan token allowance. See tokenUsage.ts. */
+  byo?: boolean | null;
+  /** Stable connected-provider id when `byo` is true. This is deliberately
+   *  separate from `model`: one credential can serve many models. */
+  byoProvider?: string | null;
+  /** Which modality produced the row — drives the BYO metering exemption.
+   *  Defaults to 'web' when unset. */
+  surface?: UsageSurface | null;
+  /** True when the tenant selected a PREMIUM (any-paid-OpenRouter) model — adds the
+   *  flat {@link PREMIUM_REQUEST_SURCHARGE_MILLICENTS} on top of the metered token
+   *  cost so billing is "OpenRouter cost + 1¢". Ignored for BYO rows (cost forced 0).
+   *  Recorded in metadata so an invoice line can show the surcharge explicitly. */
+  premiumSurcharge?: boolean | null;
 }
 
-/** Minimal shape of a ProxyResult this helper needs — avoids importing the full type. */
+/** Minimal shape of a ProxyResult this helper needs — avoids importing the full type.
+ *  Must carry the BYO provenance fields: narrowing them away silently prices a
+ *  tenant's own-key call against the catalog and bills them for it. */
 interface ProxyUsageResult {
   usage?: LlmUsage;
   resolvedModel?: string;
+  byoFunded?: boolean;
+  resolvedVendor?: string;
 }
 
 /**
@@ -154,9 +205,11 @@ export async function recordProxyUsage(
     result: ProxyUsageResult;
     llmProduct?: string;
     attribution?: UsageAttribution | null;
+    surface?: UsageSurface | null;
   },
 ): Promise<void> {
   if (!opts.result.usage) return;
+  const byo = opts.result.byoFunded ?? false;
   await recordUsageRow(db, env, {
     tenantId:   opts.tenantId,
     userId:     opts.userId ?? null,
@@ -165,6 +218,11 @@ export async function recordProxyUsage(
     usage:      opts.result.usage,
     useCase:    opts.useCase,
     attribution: opts.attribution ?? null,
+    byo,
+    byoProvider: byo && opts.result.resolvedVendor
+      ? normalizeByoProvider(opts.result.resolvedVendor)
+      : null,
+    surface:    opts.surface ?? null,
   });
 }
 
@@ -172,6 +230,7 @@ export async function recordProxyUsage(
  *  Best-effort — never throws (logging must not fail a run). */
 export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Promise<void> {
   try {
+    const usageDb = env.NEON_TRANSACTIONAL_DATABASE_URL ? buildTransactionalDatabase(env) : db;
     // Clamp tokens ONCE at the canonical write boundary so neither the cost price
     // nor the persisted columns can carry a NaN/negative/fractional from a bad
     // upstream turn — every usage producer (gateway + cloud) funnels through here.
@@ -180,14 +239,25 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
     // Price the call at write time so the dashboard/billing sums a recorded
     // column instead of re-pricing tokens against a moving catalog. Catalog read
     // is L1+KV cached, so this is a cheap lookup on the hot logging path.
+    // BYO rows are served by the tenant's OWN provider account — the platform
+    // pays nothing — so their platform cost is always 0 (skip pricing entirely).
     let costUsdMillicents = 0;
-    try {
-      const catalog = await getCatalogCached(env);
-      const pricing = catalog.find((m) => m.id === row.model)?.pricing;
-      costUsdMillicents = computeCostMillicents(pricing, usage);
-    } catch { /* pricing unavailable — record tokens with cost 0 */ }
+    if (!row.byo) {
+      try {
+        const catalog = await getCatalogCached(env);
+        const pricing = catalog.find((m) => m.id === row.model)?.pricing;
+        costUsdMillicents = computeCostMillicents(pricing, usage);
+      } catch { /* pricing unavailable — record tokens with cost 0 */ }
+      // Premium (any-paid-OpenRouter) selection: add the flat per-request surcharge on
+      // top of the metered token cost so the tenant is billed "OpenRouter cost + 1¢".
+      if (row.premiumSurcharge) costUsdMillicents += PREMIUM_REQUEST_SURCHARGE_MILLICENTS;
+    }
+    // Stamp the surcharge into metadata so an invoice/usage row can show it explicitly.
+    const metadata = row.premiumSurcharge
+      ? { ...(row.metadata ?? {}), premiumSurchargeMillicents: PREMIUM_REQUEST_SURCHARGE_MILLICENTS }
+      : row.metadata;
 
-    await db.insert(llmUsageLog).values({
+    await usageDb.insert(llmUsageLog).values({
       tenantId:            row.tenantId,
       userId:              row.userId,
       llmProduct:          row.llmProduct,
@@ -199,7 +269,7 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
       cacheCreationTokens: usage.cacheCreationTokens ?? 0,
       retries:             row.retries ?? 0,
       streamed:            row.streamed ?? false,
-      metadata:            row.metadata ? JSON.stringify(row.metadata) : null,
+      metadata:            metadata ? JSON.stringify(metadata) : null,
       idempotencyKey:      row.idempotencyKey ?? null,
       useCase:             row.useCase ?? null,
       tenantApiKeyId:      row.tenantApiKeyId ?? null,
@@ -211,6 +281,9 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
       costUsdMillicents,
       traceId:             row.traceId ?? null,
       paidOverflow:        row.paidOverflow ?? false,
+      byo:                 row.byo ?? false,
+      byoProvider:         row.byo ? (row.byoProvider ?? null) : null,
+      surface:             row.surface ?? 'web',
     });
   } catch { /* never let usage logging fail the request */ }
 }

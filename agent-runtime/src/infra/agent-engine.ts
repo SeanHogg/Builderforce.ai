@@ -1,10 +1,9 @@
 /**
  * RelayTaskEngine — the host relay's swappable runner for executing a dispatched task.
  *
- * The host relay used to hard-branch `if (engine === 'builderforce-v2') runV2 else
- * runV1`, and the cloud path branched again — the same V1/V2 decision encoded in
- * multiple places. Behind this interface, each runtime is one implementation
- * (Strategy pattern); the relay resolves the right one by id and calls `run()`.
+ * The host relay used to hard-branch on the engine id in multiple places. Behind this
+ * interface there is ONE runtime — the current engine — resolved via the shared DI
+ * registry and driven with `run()`; the seam stays so the NEXT engine is a wiring change.
  *
  * **Layering — NOT the same contract as `@builderforce/agent-tools`'s `AgentEngine`.**
  * That shared engine is a PURE per-task loop: `run(input) → AgentRunResult`, with the
@@ -43,8 +42,8 @@ export interface EngineDispatch {
   policyGates?: PolicyGate[];
 }
 
-/** One relay task runtime. Sole implementation today: the Claude Agent SDK
- *  (`builderforce-v2`); V1 (pi) and `builderforce-local` are retired. */
+/** One relay task runtime. Sole implementation: the Claude Agent SDK loop, the
+ *  current engine ({@link CURRENT_ENGINE_ID}). Legacy ids resolve to it. */
 export interface RelayTaskEngine {
   /** Stable engine id matched against `EngineDispatch.engine`. */
   readonly id: string;

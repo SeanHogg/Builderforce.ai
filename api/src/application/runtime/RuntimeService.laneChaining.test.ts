@@ -28,7 +28,10 @@ function buildTask(status: string): Task {
     status, priority: TaskPriority.MEDIUM, taskType: TaskType.TASK, parentTaskId: null,
     assignedAgentType: null, githubIssueNumber: null, githubIssueUrl: null, githubPrUrl: null,
     githubPrNumber: null, assignedAgentHostId: null, assignedAgentRef: null, assignedUserId: null,
-    gitBranch: null, explicitRepoId: null, sprintId: null, releaseId: null, storyPoints: null, startDate: null, dueDate: null,
+    gitBranch: null, explicitRepoId: null, sprintId: null, releaseId: null, storyPoints: null,
+    businessValue: null, businessValueRationale: null, businessValueSource: null, managerRank: null,
+    reviewCount: 0, lastReviewedAt: null, lastReviewVerdict: null, gapOriginTaskId: null,
+    startDate: null, dueDate: null,
     persona: null, archived: false, createdAt: now, updatedAt: now,
   });
 }
@@ -45,7 +48,7 @@ function buildExecution(payload: string | null, status = ExecutionStatus.RUNNING
 
 type Captured = { status: string; originLaneKey?: string } | null;
 
-function makeService(opts: { taskStatus: string; payload: string | null }) {
+function makeService(opts: { taskStatus: string; payload: string | null; nextStatus?: string | null; managedToStatus?: string }) {
   let stored = buildTask(opts.taskStatus);
   const exec = buildExecution(opts.payload);
   const executions = {
@@ -63,7 +66,16 @@ function makeService(opts: { taskStatus: string; payload: string | null }) {
   const onLaneEntry = async (info: { status: string; originLaneKey?: string }) => {
     captured = { status: info.status, originLaneKey: info.originLaneKey };
   };
-  const svc = new RuntimeService(executions, tasks, agents, audit, undefined, undefined, undefined, onLaneEntry);
+  // When a nextStatus is provided the service is wired WITH the config-driven
+  // resolver (mimicking the board having a next swimlane); otherwise it is left
+  // undefined so the default in_review path is exercised.
+  const resolveNextStatus = opts.nextStatus !== undefined
+    ? async () => opts.nextStatus ?? null
+    : undefined;
+  const onManagedRunStatus = opts.managedToStatus !== undefined
+    ? async () => ({ managed: true, toStatus: opts.managedToStatus! })
+    : undefined;
+  const svc = new RuntimeService(executions, tasks, agents, audit, undefined, undefined, undefined, onLaneEntry, resolveNextStatus, undefined, undefined, onManagedRunStatus);
   return { svc, getCaptured: () => captured, getStored: () => stored };
 }
 
@@ -110,11 +122,64 @@ describe('RuntimeService lane chaining', () => {
     expect(getCaptured()).toBeNull();
   });
 
+  it('advances to the board’s CONFIGURED next swimlane on COMPLETED (not hardcoded in_review)', async () => {
+    const { svc, getStored, getCaptured } = makeService({
+      taskStatus: 'build', payload: JSON.stringify({ laneKey: 'build' }), nextStatus: 'qa',
+    });
+    await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'done' });
+    expect(getStored().status).toBe('qa');
+    expect(getCaptured()).toEqual({ status: 'qa', originLaneKey: 'build' });
+  });
+
+  it('falls back to in_review when the resolver returns null (non-board task)', async () => {
+    const { svc, getStored } = makeService({
+      taskStatus: TaskStatus.IN_PROGRESS, payload: null, nextStatus: null,
+    });
+    await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'done' });
+    expect(getStored().status).toBe(TaskStatus.IN_REVIEW);
+  });
+
+  it('[auto-approve] still short-circuits to Done even with a configured next lane', async () => {
+    const { svc, getStored, getCaptured } = makeService({
+      taskStatus: 'build', payload: JSON.stringify({ laneKey: 'build' }), nextStatus: 'qa',
+    });
+    await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'shipped [auto-approve]' });
+    expect(getStored().status).toBe(TaskStatus.DONE);
+    expect(getCaptured()).toBeNull();
+  });
+
   it('does NOT chain on a FAILED terminal (lane unchanged)', async () => {
     const { svc, getCaptured } = makeService({
       taskStatus: TaskStatus.IN_PROGRESS, payload: JSON.stringify({ laneKey: 'in_progress' }),
     });
     await svc.update(EXEC_ID, { status: ExecutionStatus.FAILED, errorMessage: 'boom' });
     expect(getCaptured()).toBeNull();
+  });
+
+  it('does not let RuntimeService move a managed ticket when the Coordinator keeps the stage blocked', async () => {
+    const { svc, getStored, getCaptured } = makeService({
+      taskStatus: 'ready', payload: JSON.stringify({ laneKey: 'ready', actAsRole: 'business-analyst' }), managedToStatus: 'ready',
+    });
+    await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'requirements drafted' });
+    expect(getStored().status).toBe('ready');
+    expect(getCaptured()).toBeNull();
+  });
+
+  it('uses the Coordinator result without invoking legacy lane chaining', async () => {
+    const { svc, getCaptured } = makeService({
+      taskStatus: 'ready', payload: JSON.stringify({ laneKey: 'ready', actAsRole: 'architect' }), managedToStatus: 'in_progress',
+    });
+    await svc.update(EXEC_ID, { status: ExecutionStatus.COMPLETED, result: 'design approved' });
+    // The composition-root Coordinator performs the DB move + next-role dispatch;
+    // RuntimeService must not perform a second move/trigger.
+    expect(getCaptured()).toBeNull();
+  });
+
+  it('does not move a managed ticket to in_progress merely because its role run started', async () => {
+    const { svc, getStored } = makeService({
+      taskStatus: 'ready', payload: JSON.stringify({ laneKey: 'ready', actAsRole: 'business-analyst' }), managedToStatus: 'ready',
+    });
+    await svc.update(EXEC_ID, { status: ExecutionStatus.RUNNING });
+    expect(getStored().status).toBe('ready');
   });
 });

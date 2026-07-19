@@ -63,6 +63,22 @@ export class TaskRepository implements ITaskRepository {
     return Number(row?.value ?? 0);
   }
 
+  async rekeyProject(projectId: ProjectId, newProjectKey: string): Promise<number> {
+    // Rebuild each key as `${newProjectKey}-${suffix}`, keeping the existing
+    // zero-padded numeric suffix intact (regexp strips everything up to the last
+    // '-', matching maxKeySeqByProject). Only rows with a purely-numeric suffix
+    // are touched so legacy/odd keys are preserved. `newProjectKey` is globally
+    // unique (enforced in updateProject), so no re-keyed row can collide with an
+    // existing key — the whole project moves prefix in one statement.
+    const isNumericSuffix = sql`regexp_replace(${tasksTable.key}, '^.*-', '') ~ '^[0-9]+$'`;
+    const rekeyed = await this.db
+      .update(tasksTable)
+      .set({ key: sql`${newProjectKey} || '-' || regexp_replace(${tasksTable.key}, '^.*-', '')` })
+      .where(and(eq(tasksTable.projectId, projectId), isNumericSuffix))
+      .returning({ id: tasksTable.id });
+    return rekeyed.length;
+  }
+
   async save(task: Task): Promise<Task> {
     const plain = task.toPlain();
     const [inserted] = await this.db
@@ -85,6 +101,11 @@ export class TaskRepository implements ITaskRepository {
         sprintId:          plain.sprintId ?? undefined,
         releaseId:         plain.releaseId ?? undefined,
         storyPoints:       plain.storyPoints ?? undefined,
+        businessValue:         plain.businessValue ?? undefined,
+        businessValueRationale: plain.businessValueRationale ?? undefined,
+        businessValueSource:   plain.businessValueSource ?? undefined,
+        managerRank:           plain.managerRank ?? undefined,
+        gapOriginTaskId:       plain.gapOriginTaskId ?? undefined,
         githubIssueNumber: plain.githubIssueNumber ?? undefined,
         githubIssueUrl:    plain.githubIssueUrl ?? undefined,
         githubPrUrl:       plain.githubPrUrl ?? undefined,
@@ -131,6 +152,11 @@ export class TaskRepository implements ITaskRepository {
         releaseId:         plain.releaseId ?? null,
         // Authoritative (real null) so clearing the estimate persists.
         storyPoints:       plain.storyPoints ?? null,
+        // AI Manager fields — authoritative so a manual clear/round-trip persists.
+        businessValue:         plain.businessValue ?? null,
+        businessValueRationale: plain.businessValueRationale ?? null,
+        businessValueSource:   plain.businessValueSource ?? null,
+        managerRank:           plain.managerRank ?? null,
         githubIssueNumber: plain.githubIssueNumber ?? undefined,
         githubIssueUrl:    plain.githubIssueUrl ?? undefined,
         githubPrUrl:       plain.githubPrUrl ?? undefined,
@@ -218,6 +244,14 @@ function toDomain(row: Row): Task {
     sprintId:          row.sprintId ?? null,
     releaseId:         row.releaseId ?? null,
     storyPoints:       row.storyPoints ?? null,
+    businessValue:         row.businessValue ?? null,
+    businessValueRationale: row.businessValueRationale ?? null,
+    businessValueSource:   row.businessValueSource ?? null,
+    managerRank:           row.managerRank ?? null,
+    reviewCount:           row.reviewCount ?? 0,
+    lastReviewedAt:        row.lastReviewedAt ?? null,
+    lastReviewVerdict:     row.lastReviewVerdict ?? null,
+    gapOriginTaskId:       row.gapOriginTaskId != null ? asTaskId(row.gapOriginTaskId) : null,
     githubIssueNumber: row.githubIssueNumber ?? null,
     githubIssueUrl:    row.githubIssueUrl ?? null,
     githubPrUrl:       row.githubPrUrl ?? null,

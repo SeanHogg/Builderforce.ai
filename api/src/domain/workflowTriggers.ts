@@ -1,9 +1,16 @@
 /**
  * Trigger extraction — lowers the `trigger` nodes of a workflow definition into
- * the activatable trigger specs the runtime acts on (schedule / webhook / rss /
- * inbound-email). `manual` and the various data-collection labels that have no
- * autonomous transport are intentionally excluded: they only ever start a run
- * via the explicit `POST .../run` endpoint.
+ * the activatable trigger specs the runtime acts on. Two families of activation:
+ *   • transport triggers  — schedule / webhook / rss / inbound-email: fired by the
+ *     scheduler sweep (schedule/rss) or an addressed inbound request (webhook/
+ *     inbound-email token).
+ *   • event triggers      — monitor-breach / incident-created / incident-resolved /
+ *     incident-status-change: fired SYNCHRONOUSLY by a domain event inside the app
+ *     (see application/workflow/eventTriggers.ts fireEventTriggers). No cron, no
+ *     token — they sit in the registry as enabled rows keyed by (tenant, type) and
+ *     the emitting service matches + runs them when the event happens.
+ * `manual` and the various data-collection labels that have no autonomous transport
+ * are intentionally excluded: they only ever start a run via `POST .../run`.
  *
  * This is the single source of truth shared by `syncDefinitionTriggers` (which
  * persists `workflow_triggers` rows) and the tests — keeping the builder's
@@ -12,9 +19,30 @@
 
 import type { WorkflowDefinition } from './workflowGraph';
 
+/**
+ * Event-driven trigger types — fired by an internal domain event (a monitor
+ * breaching, an incident opening/resolving/changing status) rather than by a
+ * cron sweep or an inbound request. The Reliability subsystem emits these.
+ */
+export const EVENT_TRIGGER_TYPES = [
+  'monitor-breach',
+  'incident-created',
+  'incident-resolved',
+  'incident-status-change',
+] as const;
+export type EventTriggerType = (typeof EVENT_TRIGGER_TYPES)[number];
+
 /** Trigger types that fire workflows autonomously (no user click). */
-export const ACTIVATABLE_TRIGGER_TYPES = ['schedule', 'webhook', 'rss', 'inbound-email'] as const;
+export const ACTIVATABLE_TRIGGER_TYPES = [
+  'schedule', 'webhook', 'rss', 'inbound-email',
+  ...EVENT_TRIGGER_TYPES,
+] as const;
 export type ActivatableTriggerType = (typeof ACTIVATABLE_TRIGGER_TYPES)[number];
+
+/** True when this activatable type is fired by an internal domain event. */
+export function isEventTriggerType(t: unknown): t is EventTriggerType {
+  return typeof t === 'string' && (EVENT_TRIGGER_TYPES as readonly string[]).includes(t);
+}
 
 /** Trigger types addressed by an inbound request/message and so needing a token. */
 const ADDRESSED_TYPES = new Set<ActivatableTriggerType>(['webhook', 'inbound-email']);

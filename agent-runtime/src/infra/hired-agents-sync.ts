@@ -117,6 +117,37 @@ export function resetHiredAgentsCacheForTest(): void {
   inFlight = null;
 }
 
+/**
+ * Current cached hired-agents snapshot (no network). Empty when never fetched or
+ * when the host runs built-ins only. A pure read of the read-through cache above.
+ */
+export function getCachedHiredAgents(): HiredAgent[] {
+  return cache?.agents ?? [];
+}
+
+/**
+ * Resolve the durable `ide_agents.id` a run is executing as from its LOCAL agent
+ * partition id (`params.agentId`). A hired agent is registered as a role under
+ * both its `roleKey` and its `id`, so a Builderforce-addressed session runs under
+ * one of those as its local `agentId`. Returns the canonical `id` (== the
+ * ide_agents.id the api validates) when the local id matches a cached hired agent,
+ * else `null` — a plain local / persona-less agent (e.g. "main", a user-defined
+ * local agent) has no ide_agents row, so the caller skips durable reporting.
+ *
+ * Case-insensitive: local agent ids are lowercased at session parse, and hired
+ * agent ids / roleKeys are lowercase slugs/cuids.
+ */
+export function resolveHiredAgentRef(localAgentId: string | undefined): string | null {
+  const id = (localAgentId ?? "").trim().toLowerCase();
+  if (!id || id === "main") return null;
+  for (const a of getCachedHiredAgents()) {
+    if (a.id.trim().toLowerCase() === id || a.roleKey.trim().toLowerCase() === id) {
+      return a.id;
+    }
+  }
+  return null;
+}
+
 /** Validate one entry against the contract, tolerating extra fields. */
 function isHiredAgent(value: unknown): value is HiredAgent {
   if (!value || typeof value !== "object") {

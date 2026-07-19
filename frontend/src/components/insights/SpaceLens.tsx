@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { recommendationsApi, type SpaceMetrics, type SpaceDimension } from '@/lib/recommendationsApi';
 import { usePmData } from '@/lib/pm/usePmData';
+import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { PmCard, PmEmpty, PmError, StatCard } from '@/components/pm/pmShared';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { DaysWindowSelect, KpiGrid } from './LensShell';
@@ -22,9 +23,10 @@ const humanize = (k: string): string =>
   k.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 
 export function SpaceLens() {
+  const { currentProjectId } = useProjectScope();
   const t = useTranslations('insights');
   const [days, setDays] = useState(30);
-  const { data, error } = usePmData<SpaceMetrics>(() => recommendationsApi.space(days), [days]);
+  const { data, error } = usePmData<SpaceMetrics>(() => recommendationsApi.space(days, currentProjectId), [days, currentProjectId]);
 
   if (error) return <PmError message={error} />;
   if (!data) return <PmEmpty message={t('loading')} />;

@@ -1,15 +1,28 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { insightsApi, type FinanceInsights, type FinanceBudgetLine, type BudgetState } from '@/lib/builderforceApi';
+import { insightsApi, pmoApi, type FinanceInsights, type FinanceBudgetLine, type BudgetState, type Initiative } from '@/lib/builderforceApi';
+import { fetchProjects } from '@/lib/api';
+import type { Project } from '@/lib/types';
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmCard, PmEmpty, PmError, StatCard, ProgressBar } from '@/components/pm/pmShared';
+import { Select } from '@/components/Select';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { TrendChart } from '@/components/charts/TrendChart';
 import { BarChart } from '@/components/charts/BarChart';
 import { KpiGrid } from './LensShell';
 import { usd } from './format';
+
+/**
+ * Resolve the compact scope-picker value ('tenant' | 'project:<id>' |
+ * 'initiative:<uuid>') into the budget-create body's scope fields.
+ */
+function scopeBody(scope: string): { scopeKind: string; projectId?: number; initiativeId?: string } {
+  if (scope.startsWith('project:')) return { scopeKind: 'project', projectId: Number(scope.slice(8)) };
+  if (scope.startsWith('initiative:')) return { scopeKind: 'initiative', initiativeId: scope.slice(11) };
+  return { scopeKind: 'tenant' };
+}
 
 const inputStyle: React.CSSProperties = {
   padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border-subtle)',
@@ -34,7 +47,18 @@ export function FinanceLens() {
   const [period, setPeriod] = useState(currentMonth());
   const [busy, setBusy] = useState(false);
   const [newLimit, setNewLimit] = useState('');
+  const [budgetScope, setBudgetScope] = useState('tenant');
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [initiatives, setInitiatives] = useState<Initiative[]>([]);
   const { data, error, reload } = usePmData<FinanceInsights>(() => insightsApi.finance(period), [period]);
+
+  // Scope options for a budget: workspace (tenant), a project, or an initiative.
+  useEffect(() => {
+    let alive = true;
+    fetchProjects().then((p) => { if (alive) setProjects(p); }).catch(() => {});
+    pmoApi.initiatives.list().then((i) => { if (alive) setInitiatives(i); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -78,13 +102,27 @@ export function FinanceLens() {
       <PmCard
         title={t('fin.budgets')}
         action={
-          <div style={{ display: 'flex', gap: 8, minWidth: 280 }}>
+          <div style={{ display: 'flex', gap: 8, minWidth: 280, flexWrap: 'wrap' }}>
+            <Select style={{ ...inputStyle, maxWidth: 190 }} value={budgetScope} onChange={(e) => setBudgetScope(e.target.value)} aria-label={t('fin.scope')}>
+              <option value="tenant">{t('fin.scopeWorkspace')}</option>
+              {projects.length > 0 && (
+                <optgroup label={t('fin.scopeProjects')}>
+                  {projects.map((p) => <option key={`p${p.id}`} value={`project:${p.id}`}>{p.name}</option>)}
+                </optgroup>
+              )}
+              {initiatives.length > 0 && (
+                <optgroup label={t('fin.scopeInitiatives')}>
+                  {initiatives.map((i) => <option key={`i${i.id}`} value={`initiative:${i.id}`}>{i.name}</option>)}
+                </optgroup>
+              )}
+            </Select>
             <input style={{ ...inputStyle, width: 130 }} type="number" min={0} placeholder={t('fin.monthlyLimit')} value={newLimit} onChange={(e) => setNewLimit(e.target.value)} />
             <button
               type="button" style={btnStyle} disabled={busy || !newLimit.trim()}
               onClick={() => run(async () => {
-                await insightsApi.budgets.create({ scopeKind: 'tenant', periodMonth: period, limitUsd: Number(newLimit) });
+                await insightsApi.budgets.create({ ...scopeBody(budgetScope), periodMonth: period, limitUsd: Number(newLimit) });
                 setNewLimit('');
+                setBudgetScope('tenant');
               })}
             >
               {t('fin.setBudget')}

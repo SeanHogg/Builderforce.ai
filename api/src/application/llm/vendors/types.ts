@@ -12,10 +12,14 @@
  */
 
 import { applyPromptCaching } from '../promptCaching';
+import type { ReasoningParamOpts } from '../reasoningCapability';
+import { parseSseDataLine } from '../sseFrames';
+
+import type { AgentExecParams } from '@builderforce/agent-tools';
 
 export type VendorId =
   // ── Bespoke wire-format vendors (hand-rolled modules)
-  | 'openrouter' | 'cerebras' | 'ollama' | 'nvidia' | 'googleai' | 'cloudflare' | 'anthropic'
+  | 'openrouter' | 'cerebras' | 'ollama' | 'nvidia' | 'googleai' | 'cloudflare' | 'anthropic' | 'openai-codex' | 'xai-oauth'
   // ── Our OWN model: serves a published `.evermind` artifact from R2 via the
   //    builderforce-memory runtime (on-CPU, in-Worker). Reached only via an
   //    explicit `evermind/<ref>` pin (autoRoute:false). See vendors/evermind.ts.
@@ -25,11 +29,14 @@ export type VendorId =
   //    ride the shared transport. Reachable via an explicit `<vendor>/<id>` pin
   //    (autoRoute:false — they don't pollute the auto-selected FREE/PRO pools) and
   //    participate in the same dispatch/cooldown/fallback machinery as the rest.
-  | 'openai' | 'groq' | 'deepseek' | 'mistral' | 'together' | 'fireworks'
+  | 'openai' | 'groq' | 'deepseek' | 'mistral' | 'together' | 'fireworks' | 'qwen'
   | 'deepinfra' | 'xai' | 'perplexity' | 'moonshot' | 'hyperbolic' | 'novita'
   | 'sambanova' | 'lepton' | 'anyscale' | 'octoai' | 'featherless' | 'inferencenet'
   | 'targon' | 'avian' | 'nebius' | 'baseten' | 'lambda' | 'klusterai'
-  | 'parasail' | 'nscale' | 'chutes' | 'ai21' | 'siliconflow' | 'minimax';
+  | 'parasail' | 'nscale' | 'chutes' | 'ai21' | 'siliconflow' | 'minimax'
+  // ── BYO-only vendor: no operator pool key; only reachable when a tenant
+  //    connects their own Meta AI account from the provider-keys settings page.
+  | 'meta';
 
 /**
  * Tier classification per model — drives pricing, plan gating, and the
@@ -47,6 +54,8 @@ export type AiModelTier = 'FREE' | 'STANDARD' | 'PREMIUM' | 'ULTRA';
  * and synthesizing this env per call — vendors don't know about plans.
  */
 export interface VendorEnv {
+  OPENAI_CODEX_AUTH?: string | null;
+  XAI_OAUTH_TOKEN?: string | null;
   OPENROUTER_API_KEY?: string | null;
   CEREBRAS_API_KEY?: string | null;
   OLLAMA_API_KEY?: string | null;
@@ -57,7 +66,7 @@ export interface VendorEnv {
   /** Anthropic (Claude) API key — direct call to api.anthropic.com/v1/messages.
    *  The last-resort reliability floor for cloud CODING runs: when every
    *  OpenRouter-routed paid coder is unreachable, the coding cascade falls back to
-   *  Claude directly on this key (claude-sonnet-4-6 → claude-opus-4-8). */
+   *  Claude directly on this key (claude-sonnet-5 → claude-opus-4-8). */
   CLAUDE_API_KEY?: string | null;
   /** A connected tenant's Claude Pro/Max SUBSCRIPTION access token (OAuth). When
    *  set, the `anthropic` vendor authenticates with `Authorization: Bearer` + the
@@ -102,6 +111,7 @@ export interface VendorEnv {
   PERPLEXITY_API_KEY?: string | null;
   /** Moonshot AI (Kimi) — api.moonshot.cn/v1. */
   MOONSHOT_API_KEY?: string | null;
+  QWEN_API_KEY?: string | null;
   /** Hyperbolic — api.hyperbolic.xyz/v1. */
   HYPERBOLIC_API_KEY?: string | null;
   /** Novita AI — api.novita.ai/v3/openai. */
@@ -142,6 +152,11 @@ export interface VendorEnv {
   SILICONFLOW_API_KEY?: string | null;
   /** MiniMax — api.minimax.io/v1. */
   MINIMAX_API_KEY?: string | null;
+  /** Meta AI (MUSE) — api.meta.ai/v1. BYO-only: populated exclusively from a
+   *  tenant's connected Meta AI provider key (settings → Bring your own models).
+   *  No operator-level key exists; when unset the `meta` vendor is skipped by the
+   *  cascade exactly like any other unbound vendor. */
+  META_API_KEY?: string | null;
 }
 
 export interface VendorCallParams {
@@ -155,6 +170,20 @@ export interface VendorCallParams {
   topP?: number;
   /** Vendor-specific passthrough. Last write wins over the standard fields above. */
   extraBody?: Record<string, unknown>;
+  /**
+   * Vendor-NEUTRAL reasoning intent (the `AgentExecParams` lever a persona or the
+   * client's `reasoning: { level }` produced) — NOT a pre-computed vendor param.
+   *
+   * A dispatch carries a model CHAIN, and `dispatchInternal` walks it on failover, so a
+   * param derived once from the chain head would ride onto whatever model the cascade
+   * lands on (a Cloudflare/deepseek/qwen coder would 400 on Anthropic `thinking`).
+   * Carrying the INTENT instead lets the chain walk derive the CORRECT param per
+   * candidate via the single `reasoningParamsForModel` mapping, merging it into that one
+   * attempt's `extraBody` — and emitting nothing at all for a family that doesn't
+   * support reasoning. `dispatchInternal` CONSUMES this field: it is stripped before the
+   * vendor call, so no `VendorModule` ever receives it.
+   */
+  reasoningIntent?: { execParams: AgentExecParams } & ReasoningParamOpts;
   /** Prompt-cache breakpoint retention for caching-capable (Anthropic-family)
    *  models: `'5m'` (default ephemeral) or `'1h'` (long retention, ~2x write
    *  cost). Carried from a caller's `_builderforce.cacheTtl` hint; only the
@@ -323,7 +352,10 @@ export function pickUsage(u: unknown): VendorUsage {
   return out;
 }
 
-function numOrUndef(v: unknown): number | undefined {
+/** Coerce an arbitrary value to a finite number, or `undefined` when it is
+ *  null/undefined/non-numeric. Shared by `pickUsage` (here) and the Ollama
+ *  vendor's native-usage parser so the "absent vs zero" boundary can't drift. */
+export function numOrUndef(v: unknown): number | undefined {
   if (v === null || v === undefined) return undefined;
   const n = Number(v);
   return Number.isFinite(n) ? n : undefined;
@@ -500,6 +532,14 @@ export function isCapacityLimitBody(text: string | undefined | null): boolean {
   );
 }
 
+/** Some OpenRouter upstreams report context-window overflow as HTTP 400 instead
+ * of 413. The payload is valid for the gateway; a larger-window model can serve
+ * it, so normalize this narrow message class to the existing 413 cascade path. */
+export function isContextOverflowBody(text: string | undefined | null): boolean {
+  if (!text) return false;
+  return /context\s*(window|length)|maximum\s+context|too\s+many\s+tokens|prompt\s+is\s+too\s+long|input.*token.*(?:exceed|limit)|estimated\s+tokens.*exceed/i.test(text);
+}
+
 /**
  * Stable `reason` slug a schema-shape rejection carries through the cascade
  * ({@link VendorSchemaError} → `DispatchAttempt.reason` → `FailoverEvent.reason`
@@ -550,6 +590,9 @@ export function throwClassified4xx(
   status: number,
   errText: string,
 ): never {
+  if (isContextOverflowBody(errText)) {
+    throw new VendorRetryableError(vendorId, model, 413, `context window exceeded (upstream ${status}): ${errText.slice(0, 200)}`);
+  }
   // Schema-too-complex is checked FIRST: it rides on a 400 (so the fatal branch
   // below would wrongly hard-fail the run) but a DIFFERENT vendor can serve the
   // same schema, so it must cascade — and carry the `schema` class so an
@@ -697,9 +740,105 @@ export function buildOpenAIChatBody(params: VendorCallParams, opts?: OpenAIChatB
   };
 }
 
+/**
+ * Forward the three optional per-call passthrough fields (`title`, `timeoutMs`,
+ * `signal`) as a spreadable object, omitting each when unset. Every OpenAI-shaped
+ * vendor module (openaiCompatible factory, googleai, cloudflare, openrouter,
+ * ollama) hand-rolled this identical triple-spread; this is the single source so
+ * a new passthrough field is added in ONE place.
+ */
+export function forwardCallOpts(params: VendorCallParams): {
+  title?: string;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+} {
+  return {
+    ...(params.title ? { title: params.title } : {}),
+    ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
+    ...(params.signal ? { signal: params.signal } : {}),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Shared HTTP transport for non-streaming requests
+//
+// `executeVendorPost` is the ONE POST-JSON-with-Bearer transport every
+// non-streaming surface rides: it does the fetch (with the per-vendor timeout +
+// abort classification), the optional 200-with-embedded-`{error}` guard, and the
+// CASCADE / AUTH / fatal status ladder. Each surface passes its own
+// `parseResponse`, its `logPrefix` + auth failover noun, an optional
+// `onEmbeddedError` (chat/embeddings check the embedded body; image does not),
+// and an `onFatal` (chat → `throwClassified4xx`; image/embeddings →
+// `VendorFatalError`). This preserves each surface's EXACT error classes and log
+// prefixes while collapsing three near-identical transports into one.
 // ---------------------------------------------------------------------------
+
+export async function executeVendorPost<T>(args: {
+  vendorId: string;
+  endpoint: string;
+  apiKey: string;
+  model: string;
+  body: Record<string, unknown>;
+  headers?: Record<string, string>;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  /** Console log prefix for the auth-failure line, e.g. `vendors` / `imageVendors`. */
+  logPrefix: string;
+  /** Noun in the "Failing over to next <noun>." auth message (`model` / `vendor`). */
+  authFailoverNoun: string;
+  parseResponse: (raw: unknown) => T;
+  /** Called (throws) when a 200 OK carries an embedded `{ error }`. Omit to skip
+   *  the embedded-error guard entirely (the image surface has none). */
+  onEmbeddedError?: (vendorId: string, model: string, msg: string) => never;
+  /** Called (throws) for a non-cascade, non-auth 4xx (400/422 etc.). */
+  onFatal: (vendorId: string, model: string, status: number, errText: string) => never;
+}): Promise<T> {
+  const {
+    vendorId, endpoint, apiKey, model, body, headers, timeoutMs, signal,
+    logPrefix, authFailoverNoun, parseResponse, onEmbeddedError, onFatal,
+  } = args;
+
+  // Per-vendor timeout — see fetchWithVendorTimeout for rationale. Throws
+  // VendorRetryableError on timeout/network, so there's no catch block here.
+  const resp = await fetchWithVendorTimeout(vendorId, model, endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      ...(headers ?? {}),
+    },
+    body: JSON.stringify(body),
+  }, timeoutMs, signal);
+
+  if (resp.ok) {
+    const raw = await resp.json();
+    // Some providers (notably OpenRouter) return 200 with { error: ... } embedded.
+    if (onEmbeddedError && raw && typeof raw === 'object' && 'error' in raw && (raw as Record<string, unknown>)['error'] != null) {
+      const errObj = (raw as Record<string, unknown>)['error'];
+      const msg = (errObj && typeof errObj === 'object' && 'message' in errObj
+        ? String((errObj as Record<string, unknown>)['message'])
+        : JSON.stringify(errObj)).slice(0, 240);
+      onEmbeddedError(vendorId, model, msg);
+    }
+    return parseResponse(raw);
+  }
+
+  const errText = (await resp.text()).slice(0, 400);
+
+  if (CASCADE_STATUSES.has(resp.status)) {
+    throw new VendorRetryableError(vendorId, model, resp.status, errText.slice(0, 240));
+  }
+
+  if (AUTH_STATUSES.has(resp.status)) {
+    console.error(
+      `[${logPrefix}] ${vendorId}/${model} auth ${resp.status} — check ${vendorId.toUpperCase()}_API_KEY. Failing over to next ${authFailoverNoun}.`,
+      errText.slice(0, 200),
+    );
+    throw new VendorRetryableError(vendorId, model, resp.status, `auth ${resp.status}: ${errText.slice(0, 200)}`);
+  }
+
+  return onFatal(vendorId, model, resp.status, errText);
+}
 
 export async function executeChatCompletion(args: {
   vendorId: VendorId;
@@ -716,57 +855,36 @@ export async function executeChatCompletion(args: {
   const { vendorId, endpoint, apiKey, model, body, headers, title, timeoutMs, signal } = args;
   const parseResponse = args.parseResponse ?? parseOpenAIResponse;
 
-  // Per-vendor timeout — see fetchWithVendorTimeout for rationale. Throws
-  // VendorRetryableError on timeout/network, so the catch block above is gone.
-  const resp = await fetchWithVendorTimeout(vendorId, model, endpoint, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'X-Title': title ?? 'Builderforce.ai',
-      ...(headers ?? {}),
+  return executeVendorPost<VendorCallResult>({
+    vendorId,
+    endpoint,
+    apiKey,
+    model,
+    body,
+    // X-Title first so a caller-supplied `headers` entry still wins (spread last).
+    headers: { 'X-Title': title ?? 'Builderforce.ai', ...(headers ?? {}) },
+    ...(timeoutMs != null ? { timeoutMs } : {}),
+    ...(signal ? { signal } : {}),
+    logPrefix: 'vendors',
+    authFailoverNoun: 'model',
+    parseResponse: (raw): VendorCallResult => {
+      const parsed = parseResponse(raw);
+      return { raw, content: parsed.content, ...(parsed.usage ? { usage: parsed.usage } : {}) };
     },
-    body: JSON.stringify(body),
-  }, timeoutMs, signal);
-
-  if (resp.ok) {
-    const raw = await resp.json();
-    // Some providers (notably OpenRouter) return 200 with { error: ... } embedded.
-    if (raw && typeof raw === 'object' && 'error' in raw && (raw as Record<string, unknown>)['error'] != null) {
-      const errObj = (raw as Record<string, unknown>)['error'];
-      const msg = (errObj && typeof errObj === 'object' && 'message' in errObj
-        ? String((errObj as Record<string, unknown>)['message'])
-        : JSON.stringify(errObj)).slice(0, 240);
+    onEmbeddedError: (vId, m, msg): never => {
       // A schema-too-complex rejection from Gemini-family upstreams routinely
       // arrives HERE — a 200 OK with the real cause buried in an embedded error
       // body (the `code: 0` failovers hired.video's trace showed). Classify it
       // as `schema` so an all-schema cascade surfaces a terminal 4xx instead of
       // cascading as a generic embedded/network failure and collapsing into 429.
       if (isSchemaComplexityBody(msg)) {
-        throw new VendorSchemaError(vendorId, model, 200, msg);
+        throw new VendorSchemaError(vId, m, 200, msg);
       }
-      throw new VendorRetryableError(vendorId, model, 0, `embedded: ${msg}`);
-    }
-    const parsed = parseResponse(raw);
-    return { raw, content: parsed.content, ...(parsed.usage ? { usage: parsed.usage } : {}) };
-  }
-
-  const errText = (await resp.text()).slice(0, 400);
-
-  if (CASCADE_STATUSES.has(resp.status)) {
-    throw new VendorRetryableError(vendorId, model, resp.status, errText.slice(0, 240));
-  }
-
-  if (AUTH_STATUSES.has(resp.status)) {
-    console.error(
-      `[vendors] ${vendorId}/${model} auth ${resp.status} — check ${vendorId.toUpperCase()}_API_KEY. Failing over to next model.`,
-      errText.slice(0, 200),
-    );
-    throw new VendorRetryableError(vendorId, model, resp.status, `auth ${resp.status}: ${errText.slice(0, 200)}`);
-  }
-
-  // 400/422 → fatal, UNLESS the body is a capacity/billing limit (failover-able).
-  throwClassified4xx(vendorId, model, resp.status, errText);
+      throw new VendorRetryableError(vId, m, 0, `embedded: ${msg}`);
+    },
+    // 400/422 → fatal, UNLESS the body is a capacity/billing limit (failover-able).
+    onFatal: throwClassified4xx,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -852,15 +970,17 @@ export async function executeChatCompletionStream(args: {
   };
 }
 
-/** Detect a provider error embedded in the first SSE chunk. */
+/** Detect a provider error embedded in the first SSE chunk. Uses the shared
+ *  `parseSseDataLine` (canonical `slice(5).trim()`) so a spaceless `data:{…}`
+ *  frame parses too — the old hand-rolled `slice(6)` here silently chopped a
+ *  character off such a frame and mis-fired the fallback. */
 function isChunkError(text: string): boolean {
   if (!text.includes('"error"')) return false;
-  const dataLine = text.split('\n').find((l) => l.startsWith('data: '));
-  if (!dataLine) return true; // mentions "error" without parseable line — be safe
-  try {
-    const parsed = JSON.parse(dataLine.slice(6)) as Record<string, unknown>;
-    return 'error' in parsed && parsed['error'] != null;
-  } catch {
-    return true; // unparseable but mentions "error" — treat as error
+  const dataLine = text.split('\n').find((l) => l.trim().startsWith('data:'));
+  if (!dataLine) return true; // mentions "error" without a data line — be safe
+  const parsed = parseSseDataLine(dataLine);
+  if (parsed === undefined || typeof parsed !== 'object' || parsed === null) {
+    return true; // unparseable / [DONE] but mentions "error" — treat as error
   }
+  return 'error' in parsed && (parsed as Record<string, unknown>)['error'] != null;
 }

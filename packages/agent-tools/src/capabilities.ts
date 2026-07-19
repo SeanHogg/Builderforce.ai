@@ -74,9 +74,16 @@ export type Capability =
 
 /** List/read/search the working tree. Backed by git-over-HTTP (cloud) or disk (Node). */
 export interface RepoReadCapability {
-  listFiles(subdir?: string): Promise<RepoListResult>;
+  /** List working-tree files. `subdir` scopes to a folder; `glob` filters by name
+   *  (e.g. `ROADMAP.md`, `**\/*.test.ts`) — case-insensitive, and a slash-free glob
+   *  matches the basename at any depth. A `glob` also bypasses the big-repo directory
+   *  summary so a matched file is always returned in full. */
+  listFiles(subdir?: string, glob?: string): Promise<RepoListResult>;
   readFile(path: string): Promise<RepoReadResult>;
-  searchCode(query: string): Promise<RepoSearchResult>;
+  /** Search the tree for `query`. Pass `scope` (a repo-relative subdirectory) to
+   *  restrict the search — essential on a large monorepo where an unscoped walk can
+   *  be truncated before it reaches the relevant subtree. */
+  searchCode(query: string, scope?: string): Promise<RepoSearchResult>;
 }
 
 /** Mutate the working tree. The provider owns the side effects of a write —
@@ -91,10 +98,15 @@ export interface RepoWriteCapability {
   editFile(path: string, oldString: string, newString: string, replaceAll?: boolean): Promise<RepoEditResult>;
 }
 
-/** Fetch / search the public web (capability `web`). */
+/** Fetch / search the public web. The two halves are gated SEPARATELY — `fetch` by
+ *  capability `web`, `search` by `web.search` — because they need different backings:
+ *  fetching a known URL is just an HTTP client (every surface has one), while search
+ *  needs a search-engine vendor. So `search` is OPTIONAL: a surface that can fetch but
+ *  has no search vendor wired backs `fetch` only and omits `web.search` from its
+ *  capability set, and the registry then never surfaces `web_search` to the model. */
 export interface WebCapability {
   fetch(url: string): Promise<WebFetchResult>;
-  search(query: string): Promise<WebSearchResult>;
+  search?(query: string): Promise<WebSearchResult>;
 }
 
 /** Run a real shell command. Present only on surfaces with a true process (the
@@ -160,7 +172,15 @@ export interface RepoReadResult {
   ok: boolean;
   path?: string;
   content?: string;
+  /** True when `content` is only part of the file (a paginated line window, or the
+   *  provider hit its own byte cap) — more remains beyond what was returned. */
   truncated?: boolean;
+  /** Total line count of the file, so the model knows how far it has left to page. */
+  totalLines?: number;
+  /** 1-based line number `content` starts at (for the paginated `read_file` window). */
+  offset?: number;
+  /** Human/model-facing guidance, e.g. how to read the next chunk of a large file. */
+  note?: string;
   error?: string;
 }
 export interface RepoSearchResult {

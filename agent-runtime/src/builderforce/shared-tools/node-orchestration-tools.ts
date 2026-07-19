@@ -23,6 +23,9 @@ import {
   createPlanningWorkflow,
   createRefactorWorkflow,
   createSecurityAuditWorkflow,
+  createQualityAuditWorkflow,
+  createPmVisionAuditWorkflow,
+  createPrivacyAuditWorkflow,
   globalOrchestrator,
   type SpawnSubagentContext,
   type WorkflowStep,
@@ -40,6 +43,9 @@ const WORKFLOW_REGISTRY: Record<string, (description: string) => WorkflowStep[]>
   bugfix: createBugFixWorkflow,
   refactor: createRefactorWorkflow,
   security_audit: createSecurityAuditWorkflow,
+  quality_audit: createQualityAuditWorkflow,
+  pm_vision_audit: createPmVisionAuditWorkflow,
+  privacy_audit: createPrivacyAuditWorkflow,
   planning: createPlanningWorkflow,
   adversarial: createAdversarialReviewWorkflow,
 };
@@ -85,7 +91,7 @@ function validateRole(role: string): string | null {
   return (
     `Unknown agent role: "${role}". Use a built-in role ` +
     `(code-creator, code-reviewer, test-generator, bug-analyzer, refactor-agent, ` +
-    `documentation-agent, architecture-advisor) or a hired-agent roleKey/id.`
+    `documentation-agent, architecture-advisor, validator-agent, security-agent) or a hired-agent roleKey/id.`
   );
 }
 

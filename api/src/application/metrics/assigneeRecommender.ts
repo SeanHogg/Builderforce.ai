@@ -20,7 +20,11 @@ import {
   memberProfiles, projects, tasks, teams, teamMembers, teamProjects, tenantMembers, users,
 } from '../../infrastructure/database/schema';
 import { readWorkforceMetricsVersion } from './workforceMetrics';
+import { resolveRoleCapableAgents } from '../kanban/roleCapability';
+import { BUILTIN_ROLES } from '../kanban/roleCatalog';
 import { TaskStatus } from '../../domain/shared/types';
+import { notSystemTask } from '../task/taskScope';
+import { clampScore as clamp } from '../../domain/shared/numbers';
 
 const DEFAULT_MAX_WIP = 5;
 /** Open lanes a task counts as WIP for (everything not done-class). */
@@ -46,7 +50,6 @@ export interface Recommendation extends Candidate {
   reasons: string[];
 }
 
-const clamp = (n: number) => Math.max(0, Math.min(100, n));
 const AVAIL_WEIGHT: Record<string, number> = { available: 1, on_call: 0.8, focus: 0.6, busy: 0.5, ooo: 0 };
 const EXP_WEIGHT: Record<string, number> = { junior: 0.4, mid: 0.6, senior: 0.8, staff: 0.9, principal: 1 };
 
@@ -153,7 +156,7 @@ async function loadWip(db: Db, tenantId: number): Promise<Map<string, number>> {
     })
     .from(tasks)
     .innerJoin(projects, eq(projects.id, tasks.projectId))
-    .where(and(eq(projects.tenantId, tenantId), eq(tasks.archived, false), notInArray(tasks.status, [...DONE_CLASS])))
+    .where(and(eq(projects.tenantId, tenantId), eq(tasks.archived, false), notInArray(tasks.status, [...DONE_CLASS]), notSystemTask))
     .limit(10_000); // bound the WIP scan; open tasks per tenant is small in practice
   const wip = new Map<string, number>();
   for (const r of rows) {
@@ -196,10 +199,51 @@ export async function recommendAssignee(env: Env, db: Db, input: RecommendInput)
   });
 }
 
-/** The single top pick (or null) — used by the Epic fan-out to auto-assign an
- *  otherwise-unassigned child. Only returns an *available* candidate. */
-export async function recommendTopAssignee(env: Env, db: Db, projectId: number, requiredSkills: string[] = []): Promise<{ memberKind: MemberKind; memberRef: string } | null> {
-  const ranked = await recommendAssignee(env, db, { projectId, requiredSkills });
-  const top = ranked.find((r) => r.available && r.spareCapacity > 0) ?? ranked.find((r) => r.available);
+export interface TopAssigneeOptions {
+  requiredSkills?: string[];
+  /** When set, restrict the pick to members ROLE-CAPABLE of this role. This is the
+   *  #467 fix: a coding ticket must not be owned by a role-incapable teammate (a PM
+   *  agent), no matter how available. Returns null when nobody capable is free — the
+   *  caller surfaces that as an unstaffed/resource gap rather than mis-assigning. */
+  roleKey?: string;
+}
+
+/** The single top pick (or null) — used by the manager assign step and the Epic
+ *  fan-out to auto-assign an otherwise-unassigned ticket. Only returns an *available*
+ *  candidate, and — when `roleKey` is given — only one capable of that role. */
+export async function recommendTopAssignee(env: Env, db: Db, projectId: number, opts: TopAssigneeOptions = {}): Promise<{ memberKind: MemberKind; memberRef: string } | null> {
+  const ranked = await recommendAssignee(env, db, { projectId, requiredSkills: opts.requiredSkills ?? [] });
+  const roleKey = opts.roleKey?.trim();
+
+  let pool = ranked;
+  if (roleKey) {
+    const [proj] = await db.select({ tenantId: projects.tenantId }).from(projects).where(eq(projects.id, projectId)).limit(1);
+    if (proj) {
+      // Agents capable of the role (explicit role_keys → builtin_kind → fuzzy).
+      const capableAgents = new Set((await resolveRoleCapableAgents(env, db, proj.tenantId, projectId, roleKey)).map((c) => c.ref));
+      // Humans are role-capable when their profile discipline matches the role's.
+      const roleDiscipline = BUILTIN_ROLES.find((r) => r.key === roleKey)?.discipline;
+      const humanDisciplines = await loadHumanDisciplines(db, proj.tenantId);
+      pool = ranked.filter((r) => {
+        if (r.memberKind === 'human') return roleDiscipline ? humanDisciplines.get(r.memberRef) === roleDiscipline : true;
+        return capableAgents.has(r.memberRef);
+      });
+      // No capable candidate at all ⇒ don't silently fall back to an incapable one.
+      if (pool.length === 0) return null;
+    }
+  }
+
+  const top = pool.find((r) => r.available && r.spareCapacity > 0) ?? pool.find((r) => r.available);
   return top ? { memberKind: top.memberKind, memberRef: top.memberRef } : null;
+}
+
+/** Member discipline per human ref (from member_profiles) — for role-capability. */
+async function loadHumanDisciplines(db: Db, tenantId: number): Promise<Map<string, string>> {
+  const rows = await db
+    .select({ memberRef: memberProfiles.memberRef, discipline: memberProfiles.discipline })
+    .from(memberProfiles)
+    .where(and(eq(memberProfiles.tenantId, tenantId), eq(memberProfiles.memberKind, 'human')));
+  const out = new Map<string, string>();
+  for (const r of rows) if (r.discipline) out.set(r.memberRef, String(r.discipline));
+  return out;
 }

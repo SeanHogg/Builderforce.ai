@@ -30,17 +30,27 @@ import { defineTool, type ToolDefinition, type ToolResult } from "./tool.js";
 export const listFilesTool: ToolDefinition = defineTool({
   name: "list_files",
   description:
-    'List repo files (recursively) on the ticket branch so you can discover the existing codebase before editing. Optionally pass a subdirectory to scope the listing.',
+    'List repo files (recursively) on the ticket branch so you can discover the existing codebase before editing. Optionally pass `path` to scope to a subdirectory. To FIND A FILE BY NAME, pass `glob` — e.g. `ROADMAP.md` (matches that filename at any depth, case-insensitive) or `src/**/*.test.ts`. Use `glob` instead of concluding a file is missing: a large repo\'s unfiltered listing is summarized to directories, but a `glob` always returns the matching files in full.',
   parameters: {
     type: "object",
     properties: {
       path: { type: "string", description: 'Optional repo-relative subdirectory to scope to, e.g. "src/components".' },
+      glob: { type: "string", description: 'Optional filename/glob filter, e.g. "ROADMAP.md", "*.md", or "src/**/*.ts". Case-insensitive; a name with no "/" matches the basename at any depth.' },
     },
   },
   requires: ["repo.read"],
   async execute(args, ctx): Promise<ToolResult> {
     const sub = typeof args.path === "string" ? args.path : undefined;
-    const r = (await ctx.caps.repoRead!.listFiles(sub)) as RepoListResult;
+    const glob = typeof args.glob === "string" && args.glob.trim() ? args.glob.trim() : undefined;
+    const r = (await ctx.caps.repoRead!.listFiles(sub, glob)) as RepoListResult;
+    if (glob && r.ok && (r.paths?.length ?? 0) === 0) {
+      return {
+        data: {
+          ...r,
+          note: `No file matches glob "${glob}". Try a broader pattern (e.g. "*${glob.replace(/[*?/]/g, "")}*"), or list_files without a glob to see the tree. 0 matches means no such file exists — do not claim one is missing without trying a broader glob first.`,
+        } as unknown as Record<string, unknown>,
+      };
+    }
     return { data: r as unknown as Record<string, unknown> };
   },
 });
@@ -48,11 +58,12 @@ export const listFilesTool: ToolDefinition = defineTool({
 export const searchCodeTool: ToolDefinition = defineTool({
   name: "search_code",
   description:
-    'Search the ENTIRE repo for a string/symbol in one call (indexed code search) — use this FIRST to find where something is referenced instead of reading files one by one. Returns matching file paths with line fragments. 0 results means the term does not appear in the indexed codebase (so "remove all references to X" with 0 results means there is nothing to remove — say so, do not invent a change). Recently-pushed code may lag the index; confirm a specific file with read_file. Then read_file the matches you intend to edit.',
+    'Search the repo for a string/symbol in one call — use this FIRST to find where something is referenced instead of reading files one by one. Returns matching file paths with line fragments. Pass `query` as an EXACT substring/regex (a symbol, import path, or config key), NOT a natural-language phrase — a multi-word phrase rarely appears verbatim on one line and will match nothing. On a large monorepo, scope the search with `path` (a subdirectory) to search just that subtree. 0 results with `truncated:false` means the term does not appear (so "remove all references to X" then means there is nothing to remove — say so, do not invent a change); 0 results with `truncated:true` means the search was cut short before scanning everything — narrow it with `path` or a more specific `query` and try again, do NOT conclude the term is absent. Then read_file the matches you intend to edit.',
   parameters: {
     type: "object",
     properties: {
-      query: { type: "string", description: "Exact text or symbol to find, e.g. a model id, function name, import path, or config key." },
+      query: { type: "string", description: "Exact text or symbol to find, e.g. a model id, function name, import path, or config key. NOT a natural-language phrase." },
+      path: { type: "string", description: 'Optional repo-relative subdirectory to restrict the search to, e.g. "packages/brain-ui". Use this to avoid truncation on a big repo.' },
     },
     required: ["query"],
   },
@@ -60,27 +71,58 @@ export const searchCodeTool: ToolDefinition = defineTool({
   async execute(args, ctx): Promise<ToolResult> {
     const query = typeof args.query === "string" ? args.query : "";
     if (!query.trim()) return { data: { ok: false, error: "query is required" } };
-    const r = (await ctx.caps.repoRead!.searchCode(query)) as RepoSearchResult;
+    const scope = typeof args.path === "string" && args.path.trim() ? args.path.trim() : undefined;
+    const r = (await ctx.caps.repoRead!.searchCode(query, scope)) as RepoSearchResult;
     if (r.ok && r.total === 0) {
-      return {
-        data: {
-          ...r,
-          note: "No matches in the indexed codebase — the term is not referenced. If the task was to remove/replace it, there is nothing to change; say so instead of inventing an edit.",
-        },
-      };
+      // A truncated 0-result is NOT a "not found" — the search hit its scan budget
+      // before covering the whole tree. Saying "the term is not referenced" here is
+      // the false negative that sent the agent reading files blind; be honest instead.
+      const note = r.truncated
+        ? `Search was truncated before scanning the whole${scope ? " subtree" : " repo"} — this is NOT proof the term is absent. Re-run scoped to a subdirectory via \`path\`${scope ? " (a narrower one)" : ""}, or use a more specific \`query\`.`
+        : `No matches${scope ? ` under "${scope}"` : ""} — the term is not referenced${scope ? " there (try without `path` to search the whole repo)" : ""}. If the task was to remove/replace it, there is nothing to change; say so instead of inventing an edit.`;
+      return { data: { ...r, note } };
     }
     return { data: r as unknown as Record<string, unknown> };
   },
 });
 
+/** Default line window for `read_file` — a large file returns a bounded slice the
+ *  model pages through with `offset`/`limit`, instead of dumping (or failing) on it. */
+export const READ_DEFAULT_LINE_LIMIT = 2000;
+
+/**
+ * Window file content to a 1-based line range, reporting whether more remains. This
+ * is the SINGLE place large-file pagination lives, so every surface (cloud, on-prem,
+ * VS Code) behaves identically: `read_file` returns the requested slice plus a
+ * `truncated` flag + a "read the next chunk" note when the file is longer than the
+ * window. A provider only has to return the file's content (or its own truncated
+ * chunk); the windowing math is here, once.
+ */
+export function windowFileContent(
+  content: string,
+  opts?: { offset?: number; limit?: number },
+): { content: string; truncated: boolean; totalLines: number; offset: number; returnedLines: number } {
+  const lines = content.split("\n");
+  const totalLines = lines.length;
+  const start = opts?.offset && opts.offset > 1 ? Math.min(Math.floor(opts.offset), totalLines + 1) : 1;
+  const limit = opts?.limit && opts.limit > 0 ? Math.floor(opts.limit) : READ_DEFAULT_LINE_LIMIT;
+  const slice = lines.slice(start - 1, start - 1 + limit);
+  const end = start - 1 + slice.length; // last line number included
+  return { content: slice.join("\n"), truncated: end < totalLines, totalLines, offset: start, returnedLines: slice.length };
+}
+
 export const readFileTool: ToolDefinition = defineTool({
   name: "read_file",
   description:
-    "Read the FULL current contents of a repo file on the ticket branch. Always read a file before editing it so you preserve existing code and only change what is needed.",
+    "Read a repo file on the ticket branch. Returns up to " +
+    READ_DEFAULT_LINE_LIMIT +
+    " lines at a time: a large file comes back as a paginated line window (never a hard failure), and the result's `truncated`/`totalLines` tell you when more remains — read the next chunk by calling again with `offset`. Always read a file before editing it so you preserve existing code and only change what is needed.",
   parameters: {
     type: "object",
     properties: {
       path: { type: "string", description: 'Repo-relative path, e.g. "src/feature.ts".' },
+      offset: { type: "number", description: "1-based line to start reading from (for paging through a large file). Default 1." },
+      limit: { type: "number", description: `Max lines to return. Default ${READ_DEFAULT_LINE_LIMIT}. Read the next window with offset = previous offset + returned lines.` },
     },
     required: ["path"],
   },
@@ -88,15 +130,31 @@ export const readFileTool: ToolDefinition = defineTool({
   async execute(args, ctx): Promise<ToolResult> {
     const path = typeof args.path === "string" ? args.path : "";
     if (!path) return { data: { ok: false, error: "path is required" } };
+    const offset = typeof args.offset === "number" && args.offset > 0 ? Math.floor(args.offset) : undefined;
+    const limit = typeof args.limit === "number" && args.limit > 0 ? Math.floor(args.limit) : undefined;
     const r = (await ctx.caps.repoRead!.readFile(path)) as RepoReadResult;
-    return { data: r as unknown as Record<string, unknown> };
+    if (!r.ok) return { data: r as unknown as Record<string, unknown> };
+    const win = windowFileContent(r.content ?? "", { offset, limit });
+    const data: RepoReadResult = {
+      ok: true,
+      path: r.path ?? path,
+      content: win.content,
+      truncated: win.truncated || r.truncated === true,
+      totalLines: win.totalLines,
+      offset: win.offset,
+    };
+    if (win.truncated) {
+      const lastLine = win.offset + win.returnedLines - 1;
+      data.note = `Showing lines ${win.offset}–${lastLine} of ${win.totalLines}. To continue, call read_file again with offset ${lastLine + 1}.`;
+    }
+    return { data: data as unknown as Record<string, unknown> };
   },
 });
 
 export const writeFileTool: ToolDefinition = defineTool({
   name: "write_file",
   description:
-    "Create or update a file on the ticket branch as a reviewable pending change (a PR is opened/updated for the run). Use once per deliverable file. Provide the FULL file content.",
+    "Create or update a file, writing its complete contents. How the write lands depends on the surface: in an editor/on-prem workspace it edits the file in place; in a cloud/review run it is staged on the ticket branch as a reviewable pending change. Do NOT narrate a specific mechanism (e.g. \"opened a PR\") — just state what the file now contains. Use once per deliverable file. Provide the FULL file content.",
   parameters: {
     type: "object",
     properties: {
@@ -254,7 +312,11 @@ export const webSearchTool: ToolDefinition = defineTool({
   async execute(args, ctx): Promise<ToolResult> {
     const query = typeof args.query === "string" ? args.query : "";
     if (!query.trim()) return { data: { ok: false, error: "query is required" } };
-    const r = (await ctx.caps.web!.search(query)) as WebSearchResult;
+    // `web.search` is in the surface's capability set, so the registry only reaches
+    // here when a search backing is wired (see WebCapability — `search` is optional
+    // precisely so a fetch-only surface can omit `web.search`).
+    if (!ctx.caps.web?.search) return { data: { ok: false, error: "web search is not available on this surface" } };
+    const r = (await ctx.caps.web.search(query)) as WebSearchResult;
     return { data: r as unknown as Record<string, unknown> };
   },
 });

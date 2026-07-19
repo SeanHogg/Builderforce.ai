@@ -14,8 +14,11 @@ import { googleAiModule } from './googleai';
 import { nvidiaModule } from './nvidia';
 import { ollamaModule } from './ollama';
 import { openRouterModule } from './openrouter';
+import { openAiCodexModule } from './openaiCodex';
+import { xaiOAuthModule } from './xaiOAuth';
 import { openAICompatibleModules, openAICompatibleModulesById } from './openaiCompatibleVendors';
 import { registerSchemaDialectResolver } from '../jsonSchemaSanitize';
+import { reasoningParamsForModel } from '../reasoningCapability';
 import {
   VendorRetryableError,
   VendorFatalError,
@@ -55,7 +58,7 @@ import {
 // vendor count to 30+ (the "30+ model providers" marketing claim) without
 // touching the tuned free/paid cascade. See openaiCompatibleVendors.ts.
 const MODULES: ReadonlyArray<VendorModule> = [
-  cerebrasModule, ollamaModule, nvidiaModule, cloudflareModule, openRouterModule, googleAiModule, anthropicModule,
+  cerebrasModule, ollamaModule, nvidiaModule, cloudflareModule, openRouterModule, googleAiModule, anthropicModule, openAiCodexModule, xaiOAuthModule,
   // `evermind` is autoRoute:false (explicit `evermind/<ref>` pin only), so its
   // position never affects the auto-selected FREE/PRO pool ordering.
   evermindModule,
@@ -73,6 +76,8 @@ const MODULES_BY_ID: Record<VendorId, VendorModule> = {
   googleai:   googleAiModule,
   cloudflare: cloudflareModule,
   anthropic:  anthropicModule,
+  'openai-codex': openAiCodexModule,
+  'xai-oauth': xaiOAuthModule,
   evermind:   evermindModule,
 };
 
@@ -109,6 +114,8 @@ const VENDOR_PREFIXES: ReadonlyArray<{ prefix: string; vendor: VendorId }> = [
   // ref may itself contain `/` (it's an R2 key prefix) — parseVendorPrefix takes
   // everything after `evermind/` as the model id, which is exactly the ref.
   { prefix: 'evermind/',   vendor: 'evermind' },
+  { prefix: 'openai-codex/', vendor: 'openai-codex' },
+  { prefix: 'xai-oauth/', vendor: 'xai-oauth' },
   // Cloudflare model ids natively start with `@cf/...` so they're
   // self-identifying without a `cloudflare/` URL-style prefix. We still accept
   // `cloudflare/@cf/...` for symmetry with the other vendors — callers who
@@ -356,7 +363,7 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
   params: DispatchParams,
   cfg: SurfaceConfig<R>,
 ): Promise<R & { modelUsed: string; vendorUsed: VendorId; attempts: DispatchAttempt[] }> {
-  const { env, modelChain, ...rest } = params;
+  const { env, modelChain, reasoningIntent, ...rest } = params;
   if (modelChain.length === 0) {
     throw new Error(`${cfg.fnName}: modelChain is empty`);
   }
@@ -378,9 +385,24 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
       continue;
     }
 
+    // Derive the reasoning param for THIS candidate, not for the chain. The full
+    // chain id (prefix intact) is what classifies: `claude-opus-4-8` is the direct
+    // Anthropic vendor (native `thinking`), while `openrouter/anthropic/claude-…`
+    // speaks the OpenAI shape and correctly resolves to nothing. A family with no
+    // reasoning support yields `undefined` → this attempt's body is untouched, so
+    // the conservative "drop when unknown" default survives on every failover hop.
+    const reasoningParams = reasoningIntent
+      ? reasoningParamsForModel(model, reasoningIntent.execParams, { isFirstTurn: reasoningIntent.isFirstTurn })
+      : undefined;
+
     const startedAt = Date.now();
     try {
-      const result = await cfg.invoke(mod, { ...rest, apiKey, model: vendorModel });
+      const result = await cfg.invoke(mod, {
+        ...rest,
+        apiKey,
+        model: vendorModel,
+        ...(reasoningParams ? { extraBody: { ...rest.extraBody, ...reasoningParams } } : {}),
+      });
       cfg.validate?.(result, vendorId, vendorModel);
       // `modelUsed` echoes what the caller asked for (with prefix preserved).
       return { ...result, modelUsed: model, vendorUsed: vendorId, attempts };

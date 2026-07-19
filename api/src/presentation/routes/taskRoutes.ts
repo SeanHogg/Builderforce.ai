@@ -1,41 +1,36 @@
 import { Hono, type Context } from 'hono';
 import { and, count, desc, eq, inArray } from 'drizzle-orm';
-import { TaskService } from '../../application/task/TaskService';
-import { TaskPriority, AgentType, TaskStatus, TaskType, ExecutionStatus } from '../../domain/shared/types';
+import { TaskService, type UpdateTaskDto } from '../../application/task/TaskService';
+import { TaskPriority, AgentType, TaskStatus, TaskType } from '../../domain/shared/types';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { auditEvents, boards, projects, specs, swimlanes, swimlaneAgentAssignments, taskSpecs, tasks, tenantMembers, users } from '../../infrastructure/database/schema';
+import { projects, specs, taskSpecs, tasks, tenantMembers, users } from '../../infrastructure/database/schema';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { addDependency, deleteDependency, listProjectDependencies, isDepType } from '../../application/task/taskDependencies';
 import { invalidateCompletedByAssignee } from './reportRoutes';
 import { invalidateProjectsList } from './projectRoutes';
-import { AuditEventType } from '../../domain/shared/types';
+import { convertWorkItemType, ConvertError, type WorkItemKind } from '../../application/workitem/convertWorkItemType';
 import type { Db } from '../../infrastructure/database/connection';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
 import { openTaskPullRequest } from '../../application/repos/openTaskPullRequest';
 import { ensureTaskPrdRecord, linkSpecToTask } from '../../application/prd/taskPrd';
 import { recordStatusTransition } from '../../application/task/taskLifecycle';
+import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
 import { recordCloudToolEvent } from '../../application/runtime/cloudAgentEngine';
-import { decideLaneAutoRun, type LaneAgentLike } from '../../application/swimlane/laneAutoRun';
-import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
+import { evaluateTaskAutoRun, type AutoRunReason } from '../../application/swimlane/evaluateAutoRun';
+import { maybeAutoRunOnLaneEntry } from '../../application/swimlane/laneEntryTrigger';
+import { TicketParticipantsService } from '../../application/kanban/ticketParticipants';
+import { SecurityTicketAccessService } from '../../application/security/SecurityTicketAccessService';
+import { ChatTicketService } from '../../application/brain/ChatTicketService';
+import { resolveTicketViewer } from '../../application/security/resolveTicketViewer';
+import { executionTokenGate } from './executionTokenGate';
 import { broadcastProjectChanged } from '../../infrastructure/relay/broadcastRoom';
 
 /** Parse a swimlane assignment's `required_capabilities` (JSON array stored as
  *  text) into a clean string[]. Tolerates null / malformed / non-array values by
  *  returning [] (no requirement) so a bad row never blocks auto-run with a throw. */
-function parseRequiredCapabilities(raw: string | null | undefined): string[] {
-  if (!raw) return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((v): v is string => typeof v === 'string' && v.trim().length > 0).map((v) => v.trim());
-  } catch {
-    return [];
-  }
-}
-
 /** Minimal shape of the agentHost relay Durable Object namespace binding. */
 type RelayNamespace = {
   idFromName(name: string): unknown;
@@ -83,7 +78,10 @@ async function countSpecsByTask(db: Db, taskIds: number[]): Promise<Map<number, 
   }
 }
 
-async function dispatchTaskFinalize(
+// Exported so the AI Manager (which advances review-complete tickets to Done under
+// non-queue PR policy) opens the PR through the SAME finalize path the board does,
+// rather than duplicating the commit/push/PR-open logic.
+export async function dispatchTaskFinalize(
   env: HonoEnv['Bindings'],
   db: Db,
   tenantId: number,
@@ -143,168 +141,14 @@ async function dispatchTaskFinalize(
 }
 
 /**
- * Board "autonomous trigger" — the SERVER-SIDE source of truth. When a ticket
- * enters a lane (created into it, or its status PATCHed into it by ANY client —
- * board drag, the status dropdown, the brain, a raw API call) and that lane has
- * a configured agent with a non-human gate, auto-start the run AS that agent.
- * This used to live only in the board frontend, so brain-created / API / non-
- * board status changes silently skipped the run (the reported bug).
- *
- * There is ONE agent engine (the V2 Agent) behind ONE surface-aware dispatcher
- * ({@link dispatchCloudRunForTask}): the agent's backplane — Durable Object,
- * Container, or an on-prem machine (a long-lived runtime, equivalent to a
- * container) — is resolved inside the dispatcher, not here. So this trigger just
- * hands the lane's agent ref + model to that single dispatcher, the same one the
- * manual run and CI auto-fix use.
- *
- * Best-effort: a dispatch failure must never block or fail the status change.
- *
- * The caller keeps THIS promise alive (the board-drag path wraps the whole call in
- * one `c.executionCtx.waitUntil(...)` registered while the request is still being
- * handled; the execution-completion path awaits it). Crucially, the executor
- * kickoff is AWAITED inside here rather than re-scheduled on the request's
- * `executionCtx`: this handler runs AFTER the Worker response has already returned,
- * and registering a fresh `executionCtx.waitUntil()` from a closed request context
- * throws ("I/O on behalf of a different request") — which this function's
- * `try/catch` would silently swallow, leaving the execution row created but never
- * dispatched. That was the reported "drag into a staffed lane never fires the
- * agent" bug: the run was submitted but its `orchestrate()` kickoff was dropped.
- *
- * Exported so the execution-completion path (RuntimeService.onLaneEntry, wired at
- * the composition root) reuses this exact trigger when an AGENT advances a ticket
- * into the next lane — without it, agent-moved tickets wrote `tasks.status`
- * directly and never started the next lane's configured agent.
+ * The board autonomous trigger now lives in the APPLICATION layer
+ * ({@link ../../application/swimlane/laneEntryTrigger}) so the non-HTTP writers
+ * that land tickets in lanes (board-sync inbound, the QA finding router, the cron
+ * sweeps, the MCP tools) can reach it without importing a route module. Re-exported
+ * here verbatim so every existing import path (`presentation/routes/taskRoutes`)
+ * keeps resolving; the routes below call the moved function.
  */
-export async function maybeAutoRunOnLaneEntry(
-  env: Env,
-  db: Db,
-  runtimeService: RuntimeService,
-  args: { tenantId: number; projectId: number; taskId: number; status: string; submittedBy: string; originLaneKey?: string },
-): Promise<void> {
-  try {
-    // A terminal (Done) lane finalizes the ticket; never spin up a fresh agent run
-    // for it — that path is handled by dispatchTaskFinalize.
-    if (args.status === TaskStatus.DONE) return;
-
-    // Resolve the lane the ticket just entered (the swimlane keyed by its status)
-    // plus that lane's configured agents and gate. No board / no matching lane →
-    // no configured agent → no auto-run.
-    let agents: LaneAgentLike[] | undefined;
-    let gate: 'auto' | 'human' | undefined;
-    const [board] = await db
-      .select({ id: boards.id })
-      .from(boards)
-      .where(eq(boards.projectId, args.projectId))
-      .limit(1);
-    if (board) {
-      const [lane] = await db
-        .select({ id: swimlanes.id, gate: swimlanes.gate })
-        .from(swimlanes)
-        .where(and(eq(swimlanes.boardId, board.id), eq(swimlanes.key, args.status)))
-        .limit(1);
-      if (lane) {
-        gate = lane.gate === 'human' ? 'human' : 'auto';
-        const rows = await db
-          .select({
-            agentRef: swimlaneAgentAssignments.agentRef,
-            model: swimlaneAgentAssignments.model,
-            requiredCapabilities: swimlaneAgentAssignments.requiredCapabilities,
-          })
-          .from(swimlaneAgentAssignments)
-          .where(eq(swimlaneAgentAssignments.swimlaneId, lane.id));
-
-        // Capability guardrail: when a lane assignment declares
-        // `required_capabilities`, resolve the agent's actual capabilities (its
-        // assigned skill + persona slugs, in this task's scope) so `decideLaneAutoRun`
-        // can skip an agent that lacks them — e.g. a docs/BA agent on a coding lane.
-        // Resolution is per-agent and only done when there's a requirement to check,
-        // so the common (unconfigured) case stays a single cheap query.
-        agents = await Promise.all(
-          rows.map(async (r): Promise<LaneAgentLike> => {
-            const requiredCapabilities = parseRequiredCapabilities(r.requiredCapabilities);
-            let capabilities: string[] | undefined;
-            if (requiredCapabilities.length > 0 && r.agentRef) {
-              const resolved = await resolveArtifacts(db, {
-                tenantId: args.tenantId,
-                taskId: args.taskId,
-                cloudAgentRef: r.agentRef,
-              }).catch(() => ({ skills: [], personas: [], content: [] }));
-              capabilities = [...resolved.skills, ...resolved.personas];
-            }
-            return { agentRef: r.agentRef, model: r.model, requiredCapabilities, capabilities };
-          }),
-        );
-      }
-    }
-
-    const decision = decideLaneAutoRun(agents, gate);
-
-    // A lane staffed with an agent that lacks the lane's required capabilities is a
-    // configuration error, not a silent no-op. Emit a `capability_mismatch` warning
-    // (Worker telemetry sink) so a mis-staffed lane is diagnosable. There is no
-    // execution to attach a timeline event to yet — see the README gap register entry
-    // for surfacing this on the Observability timeline.
-    if (decision.capabilityMismatches?.length) {
-      for (const m of decision.capabilityMismatches) {
-        console.warn(
-          `[capability_mismatch] task ${args.taskId} lane '${args.status}': agent '${m.agentRef}' lacks required capabilities [${m.missing.join(', ')}] — skipped for auto-run`,
-        );
-      }
-    }
-    if (!decision.autoRun) return;
-
-    // Same-lane re-entry guard: the execution-completion path
-    // (RuntimeService.onLaneEntry) always lands a completed ticket in `in_review`.
-    // If that lane is staffed (gate overridden to 'auto'), the run it auto-starts
-    // would complete back into `in_review` and re-fire forever. `originLaneKey` is
-    // the lane the JUST-COMPLETED run was dispatched for; skip only when the ticket
-    // is re-entering that SAME lane. Keyed on lane, not agent — a genuine handoff to
-    // a DIFFERENT lane that happens to be staffed by the same agent still runs. A
-    // human drag / manual run passes no `originLaneKey`, so it never blocks a hop.
-    if (args.originLaneKey && args.originLaneKey === args.status) return;
-
-    // Idempotency: never stack a second run on a ticket that already has a live
-    // one (a manual run just started, or a re-PATCH to the same lane) — this is what
-    // lets every caller invoke the trigger safely. Read through runtimeService (NOT a
-    // raw query) so a stale cloud run abandoned RUNNING by an evicted isolate is
-    // reaped to FAILED on read FIRST. A raw status check would treat that dead row as
-    // "active" and silently block the lane's agent from ever starting again — the
-    // "drag does nothing on a ticket that ran once before" failure mode.
-    const live = (await runtimeService.listByTask(args.taskId)).some(
-      (e) =>
-        e.status === ExecutionStatus.PENDING ||
-        e.status === ExecutionStatus.SUBMITTED ||
-        e.status === ExecutionStatus.RUNNING,
-    );
-    if (live) return;
-
-    // Hand the lane's agent + model to the single surface-aware dispatcher (the
-    // `cloudAgentRef` payload key is the existing dispatch contract — the V2 agent
-    // ref the dispatcher resolves + attributes the run to). `laneKey` records which
-    // lane this run serves so a completion that re-enters the SAME lane (a loop) is
-    // suppressed by the same-lane guard above on the next hop.
-    const payloadObj: { cloudAgentRef?: string; model?: string; laneKey?: string } = { laneKey: args.status };
-    if (decision.agentRef) payloadObj.cloudAgentRef = decision.agentRef;
-    if (decision.model) payloadObj.model = decision.model;
-
-    // Collect the dispatcher's deferred executor kickoff (`orchestrate()`) and AWAIT
-    // it here instead of letting it re-register on the (already-closed) request
-    // `executionCtx`. We are off the response path, so awaiting the kickoff costs
-    // nothing the user waits on — but it guarantees the run is actually started
-    // rather than created-then-dropped. See this function's header for the why.
-    const deferred: Promise<unknown>[] = [];
-    await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
-      taskId: args.taskId,
-      tenantId: args.tenantId,
-      payload: Object.keys(payloadObj).length > 0 ? JSON.stringify(payloadObj) : undefined,
-      submittedBy: args.submittedBy,
-    });
-    await Promise.allSettled(deferred);
-  } catch {
-    // Best-effort: the status change already succeeded; an autonomous-run failure
-    // must not surface as a failed PATCH/create.
-  }
-}
+export { maybeAutoRunOnLaneEntry, onTaskLandedInLane } from '../../application/swimlane/laneEntryTrigger';
 
 export function createTaskRoutes(taskService: TaskService, db: Db, runtimeService: RuntimeService): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -326,6 +170,33 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
         submittedBy: (c as { get(k: 'userId'): string | undefined }).get('userId') ?? 'system:lane-auto',
       }),
     );
+  };
+
+  // Emit a ticket mutation onto the unified activity/audit stream, attributed to
+  // whoever made the request (team member, external hire, or — for agent-token
+  // paths — the system). Best-effort, off the response path (recordActivity never
+  // throws). The ONE place ticket events reach the audit log, so create/update/
+  // move/delete stay in lockstep.
+  const emitTaskActivity = (
+    c: Context<HonoEnv>,
+    verb: string,
+    o: { taskId: number; projectId?: number | null; title?: string | null; summary?: string | null; metadata?: Record<string, unknown> | null },
+  ): void => {
+    c.executionCtx.waitUntil((async () => {
+      const actor = await resolveActorFromContext(c.env as Env, db, c);
+      await recordActivity(c.env as Env, db, {
+        tenantId:   c.get('tenantId'),
+        segmentId:  (c as { get(k: 'segmentId'): string | undefined }).get('segmentId') ?? null,
+        projectId:  o.projectId ?? null,
+        actor,
+        verb,
+        targetType: 'task',
+        targetId:   o.taskId,
+        targetLabel: o.title ?? null,
+        summary:    o.summary ?? null,
+        metadata:   o.metadata ?? null,
+      });
+    })().catch(() => {}));
   };
 
   // Bump the project's epic-tree cache version so the next /:id/tree read reloads.
@@ -351,7 +222,12 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // where the archive itself is the subject (e.g. the delete-project dialog).
     const includeArchived = c.req.query('include_archived') === 'true';
     const tasks = await taskService.listTasks(c.get('tenantId'), projectId, includeArchived);
-    const plain = tasks.map(t => t.toPlain());
+    // Mask (don't drop) the access-restricted SECURITY tickets this viewer may not
+    // see, via the one shared visibility gate — the item stays visible as a
+    // "clearance needed" placeholder. No-op unless the list holds security tickets.
+    const viewer = await resolveTicketViewer(c, db);
+    const plain = await new SecurityTicketAccessService(db, c.env as Env)
+      .applyVisibilityForViewer(c.get('tenantId'), viewer, tasks.map(t => t.toPlain() as unknown as Record<string, unknown>));
     // Augment each card with its linked-PRD count [1266] — one grouped query (no
     // N+1), and best-effort so it no-ops where task_specs (migration 0098) isn't
     // applied yet (the board still renders, just with no PRD dots).
@@ -431,7 +307,77 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const id = Number(c.req.param('id'));
     if (!(await loadTenantTask(id, c.get('tenantId')))) return c.json({ error: 'Task not found' }, 404);
     const task = await taskService.getTask(id);
-    return c.json(task.toPlain());
+    const plain = task.toPlain() as unknown as Record<string, unknown>;
+    // A SECURITY ticket the viewer isn't cleared for is returned MASKED (200) — its
+    // existence is surfaced, its content redacted with `restricted: true`. Same shared
+    // gate as the list.
+    if (plain.taskType === TaskType.SECURITY) {
+      const viewer = await resolveTicketViewer(c, db);
+      const [masked] = await new SecurityTicketAccessService(db, c.env as Env)
+        .applyVisibilityForViewer(c.get('tenantId'), viewer, [plain]);
+      return c.json(masked ?? plain);
+    }
+    return c.json(plain);
+  });
+
+  // GET /api/tasks/:id/autorun-diagnostics — the board TRIAGE read: explains, for a
+  // single ticket, whether the autonomous agent will run AND if not exactly why
+  // (no agent, human gate, capability mismatch, already running, terminal/backlog
+  // lane). Same evaluator the trigger uses, so the answer is authoritative. Not
+  // cached — it reflects live execution status, which changes on every tick.
+  router.get('/:id/autorun-diagnostics', async (c) => {
+    const id = Number(c.req.param('id'));
+    const row = await loadTenantTask(id, c.get('tenantId'));
+    if (!row) return c.json({ error: 'Task not found' }, 404);
+    const evaln = await evaluateTaskAutoRun(db, runtimeService, {
+      tenantId:  c.get('tenantId'),
+      projectId: row.projectId,
+      taskId:    id,
+      status:    row.status,
+    });
+    return c.json(evaln);
+  });
+
+  // POST /api/tasks/:id/run-now — manual TRIAGE trigger: dispatch the ticket's
+  // owner / first-capable lane agent immediately, IGNORING the lane gate (an
+  // explicit human click is itself the approval — so it works on a human-gated lane
+  // too). 409 when a run is already live; 400 when no agent can run the ticket
+  // (`reason` lets the UI explain what to fix). Reuses the one dispatcher.
+  router.post('/:id/run-now', async (c) => {
+    const id = Number(c.req.param('id'));
+    const row = await loadTenantTask(id, c.get('tenantId'));
+    if (!row) return c.json({ error: 'Task not found' }, 404);
+    const evaln = await evaluateTaskAutoRun(db, runtimeService, {
+      tenantId:  c.get('tenantId'),
+      projectId: row.projectId,
+      taskId:    id,
+      status:    row.status,
+    });
+    if (evaln.liveExecution) {
+      return c.json({ error: 'A run is already in progress for this ticket.', reason: 'already_running' satisfies AutoRunReason, executionId: evaln.liveExecution.id }, 409);
+    }
+    // Token gate — no budget → no run. Shared adapter (same one submit-execution +
+    // the board Run use), so the tenant-budget check and the superadmin bypass are
+    // applied identically everywhere. Blocking here avoids creating a run that can't
+    // make progress; the gateway would 429 the spend anyway.
+    const tokenBlock = await executionTokenGate(c, db);
+    if (tokenBlock) return tokenBlock;
+    if (!evaln.candidate) {
+      // Nothing to run as — surface the precise reason so the UI can prompt the fix
+      // (assign an agent, staff the lane, or relax the capability requirement).
+      const reason: AutoRunReason = evaln.reason === 'will_run' ? 'no_agent' : evaln.reason;
+      return c.json({ error: 'No agent is configured to run this ticket. Assign a cloud agent (or staff this lane), then try again.', reason }, 400);
+    }
+    const payloadObj: { cloudAgentRef: string; model?: string; laneKey: string } = {
+      cloudAgentRef: evaln.candidate.agentRef,
+      laneKey:       row.status,
+    };
+    if (evaln.candidate.model) payloadObj.model = evaln.candidate.model;
+    const executionId = await dispatchCloudRunForTask(
+      c.env as Env, db, runtimeService, (p) => c.executionCtx.waitUntil(p),
+      { taskId: id, tenantId: c.get('tenantId'), payload: JSON.stringify(payloadObj), submittedBy: (c as { get(k: 'userId'): string | undefined }).get('userId') ?? 'system:run-now' },
+    );
+    return c.json({ ok: true, executionId, agentRef: evaln.candidate.agentRef }, 202);
   });
 
   // GET /api/tasks/:id/tree — an Epic and its direct child tasks (parent/child
@@ -532,6 +478,10 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     // cloud agent (e.g. the brain drops a task into an agent-owned lane) must
     // auto-run just like one dragged in. Best-effort, off the response path.
     fireLaneAutoRun(c, { projectId: created.projectId, taskId: created.id, status: created.status });
+    emitTaskActivity(c, 'task.created', {
+      taskId: created.id, projectId: created.projectId, title: created.title,
+      summary: `Created ${created.key ?? `#${created.id}`}`,
+    });
     return c.json(created, 201);
   });
 
@@ -549,6 +499,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       sprintId?: string | null;
       releaseId?: string | null;
       storyPoints?: number | null;
+      businessValue?: number | null;
       assignedAgentType?: AgentType | null;
       assignedAgentHostId?: number | null;
       assignedAgentRef?: string | null;
@@ -560,12 +511,31 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       persona?: string | null;
       archived?: boolean;
     }>();
-    // Capture the pre-update status so a status change can be recorded as a lane
-    // transition (the metrics keystone, migration 0117). Cheap PK read; only when
-    // the PATCH actually carries a status.
-    const prevStatus = body.status !== undefined
-      ? (await db.select({ status: tasks.status, projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, id)).limit(1))[0]
+    // A human setting business value on the board pins the source to 'manual' so the
+    // AI Manager never overwrites the number (it only backfills unscored/AI tickets).
+    if (body.businessValue !== undefined) {
+      (body as UpdateTaskDto).businessValueSource = 'manual';
+      if (body.businessValue !== null) {
+        (body as UpdateTaskDto).businessValueRationale = 'Set by a team member.';
+      }
+    }
+    // Capture the pre-update status + owner so a status change can be recorded as a
+    // lane transition (the metrics keystone, migration 0117) AND an owner-agent
+    // change can fire the autonomous trigger. Cheap PK read; only when the PATCH
+    // carries a status and/or a reassignment.
+    const prevStatus = (body.status !== undefined || body.assignedAgentRef !== undefined)
+      ? (await db.select({ status: tasks.status, projectId: tasks.projectId, assignedAgentRef: tasks.assignedAgentRef }).from(tasks).where(eq(tasks.id, id)).limit(1))[0]
       : undefined;
+
+    // Done gate (AC-2): on a lifecycle-managed board, block a move to a terminal lane
+    // while any required participant is not completed-with-evidence — the board shows
+    // the outstanding roles instead of letting an incomplete ticket reach Done.
+    if (body.status !== undefined && prevStatus && body.status !== prevStatus.status) {
+      const gate = await new TicketParticipantsService(db).doneGate(c.env as Env, c.get('tenantId') as number, id, body.status).catch(() => ({ blocked: false, outstanding: [] as string[] }));
+      if (gate.blocked) {
+        return c.json({ error: 'done_blocked', message: `Cannot move to Done — outstanding required roles: ${gate.outstanding.join(', ')}`, outstanding: gate.outstanding }, 409);
+      }
+    }
 
     const task = await taskService.updateTask(id, body);
     // A PATCH can change parent/sprint/title/status — any of which reshapes a tree.
@@ -609,6 +579,34 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       fireLaneAutoRun(c, { projectId: prevStatus.projectId, taskId: id, status: body.status });
     }
 
+    // Autonomous trigger on REASSIGNMENT: assigning a cloud agent as the ticket's
+    // owner is itself a "go" — the owner agent should pick the ticket up in its
+    // current (auto-gated) lane, even with no explicit swimlane staffing (see
+    // withOwnerAgentFallback). Fire only when the owner ref actually CHANGED to a
+    // non-null value AND the status did not also change in this PATCH (that path
+    // already fired for the lane the ticket entered), so a single PATCH never
+    // double-fires. The live-run idempotency guard makes a redundant fire a no-op.
+    const statusChanged = !!prevStatus && body.status !== undefined && body.status !== prevStatus.status;
+    const newAgentRef = typeof body.assignedAgentRef === 'string' ? body.assignedAgentRef.trim() : null;
+    const agentReassigned = !!newAgentRef && !!prevStatus && newAgentRef !== (prevStatus.assignedAgentRef ?? null);
+    if (!statusChanged && agentReassigned) {
+      const plain = task.toPlain();
+      fireLaneAutoRun(c, { projectId: plain.projectId, taskId: id, status: plain.status });
+    }
+    // Reassigning to a NEW cloud agent also brings it INTO the ticket's linked chats
+    // (with a "starting work" notice) — independent of whether the lane/status changed —
+    // so the conversation that spawned the ticket shows the agent picking it up. DRY with
+    // the Brain MCP path (fireAgentAssignmentHandoff → ChatTicketService.onTicketAgentAssigned).
+    if (agentReassigned && newAgentRef) {
+      const plain = task.toPlain() as { taskType?: string };
+      const kind = plain.taskType === 'epic' || plain.taskType === 'gap' ? plain.taskType : 'task';
+      c.executionCtx.waitUntil(
+        new ChatTicketService(db, c.env as Env)
+          .onTicketAgentAssigned(c.get('tenantId'), kind, String(id), newAgentRef)
+          .catch(() => {}),
+      );
+    }
+
     // On transition to Done, finalize the ticket → commit + PR (host relay or
     // cloud server-side; see dispatchTaskFinalize).
     if (body.status === TaskStatus.DONE) {
@@ -624,19 +622,21 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       );
     }
 
-    // record audit event for the status of this task change
-    try {
-      await db.insert(auditEvents).values({
-        tenantId: c.get('tenantId'),
-        userId:   (c as any).get('userId') ?? null,
-        eventType: AuditEventType.TASK_UPDATED,
-        resourceType: 'task',
-        resourceId: String(id),
-        metadata: JSON.stringify(body),
-      });
-    } catch {
-      // ignore failures to avoid blocking the main flow
-    }
+    // Unified audit stream: classify the edit so the timeline reads meaningfully.
+    const assignmentTouched = body.assignedUserId !== undefined || body.assignedAgentRef !== undefined || body.assignedAgentHostId !== undefined;
+    const plainPatched = task.toPlain();
+    const verb = statusChanged ? 'task.status_changed' : assignmentTouched ? 'task.assigned' : 'task.updated';
+    emitTaskActivity(c, verb, {
+      taskId: id,
+      projectId: plainPatched.projectId,
+      title: plainPatched.title,
+      summary: statusChanged
+        ? `Moved ${plainPatched.key ?? `#${id}`}: ${prevStatus?.status} → ${body.status}`
+        : assignmentTouched
+          ? `Reassigned ${plainPatched.key ?? `#${id}`}`
+          : `Updated ${plainPatched.key ?? `#${id}`}`,
+      metadata: statusChanged ? { fromStatus: prevStatus?.status, toStatus: body.status } : { fields: Object.keys(body) },
+    });
 
     return c.json(task.toPlain());
   });
@@ -656,18 +656,11 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, before?.projectId));
     c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, body.projectId));
 
-    try {
-      await db.insert(auditEvents).values({
-        tenantId: c.get('tenantId'),
-        userId:   (c as any).get('userId') ?? null,
-        eventType: AuditEventType.TASK_UPDATED,
-        resourceType: 'task',
-        resourceId: String(id),
-        metadata: JSON.stringify({ movedToProjectId: body.projectId, key: task.key }),
-      });
-    } catch {
-      // ignore failures to avoid blocking the main flow
-    }
+    emitTaskActivity(c, 'task.moved', {
+      taskId: id, projectId: body.projectId, title: task.toPlain().title,
+      summary: `Moved ${task.key ?? `#${id}`} to another project`,
+      metadata: { fromProjectId: before?.projectId ?? null, toProjectId: body.projectId },
+    });
 
     return c.json(task.toPlain());
   });
@@ -683,7 +676,37 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     await invalidateProjectsList(c.env as Env, c.get('tenantId')).catch(() => {});
     // Drop the card from every client viewing this project's live board.
     c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, before?.projectId));
+    emitTaskActivity(c, 'task.deleted', {
+      taskId: id, projectId: before.projectId, title: before.title,
+      summary: `Deleted task #${id}`,
+    });
     return c.body(null, 204);
+  });
+
+  // POST /api/tasks/:id/convert-type — change a board item's type: task⇄epic, or
+  // promote it to an OKR Objective (target='objective'). The reverse (objective →
+  // board) lives on the pmo route since its id space is different. Shared logic in
+  // convertWorkItemType so both callers + the MCP tool stay in lockstep.
+  router.post('/:id/convert-type', async (c) => {
+    const id = Number(c.req.param('id'));
+    const before = await loadTenantTask(id, c.get('tenantId'));
+    if (!before) return c.json({ error: 'Task not found' }, 404);
+    const body = await c.req.json<{ target?: WorkItemKind }>();
+    const target = body.target;
+    if (target !== 'task' && target !== 'epic' && target !== 'objective') {
+      return c.json({ error: 'target must be task|epic|objective' }, 400);
+    }
+    try {
+      const result = await convertWorkItemType(
+        { db, tasks: taskService, env: c.env as Env },
+        { tenantId: c.get('tenantId'), segmentId: c.get('segmentId') as string, sourceKind: 'epic', sourceId: String(id), target },
+      );
+      c.executionCtx.waitUntil(broadcastProjectChanged(c.env?.SESSION_ROOM, before.projectId));
+      return c.json(result);
+    } catch (e) {
+      if (e instanceof ConvertError) return c.json({ error: e.message }, 400);
+      throw e;
+    }
   });
 
   // ── Task ↔ PRD links (many-to-many via task_specs, 0098) ──────────────────
@@ -695,7 +718,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
   /** Verify the task belongs to the tenant; returns its row or null. */
   async function loadTenantTask(taskId: number, tenantId: number) {
     const [row] = await db
-      .select({ id: tasks.id, projectId: tasks.projectId, title: tasks.title, description: tasks.description })
+      .select({ id: tasks.id, projectId: tasks.projectId, status: tasks.status, title: tasks.title, description: tasks.description })
       .from(tasks)
       .innerJoin(projects, eq(projects.id, tasks.projectId))
       .where(and(eq(tasks.id, taskId), eq(projects.tenantId, tenantId)));
@@ -774,19 +797,12 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
     const task = await taskService.dequeueNextReady(c.get('tenantId'));
     if (task) {
       const plain = task.toPlain();
-      // record that the task was claimed
-      try {
-        await db.insert(auditEvents).values({
-          tenantId: c.get('tenantId'),
-          userId: null,
-          eventType: AuditEventType.TASK_UPDATED,
-          resourceType: 'task',
-          resourceId: String(task.id),
-          metadata: JSON.stringify({ claimed: true, status: task.status }),
-        });
-      } catch {
-        // ignore errors
-      }
+      // record that the task was claimed (unified activity stream)
+      emitTaskActivity(c, 'task.claimed', {
+        taskId: plain.id, projectId: plain.projectId, title: plain.title,
+        summary: `Claimed ${plain.key ?? `#${plain.id}`}`,
+        metadata: { claimed: true, status: task.status },
+      });
       // dequeue moved the ticket ready → in_progress without a PATCH; record the
       // lane transition so pickup-latency / cycle metrics see the claim.
       c.executionCtx.waitUntil(

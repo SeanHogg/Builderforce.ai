@@ -12,7 +12,9 @@
 import { and, eq, gte, sql } from 'drizzle-orm';
 import { ingestionUsageLog, tenants } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
+import { resolveSuperadminUnlimited } from '../llm/tenantTokenAvailability';
 import { resolveIngestionMonthlyBytes } from '../../domain/tenant/PlanLimits';
 import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { utcMonthStart } from '../llm/tokenUsage';
@@ -70,6 +72,30 @@ export async function dailyTenantIngestionBytes(
   return rows.map((r) => ({ day: r.day, value: Math.max(0, Math.floor(Number(r.used ?? 0))) }));
 }
 
+/** Month-to-date ingestion grouped by the integration that supplied it. Null
+ * provider rows remain part of the aggregate meter but are intentionally omitted
+ * here because there is no integration card to attribute them to. */
+export async function tenantIngestionBytesByProvider(
+  db: Db,
+  tenantId: number,
+  since: Date,
+): Promise<Array<{ key: string; used: number }>> {
+  const rows = await db
+    .select({ provider: ingestionUsageLog.provider, used: sql<number>`COALESCE(SUM(${ingestionUsageLog.bytesIngested}), 0)` })
+    .from(ingestionUsageLog)
+    .where(and(
+      eq(ingestionUsageLog.tenantId, tenantId),
+      gte(ingestionUsageLog.createdAt, since),
+      sql`${ingestionUsageLog.provider} IS NOT NULL`,
+    ))
+    .groupBy(ingestionUsageLog.provider)
+    .orderBy(ingestionUsageLog.provider);
+  return rows.map((r) => ({
+    key: String(r.provider),
+    used: Math.max(0, Math.floor(Number(r.used ?? 0))),
+  }));
+}
+
 export type IngestionCapResult =
   | { allowed: true }
   | { allowed: false; effectivePlan: TenantPlan; used: number; limit: number };
@@ -81,7 +107,12 @@ export type IngestionCapResult =
  * tenants) always pass. Fails OPEN on a query error — a metering hiccup must not
  * block a legitimate import.
  */
-export async function enforceIngestionCap(db: Db, tenantId: number): Promise<IngestionCapResult> {
+export async function enforceIngestionCap(
+  db: Db,
+  tenantId: number,
+  ingestionDb: Db = db,
+  env?: Env,
+): Promise<IngestionCapResult> {
   try {
     const [tenantRow] = await db
       .select({
@@ -103,9 +134,14 @@ export async function enforceIngestionCap(db: Db, tenantId: number): Promise<Ing
       effectivePlan,
       tokenDailyLimitOverride: tenantRow?.tokenDailyLimitOverride ?? null,
     });
-    if (limit < 0) return { allowed: true }; // unlimited
+    if (limit < 0) return { allowed: true }; // plan-unlimited (Teams / -1 override)
 
-    const used = await sumTenantIngestionBytes(db, tenantId, utcMonthStart());
+    // A superadmin OPERATOR is unlimited on EVERY meter — same rule, same source of
+    // truth as the token and cloud-run gates. Only consulted once the plan already
+    // caps the tenant, so unlimited tenants pay nothing for it.
+    if (await resolveSuperadminUnlimited(db, tenantId, undefined, env)) return { allowed: true };
+
+    const used = await sumTenantIngestionBytes(ingestionDb, tenantId, utcMonthStart());
     if (used >= limit) return { allowed: false, effectivePlan, used, limit };
     return { allowed: true };
   } catch {

@@ -14,9 +14,11 @@ import { eq, and, sql, desc } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import * as schema from '../../infrastructure/database/schema';
 import { signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
+import { hashPassword, verifyPassword } from '../../infrastructure/auth/HashService';
 import { invalidateCapabilityCache } from '../../application/artifact/capabilityContext';
 import { getOrSetCached, invalidateCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
-import type { Env, HonoEnv } from '../../env';
+import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
+import { sendWelcomeEmail } from '../../infrastructure/email/EmailService';
 
 /** Read-through cache key for a single published skill's SEO/SSR payload. */
 const skillSeoCacheKey = (slug: string): string => `mp:skill:seo:${slug}`;
@@ -34,55 +36,9 @@ async function invalidateSkillsList(env: Env): Promise<void> {
   await bumpCacheVersion(env, SKILLS_LIST_VERSION_KEY);
 }
 
-// ---------------------------------------------------------------------------
-// Password hashing (PBKDF2 via Web Crypto – works in CF Workers)
-// ---------------------------------------------------------------------------
-
-async function hashPassword(password: string): Promise<string> {
-  const saltBytes = crypto.getRandomValues(new Uint8Array(16));
-  const saltHex = Array.from(saltBytes)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-  const keyMat = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(password),
-    'PBKDF2',
-    false,
-    ['deriveBits'],
-  );
-  const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt: saltBytes, iterations: 100_000, hash: 'SHA-256' },
-    keyMat,
-    256,
-  );
-  const hashHex = Array.from(new Uint8Array(bits))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-  return `${saltHex}:${hashHex}`;
-}
-
-async function verifyPassword(input: string, stored: string): Promise<boolean> {
-  const [saltHex, hashHex] = stored.split(':');
-  const saltBytes = new Uint8Array(
-    (saltHex ?? '').match(/../g)?.map((h) => parseInt(h, 16)) ?? [],
-  );
-  const keyMat = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(input),
-    'PBKDF2',
-    false,
-    ['deriveBits'],
-  );
-  const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt: saltBytes, iterations: 100_000, hash: 'SHA-256' },
-    keyMat,
-    256,
-  );
-  const inputHash = Array.from(new Uint8Array(bits))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-  return inputHash === hashHex;
-}
+// Password hashing (PBKDF2 via Web Crypto) uses the canonical HashService — the
+// SAME salt:hash format + params as every other web/marketplace user hash, so the
+// two must never drift. `hashPassword` / `verifyPassword` are imported above.
 
 // ---------------------------------------------------------------------------
 // Marketplace-specific auth middleware
@@ -192,6 +148,10 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
       displayName:  display_name ?? username,
       passwordHash,
     });
+
+    // Fire-and-forget: a mail failure must not fail the registration. This path
+    // never creates a gig account, so the builder next steps apply.
+    void sendWelcomeEmail(c.env, email, display_name ?? username, resolveAppBaseUrl(c.env), 'standard');
 
     const token = await signWebJwt(
       { sub: userId, email, username },

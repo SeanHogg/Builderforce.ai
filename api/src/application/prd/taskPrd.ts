@@ -8,7 +8,8 @@
  * primary PRD (the canonical one the agent reads/writes for that task).
  */
 import { and, desc, eq } from 'drizzle-orm';
-import { ideProxy } from '../llm/LlmProxyService';
+import { completeForTenant } from '../llm/tenantProxy';
+import { readProxyChoice } from '../llm/LlmProxyService';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { specs, taskSpecs } from '../../infrastructure/database/schema';
@@ -35,26 +36,25 @@ export function stripPrdMarkdownFence(content: string): string {
   return m ? (m[2] ?? '').trim() : text;
 }
 
-/** Draft a PRD body for a task via the gateway. Returns trimmed markdown, or '' on failure. Never throws. */
+/** Draft a PRD body for a task via the gateway, on the tenant's connected BYO account
+ *  when they have one (the compiled/agent `model` is honored only when it preempts the
+ *  BYO seed). Returns trimmed markdown, or '' on failure. Never throws. */
 export async function draftTaskPrd(
   env: Env,
+  tenantId: number,
   task: { title: string; description: string | null },
   model?: string,
 ): Promise<string> {
   try {
-    const gen = await ideProxy(env).complete({
+    const gen = await completeForTenant(env, tenantId, {
       messages: [
         { role: 'system', content: PRD_SYSTEM_PROMPT },
         { role: 'user', content: `Task: ${task.title}\n\n${task.description ?? ''}`.trim() },
       ],
-      ...(model ? { model } : {}),
       useCase: 'prd_generation',
-    });
+    }, { meterUseCase: 'prd_generation', explicitModel: model });
     if (gen.response.status < 400) {
-      const raw = await gen.response.json().catch(() => null);
-      const content = (raw as { choices?: Array<{ message?: { content?: unknown } }> } | null)
-        ?.choices?.[0]?.message?.content;
-      return stripPrdMarkdownFence(typeof content === 'string' ? content : '');
+      return stripPrdMarkdownFence((await readProxyChoice(gen)).content);
     }
   } catch { /* generation failed — caller treats '' as "no PRD" */ }
   return '';
@@ -141,6 +141,28 @@ export type EnsureTaskPrdResult = { specId: string; prd: string; status: 'reused
  * the cloud-execution wrapper, the on-demand "Generate PRD" endpoint, and the
  * swimlane auto-PRD gate. Never throws.
  */
+/** The anchored per-role hand-off sections of a task PRD (PRD §5.7). Each role authors
+ *  its section; a section's presence is part of verifying that role participated. */
+export const PRD_ROLE_SECTIONS: ReadonlyArray<{ heading: string; role: string }> = [
+  { heading: 'Requirements', role: 'business-analyst' },
+  { heading: 'Design', role: 'architect' },
+  { heading: 'Implementation Notes', role: 'developer' },
+  { heading: 'Review', role: 'code-reviewer' },
+  { heading: 'Test Evidence', role: 'qa-tester' },
+  { heading: 'Acceptance', role: 'validator' },
+];
+
+/** Ensure the PRD carries the per-role hand-off sections. Idempotent — only appends a
+ *  section header that's missing, so re-running never duplicates or clobbers content. */
+export function scaffoldPrdSections(prd: string): string {
+  let out = prd.trimEnd();
+  for (const s of PRD_ROLE_SECTIONS) {
+    const re = new RegExp(`^##\\s+${s.heading}\\b`, 'im');
+    if (!re.test(out)) out += `\n\n## ${s.heading}\n\n_Owned by the ${s.role} — to be authored._`;
+  }
+  return out;
+}
+
 export async function ensureTaskPrdRecord(
   db: Db,
   env: Env,
@@ -157,9 +179,11 @@ export async function ensureTaskPrdRecord(
   const existing = await findTaskPrimarySpec(db, args.taskId);
   if (existing?.prd?.trim()) return { specId: existing.id, prd: existing.prd.trim(), status: 'reused' };
 
-  const body = await draftTaskPrd(env, { title: args.title, description: args.description }, args.model);
+  const body = await draftTaskPrd(env, args.tenantId, { title: args.title, description: args.description }, args.model);
   if (!body) return null;
-  const prd = buildPrdWithAttribution(body, args.agentLabel, args.taskId);
+  // Scaffold the per-role hand-off sections so every task PRD carries the role
+  // structure each participant fills (§5.7) — the shared hand-off contract.
+  const prd = scaffoldPrdSections(buildPrdWithAttribution(body, args.agentLabel, args.taskId));
 
   const specId = existing?.id ?? crypto.randomUUID();
   const now = new Date();

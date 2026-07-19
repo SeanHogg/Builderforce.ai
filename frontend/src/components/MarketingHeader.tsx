@@ -26,6 +26,7 @@ interface SimpleLink {
 const RESOURCE_LINKS: SimpleLink[] = [
   { href: '/blog', label: 'Blog' },
   { href: '/tools', label: 'Diagnostics & Tools' },
+  { href: '/soc2', label: 'SOC 2 & System Audits' },
   { href: '/prompts', label: 'Prompt Library' },
   { href: '/compare', label: 'Compare' },
   { href: '/integrations', label: 'Integrations' },
@@ -33,11 +34,14 @@ const RESOURCE_LINKS: SimpleLink[] = [
 
 // Flat links that sit directly in the bar (no dropdown).
 const FLAT_LINKS: SimpleLink[] = [
-  { href: '/marketplace', label: 'Workforce' },
+  // Talent (freelancers) + Workforce (AI agents/skills/personas) are one merged
+  // marketplace surface now — a single nav entry, no separate /talent link.
+  { href: '/marketplace', label: 'Talent / Workforce' },
   { href: '/agents', label: 'Agents' },
   // Evermind intentionally NOT a top-level flat link — it lives under the Product
   // mega-menu and in the footer; keeping it out of the bar reduces nav clutter.
-  { href: '/models', label: 'Models' },
+  // Models is a prefilled filter into the one marketplace, same as Talent / Workforce.
+  { href: '/marketplace?category=models', label: 'Models' },
   { href: '/pricing', label: 'Pricing' },
 ];
 

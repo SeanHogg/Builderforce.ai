@@ -1,6 +1,6 @@
 /**
  * AgentContainerDO — the **long-lived Cloudflare Container** runtime for a
- * "V2 Cloud Agent (Node/Container)". Unlike {@link CloudRunnerDO} (the durable
+ * "Cloud Agent (Node/Container)". Unlike {@link CloudRunnerDO} (the durable
  * surface, one LLM step per alarm tick, no shell), this runs the agent loop in a
  * persistent Node process inside a real container, so the agent gets a **real
  * shell** (`run_command`) to clone the repo, install deps, and run actual

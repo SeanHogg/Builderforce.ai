@@ -33,6 +33,7 @@ class ArchiveAwareTaskRepo implements ITaskRepository {
   }
   async findChildren(): Promise<Task[]> { return []; }
   async maxKeySeqByProject(): Promise<number> { return 0; }
+  async rekeyProject(): Promise<number> { return 0; }
   async save(t: Task): Promise<Task> { return t; }
   async update(t: Task): Promise<Task> { return t; }
   async delete(): Promise<void> {}
@@ -101,6 +102,14 @@ function makeTask(id: number, archived: boolean): Task {
     sprintId: null,
     releaseId: null,
     storyPoints: null,
+    businessValue: null,
+    businessValueRationale: null,
+    businessValueSource: null,
+    managerRank: null,
+    reviewCount: 0,
+    lastReviewedAt: null,
+    lastReviewVerdict: null,
+    gapOriginTaskId: null,
     githubIssueNumber: null,
     githubIssueUrl: null,
     githubPrUrl: null,

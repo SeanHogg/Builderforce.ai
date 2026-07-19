@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
 import { RoleGate } from '@/components/RoleGate';
+import { Select } from '@/components/Select';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { GaugeChart } from '@/components/charts/GaugeChart';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
@@ -28,7 +29,7 @@ import { useCreateKnowledge } from './useCreateKnowledge';
  * Docs-style template gallery (/knowledge/new), never a modal.
  */
 
-const DOC_TYPE_LABELS: Record<DocType, string> = { sop: 'type_sop', process: 'type_process', doc: 'type_doc' };
+const DOC_TYPE_LABELS: Record<DocType, string> = { sop: 'type_sop', process: 'type_process', doc: 'type_doc', postmortem: 'type_postmortem', known_error: 'type_known_error' };
 
 function statusColor(status: string): { bg: string; fg: string } {
   if (status === 'published') return { bg: 'var(--success-bg, #0f3d2e)', fg: 'var(--success-text, #4ade80)' };
@@ -191,6 +192,8 @@ const TYPE_FILTERS: Array<{ id: '' | DocType; labelKey: string }> = [
   { id: 'sop', labelKey: 'type_sop' },
   { id: 'process', labelKey: 'type_process' },
   { id: 'doc', labelKey: 'type_doc' },
+  { id: 'postmortem', labelKey: 'type_postmortem' },
+  { id: 'known_error', labelKey: 'type_known_error' },
 ];
 
 function Library({ projectId, t }: { projectId: number | null; t: ReturnType<typeof useTranslations> }) {
@@ -238,14 +241,14 @@ function Library({ projectId, t }: { projectId: number | null; t: ReturnType<typ
         </div>
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('searchPlaceholder')} style={inputStyle} />
         {allTags.length > 0 && (
-          <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} style={inputStyle}>
+          <Select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} style={inputStyle}>
             <option value="">{t('allTags')}</option>
             {allTags.map((tg) => (
               <option key={tg} value={tg}>
                 {tg}
               </option>
             ))}
-          </select>
+          </Select>
         )}
       </div>
 

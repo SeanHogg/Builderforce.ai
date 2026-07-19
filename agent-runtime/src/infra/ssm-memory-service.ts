@@ -25,7 +25,7 @@ export interface SsmMemoryServiceOptions {
   /** Anthropic API key forwarded to an optional bridge (unused in memory-only mode). */
   anthropicApiKey?: string;
   /**
-   * MambaKit model size preset.
+   * SSM model size preset.
    * Default: 'small'
    */
   modelSize?: "nano" | "small" | "medium" | "large";

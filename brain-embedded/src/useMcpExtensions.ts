@@ -15,6 +15,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useBrainConfig } from './config';
 import { useRegisterBrainActions, type BrainAction } from './BrainActionsContext';
+import { getLastResolvedModel } from './lastResolvedModel';
+import { setMcpToolStatus } from './mcpToolStatus';
 
 interface McpToolEntry {
   extensionId: string;
@@ -72,6 +74,28 @@ function nowMs(): number {
   return typeof Date !== 'undefined' ? Date.now() : 0;
 }
 
+/** The catalog tool that reports which model is serving the conversation. */
+const CURRENT_MODEL_TOOL = 'session.current_model';
+
+/**
+ * Supply the model the LAST turn actually resolved to as the `model` argument of
+ * `session.current_model`.
+ *
+ * An MCP call is a SEPARATE request from the completion, so the server cannot see which
+ * model answered this chat — only the client can (it reads the `x-builderforce-model`
+ * response header, recorded by the run store). Without this the tool falls back to the
+ * plan default and the assistant answers "probably X" instead of the exact model. The
+ * model's own argument wins if it explicitly asked about a specific id.
+ */
+function withObservedModel(tool: string, args: unknown): unknown {
+  if (tool !== CURRENT_MODEL_TOOL) return args;
+  const observed = getLastResolvedModel();
+  if (!observed) return args;
+  const supplied = (args ?? {}) as Record<string, unknown>;
+  if (typeof supplied.model === 'string' && supplied.model.trim()) return args;
+  return { ...supplied, model: observed };
+}
+
 /** Deterministic JSON for the dedupe key (object key order can vary per call). */
 function stableStringify(value: unknown): string {
   if (value == null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
@@ -90,10 +114,11 @@ function isErrorResult(out: unknown): boolean {
   return !!out && typeof out === 'object' && typeof (out as { error?: unknown }).error === 'string';
 }
 
-export function useMcpExtensions(options?: UseMcpExtensionsOptions): { loading: boolean; toolCount: number } {
+export function useMcpExtensions(options?: UseMcpExtensionsOptions): { loading: boolean; toolCount: number; error: string | null } {
   const { transport } = useBrainConfig();
   const [entries, setEntries] = useState<McpToolEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   // Stable key so the fetch effect doesn't re-run on every render from a fresh array.
   const skipKey = (options?.skipExtensionIds ?? []).join(',');
   // Read the result callback through a ref so the actions memo stays stable.
@@ -107,12 +132,24 @@ export function useMcpExtensions(options?: UseMcpExtensionsOptions): { loading: 
     if (token) headers.Authorization = `Bearer ${token}`;
     const skip = new Set(skipKey ? skipKey.split(',') : []);
 
+    // A failure here is NOT benign: it leaves the Brain with zero data tools, so
+    // every answer degrades to "I don't have that data" with no way to tell it
+    // apart from a weak model. Record WHY instead of collapsing to an empty list.
     fetch(`${transport.baseUrl}/llm/v1/mcp/tools`, { headers })
-      .then((res) => (res.ok ? res.json() : { tools: [] }))
-      .then((body: { tools?: McpToolEntry[] }) => {
-        if (!cancelled) setEntries((body.tools ?? []).filter((t) => !skip.has(t.extensionId)));
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`tool catalog unavailable (HTTP ${res.status})`);
+        return (await res.json()) as { tools?: McpToolEntry[] };
       })
-      .catch(() => { if (!cancelled) setEntries([]); })
+      .then((body) => {
+        if (cancelled) return;
+        setEntries((body.tools ?? []).filter((t) => !skip.has(t.extensionId)));
+        setError(null);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setEntries([]);
+        setError(e instanceof Error ? e.message : 'tool catalog fetch failed');
+      })
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
@@ -137,7 +174,7 @@ export function useMcpExtensions(options?: UseMcpExtensionsOptions): { loading: 
             const res = await fetch(`${transport.baseUrl}/llm/v1/mcp/call`, {
               method: 'POST',
               headers,
-              body: JSON.stringify({ extensionId: entry.extensionId, tool: entry.tool, arguments: args }),
+              body: JSON.stringify({ extensionId: entry.extensionId, tool: entry.tool, arguments: withObservedModel(entry.tool, args) }),
             });
             const body = (await res.json().catch(() => ({}))) as { result?: unknown; error?: string };
             const out = !res.ok ? { error: body.error ?? `MCP call failed (${res.status})` } : (body.result ?? body);
@@ -169,5 +206,11 @@ export function useMcpExtensions(options?: UseMcpExtensionsOptions): { loading: 
 
   useRegisterBrainActions(actions);
 
-  return { loading, toolCount: actions.length };
+  // Publish for the diagnostics reporter — "how many tools did the model actually
+  // have, and why not more?" must be answerable after the fact, from any surface.
+  useEffect(() => {
+    setMcpToolStatus({ count: actions.length, error, loading });
+  }, [actions.length, error, loading]);
+
+  return { loading, toolCount: actions.length, error };
 }

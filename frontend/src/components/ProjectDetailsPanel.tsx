@@ -19,7 +19,7 @@ import { BoardConnectionsManager } from './integrations/BoardConnectionsManager'
 import { ProjectDiagnosticsTab } from './ProjectDiagnosticsTab';
 import { ProjectInitiativeLink } from './pm/ProjectInitiativeLink';
 import { ProjectHealthGauges } from './ProjectHealth';
-import { ProjectInspectionReport } from './ProjectInspection';
+import { ProjectInspectionReport, ProjectInspectionSummary } from './ProjectInspection';
 import type { InspectionRecommendation } from '@/lib/projectInspection';
 
 /** ISO timestamp → `yyyy-mm-dd` for a native date input (empty string when unset). */
@@ -37,6 +37,7 @@ const formatDeadline = (iso?: string | null): string => {
 };
 
 export type ProjectPanelTab =
+  | 'analytics'
   | 'details'
   | 'integrations'
   | 'taskMgmt'
@@ -52,6 +53,9 @@ export interface ProjectDetailsPanelProps {
   onClose: () => void;
   /** Initial tab when panel opens. */
   initialTab?: ProjectPanelTab;
+  /** When opening on the diagnostics tab from a notification deep-link, the audit
+   *  whose results should auto-open. */
+  initialAuditId?: string | null;
   /** Called when project is updated (e.g. name, description). */
   onProjectUpdate?: (project: Project) => void;
   /** Called when the user deletes the project. Component will prompt for confirmation. */
@@ -60,6 +64,7 @@ export interface ProjectDetailsPanelProps {
 
 /** Tab id → i18n key; labels resolved through `projectDetails.tabs.*` at render. */
 const TAB_DEFS: { id: ProjectPanelTab; key: string }[] = [
+  { id: 'analytics', key: 'tabs.analytics' },
   { id: 'details', key: 'tabs.details' },
   { id: 'integrations', key: 'tabs.integrations' },
   { id: 'taskMgmt', key: 'tabs.taskMgmt' },
@@ -128,7 +133,8 @@ export function ProjectDetailsPanel({
   project,
   open,
   onClose,
-  initialTab = 'details',
+  initialTab = 'analytics',
+  initialAuditId,
   onProjectUpdate,
   onDelete,
 }: ProjectDetailsPanelProps) {
@@ -388,23 +394,36 @@ export function ProjectDetailsPanel({
           overflow: activeTab === 'brainChat' ? 'hidden' : 'auto',
           padding: activeTab === 'brainChat' ? 0 : 20,
         }}>
-          {activeTab === 'details' && (
+          {activeTab === 'analytics' && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
-              {/* Health speedometer + % done ring — same shared visual as the
-                  project card/list so the score can't drift. Self-hides when the
-                  project has no task data. */}
-              <ProjectHealthGauges project={project} size={120} />
+              {/* Metrics row — the reporting the user sees first: the health
+                  speedometer + % done ring beside the overall inspection rating.
+                  Same shared visuals as the project card/list so nothing drifts;
+                  the gauges self-hide when the project has no task data. */}
+              <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'stretch' }}>
+                <ProjectHealthGauges project={project} size={120} />
+                <div style={{ flex: 1, minWidth: 260 }}>
+                  <ProjectInspectionSummary project={project} />
+                </div>
+              </div>
 
-              {/* Full project inspection — the prescriptive PM rating: every
-                  dimension benchmarked + a "what to target" list that deep-links
-                  each fix to the right tab. Spans the whole grid. */}
+              {/* Prescriptive breakdown — every dimension benchmarked + a "what to
+                  target" list that deep-links each fix to the right tab. The rating
+                  summary is rendered in the metrics row above. Spans the grid. */}
               <div style={{ gridColumn: '1 / -1' }}>
                 <ProjectInspectionReport
                   project={project}
                   onNavigate={setActiveTab}
                   onTargetRecommendation={handleTargetRecommendation}
+                  showSummary={false}
                 />
               </div>
+
+            </div>
+          )}
+
+          {activeTab === 'details' && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
               <div style={cardStyle}>
                 <div style={{ position: 'relative' }}>
                 <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>{t('overview')}</div>
@@ -631,7 +650,41 @@ export function ProjectDetailsPanel({
                   <ProjectInitiativeLink projectId={project.id} />
                 </div>
               </div>
+            </div>
+          )}
 
+          {activeTab === 'integrations' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <IntegrationCredentialsManager projectId={project.id} heading={t('integrationKeys')} />
+              <SourceControlContent projectId={project.id} />
+              <BoardConnectionsManager projectId={project.id} />
+            </div>
+          )}
+
+          {activeTab === 'taskMgmt' && (
+            <TaskMgmtContent
+              projectId={project.id}
+              projectName={project.name}
+            />
+          )}
+
+          {activeTab === 'prds' && (
+            <PRDsContent projectId={project.id} projectName={project.name} />
+          )}
+
+          {activeTab === 'diagnostics' && (
+            <ProjectDiagnosticsTab projectId={project.id} initialAuditId={initialAuditId} />
+          )}
+
+          {activeTab === 'brainChat' && (
+            <div style={{ height: '100%' }}>
+              <BrainPanel variant="docked" pinnedProjectId={project.id} />
+            </div>
+          )}
+
+          {activeTab === 'workspace' && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+              {/* Workspace actions — moved here from the Analytics tab. */}
               <div style={cardStyle}>
                 <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 14 }}>{t('workspaceActions')}</div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -683,52 +736,22 @@ export function ProjectDetailsPanel({
                   >
                     {t('draftPrd')}
                   </button>
-                </div> {/* end workspace actions button row */}
+                </div>
                 <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
                   {t('brainHint')}
                 </div>
               </div>
-            </div>
-          )}
 
-          {activeTab === 'integrations' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <IntegrationCredentialsManager projectId={project.id} heading={t('integrationKeys')} />
-              <SourceControlContent projectId={project.id} />
-              <BoardConnectionsManager projectId={project.id} />
-            </div>
-          )}
-
-          {activeTab === 'taskMgmt' && (
-            <TaskMgmtContent
-              projectId={project.id}
-              projectName={project.name}
-            />
-          )}
-
-          {activeTab === 'prds' && (
-            <PRDsContent projectId={project.id} projectName={project.name} />
-          )}
-
-          {activeTab === 'diagnostics' && (
-            <ProjectDiagnosticsTab projectId={project.id} />
-          )}
-
-          {activeTab === 'brainChat' && (
-            <div style={{ height: '100%' }}>
-              <BrainPanel variant="docked" pinnedProjectId={project.id} />
-            </div>
-          )}
-
-          {activeTab === 'workspace' && (
-            <div style={cardStyle}>
-              <div style={{ fontWeight: 600, marginBottom: 10 }}>{t('workspaceTitle')}</div>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                {t('workspaceDesc')}
-              </p>
-              <Link href={`/ide/${project.publicId ?? project.id}`} style={{ fontSize: 13, color: 'var(--coral-bright)', marginTop: 8, display: 'inline-block' }}>
-                {t('openInIde')} →
-              </Link>
+              {/* Open in the full IDE workspace. */}
+              <div style={cardStyle}>
+                <div style={{ fontWeight: 600, marginBottom: 10 }}>{t('workspaceTitle')}</div>
+                <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                  {t('workspaceDesc')}
+                </p>
+                <Link href={`/ide/${project.publicId ?? project.id}`} style={{ fontSize: 13, color: 'var(--coral-bright)', marginTop: 8, display: 'inline-block' }}>
+                  {t('openInIde')} →
+                </Link>
+              </div>
             </div>
           )}
 

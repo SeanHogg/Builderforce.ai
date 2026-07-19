@@ -19,6 +19,7 @@
 import { useState } from 'react';
 import { useOnboardingState, type ActiveTermsDoc } from '@/lib/onboarding';
 import { LegalDocPreview } from '@/components/admin/LegalDocPreview';
+import RoleChoiceScreen from '@/components/account/RoleChoiceScreen';
 
 interface OnboardingGateProps {
   children: React.ReactNode;
@@ -27,7 +28,7 @@ interface OnboardingGateProps {
 }
 
 export default function OnboardingGate({ children, renderShell }: OnboardingGateProps) {
-  const { phase, loading, terms, acceptTerms } = useOnboardingState();
+  const { phase, loading, terms, acceptTerms, selectRole } = useOnboardingState();
 
   if (phase === 'pre-auth') return null;
 
@@ -35,6 +36,12 @@ export default function OnboardingGate({ children, renderShell }: OnboardingGate
 
   if (phase === 'pending-terms' && terms) {
     return <TermsAcceptanceScreen terms={terms} onAccept={acceptTerms} />;
+  }
+
+  // OAuth / magic-link accounts never picked Build vs Hired — force the one-time
+  // choice before any workspace chrome renders.
+  if (phase === 'pending-role') {
+    return <RoleChoiceScreen onSelect={selectRole} />;
   }
 
   // 'pending-tenant' and 'ready' both render the shell. Middleware ensures

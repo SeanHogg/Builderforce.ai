@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   login,
   register,
+  verifyEmailCode,
+  resendVerificationCode,
   getMyTenants,
   getTenantToken,
   persistSession,
@@ -82,7 +84,7 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('login', () => {
-  it('POSTs to /api/auth/web/login and returns token + user', async () => {
+  it('POSTs to /api/auth/web/login and returns a session', async () => {
     fetchSpy.mockResolvedValueOnce(mockOk({ token: 'web-token-123', user: sampleUser }));
     const result = await login('test@example.com', 'password123');
     expect(fetchSpy).toHaveBeenCalledOnce();
@@ -92,8 +94,21 @@ describe('login', () => {
     const body = JSON.parse(init.body as string);
     expect(body.email).toBe('test@example.com');
     expect(body.password).toBe('password123');
+    if (result.needsVerification) throw new Error('expected a session, got verification step');
     expect(result.token).toBe('web-token-123');
     expect(result.user.id).toBe('user-1');
+  });
+
+  it('returns the verification step (not an error) for an unverified account', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      Promise.resolve(new Response(JSON.stringify({ verificationRequired: true, email: 'u@x.com' }), {
+        status: 403, headers: { 'Content-Type': 'application/json' },
+      }))
+    );
+    const result = await login('u@x.com', 'pw');
+    expect(result.needsVerification).toBe(true);
+    if (!result.needsVerification) throw new Error('expected verification step');
+    expect(result.email).toBe('u@x.com');
   });
 
   it('throws with server message on non-ok response', async () => {
@@ -114,8 +129,12 @@ describe('login', () => {
 // ---------------------------------------------------------------------------
 
 describe('register', () => {
-  it('POSTs to /api/auth/web/register with name and terms acceptance', async () => {
-    fetchSpy.mockResolvedValueOnce(mockOk({ token: 'web-token-abc', user: sampleUser }));
+  it('POSTs to /api/auth/web/register and returns the verification step', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      Promise.resolve(new Response(JSON.stringify({ verificationRequired: true, email: 'new@example.com' }), {
+        status: 201, headers: { 'Content-Type': 'application/json' },
+      }))
+    );
     const result = await register('new@example.com', 'secret123', 'Test User', true);
     const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
     expect(url).toMatch(/\/api\/auth\/web\/register$/);
@@ -123,12 +142,50 @@ describe('register', () => {
     const body = JSON.parse(init.body as string);
     expect(body.name).toBe('Test User');
     expect(body.agreeToTerms).toBe(true);
-    expect(result.token).toBe('web-token-abc');
+    expect(result.needsVerification).toBe(true);
+    if (!result.needsVerification) throw new Error('expected verification step');
+    expect(result.email).toBe('new@example.com');
   });
 
   it('throws on non-ok response', async () => {
     fetchSpy.mockResolvedValueOnce(mockError(409, 'Email already exists'));
     await expect(register('dup@example.com', 'pass', undefined, true)).rejects.toThrow('Email already exists');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// verifyEmailCode / resendVerificationCode
+// ---------------------------------------------------------------------------
+
+describe('verifyEmailCode', () => {
+  it('POSTs the code and returns a session', async () => {
+    fetchSpy.mockResolvedValueOnce(mockOk({ token: 'verified-token', user: sampleUser }));
+    const result = await verifyEmailCode('new@example.com', '123456', true);
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toMatch(/\/api\/auth\/web\/register\/verify$/);
+    const body = JSON.parse(init.body as string);
+    expect(body.code).toBe('123456');
+    expect(body.trustDevice).toBe(true);
+    expect(result.token).toBe('verified-token');
+  });
+
+  it('throws an Error carrying the server reason code', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      Promise.resolve(new Response(JSON.stringify({ error: 'This code has expired.', reason: 'expired' }), {
+        status: 400, headers: { 'Content-Type': 'application/json' },
+      }))
+    );
+    await expect(verifyEmailCode('x@x.com', '000000', false)).rejects.toMatchObject({ reason: 'expired' });
+  });
+});
+
+describe('resendVerificationCode', () => {
+  it('POSTs and surfaces a cooldown when throttled', async () => {
+    fetchSpy.mockResolvedValueOnce(mockOk({ ok: true, cooldownSeconds: 42 }));
+    const result = await resendVerificationCode('new@example.com');
+    const [url] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toMatch(/\/api\/auth\/web\/register\/resend$/);
+    expect(result.cooldownSeconds).toBe(42);
   });
 });
 

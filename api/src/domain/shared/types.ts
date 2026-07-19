@@ -54,6 +54,20 @@ export enum TaskPriority {
 export enum TaskType {
   TASK = 'task',
   EPIC = 'epic',
+  /** Minted by the Validator agent when a reviewed Done item is found incomplete
+   *  (migration 0270). A first-class, schedulable board item that carries a
+   *  gapOriginTaskId back to the Done item it was found in. */
+  GAP = 'gap',
+  /** Minted by the Security agent for a SOC 2 audit finding (migration 0290). A
+   *  first-class, schedulable board item carrying the finding's severity + Trust
+   *  Service Criterion, and access-restricted via security_ticket_access — visible
+   *  only to allowlisted/opted-in audiences plus Owner/Admin. */
+  SECURITY = 'security',
+  /** Opened by the Incident Manager agent for a help-desk ticket that reads as an
+   *  incident (migration 0325). A first-class, schedulable board item carrying the
+   *  incident's severity, status and affected system, bridged to a prodIncidents
+   *  record (task.incidentId) that owns the MTTR/escalation lifecycle. */
+  INCIDENT = 'incident',
 }
 
 export enum AgentType {
@@ -143,15 +157,6 @@ export enum AssignmentScope {
   PROJECT = 'project',
   TASK    = 'task',
 }
-
-/** Precedence order for scope resolution (highest → lowest). */
-export const SCOPE_PRECEDENCE: AssignmentScope[] = [
-  AssignmentScope.AGENT,
-  AssignmentScope.TASK,
-  AssignmentScope.PROJECT,
-  AssignmentScope.HOST,
-  AssignmentScope.TENANT,
-];
 
 export type ResolvedArtifacts = {
   skills:   string[];

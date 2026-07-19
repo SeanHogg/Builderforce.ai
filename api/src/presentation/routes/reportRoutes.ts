@@ -18,7 +18,7 @@
  */
 
 import { Hono } from 'hono';
-import { and, desc, eq, gte, lte, lt, isNull, notExists, inArray, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gte, lte, lt, isNull, notExists, inArray, sql } from 'drizzle-orm';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import {
   activityEvents,
@@ -35,8 +35,10 @@ import {
   customerFeedback,
   portfolios,
 } from '../../infrastructure/database/schema';
+import { notSystemTask } from '../../application/task/taskScope';
 import { computePortfolioRollup } from '../../application/pmo/portfolioRollup';
 import { buildExecutiveSummary } from '../../application/reports/executiveSummary';
+import { generateProjectStatusReport } from '../../application/reports/projectStatusReport';
 import { TenantRole, TaskStatus } from '../../domain/shared/types';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import type { Env, HonoEnv } from '../../env';
@@ -133,7 +135,15 @@ async function generateCodeReviewReport(db: Db, tenantId: number, from: Date, to
     ))
     .limit(50);
 
-  const mergedPrs = await db.select()
+  // Aggregate merged-PR count + mean cycle time in SQL — the row set is unbounded
+  // and only feeds these two numbers, so we never materialize it. AVG() ignores
+  // NULL cycle times and is itself NULL when none exist, exactly matching the prior
+  // "mean over rows that have a cycle time, null when there are none".
+  const [mergedAgg] = await db
+    .select({
+      total: count(),
+      avgCycleHours: sql<number | null>`AVG(${activityEvents.cycleTimeHours})`,
+    })
     .from(activityEvents)
     .where(and(
       eq(activityEvents.tenantId, tenantId),
@@ -141,12 +151,8 @@ async function generateCodeReviewReport(db: Db, tenantId: number, from: Date, to
       gte(activityEvents.occurredAt, from),
       lte(activityEvents.occurredAt, to),
     ));
-
-  // Average cycle time
-  const cycleTimePrs = mergedPrs.filter((p) => p.cycleTimeHours != null);
-  const avgCycleTime = cycleTimePrs.length > 0
-    ? Math.round(cycleTimePrs.reduce((s, p) => s + (p.cycleTimeHours ?? 0), 0) / cycleTimePrs.length)
-    : null;
+  const mergedPrsCount = Number(mergedAgg?.total ?? 0);
+  const avgCycleTime = mergedAgg?.avgCycleHours != null ? Math.round(Number(mergedAgg.avgCycleHours)) : null;
 
   // Stale PRs (opened >7 days ago, not yet merged)
   const staleThreshold = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -160,7 +166,7 @@ async function generateCodeReviewReport(db: Db, tenantId: number, from: Date, to
     summary: {
       totalReviews:    reviews.length,
       openPrs:         openPrs.length,
-      mergedPrs:       mergedPrs.length,
+      mergedPrs:       mergedPrsCount,
       stalePrs:        stalePrs.length,
       avgCycleTimeHrs: avgCycleTime,
     },
@@ -360,6 +366,21 @@ export function completedByAssigneeCacheKey(tenantId: number, version: number, d
   return `report-completed-by-assignee:tenant:${tenantId}:v:${version}:days:${days}`;
 }
 
+// The standup / code-review / executive GET endpoints are cached the same way as
+// completed-by-assignee: keyed on (tenant, version, window) and folding in the
+// SAME per-tenant report version token (bumped on any task status write via
+// invalidateCompletedByAssignee), with the getOrSetCached KV TTL as the backstop
+// for activity/metric writes that don't bump the token.
+export function standupCacheKey(tenantId: number, version: number, dayKey: string): string {
+  return `report-standup:tenant:${tenantId}:v:${version}:date:${dayKey}`;
+}
+export function codeReviewCacheKey(tenantId: number, version: number, windowKey: string): string {
+  return `report-code-review:tenant:${tenantId}:v:${version}:w:${windowKey}`;
+}
+export function executiveCacheKey(tenantId: number, version: number, windowKey: string): string {
+  return `report-executive:tenant:${tenantId}:v:${version}:w:${windowKey}`;
+}
+
 /** Current version token for a tenant's completed-by-assignee cache (defaults to 0). */
 async function readCompletedByAssigneeVersion(env: Env, tenantId: number): Promise<number> {
   return getOrSetCached(env, versionTokenKey(tenantId), async () => 0, { kvTtlSeconds: 86_400 });
@@ -488,6 +509,7 @@ async function generateCompletedByAssigneeReport(db: Db, tenantId: number, days:
       eq(tasks.archived, false),
       inArray(tasks.status, DONE_CLASS_STATUSES as string[]),
       gte(completedAtExpr, since),
+      notSystemTask,
     ));
 
   const assignees = groupCompletedByAssignee(rows as CompletedTaskRow[]);
@@ -578,6 +600,8 @@ export async function buildScheduledReport(
       return { subject: '[Builderforce] Executive summary', report: await generateExecutiveReport(db, tenantId, new Date(now.getTime() - 30 * REPORT_DAY_MS), now) as unknown as Record<string, unknown> };
     case 'portfolio_rollup':
       return { subject: '[Builderforce] Portfolio (PMO) rollup', report: await generatePortfolioReport(db, tenantId, segmentId) };
+    case 'project_status':
+      return { subject: '[Builderforce] Project status digest', report: await generateProjectStatusReport(db, tenantId, segmentId) as unknown as Record<string, unknown> };
     default:
       return null;
   }
@@ -594,8 +618,16 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
   // ── GET /api/reports/standup ──────────────────────────────────────────────
   router.get('/standup', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const date = c.req.query('date') ? new Date(c.req.query('date')!) : new Date();
-    return c.json(await generateStandupReport(db, tenantId, date));
+    const dateParam = c.req.query('date');
+    const date = dateParam ? new Date(dateParam) : new Date();
+    const env = c.env as Env;
+    const version = await readCompletedByAssigneeVersion(env, tenantId);
+    const report = await getOrSetCached(
+      env,
+      standupCacheKey(tenantId, version, dateParam ?? date.toISOString().slice(0, 10)),
+      () => generateStandupReport(db, tenantId, date),
+    );
+    return c.json(report);
   });
 
   // ── GET /api/reports/code-review ─────────────────────────────────────────
@@ -603,15 +635,32 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const to   = new Date();
     const from = new Date(to.getTime() - 14 * 24 * 60 * 60 * 1000);
-    return c.json(await generateCodeReviewReport(db, tenantId, from, to));
+    const env = c.env as Env;
+    const version = await readCompletedByAssigneeVersion(env, tenantId);
+    const report = await getOrSetCached(
+      env,
+      codeReviewCacheKey(tenantId, version, to.toISOString().slice(0, 10)),
+      () => generateCodeReviewReport(db, tenantId, from, to),
+    );
+    return c.json(report);
   });
 
   // ── GET /api/reports/executive ────────────────────────────────────────────
   router.get('/executive', requireRole(TenantRole.MANAGER), async (c) => {
     const tenantId = c.get('tenantId') as number;
-    const to   = c.req.query('to')   ? new Date(c.req.query('to')!)   : new Date();
-    const from = c.req.query('from') ? new Date(c.req.query('from')!) : new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
-    return c.json(await generateExecutiveReport(db, tenantId, from, to));
+    const toParam   = c.req.query('to');
+    const fromParam = c.req.query('from');
+    const to   = toParam   ? new Date(toParam)   : new Date();
+    const from = fromParam ? new Date(fromParam) : new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const env = c.env as Env;
+    const version = await readCompletedByAssigneeVersion(env, tenantId);
+    const windowKey = `${fromParam ?? from.toISOString().slice(0, 10)}:${toParam ?? to.toISOString().slice(0, 10)}`;
+    const report = await getOrSetCached(
+      env,
+      executiveCacheKey(tenantId, version, windowKey),
+      () => generateExecutiveReport(db, tenantId, from, to),
+    );
+    return c.json(report);
   });
 
   // ── GET /api/reports/portfolio ────────────────────────────────────────────
@@ -620,6 +669,14 @@ export function createReportRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const segmentId = c.get('segmentId') as string;
     return c.json(await generatePortfolioReport(db, tenantId, segmentId));
+  });
+
+  // ── GET /api/reports/project-status ───────────────────────────────────────
+  // Per-project delivery digest (schedulable as report_type 'project_status').
+  router.get('/project-status', requireRole(TenantRole.MANAGER), async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const segmentId = c.get('segmentId') as string;
+    return c.json(await generateProjectStatusReport(db, tenantId, segmentId));
   });
 
   // ── GET /api/reports/completed-by-assignee ───────────────────────────────

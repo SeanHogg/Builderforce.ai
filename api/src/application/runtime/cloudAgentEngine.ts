@@ -9,9 +9,13 @@
  * so it is unit-testable against a mocked gateway/DB without standing up the Worker.
  */
 import { neon } from '@neondatabase/serverless';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, or, isNull } from 'drizzle-orm';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { buildCloudMemoryCapability } from './cloudMemory';
+import { buildCloudWebCapability } from './cloudWeb';
+import { isValidatorReviewPayload } from '../validation/validatorReviewMarker';
+import { recordActivity, SYSTEM_ACTOR } from '../activity/activityLog';
+import { isIncidentTriagePayload, incidentIdFromPayload } from '../incident/incidentTriageMarker';
 import { resolveTicketRepoContext, commitAgentFile, deleteAgentFile, type TicketRepoContext } from '../repos/commitFileAsPendingChange';
 import { commitPrdAsPendingChange } from '../repos/commitPrdToRepo';
 import { createPullRequest } from '../repos/createPullRequest';
@@ -21,35 +25,44 @@ import { claimTaskPrOpen, releaseTaskPrClaim } from '../repos/openTaskPullReques
 import { readRepoFile, listRepoFiles, searchRepoCode, listBranchDiff } from '../repos/readRepoContents';
 import { verifyWrittenFiles } from '../repos/verifyWrittenFiles';
 import { scanWrittenForPlaceholders } from '../repos/scanForPlaceholders';
-import { CODING_BACKSTOP_MODELS, CODING_MODEL_POOL, codingModelsForPlan, estimateRequestTokens, llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../llm/LlmProxyService';
+import { CODING_BACKSTOP_MODELS, RECOGNIZED_CODER_MODELS, codingModelsForPlan, estimateRequestTokens, isPremiumModelSelection, llmProxyForPlan, pickCloudModel, type ChatMessage, type EffectivePlan } from '../llm/LlmProxyService';
+import { evaluatePremiumModelAccess } from '../../domain/tenant/planFeatures';
+import { TenantPlan } from '../../domain/shared/types';
 import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
-import { resolveAnthropicOAuthToken } from '../llm/tenantProviderKeyService';
+import { resolveTenantLlmCredentials, byoVendorIdSet, providersFromCredentials, type TenantVendorKeys } from '../llm/tenantProviderKeyService';
+import { cloudAgentPlatformToolSchemas, resolveCloudAgentPlatformTool, callBuiltinTool } from '../llm/builtinMcpService';
+import { TenantRole } from '../../domain/shared/types';
 import { resolveTenantPlan } from '../../presentation/routes/llmRoutes';
-import { recordUsageRow, clampTokenCount } from '../llm/usageLedger';
+import { recordUsageRow, clampTokenCount, normalizeByoProvider } from '../llm/usageLedger';
 import { ensureTaskPrdRecord, appendTaskPrdRevision } from '../prd/taskPrd';
 import { loadCapabilityContext, loadPersonaSetpoints } from '../artifact/capabilityContext';
+import { recordPersonalityEvent, compilePersonalityApplication } from '../persona/recordPersonalityEvent';
+import { resolveArtifacts } from '../artifact/resolveArtifacts';
 import { pullPendingSteering, releasePendingSteers } from './executionSteering';
 import { notifyExecutionSubscribers } from './executionEvents';
 import { notifyApprovalRequested } from '../approval/approvalNotifier';
 import {
   CLOUD_AGENT_TOOLS, CONTAINER_AGENT_TOOLS, CLOUD_SURFACE_CAPS, cloudToolRegistry,
   MAX_CLOUD_TOOL_STEPS, MAX_PLACEHOLDER_FINISH_BLOCKS,
-  CONTAINER_MAX_STEPS, assertsUnrunVerification, hasNoCodeDeliverable, type RawToolCall,
+  CONTAINER_MAX_STEPS, assertsUnrunVerification, hasNoCodeDeliverable, policyGateCallKey, type RawToolCall,
 } from './cloudAgentTools';
 import {
-  DEFAULT_ENGINE_ID, ENGINE_IDS, resolveEngineById, evaluatePolicyGate,
+  CURRENT_ENGINE_ID, evaluatePolicyGate, filterByGlob, applyStringEdit,
   appraiseTask, buildLimbicBlock, compileLimbicState, neutralState,
   applyDelta, appraiseAmygdala, homeostasis,
-  type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type ToolControl, type LimbicState, type LimbicEvent, type PolicyGate,
+  type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type ToolControl, type LimbicState, type LimbicEvent, type PolicyGate, type AgentExecParams,
 } from '@builderforce/agent-tools';
-import { parseRemediation, parseFollowUp, parseCloudAgentRef, parseModel, parseRoutingBias, parsePolicyGates } from './cloudDispatch';
+import { parseRemediation, parseFollowUp, parseCloudAgentRef, parseModel } from './cloudDispatch';
 import { classifyTaskAction } from '../llm/classifyTask';
 import { deriveAllocationCategory } from '../llm/allocationCategories';
 import { normalizeActionType, learnedRoutingEnabled, type ActionType } from '../llm/actionTypes';
 import { getRoutingTable, MIN_SAMPLES, type RoutingScope } from '../llm/routingTable';
 import type { ActionModelRankStat } from '../llm/LlmProxyService';
 import { resolveTenantModel } from '../llm/tenantModelService';
-import { scoreRunOutcome } from './scoreRunOutcome';
+import { reasoningParamsForModel } from '../llm/reasoningCapability';
+import { contributeTextToProjectEverminds, buildEvermindLessonsBlock } from '../llm/projectEvermind';
+import { buildProjectFactsBlock } from '../llm/projectFacts';
+import { scoreRunOutcome, finalizeLearnWeight } from './scoreRunOutcome';
 import { handleCloudRunCrash } from './cloudSelfHeal';
 import { cloudCrashReason } from './orphanReasons';
 import { RuntimeService } from './RuntimeService';
@@ -57,7 +70,8 @@ import { ExecutionStatus } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
-import { executions, tasks, specs, toolAuditEvents, usageSnapshots, projects, approvals } from '../../infrastructure/database/schema';
+import { boards, executions, tasks, specs, toolAuditEvents, usageSnapshots, projects, approvals, projectAgents } from '../../infrastructure/database/schema';
+import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 
 /** Resolved cloud-agent identity for a run — engine, display label, surface, model. */
 export interface ResolvedCloudAgent {
@@ -100,12 +114,14 @@ export async function resolveCloudAgent(
   tenantId: number,
   ref: string | undefined,
 ): Promise<ResolvedCloudAgent> {
-  const DEFAULT: ResolvedCloudAgent = { engine: DEFAULT_ENGINE_ID, ref, runtimeSurface: 'durable' };
+  // The engine is ALWAYS the current version (a code constant) — never read from the
+  // DB. A run is the current engine regardless of any legacy `engine` value on the row.
+  const DEFAULT: ResolvedCloudAgent = { engine: CURRENT_ENGINE_ID, ref, runtimeSurface: 'durable' };
   if (!ref) return DEFAULT;
   try {
     const sql = neon(env.NEON_DATABASE_URL);
-    const rows = (await sql`SELECT engine, name, runtime_surface, base_model, runtime_support, preferred_runtime FROM ide_agents WHERE id = ${ref} AND tenant_id = ${tenantId} LIMIT 1`) as Array<{ engine?: string; name?: string; runtime_surface?: string; base_model?: string; runtime_support?: string; preferred_runtime?: string | null }>;
-    const engine = typeof rows[0]?.engine === 'string' && rows[0].engine ? rows[0].engine : DEFAULT_ENGINE_ID;
+    const rows = (await sql`SELECT name, runtime_surface, base_model, runtime_support, preferred_runtime FROM ide_agents WHERE id = ${ref} AND tenant_id = ${tenantId} LIMIT 1`) as Array<{ name?: string; runtime_surface?: string; base_model?: string; runtime_support?: string; preferred_runtime?: string | null }>;
+    const engine = CURRENT_ENGINE_ID;
     const label = typeof rows[0]?.name === 'string' && rows[0].name ? rows[0].name : undefined;
     const runtimeSurface = rows[0]?.runtime_surface === 'container' ? 'container' : 'durable';
     const rawModel = typeof rows[0]?.base_model === 'string' ? rows[0].base_model.trim() : '';
@@ -118,6 +134,27 @@ export async function resolveCloudAgent(
   }
 }
 /**
+ * Load a cloud agent's OWN psychometric profile (ide_agents.psychometric) — the
+ * per-agent personality set from the Workforce editor, independent of any assigned
+ * persona. Returns the raw JSON string (or null). Tenant-scoped, one indexed lookup;
+ * consumed by prepareCloudRun to compile prompt directives + exec params + setpoints.
+ */
+export async function loadAgentPsychometric(
+  env: Env,
+  tenantId: number,
+  ref: string | undefined,
+): Promise<string | null> {
+  if (!ref) return null;
+  try {
+    const sql = neon(env.NEON_DATABASE_URL);
+    const rows = (await sql`SELECT psychometric FROM ide_agents WHERE id = ${ref} AND tenant_id = ${tenantId} LIMIT 1`) as Array<{ psychometric?: string | null }>;
+    return typeof rows[0]?.psychometric === 'string' ? rows[0].psychometric : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Run an execution server-side via the gateway when NO online agentHost took the
  * dispatch (Auto / cloud agent with no self-hosted runtime). The task is run as a
  * single gateway completion using the chosen model (the cloud agent's, or the
@@ -127,7 +164,7 @@ export async function resolveCloudAgent(
  */
 /** Load the project's governance rules + architecture spec (the non-PRD context
  *  the deliverable must honor). Best-effort: '' on any miss. */
-async function loadGovernanceContext(db: Db, tenantId: number, projectId: number): Promise<string> {
+async function loadGovernanceContext(db: Db, tenantId: number, projectId: number, cloudAgentRef?: string): Promise<string> {
   const parts: string[] = [];
   try {
     const [spec] = await db
@@ -146,6 +183,27 @@ async function loadGovernanceContext(db: Db, tenantId: number, projectId: number
       .limit(1);
     if (proj?.governance?.trim()) parts.push(`## Project Rules / Governance (must be followed)\n\n${proj.governance.trim()}`);
   } catch { /* skip */ }
+  // Per-agent governance (project_agents.governance) — the rules configured for THIS
+  // agent specifically. Previously written via PUT /project-agents/:id/governance but
+  // never consumed at execution; now folded in so a per-agent policy actually binds the
+  // run. Prefer the project-specific attachment, else the canonical project-less row.
+  if (cloudAgentRef) {
+    try {
+      const rows = await db
+        .select({ governance: projectAgents.governance, projectId: projectAgents.projectId })
+        .from(projectAgents)
+        .where(and(
+          eq(projectAgents.tenantId, tenantId),
+          eq(projectAgents.agentRef, cloudAgentRef),
+          or(isNull(projectAgents.projectId), eq(projectAgents.projectId, projectId)),
+        ));
+      // Project-specific row wins over the project-less identity row.
+      const chosen = rows.find((r) => r.projectId === projectId) ?? rows.find((r) => r.projectId == null);
+      if (chosen?.governance?.trim()) {
+        parts.push(`## Agent Rules / Governance (specific to you — must be followed)\n\n${chosen.governance.trim()}`);
+      }
+    } catch { /* skip */ }
+  }
   return parts.join('\n\n');
 }
 
@@ -328,6 +386,17 @@ async function landPrdChange(
       .set({ gitBranch: committed.branch, updatedAt: new Date() })
       .where(eq(tasks.id, args.taskId))
       .catch(() => { /* best-effort */ });
+  } else {
+    // The DB PRD copy (specs.prd) stands but the repo PRD.md commit failed — the 3 copies
+    // have DIVERGED. Surface it on the audit trail (a reconcile signal) instead of silently
+    // dropping it (PRD §5.7), so an operator/agent can re-land the repo copy.
+    await recordActivity(env, db, {
+      tenantId: args.tenantId, projectId: null, actor: SYSTEM_ACTOR,
+      verb: 'ticket.prd.reconcile_needed',
+      targetType: 'task', targetId: String(args.taskId), targetLabel: `#${args.taskId}`,
+      summary: `PRD repo commit failed (${committed.reason ?? 'unknown'}) — the DB PRD and repo PRD.md have diverged; re-land needed`.slice(0, 300),
+      metadata: { reason: committed.reason ?? null, executionId: args.executionId },
+    }).catch(() => { /* best-effort — telemetry must not block the run */ });
   }
 
   notifyExecutionSubscribers(args.executionId, {
@@ -410,8 +479,17 @@ export async function recordCloudToolEvent(
   } catch { /* telemetry is best-effort — never break the run */ }
 }
 
-/** Set form of CODING_MODEL_POOL for O(1) membership on the hot per-turn path. */
-const CODING_MODEL_POOL_SET: ReadonlySet<string> = new Set(CODING_MODEL_POOL);
+/** Real-coder recognition set (auto-route pool + BYO frontier flagships) for O(1)
+ *  membership on the hot per-turn path — so a connected-account coder (e.g. Meta MUSE
+ *  `direct/meta/muse-spark-1.1`) is recognised as a coder, not flagged as degraded. */
+const CODING_MODEL_POOL_SET: ReadonlySet<string> = RECOGNIZED_CODER_MODELS;
+
+/** The ONE agent commit-message convention (`<Verb> <path> — task #<id> (<agent>)`),
+ *  so every write/edit/delete commit reads identically instead of re-inlining the
+ *  template at each call site. `suffix` appends an optional reason (e.g. a delete note). */
+function agentCommitMessage(verb: string, path: string, taskId: number, agentLabel: string, suffix = ''): string {
+  return `${verb} ${path} — task #${taskId} (${agentLabel})${suffix}`;
+}
 
 /**
  * True when a CLOUD CODING turn was served by a model that is NOT a curated coding
@@ -596,6 +674,13 @@ export async function resolveLearnedRoutingInputs(
  * approval id so the loop can carry it in the pause result. The run is parked in
  * `paused` by the caller. Best-effort on notify; the row insert is the durable part.
  */
+/**
+ * How long an unanswered agent question waits before the /escalate sweep expires it
+ * and alerts. Shorter than the 72h paused-run reap deadline on purpose: escalation
+ * should get a human's attention well BEFORE the backstop kills the run.
+ */
+export const CLOUD_QUESTION_ESCALATE_AFTER_MS = 24 * 60 * 60 * 1000;
+
 async function createCloudQuestion(
   env: Env,
   db: Db,
@@ -606,6 +691,16 @@ async function createCloudQuestion(
 ): Promise<string> {
   const approvalId = crypto.randomUUID();
   const now = new Date();
+  // An agent's question MUST carry an expiry. `expiresAt` is caller-supplied and has
+  // no default, and this path used to set none — so the /escalate sweep (which only
+  // sees `expiresAt < now`) could never escalate an unanswered agent question. It sat
+  // pending forever, and because `paused` counts as a LIVE run in evaluateTaskAutoRun
+  // + laneRequirementGate, one ignored question silently froze all future autonomy on
+  // that ticket. Escalation is the FIRST line here (it pings the manager); the 72h
+  // paused-run reaper in staleExecutionReaper is the backstop that eventually frees
+  // the ticket if nobody ever answers. Deliberately generous: a question asked on a
+  // Friday afternoon must still be answerable on Monday morning.
+  const expiresAt = new Date(now.getTime() + CLOUD_QUESTION_ESCALATE_AFTER_MS);
   const description = args.context?.trim()
     ? `${args.question.trim()}\n\nContext: ${args.context.trim()}`
     : args.question.trim();
@@ -620,6 +715,7 @@ async function createCloudQuestion(
     actionType:   'clarify.blocked',
     description,
     status:       'pending',
+    expiresAt,
     createdAt:    now,
     updatedAt:    now,
   });
@@ -653,7 +749,17 @@ async function createCloudQuestion(
 export async function recordCloudUsage(
   env: Env,
   db: Db,
-  args: { tenantId: number; cloudAgentRef?: string; executionId: number; taskId: number; projectId?: number | null; model: string; inputTokens: number; outputTokens: number },
+  args: {
+    tenantId: number; cloudAgentRef?: string; executionId: number; taskId: number;
+    projectId?: number | null; model: string; inputTokens: number; outputTokens: number;
+    byo?: boolean; byoProvider?: string | null;
+    /** The run's effective plan + premium override — used ONLY to price a PREMIUM
+     *  (any-paid-OpenRouter) turn, which adds the flat per-request surcharge on top of
+     *  the metered token cost. Omit and a premium cloud turn would be billed at plain
+     *  OpenRouter cost, i.e. the surcharge silently lost on this surface. */
+    effectivePlan?: 'free' | 'pro' | 'teams';
+    premiumOverride?: boolean;
+  },
 ): Promise<void> {
   // Clamp at the boundary so a bad-usage turn (NaN/negative tokens) can't poison the
   // snapshot's context math or the billing ledger — same shared clamp recordUsageRow uses.
@@ -682,6 +788,17 @@ export async function recordCloudUsage(
     // Attribute the spend to the run's cloud agent + ticket + project so cost
     // rolls up ticket → project → account (0104 / 0103).
     attribution: { cloudAgentRef: args.cloudAgentRef ?? null, executionId: args.executionId, taskId: args.taskId, projectId: args.projectId ?? null },
+    // Cloud runs always execute on our infra: a BYO row here is $0 to us but STILL
+    // counts against the tenant's token allowance (free tenants are charged for
+    // cloud-agent usage), so surface is 'cloud' — never exempt. See tokenUsage.ts.
+    byo: args.byo ?? false, byoProvider: args.byoProvider ?? null, surface: 'cloud',
+    // Premium (any-paid-OpenRouter) turns carry the flat per-request surcharge on the
+    // cloud surface too — the same rule the gateway route applies, so a premium model
+    // costs the same whether a chat or an autonomous run drove it. BYO rows are $0 to
+    // us, so recordUsageRow skips the surcharge for them.
+    premiumSurcharge: args.effectivePlan
+      ? isPremiumModelSelection(args.model, args.effectivePlan, args.premiumOverride ?? false)
+      : false,
   });
 }
 
@@ -690,18 +807,48 @@ export async function recordCloudUsage(
  *  Observability timeline. Shared with the frontend via the cloud-agents list. */
 export const DEFAULT_CLOUD_REF = '__default__';
 
+/** True when a tenant brought at least one BYO api-key — so we only thread the
+ *  overlay (and mark vendors tenant-funded) when there's actually a key. */
+function hasVendorKeys(keys: TenantVendorKeys): boolean {
+  return Object.values(keys).some((v) => !!v);
+}
+
+/** Map the gateway's string effectivePlan onto the plan enum the pure entitlement
+ *  evaluators take. */
+function toTenantPlanEnum(ep: EffectivePlan): TenantPlan {
+  if (ep === 'pro') return TenantPlan.PRO;
+  if (ep === 'teams') return TenantPlan.TEAMS;
+  return TenantPlan.FREE;
+}
+
 /** A cloud run's LLM routing — which model pool / vendor key its tenant's plan
  *  unlocks. Resolved once per run and reused, never recomputed per turn. */
-export type CloudRouting = { effectivePlan: EffectivePlan; premiumOverride: boolean };
+export type CloudRouting = {
+  effectivePlan: EffectivePlan;
+  premiumOverride: boolean;
+  /** May this run honour a PREMIUM (any-paid-OpenRouter) pin — a paid plan WITH a
+   *  validated card? A cloud run never passes the gateway route's premium gate, so
+   *  `pickCloudModel` enforces it from this. */
+  premiumEntitled: boolean;
+};
 
 /** Resolve a tenant's cloud LLM routing, degrading to the free plan if the plan
  *  lookup throws — a background cloud run must never hard-fail on plan I/O. */
 async function resolveCloudRouting(env: Env, tenantId: number): Promise<CloudRouting> {
   try {
     const r = await resolveTenantPlan(env, tenantId);
-    return { effectivePlan: r.effectivePlan, premiumOverride: r.premiumOverride };
+    // Superadmin is deliberately NOT consulted: a cloud run has no acting user, and
+    // premium is a tenant-funding question. A comped tenant still gets it via the
+    // premium override, which the evaluator honours.
+    const premium = evaluatePremiumModelAccess({
+      effectivePlan: toTenantPlanEnum(r.effectivePlan),
+      premiumOverride: r.premiumOverride,
+      isSuperadmin: false,
+      cardValidated: r.cardValidated,
+    });
+    return { effectivePlan: r.effectivePlan, premiumOverride: r.premiumOverride, premiumEntitled: premium.entitled };
   } catch {
-    return { effectivePlan: 'free', premiumOverride: false };
+    return { effectivePlan: 'free', premiumOverride: false, premiumEntitled: false };
   }
 }
 
@@ -720,6 +867,14 @@ interface ContainerRunContext {
    *  so per-op `llm` calls pick the plan's pool/key without a per-call plan query. */
   effectivePlan: EffectivePlan;
   premiumOverride: boolean;
+  /** Whether a PREMIUM (any-paid-OpenRouter) pin may be honoured — paid plan + a
+   *  validated card. Resolved with the routing above so the container op enforces the
+   *  same rule as the durable loop. */
+  premiumEntitled: boolean;
+  /** Execution levers compiled from the assigned personas + the agent's own
+   *  personality, resolved once at context build (cached) so the container's per-step
+   *  `llm` op applies the trait-derived temperature — parity with the Worker/DO loop. */
+  execParams: AgentExecParams;
 }
 
 /** Load (and briefly cache) the container-run context for an execution. No secret
@@ -734,16 +889,36 @@ export async function loadContainerRunContext(env: Env, db: Db, executionId: num
       .select({ title: tasks.title, description: tasks.description, projectId: tasks.projectId, assignedAgentRef: tasks.assignedAgentRef })
       .from(tasks).where(eq(tasks.id, exec.taskId)).limit(1);
     if (!task) return null;
-    const ref = parseCloudAgentRef(exec.payload ?? undefined) ?? task.assignedAgentRef ?? undefined;
+    const explicitRef = parseCloudAgentRef(exec.payload ?? undefined);
+    const board = await findCanonicalBoard(db, task.projectId, exec.tenantId);
+    // Managed-ticket assignees coordinate; role dispatches must name their executor.
+    if (board?.lifecycleManaged && !explicitRef) return null;
+    const ref = explicitRef ?? task.assignedAgentRef ?? undefined;
     const agent = await resolveCloudAgent(env, exec.tenantId, ref);
     const payloadModel = parseModel(exec.payload ?? undefined);
     const routing = await resolveCloudRouting(env, exec.tenantId);
+    // Compile the persona/agent personality exec levers ONCE per run (cache-backed
+    // persona bodies), so the container's per-step `llm` op applies the same
+    // trait-derived temperature the Worker/DO loops do. Best-effort: a resolution
+    // failure must NOT break the container run — degrade to no exec overrides.
+    let execParams: AgentExecParams = {};
+    try {
+      const [artifacts, agentPsychometric] = await Promise.all([
+        resolveArtifacts(db, { tenantId: exec.tenantId, taskId: exec.taskId, projectId: task.projectId, cloudAgentRef: agent.ref }),
+        loadAgentPsychometric(env, exec.tenantId, agent.ref),
+      ]);
+      execParams = (await loadCapabilityContext(env, db, artifacts, agentPsychometric)).execParams;
+    } catch {
+      /* best-effort — personality temperature is an enhancement, not run-critical */
+    }
     return {
       tenantId: exec.tenantId, taskId: exec.taskId, projectId: task.projectId,
       taskTitle: task.title, taskDescription: task.description,
       cloudAgentRef: agent.ref, agentLabel: agent.label ?? 'BuilderForce Agent',
       model: payloadModel ?? agent.baseModel,
       effectivePlan: routing.effectivePlan, premiumOverride: routing.premiumOverride,
+      premiumEntitled: routing.premiumEntitled,
+      execParams,
     };
   }, { kvTtlSeconds: 600, l1TtlMs: 600_000 });
 }
@@ -778,6 +953,10 @@ interface CloudLlmTurnCtx {
   requestedModel?: string;
   /** Model id to attribute when the gateway doesn't echo a resolved one. */
   fallbackModel?: string;
+  /** The run's effective plan + premium override — needed to price a PREMIUM
+   *  (any-paid-OpenRouter) turn's flat per-request surcharge. */
+  effectivePlan?: 'free' | 'pro' | 'teams';
+  premiumOverride?: boolean;
 }
 
 /**
@@ -799,7 +978,10 @@ async function recordCloudLlmTurn(
   if (result.usage) {
     await recordCloudUsage(rc.env, rc.db, {
       ...evtBase, taskId: rc.taskId, projectId: rc.projectId, model: resolvedModel,
+      ...(rc.effectivePlan ? { effectivePlan: rc.effectivePlan, premiumOverride: rc.premiumOverride ?? false } : {}),
       inputTokens: result.usage.promptTokens ?? 0, outputTokens: result.usage.completionTokens ?? 0,
+      byo: result.byoFunded ?? false,
+      byoProvider: result.byoFunded ? normalizeByoProvider(result.resolvedVendor) : null,
     });
   }
   const durationMs = Date.now() - opts.tGen0;
@@ -811,7 +993,7 @@ async function recordCloudLlmTurn(
     const chain = result.candidateChain?.length ? ` · chain: ${result.candidateChain.join(' → ')}` : '';
     await recordCloudToolEvent(rc.db, {
       ...evtBase, toolName: 'llm.complete', category: 'llm',
-      detail: { model: resolvedModel, traceId: result.traceId ?? null, status: result.response.status, step: opts.step, outcome: result.outcome ?? null, candidateChain: result.candidateChain ?? null },
+      detail: { model: resolvedModel, provider: result.resolvedVendor, byo: result.byoFunded ?? false, keySource: result.byoFunded ? 'byo' : 'builderforce-managed', traceId: result.traceId ?? null, status: result.response.status, step: opts.step, outcome: result.outcome ?? null, candidateChain: result.candidateChain ?? null },
       result: `gateway ${result.response.status} on '${resolvedModel}' (${result.outcome ?? 'error'})`, durationMs,
     });
     return { ok: false, error: `Gateway ${result.response.status} on model '${resolvedModel}'${chain}: ${text.slice(0, 300)}`, resolvedModel };
@@ -819,7 +1001,7 @@ async function recordCloudLlmTurn(
   const { content, toolCalls } = parseLlmChoice(await result.response.json().catch(() => null));
   await recordCloudToolEvent(rc.db, {
     ...evtBase, toolName: 'llm.complete', category: 'llm',
-    detail: { model: resolvedModel, traceId: result.traceId ?? null, step: opts.step, toolCalls: toolCalls.length },
+    detail: { model: resolvedModel, provider: result.resolvedVendor, byo: result.byoFunded ?? false, keySource: result.byoFunded ? 'byo' : 'builderforce-managed', traceId: result.traceId ?? null, step: opts.step, toolCalls: toolCalls.length },
     result: `${toolCalls.length} tool call(s)${content ? ` · ${content.length} chars` : ''}`, durationMs,
   });
   await emitCodingModelDegraded(rc.db, { ...evtBase, resolvedModel, requestedModel: rc.requestedModel ?? '' });
@@ -835,8 +1017,8 @@ async function recordCloudLlmTurn(
 
 /**
  * Bump `executions.updated_at` — the cloud-run liveness heartbeat the orphan reaper
- * (RuntimeService.CLOUD_ORPHAN_MS / staleExecutionReaper.CLOUD_RUNNING_DEADLINE_MS,
- * both 90s) measures "last activity" from. The container can spend minutes inside a
+ * (the per-surface {@link cloudSilenceCeilingMs}) measures "last activity" from. The
+ * container can spend minutes inside a
  * single `run_command` (a build/test step) with no LLM round-trip, so it pings this
  * on a timer independent of LLM steps; without that the reaper would kill a healthy,
  * busy container mid-build. ONE writer so the `llm` op and the dedicated `heartbeat`
@@ -849,7 +1031,8 @@ async function heartbeatExecution(db: Db, executionId: number): Promise<void> {
  * Handle one container-op call from the long-lived Container executor. The container
  * runs the agent loop in its own process and delegates to the Worker for everything
  * that must stay server-side: the gateway LLM step (`llm`), per-file commit to the
- * ticket branch (`write`), arbitrary telemetry (`event`), the PR finalize
+ * ticket branch (`write`), arbitrary telemetry (`event`), the curated platform tools
+ * (`platform_tool`), durable cross-run memory (`memory`), the PR finalize
  * (`finalize`), a cheap cancel poll (`status`), and a liveness `heartbeat`. Reuses the
  * exact same helpers as the in-Worker loop, so there is ONE implementation of
  * metering, commit, and finalize. Authenticated by the per-run token (already verified
@@ -891,6 +1074,76 @@ export async function handleContainerOp(
     return { status: 200, body: { ok: true } };
   }
 
+  // Curated platform tool relayed from the container (it holds no DB creds). Same
+  // dispatch as the durable loop: subset-only resolver refuses off-list names, run
+  // in-process tenant-scoped, project defaulted to THIS run's. Records a tool event
+  // so container platform actions show on the timeline like the Worker loop's.
+  if (op === 'platform_tool') {
+    const name = typeof args.name === 'string' ? args.name : '';
+    const toolArgs = args.arguments && typeof args.arguments === 'object' ? (args.arguments as Record<string, unknown>) : {};
+    const platformTool = resolveCloudAgentPlatformTool(name);
+    if (!platformTool) return { status: 200, body: { ok: false, error: `unknown or disallowed platform tool '${name}'` } };
+    const tStart = Date.now();
+    let result: Record<string, unknown>;
+    try {
+      const data = await callBuiltinTool(db, {
+        tenantId, tool: platformTool,
+        arguments: { projectId, ...toolArgs },
+        env, userId: cloudAgentRef ?? null, role: TenantRole.MANAGER,
+      });
+      result = data && typeof data === 'object' ? (data as Record<string, unknown>) : { ok: true, result: data };
+    } catch (e) {
+      result = { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+    await recordCloudToolEvent(db, {
+      tenantId, cloudAgentRef, executionId,
+      toolName: name, category: 'tool', detail: toolArgs,
+      result: JSON.stringify(result).slice(0, 300), durationMs: Date.now() - tStart,
+    });
+    return { status: 200, body: result };
+  }
+
+  // Durable cross-run memory relayed from the container (it holds no DB creds, the
+  // same reason `platform_tool` exists). Backed by the IDENTICAL capability the
+  // durable loop uses — `project_facts` for a project-scoped run, the tenant-wide
+  // `agent_memory` twin otherwise — so a fact remembered on one cloud surface is
+  // recalled on the other. `action` is 'recall' | 'remember'. Records a tool event so
+  // container memory calls appear on the timeline like the Worker loop's.
+  if (op === 'memory') {
+    const action = typeof args.action === 'string' ? args.action : '';
+    const memory = buildCloudMemoryCapability({ db, env, tenantId, projectId });
+    const tStart = Date.now();
+    let result: Record<string, unknown>;
+    let toolName = 'memory';
+    try {
+      if (action === 'recall') {
+        toolName = 'memory_recall';
+        const query = typeof args.query === 'string' ? args.query : '';
+        if (!query.trim()) return { status: 200, body: { ok: false, error: 'query is required' } };
+        const limit = typeof args.limit === 'number' && Number.isFinite(args.limit) ? args.limit : undefined;
+        result = (await memory.recall(query, limit)) as unknown as Record<string, unknown>;
+      } else if (action === 'remember') {
+        toolName = 'memory_remember';
+        const key = typeof args.key === 'string' ? args.key : '';
+        const content = typeof args.content === 'string' ? args.content : '';
+        if (!key.trim() || !content.trim()) return { status: 200, body: { ok: false, error: 'key and content are required' } };
+        const tags = Array.isArray(args.tags) ? args.tags.filter((t): t is string => typeof t === 'string') : undefined;
+        const importance = typeof args.importance === 'number' && Number.isFinite(args.importance) ? args.importance : undefined;
+        result = (await memory.remember(key, content, { tags, importance })) as unknown as Record<string, unknown>;
+      } else {
+        return { status: 200, body: { ok: false, error: `unknown memory action '${action}' (expected 'recall' or 'remember')` } };
+      }
+    } catch (e) {
+      result = { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+    await recordCloudToolEvent(db, {
+      tenantId, cloudAgentRef, executionId,
+      toolName, category: 'tool', detail: args,
+      result: JSON.stringify(result).slice(0, 300), durationMs: Date.now() - tStart,
+    });
+    return { status: 200, body: result };
+  }
+
   if (op === 'llm') {
     const messages = Array.isArray(args.messages) ? (args.messages as unknown as Array<Record<string, unknown>>) : ([] as Array<Record<string, unknown>>);
     // Mid-run steering for the long-lived container: drain user follow-ups posted
@@ -928,17 +1181,42 @@ export async function handleContainerOp(
     // the shared cloud model rule: explicit pick = hard pin, else the plan's best
     // coding model. The container holds its own loop state, so per-op pinning is
     // the caller's explicit `model`; the default lands on a strong coding model.
+    // Repo/shell tools + the curated platform subset (create tasks / update OKRs /
+    // read remaining) — parity with the durable loop. The container relays each
+    // `builtin_*` call back via the `platform_tool` op below (it has no DB).
+    const containerTools = [...CONTAINER_AGENT_TOOLS, ...cloudAgentPlatformToolSchemas()];
+    // A connected Claude subscription powers a direct-Claude container turn; BYO
+    // OpenAI/Google/Anthropic api-keys override the operator keys for their vendors
+    // (tenant-funded → byo). One round-trip (parallel reads); empty (operator-key
+    // floor) when the tenant has connected nothing. Resolved BEFORE model pick so a
+    // free tenant may pin a BYO model (byoVendors lifts the free-plan choice gate).
+    const containerCreds = await resolveTenantLlmCredentials(env, tenantId);
+    const { anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, vendorKeys: tenantVendorKeys } = containerCreds;
     const pick = pickCloudModel(model, ctx.effectivePlan, ctx.premiumOverride, {
       // Context-aware seed: a small-window model isn't picked for a big container turn.
-      estimatedTokens: estimateRequestTokens(sendMessages, CONTAINER_AGENT_TOOLS),
+      estimatedTokens: estimateRequestTokens(sendMessages, containerTools),
+      byoVendors: byoVendorIdSet(providersFromCredentials(containerCreds)),
+      // Tenant BYO precedence — lead with the owner's chosen account (e.g. Meta first).
+      byoVendorPriority: containerCreds.vendorPriority,
+      // Parity with the durable loop: a PREMIUM pin needs a paid plan + validated card.
+      premiumEntitled: ctx.premiumEntitled,
     });
-    // A connected Claude subscription powers a direct-Claude container turn. One
-    // PK-indexed read per turn, alongside the turn's existing DB writes — cheap and
-    // not a fan-out; null (operator-key floor) when no subscription is connected.
-    const anthropicOAuthToken = await resolveAnthropicOAuthToken(env, tenantId);
-    const result = await llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}) }).complete({
-      messages: sendMessages as unknown as ChatMessage[], tools: CONTAINER_AGENT_TOOLS, tool_choice: 'auto',
+    const result = await llmProxyForPlan(env, ctx.effectivePlan, ctx.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}), ...(openaiCodexAuth ? { openaiCodexAuth } : {}), ...(xaiOAuthToken ? { xaiOAuthToken } : {}), ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}), ...(containerCreds.vendorPriority.length ? { byoVendorPriority: containerCreds.vendorPriority } : {}), ...(containerCreds.configuredProviders.length ? { byoRequired: true } : {}) }).complete({
+      messages: sendMessages as unknown as ChatMessage[], tools: containerTools, tool_choice: 'auto',
       ...(pick.model ? { model: pick.model, ...(pick.strict ? { modelStrict: true } : {}) } : {}),
+      // Personality temperature — parity with the Worker/DO loop.
+      ...(ctx.execParams.temperature != null ? { temperature: ctx.execParams.temperature } : {}),
+      // Personality reasoning levers (thinkLevel/reasoningLevel) → the CORRECT vendor
+      // param for THIS model family (Anthropic `thinking` / OpenAI `reasoning_effort`),
+      // or nothing for a model that doesn't support one (reasoningCapability drops it).
+      // Only on a STRICT pin: an unpinned model may cascade to a different vendor that
+      // would reject the param, so we attach it solely when the resolved model is fixed.
+      // First-turn detection: the container op has no assistant turn yet in its slice.
+      ...(pick.strict
+        ? reasoningParamsForModel(pick.model, ctx.execParams, {
+            isFirstTurn: !sendMessages.some((m) => (m as { role?: string }).role === 'assistant'),
+          }) ?? {}
+        : {}),
       useCase: 'task_execution',
     });
     // Shared post-`complete` processing (metering + telemetry) — identical to the
@@ -947,6 +1225,7 @@ export async function handleContainerOp(
     const turn = await recordCloudLlmTurn(result, {
       env, db, tenantId, cloudAgentRef, executionId, taskId, projectId,
       requestedModel: pick.model ?? model, fallbackModel: pick.model,
+      effectivePlan: ctx.effectivePlan, premiumOverride: ctx.premiumOverride,
     }, { tGen0, notify: true });
     // Heartbeat: a live container keeps the run out of the orphan reaper.
     await heartbeatExecution(db, executionId);
@@ -967,7 +1246,7 @@ export async function handleContainerOp(
     if (!path || !content) return { status: 200, body: { ok: false, error: 'path and content are both required' } };
     const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskId);
     if (!repo.ok) return { status: 200, body: { ok: false, error: `no repo bound to this task (${repo.reason}); include the file contents in your final summary instead` } };
-    const commit = await commitAgentFile(repo.ctx, path, content, `${isNew ? 'Add' : 'Update'} ${path} — task #${taskId} (${agentLabel})`);
+    const commit = await commitAgentFile(repo.ctx, path, content, agentCommitMessage(isNew ? 'Add' : 'Update', path, taskId, agentLabel));
     if (!commit.ok) return { status: 200, body: { ok: false, error: commit.reason } };
     // Label from whether the path actually existed in the repo (commit.existed),
     // not the caller's `isNew` hint — that defaults to true and mislabels edits as "created".
@@ -1052,13 +1331,21 @@ export interface CloudLoopState {
   /** ROADMAP #38: set once the empty-deliverable finish gate has fired, so the
    *  durable surface doesn't re-arm (and re-block) the same self-review every tick. */
   noDeliverableBlocked?: boolean;
+  /** How many finish attempts the anti-stub gate has already blocked this RUN. MUST be
+   *  persisted: the durable surface runs ONE step per alarm tick, so a loop-local
+   *  counter resets to 0 every tick and MAX_PLACEHOLDER_FINISH_BLOCKS could never be
+   *  reached — the gate would block a stub-shipping finish forever instead of relenting
+   *  after N attempts and opening the PR annotated-unverified. */
+  placeholderBlocks?: number;
   /** Compiled governance gates for this run (compile-primitive policy modality).
    *  Persisted on the first tick so every durable tick enforces the SAME gates
    *  without re-reading the payload (which a later tick may not carry). */
   policyGates?: PolicyGate[];
-  /** Gate ids whose `require-approval` has already been asked + answered (the run
-   *  parked on the human question and resumed). Persisted so a re-reached approval
-   *  gate proceeds instead of re-parking forever. */
+  /** Approved `require-approval` CALLS — one {@link policyGateCallKey} (gate id + tool
+   *  name + argument hash) per call the human already answered. Persisted so a retried
+   *  identical call proceeds instead of re-parking forever. Keyed per-call, NOT per
+   *  gate: a gate keyed by id alone stopped gating after its first approval, silently
+   *  pre-approving every later call it covered for the rest of the run. */
   policyAskedGates?: string[];
 }
 export interface CloudLoopOpts {
@@ -1090,6 +1377,13 @@ export interface CloudLoopOpts {
    *  modality). The first tick seeds {@link CloudLoopState.policyGates} from this;
    *  later ticks resume from state. */
   policyGates?: PolicyGate[];
+  /** Execution levers compiled from the agent's/personas' psychometric personality
+   *  (from {@link prepareCloudRun}). `temperature` applies on every turn; the reasoning
+   *  levers (thinkLevel/reasoningLevel) are mapped to the correct vendor param for the
+   *  pinned model by {@link reasoningParamsForModel} (Anthropic `thinking` / OpenAI
+   *  `reasoning_effort`) and attached on a strict pin. Applied to every LLM turn so
+   *  personality changes how the agent reasons and samples, not just its prompt. */
+  execParams?: AgentExecParams;
 }
 export interface CloudLoopResult {
   ok: boolean;
@@ -1109,8 +1403,9 @@ export interface CloudLoopResult {
 /**
  * The durable/Worker surface's {@link CapabilityProvider}: the concrete backing for
  * the capability-gated tool registry on Cloudflare. It exposes the repo over the git
- * API (no disk), a shell-free static validator, and human-in-the-loop via the
- * approvals queue — and OWNS the side effects of a write/delete (tracking the run's
+ * API (no disk), a shell-free static validator, human-in-the-loop via the approvals
+ * queue, durable cross-run memory, and bounded public-web reads — and OWNS the side
+ * effects of a write/delete (tracking the run's
  * written paths, recording a `task_file_changes` row, notifying subscribers) so each
  * tool stays a thin schema + result shaper. `repoCtx` and `writtenPaths` are the live
  * run state, so `readRef` (base before the first write, the ticket branch after) is
@@ -1121,6 +1416,7 @@ function buildCloudProvider(args: {
   env: Env;
   db: Db;
   tenantId: number;
+  projectId: number;
   executionId: number;
   taskRow: { id: number; title: string };
   agentLabel: string;
@@ -1130,7 +1426,7 @@ function buildCloudProvider(args: {
   /** Live set of paths written this run (mutated by write/delete). */
   writtenPaths: Set<string>;
 }): CapabilityProvider {
-  const { env, db, tenantId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths } = args;
+  const { env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths } = args;
   // Read/list against the ticket branch only once it exists (created on the first
   // commit). Before any write, the branch ref 404s — read from `base` instead, so
   // the agent sees the real codebase rather than mistaking the missing branch for
@@ -1141,28 +1437,37 @@ function buildCloudProvider(args: {
   return {
     capabilities: CLOUD_SURFACE_CAPS,
     repoRead: {
-      async listFiles(sub) {
+      async listFiles(sub, glob) {
         if (!repoCtx) return { ok: false, error: noRepo() };
         const ref = readRef();
         const ls = await listRepoFiles({ ...repoCtx, ref }, sub);
-        return ls.ok ? { ok: true, ref, paths: ls.paths, truncated: ls.truncated } : { ok: false, error: ls.reason };
+        if (!ls.ok) return { ok: false, error: ls.reason };
+        // A glob is an explicit "find these files" — filter to matches (case-insensitive,
+        // bare name matches basename at any depth) so a named file is always surfaced.
+        const paths = glob ? filterByGlob(ls.paths, glob) : ls.paths;
+        return { ok: true, ref, paths, truncated: ls.truncated };
       },
       async readFile(path) {
         if (!repoCtx) return { ok: false, error: noRepo() };
         const rf = await readRepoFile({ ...repoCtx, ref: readRef() }, path);
         return rf.ok ? { ok: true, path: rf.path, content: rf.content, truncated: rf.truncated } : { ok: false, error: rf.reason };
       },
-      async searchCode(query) {
+      async searchCode(query, scope) {
         if (!repoCtx) return { ok: false, error: noRepo() };
-        const sr = await searchRepoCode({ ...repoCtx, ref: readRef() }, query, { maxResults: 30 });
-        return sr.ok ? { ok: true, query, total: sr.total, truncated: sr.truncated, matches: sr.matches } : { ok: false, error: sr.reason };
+        // The `path` scope is applied INSIDE searchRepoCode (server-side via GitHub's
+        // `path:` qualifier), not post-filtered here — a post-filter over the capped
+        // top-N global hits dropped a subdir's real matches and carried a stale
+        // `truncated` flag, yielding `total:0, truncated:true` that looped the agent.
+        const sr = await searchRepoCode({ ...repoCtx, ref: readRef() }, query, { maxResults: 30, path: scope });
+        if (!sr.ok) return { ok: false, error: sr.reason };
+        return { ok: true, query, total: sr.total, truncated: sr.truncated, matches: sr.matches };
       },
     },
     repoWrite: {
       async writeFile(path, content, _summary) {
         if (!repoCtx) return { ok: false, error: noRepo('; include the file contents in your final summary instead') };
         const firstWriteThisRun = !writtenPaths.has(path);
-        const commit = await commitAgentFile(repoCtx, path, content, `${firstWriteThisRun ? 'Add' : 'Update'} ${path} — task #${taskRow.id} (${agentLabel})`);
+        const commit = await commitAgentFile(repoCtx, path, content, agentCommitMessage(firstWriteThisRun ? 'Add' : 'Update', path, taskRow.id, agentLabel));
         if (!commit.ok) return { ok: false, error: commit.reason };
         writtenPaths.add(path);
         // created vs modified comes from whether the path pre-existed in the repo
@@ -1177,22 +1482,24 @@ function buildCloudProvider(args: {
         const rf = await readRepoFile({ ...repoCtx, ref: readRef() }, path);
         if (!rf.ok) return { ok: false, error: `cannot edit '${path}': ${rf.reason}` };
         if (rf.truncated) return { ok: false, error: `'${path}' is too large to edit safely here — rewrite it with write_file instead` };
-        const count = rf.content.split(oldString).length - 1;
-        if (count === 0) return { ok: false, error: `old_string not found in '${path}' — read_file and copy the exact text (including indentation)` };
-        if (count > 1 && !replaceAll) return { ok: false, error: `old_string is not unique in '${path}' (${count} matches) — add surrounding context to make it unique, or set replace_all` };
-        const updated = replaceAll ? rf.content.split(oldString).join(newString) : rf.content.replace(oldString, newString);
+        // EOL-tolerant, EOL-preserving match (shared with the VS Code provider) so an
+        // agent that emits LF against a CRLF-committed file still edits it instead of
+        // failing with "old_string not found" and giving up.
+        const edit = applyStringEdit(rf.content, oldString, newString, replaceAll);
+        if (!edit.ok || edit.content == null) return { ok: false, error: `cannot edit '${path}': ${edit.error ?? 'old_string not found'}` };
+        const updated = edit.content;
         const firstWriteThisRun = !writtenPaths.has(path);
-        const commit = await commitAgentFile(repoCtx, path, updated, `${firstWriteThisRun ? 'Edit' : 'Update'} ${path} — task #${taskRow.id} (${agentLabel})`);
+        const commit = await commitAgentFile(repoCtx, path, updated, agentCommitMessage(firstWriteThisRun ? 'Edit' : 'Update', path, taskRow.id, agentLabel));
         if (!commit.ok) return { ok: false, error: commit.reason };
         writtenPaths.add(path);
         await recordTaskFileChange(env, tenantId, taskRow.id, executionId, path, 'modified', agentLabel);
         notifyExecutionSubscribers(executionId, { type: 'file_change', executionId, path, change: 'modified', ts: new Date().toISOString() });
-        return { ok: true, branch: repoCtx.branch, commitUrl: commit.commitUrl, change: 'modified', replaced: replaceAll ? count : 1 };
+        return { ok: true, branch: repoCtx.branch, commitUrl: commit.commitUrl, change: 'modified', replaced: edit.replaced };
       },
       async deleteFile(path, reason) {
         if (!repoCtx) return { ok: false, error: noRepo() };
         const suffix = reason && reason.trim() ? ` — ${reason.trim()}` : '';
-        const del = await deleteAgentFile(repoCtx, path, `Remove ${path} — task #${taskRow.id} (${agentLabel})${suffix}`);
+        const del = await deleteAgentFile(repoCtx, path, agentCommitMessage('Remove', path, taskRow.id, agentLabel, suffix));
         if (del.ok) {
           writtenPaths.delete(path);
           await recordTaskFileChange(env, tenantId, taskRow.id, executionId, path, 'deleted', agentLabel);
@@ -1234,9 +1541,14 @@ function buildCloudProvider(args: {
         return { paused: true, approvalId, note: 'Question sent to a human. The run is paused until it is answered; you will resume with the answer.' };
       },
     },
-    // Durable cross-run memory (Postgres `agent_memory`, tenant-scoped). The Worker-safe
-    // twin of the on-prem SSM MemoryStore; lexical recall, read-through cached.
-    memory: buildCloudMemoryCapability({ db, env, tenantId }),
+    // Durable cross-run memory. Project-scoped runs use the SHARED `project_facts`
+    // store (recalled by every surface); else the tenant-wide `agent_memory` twin.
+    memory: buildCloudMemoryCapability({ db, env, tenantId, projectId }),
+    // Read a public URL (docs / an API spec / a linked issue) so the agent isn't
+    // limited to what the repo already contains. Fetch-only: no search vendor is
+    // wired, so CLOUD_SURFACE_CAPS omits `web.search` and `web_search` is never
+    // advertised. The SSRF egress policy + byte cap + timeout live in cloudWeb.
+    web: buildCloudWebCapability({ env }),
   };
 }
 
@@ -1281,9 +1593,26 @@ export async function runCloudToolLoop(
   // Unknown/non-tenant refs resolve to null and pass through unchanged.
   const tenantModel = await resolveTenantModel(env, db, tenantId, model);
   const effectiveModel = tenantModel ? (tenantModel.baseModel ?? undefined) : model;
+  // Curated platform tools give this run the SAME work-management reach the Brain
+  // has (create follow-up tasks, update OKRs, read what's remaining) — advertised
+  // alongside the repo/file tools and dispatched in-process below. The prompt
+  // guidance that makes the agent USE them lives in prepareCloudRun so every
+  // surface (Worker/DO durable + the container) gets it once (DRY).
+  const cloudTools = [...CLOUD_AGENT_TOOLS, ...cloudAgentPlatformToolSchemas()];
   const effectiveSystemPrompt = tenantModel?.directives
     ? `${tenantModel.directives}\n\n${systemPrompt}`
     : systemPrompt;
+
+  // Project Evermind consumer. The dispatcher (runtimeRoutes `withDefaultModel`)
+  // emits a concrete `evermind/<ref>` as the run's model when the project is
+  // configured to run its agents on its own self-learning model (resolved ONCE at the
+  // run boundary — pull-on-boundary). That ref is a direct vendor route, NOT a catalog
+  // id, so it must bypass the coding-pool `pickCloudModel` selection and hard-pin: the
+  // in-process evermind vendor (uploads-threaded) serves it, and a toy-model failure
+  // cascades to the coding backstop (graceful). [[evermind-learning-architecture]]
+  const projectInferenceModel = typeof effectiveModel === 'string' && effectiveModel.startsWith('evermind/')
+    ? effectiveModel
+    : undefined;
 
   // The PRD (committed to the ticket branch during prep) is part of this task's
   // single PR. Seed it into writtenPaths on the first tick so the finalize opens a
@@ -1308,14 +1637,16 @@ export async function runCloudToolLoop(
   // so DO ticks don't re-query the plan).
   const routing = opts?.resume?.routing ?? await resolveCloudRouting(env, tenantId);
   // A connected Claude subscription powers any direct-Claude turn in the cascade
-  // (Bearer + oauth, free to us). Resolved once per loop/tick (NOT per turn) and
-  // re-resolved fresh each DO tick so a rotated token stays valid. Null when the
-  // tenant didn't connect one — cascade keeps its operator-key floor (unchanged).
-  const anthropicOAuthToken = await resolveAnthropicOAuthToken(env, tenantId);
+  // (Bearer + oauth, free to us); BYO OpenAI/Google/Anthropic api-keys override the
+  // operator keys for their vendors (tenant-funded → byo). Resolved once per
+  // loop/tick (NOT per turn) and re-resolved fresh each DO tick so a rotated token
+  // stays valid. Empty when the tenant connected nothing — operator-key floor.
+  const loopCreds = await resolveTenantLlmCredentials(env, tenantId);
+  const { anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, vendorKeys: tenantVendorKeys } = loopCreds;
   // `codingOnly` keeps the failover cascade inside the curated coding pool, so an
   // exhausted free run escalates to the paid coding backstop instead of degrading
   // onto a non-coder (gemini-flash-lite) or a tool-unreliable vendor (Ollama).
-  const proxy = llmProxyForPlan(env, routing.effectivePlan, routing.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}) });
+  const proxy = llmProxyForPlan(env, routing.effectivePlan, routing.premiumOverride, { backstopModels: CODING_BACKSTOP_MODELS, codingOnly: true, ...(anthropicOAuthToken ? { anthropicOAuthToken } : {}), ...(openaiCodexAuth ? { openaiCodexAuth } : {}), ...(xaiOAuthToken ? { xaiOAuthToken } : {}), ...(hasVendorKeys(tenantVendorKeys) ? { tenantVendorKeys } : {}), ...(loopCreds.vendorPriority.length ? { byoVendorPriority: loopCreds.vendorPriority } : {}), ...(loopCreds.configuredProviders.length ? { byoRequired: true } : {}) });
 
   // Per-run model pin. A coding agent must drive the WHOLE task on one model, not
   // hop between pool models per turn (the gateway's round-robin cursor would
@@ -1335,13 +1666,24 @@ export async function runCloudToolLoop(
   // the order on top of the shared table.
   const learned = opts?.resume ? { actionType: 'other' as ActionType, actionStats: undefined } : await resolveLearnedRoutingInputs(env, db, { tenantId, projectId, taskRow });
   // The resolved pin rides CloudLoopState so the DO surface keeps every tick on it.
-  const pick = pickCloudModel(effectiveModel, routing.effectivePlan, routing.premiumOverride, {
-    actionType: learned.actionType,
-    actionStats: learned.actionStats,
-    bias: opts?.routingBias,
-    // Context-aware seed: don't pick a small-window model for a big first turn.
-    estimatedTokens: estimateRequestTokens(messages, CLOUD_AGENT_TOOLS),
-  });
+  // A live project-Evermind pin hard-pins the project model (strict) and skips the
+  // coding-pool selection entirely; otherwise the normal learned-routing seed runs.
+  const pick = projectInferenceModel
+    ? { model: projectInferenceModel, strict: true as const }
+    : pickCloudModel(effectiveModel, routing.effectivePlan, routing.premiumOverride, {
+        actionType: learned.actionType,
+        actionStats: learned.actionStats,
+        bias: opts?.routingBias,
+        // Context-aware seed: don't pick a small-window model for a big first turn.
+        estimatedTokens: estimateRequestTokens(messages, cloudTools),
+        // A free tenant may pin a model their connected provider (BYO) serves.
+        byoVendors: byoVendorIdSet(providersFromCredentials(loopCreds)),
+        // Tenant BYO precedence — lead with the owner's chosen account (e.g. Meta first).
+        byoVendorPriority: loopCreds.vendorPriority,
+        // A PREMIUM pin is honoured only with a paid plan + a validated card; otherwise
+        // it's ignored and the run uses the plan's coding default.
+        premiumEntitled: routing.premiumEntitled,
+      });
   // Mutable: a 429 on the pinned model drops the strict pin so the proxy cascades
   // (see the per-turn cascade below); the run then stays unpinned for later turns.
   let strictPin = pick.strict;
@@ -1373,7 +1715,9 @@ export async function runCloudToolLoop(
   // Anti-stub gate: count finish attempts blocked because committed files still
   // contain placeholder/stub code, so the agent is forced to ship a real
   // implementation (or delete the dead file) — see MAX_PLACEHOLDER_FINISH_BLOCKS.
-  let placeholderBlocks = 0;
+  // Carried across DO ticks via resume state (the durable surface runs one step per
+  // tick, so a per-call counter would reset before the cap was ever reached).
+  let placeholderBlocks = opts?.resume?.placeholderBlocks ?? 0;
   // Pre-finish completeness self-review (ROADMAP #38): block a finish that produced
   // NO code deliverable exactly ONCE, re-prompting the agent to verify it met the
   // PRD requirements. A genuine "nothing to change" run finishes on the retry; a
@@ -1383,9 +1727,11 @@ export async function runCloudToolLoop(
 
   // Governance gates (compile-primitive policy modality). Resolved ONCE: a resumed
   // run reuses the gates persisted on its first tick (the payload may not survive
-  // to later ticks); a fresh run seeds them from the dispatch payload. `askedGates`
-  // tracks which require-approval gates have already been asked + answered, so a
-  // re-reached gate proceeds rather than re-parking the run forever.
+  // to later ticks); a fresh run seeds them from the dispatch payload.
+  // `policyAskedGates` holds one entry per already-approved CALL — keyed by
+  // {@link policyGateCallKey} (gate + tool + argument hash), NOT by gate id — so an
+  // approval covers exactly the call a human saw. A retried identical call proceeds;
+  // a different call through the same gate is asked again.
   const policyGates: PolicyGate[] = opts?.resume?.policyGates ?? opts?.policyGates ?? [];
   const policyAskedGates = new Set<string>(opts?.resume?.policyAskedGates ?? []);
 
@@ -1408,7 +1754,7 @@ export async function runCloudToolLoop(
   // The provider closes over the LIVE `writtenPaths` set + `repoCtx`, so write/delete
   // bookkeeping and the base→branch read switch stay correct as the run progresses.
   const provider = buildCloudProvider({
-    env, db, tenantId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths,
+    env, db, tenantId, projectId, executionId, taskRow, agentLabel, cloudAgentRef, repoCtx, repoMiss, writtenPaths,
   });
   const toolCtx: ToolContext = { caps: provider, signal: abortController.signal };
 
@@ -1471,9 +1817,26 @@ export async function runCloudToolLoop(
         result = await proxy.complete(
           {
             messages: requestMessages as unknown as ChatMessage[],
-            tools: CLOUD_AGENT_TOOLS,
+            tools: cloudTools,
             tool_choice: 'auto',
             ...(activeModel ? { model: activeModel, ...(strictPin ? { modelStrict: true } : {}) } : {}),
+            // Personality temperature (compiled from the agent's/personas' traits).
+            ...(opts?.execParams?.temperature != null ? { temperature: opts.execParams.temperature } : {}),
+            // Personality reasoning levers (thinkLevel/reasoningLevel) → the correct
+            // vendor param via reasoningCapability (Anthropic `thinking` / OpenAI
+            // `reasoning_effort`), surviving to the vendor as extraBody. Attached ONLY
+            // on a strict pin so it never rides a cascade onto a vendor that would 400
+            // on an unknown key; unsupported models return nothing (no change). Note the
+            // direct-Anthropic vendor enables `thinking` alongside tools on the FIRST
+            // (planning) turn — detected here as "no assistant turn yet in the persisted
+            // conversation" and threaded as the `isFirstTurn` hint — and keeps it off on
+            // continuation turns (whose thinking block was lost in the OpenAI round-trip);
+            // for a pinned OpenAI o-series/gpt-5 coder it lands `reasoning_effort`.
+            ...(strictPin
+              ? reasoningParamsForModel(activeModel, opts?.execParams, {
+                  isFirstTurn: !messages.some((m) => (m as { role?: string }).role === 'assistant'),
+                }) ?? {}
+              : {}),
             useCase: 'task_execution',
           },
           undefined,
@@ -1515,6 +1878,7 @@ export async function runCloudToolLoop(
     const turn = await recordCloudLlmTurn(result, {
       env, db, tenantId, cloudAgentRef, executionId, taskId: taskRow.id, projectId,
       requestedModel: pick.model, fallbackModel: activeModel,
+      effectivePlan: routing.effectivePlan, premiumOverride: routing.premiumOverride,
     }, { tGen0, step, notify: false });
     if (!turn.ok) return { ok: false, output: turn.error, cancelled, finished: true };
     const { content, toolCalls } = turn;
@@ -1548,28 +1912,48 @@ export async function runCloudToolLoop(
           detail: { tool: name, gateId: gate.gateId, reason: gate.reason },
           result: `Blocked ${name}: ${gate.reason}`,
         });
-      } else if (gate.action === 'require-approval' && !policyAskedGates.has(gate.gateId)) {
-        // First encounter — ask a human and park. The answer resumes the run; the gate
-        // id is recorded (in resume state) so the re-reached gate proceeds (below).
+      } else if (gate.action === 'require-approval' && !policyAskedGates.has(policyGateCallKey(gate.gateId, name, parsed))) {
+        // First encounter OF THIS CALL — ask a human and park. The answer resumes the
+        // run; the call key is recorded (in resume state) so the re-reached identical
+        // call proceeds (below), while a DIFFERENT call through the same gate is asked
+        // on its own merits rather than riding the earlier approval.
         const question = `Approve the agent's use of "${name}"? ${gate.reason}`;
         const approvalId = await createCloudQuestion(env, db, {
           tenantId, cloudAgentRef, executionId, agentLabel,
           question,
-          context: `Governance gate "${gate.gateId}" requires human approval before this tool may run.`,
+          context: `Governance gate "${gate.gateId}" requires human approval before this tool may run with these arguments: ${JSON.stringify(parsed).slice(0, 500)}`,
         });
-        policyAskedGates.add(gate.gateId);
+        policyAskedGates.add(policyGateCallKey(gate.gateId, name, parsed));
         awaitingInput = { approvalId, question };
         toolResult = { ok: false, error: `Paused for human approval of "${name}" (governance gate ${gate.gateId}).` };
       } else {
-        // allow — or a require-approval gate already asked + answered. Dispatch through
-        // the ONE capability-gated registry. Each tool reaches the repo / static-check /
-        // human ONLY via the injected provider (so the same definition runs on-prem
-        // against a disk/shell provider). `finish` and `ask_human` come back as CONTROL
-        // signals the loop interprets below — the finish honesty/anti-stub gates and the
-        // pause/park are loop policy, not a tool's concern, so they stay here.
-        const dispatched = await cloudToolRegistry.dispatch(name, parsed, toolCtx);
-        toolResult = dispatched.data;
-        control = dispatched.control;
+        // allow — or a require-approval gate already asked + answered.
+        const platformTool = resolveCloudAgentPlatformTool(name);
+        if (platformTool) {
+          // Curated platform tool (create task / update OKR / read remaining work) —
+          // run in-process, tenant-scoped, defaulting the project to THIS run's so a
+          // follow-up task lands on the right project unless the model names another.
+          // MANAGER role so the OKR/task writes the user asked for are permitted; the
+          // subset is admin/destructive-free so this can't reach keys/security/etc.
+          try {
+            const data = await callBuiltinTool(db, {
+              tenantId, tool: platformTool,
+              arguments: { projectId, ...parsed },
+              env, userId: cloudAgentRef ?? null, role: TenantRole.MANAGER,
+            });
+            toolResult = data && typeof data === 'object' ? (data as Record<string, unknown>) : { ok: true, result: data };
+          } catch (e) {
+            toolResult = { ok: false, error: e instanceof Error ? e.message : String(e) };
+          }
+        } else {
+          // Repo/file/static-check/human tools. Dispatch through the ONE capability-gated
+          // registry — each reaches the repo / static-check / human ONLY via the injected
+          // provider (so the same definition runs on-prem against a disk/shell provider).
+          // `finish` and `ask_human` come back as CONTROL signals the loop interprets below.
+          const dispatched = await cloudToolRegistry.dispatch(name, parsed, toolCtx);
+          toolResult = dispatched.data;
+          control = dispatched.control;
+        }
       }
 
       if (control?.kind === 'finish') {
@@ -1655,6 +2039,26 @@ export async function runCloudToolLoop(
     await cancelWatcher.catch(() => { /* ignore */ });
   }
 
+  // The ONE snapshot of everything the next durable tick must resume from. Both
+  // non-terminal exits (paused-on-a-question, per-tick budget spent) hand back the
+  // SAME shape — built here so a newly-persisted field can never be added to one exit
+  // and forgotten at the other (exactly how `placeholderBlocks` came to reset every
+  // tick, making its cap unreachable). Every counter/flag the loop carries ACROSS
+  // ticks belongs in here.
+  const resumeState = (): CloudLoopState => ({
+    messages,
+    writtenPaths: [...writtenPaths],
+    step,
+    pinnedModel: activeModel,
+    routing,
+    repoCtx,
+    repoMiss,
+    noDeliverableBlocked,
+    placeholderBlocks,
+    policyGates,
+    policyAskedGates: [...policyAskedGates],
+  });
+
   // Paused on a human question — do NOT finalize (no PR, not terminal). Hand back
   // the resume state + the awaiting marker so the surface parks the run in `paused`
   // and wakes the loop when the question is answered (the answer arrives as a steer).
@@ -1666,7 +2070,7 @@ export async function runCloudToolLoop(
       cancelled: false,
       finished: false,
       awaitingInput,
-      state: { messages, writtenPaths: [...writtenPaths], step, pinnedModel: activeModel, routing, repoCtx, repoMiss, noDeliverableBlocked, policyGates, policyAskedGates: [...policyAskedGates] },
+      state: resumeState(),
     };
   }
 
@@ -1682,7 +2086,7 @@ export async function runCloudToolLoop(
       output: '',
       cancelled,
       finished: false,
-      state: { messages, writtenPaths: [...writtenPaths], step, pinnedModel: activeModel, routing, repoCtx, repoMiss, noDeliverableBlocked, policyGates, policyAskedGates: [...policyAskedGates] },
+      state: resumeState(),
     };
   }
 
@@ -1712,51 +2116,34 @@ export interface CloudEngineContext {
   /** Resolved assigned artifacts (skills/personas/content). Used by V3 to derive
    *  limbic setpoints from the assigned personas' psychometric profiles. */
   artifacts?: ResolvedArtifacts;
+  /** Execution levers compiled from the personas + the agent's own personality
+   *  (from {@link prepareCloudRun}). Passed through to the loop's per-turn LLM call. */
+  execParams?: AgentExecParams;
+  /** The agent's OWN psychometric JSON (ide_agents.psychometric). Folded into the
+   *  limbic setpoints alongside the assigned personas. */
+  agentPsychometric?: string | null;
 }
 
 /**
- * The cloud tool-loop engine behind the shared {@link AgentEngine} seam. Wraps
- * {@link runCloudToolLoop} so dispatch sites depend on the INTERFACE, not the
- * concrete loop — the whole point of the seam is that "the next engine" (a
- * Claude-Agent-SDK loop, a different surface strategy) is injected at one composition
- * root ({@link resolveAgentEngine}) without editing any call site.
- */
-export class CloudToolLoopEngine implements AgentEngine {
-  // The engine id that backs `builderforce-v2` cloud agents — drawn from the single
-  // ENGINE_IDS source so the id never drifts from the registry's well-known names.
-  readonly id = ENGINE_IDS.v2;
-  constructor(private readonly rc: CloudEngineContext) {}
-  async run(input: AgentRunInput): Promise<AgentRunResult> {
-    const r = await runCloudToolLoop(
-      this.rc.env, this.rc.db, this.rc.executionId, this.rc.tenantId, this.rc.taskRow,
-      this.rc.cloudAgentRef, this.rc.agentLabel, input.model, input.systemPrompt, input.userContent,
-      this.rc.isCancelled, this.rc.projectId,
-      { routingBias: this.rc.routingBias, ...(input.policy?.gates ? { policyGates: [...input.policy.gates] } : {}) },
-    );
-    return { ok: r.ok, output: r.output, cancelled: r.cancelled, finished: r.finished, awaitingInput: r.awaitingInput, state: r.state };
-  }
-}
-
-/**
- * V3 — the cloud limbic engine. Composes the V2 loop WITHOUT modifying it: it
- * derives a task-appropriate affective state via the shared, Worker-safe limbic
- * compiler (`@builderforce/agent-tools`) and injects the affect block through the
- * loop's per-step {@link CloudLoopOpts.dynamicSystem} seam — NOT by mutating the
- * persisted prompt/conversation. That decoupling is what lets affect evolve
- * across DO ticks (see {@link CloudRunnerDO}) and lets *any* future engine layer
- * per-step behaviour the same way. Cloudflare Workers can't run `@webgpu/node`,
- * so the cloud limbic is the deterministic heuristic regions only — GPU
- * *training* stays on-prem. Selecting V3 leaves every V2 agent byte-for-byte
- * unchanged (V2 passes no `dynamicSystem`).
+ * The cloud agent engine behind the shared {@link AgentEngine} seam — THE current
+ * engine (V3). It drives {@link runCloudToolLoop} (the Claude-Agent-SDK tool loop)
+ * with the limbic affective layer ALWAYS composed on top: it derives a task-appropriate
+ * affective state via the shared, Worker-safe limbic compiler (`@builderforce/agent-tools`)
+ * and injects the affect block through the loop's per-step {@link CloudLoopOpts.dynamicSystem}
+ * seam — NOT by mutating the persisted prompt/conversation. That decoupling lets affect
+ * evolve across DO ticks (see {@link CloudRunnerDO}). Cloudflare Workers can't run
+ * `@webgpu/node`, so the cloud limbic is the deterministic heuristic regions only — GPU
+ * *training* stays on-prem. Dispatch sites depend on the INTERFACE via
+ * {@link resolveAgentEngine}, so the NEXT engine (a future V4) is a one-line wiring change.
  */
 export class CloudLimbicEngine implements AgentEngine {
-  readonly id = ENGINE_IDS.v3;
+  readonly id = CURRENT_ENGINE_ID;
   constructor(private readonly rc: CloudEngineContext) {}
 
   async run(input: AgentRunInput): Promise<AgentRunResult> {
     // Personality = setpoints (from the assigned personas' psychometric profiles);
     // dynamics = the task-appraised affect around those setpoints.
-    const setpoints = await loadPersonaSetpoints(this.rc.env, this.rc.db, this.rc.artifacts?.personas ?? []);
+    const setpoints = await loadPersonaSetpoints(this.rc.env, this.rc.db, this.rc.artifacts?.personas ?? [], this.rc.agentPsychometric);
     const state = initialCloudLimbicState(this.rc.taskRow, setpoints);
     await recordLimbicState(this.rc.db, { tenantId: this.rc.tenantId, cloudAgentRef: this.rc.cloudAgentRef, executionId: this.rc.executionId }, state);
     const directive = buildLimbicBlock(state);
@@ -1765,7 +2152,7 @@ export class CloudLimbicEngine implements AgentEngine {
       this.rc.env, this.rc.db, this.rc.executionId, this.rc.tenantId, this.rc.taskRow,
       this.rc.cloudAgentRef, this.rc.agentLabel, input.model, input.systemPrompt, input.userContent,
       this.rc.isCancelled, this.rc.projectId,
-      { routingBias: this.rc.routingBias, ...(directive ? { dynamicSystem: directive } : {}), ...(input.policy?.gates ? { policyGates: [...input.policy.gates] } : {}) },
+      { routingBias: this.rc.routingBias, ...(directive ? { dynamicSystem: directive } : {}), ...(input.policy?.gates ? { policyGates: [...input.policy.gates] } : {}), ...(this.rc.execParams ? { execParams: this.rc.execParams } : {}) },
     );
     return { ok: r.ok, output: r.output, cancelled: r.cancelled, finished: r.finished, awaitingInput: r.awaitingInput, state: r.state };
   }
@@ -1825,20 +2212,14 @@ export async function recordLimbicState(
 }
 
 /**
- * The single composition root for cloud engine selection. An id-keyed registry of
- * engine factories resolved via the shared {@link resolveEngineById} — the SAME
- * pattern the on-prem relay `resolveEngine` uses — so adding an engine is one
- * registry entry on BOTH surfaces, never a new branch. `builderforce-v2` is the
- * default tool loop; `builderforce-v3` adds the limbic layer on top of it; any
- * legacy/unknown id falls back to `DEFAULT_ENGINE_ID`. (Surface routing —
- * durable DO / container / worker — is a separate decision in `runtimeRoutes.ts`.)
+ * The single composition root for the cloud engine. There is ONE engine (the current
+ * V3 = tool loop + limbic); every run resolves to it regardless of any legacy engine
+ * value. The seam stays a function so the NEXT engine (a future V4) is a one-line swap
+ * here, never a branch at the call sites. (Surface routing — durable DO / container /
+ * worker — is a separate decision in `runtimeRoutes.ts`.)
  */
-export function resolveAgentEngine(rc: CloudEngineContext, engineId?: string): AgentEngine {
-  const registry: Record<string, (c: CloudEngineContext) => AgentEngine> = {
-    [ENGINE_IDS.v2]: (c) => new CloudToolLoopEngine(c),
-    [ENGINE_IDS.v3]: (c) => new CloudLimbicEngine(c),
-  };
-  return resolveEngineById(registry, engineId)(rc);
+export function resolveAgentEngine(rc: CloudEngineContext): AgentEngine {
+  return new CloudLimbicEngine(rc);
 }
 
 /**
@@ -1989,12 +2370,32 @@ export async function finalizeCloudRun(
   const unverifiedNote = prOpened
     ? '\n\n⚠ Not verified in-agent — this serverless executor ran no build/type-check/tests. CI on the PR is the source of truth.'
     : '';
+
+  // Unified learning: contribute this run's output to the project's Evermind. The
+  // coordinator adapts+diffs+merges IN ITS ALARM, so this finalize (a CF Worker/DO
+  // with a tight CPU budget) pays NO training cost — it just enqueues the text. The
+  // same door IDE + on-prem post to; the coordinator gates seeded/frozen itself.
+  // Best-effort, never affects the run outcome. [[evermind-learning-architecture]]
+  if (repoCtx?.projectId && !cancelled && output.trim().length >= 20) {
+    // Thread the task title as the teacher prompt so a pinned frontier teacher learns
+    // (task → ideal answer), not just a refinement of this run's output. Weight the
+    // contribution by run QUALITY (merged > opened > wrote-files > no-op) instead of
+    // the old text-length proxy, so a merged run teaches harder than a failed one.
+    const learnWeight = finalizeLearnWeight({
+      merged, prOpened, autoMergeFailed, producedChanges: writtenPaths.size > 0,
+    });
+    // Fan out to EVERY live Evermind this project targets (its own head + the IDE builds
+    // grouped under it), not just the one projectId — the same resolver the chat learn
+    // gate uses, so a cloud run contributes to all the project's Everminds. Best-effort.
+    await contributeTextToProjectEverminds(env, db, tenantId, repoCtx.projectId, output, learnWeight, taskRow.title).catch(() => { /* best-effort */ });
+  }
+
   return { ok: !autoMergeFailed, output: output + unverifiedNote };
 }
 
 /**
- * Prep shared by both cloud surfaces (Worker `runCloudExecution` and the durable
- * `CloudRunnerDO`): ensure a task PRD, load governance + assigned capabilities (all
+ * Prep shared by both cloud surfaces (the durable `CloudRunnerDO` and the Cloudflare
+ * Container): ensure a task PRD, load governance + assigned capabilities (all
  * parallel reads), record the `context.prepare` + `capabilities.load` timeline
  * events, and build the system + user prompts the tool loop runs against. Returns
  * the two prompts. Never throws on the telemetry writes (best-effort).
@@ -2012,17 +2413,26 @@ export async function prepareCloudRun(
   cloudAgentRef?: string,
   payload?: string,
   opts?: { shell?: boolean },
-): Promise<{ systemPrompt: string; userContent: string }> {
+): Promise<{ systemPrompt: string; userContent: string; execParams: AgentExecParams; agentPsychometric: string | null }> {
   const tPrep0 = Date.now();
-  const [prd, governance, capabilities, workspace] = await Promise.all([
+  // The agent's OWN personality (independent of assigned personas) — folded into the
+  // capability prompt block, the exec params, and (by the caller) the limbic setpoints.
+  const agentPsychometric = await loadAgentPsychometric(env, tenantId, cloudAgentRef);
+  const [prd, governance, capabilities, workspace, factsBlock, lessonsBlock] = await Promise.all([
     ensureTaskPrd(env, db, executionId, taskRow, tenantId, projectId, taskRow.id, agentLabel, model),
-    loadGovernanceContext(db, tenantId, projectId),
-    loadCapabilityContext(env, db, artifacts),
+    loadGovernanceContext(db, tenantId, projectId, cloudAgentRef),
+    loadCapabilityContext(env, db, artifacts, agentPsychometric),
     // The repo the agent runs against — its identity + top-level shape (so a wrong/
     // empty binding is visible before any LLM spend) AND what a prior pass already
     // committed to this branch (so a re-run reconciles instead of blindly appending).
     // Best-effort: a clean first run / no repo yields an empty workspace.
     loadWorkspaceContext(env, db, gitSecret(env), tenantId, taskRow.id),
+    // Shared project memory — durable facts any surface (VS Code / on-prem / prior
+    // cloud run) wrote for this project, recalled by the task text. Best-effort '' .
+    buildProjectFactsBlock(env, db, tenantId, projectId, `${taskRow.title} ${taskRow.description ?? ''}`.trim()),
+    // Evermind lessons — prior run outcomes AND incident post-mortem causes recalled by
+    // the task text, so the agent doesn't repeat mistakes that caused incidents.
+    buildEvermindLessonsBlock(env, db, tenantId, projectId, `${taskRow.title} ${taskRow.description ?? ''}`.trim()),
   ]);
   const priorChanges = workspace.priorChanges;
   const repoLabel = workspace.repo ? `${workspace.repo.owner}/${workspace.repo.repo}` : null;
@@ -2049,6 +2459,26 @@ export async function prepareCloudRun(
     });
   }
 
+  // Record a FIRST-CLASS personality-application event (Residual 1) the moment this run
+  // actually applies a personality — an in-process db write, NOT an HTTP self-call. Runs
+  // exactly ONCE per run (prepareCloudRun is the single prep site every cloud surface —
+  // Worker / durable DO / container — funnels through). Reuses the profile + merged exec
+  // levers already resolved above (one compile, no per-turn N+1). `compilePersonalityApplication`
+  // returns null when the agent's own psychometric yields no directives, so a V2 /
+  // neutral-profile run records nothing and stays byte-identical. The GET now derives
+  // only to backfill gaps. Best-effort — telemetry must never block a run.
+  if (cloudAgentRef) {
+    const application = compilePersonalityApplication({
+      agentPsychometric,
+      execParams: capabilities.execParams,
+      personaIds: capabilities.summary.personas,
+    });
+    if (application) {
+      await recordPersonalityEvent(env, db, tenantId, { agentRef: cloudAgentRef, executionId, ...application })
+        .catch(() => { /* telemetry only — never block the run */ });
+    }
+  }
+
   // Auto-fix runs carry a remediation block (the post-merge build failure) in the
   // payload — surface it prominently so the agent fixes the REAL failing build.
   const remediation = parseRemediation(payload);
@@ -2058,6 +2488,19 @@ export async function prepareCloudRun(
   // the message as the goal — building on the prior run's committed work and the
   // (now PRD-recorded) directive, not redoing the task from scratch.
   const followUp = parseFollowUp(payload);
+
+  // Validator acceptance-review run: the payload marks this run as a REVIEW, not
+  // implementation work. Steer it explicitly (independent of the agent's persona) so
+  // ANY agent dispatched with the review flag performs an acceptance review and reports
+  // via reviews.record, rather than editing code.
+  const isReviewRun = isValidatorReviewPayload(payload);
+
+  // Incident-triage run: the payload marks this as the Incident Manager working an
+  // open incident, NOT shipping code. Steer it (independent of persona) to analyse the
+  // ticket, classify the affected system, page/escalate on-call, and post war-room
+  // updates via the incidents.*/oncall.* tools.
+  const isIncidentRun = isIncidentTriagePayload(payload);
+  const incidentRunId = incidentIdFromPayload(payload);
 
   // Show the agent the repo it's about to edit BEFORE it spends an LLM call, so a
   // wrong/empty binding is caught up-front instead of after a conceptual non-answer
@@ -2078,6 +2521,12 @@ export async function prepareCloudRun(
     : null;
 
   const userContent = [
+    isReviewRun
+      ? `## Acceptance review (do NOT edit code)\n\nThis is a VALIDATOR REVIEW of already-Done work — verify the ticket was genuinely completed against its PRD/requirements and the repository. Read the branch/PR and the relevant code with search_code / read_file, judge whether the deliverable is complete and correct, then call the \`builtin_reviews_record\` tool with your verdict ('complete' or 'gaps'), a short assessment, and any concrete gaps (each becomes a GAP ticket). Do NOT write_file / delete_file or change the ticket's status — you are reviewing, not implementing.`
+      : null,
+    isIncidentRun
+      ? `## Incident triage (do NOT edit code)\n\nYou are the INCIDENT MANAGER working an OPEN incident${incidentRunId ? ` (incident \`${incidentRunId}\`)` : ''} — help-desk triage and response, NOT a code change. Steps:\n1. Read the incident with \`builtin_incidents_get\`; read the source ticket in the task description.\n2. **Search the knowledge base FIRST** with \`builtin_knowledge_search\` for prior similar incidents, RCAs, or known-errors — if this has happened before, reuse the documented workaround/resolution instead of starting from scratch.\n3. Work out WHICH SYSTEM the issue pertains to and record it with \`builtin_incidents_classify\`.\n4. Set an accurate severity with \`builtin_incidents_update\` (sev1 = full outage / broad impact … sev4 = minor).\n5. Page whoever is on call with \`builtin_oncall_page\` (check \`builtin_oncall_list\` first). Escalation to later tiers happens automatically on a timer until someone acknowledges.\n6. Post what you find and do to the war-room feed with \`builtin_incidents_add_note\`.\n7. When the incident is resolved, set its status to resolved with \`builtin_incidents_update\`, then **publish a post-mortem** with \`builtin_incidents_postmortem\` (root cause, contributing factors, resolution, what went well/wrong, and concrete action items) — it becomes a searchable Knowledge RCA, files the action items as remediation tasks, and teaches the workforce not to repeat the cause.\nDo NOT write_file / delete_file — you are triaging, not implementing.`
+      : null,
     remediation
       ? `## Build failure to fix (attempt ${remediation.attempt}/${remediation.maxAttempts})\n\n${
           remediation.phase === 'pre_merge'
@@ -2110,27 +2559,40 @@ export async function prepareCloudRun(
     'then write_file with the FULL updated content (no bracketed placeholders) for each deliverable file. ' +
     'If search_code returns 0 matches for the thing a task says to change/remove, that means it is not in the codebase — say so in your summary instead of inventing an unrelated edit. ' +
     'If the bound repository (see "Repository / workspace") has no files related to the task, report that the wrong repo appears bound and name it — do NOT produce a conceptual stand-in against unrelated code. ' +
+    'Do not narrate your plan, repeat findings, or emit progress summaries between tool calls — act through the tools and reserve assistant text for information the user actually needs. ' +
     'Do NOT call finish while any deliverable file is still a stub/placeholder or any requirement in the task/PRD is unimplemented — keep listing, reading and writing files until the task is genuinely complete. ' +
+    'Do not claim the task is completed merely because you investigated it or described a fix; completion requires the requested repository changes to be written and reconciled. ' +
     'Reconcile the branch against the task, do not just append: if a file already on this branch (see "Files already on this branch") is dead code — a stub, an unreferenced file, or something that should not ship in this PR — remove it with delete_file (confirm it is unused via search_code first). The PR should contain only the files the task genuinely needs. ' +
     'When you finish, your committed changes are opened as a PULL REQUEST for human review (a person approves the merge in-product); they are NOT auto-deployed — so the PR must contain the COMPLETE, working change, not a partial scaffold. Call finish with a summary only once everything the task requires has been written. ' +
     shellLine + ' ' +
     'If no repository is bound, return the complete deliverable in your final summary instead. Make explicit, reasonable assumptions where specifics are unknown.',
+    // Platform (project-management) tools — advertised alongside the repo tools on
+    // every cloud surface (durable + container). This is what lets a run manage the
+    // project as it works instead of silently dropping out-of-scope findings.
+    'You ALSO have PLATFORM tools (prefixed `builtin_`) to manage the project as you work — they act on the SAME project boards the humans use, not the repo. '
+    + 'Use `builtin_tasks_list` / `builtin_tasks_get` to see what is already tracked; '
+    + '`builtin_tasks_create` to file a NEW task for any gap, bug, or follow-up work you find that is OUT OF SCOPE for THIS task — do NOT silently drop it, capture it as a task so it is not lost; '
+    + '`builtin_tasks_update` to reflect progress; and `builtin_objectives_update` / `builtin_key_results_update` to update the OKR/objective progress your work advances. '
+    + "They default to THIS run's project; pass an explicit projectId only to target another. "
+    + 'When you finish, base any "what remains" statement on real state — the tasks you actually created plus `builtin_tasks_list` — never a guess.',
     capabilities.promptBlock || null,
+    factsBlock || null,
+    lessonsBlock || null,
   ].filter(Boolean).join('\n\n');
 
-  return { systemPrompt, userContent };
+  return { systemPrompt, userContent, execParams: capabilities.execParams, agentPsychometric };
 }
 
 /**
- * The single PENDING/SUBMITTED → RUNNING transition for EVERY cloud surface
- * (Worker `runCloudExecution`, durable `CloudRunnerDO`, and the Cloudflare
- * Container kickoff). Routes through {@link RuntimeService.update} — the one routine
- * that also moves the ticket to In Progress, records metrics, and writes the audit
- * event — then announces the new status to live subscribers. Best-effort: a row
- * that already raced to a terminal/cancelled state makes `markRunning` throw, which
- * we swallow rather than clobber. Funnelling all three executors through here is
- * what stops them drifting (the container surface used to skip RUNNING entirely, so
- * its card sat on "pending" for the whole live run).
+ * The single PENDING/SUBMITTED → RUNNING transition for BOTH cloud surfaces (the
+ * durable `CloudRunnerDO` and the Cloudflare Container kickoff). Routes through
+ * {@link RuntimeService.update} — the one routine that also moves the ticket to In
+ * Progress, records metrics, and writes the audit event — then announces the new
+ * status to live subscribers. Best-effort: a row that already raced to a
+ * terminal/cancelled state makes `markRunning` throw, which we swallow rather than
+ * clobber. Funnelling both executors through here is what stops them drifting (the
+ * container surface used to skip RUNNING entirely, so its card sat on "pending" for
+ * the whole live run).
  */
 export async function markCloudExecutionRunning(runtimeService: RuntimeService, executionId: number): Promise<void> {
   let running: Awaited<ReturnType<RuntimeService['update']>>;
@@ -2148,113 +2610,3 @@ export async function markCloudExecutionRunning(runtimeService: RuntimeService, 
   });
 }
 
-/**
- * Run an execution server-side via the gateway (the interim `durable`-surface
- * executor when the CloudRunnerDO binding is absent). Standard flow:
- * (1) ensure a PRD exists (generate + persist + emit as first change), then
- * (2) produce the deliverable honoring the PRD + project rules. Never throws.
- */
-export async function runCloudExecution(
-  env: Env,
-  runtimeService: RuntimeService,
-  db: Db,
-  executionId: number,
-  taskRow: { id: number; title: string; description: string | null },
-  tenantId: number,
-  projectId: number,
-  agentLabel: string,
-  cloudAgentRef?: string,
-  payload?: string,
-  artifacts?: ResolvedArtifacts,
-): Promise<void> {
-  const model = parseModel(payload);
-
-  // Cross-isolate cancel check: the /cancel endpoint flips the DB row to
-  // CANCELLED from a different request/isolate; the background loop polls this
-  // between paid steps and stops instead of running to completion.
-  const isCancelled = async (): Promise<boolean> => {
-    try {
-      return (await runtimeService.getExecution(executionId)).status === ExecutionStatus.CANCELLED;
-    } catch { return false; }
-  };
-
-  try {
-    // Already cancelled before we even started running → don't transition or spend.
-    if (await isCancelled()) return;
-    await markCloudExecutionRunning(runtimeService, executionId);
-
-    const { systemPrompt, userContent } = await prepareCloudRun(
-      env, db, executionId, taskRow, tenantId, projectId, agentLabel, model, artifacts, cloudAgentRef, payload,
-    );
-    // Resolve the engine behind the shared seam (DI), then drive it with just the
-    // per-task input. Surface/runtime wiring lives in the engine, not this call site.
-    // The agent's `engine` column selects the implementation: V2 (default) or V3
-    // (limbic). Unknown/legacy ids fall back to the default — so V2 agents are
-    // unaffected and only rows explicitly set to `builderforce-v3` get the layer.
-    const engineId = (await resolveCloudAgent(env, tenantId, cloudAgentRef)).engine;
-    const engine = resolveAgentEngine({
-      env, db, executionId, taskRow, tenantId, projectId, agentLabel, cloudAgentRef, isCancelled,
-      routingBias: parseRoutingBias(payload), artifacts,
-    }, engineId);
-    const policyGates = parsePolicyGates(payload);
-    const { ok, output, cancelled, awaitingInput } = await engine.run({
-      systemPrompt, userContent, model,
-      ...(policyGates.length ? { policy: { gates: policyGates } } : {}),
-    });
-
-    // Run was cancelled mid-loop: the row is already CANCELLED (a terminal
-    // state). Don't attempt a COMPLETED/FAILED transition (it would throw) —
-    // just surface the partial output to subscribers and stop.
-    if (cancelled || (await isCancelled())) {
-      notifyExecutionSubscribers(executionId, {
-        type: 'message', executionId, role: 'assistant',
-        text: output || 'Run cancelled.', ts: new Date().toISOString(),
-      });
-      // Score the cancelled run (status is already CANCELLED → score 0). Best-effort.
-      await scoreRunOutcome(env, db, { executionId }).catch(() => { /* best-effort */ });
-      return;
-    }
-
-    // Paused on a human question: park the run in `paused` (NOT terminal) — the
-    // question is already in the human-requests queue. Set the status directly
-    // (RuntimeService.update only permits running/completed/failed), mirroring the
-    // CloudRunnerDO pause. The interim Worker surface has no persisted cursor to
-    // resume, so when the answer lands it is delivered as a steer and picked up by
-    // the follow-up run the answer triggers.
-    if (awaitingInput) {
-      await db.update(executions)
-        .set({ status: ExecutionStatus.PAUSED, updatedAt: new Date() })
-        .where(eq(executions.id, executionId))
-        .catch(() => { /* best-effort */ });
-      const paused = await runtimeService.getExecution(executionId).catch(() => null);
-      if (paused) notifyExecutionSubscribers(executionId, {
-        type: 'status_change', executionId, status: paused.status, execution: paused.toPlain(), ts: new Date().toISOString(),
-      });
-      return;
-    }
-
-    notifyExecutionSubscribers(executionId, {
-      type: 'message',
-      executionId,
-      role: 'assistant',
-      text: output,
-      ts: new Date().toISOString(),
-    });
-    await runtimeService.update(
-      executionId,
-      ok
-        ? { status: ExecutionStatus.COMPLETED, result: output }
-        : { status: ExecutionStatus.FAILED, errorMessage: output },
-    );
-    // Learned Model Routing: Worker-surface terminal chokepoint. Best-effort.
-    await scoreRunOutcome(env, db, { executionId }).catch(() => { /* best-effort */ });
-  } catch (e) {
-    // Don't clobber a cancellation (terminal) with a FAILED transition.
-    if (await isCancelled()) return;
-    await runtimeService.update(executionId, {
-      status: ExecutionStatus.FAILED,
-      errorMessage: e instanceof Error ? e.message : String(e),
-    });
-    await scoreRunOutcome(env, db, { executionId }).catch(() => { /* best-effort */ });
-  }
-}

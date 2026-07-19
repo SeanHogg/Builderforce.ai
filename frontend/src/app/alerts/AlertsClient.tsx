@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
 import { RoleGate } from '@/components/RoleGate';
+import { Select } from '@/components/Select';
 import { PmCard, PmEmpty, PmError } from '@/components/pm/pmShared';
 import {
   tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle,
@@ -123,16 +124,16 @@ export function AlertsClient() {
                   onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
               </Field>
               <Field label={t('field.metric')}>
-                <select style={inputStyle} value={draft.metric}
+                <Select style={inputStyle} value={draft.metric}
                   onChange={(e) => setDraft({ ...draft, metric: e.target.value as AlertMetric })}>
                   {METRICS.map((m) => <option key={m} value={m}>{t(`metric.${m}`)}</option>)}
-                </select>
+                </Select>
               </Field>
               <Field label={t('field.comparator')}>
-                <select style={inputStyle} value={draft.comparator}
+                <Select style={inputStyle} value={draft.comparator}
                   onChange={(e) => setDraft({ ...draft, comparator: e.target.value as AlertComparator })}>
                   {COMPARATORS.map((c) => <option key={c} value={c}>{t(`comparator.${c}`)}</option>)}
-                </select>
+                </Select>
               </Field>
               <Field label={t('field.threshold')}>
                 <input style={inputStyle} type="number" value={draft.threshold}
@@ -143,10 +144,10 @@ export function AlertsClient() {
                   onChange={(e) => setDraft({ ...draft, windowDays: e.target.value })} />
               </Field>
               <Field label={t('field.scope')}>
-                <select style={inputStyle} value={draft.scopeKind}
+                <Select style={inputStyle} value={draft.scopeKind}
                   onChange={(e) => setDraft({ ...draft, scopeKind: e.target.value as AlertScopeKind })}>
                   {SCOPES.map((s) => <option key={s} value={s}>{t(`scope.${s}`)}</option>)}
-                </select>
+                </Select>
               </Field>
             </div>
             <div style={{ display: 'flex', gap: 18, alignItems: 'center', marginTop: 12, flexWrap: 'wrap' }}>

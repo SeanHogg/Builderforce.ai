@@ -17,8 +17,7 @@ import {
   type AgentEngine,
   type PolicyGate,
   coercePolicyGates,
-  DEFAULT_ENGINE_ID,
-  ENGINE_IDS,
+  CURRENT_ENGINE_ID,
   resolveEngineById,
 } from "@builderforce/agent-tools";
 import { WebSocket } from "ws";
@@ -144,18 +143,14 @@ export class BuilderforceRelayService implements IRelayService {
    * {@link RelayTaskEngine} implementation; `dispatchTaskFromRelay` resolves by id and
    * calls `run()` instead of branching. Adding/swapping a runner is a registry entry.
    *
-   * **V1 and Local are RETIRED (operator decision 2026-06-14)** — `runV1Engine` and the
-   * `builderforce-local` shared-registry engine are gone; neither has a registry entry.
-   * The sole runner is `builderforce-v2` (the Claude-Agent-SDK engine, gateway-routed),
-   * which is also {@link DEFAULT_ENGINE_ID}; any legacy `engine` value (`builderforce-v1`,
-   * `builderforce-local`) is unknown here and falls through to v2. Adding a runner is a
-   * registry entry; the DI seam stays even with one engine so the next runner is a wiring
-   * change, not a branch.
+   * There is ONE engine — the current version ({@link CURRENT_ENGINE_ID}, the
+   * Claude-Agent-SDK runner). Any legacy `engine` value on an old dispatch is ignored
+   * and resolves to the current engine; the DI seam stays even with one engine so the
+   * NEXT runner (a future V4) is a wiring change, not a branch.
    */
   private resolveEngine(engineId?: string): RelayTaskEngine {
-    const v2: RelayTaskEngine = { id: ENGINE_IDS.v2, run: (d, p) => this.runV2Engine(d, p) };
-    const registry: Record<string, RelayTaskEngine> = { [v2.id]: v2 };
-    // Shared id→impl + default-fallback (so a V3 registers the same way on every surface).
+    const current: RelayTaskEngine = { id: CURRENT_ENGINE_ID, run: (d, p) => this.runV2Engine(d, p) };
+    const registry: Record<string, RelayTaskEngine> = { [current.id]: current };
     return resolveEngineById(registry, engineId);
   }
 
@@ -1017,9 +1012,9 @@ export class BuilderforceRelayService implements IRelayService {
           break;
         }
 
-        // Engine selector + model are resolved by the API (engine from the cloud
-        // agent record, model from the run payload).
-        const engine = typeof msg.engine === "string" ? msg.engine : DEFAULT_ENGINE_ID;
+        // One engine — the current version. Any legacy `engine` on the message is
+        // ignored (resolveEngine maps everything to the current runner).
+        const engine = typeof msg.engine === "string" ? msg.engine : CURRENT_ENGINE_ID;
         let model: string | undefined;
         let policyGates: PolicyGate[] = [];
         try {

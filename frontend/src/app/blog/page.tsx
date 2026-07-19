@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { getTranslations } from 'next-intl/server';
 import { pageMetadata } from '@/lib/seo';
@@ -22,5 +23,11 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function BlogPage() {
-  return <BlogPageClient />;
+  // BlogPageClient reads `?page=` via useSearchParams, which Next requires to sit
+  // under a Suspense boundary.
+  return (
+    <Suspense>
+      <BlogPageClient />
+    </Suspense>
+  );
 }

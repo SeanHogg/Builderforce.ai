@@ -13,19 +13,47 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { BrainPanel } from './BrainPanel';
+import { GuestBrainPanel } from './GuestBrainPanel';
 import { MigrationPanelHost } from '@/components/integrations/MigrationPanelHost';
 import { useBrainContext, takePendingPrompt } from '@/lib/brain';
 import { pendingPromptsApi } from '@/lib/builderforceApi';
+import { useAttention } from '@/lib/useAttention';
 import { useAuth } from '@/lib/AuthContext';
 import { useModalDismiss } from '@/hooks/useModalDismiss';
 
 export function FloatingBrain() {
   const pathname = usePathname();
+  const tAttn = useTranslations('attention');
+  const tLauncher = useTranslations('brainLauncher');
   const { hasTenant } = useAuth();
-  const { open, setOpen, projectId, viewingProjectId, modality, extraSystem, initialChatId } = useBrainContext();
-  const [initialPrompt, setInitialPrompt] = useState<string | undefined>(undefined);
+  const { open, setOpen, projectId, viewingProjectId, modality, extraSystem, initialChatId, initialPrompt: ctxInitialPrompt, initialTicket } = useBrainContext();
+  // Tenant-wide "needs you" signal for the launcher badge — only while the drawer
+  // is closed (when open, BrainPanel's own useAttention drives the chat-row dots,
+  // so we never run two pollers at once).
+  const { counts } = useAttention(undefined, hasTenant && !open);
+  const [pendingPrompt, setPendingPrompt] = useState<string | undefined>(undefined);
+  // A page-published seed (e.g. the IDE `?prompt=`) wins over the sign-in handoff.
+  const initialPrompt = ctxInitialPrompt ?? pendingPrompt;
+
+  // Cross-device handoff: a signup/verify link carries the FIRST device's anon id
+  // as `?aid=` (appended by the auth emails). Adopt it into this browser's storage
+  // BEFORE the pending-prompt `claim` below runs, so a prompt typed on the phone is
+  // claimed by the laptop that opened the email. Runs once, synchronously on mount,
+  // ahead of the claim effect. [1517]
+  useEffect(() => {
+    try {
+      const aid = new URLSearchParams(window.location.search).get('aid');
+      if (aid) pendingPromptsApi.setAnonId(aid);
+    } catch { /* no-op if URL/storage is unavailable */ }
+  }, []);
+
+  // A page that publishes an initialPrompt OR an auto-link ticket into the Brain
+  // context wants the drawer open so BrainPanel can act on it.
+  useEffect(() => {
+    if (ctxInitialPrompt || initialTicket) setOpen(true);
+  }, [ctxInitialPrompt, initialTicket, setOpen]);
 
   // Lock background scroll + close on Escape while the drawer is open. Shared
   // with the marketing mobile menu so every overlay dismisses the same way.
@@ -46,7 +74,7 @@ export function FloatingBrain() {
     if (pathname?.startsWith('/brainstorm')) return;
     const p = takePendingPrompt();
     if (p) {
-      setInitialPrompt(p);
+      setPendingPrompt(p);
       setOpen(true);
       return;
     }
@@ -55,7 +83,7 @@ export function FloatingBrain() {
     let cancelled = false;
     void pendingPromptsApi.claim().then((serverPrompt) => {
       if (!cancelled && serverPrompt) {
-        setInitialPrompt(serverPrompt);
+        setPendingPrompt(serverPrompt);
         setOpen(true);
       }
     });
@@ -82,11 +110,28 @@ export function FloatingBrain() {
           <button
             type="button"
             onClick={() => setOpen(true)}
-            aria-label="Open Brain assistant"
-            title="Brain assistant"
+            aria-label={tLauncher('open')}
+            title={tLauncher('title')}
             className="brain-launcher"
           >
             🧠
+            {counts.awaiting > 0 ? (
+              <span
+                className="brain-launcher-badge"
+                role="status"
+                aria-label={tAttn('needsYou', { count: counts.awaiting })}
+                title={tAttn('needsYou', { count: counts.awaiting })}
+              >
+                {counts.awaiting}
+              </span>
+            ) : counts.running > 0 ? (
+              <span
+                className="brain-launcher-dot"
+                role="status"
+                aria-label={tAttn('runningCount', { count: counts.running })}
+                title={tAttn('runningCount', { count: counts.running })}
+              />
+            ) : null}
           </button>
           <style>{`
             .brain-launcher {
@@ -106,6 +151,41 @@ export function FloatingBrain() {
               display: flex;
               align-items: center;
               justify-content: center;
+            }
+            /* "A person must answer" — amber count badge, pulsing so it's noticed
+               even when the drawer is closed and you're multitasking elsewhere. */
+            .brain-launcher-badge {
+              position: absolute;
+              top: -2px;
+              right: -2px;
+              min-width: 20px;
+              height: 20px;
+              padding: 0 5px;
+              border-radius: 10px;
+              background: var(--warning, #d97706);
+              color: #fff;
+              font-size: 11px;
+              font-weight: 700;
+              line-height: 20px;
+              text-align: center;
+              box-shadow: 0 0 0 2px var(--bg-base, #0b0b0b);
+              animation: agentPulse 1.4s ease-in-out infinite;
+            }
+            /* Background activity (something running, nothing blocked) — a quiet
+               coral dot, no count. */
+            .brain-launcher-dot {
+              position: absolute;
+              top: 2px;
+              right: 2px;
+              width: 12px;
+              height: 12px;
+              border-radius: 50%;
+              background: var(--coral-bright, #f4726e);
+              box-shadow: 0 0 0 2px var(--bg-base, #0b0b0b);
+              animation: agentPulse 1.4s ease-in-out infinite;
+            }
+            @media (prefers-reduced-motion: reduce) {
+              .brain-launcher-badge, .brain-launcher-dot { animation: none; }
             }
             /* The mobile bottom nav is a fixed 56px bar (shown <768px). Lift the
                launcher above it so it never covers the menu, and clear the iOS
@@ -130,7 +210,7 @@ export function FloatingBrain() {
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="Brain assistant"
+            aria-label={tLauncher('title')}
             className="brain-drawer"
           >
             {hasTenant ? (
@@ -142,10 +222,13 @@ export function FloatingBrain() {
                 extraSystem={extraSystem}
                 initialChatId={initialChatId}
                 initialPrompt={initialPrompt}
+                initialTicket={initialTicket}
                 onClose={() => setOpen(false)}
               />
             ) : (
-              <BrainSignInCTA onClose={() => setOpen(false)} />
+              // Logged-out: a real, metered guest chat (not a dead-end sign-in
+              // wall) so a visitor can try the Brain before creating an account.
+              <GuestBrainPanel variant="docked" initialPrompt={initialPrompt} onClose={() => setOpen(false)} />
             )}
           </div>
           <style>{`
@@ -185,74 +268,5 @@ export function FloatingBrain() {
         </>
       )}
     </>
-  );
-}
-
-/**
- * Gated panel shown when the visitor isn't signed in (no workspace token). The
- * Brain is visible everywhere, but it can't call the gateway without auth, so
- * instead of a chat input we surface a sign-in / sign-up call to action. No
- * input means no anonymous gateway traffic.
- */
-function BrainSignInCTA({ onClose }: { onClose: () => void }) {
-  return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-base)' }}>
-      <div
-        style={{
-          flexShrink: 0,
-          padding: '10px 14px',
-          borderBottom: '1px solid var(--border-subtle)',
-          background: 'var(--bg-elevated)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          🧠 Brain
-        </span>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close Brain"
-          style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: '0 4px' }}
-        >
-          ×
-        </button>
-      </div>
-      <div
-        style={{
-          flex: 1,
-          minHeight: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 14,
-          padding: 24,
-          textAlign: 'center',
-        }}
-      >
-        <div style={{ fontSize: 44 }}>🧠</div>
-        <div style={{ fontSize: 17, fontWeight: 600, color: 'var(--text-primary)' }}>Meet Brain</div>
-        <div style={{ fontSize: 14, color: 'var(--text-muted)', maxWidth: 280, lineHeight: 1.5 }}>
-          Your AI co-builder for planning projects, generating specs, and shipping faster. Sign in to start a conversation.
-        </div>
-        <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-          <Link
-            href="/login"
-            style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', borderRadius: 10, textDecoration: 'none' }}
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/register"
-            style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 10, textDecoration: 'none' }}
-          >
-            Create account
-          </Link>
-        </div>
-      </div>
-    </div>
   );
 }

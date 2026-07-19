@@ -32,6 +32,20 @@ export async function broadcastRoom(
  */
 export const projectRoomName = (projectId: number | string): string => `project:${projectId}`;
 
+/** Tenant-qualified room for one Brain chat. Tenant qualification prevents an id
+ * collision from ever crossing tenant boundaries inside the shared relay. */
+export const brainChatRoomName = (tenantId: number | string, chatId: number | string): string =>
+  `brain-chat:${tenantId}:${chatId}`;
+
+/** Notify every open surface that a durable chat message was appended. */
+export async function broadcastBrainChatChanged(
+  ns: DurableObjectNamespace | undefined,
+  tenantId: number | string,
+  chatId: number | string,
+): Promise<void> {
+  return broadcastRoom(ns, brainChatRoomName(tenantId, chatId));
+}
+
 /** Push a `{type:"changed"}` signal to a project's live board room (see {@link projectRoomName}). */
 export async function broadcastProjectChanged(
   ns: DurableObjectNamespace | undefined,

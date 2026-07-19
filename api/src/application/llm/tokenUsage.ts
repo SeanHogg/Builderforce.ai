@@ -15,7 +15,7 @@
 import { and, eq, gte, notInArray, sql, type SQL } from 'drizzle-orm';
 import { llmUsageLog } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
-import { CACHE_READ_MULTIPLIER, CACHE_CREATION_MULTIPLIER } from './usageLedger';
+import { CACHE_READ_MULTIPLIER, CACHE_CREATION_MULTIPLIER, clampTokenCount } from './usageLedger';
 import { IMAGE_PRODUCT_NAMES } from './ImageProxyService';
 
 /**
@@ -34,7 +34,38 @@ const rowWeight: SQL = sql`(
  *  rows never consume the text-token cap (and vice-versa). */
 const notImageRow = notInArray(llmUsageLog.llmProduct, [...IMAGE_PRODUCT_NAMES]);
 
-const toInt = (v: unknown): number => Math.max(0, Math.floor(Number(v ?? 0)));
+/**
+ * BYO exemption: a row served by the tenant's OWN provider credential (`byo`)
+ * AND produced on the user's own machine (on-prem host or VSIX) is FREE — the
+ * tenant paid their own provider — so it NEVER consumes the plan token allowance
+ * (migration 0284). A BYO row on the `cloud` (or `web`/`sdk`) surface still
+ * counts, so free tenants are charged for cloud-agent usage. Defined ONCE so the
+ * request-path cap gate, the availability gate, AND the consumption meter apply
+ * the exact same rule — "shown == enforced" holds for BYO too.
+ */
+const notFreeByoRow: SQL = sql`NOT (${llmUsageLog.byo} AND ${llmUsageLog.surface} IN ('on_prem', 'vsix'))`;
+
+/** The single billable-row predicate every usage window reuses: exclude image
+ *  rows (own budget) AND own-machine BYO rows (free). One definition so no window
+ *  can drift from the enforced total. */
+const billableRow: SQL = and(notImageRow, notFreeByoRow)!;
+
+// Coerce a SQL SUM result (number, or a numeric string from pg/drizzle, or null
+// from an empty window) to a non-negative integer via the SAME clamp the billing
+// ledger uses ({@link clampTokenCount}) — one definition of "token count floor" so
+// the meter and the ledger can't drift. `Number(v ?? 0)` handles the string/null
+// coercion clampTokenCount's numeric signature doesn't.
+const toInt = (v: unknown): number => clampTokenCount(Number(v ?? 0));
+
+/**
+ * The "~4 chars per token" heuristic — the ONE definition shared by the
+ * cost-forecast estimate and the LlmProxy model-fit estimate. Cheap and for
+ * estimation only (NOT billing): accurate to ~15% for English/code and errs
+ * slightly high (JSON punctuation), the safe direction for a context-fit check.
+ */
+export function estimateTokensFromChars(charCount: number): number {
+  return Math.ceil(charCount / 4);
+}
 
 /** Start of the current UTC day — the daily-cap reset boundary. */
 export function utcDayStart(now: Date = new Date()): Date {
@@ -66,7 +97,7 @@ export async function sumTenantTextTokens(db: Db, tenantId: number, since: Date)
   const [row] = await db
     .select({ used: sql<number>`COALESCE(SUM(${rowWeight}), 0)` })
     .from(llmUsageLog)
-    .where(and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, since), notImageRow));
+    .where(and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, since), billableRow));
   return toInt(row?.used);
 }
 
@@ -86,7 +117,7 @@ export async function dailyTenantTextTokens(
   const rows = await db
     .select({ day: dayExpr, used: sql<number>`COALESCE(SUM(${rowWeight}), 0)` })
     .from(llmUsageLog)
-    .where(and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, since), notImageRow))
+    .where(and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, since), billableRow))
     .groupBy(dayExpr)
     .orderBy(dayExpr);
   return rows.map((r) => ({ day: r.day, value: toInt(r.used) }));
@@ -109,6 +140,6 @@ export async function sumTenantTextTokensDayAndMonth(
       day: sql<number>`COALESCE(SUM(${rowWeight}) FILTER (WHERE ${llmUsageLog.createdAt} >= ${dayStart}), 0)`,
     })
     .from(llmUsageLog)
-    .where(and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, monthStart), notImageRow));
+    .where(and(eq(llmUsageLog.tenantId, tenantId), gte(llmUsageLog.createdAt, monthStart), billableRow));
   return { day: toInt(row?.day), month: toInt(row?.month) };
 }

@@ -4,8 +4,11 @@ import { useTranslations } from 'next-intl';
 
 import { Select } from '@/components/Select';
 
-import type { AgentRuntimeSupport, AgentEngine, AgentRuntimeSurface } from '@/lib/api';
+import type { AgentRuntimeSupport, AgentRuntimeSurface } from '@/lib/api';
 import { ModelSelect } from '@/components/llm/ModelSelect';
+import { PremiumModelUnlock } from '@/components/llm/PremiumModelUnlock';
+import PsychometricEditor from '@/components/PsychometricEditor';
+import type { PsychometricProfile } from '@/lib/psychometric';
 
 /**
  * The cloud-agent identity field set, shared by the "Add agent" create modal
@@ -29,15 +32,17 @@ export interface CloudAgentFormState {
   baseModel: string;
   runtimeSupport: AgentRuntimeSupport;
   preferredRuntime: 'cloud' | 'host';
-  /** Agent runtime engine — which agent loop runs this agent's tasks. */
-  engine: AgentEngine;
-  /** Execution surface for a V2 agent — durable DO vs long-lived node. */
+  /** Cloud execution surface — durable DO vs long-lived node. (The engine is not
+   *  user-selectable: every agent runs the current engine version.) */
   runtimeSurface: AgentRuntimeSurface;
+  /** This agent's OWN personality (Pro). Compiled at run time into prompt directives,
+   *  sampling temperature, and limbic setpoints. Undefined = no personality set. */
+  psychometric?: PsychometricProfile;
 }
 
 export const EMPTY_CLOUD_AGENT_FORM: CloudAgentFormState = {
   name: '', title: '', bio: '', skills: '', baseModel: '', runtimeSupport: 'cloud', preferredRuntime: 'cloud',
-  engine: 'builderforce-v2', runtimeSurface: 'durable',
+  runtimeSurface: 'durable',
 };
 
 /**
@@ -53,7 +58,6 @@ export const RUNTIME_LABELS: Record<AgentRuntimeSupport, string> = {
 };
 
 const RUNTIME_SUPPORT_KEYS: AgentRuntimeSupport[] = ['cloud', 'host', 'both'];
-const ENGINE_KEYS: AgentEngine[] = ['builderforce-v2', 'builderforce-v3'];
 const RUNTIME_SURFACE_KEYS: AgentRuntimeSurface[] = ['durable', 'container'];
 
 export const btnPrimary: React.CSSProperties = { padding: '8px 16px', fontSize: 13, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' };
@@ -67,15 +71,15 @@ export const labelStyle: React.CSSProperties = {
   display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--text-strong)', marginBottom: 6,
 };
 
-export function CloudAgentFormFields({
-  form,
-  onChange,
-  autoFocus,
-}: {
+interface FieldGroupProps {
   form: CloudAgentFormState;
   onChange: (patch: Partial<CloudAgentFormState>) => void;
   autoFocus?: boolean;
-}) {
+}
+
+/** Identity fields: name, title, description, discovery tags. The slide-out panel
+ *  renders this alone on its "Details" tab. */
+export function CloudAgentDetailsFields({ form, onChange, autoFocus }: FieldGroupProps) {
   const t = useTranslations('cloudAgentForm');
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -96,6 +100,17 @@ export function CloudAgentFormFields({
         <input style={inputStyle} value={form.skills} onChange={(e) => onChange({ skills: e.target.value })} placeholder={t('tagsPlaceholder')} />
         <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>{t('tagsHelp')}</p>
       </div>
+    </div>
+  );
+}
+
+/** Runtime fields: where + how the agent executes (support, preferred runtime,
+ *  cloud surface, base model). The slide-out panel renders this on its own
+ *  "Runtime" tab. */
+export function CloudAgentRuntimeFields({ form, onChange }: FieldGroupProps) {
+  const t = useTranslations('cloudAgentForm');
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div>
         <label style={labelStyle}>{t('runtimeSupport')}</label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -117,25 +132,14 @@ export function CloudAgentFormFields({
         </div>
       )}
       <div>
-        <label style={labelStyle}>{t('engine')}</label>
-        <Select style={inputStyle} value={form.engine} onChange={(e) => onChange({ engine: e.target.value as AgentEngine })}>
-          {ENGINE_KEYS.map((eng) => (
-            <option key={eng} value={eng}>{t(`engineLabel.${eng}`)}</option>
+        <label style={labelStyle}>{t('surface')}</label>
+        <Select style={inputStyle} value={form.runtimeSurface} onChange={(e) => onChange({ runtimeSurface: e.target.value as AgentRuntimeSurface })}>
+          {RUNTIME_SURFACE_KEYS.map((rs) => (
+            <option key={rs} value={rs}>{t(`surfaceLabel.${rs}`)}</option>
           ))}
         </Select>
-        <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>{t('engineHelp')}</p>
+        <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>{t('surfaceHelp')}</p>
       </div>
-      {(form.engine === 'builderforce-v2' || form.engine === 'builderforce-v3') && (
-        <div>
-          <label style={labelStyle}>{t('surface')}</label>
-          <Select style={inputStyle} value={form.runtimeSurface} onChange={(e) => onChange({ runtimeSurface: e.target.value as AgentRuntimeSurface })}>
-            {RUNTIME_SURFACE_KEYS.map((rs) => (
-              <option key={rs} value={rs}>{t(`surfaceLabel.${rs}`)}</option>
-            ))}
-          </Select>
-          <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>{t('surfaceHelp')}</p>
-        </div>
-      )}
       <div>
         <label style={labelStyle}>{t('baseModel')}</label>
         <ModelSelect
@@ -147,7 +151,39 @@ export function CloudAgentFormFields({
           style={inputStyle}
         />
         <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0' }}>{t('baseModelHelp')}</p>
+        {/* Renders only when premium is unlockable (paid plan + card, or upgrade) —
+            it decides its own visibility, so no entitlement prop-drilling here. */}
+        <div style={{ marginTop: 10 }}><PremiumModelUnlock /></div>
       </div>
+    </div>
+  );
+}
+
+/** Personality field: this agent's own psychometric profile. The slide-out panel
+ *  renders this on its own "Personality" tab. */
+export function CloudAgentPersonalityFields({ form, onChange }: FieldGroupProps) {
+  const t = useTranslations('cloudAgentForm');
+  return (
+    <div>
+      <label style={labelStyle}>{t('personality')}</label>
+      <p style={{ fontSize: 11, color: 'var(--muted)', margin: '0 0 8px' }}>{t('personalityHelp')}</p>
+      {/* Self-gates on the Pro entitlement (renders a locked upsell when not entitled). */}
+      <PsychometricEditor value={form.psychometric} onChange={(p) => onChange({ psychometric: p })} />
+    </div>
+  );
+}
+
+/**
+ * The full field set (Details + Runtime + Personality) stacked in one column —
+ * used by the "Add agent" create modal, where everything is captured at once. The
+ * slide-out panel instead renders the three groups above as separate tabs.
+ */
+export function CloudAgentFormFields({ form, onChange, autoFocus }: FieldGroupProps) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <CloudAgentDetailsFields form={form} onChange={onChange} autoFocus={autoFocus} />
+      <CloudAgentRuntimeFields form={form} onChange={onChange} />
+      <CloudAgentPersonalityFields form={form} onChange={onChange} />
     </div>
   );
 }
@@ -164,9 +200,9 @@ export function cloudAgentFormToInput(form: CloudAgentFormState) {
     baseModel: form.baseModel.trim() || undefined,
     runtimeSupport: form.runtimeSupport,
     preferredRuntime: form.runtimeSupport === 'both' ? form.preferredRuntime : null,
-    engine: form.engine,
-    // V2 and V3 (which wraps V2) both run on a cloud surface; legacy/other engines don't.
-    runtimeSurface:
-      form.engine === 'builderforce-v2' || form.engine === 'builderforce-v3' ? form.runtimeSurface : undefined,
+    // The engine is not sent — the server always runs the current engine version.
+    runtimeSurface: form.runtimeSurface,
+    // null explicitly clears a previously-set personality; undefined omits the field.
+    psychometric: form.psychometric ?? null,
   };
 }

@@ -18,10 +18,11 @@ import type { ComponentType, ReactNode } from 'react';
 import type { Capability } from '@/lib/rbac';
 import { DevexResultsLens } from './DevexResultsLens';
 import { SurveysManager } from './SurveysManager';
+import { PulseLens } from './PulseWidget';
 import { DevexResultsSummary, DevexSurveysSummary } from './DevexSummaries';
 
 /** Stable ids (also the `?panel=` deep-link + Brain enum values). */
-export type DevexPanelId = 'results' | 'surveys';
+export type DevexPanelId = 'results' | 'surveys' | 'pulse';
 
 export interface DevexPanelDef {
   id: DevexPanelId;
@@ -50,6 +51,10 @@ export const DEVEX_PANELS: Record<DevexPanelId, DevexPanelDef> = {
   surveys: {
     id: 'surveys', icon: '📝', titleKey: 'panel.surveys', descKey: 'panel.surveysDesc',
     capability: 'insights.devex', width: WIDE, Summary: DevexSurveysSummary, render: () => <SurveysManager />,
+  },
+  pulse: {
+    id: 'pulse', icon: '💓', titleKey: 'panel.pulse', descKey: 'panel.pulseDesc',
+    capability: 'insights.pulse', width: WIDE, Summary: () => null, render: () => <PulseLens />,
   },
 };
 

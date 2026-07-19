@@ -36,6 +36,7 @@ import {
 } from '../../application/repos/sources/RepoSource';
 import { ArchitectAnalysisService, ArtifactGenerationError } from '../../application/repoanalysis/ArchitectAnalysisService';
 import { ToolService, ARCHITECTURE_DIAGNOSTIC_ID } from '../../application/tools/ToolService';
+import { deriveArchitectureResult } from '../../application/tools/auditScanners';
 import { linkSpecToTask } from '../../application/prd/taskPrd';
 import {
   ARTIFACT_KINDS,
@@ -553,35 +554,15 @@ export class AnalysisRunnerDO implements DurableObject {
     const data = safeJson<Record<string, { score?: number; notes?: string }>>(row.dataJson ?? '{}');
     if (!data) return;
 
-    const PRINCIPLES: Array<{ key: string; label: string }> = [
-      { key: 'dry', label: 'DRY' },
-      { key: 'solid', label: 'SOLID' },
-      { key: 'ddd', label: 'DDD' },
-      { key: 'patterns', label: 'Patterns' },
-    ];
-    const LEVEL_NAMES = ['Initial', 'Managed', 'Defined', 'Quantitatively Managed', 'Optimizing'];
-    const clampLevel = (n: number) => Math.max(1, Math.min(5, Math.round(n)));
-
-    const rows = PRINCIPLES
-      .map((p) => ({ ...p, raw: data[p.key]?.score }))
-      .filter((p): p is { key: string; label: string; raw: number } => typeof p.raw === 'number');
-    if (rows.length === 0) return;
-
-    const avg10 = rows.reduce((s, p) => s + Math.max(0, Math.min(10, p.raw)), 0) / rows.length;
-    const score = Math.round((avg10 / 2) * 10) / 10; // 0–10 → 1–5 scale
-    const label = LEVEL_NAMES[clampLevel(score) - 1]!;
-
-    const result = {
-      headline: `${label} — ${score.toFixed(1)} / 5`,
-      summary: 'Design-principle adherence (DRY, SOLID, DDD, patterns) from the latest architecture analysis.',
-      score,
-      scoreLabel: label,
-      metrics: rows.map((p) => {
-        const v = Math.max(0, Math.min(10, p.raw));
-        return { label: p.label, value: `${v}/10`, hint: data[p.key]?.notes?.slice(0, 160), tier: clampLevel(v / 2) };
-      }),
-      recommendations: [],
-    };
+    // Shared 1–5 derivation (the same scorer the deterministic architecture audit
+    // uses) — one source of truth for the principle→score math.
+    const result = deriveArchitectureResult([
+      { key: 'dry', label: 'DRY', score: data.dry?.score, notes: data.dry?.notes },
+      { key: 'solid', label: 'SOLID', score: data.solid?.score, notes: data.solid?.notes },
+      { key: 'ddd', label: 'DDD', score: data.ddd?.score, notes: data.ddd?.notes },
+      { key: 'patterns', label: 'Patterns', score: data.patterns?.score, notes: data.patterns?.notes },
+    ]);
+    if (!result) return;
 
     await new ToolService(this.db).recordExternalRun(this.env, {
       tenantId: cursor.tenantId,

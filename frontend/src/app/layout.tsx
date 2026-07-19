@@ -16,13 +16,27 @@ import { EmulationProvider } from '@/lib/EmulationContext';
 import { RolePreviewProvider } from '@/lib/RolePreviewContext';
 import { PermissionDebuggerProvider } from '@/lib/PermissionDebuggerContext';
 import ThemeProvider from './ThemeProvider';
+import { ConfirmProvider } from '@/components/ConfirmProvider';
+import { ToastProvider } from '@/components/ToastProvider';
 import ConditionalAppShell from '@/components/ConditionalAppShell';
 import { PwaUpdateBanner } from '@/components/PwaUpdateBanner';
 import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
 import { GlobalErrorHandler } from '@/components/GlobalErrorHandler';
+import { QualityErrorReporter } from '@/components/QualityErrorReporter';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
+import { ChunkErrorRecovery } from '@/components/ChunkErrorRecovery';
+import { EMBED_ERROR_REPORTER } from '@/lib/embed/embedErrorReporter';
+import { AUTH_API_URL } from '@/lib/auth';
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://builderforce.ai';
+
+// Dogfood: our own web errors flow to the Product Quality pillar. The public
+// bfq_ ingest key is read server-side (no NEXT_PUBLIC_ needed) and handed to the
+// client island; the endpoint tracks whatever API origin auth uses.
+const QUALITY_ERROR_KEY = process.env.NEXT_BUILDERFORCE_ERROR_API_KEY || '';
+const QUALITY_ENDPOINT = `${AUTH_API_URL}/api/quality-ingest`;
+const QUALITY_ENVIRONMENT = process.env.NODE_ENV === 'production' ? 'production' : 'development';
 
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
@@ -129,6 +143,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
 
+        {/*
+          Framed-only embed crash reporter. Runs before any route bundle (raw
+          inline <head> script — the reliable "beforeInteractive", which a nested
+          layout can't provide). No-ops on the top-level app; when framed, it
+          relays render/hydration throws to the host so an embed failure is
+          diagnosable instead of a silent 15s timeout. See embedErrorReporter.ts.
+        */}
+        <script dangerouslySetInnerHTML={{ __html: EMBED_ERROR_REPORTER }} />
+
         {/* Fontshare loaded via CSS @import in globals.css — no <link> needed here */}
         {/* JetBrains Mono loaded via next/font/google (see jetbrainsMono variable above) — no <link> needed */}
         {/* JSON-LD Structured Data (SEO) — homepage schema injected at layout
@@ -157,21 +180,38 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             user's cookie locale on the client after hydration. */}
         <LocaleProvider>
           <ErrorBoundary homePath="/dashboard" homeLabel="Go to Dashboard">
-            <AuthProvider>
-              <CartProvider>
-                <EmulationProvider>
-                  <RolePreviewProvider>
-                    <PermissionDebuggerProvider>
-                      <ConditionalAppShell>{children}</ConditionalAppShell>
-                    </PermissionDebuggerProvider>
-                  </RolePreviewProvider>
-                </EmulationProvider>
-              </CartProvider>
-            </AuthProvider>
+            {/* Chunk-load crashes self-heal (purge stale SW cache + reload onto
+                the current build) instead of hitting the generic crash page; any
+                non-chunk error re-throws up to ErrorBoundary above. */}
+            <ChunkErrorBoundary>
+              <AuthProvider>
+                <CartProvider>
+                  <EmulationProvider>
+                    <RolePreviewProvider>
+                      <PermissionDebuggerProvider>
+                        <ConfirmProvider>
+                          <ToastProvider>
+                            <ConditionalAppShell>{children}</ConditionalAppShell>
+                          </ToastProvider>
+                        </ConfirmProvider>
+                      </PermissionDebuggerProvider>
+                    </RolePreviewProvider>
+                  </EmulationProvider>
+                </CartProvider>
+              </AuthProvider>
+            </ChunkErrorBoundary>
 
             <GlobalErrorHandler />
+            {QUALITY_ERROR_KEY && (
+              <QualityErrorReporter
+                apiKey={QUALITY_ERROR_KEY}
+                endpoint={QUALITY_ENDPOINT}
+                environment={QUALITY_ENVIRONMENT}
+              />
+            )}
           </ErrorBoundary>
 
+          <ChunkErrorRecovery />
           <PwaUpdateBanner />
           <PwaInstallPrompt />
         </LocaleProvider>

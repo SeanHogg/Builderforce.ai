@@ -23,6 +23,7 @@ import { zipSync, type Zippable } from 'fflate';
 import {
   EVERMIND_MODEL_ROOT,
   evermindGenerate,
+  evermindGenerateMedia,
   buildEvermindCompletion,
   benchmarkEvermind,
   exportEvermindArtifact,
@@ -75,27 +76,36 @@ export function createEvermindModelRoutes(db: Db): Hono<HonoEnv> {
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     const modelB64 = typeof body.model === 'string' ? body.model : '';
     const tokenizer = body.tokenizer as { vocab?: unknown; merges?: unknown } | undefined;
+    const hasTokenizer = !!tokenizer && typeof tokenizer.vocab === 'object' && Array.isArray(tokenizer.merges);
     if (!name) return c.json({ error: 'name is required' }, 400);
     if (!modelB64) return c.json({ error: 'model (base64 .evermind) is required' }, 400);
-    if (!tokenizer || typeof tokenizer.vocab !== 'object' || !Array.isArray(tokenizer.merges)) {
-      return c.json({ error: 'tokenizer { vocab, merges } is required' }, 400);
-    }
 
     // Validate the artifact at publish time — reject a corrupt/foreign blob before
     // it ever becomes callable (this is the "validate" half of validate-and-test).
     let bytes: Uint8Array;
+    let modality: string;
     try {
       bytes = decodeBase64(modelB64);
-      const verdict = EvermindModelPackage.fromBlob(bytes.buffer as ArrayBuffer).validate();
+      const pkg = EvermindModelPackage.fromBlob(bytes.buffer as ArrayBuffer);
+      const verdict = pkg.validate();
       if (!verdict.ok) return c.json({ error: `invalid .evermind artifact: ${verdict.errors.join('; ')}` }, 400);
+      modality = pkg.manifest.modality ?? 'text';
     } catch (err) {
       return c.json({ error: `could not parse .evermind artifact: ${err instanceof Error ? err.message : String(err)}` }, 400);
+    }
+
+    // Text models need a tokenizer for I/O; media (video/image) models bundle their
+    // codec inside the artifact and only need a tokenizer when text-conditioned.
+    if (modality === 'text' && !hasTokenizer) {
+      return c.json({ error: 'tokenizer { vocab, merges } is required for text models' }, 400);
     }
 
     // Immutable, versioned ref so the per-isolate model cache is always coherent.
     const ref = `${EVERMIND_MODEL_ROOT}/${tenantId}/${crypto.randomUUID()}`;
     await c.env.UPLOADS.put(`${ref}/model.evermind`, bytes.buffer as ArrayBuffer);
-    await c.env.UPLOADS.put(`${ref}/tokenizer.json`, JSON.stringify({ vocab: tokenizer.vocab, merges: tokenizer.merges }));
+    if (hasTokenizer) {
+      await c.env.UPLOADS.put(`${ref}/tokenizer.json`, JSON.stringify({ vocab: tokenizer!.vocab, merges: tokenizer!.merges }));
+    }
 
     const model = await createTenantModel(c.env as Env, db, tenantId, userId ?? null, {
       name,
@@ -155,6 +165,41 @@ export function createEvermindModelRoutes(db: Db): Hono<HonoEnv> {
       return c.json(buildEvermindCompletion(gen, tm.baseModel));
     } catch (err) {
       return c.json({ error: 'Evermind generation failed', detail: err instanceof Error ? err.message : String(err) }, 502);
+    }
+  });
+
+  /**
+   * POST /api/studio/models/:slug/generate-media
+   * Body: { prompt?, maxFrames?, maxTokens?, temperature?, seed? }
+   * → runs a published VIDEO/IMAGE Evermind model and returns base64 frames + shape.
+   *   Not cached: a generative call keyed on the request body.
+   */
+  router.post('/:slug/generate-media', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const slug = c.req.param('slug');
+    if (!c.env.UPLOADS) return c.json({ error: 'R2 artifact storage not configured' }, 503);
+
+    const tm = await resolveTenantModel(c.env as Env, db, tenantId, `${TENANT_MODEL_REF_PREFIX}${slug}`);
+    if (!tm || !tm.baseModel?.startsWith(EVERMIND_PIN_PREFIX)) {
+      return c.json({ error: 'No published Evermind model with that slug' }, 404);
+    }
+    const ref = tm.baseModel.slice(EVERMIND_PIN_PREFIX.length);
+
+    const body = (await c.req.json<{
+      prompt?: unknown; maxFrames?: unknown; maxTokens?: unknown; temperature?: unknown; seed?: unknown;
+    }>().catch(() => ({}))) as { prompt?: unknown; maxFrames?: unknown; maxTokens?: unknown; temperature?: unknown; seed?: unknown };
+
+    try {
+      const media = await evermindGenerateMedia(c.env.UPLOADS, ref, {
+        ...(typeof body.prompt === 'string' ? { prompt: body.prompt } : {}),
+        ...(typeof body.maxFrames === 'number' ? { maxFrames: body.maxFrames } : {}),
+        ...(typeof body.maxTokens === 'number' ? { maxTokens: body.maxTokens } : {}),
+        ...(typeof body.temperature === 'number' ? { temperature: body.temperature } : {}),
+        ...(typeof body.seed === 'number' ? { seed: body.seed } : {}),
+      });
+      return c.json({ model: tm.baseModel, ...media });
+    } catch (err) {
+      return c.json({ error: 'Evermind media generation failed', detail: err instanceof Error ? err.message : String(err) }, 502);
     }
   });
 

@@ -21,7 +21,8 @@ import { resolveDefaultRepoForTask } from '../repos/resolveDefaultRepo';
 import { resolveRepoCredential, isResolveError } from '../repos/resolveRepoCredential';
 import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutofixOnBuildFailure, MAX_AUTOFIX_ATTEMPTS } from '../repos/mergeBranchToBase';
 import { ticketBranchName } from '../repos/commitFileAsPendingChange';
-import { markPullRequestMergedByTask, findMergedPullRequestBySha, findOpenPullRequestByTask, setPullRequestBuildStatus } from '../repos/recordPullRequestRow';
+import { markPullRequestMergedByTask, findMergedPullRequestBySha, findOpenPullRequestByTask, findOpenPullRequestByProject, setPullRequestBuildStatus } from '../repos/recordPullRequestRow';
+import { completeTaskOnMerge } from '../task/taskLifecycle';
 import { fetchBuildError } from './fetchBuildError';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -37,11 +38,22 @@ export interface RepoCiEvent {
   /** Raw provider state/conclusion for the audit detail. */
   rawState: string | null;
   targetUrl: string | null;
-  /** Provider run id (GitHub Actions `workflow_run.id`) — for the failed-step fetch. */
+  /** Provider run id (GitHub Actions `workflow_run.id`, GitLab `pipeline.id`) — for the failed-step fetch. */
   runId: number | null;
+  /**
+   * Pre-merge auto-fix eligibility override. A ticket-branch failure only burns an
+   * auto-fix attempt when the event is an AUTHORITATIVE whole-build conclusion — on
+   * GitHub that is exactly "has a workflow_run id", which is why this defaults to
+   * `runId != null`. Providers whose terminal build event carries no numeric run id
+   * (Bitbucket commit statuses) set this explicitly so they are genuinely eligible
+   * rather than silently skipped.
+   */
+  authoritative?: boolean;
 }
 
 const TASK_BRANCH_RE = /^builderforce\/task-(\d+)\b/;
+/** The IDE bridge's branch (`repoBridge.designerBranch`) — a PROJECT, not a task. */
+const DESIGNER_BRANCH_RE = /^builderforce\/designer-(\d+)\b/;
 
 /** Telemetry toolName recorded per dispatched auto-fix run (the loop-guard counts these). */
 export const AUTOFIX_DISPATCH_EVENT = 'autofix.dispatch';
@@ -59,6 +71,8 @@ export interface IngestResult {
   processed: boolean;
   reason?: string;
   taskId?: number;
+  /** Owning tenant of the correlated task (set whenever `taskId` is). */
+  tenantId?: number;
   executionId?: number;
   merged?: boolean;
   buildStatus?: 'success' | 'failure' | 'pending';
@@ -154,15 +168,15 @@ async function applyBuildOutcome(
   }).catch(() => {});
 
   if (outcome === 'success') {
-    return { processed: true, taskId, executionId: execId, buildStatus: 'success' };
+    return { processed: true, taskId, tenantId, executionId: execId, buildStatus: 'success' };
   }
 
   // FAILURE → auto-fix (if eligible, enabled, and under the per-task attempt cap).
   if (!ctx.allowAutoFix) {
-    return { processed: true, taskId, executionId: execId, buildStatus: 'failure', reason: 'event not auto-fix eligible' };
+    return { processed: true, taskId, tenantId, executionId: execId, buildStatus: 'failure', reason: 'event not auto-fix eligible' };
   }
   if (!cloudAutofixOnBuildFailure(env)) {
-    return { processed: true, taskId, executionId: execId, buildStatus: 'failure', reason: 'auto-fix disabled' };
+    return { processed: true, taskId, tenantId, executionId: execId, buildStatus: 'failure', reason: 'auto-fix disabled' };
   }
   const priorAttempts = await autofixAttemptsSoFar(db, taskId, tenantId);
   if (priorAttempts >= MAX_AUTOFIX_ATTEMPTS) {
@@ -173,7 +187,7 @@ async function applyBuildOutcome(
       args: JSON.stringify({ phase, sha: evt.sha, attempts: priorAttempts }),
       result: `auto-fix exhausted after ${priorAttempts} attempt(s) — needs human`, ts: new Date(),
     }).catch(() => {});
-    return { processed: true, taskId, executionId: execId, buildStatus: 'failure', reason: 'auto-fix attempts exhausted' };
+    return { processed: true, taskId, tenantId, executionId: execId, buildStatus: 'failure', reason: 'auto-fix attempts exhausted' };
   }
 
   const attempt = priorAttempts + 1;
@@ -181,7 +195,7 @@ async function applyBuildOutcome(
     remediation: { kind: 'build_failure', phase, attempt, maxAttempts: MAX_AUTOFIX_ATTEMPTS, buildError, runUrl: evt.targetUrl },
   });
   return {
-    processed: true, taskId, executionId: execId, buildStatus: 'failure',
+    processed: true, taskId, tenantId, executionId: execId, buildStatus: 'failure',
     autoFix: { taskId, tenantId, attempt, payload },
   };
 }
@@ -194,13 +208,78 @@ export async function ingestRepoCiEvent(
   evt: RepoCiEvent,
 ): Promise<IngestResult> {
   try {
-    const m = evt.branch ? TASK_BRANCH_RE.exec(evt.branch) : null;
-    return m
-      ? await ingestPreMergeEvent(db, env, secret, evt, Number(m[1]))
-      : await ingestPostMergeEvent(db, env, secret, evt);
+    const task = evt.branch ? TASK_BRANCH_RE.exec(evt.branch) : null;
+    if (task) return await ingestPreMergeEvent(db, env, secret, evt, Number(task[1]));
+    // Designer/Mobile PRs come from the IDE bridge, not a ticket. They previously
+    // fell through to the post-merge path, which correlates by merged-PR SHA and
+    // so matched nothing — meaning an IDE-opened PR showed no build status at all.
+    const designer = evt.branch ? DESIGNER_BRANCH_RE.exec(evt.branch) : null;
+    if (designer) return await ingestDesignerEvent(db, env, secret, evt, Number(designer[1]));
+    return await ingestPostMergeEvent(db, env, secret, evt);
   } catch (e) {
     return { processed: false, reason: e instanceof Error ? e.message : 'ingest failed' };
   }
+}
+
+/**
+ * Path 1b — an event on an IDE bridge branch (`builderforce/designer-<projectId>`).
+ *
+ * Same goal as the ticket path — the PR row carries the build verdict and the
+ * reason, so the IDE can show whether the pushed workspace actually builds — but
+ * deliberately WITHOUT the auto-fix dispatch: there is no ticket and no assigned
+ * agent to hand a failing build to. A human opened this PR from the IDE, so the
+ * feedback belongs on screen, not in an agent run.
+ */
+async function ingestDesignerEvent(
+  db: Db,
+  env: Env,
+  secret: string,
+  evt: RepoCiEvent,
+  projectId: number,
+): Promise<IngestResult> {
+  const [project] = await db
+    .select({ id: projects.id, tenantId: projects.tenantId })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1);
+  if (!project) return { processed: false, reason: `no project #${projectId}` };
+
+  if (evt.outcome !== 'success' && evt.outcome !== 'failure') {
+    return { processed: false, reason: 'not a terminal build outcome' };
+  }
+
+  const pr = await findOpenPullRequestByProject(db, project.tenantId, projectId);
+  if (!pr) return { processed: false, reason: `no open PR for project #${projectId}` };
+
+  const outcome = evt.outcome;
+  let buildError: string | null = null;
+  if (outcome === 'failure') {
+    buildError = `The PR-branch build failed.${evt.targetUrl ? ` See: ${evt.targetUrl}` : ''}`;
+    if (pr.repoId && evt.runId) {
+      const resolved = await resolveRepoCredential(db, secret, project.tenantId, pr.repoId);
+      if (!isResolveError(resolved)) {
+        const be = await fetchBuildError(env, {
+          provider: resolved.repo.provider, host: resolved.repo.host,
+          owner: resolved.repo.owner, repo: resolved.repo.repo, token: resolved.token,
+          runId: evt.runId, runUrl: evt.targetUrl,
+        });
+        buildError = be.summary;
+      }
+    }
+  }
+
+  await setPullRequestBuildStatus(db, pr.id, outcome, buildError).catch(() => {});
+
+  await db.insert(toolAuditEvents).values({
+    tenantId: project.tenantId, agentHostId: null, cloudAgentRef: null,
+    executionId: null, sessionKey: `project:${projectId}`,
+    toolName: 'build.result', category: 'ci',
+    args: JSON.stringify({ branch: evt.branch, sha: evt.sha, projectId }),
+    result: (outcome === 'success' ? 'PR-branch build passed' : (buildError ?? 'PR-branch build failed')).slice(0, 300),
+    ts: new Date(),
+  }).catch(() => { /* telemetry best-effort */ });
+
+  return { processed: true, tenantId: project.tenantId, buildStatus: outcome };
 }
 
 /** Path 1 — an event on the ticket branch (pre-merge): record + optional green merge. */
@@ -236,7 +315,7 @@ async function ingestPreMergeEvent(db: Db, env: Env, secret: string, evt: RepoCi
       buildResult = await applyBuildOutcome(db, env, secret, {
         phase: 'pre_merge', taskId, tenantId: task.tenantId, execId,
         agentRef: task.assignedAgentRef ?? null, pr: { id: pr.id, repoId: pr.repoId },
-        evt, allowAutoFix: evt.runId != null,
+        evt, allowAutoFix: evt.authoritative ?? evt.runId != null,
       });
     }
   }
@@ -258,14 +337,18 @@ async function ingestPreMergeEvent(db: Db, env: Env, secret: string, evt: RepoCi
         });
         merged = mr.ok;
         // Stamp the merge SHA so the resulting deploy-branch build correlates back.
-        if (mr.ok) await markPullRequestMergedByTask(db, task.tenantId, taskId, { mergeSha: mr.sha ?? null }).catch(() => {});
+        if (mr.ok) {
+          await markPullRequestMergedByTask(db, task.tenantId, taskId, { mergeSha: mr.sha ?? null }).catch(() => {});
+          // Merge on green → ticket complete (same completion path as the human/manager merge).
+          await completeTaskOnMerge(env, db, { tenantId: task.tenantId, taskId }).catch(() => {});
+        }
       }
     }
   }
 
   // Carry the build status + any auto-fix intent (failure) up to the webhook, which
   // owns the run dispatch — same contract the post-merge path returns.
-  return { processed: true, taskId, executionId: execId, merged, buildStatus: buildResult?.buildStatus, autoFix: buildResult?.autoFix };
+  return { processed: true, taskId, tenantId: task.tenantId, executionId: execId, merged, buildStatus: buildResult?.buildStatus, autoFix: buildResult?.autoFix };
 }
 
 /** Path 2 — an event on the deploy branch (post-merge): validate + maybe auto-fix. */
@@ -285,6 +368,14 @@ async function ingestPostMergeEvent(db: Db, env: Env, secret: string, evt: RepoC
     .from(tasks).where(eq(tasks.id, taskId)).limit(1);
 
   const execId = await latestExecutionId(db, taskId, tenantId);
+
+  // Merge & deploy → ticket complete: a SUCCESSFUL post-merge deploy is the final
+  // "it shipped" signal, so complete the ticket here too (idempotent — a no-op if an
+  // earlier merge path already completed it). A deploy FAILURE leaves it open and
+  // drives auto-fix below.
+  if (evt.outcome === 'success') {
+    await completeTaskOnMerge(env, db, { tenantId, taskId }).catch(() => {});
+  }
 
   // Post-merge always allows auto-fix (a deploy failure is authoritative even without
   // a runId — e.g. deployment_status events). Same outcome + reason + intent contract

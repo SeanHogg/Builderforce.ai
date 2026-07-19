@@ -40,7 +40,7 @@ Builderforce.ai is a **human-in-the-loop, fully agentic cloud** where ideas beco
 - **Live Preview** — iFrame running the Vite dev server; updates on save
 
 ### AI Training Studio
-- **In-browser LoRA fine-tuning** — uses [@seanhogg/ssmjs](https://www.npmjs.com/package/@seanhogg/ssmjs) / Transformers.js with WebGPU; trains Mamba-1/2/3 and GPT-style models up to 2B parameters entirely client-side
+- **In-browser LoRA fine-tuning** — uses [@seanhogg/builderforce-memory](https://www.npmjs.com/package/@seanhogg/builderforce-memory) / Transformers.js with WebGPU; trains Mamba-1/2/3 and GPT-style models up to 2B parameters entirely client-side
 - **Hybrid Local Brain** — Mamba State Engine (`mamba-engine.ts`) runs an O(n) selective scan alongside transformer inference; agent state persists to IndexedDB as a compact Float32 state vector and is embedded in exported `AgentPackage` JSON
 - **Dataset generation** — LLM-assisted JSONL instruction dataset creation with SSE streaming progress
 - **AI evaluation** — independent judge scores model outputs on code correctness, reasoning quality, and hallucination rate (0.0–1.0)
@@ -77,14 +77,12 @@ Builderforce.ai is the cloud-side control plane for [BuilderForce Agents](https:
 - **Multi-workspace** — users belong to multiple tenants; `bf_default_tenant_id` auto-selects on login
 - **Admin observability** — `/admin` surface for platform admins (superadmin flag); `logs/global-errors.txt` in R2; `/observability` LLM usage metrics
 
-### Billing & Subscriptions (Provider-Agnostic)
-- **PaymentProvider abstraction** — `src/infrastructure/payment/PaymentProvider.ts` defines the interface; swap providers by changing one env var
-- **ManualProvider** (default) — no external processor; subscription activates immediately; suits manual invoicing or internal deployments
-- **StripeProvider** — Stripe Checkout + Billing; hosted payment page; webhook-activated subscriptions
-- **HelcimProvider** — Helcim HelcimPay.js; webhook-activated; stub ready for implementation
-- **Checkout flow** — `POST /api/tenants/:id/subscription/checkout` returns either a redirect URL (hosted providers) or `null` (manual, activates immediately)
-- **Webhook handler** — `POST /api/webhooks/payment` receives provider events; HMAC-verified; activates/cancels subscriptions via normalised `WebhookEvent`
-- **Switching providers** — set `PAYMENT_PROVIDER=stripe|helcim|manual` + provider credentials; no application code changes required
+### Billing & Subscriptions (Stripe)
+- **Stripe only** — `src/infrastructure/payment/StripeProvider.ts` (Stripe Checkout + Billing, hosted payment page, webhook-activated). There is deliberately no provider switch and no manual fallback: a fallback that activated plans without charging meant an unconfigured deploy handed out paid plans for free.
+- **PaymentProvider interface** — `src/infrastructure/payment/PaymentProvider.ts` keeps `TenantService` off the concrete Stripe client and lets tests inject a fake; it is not a provider-swap seam.
+- **Checkout flow** — `POST /api/tenants/:id/subscription/checkout` always returns a hosted `checkoutUrl`. The plan activates only when the signed webhook confirms payment — never from the request itself.
+- **Webhook handler** — `POST /api/webhooks/payment` receives Stripe events; HMAC-verified with a 5-minute replay window; activates/cancels subscriptions via normalised `WebhookEvent`
+- **Configuration** — set the `STRIPE_*` Worker secrets (see `src/infrastructure/payment/index.ts`). They are validated lazily: absent secrets return **503** from the billing routes and never break Worker boot.
 
 ### Dev Analytics & Team Intelligence
 - **Contributor profiles** — cross-platform developer identity reconciliation (GitHub, Jira, Bitbucket); `GET /api/contributors`
@@ -155,6 +153,30 @@ Move off a competitor tracker without fear, or just sync data in — a **staged*
 
 ### Consumption Metering (mig 0218)
 - **Meter on consumption, not visibility** — one framework (`/api/consumption`) reports month-to-date usage for `ai_tokens`, `ingestion` (bytes), and `error_events` against the plan allowance, using the **same accountants the gateway and ingestion gate enforce** — so the "% used" a member sees equals the cap that's enforced. Cached 60s, keyed per tenant + calendar month.
+
+### Coordinated Role Participation & Accountability (mig 0334)
+- **The right role does the work** — first-class agent↔role capability (`ide_agents.role_keys`) drives role-aware assignment: a producer stage resolves the role from the ticket's `action_type` and dispatches a role-capable agent/human, never a mis-assigned one. Stops the "a Product Manager was dispatched to write code" class of failure.
+- **A participation manifest per ticket** — `ticket_participants` derives the required roles from the board's swimlane requirements, resolves each slot by capability, and tracks per-participant state (pending / assigned / in_progress / completed / changes_requested / waived / unstaffed).
+- **An immutable Accountability Report** — an append-only `ticket_role_signoffs` ledger records Who / When / Verdict / Comments / Contribution per role; default-deny RBAC (only role-capable members may sign off as a role); every sign-off emits to the unified activity log. A **Resource Assessment** control adds a needed role beyond the template — an unresolved add surfaces as a blocking resource gap.
+- **Endpoints** — `GET /api/kanban/tasks/:id/accountability`, `/participants`, `POST /participants` (assess) / `/materialize`, plus MCP `kanban.participants` / `kanban.accountability` / `kanban.assess_resource`. Surface: the ticket-drawer **Accountability** tab + a board `X/Y` participants chip.
+
+### Pre-Sales RFP / RFQ Response (mig 0335)
+- **Turn a repo into a proposal** — CTO + Product Owner built-in agents generate a branded, costed proposal from a project's analyzed capabilities: cost / P&L, a phase Gantt, risks, dependencies, and a capability roster matched to the ask.
+- **Co-branded output** — the requester's palette + logo blend with the responder's for a branded, self-contained proposal document (print-to-PDF / download), with freshness-gated grounding (a >5-day-stale scan re-runs the deterministic system audits before answering).
+- **Surface** — a Projects **RFP tab** (list / create) + `/projects/rfp/[id]` detail; `/api/rfp` routes.
+
+### Incident Management & Active Monitoring (mig 0292)
+- **Incidents close the loop** — a Help-Desk / Incident-Manager agent, a Freshdesk connector, on-call rotations, timed escalation, Teams / Slack / email paging, and a per-incident war-room feed. On resolution the RCA is published to Knowledge **and** fed to the project's Evermind, so the workforce learns and stops repeating causes.
+- **A monitoring canvas** — pin heartbeat / HTTP / webhook / metric monitors onto an uploaded architecture diagram; a `*/5` sweep evaluates them and a breach **auto-starts the on-call investigation** (monitor → signal → incident → paging), with reporting on the timeline.
+
+### Meetings & Live Collaboration (mig 0292, 0330)
+- **Video / audio meetings with agents in the room** — mesh WebRTC over a `CeremonyRoomDO` relay; agent attendees speak live via a caption / transcript bridge; recording + transcription produce **AI minutes**. Google / Microsoft calendar sync. Surface: `/meetings`.
+
+### AI Managers — Types & Coaching (mig 0327)
+- **Typed managers tied to the role catalog** — Dev / QA / Service-Desk / DevOps manager types map to `roleCatalog` (custom roles become `role:<key>` types); a human → manager **Coaching Session** carries directive | task modes with expiry / done state, steering how a manager agent runs its reports.
+
+### Memory-First Answering — skip the paid LLM
+- **Answer from the project's own memory before spending a model call** — the web and VS Code webview Brain consult the project's `project_facts` fact tier + its Evermind SSM first and short-circuit the LLM on a confident hit (an exact-repeat Q&A cache + opt-in Evermind-first inference), single-sourced in `resolveMemoryAnswer`. Learning fans out to **every** Evermind under a project (its own head + its IDE builds' heads) via one shared `contributeTextToProjectEverminds`. Endpoints: `GET/POST /api/projects/:id/answer`, `GET /api/projects/:id/evermind/targets`.
 
 ---
 
@@ -416,13 +438,13 @@ CoderClaw operates fully standalone without Builderforce. The connection unlocks
 
 ## On-Device AI Stack
 
-Builderforce.ai is built on the open-source MambaCode.js / SSM.js stack for on-device AI:
+Builderforce.ai is built on the open-source `@seanhogg/builderforce-memory` stack for on-device AI:
 
 ```
-MambaCode.js (@seanhogg/mambacode.js)
+@seanhogg/builderforce-memory-engine  (engine)
   └─ WebGPU WGSL kernels: Mamba-1 (S6), Mamba-2 (SSD), Mamba-3 (complex MIMO+ET), causal attention
         ↓
-SSM.js (@seanhogg/ssmjs)
+@seanhogg/builderforce-memory  (runtime)
   └─ MambaSession.create() — one-call GPU init, tokenizer, model, checkpoint, persistence
   └─ Inference routing · distillation · semantic memory · SSMAgent
         ↓
@@ -434,7 +456,7 @@ Builderforce.ai IDE
 
 The on-device AI layer runs in O(n) time (vs O(n²) for attention), making it suitable for continuous low-latency state updates and fine-tuning entirely in the browser.
 
-> The engine + runtime were consolidated and renamed to `@seanhogg/builderforce-memory-engine` (was `@seanhogg/mambacode.js`) and `@seanhogg/builderforce-memory` (was `@seanhogg/ssmjs`), both published on npm. The diagram above keeps the historical names; new code should import the `@seanhogg/builderforce-memory*` packages.
+> Both packages are published on npm: `@seanhogg/builderforce-memory-engine` (engine) and `@seanhogg/builderforce-memory` (runtime).
 
 ### Cross-surface semantic cache (token savings)
 
@@ -594,39 +616,21 @@ Planned milestones (including **PHASE 4 — Multi-Agent Orchestration at Scale**
 
 ## Cloud Agent Types
 
-Builderforce runs agents on two execution **planes** — **On-Prem (Hosted)** and **Cloud** — and the Cloud plane has **three distinct agent types**. They are easy to conflate; each has its own engine, surface, and code path. The routing decision is a single source of truth in [cloudDispatch.ts](api/src/application/runtime/cloudDispatch.ts) (`resolveCloudSurface`) and [runtimeRoutes.ts](api/src/presentation/routes/runtimeRoutes.ts) (`resolveCloudAgent` / `cloudAgentTypeLabel`); the engine/surface columns live on `ide_agents` (`engine` migration 0087, `runtime_surface` migration 0105).
+Builderforce runs agents on two execution **planes** — **On-Prem (Hosted)** and **Cloud**. There is ONE agent engine (the current version), so the Cloud plane is a single **Cloud Agent** that runs on one of **two surfaces**: a **Durable Object** or a **Node/Container**. The routing decision is a single source of truth in [cloudDispatch.ts](api/src/application/runtime/cloudDispatch.ts) (`resolveCloudSurface` / `cloudAgentTypeLabel`) and [runtimeRoutes.ts](api/src/presentation/routes/runtimeRoutes.ts) (`resolveCloudAgent`); the surface column lives on `ide_agents` (`runtime_surface` migration 0105). The engine is never read from the DB — it is always the current version.
 
 > **Cloud vs. On-Prem is a hard boundary.** A cloud agent executes **only** in the cloud (everything is Cloudflare — Worker, Durable Object, or Container). A cloud agent is **never** dispatched to a client machine. An **On-Prem (Hosted)** agent — an *agentHost*, of which many can run on one machine — runs a task only when a host is **explicitly pinned** to it. See the agent taxonomy ([[agent-types-taxonomy]]).
 
 ### At a glance
 
-| Agent type | Engine | Surface / where it runs | Persistent shell? | Best for |
-|---|---|---|---|---|
-| **V1 Cloud Agent** | `builderforce-v1` (pi-coding-agent) — the default engine | Cloud (Worker / durable executor) | No | Existing pi-engine workloads; the legacy default |
-| **V2 Cloud Agent (Durable Object)** | `builderforce-v2` (Claude Agent SDK) | `durable` — `CloudRunnerDO`, one LLM step per `alarm()` tick. **Default V2 surface.** | No (CI verifies builds) | Most cloud tasks: on-demand, no always-on compute, survives long runs |
-| **V2 Cloud Agent (Node/Container)** | `builderforce-v2` (Claude Agent SDK) | `container` — long-lived Cloudflare Container (`AgentContainerDO`) | **Yes** (`run_command`) | Very long / continuous tasks needing a real shell to install deps + run builds/tests/lint |
-| *(On-Prem Hosted — for contrast)* | host runtime | Client machine (agentHost), only when pinned | Yes (the host's own machine) | BYO-machine execution; not a cloud agent |
+| Cloud Agent surface | Where it runs | Persistent shell? | Best for |
+|---|---|---|---|
+| **Cloud Agent (Durable Object)** | `durable` — `CloudRunnerDO`, one LLM step per `alarm()` tick. **Default surface.** | No (CI verifies builds) | Most cloud tasks: on-demand, no always-on compute, survives long runs |
+| **Cloud Agent (Node/Container)** | `container` — long-lived Cloudflare Container (`AgentContainerDO`) | **Yes** (`run_command`) | Very long / continuous tasks needing a real shell to install deps + run builds/tests/lint |
+| *(On-Prem Hosted — for contrast)* | Client machine (agentHost), only when pinned | Yes (the host's own machine) | BYO-machine execution; not a cloud agent |
 
-### V1 Cloud Agent — engine `builderforce-v1`
+### Cloud Agent (Durable Object) — surface `durable`
 
-The original cloud engine (pi-coding-agent). It is the **default** engine when an agent declares no `engine`, and the fallback `resolveCloudAgent` returns on any lookup failure.
-
-**Features**
-- Runs entirely in the cloud; no client machine involved.
-- Self-assigns the ticket as it starts work; mirrors status into the `executions` row for the polling UI.
-- Produces the same PRD / file-change / PR finalize artifacts as V2.
-
-**Pros**
-- Simplest path; the safe default for existing workloads.
-- No dependency on a tenant Anthropic key or the Claude Agent SDK toolchain.
-
-**Cons**
-- Older engine — does not benefit from the Claude Agent SDK tool loop, steering, or the per-tick durability model below.
-- No persistent shell; no real build/test verification of its own.
-
-### V2 Cloud Agent (Durable Object) — engine `builderforce-v2`, surface `durable`
-
-The modern default. Runs the Claude Agent SDK tool loop fully in the cloud across Durable Object `alarm()` ticks — **one LLM step per tick**, conversation state persisted in DO storage between ticks (`CloudRunnerDO`). V2 inference routes through the **LLM Gateway** using the tenant's **BYO Anthropic key**.
+The default. Runs the Claude Agent SDK tool loop fully in the cloud across Durable Object `alarm()` ticks — **one LLM step per tick**, conversation state persisted in DO storage between ticks (`CloudRunnerDO`). Inference routes through the **LLM Gateway** using the tenant's **BYO Anthropic key**.
 
 **Features**
 - One step per `alarm()` tick; each tick is a fresh Worker invocation with a fresh CPU/subrequest budget, so a multi-step run **never hits the ~30s `waitUntil` wall** that kills the interim Worker executor.
@@ -644,9 +648,9 @@ The modern default. Runs the Claude Agent SDK tool loop fully in the cloud acros
 - Per-tick overhead (alarm scheduling, state rehydrate) makes it less efficient for a single very long, chatty session than a persistent process.
 - Requires a tenant Anthropic key wired through the Gateway.
 
-> When the `CloudRunnerDO` binding is absent, an **interim Worker executor** (`runCloudExecution`) runs the whole loop inline. It works but dies at the ~30s `waitUntil` wall on long runs — it exists only as a fallback until the DO is deployed.
+> When the `CloudRunnerDO` binding is absent there is **no fallback executor** — dispatch resolves to `unavailable` and the run fails fast with that reason. An in-request Worker executor used to be documented here as an interim fallback, but it could not survive the ~30s `waitUntil` wall on a multi-step run, so it was never selectable and has been removed: a clear "no executor bound" error beats a run that silently dies mid-task and gets orphan-reaped.
 
-### V2 Cloud Agent (Node/Container) — engine `builderforce-v2`, surface `container`
+### Cloud Agent (Node/Container) — surface `container`
 
 The Claude Agent SDK loop running in a **persistent Node process inside a real Cloudflare Container** (`AgentContainerDO`). The container boots a small HTTP server; the DO is the Cloudflare-Containers control plane that starts/stops it and proxies the run. The container drives the loop and calls back into the Worker for every LLM step, repo telemetry, and the final PR — so the Worker stays the single source of truth for the Gateway, usage metering, and PR finalize.
 
@@ -667,7 +671,7 @@ The Claude Agent SDK loop running in a **persistent Node process inside a real C
 
 ### How a type is selected at dispatch
 
-`resolveCloudAgent` reads the agent's `engine` + `runtime_surface` from `ide_agents`; `resolveCloudSurface(agentSurface, hasExplicitHost)` then picks the surface — an explicitly-pinned host ⇒ `container`, otherwise the agent's chosen surface, defaulting to `durable`. `cloudAgentTypeLabel(engine, surface)` produces the human label used for run attribution (`V1 Cloud Agent` / `V2 Cloud Agent (Durable Object)` / `V2 Cloud Agent (Node/Container)`).
+`resolveCloudAgent` reads the agent's `runtime_surface` from `ide_agents` (the engine is always the current version, never read); `resolveCloudSurface(agentSurface, hasExplicitHost)` then picks the surface — an explicitly-pinned host ⇒ `container`, otherwise the agent's chosen surface, defaulting to `durable`. `cloudAgentTypeLabel(surface)` produces the human label used for run attribution (`Cloud Agent (Durable Object)` / `Cloud Agent (Node/Container)`).
 
 ---
 

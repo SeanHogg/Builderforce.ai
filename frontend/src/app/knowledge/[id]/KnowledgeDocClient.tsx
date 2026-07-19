@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { DocumentMarkdown } from '@/components/DocumentMarkdown';
 import { useTranslations } from 'next-intl';
+import { useConfirm } from '@/components/ConfirmProvider';
 import PageContainer from '@/components/PageContainer';
+import { Select } from '@/components/Select';
 import { usePermission } from '@/lib/rbac';
 import { useAuth } from '@/lib/AuthContext';
 import { useDocCollaboration } from '@/hooks/useDocCollaboration';
@@ -33,7 +34,7 @@ import {
   statusColorStyle,
 } from '../KnowledgeClient';
 
-const DOC_TYPES: DocType[] = ['sop', 'process', 'doc'];
+const DOC_TYPES: DocType[] = ['sop', 'process', 'doc', 'postmortem', 'known_error'];
 
 export default function KnowledgeDocClient({ docId }: { docId: string }) {
   const t = useTranslations('knowledge');
@@ -210,13 +211,13 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
       {canEdit && (
         <>
           <div style={{ display: 'flex', gap: 10, margin: '12px 0', flexWrap: 'wrap', alignItems: 'center' }}>
-            <select value={docType} onChange={(e) => markDirty(setDocType)(e.target.value as DocType)} style={inputStyle}>
+            <Select value={docType} onChange={(e) => markDirty(setDocType)(e.target.value as DocType)} style={inputStyle}>
               {DOC_TYPES.map((dt) => (
                 <option key={dt} value={dt}>
                   {t(`type_${dt}`)}
                 </option>
               ))}
-            </select>
+            </Select>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
               <input type="checkbox" checked={requiresAck} onChange={(e) => markDirty(setRequiresAck)(e.target.checked)} />
               {t('requiresAckLabel')}
@@ -318,10 +319,9 @@ export default function KnowledgeDocClient({ docId }: { docId: string }) {
             background: 'var(--surface, #1a1a1a)',
             minHeight: 200,
           }}
-          className="markdown-body"
         >
           {content.trim() ? (
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+            <DocumentMarkdown content={content} />
           ) : (
             <span style={{ color: 'var(--text-muted, #9ca3af)' }}>{t('emptyContent')}</span>
           )}
@@ -477,18 +477,18 @@ function SharePanel({
 
           {canEdit && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <select value={pick} onChange={(e) => setPick(e.target.value)} style={inputStyle}>
+              <Select value={pick} onChange={(e) => setPick(e.target.value)} style={inputStyle}>
                 <option value="">{t('selectMember')}</option>
                 {candidates.map((m) => (
                   <option key={m.userId} value={m.userId}>
                     {m.name}
                   </option>
                 ))}
-              </select>
-              <select value={role} onChange={(e) => setRole(e.target.value as CollaboratorRole)} style={inputStyle}>
+              </Select>
+              <Select value={role} onChange={(e) => setRole(e.target.value as CollaboratorRole)} style={inputStyle}>
                 <option value="editor">{t('roleEditor')}</option>
                 <option value="viewer">{t('roleViewer')}</option>
-              </select>
+              </Select>
               <button type="button" onClick={invite} disabled={busy || !pick} style={btnPrimary}>
                 {busy ? t('inviting') : t('invite')}
               </button>
@@ -500,7 +500,13 @@ function SharePanel({
   );
 }
 
-function PresenceBar({ collab, t }: { collab: ReturnType<typeof useDocCollaboration>; t: ReturnType<typeof useTranslations> }) {
+function PresenceBar({
+  collab,
+  t,
+}: {
+  collab: ReturnType<typeof useDocCollaboration>;
+  t: ReturnType<typeof useTranslations>;
+}) {
   if (!collab.enabled) return null;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} title={t('liveCollab')}>
@@ -746,9 +752,8 @@ function AiAssist({
                   maxHeight: 260,
                   overflow: 'auto',
                 }}
-                className="markdown-body"
               >
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{result}</ReactMarkdown>
+                <DocumentMarkdown content={result} />
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                 <button type="button" onClick={() => { onApply(result, true); setResult(null); }} style={btnPrimary}>
@@ -870,9 +875,8 @@ function AnalyzePanel({
                       maxHeight: 220,
                       overflow: 'auto',
                     }}
-                    className="markdown-body"
                   >
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{result.improvedFlow}</ReactMarkdown>
+                    <DocumentMarkdown content={result.improvedFlow} />
                   </div>
                   <button
                     type="button"
@@ -904,6 +908,7 @@ function PublishBar({
 }) {
   const [changeNote, setChangeNote] = useState('');
   const [busy, setBusy] = useState(false);
+  const confirm = useConfirm();
 
   async function publish() {
     setBusy(true);
@@ -916,7 +921,7 @@ function PublishBar({
     }
   }
   async function remove() {
-    if (!window.confirm(t('deleteConfirm'))) return;
+    if (!(await confirm(t('deleteConfirm')))) return;
     setBusy(true);
     try {
       await knowledgeApi.remove(doc.id);

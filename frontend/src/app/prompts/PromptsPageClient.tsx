@@ -3,6 +3,7 @@
 import { Select } from '@/components/Select';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import {
   promptLibraryApi,
@@ -14,6 +15,8 @@ import {
 import { getStoredUser } from '@/lib/auth';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { CatalogInsightsBar, type CatalogInsightsItem } from '@/components/CatalogInsightsBar';
+import { PromptVersionDiff } from '@/components/prompts/PromptVersionDiff';
+import type { PromptAnalysis } from '@/lib/builderforceApi';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 
 const card: React.CSSProperties = {
@@ -26,6 +29,7 @@ const card: React.CSSProperties = {
 type Tab = 'public' | 'mine';
 
 export default function PromptsPage() {
+  const t = useTranslations('promptsPage');
   const isAuthed = !!getStoredUser();
   const [tab, setTab] = useState<Tab>('public');
   const [prompts, setPrompts] = useState<PromptSummary[]>([]);
@@ -96,15 +100,14 @@ export default function PromptsPage() {
   return (
     <div className="page-inner">
       <div style={{ textAlign: 'center', marginBottom: 28 }}>
-        <h1 style={{ fontSize: 'clamp(24px,4vw,36px)', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 8px' }}>Prompt Library</h1>
+        <h1 style={{ fontSize: 'clamp(24px,4vw,36px)', fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 8px' }}>{t('title')}</h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: 14, maxWidth: 600, margin: '0 auto' }}>
-          Ready-to-use prompt templates for entrepreneurs, testing, coding, business analysis, and marketing research.
-          Copy any prompt in one click{isAuthed ? ', or publish your own to share with everyone.' : ' — sign in to publish and star your own.'}
+          {t('subtitle')}{isAuthed ? t('subtitleAuthed') : t('subtitleGuest')}
         </p>
         {isAuthed && (
           <div style={{ marginTop: 16 }}>
             <button type="button" className="btn btn-primary" onClick={() => setShowCreate((v) => !v)}>
-              {showCreate ? 'Close' : '+ New prompt'}
+              {showCreate ? t('close') : t('newPrompt')}
             </button>
           </div>
         )}
@@ -119,8 +122,8 @@ export default function PromptsPage() {
 
       {/* Tabs + view toggle */}
       <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
-        <button type="button" className={`btn ${tab === 'public' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('public')}>Public gallery</button>
-        {isAuthed && <button type="button" className={`btn ${tab === 'mine' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('mine')}>My prompts</button>}
+        <button type="button" className={`btn ${tab === 'public' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('public')}>{t('tabPublic')}</button>
+        {isAuthed && <button type="button" className={`btn ${tab === 'mine' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('mine')}>{t('tabMine')}</button>}
         <div style={{ marginLeft: 'auto' }}>
           <ViewToggle value={viewMode} onChange={setViewMode} />
         </div>
@@ -133,15 +136,15 @@ export default function PromptsPage() {
             type="search"
             className="input"
             style={{ maxWidth: 320 }}
-            placeholder="Search prompts…"
+            placeholder={t('searchPlaceholder')}
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') loadPublic(q); }}
           />
           <Select className="input" style={{ maxWidth: 150 }} value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
-            <option value="popular">Most used</option>
-            <option value="recent">Newest</option>
-            <option value="featured">Featured</option>
+            <option value="popular">{t('sortPopular')}</option>
+            <option value="recent">{t('sortRecent')}</option>
+            <option value="featured">{t('sortFeatured')}</option>
           </Select>
         </div>
       )}
@@ -153,10 +156,11 @@ export default function PromptsPage() {
           primaryMetric="usage"
           secondaryMetric="stars"
           groupKind="category"
+          showTrend={isAuthed}
         />
       )}
 
-      {loading && <div style={card}>Loading prompts…</div>}
+      {loading && <div style={card}>{t('loading')}</div>}
       {error && <div style={{ ...card, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)' }}>{error}</div>}
 
       {!loading && !error && viewMode === 'card' && (
@@ -170,18 +174,18 @@ export default function PromptsPage() {
               {p.description && <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 10px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.description}</p>}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
                 {p.category && <span className="badge badge-gray">{p.category}</span>}
-                {p.tags.slice(0, 3).map((t) => <span key={t} className="badge badge-gray">#{t}</span>)}
+                {p.tags.slice(0, 3).map((tag) => <span key={tag} className="badge badge-gray">#{tag}</span>)}
               </div>
               <div style={{ display: 'flex', gap: 14, fontSize: 12, color: 'var(--text-muted)' }}>
-                <span>▶ {p.usageCount.toLocaleString()} uses</span>
+                <span>▶ {t('usesCount', { n: p.usageCount })}</span>
                 <span>★ {p.starCount}</span>
-                {p.authorName && <span>by {p.authorName}</span>}
+                {p.authorName && <span>{t('byAuthor', { name: p.authorName })}</span>}
               </div>
             </button>
           ))}
           {prompts.length === 0 && (
             <div style={{ ...card, gridColumn: '1 / -1', color: 'var(--text-muted)' }}>
-              {tab === 'mine' ? 'You have no prompts yet. Click “+ New prompt” to create one.' : 'No public prompts found.'}
+              {tab === 'mine' ? t('emptyMine') : t('emptyPublic')}
             </div>
           )}
         </div>
@@ -190,7 +194,7 @@ export default function PromptsPage() {
       {!loading && !error && viewMode === 'table' && (
         prompts.length === 0 ? (
           <div style={{ ...card, color: 'var(--text-muted)' }}>
-            {tab === 'mine' ? 'You have no prompts yet. Click “+ New prompt” to create one.' : 'No public prompts found.'}
+            {tab === 'mine' ? t('emptyMine') : t('emptyPublic')}
           </div>
         ) : (
           <div style={tableWrapStyle}>
@@ -248,7 +252,13 @@ export default function PromptsPage() {
 }
 
 function PromptDetail({ prompt, isAuthed, onClose, onUse }: { prompt: PromptPublicView; isAuthed: boolean; onClose: () => void; onUse: () => void }) {
+  const t = useTranslations('promptsPage');
   const [starred, setStarred] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [analysis, setAnalysis] = useState<PromptAnalysis | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
   const id = (prompt as PromptPublicView & { id: string }).id;
 
   const toggleStar = async () => {
@@ -256,6 +266,29 @@ function PromptDetail({ prompt, isAuthed, onClose, onUse }: { prompt: PromptPubl
       if (starred) { await promptLibraryApi.unstar(id); setStarred(false); }
       else { await promptLibraryApi.star(id); setStarred(true); }
     } catch { /* ignore */ }
+  };
+
+  const runAnalyze = async () => {
+    setAnalyzing(true);
+    setAnalyzeError(null);
+    setSaved(false);
+    try {
+      setAnalysis(await promptLibraryApi.analyze(id));
+    } catch (e) {
+      setAnalyzeError(e instanceof Error ? e.message : 'Analysis failed');
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const saveSuggestion = async () => {
+    if (!analysis?.suggestion) return;
+    try {
+      await promptLibraryApi.addVersion(id, { body: analysis.suggestion, notes: 'Analyzer suggestion' });
+      setSaved(true);
+    } catch (e) {
+      setAnalyzeError(e instanceof Error ? e.message : 'Save failed');
+    }
   };
 
   return (
@@ -272,10 +305,34 @@ function PromptDetail({ prompt, isAuthed, onClose, onUse }: { prompt: PromptPubl
           {prompt.model && <span className="badge badge-gray">model: {prompt.model}</span>}
         </div>
 
-        <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
           <button type="button" className="btn btn-primary" onClick={onUse}>Use this prompt (copy)</button>
           {isAuthed && id && <button type="button" className="btn btn-secondary" onClick={toggleStar}>{starred ? '★ Starred' : '☆ Star'}</button>}
+          {isAuthed && id && <button type="button" className="btn btn-secondary" onClick={() => setShowHistory(true)}>{t('history')}</button>}
+          {isAuthed && id && (
+            <button type="button" className="btn btn-secondary" onClick={runAnalyze} disabled={analyzing}>
+              {analyzing ? t('analyzing') : t('analyze')}
+            </button>
+          )}
         </div>
+
+        {analyzeError && <div style={{ color: 'var(--danger, #e5484d)', fontSize: 13, marginBottom: 12 }}>{analyzeError}</div>}
+
+        {analysis && (
+          <div style={{ ...card, marginBottom: 16, borderColor: 'var(--coral-bright, #f4726e)' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('suggestionTitle')}</div>
+            {analysis.rationale && <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 10px' }}>{analysis.rationale}</p>}
+            <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 13, fontFamily: 'ui-monospace, monospace', maxHeight: 280, overflowY: 'auto', margin: 0 }}>{analysis.suggestion}</pre>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
+              <button type="button" className="btn btn-primary btn-sm" onClick={saveSuggestion} disabled={saved}>
+                {saved ? t('savedVersion') : t('saveAsVersion')}
+              </button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigator.clipboard?.writeText(analysis.suggestion).catch(() => {})}>{t('copySuggestion')}</button>
+            </div>
+          </div>
+        )}
+
+        {showHistory && id && <PromptVersionDiff promptId={id} open={showHistory} onClose={() => setShowHistory(false)} />}
 
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>PROMPT (v{prompt.currentVersion})</div>
         <pre style={{ ...card, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 13, fontFamily: 'ui-monospace, monospace', maxHeight: 360, overflowY: 'auto' }}>{prompt.body}</pre>

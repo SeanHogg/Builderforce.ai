@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="0%" r="120%">
+      <stop offset="0%" stop-color="#1B1F46"/><stop offset="55%" stop-color="#13152F"/><stop offset="100%" stop-color="#0A0B1E"/>
+    </radialGradient>
+    <linearGradient id="violetGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#A98BFF"/><stop offset="100%" stop-color="#6A4DF0"/></linearGradient>
+    <linearGradient id="coolGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3DD6F5"/><stop offset="100%" stop-color="#4F8BFF"/></linearGradient>
+    <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#5BF0BC"/><stop offset="100%" stop-color="#23B987"/></linearGradient>
+    <linearGradient id="coralGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF8F7A"/><stop offset="100%" stop-color="#F0574A"/></linearGradient>
+    <linearGradient id="amberGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFCE6B"/><stop offset="100%" stop-color="#F5A623"/></linearGradient>
+    <linearGradient id="hairline" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(139,108,255,0)"/><stop offset="50%" stop-color="rgba(139,108,255,0.55)"/><stop offset="100%" stop-color="rgba(61,214,245,0)"/></linearGradient>
+    <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8891AE"/></marker>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bgGlow)"/>
+  <text x="80" y="92" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" letter-spacing="3" font-weight="700" fill="#A98BFF">SKILLS, ASSIGNMENTS &amp; THE MARKETPLACE</text>
+  <text x="80" y="146" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="800" fill="#EEF0FA">Publish once, assign at any scope</text>
+  <rect x="82" y="170" width="120" height="4" rx="2" fill="url(#hairline)"/>
+
+  <!-- flow arrows -->
+  <line x1="464" y1="470" x2="546" y2="470" stroke="rgba(169,139,255,0.5)" stroke-width="2.5" marker-end="url(#arw)"/>
+  <line x1="1024" y1="470" x2="1106" y2="470" stroke="rgba(169,139,255,0.5)" stroke-width="2.5" marker-end="url(#arw)"/>
+
+  <!-- Marketplace -->
+  <rect x="80" y="230" width="384" height="480" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="80" y="230" width="6" height="480" rx="3" fill="url(#coolGrad)"/>
+  <text x="108" y="272" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">Skills Marketplace</text>
+  <text x="108" y="298" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#8891AE">browse &#183; publish &#183; version</text>
+
+  <rect x="108" y="316" width="328" height="66" rx="10" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.10)"/>
+  <text x="128" y="344" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" font-weight="700" fill="#EEF0FA">github-api</text>
+  <text x="128" y="368" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" fill="#8891AE">tool defs &#183; &#8595; 1.2k &#183; &#9829; 340</text>
+
+  <rect x="108" y="392" width="328" height="66" rx="10" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.10)"/>
+  <text x="128" y="420" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" font-weight="700" fill="#EEF0FA">typescript-strict</text>
+  <text x="128" y="444" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" fill="#8891AE">domain knowledge &#183; &#8595; 980</text>
+
+  <rect x="108" y="468" width="328" height="66" rx="10" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.10)"/>
+  <text x="128" y="496" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" font-weight="700" fill="#EEF0FA">incident-response</text>
+  <text x="128" y="520" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" fill="#8891AE">workflow runbook &#183; &#8595; 610</text>
+
+  <rect x="108" y="544" width="328" height="66" rx="10" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.10)"/>
+  <text x="128" y="572" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="16" font-weight="700" fill="#EEF0FA">our-coding-standards</text>
+  <text x="128" y="596" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" fill="#8891AE">private &#183; tenant-only</text>
+
+  <text x="108" y="656" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#A6ADC8">A skill = prompt fragment + tool defs</text>
+  <text x="108" y="678" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#A6ADC8">+ workflow template + domain knowledge.</text>
+
+  <!-- Scope precedence -->
+  <rect x="546" y="230" width="478" height="480" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="546" y="230" width="6" height="480" rx="3" fill="url(#violetGrad)"/>
+  <text x="574" y="272" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">Assignment scope</text>
+  <text x="574" y="298" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#8891AE">precedence: task &gt; project &gt; agentHost &gt; tenant</text>
+
+  <rect x="574" y="320" width="422" height="60" rx="10" fill="rgba(169,139,255,0.10)" stroke="rgba(169,139,255,0.4)"/>
+  <text x="594" y="348" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" font-weight="700" fill="#EEF0FA">tenant</text>
+  <text x="976" y="356" text-anchor="end" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13.5" fill="#A6ADC8">all agentHosts</text>
+
+  <rect x="574" y="390" width="422" height="60" rx="10" fill="rgba(61,214,245,0.10)" stroke="rgba(61,214,245,0.4)"/>
+  <text x="594" y="418" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" font-weight="700" fill="#EEF0FA">agentHost</text>
+  <text x="976" y="426" text-anchor="end" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13.5" fill="#A6ADC8">one instance &#8212; overrides tenant</text>
+
+  <rect x="574" y="460" width="422" height="60" rx="10" fill="rgba(91,240,188,0.10)" stroke="rgba(91,240,188,0.4)"/>
+  <text x="594" y="488" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" font-weight="700" fill="#EEF0FA">project</text>
+  <text x="976" y="496" text-anchor="end" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13.5" fill="#A6ADC8">any host on that project</text>
+
+  <rect x="574" y="530" width="422" height="60" rx="10" fill="rgba(245,166,35,0.12)" stroke="rgba(245,166,35,0.5)"/>
+  <text x="594" y="558" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" font-weight="800" fill="#EEF0FA">task</text>
+  <text x="976" y="566" text-anchor="end" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#F5A623">highest &#8212; this assignment wins</text>
+
+  <text x="574" y="632" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#A6ADC8">The same unified model assigns skills,</text>
+  <text x="574" y="656" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#A6ADC8">personas, and content at any scope.</text>
+
+  <!-- Registry -->
+  <rect x="1106" y="230" width="414" height="480" rx="18" fill="rgba(255,255,255,0.035)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
+  <rect x="1106" y="230" width="6" height="480" rx="3" fill="url(#mintGrad)"/>
+  <text x="1134" y="272" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="22" font-weight="800" fill="#EEF0FA">Skill registry</text>
+  <text x="1134" y="298" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#8891AE">loaded at agentHost startup</text>
+
+  <rect x="1134" y="320" width="358" height="230" rx="12" fill="rgba(0,0,0,0.28)" stroke="rgba(91,240,188,0.3)"/>
+  <text x="1156" y="356" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#5BF0BC">[skill-registry]</text>
+  <text x="1156" y="382" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14" fill="#A6ADC8">loaded 4 skill(s):</text>
+  <text x="1156" y="414" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#EEF0FA">&#8226; typescript-strict</text>
+  <text x="1156" y="442" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#EEF0FA">&#8226; github-api</text>
+  <text x="1156" y="470" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#EEF0FA">&#8226; test-runner</text>
+  <text x="1156" y="498" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#EEF0FA">&#8226; our-coding-standards</text>
+  <text x="1156" y="530" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="13" fill="#8891AE">GET /api/agent-hosts/:id/skills</text>
+
+  <text x="1134" y="592" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#A6ADC8">The agent behaves as if it always</text>
+  <text x="1134" y="616" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#A6ADC8">knew the skill &#8212; no prompting.</text>
+  <text x="1134" y="656" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#A6ADC8">Add an assignment &#8594; picked up on</text>
+  <text x="1134" y="680" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="14.5" fill="#A6ADC8">the next restart.</text>
+
+  <g opacity="0.85">
+    <circle cx="1336" cy="852" r="9" fill="url(#violetGrad)"/>
+    <text x="1354" y="859" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="700" fill="#A6ADC8">Builderforce.ai</text>
+  </g>
+  <text x="80" y="858" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#717892">Skills extend an agent without retraining &#8212; assigned by scope, merged and loaded at startup</text>
+</svg>

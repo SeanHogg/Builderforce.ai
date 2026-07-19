@@ -3,14 +3,11 @@
 import { Select } from '@/components/Select';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { inviteByEmail } from '@/lib/auth';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 
-const ROLES = [
-  { value: 'developer', label: 'Developer' },
-  { value: 'manager', label: 'Manager' },
-  { value: 'viewer', label: 'Viewer' },
-] as const;
+const ROLE_VALUES = ['developer', 'manager', 'viewer'] as const;
 
 interface Invite {
   email: string;
@@ -35,6 +32,7 @@ interface InviteTeamMembersProps {
  * Looks up users by email and adds them to the workspace.
  */
 export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimit }: InviteTeamMembersProps) {
+  const t = useTranslations('inviteMembers');
   const [email, setEmail]   = useState('');
   const [role, setRole]     = useState('developer');
   const [invites, setInvites] = useState<Invite[]>([]);
@@ -67,7 +65,7 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
         setInvites((prev) => prev.filter((i) => i.email !== trimmed));
         onPlanLimit?.(err);
       } else {
-        const msg = err instanceof Error ? err.message : 'Failed to invite';
+        const msg = err instanceof Error ? err.message : t('errFailed');
         setInvites((prev) =>
           prev.map((i) => (i.email === trimmed ? { ...i, status: 'error', errorMsg: msg } : i))
         );
@@ -80,15 +78,13 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
   return (
     <div>
       <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 20 }}>
-        Add teammates to your workspace by email. If they already have a Builderforce account they
-        join right away; if not, the invite stays <strong>pending</strong> and they join automatically
-        the first time they sign in with that email.
+        {t.rich('intro', { strong: (chunks) => <strong>{chunks}</strong> })}
       </p>
 
       <form onSubmit={handleAdd} style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         <input
           type="email"
-          placeholder="teammate@company.com"
+          placeholder={t('emailPlaceholder')}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           disabled={adding}
@@ -117,8 +113,8 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
             cursor: 'pointer',
           }}
         >
-          {ROLES.map((r) => (
-            <option key={r.value} value={r.value}>{r.label}</option>
+          {ROLE_VALUES.map((r) => (
+            <option key={r} value={r}>{t(`roles.${r}`)}</option>
           ))}
         </Select>
         <button
@@ -137,7 +133,7 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
             whiteSpace: 'nowrap',
           }}
         >
-          Invite
+          {t('invite')}
         </button>
       </form>
 
@@ -158,21 +154,21 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
               }}
             >
               <span style={{ flex: 1, color: 'var(--text-primary)' }}>{invite.email}</span>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'capitalize' }}>
-                {invite.role}
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                {t(`roles.${invite.role}`)}
               </span>
               {invite.status === 'sending' && (
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Sending…</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('statusSending')}</span>
               )}
               {invite.status === 'added' && (
-                <span style={{ fontSize: 11, color: '#22c55e', fontWeight: 600 }}>✓ Added</span>
+                <span style={{ fontSize: 11, color: '#22c55e', fontWeight: 600 }}>✓ {t('statusAdded')}</span>
               )}
               {invite.status === 'invited' && (
-                <span style={{ fontSize: 11, color: '#d97706', fontWeight: 600 }} title="No account yet — joins automatically when they sign up">✉ Invited · pending</span>
+                <span style={{ fontSize: 11, color: '#d97706', fontWeight: 600 }} title={t('statusInvitedHint')}>✉ {t('statusInvited')}</span>
               )}
               {invite.status === 'error' && (
                 <span style={{ fontSize: 11, color: 'var(--error-text, #e74c3c)' }} title={invite.errorMsg}>
-                  ✗ {invite.errorMsg ?? 'Error'}
+                  ✗ {invite.errorMsg ?? t('statusError')}
                 </span>
               )}
             </div>
@@ -182,11 +178,13 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
 
       {invites.length === 0 && (
         <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          You can also invite teammates later from{' '}
-          <a href="/workforce" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
-            Workforce
-          </a>
-          .
+          {t.rich('laterHint', {
+            link: (chunks) => (
+              <a href="/workforce" style={{ color: 'var(--coral-bright)', textDecoration: 'none' }}>
+                {chunks}
+              </a>
+            ),
+          })}
         </p>
       )}
     </div>

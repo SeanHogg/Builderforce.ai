@@ -96,7 +96,7 @@ export async function createProject(data: {
   name: string;
   description?: string;
   template?: string;
-  /** IDE project type — 'designer' | 'video' | 'llm'. Defaults server-side to 'designer'. */
+  /** IDE project type — 'designer' | 'mobile' | 'video' | 'evermind' | 'finetune' | 'voice'. Defaults server-side to 'designer'. */
   modality?: string;
   /** Where the project was born — 'ide' tags it for the Designer badge. */
   origin?: string;
@@ -161,13 +161,19 @@ export async function listIdeContainers(): Promise<IdeContainerOption[]> {
 
 export async function createIdeProject(data: {
   name: string;
-  /** 'designer' | 'video' | 'llm' | 'voice'. Defaults server-side to 'designer'. */
+  /** 'designer' | 'mobile' | 'video' | 'evermind' | 'finetune' | 'voice'. Defaults server-side to 'designer'. */
   modality?: string;
   /** Optional parent Project to group this build under. */
   containerProjectId?: number | null;
   template?: string | null;
-  /** Required for the 'llm' modality — the workflow the project runs. */
+  /** Optional automation workflow to attach (any modality). Not required for evermind. */
   workflowDefinitionId?: string | null;
+  /** Evermind modality: the one-click Evermind recipe that provisions the project's model. */
+  evermindRecipe?: string | null;
+  /** Evermind modality: frontier teacher model to distil through (recipe-dependent). */
+  evermindTeacherModel?: string | null;
+  /** Evermind modality: for the 'seed-published' recipe, the published model slug to clone. */
+  evermindSeedModelSlug?: string | null;
 }): Promise<IdeProject> {
   return apiRequest<IdeProject>('/api/ide-projects', {
     method: 'POST',
@@ -282,6 +288,15 @@ export const ideRepoApi = {
 
   createRepo: (projectId: number | string, body: { name: string; provider?: string; private?: boolean; credentialId: string }): Promise<{ ok: boolean; repoId: string; owner: string; repo: string; committed: number }> =>
     projectsRequest(`${ideProjectBase(projectId)}/create-repo`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }),
+
+  /** Write the GitHub Actions deploy workflow into the repo (idempotent). */
+  enableDeploys: (
+    projectId: number | string,
+    body: { repoId?: string; subdomain?: string; distDir?: string } = {},
+  ): Promise<{ path: string; branch: string; workflow: string }> =>
+    projectsRequest(`${ideProjectBase(projectId)}/enable-deploys`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     }),
 };
@@ -680,10 +695,11 @@ export async function fetchAgentPackage(agentId: string): Promise<AgentPackage> 
 export type AgentRuntimeSupport = 'cloud' | 'host' | 'both';
 export type AgentPricingModel = 'flat_fee' | 'consumption';
 /**
- * Agent runtime engine. **V1 is RETIRED (2026-06-13)** — `builderforce-v2` (the Claude
- * Agent SDK runner, gateway-routed) is the only engine. The `builderforce-v1` pi loop is gone.
+ * Agent runtime engine. There is ONE engine — the current version (`builderforce-v3`,
+ * the Claude-Agent-SDK loop with the limbic layer always composed). It is not
+ * user-selectable; the field is a read-only denormalized value on the agent record.
  */
-export type AgentEngine = 'builderforce-v2' | 'builderforce-v3';
+export type AgentEngine = 'builderforce-v3';
 /**
  * Execution surface for a V2 cloud agent — the two types the user picks at
  * creation. Both run the full task IN THE CLOUD (all Cloudflare, no local/hybrid
@@ -707,6 +723,8 @@ export interface CloudAgentInput {
   pricingModel?: AgentPricingModel;
   priceUnit?: string | null;
   published?: boolean;
+  /** This agent's OWN personality (Pro). null clears it; server ignores for free plans. */
+  psychometric?: import('./psychometric').PsychometricProfile | null;
 }
 
 /** The tenant's own agents (any publish state). */
@@ -759,6 +777,93 @@ export interface AgentPerfRollup {
 
 export async function fetchAgentPerf(agentId: string): Promise<AgentPerfRollup> {
   return apiRequest<AgentPerfRollup>(`/api/workforce/agents/${agentId}/perf`);
+}
+
+// ── Personality LEARNING + TRACKING (Gaps 6 & 7) ──────────────────────────────
+// Usage events + outcome-driven trait reinforcement for a cloud agent. Powers the
+// PersonalityUsagePanel in the agent details slide-out.
+
+/** One "personality applied to a run" entry — recorded durably, or derived live
+ *  from a real terminal run (`recorded: false`). */
+export interface PersonalityEvent {
+  id: string;
+  recorded: boolean;
+  executionId: number | null;
+  runId: string | null;
+  profileSource: string;
+  personaIds: string[];
+  directivesSummary: string;
+  directiveCount: number;
+  thinkLevel: string | null;
+  reasoningLevel: string | null;
+  temperature: number | null;
+  at: string | null;
+}
+
+export interface PersonalityEventsResponse {
+  agentRef: string;
+  activeSummary: string;
+  activeDirectiveCount: number;
+  events: PersonalityEvent[];
+}
+
+/** A bounded, reversible trait-reinforcement proposal computed from run outcomes. */
+export interface ReinforcementProposal {
+  deltas: Record<string, number>;
+  rationale: string[];
+  summary: string;
+  previewVector: Record<string, number>;
+}
+
+export interface ReinforcementHistoryItem {
+  id: number;
+  status: 'proposed' | 'applied' | 'dismissed';
+  deltas: Record<string, number>;
+  rationale: string[];
+  basedOnRuns: number;
+  autoApplied: boolean;
+  proposedAt: string | null;
+  decidedAt: string | null;
+}
+
+export interface ReinforcementResponse {
+  agentRef: string;
+  windowDays: number;
+  basedOnRuns: number;
+  proposal: ReinforcementProposal | null;
+  rationale: string[];
+  caps: { perDimension: number; perPeriod: number };
+  history: ReinforcementHistoryItem[];
+}
+
+export async function fetchPersonalityEvents(agentId: string, limit = 20): Promise<PersonalityEventsResponse> {
+  return apiRequest<PersonalityEventsResponse>(`/api/personality/agents/${agentId}/events?limit=${limit}`);
+}
+
+export async function fetchTraitReinforcements(agentId: string, days = 14): Promise<ReinforcementResponse> {
+  return apiRequest<ReinforcementResponse>(`/api/personality/agents/${agentId}/reinforcements?days=${days}`);
+}
+
+export async function applyTraitReinforcement(
+  agentId: string,
+  body: { deltas: Record<string, number>; rationale: string[]; basedOnRuns: number; windowDays: number },
+): Promise<{ id: number; applied: Record<string, number>; vector: Record<string, number>; summary: string }> {
+  return apiRequest(`/api/personality/agents/${agentId}/reinforcements/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function dismissTraitReinforcement(
+  agentId: string,
+  body: { deltas: Record<string, number>; rationale: string[] },
+): Promise<{ id: number; dismissed: boolean }> {
+  return apiRequest(`/api/personality/agents/${agentId}/reinforcements/dismiss`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 }
 
 /**

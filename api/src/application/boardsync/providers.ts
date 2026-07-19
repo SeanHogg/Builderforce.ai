@@ -829,6 +829,87 @@ export class FreshserviceBoardProvider implements BoardProvider {
 }
 
 // ---------------------------------------------------------------------------
+// Freshdesk (REST) — itsm (help desk / support)
+// ---------------------------------------------------------------------------
+// Freshworks' help-desk product (distinct from Freshservice ITSM). Same /api/v2/
+// tickets REST shape + basic-auth-with-apiKey, so this mirrors FreshserviceBoardProvider;
+// the differences are the base URL (…/freshdesk.com) and Freshdesk's default status set.
+
+const FRESHDESK_STATUS: Record<number, string> = { 2: 'open', 3: 'pending', 4: 'resolved', 5: 'closed' };
+const FRESHDESK_PRIORITY: Record<number, string> = { 1: 'low', 2: 'normal', 3: 'high', 4: 'urgent' };
+
+interface FreshdeskTicketRaw {
+  id: number;
+  subject: string;
+  description_text?: string | null;
+  description?: string | null;
+  status?: number;
+  priority?: number;
+  /** Freshdesk ticket type ('Incident' | 'Problem' | 'Question' | 'Feature Request' | …). */
+  type?: string | null;
+  requester_id?: number | null;
+  updated_at: string;
+}
+
+export class FreshdeskBoardProvider implements BoardProvider {
+  readonly id = 'freshdesk';
+  constructor(private readonly cfg: ProviderConfig, private readonly fetchFn: FetchLike) {}
+
+  async fetchTicketsSince(cursor: string | null): Promise<FetchPage> {
+    const base = trimSlash(this.cfg.baseUrl);
+    if (!base) throw new Error('freshdesk provider requires baseUrl');
+    const apiKey = String(this.cfg.credentials.apiKey ?? '');
+
+    const params = new URLSearchParams({ order_by: 'updated_at', order_type: 'asc', per_page: '100' });
+    if (cursor) params.set('updated_since', cursor);
+
+    const res = await this.fetchFn(`${base}/api/v2/tickets?${params.toString()}`, {
+      headers: { Authorization: basicAuth(apiKey, 'X'), Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Freshdesk tickets fetch failed: ${res.status}`);
+
+    const raw = (await res.json()) as FreshdeskTicketRaw[];
+    const tickets: NormalizedTicket[] = [];
+    let next = cursor;
+    for (const t of raw ?? []) {
+      tickets.push(
+        buildTicket(this.id, {
+          externalId:      String(t.id),
+          externalUrl:     `${base}/a/tickets/${t.id}`,
+          externalVersion: t.updated_at,
+          title:           t.subject,
+          body:            t.description_text ?? t.description ?? null,
+          state:           FRESHDESK_STATUS[t.status ?? 2] ?? 'open',
+          extra:           {
+            priority: FRESHDESK_PRIORITY[t.priority ?? 2] ?? 'normal',
+            ticketType: t.type ?? null,
+            requester: t.requester_id != null ? String(t.requester_id) : null,
+          },
+        }),
+      );
+      next = maxVersion(next, t.updated_at);
+    }
+    return { tickets, nextCursor: next };
+  }
+
+  async pushUpdate(externalId: string, changeSet: ChangeSet): Promise<void> {
+    const base = trimSlash(this.cfg.baseUrl);
+    const apiKey = String(this.cfg.credentials.apiKey ?? '');
+    const fields: Record<string, unknown> = {};
+    if (changeSet.title !== undefined) fields.subject = changeSet.title;
+    if (changeSet.body !== undefined) fields.description = changeSet.body;
+    if (Object.keys(fields).length === 0) return;
+
+    const res = await this.fetchFn(`${base}/api/v2/tickets/${externalId}`, {
+      method: 'PUT',
+      headers: { Authorization: basicAuth(apiKey, 'X'), Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(fields),
+    });
+    if (!res.ok) throw new Error(`Freshdesk ticket update failed: ${res.status}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // ServiceNow (REST Table API) — itsm
 // ---------------------------------------------------------------------------
 
@@ -1545,6 +1626,7 @@ const PROVIDER_REGISTRY: Record<string, BoardProviderCtor> = {
   sentry:       SentryBoardProvider,
   pagerduty:    PagerDutyBoardProvider,
   freshservice: FreshserviceBoardProvider,
+  freshdesk:    FreshdeskBoardProvider,
   servicenow:   ServiceNowBoardProvider,
   monday:       MondayBoardProvider,
   asana:        AsanaBoardProvider,

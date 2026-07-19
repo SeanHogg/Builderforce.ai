@@ -1,0 +1,16 @@
+-- Store the processor's PAYMENT-METHOD id for the tenant's validated card.
+--
+-- Card validation previously persisted only brand + last4, which left two defects
+-- that share this one root cause:
+--
+--   1. Removing a card had to detach EVERY card on the Stripe customer, because
+--      the customer was the only handle we held. Harmless with one card, wrong the
+--      moment a tenant has two.
+--   2. Replacing a card had to reset the tenant to `pending` first, suspending
+--      premium access until the new card's webhook landed. With the old card's id
+--      on record we can validate the new one FIRST and detach the old one after —
+--      no gap.
+--
+-- Nullable and additive: existing rows keep a null id and fall back to the
+-- customer-wide sweep, so no backfill is required.
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS external_payment_method_id VARCHAR(255);

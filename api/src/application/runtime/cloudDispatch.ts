@@ -26,7 +26,15 @@ export function resolveCloudSurface(agentSurface: string | undefined | null, has
   return agentSurface === 'container' ? 'container' : 'durable';
 }
 
-export type CloudExecutor = 'container' | 'durable' | 'worker';
+/**
+ * The executors a cloud run can actually land on. There are exactly TWO, and both are
+ * long-lived: the alarm-ticked `durable` CloudRunnerDO and the `container` runtime.
+ * There is no in-request Worker executor — a `waitUntil` background loop cannot
+ * outlast the ~30s serverless wall, so {@link chooseCloudExecutor} fails fast to
+ * `unavailable` rather than starting a run that provably cannot finish.
+ */
+export type CloudExecutor = 'container' | 'durable';
+export type CloudDispatchTarget = CloudExecutor | 'unavailable';
 
 /**
  * Decide which cloud executor a run lands on, given the resolved capabilities.
@@ -37,18 +45,21 @@ export type CloudExecutor = 'container' | 'durable' | 'worker';
  *   1. `container` — only when the run wants it, the binding exists, AND a health
  *      probe proved the container is actually live;
  *   2. `durable` (CloudRunnerDO) — the surviving serverless executor, whenever bound;
- *   3. `worker` — last-resort in-request loop (does NOT survive long runs); only
- *      when no durable runner is bound.
+ *   3. `unavailable` — no long-lived executor exists. Dispatch fails fast. There is
+ *      deliberately no third, in-request fallback: a Worker loop running under
+ *      `waitUntil` cannot survive a multi-step run's ~30s background-execution wall,
+ *      so offering it would only convert a clear "no executor bound" error into a run
+ *      that silently dies mid-task and gets orphan-reaped.
  */
 export function chooseCloudExecutor(caps: {
   wantsContainer: boolean;
   hasContainerBinding: boolean;
   containerHealthy: boolean;
   hasCloudRunner: boolean;
-}): CloudExecutor {
+}): CloudDispatchTarget {
   if (caps.wantsContainer && caps.hasContainerBinding && caps.containerHealthy) return 'container';
   if (caps.hasCloudRunner) return 'durable';
-  return 'worker';
+  return 'unavailable';
 }
 
 /**
@@ -71,9 +82,10 @@ export async function probeContainerHealth(stub: { fetch: (input: string, init?:
 
 /** Human-readable name for a cloud agent run by surface — the canonical taxonomy.
  *  Used in dispatch telemetry so the timeline says exactly which cloud surface ran.
- *  There is ONE engine (the V2 Agent; V1 is deleted), so only the surface varies. */
+ *  There is ONE engine, so only the surface varies — the label is just "Cloud Agent"
+ *  plus the surface (no engine-version prefix). */
 export function cloudAgentTypeLabel(surface: string): string {
-  return surface === 'container' ? 'V2 Cloud Agent (Node/Container)' : 'V2 Cloud Agent (Durable Object)';
+  return surface === 'container' ? 'Cloud Agent (Node/Container)' : 'Cloud Agent (Durable Object)';
 }
 
 /** Terminal = the run has settled and has no live session to steer. A "Send" to a
@@ -88,6 +100,21 @@ export function parseCloudAgentRef(payload: string | undefined): string | undefi
   try {
     const p = JSON.parse(payload) as { cloudAgentRef?: unknown };
     return typeof p.cloudAgentRef === 'string' && p.cloudAgentRef.trim() ? p.cloudAgentRef.trim() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The ROLE a run ran AS, off its payload — the reviewer round-trip stamps `reviewRole`,
+ *  a role-attributed producer stamps `actAsRole`. Drives manifest attribution at finalize
+ *  and the approvals→sign-off bridge (a human approving a role's gate records that role's
+ *  sign-off). Null when the run carries no role stamp. */
+export function parseActAsRole(payload: string | null | undefined): string | undefined {
+  if (!payload) return undefined;
+  try {
+    const p = JSON.parse(payload) as { actAsRole?: unknown; reviewRole?: unknown };
+    const role = typeof p.actAsRole === 'string' ? p.actAsRole : typeof p.reviewRole === 'string' ? p.reviewRole : undefined;
+    return role && role.trim() ? role.trim() : undefined;
   } catch {
     return undefined;
   }
@@ -246,6 +273,37 @@ export function parseRemediation(payload: string | undefined): RemediationContex
   } catch {
     return null;
   }
+}
+
+/**
+ * The cloud executor a run actually landed on, parsed off its execution payload
+ * (stamped by dispatch once {@link chooseCloudExecutor} decides). The orphan
+ * detectors read this to pick the silence ceiling: BOTH surviving executors are
+ * long-lived and heartbeat once per alarm tick, and a tick legitimately spans one
+ * whole (possibly slow) LLM step, so neither may be reaped at the serverless wall.
+ * An unrecognized value — including `'worker'` on a payload stamped before the
+ * in-request Worker executor was removed — parses as undefined, which the ceiling
+ * helper treats as long-lived, so a live run is never reaped prematurely. */
+export function parseExecutor(payload: string | null | undefined): CloudExecutor | undefined {
+  if (!payload) return undefined;
+  try {
+    const e = (JSON.parse(payload) as { executor?: unknown }).executor;
+    return e === 'durable' || e === 'container' ? e : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Stamp the resolved cloud executor into the execution payload so the orphan
+ *  detectors can measure it against the right silence ceiling. Idempotent (re-stamps
+ *  overwrite). Returns the payload unchanged shape with `executor` set. */
+export function withExecutor(payload: string | null | undefined, executor: CloudExecutor): string {
+  let obj: Record<string, unknown> = {};
+  if (payload) {
+    try { obj = JSON.parse(payload) as Record<string, unknown>; } catch { obj = {}; }
+  }
+  obj.executor = executor;
+  return JSON.stringify(obj);
 }
 
 /**

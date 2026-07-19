@@ -23,16 +23,45 @@ type CachedValue<T> = {
   cacheKey: string;
 };
 
-let claudeCliCache: CachedValue<ClaudeCliCredential> | null = null;
-let codexCliCache: CachedValue<CodexCliCredential> | null = null;
-let qwenCliCache: CachedValue<QwenCliCredential> | null = null;
-let minimaxCliCache: CachedValue<MiniMaxCliCredential> | null = null;
+type CacheStore<T> = { current: CachedValue<T> | null };
+
+/**
+ * Generic single-slot cache keyed by `cacheKey`. Returns the cached value when
+ * the TTL is positive, the stored key matches, and the entry has not expired;
+ * otherwise invokes `loader` and (when TTL > 0) records the fresh value.
+ */
+async function cachedByKey<T>(
+  store: CacheStore<T>,
+  cacheKey: string,
+  ttlMs: number,
+  loader: () => Promise<T | null>,
+): Promise<T | null> {
+  const now = Date.now();
+  if (
+    ttlMs > 0 &&
+    store.current &&
+    store.current.cacheKey === cacheKey &&
+    now - store.current.readAt < ttlMs
+  ) {
+    return store.current.value;
+  }
+  const value = await loader();
+  if (ttlMs > 0) {
+    store.current = { value, readAt: now, cacheKey };
+  }
+  return value;
+}
+
+const claudeCliCache: CacheStore<ClaudeCliCredential> = { current: null };
+const codexCliCache: CacheStore<CodexCliCredential> = { current: null };
+const qwenCliCache: CacheStore<QwenCliCredential> = { current: null };
+const minimaxCliCache: CacheStore<MiniMaxCliCredential> = { current: null };
 
 export function resetCliCredentialCachesForTest(): void {
-  claudeCliCache = null;
-  codexCliCache = null;
-  qwenCliCache = null;
-  minimaxCliCache = null;
+  claudeCliCache.current = null;
+  codexCliCache.current = null;
+  qwenCliCache.current = null;
+  minimaxCliCache.current = null;
 }
 
 export type ClaudeCliCredential =
@@ -308,27 +337,18 @@ export async function readClaudeCliCredentialsCached(options?: {
   homeDir?: string;
   execSync?: ExecSyncFn;
 }): Promise<ClaudeCliCredential | null> {
-  const ttlMs = options?.ttlMs ?? 0;
-  const now = Date.now();
-  const cacheKey = resolveClaudeCliCredentialsPath(options?.homeDir);
-  if (
-    ttlMs > 0 &&
-    claudeCliCache &&
-    claudeCliCache.cacheKey === cacheKey &&
-    now - claudeCliCache.readAt < ttlMs
-  ) {
-    return claudeCliCache.value;
-  }
-  const value = await readClaudeCliCredentials({
-    allowKeychainPrompt: options?.allowKeychainPrompt,
-    platform: options?.platform,
-    homeDir: options?.homeDir,
-    execSync: options?.execSync,
-  });
-  if (ttlMs > 0) {
-    claudeCliCache = { value, readAt: now, cacheKey };
-  }
-  return value;
+  return cachedByKey(
+    claudeCliCache,
+    resolveClaudeCliCredentialsPath(options?.homeDir),
+    options?.ttlMs ?? 0,
+    () =>
+      readClaudeCliCredentials({
+        allowKeychainPrompt: options?.allowKeychainPrompt,
+        platform: options?.platform,
+        homeDir: options?.homeDir,
+        execSync: options?.execSync,
+      }),
+  );
 }
 
 export function writeClaudeCliKeychainCredentials(
@@ -506,67 +526,38 @@ export async function readCodexCliCredentialsCached(options?: {
   platform?: NodeJS.Platform;
   execSync?: ExecSyncFn;
 }): Promise<CodexCliCredential | null> {
-  const ttlMs = options?.ttlMs ?? 0;
-  const now = Date.now();
-  const cacheKey = `${options?.platform ?? process.platform}|${resolveCodexCliAuthPath()}`;
-  if (
-    ttlMs > 0 &&
-    codexCliCache &&
-    codexCliCache.cacheKey === cacheKey &&
-    now - codexCliCache.readAt < ttlMs
-  ) {
-    return codexCliCache.value;
-  }
-  const value = await readCodexCliCredentials({
-    platform: options?.platform,
-    execSync: options?.execSync,
-  });
-  if (ttlMs > 0) {
-    codexCliCache = { value, readAt: now, cacheKey };
-  }
-  return value;
+  return cachedByKey(
+    codexCliCache,
+    `${options?.platform ?? process.platform}|${resolveCodexCliAuthPath()}`,
+    options?.ttlMs ?? 0,
+    () =>
+      readCodexCliCredentials({
+        platform: options?.platform,
+        execSync: options?.execSync,
+      }),
+  );
 }
 
 export async function readQwenCliCredentialsCached(options?: {
   ttlMs?: number;
   homeDir?: string;
 }): Promise<QwenCliCredential | null> {
-  const ttlMs = options?.ttlMs ?? 0;
-  const now = Date.now();
-  const cacheKey = resolveQwenCliCredentialsPath(options?.homeDir);
-  if (
-    ttlMs > 0 &&
-    qwenCliCache &&
-    qwenCliCache.cacheKey === cacheKey &&
-    now - qwenCliCache.readAt < ttlMs
-  ) {
-    return qwenCliCache.value;
-  }
-  const value = await readQwenCliCredentials({ homeDir: options?.homeDir });
-  if (ttlMs > 0) {
-    qwenCliCache = { value, readAt: now, cacheKey };
-  }
-  return value;
+  return cachedByKey(
+    qwenCliCache,
+    resolveQwenCliCredentialsPath(options?.homeDir),
+    options?.ttlMs ?? 0,
+    () => readQwenCliCredentials({ homeDir: options?.homeDir }),
+  );
 }
 
 export async function readMiniMaxCliCredentialsCached(options?: {
   ttlMs?: number;
   homeDir?: string;
 }): Promise<MiniMaxCliCredential | null> {
-  const ttlMs = options?.ttlMs ?? 0;
-  const now = Date.now();
-  const cacheKey = resolveMiniMaxCliCredentialsPath(options?.homeDir);
-  if (
-    ttlMs > 0 &&
-    minimaxCliCache &&
-    minimaxCliCache.cacheKey === cacheKey &&
-    now - minimaxCliCache.readAt < ttlMs
-  ) {
-    return minimaxCliCache.value;
-  }
-  const value = await readMiniMaxCliCredentials({ homeDir: options?.homeDir });
-  if (ttlMs > 0) {
-    minimaxCliCache = { value, readAt: now, cacheKey };
-  }
-  return value;
+  return cachedByKey(
+    minimaxCliCache,
+    resolveMiniMaxCliCredentialsPath(options?.homeDir),
+    options?.ttlMs ?? 0,
+    () => readMiniMaxCliCredentials({ homeDir: options?.homeDir }),
+  );
 }

@@ -2,7 +2,7 @@
   "name": "builderforce-ai",
   "displayName": "BuilderForce.ai",
   "description": "%extension.description%",
-  "version": "2026.6.42",
+  "version": "2026.7.90",
   "publisher": "builderforce",
   "license": "MIT",
   "author": "Sean Hogg",
@@ -59,16 +59,29 @@
           "name": "%view.sessions%"
         },
         {
-          "id": "builderforce.inbox",
-          "name": "%view.inbox%"
-        },
-        {
           "id": "builderforce.project",
           "name": "%view.project%"
         },
         {
+          "id": "builderforce.inbox",
+          "name": "%view.inbox%"
+        },
+        {
           "id": "builderforce.insights",
           "name": "%view.insights%"
+        },
+        {
+          "id": "builderforce.evermind",
+          "type": "webview",
+          "name": "%view.evermind%"
+        },
+        {
+          "id": "builderforce.diagnostics",
+          "name": "%view.diagnostics%"
+        },
+        {
+          "id": "builderforce.meetings",
+          "name": "%view.meetings%"
         }
       ]
     },
@@ -80,6 +93,10 @@
       {
         "view": "builderforce.insights",
         "contents": "%welcome.insights%"
+      },
+      {
+        "view": "builderforce.diagnostics",
+        "contents": "%welcome.diagnostics%"
       }
     ],
     "commands": [
@@ -89,8 +106,42 @@
         "icon": "$(comment-discussion)"
       },
       {
+        "command": "builderforce.refreshMeetings",
+        "title": "%command.refreshMeetings%",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "builderforce.scheduleMeeting",
+        "title": "%command.scheduleMeeting%",
+        "category": "BuilderForce",
+        "icon": "$(add)"
+      },
+      {
+        "command": "builderforce.joinMeetingBrowser",
+        "title": "%command.joinMeetingBrowser%",
+        "category": "BuilderForce",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "builderforce.joinMeetingNative",
+        "title": "%command.joinMeetingNative%",
+        "category": "BuilderForce",
+        "icon": "$(device-camera-video)"
+      },
+      {
+        "command": "builderforce.logMeeting",
+        "title": "Log Meeting as Paid Time",
+        "category": "BuilderForce",
+        "icon": "$(calendar)"
+      },
+      {
         "command": "builderforce.refreshInsights",
         "title": "%command.refreshInsights%",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "builderforce.refreshEvermind",
+        "title": "%command.refreshEvermind%",
         "icon": "$(sync)"
       },
       {
@@ -153,6 +204,56 @@
         "icon": "$(eye-closed)"
       },
       {
+        "command": "builderforce.projectViewHierarchy",
+        "title": "%command.projectViewHierarchy%",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "builderforce.projectViewFlat",
+        "title": "%command.projectViewFlat%",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "builderforce.projectGroupBy",
+        "title": "%command.projectGroupBy%",
+        "icon": "$(group-by-ref-type)"
+      },
+      {
+        "command": "builderforce.projectSortBy",
+        "title": "%command.projectSortBy%",
+        "icon": "$(sort-precedence)"
+      },
+      {
+        "command": "builderforce.projectFilterStatus",
+        "title": "%command.projectFilterStatus%",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "builderforce.projectFilterAttentionOn",
+        "title": "%command.projectFilterAttentionOn%",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "builderforce.projectFilterAttentionOff",
+        "title": "%command.projectFilterAttentionOff%",
+        "icon": "$(filter-filled)"
+      },
+      {
+        "command": "builderforce.projectFilterMineOn",
+        "title": "%command.projectFilterMineOn%",
+        "icon": "$(account)"
+      },
+      {
+        "command": "builderforce.projectFilterMineOff",
+        "title": "%command.projectFilterMineOff%",
+        "icon": "$(account)"
+      },
+      {
+        "command": "builderforce.convertTaskType",
+        "title": "%command.convertTaskType%",
+        "icon": "$(type-hierarchy-sub)"
+      },
+      {
         "command": "builderforce.startTaskSession",
         "title": "%command.startTaskSession%",
         "icon": "$(comment-discussion)"
@@ -173,13 +274,18 @@
         "icon": "$(verified)"
       },
       {
+        "command": "builderforce.openProject360",
+        "title": "%command.openProject360%",
+        "icon": "$(pie-chart)"
+      },
+      {
         "command": "builderforce.openBoard",
         "title": "%command.openBoard%",
         "icon": "$(layout)"
       },
       {
-        "command": "builderforce.openView",
-        "title": "%command.openView%",
+        "command": "builderforce.openPage",
+        "title": "%command.openPage%",
         "icon": "$(browser)"
       },
       {
@@ -239,6 +345,21 @@
         "command": "builderforce.refreshInbox",
         "title": "%command.refreshInbox%",
         "icon": "$(sync)"
+      },
+      {
+        "command": "builderforce.refreshDiagnostics",
+        "title": "%command.refreshDiagnostics%",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "builderforce.runDiagnostic",
+        "title": "%command.runDiagnostic%",
+        "icon": "$(play)"
+      },
+      {
+        "command": "builderforce.openDiagnosticReport",
+        "title": "%command.openDiagnosticReport%",
+        "icon": "$(output)"
       }
     ],
     "menus": {
@@ -250,8 +371,23 @@
       ],
       "view/title": [
         {
+          "command": "builderforce.scheduleMeeting",
+          "when": "view == builderforce.meetings",
+          "group": "navigation@1"
+        },
+        {
+          "command": "builderforce.refreshMeetings",
+          "when": "view == builderforce.meetings",
+          "group": "navigation@2"
+        },
+        {
           "command": "builderforce.refreshInsights",
           "when": "view == builderforce.insights",
+          "group": "navigation@1"
+        },
+        {
+          "command": "builderforce.refreshEvermind",
+          "when": "view == builderforce.evermind",
           "group": "navigation@1"
         },
         {
@@ -300,42 +436,107 @@
           "group": "1_workspace@1"
         },
         {
-          "command": "builderforce.openBoard",
+          "command": "builderforce.openProject360",
           "when": "view == builderforce.project",
           "group": "navigation@2"
         },
         {
-          "command": "builderforce.openView",
+          "command": "builderforce.openBoard",
           "when": "view == builderforce.project",
           "group": "navigation@3"
         },
         {
-          "command": "builderforce.humanRequests",
+          "command": "builderforce.openPage",
           "when": "view == builderforce.project",
           "group": "navigation@4"
         },
         {
-          "command": "builderforce.refreshProjects",
+          "command": "builderforce.humanRequests",
           "when": "view == builderforce.project",
           "group": "navigation@5"
         },
         {
+          "command": "builderforce.refreshProjects",
+          "when": "view == builderforce.project",
+          "group": "navigation@6"
+        },
+        {
           "command": "builderforce.hideDoneTasks",
           "when": "view == builderforce.project && !builderforce.hideDoneTasks",
-          "group": "navigation@6"
+          "group": "navigation@7"
         },
         {
           "command": "builderforce.showDoneTasks",
           "when": "view == builderforce.project && builderforce.hideDoneTasks",
-          "group": "navigation@6"
+          "group": "navigation@7"
+        },
+        {
+          "command": "builderforce.projectViewHierarchy",
+          "when": "view == builderforce.project && !builderforce.projectHierarchy",
+          "group": "navigation@8"
+        },
+        {
+          "command": "builderforce.projectViewFlat",
+          "when": "view == builderforce.project && builderforce.projectHierarchy",
+          "group": "navigation@8"
+        },
+        {
+          "command": "builderforce.projectGroupBy",
+          "when": "view == builderforce.project",
+          "group": "1_arrange@1"
+        },
+        {
+          "command": "builderforce.projectSortBy",
+          "when": "view == builderforce.project",
+          "group": "1_arrange@2"
+        },
+        {
+          "command": "builderforce.projectFilterStatus",
+          "when": "view == builderforce.project",
+          "group": "1_arrange@3"
+        },
+        {
+          "command": "builderforce.projectFilterAttentionOn",
+          "when": "view == builderforce.project && !builderforce.projectNeedsAttention",
+          "group": "1_arrange@4"
+        },
+        {
+          "command": "builderforce.projectFilterAttentionOff",
+          "when": "view == builderforce.project && builderforce.projectNeedsAttention",
+          "group": "1_arrange@4"
+        },
+        {
+          "command": "builderforce.projectFilterMineOn",
+          "when": "view == builderforce.project && !builderforce.projectAssignedToMe",
+          "group": "1_arrange@5"
+        },
+        {
+          "command": "builderforce.projectFilterMineOff",
+          "when": "view == builderforce.project && builderforce.projectAssignedToMe",
+          "group": "1_arrange@5"
         },
         {
           "command": "builderforce.refreshInbox",
           "when": "view == builderforce.inbox",
           "group": "navigation@1"
+        },
+        {
+          "command": "builderforce.refreshDiagnostics",
+          "when": "view == builderforce.diagnostics",
+          "group": "navigation@1"
         }
       ],
       "view/item/context": [
+        {
+          "command": "builderforce.joinMeetingNative",
+          "when": "view == builderforce.meetings && viewItem == bfMeeting",
+          "group": "inline@1"
+        },
+        {
+          "command": "builderforce.joinMeetingBrowser",
+          "when": "view == builderforce.meetings && viewItem == bfMeeting",
+          "group": "inline@2"
+        },
         {
           "command": "builderforce.renameSession",
           "when": "view == builderforce.sessions && viewItem == builderforceSession",
@@ -360,6 +561,21 @@
           "command": "builderforce.setTaskStatus",
           "when": "view == builderforce.project && viewItem == builderforceTask",
           "group": "inline@3"
+        },
+        {
+          "command": "builderforce.convertTaskType",
+          "when": "view == builderforce.project && viewItem == builderforceTask",
+          "group": "9_modify@1"
+        },
+        {
+          "command": "builderforce.runDiagnostic",
+          "when": "view == builderforce.diagnostics && viewItem == builderforceDiagnostic",
+          "group": "inline@1"
+        },
+        {
+          "command": "builderforce.openDiagnosticReport",
+          "when": "view == builderforce.diagnostics && viewItem == builderforceDiagnostic",
+          "group": "inline@2"
         }
       ],
       "commandPalette": [
@@ -384,6 +600,10 @@
           "when": "false"
         },
         {
+          "command": "builderforce.convertTaskType",
+          "when": "false"
+        },
+        {
           "command": "builderforce.runTask",
           "when": "false"
         },
@@ -393,6 +613,14 @@
         },
         {
           "command": "builderforce.refreshInbox",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.runDiagnostic",
+          "when": "false"
+        },
+        {
+          "command": "builderforce.openDiagnosticReport",
           "when": "false"
         }
       ]
@@ -411,7 +639,7 @@
       "properties": {
         "builderforce.baseUrl": {
           "type": "string",
-          "default": "https://api.builderforce.ai",
+          "default": "https://builderforce.ai/gateway",
           "markdownDescription": "%config.baseUrl.desc%"
         },
         "builderforce.webUrl": {
@@ -436,6 +664,19 @@
             "%config.permissionMode.acceptEdits%"
           ],
           "description": "%config.permissionMode.desc%"
+        },
+        "builderforce.sessionTabs": {
+          "type": "string",
+          "enum": [
+            "reuse",
+            "perSession"
+          ],
+          "default": "reuse",
+          "markdownEnumDescriptions": [
+            "%config.sessionTabs.reuse%",
+            "%config.sessionTabs.perSession%"
+          ],
+          "description": "%config.sessionTabs.desc%"
         }
       }
     }
@@ -452,10 +693,7 @@
     "publish:openvsx": "ovsx publish",
     "typecheck:native": "tsgo --noEmit"
   },
-  "dependencies": {
-    "@seanhogg/builderforce-memory": "^2026.6.35",
-    "@seanhogg/builderforce-memory-engine": "^2026.6.35"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@seanhogg/builderforce-brain-embedded": "link:../../brain-embedded",
     "@seanhogg/builderforce-brain-ui": "link:../../packages/brain-ui",

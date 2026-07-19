@@ -11,8 +11,10 @@ import {
   type InspectionRecommendation,
 } from '@/lib/projectInspection';
 import type { HealthTier } from '@/lib/projectHealth';
+import { diagnosticScoreColor } from '@/lib/diagnosticScore';
 import type { ProjectPanelTab } from './ProjectDetailsPanel';
 import { BandedMetricBar, type MetricTier } from './charts/BandedMetricBar';
+import { ProjectDiagnosticsStrip } from './ProjectDiagnosticsStrip';
 
 /**
  * Shared "project inspection" visuals — the single source of truth for the PM
@@ -136,17 +138,57 @@ export interface ProjectInspectionReportProps {
    * Fix that lands on the tab the report already lives on still does something.
    */
   onTargetRecommendation?: (rec: InspectionRecommendation) => void;
+  /**
+   * Render the overall grade + verdict block at the top of the report. Default
+   * true. The details panel sets this false and renders {@link
+   * ProjectInspectionSummary} on its own so the rating sits in the metrics row
+   * beside the health gauges — the report below then shows only the per-dimension
+   * breakdown and the prescriptive "what to target" list.
+   */
+  showSummary?: boolean;
 }
 
-/** Map a 1–5 maturity score to one of the shared tier colours. */
-function maturityColor(score: number): string {
-  if (score >= 4) return TIER_HEX.healthy;
-  if (score >= 3) return TIER_HEX.watch;
-  if (score >= 2) return TIER_HEX.at_risk;
-  return TIER_HEX.critical;
+/**
+ * The overall PM grade + plain-language verdict — the "rating" tile. Shared so it
+ * can render standalone (in the details-panel metrics row, next to the health
+ * gauges) or as the header of {@link ProjectInspectionReport}. Fills its
+ * container's height so it lines up with the gauge card beside it.
+ */
+export function ProjectInspectionSummary({ project }: { project: Project }) {
+  const t = useTranslations('projectInspection');
+  const insp = computeProjectInspection(project);
+  return (
+    <div
+      style={{
+        display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+        height: '100%', padding: 16, background: 'var(--bg-base)',
+        border: `1px solid ${insp.color}`, borderRadius: 12,
+      }}
+    >
+      <div
+        aria-hidden
+        style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          width: 64, height: 64, borderRadius: 12, flexShrink: 0,
+          background: `${insp.color}22`, border: `2px solid ${insp.color}`,
+        }}
+      >
+        <span style={{ fontSize: 30, fontWeight: 800, lineHeight: 1, color: insp.color }}>{insp.grade}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: insp.color }}>{t('outOf', { score: insp.overall })}</span>
+      </div>
+      <div style={{ flex: 1, minWidth: 160 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>
+          {t('reportTitle')}
+        </div>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+          {t(`verdict.${insp.tier}`)}
+        </p>
+      </div>
+    </div>
+  );
 }
 
-export function ProjectInspectionReport({ project, onNavigate, onTargetRecommendation }: ProjectInspectionReportProps) {
+export function ProjectInspectionReport({ project, onNavigate, onTargetRecommendation, showSummary = true }: ProjectInspectionReportProps) {
   const t = useTranslations('projectInspection');
   const insp = computeProjectInspection(project);
 
@@ -171,34 +213,9 @@ export function ProjectInspectionReport({ project, onNavigate, onTargetRecommend
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Overall grade + plain-language summary */}
-      <div
-        style={{
-          display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-          padding: 16, background: 'var(--bg-base)',
-          border: `1px solid ${insp.color}`, borderRadius: 12,
-        }}
-      >
-        <div
-          aria-hidden
-          style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            width: 64, height: 64, borderRadius: 12, flexShrink: 0,
-            background: `${insp.color}22`, border: `2px solid ${insp.color}`,
-          }}
-        >
-          <span style={{ fontSize: 30, fontWeight: 800, lineHeight: 1, color: insp.color }}>{insp.grade}</span>
-          <span style={{ fontSize: 11, fontWeight: 700, color: insp.color }}>{t('outOf', { score: insp.overall })}</span>
-        </div>
-        <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 2 }}>
-            {t('reportTitle')}
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
-            {t(`verdict.${insp.tier}`)}
-          </p>
-        </div>
-      </div>
+      {/* Overall grade + plain-language summary. Hidden when the owning surface
+          renders ProjectInspectionSummary itself (details panel metrics row). */}
+      {showSummary && <ProjectInspectionSummary project={project} />}
 
       {/* Per-dimension benchmark bars + what each one means */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -230,7 +247,7 @@ export function ProjectInspectionReport({ project, onNavigate, onTargetRecommend
             <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{t('maturity.title')}</span>
             {maturity?.result.scoreLabel && (
               <span style={{
-                fontSize: '0.7rem', fontWeight: 700, color: '#fff', background: maturityColor(maturityScore),
+                fontSize: '0.7rem', fontWeight: 700, color: '#fff', background: diagnosticScoreColor(maturityScore),
                 padding: '1px 8px', borderRadius: 999,
               }}>
                 {maturity.result.scoreLabel}
@@ -241,7 +258,7 @@ export function ProjectInspectionReport({ project, onNavigate, onTargetRecommend
             </span>
           </div>
           <div style={{ height: 8, borderRadius: 999, background: 'var(--border-subtle)', overflow: 'hidden' }}>
-            <div style={{ width: `${(maturityScore / 5) * 100}%`, height: '100%', background: maturityColor(maturityScore), borderRadius: 999 }} />
+            <div style={{ width: `${(maturityScore / 5) * 100}%`, height: '100%', background: diagnosticScoreColor(maturityScore), borderRadius: 999 }} />
           </div>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>{t('maturity.subtitle')}</p>
           {onNavigate && (
@@ -254,6 +271,18 @@ export function ProjectInspectionReport({ project, onNavigate, onTargetRecommend
             </button>
           )}
         </div>
+      )}
+
+      {/* Per-diagnostic breakdown — each diagnostic run against this project (SOC 2
+          readiness, Quality, …) as a score gauge + remediation status. Shares the
+          projectScore fetch above so there's no extra round-trip; self-hides when
+          none have been run. Clicking a gauge jumps to the Diagnostics tab. */}
+      {maturity && maturity.diagnostics.length > 0 && (
+        <ProjectDiagnosticsStrip
+          diagnostics={maturity.diagnostics}
+          variant="gauges"
+          onOpen={onNavigate ? () => onNavigate('diagnostics') : undefined}
+        />
       )}
 
       {/* Prescriptive "what to target" */}

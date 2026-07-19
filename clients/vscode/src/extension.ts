@@ -2,21 +2,29 @@ import * as os from "os";
 import * as vscode from "vscode";
 import { BuilderForceAuthProvider } from "./auth";
 import * as bfApi from "./bfApi";
+import { initActivity, trackVsix } from "./activity";
 import { BoardPanel } from "./boardPanel";
 import { BrainWebview } from "./brainWebview";
-import { EmbedPanel } from "./embedPanel";
+import { Project360Panel } from "./project360Panel";
+import { ProjectPagePanel, projectPageChoices } from "./projectPagePanel";
 import { registerChatParticipant } from "./chatParticipant";
 import { registerChatSessions } from "./chatSessions";
 import { scanCodebase } from "./codebaseScan";
-import { getModels, getWebBaseUrl, SECRET_KEY } from "./gateway";
+import { getModels, getWebBaseUrl, SECRET_KEY, clearPersonalityBlockCache } from "./gateway";
 import { InsightsController } from "./insights";
+import { EvermindViewProvider } from "./evermindView";
+import { DiagnosticsController } from "./diagnostics";
 import { clearPlatformToolsCache } from "./platformTools";
 import { setGroundingSummary } from "./grounding";
-import { setSelectedModel } from "./modelState";
-import { getSelectedProject, initProjectState, setSelectedProject } from "./projectState";
+import { onModelChange, setSelectedModel } from "./modelState";
+import { getSelectedProject, initProjectState, onProjectChange, setSelectedProject } from "./projectState";
+import { invalidateProjectNames } from "./projectNames";
 import { ProjectsTreeProvider } from "./projectsTree";
 import { SessionsTreeProvider } from "./sessionsTree";
 import { InboxTreeProvider } from "./inboxTree";
+import { AttentionPoller, setLocalChatRuns, onLocalRunsChange, managerAttention } from "./attention";
+import { appUrl } from "./auth";
+import { MeetingsController, joinMeetingInBrowser, joinMeetingNative, openMeetingsWeb, type MeetingItem } from "./meetings";
 
 /** Pull a numeric Brain chat id out of a Sessions tree item or a raw id argument. */
 function chatIdOf(item: bfApi.BfBrainChat | number | string | undefined): number | undefined {
@@ -38,6 +46,15 @@ let projectView: (vscode.Disposable & { description?: string }) | undefined;
 /** Live builder-insights surface (status bar + tree); restarted on auth change. */
 let insights: InsightsController | undefined;
 
+/** The Evermind sidebar console; re-pushed init on project switch + auth change. */
+let evermindView: EvermindViewProvider | undefined;
+
+/** Security & compliance Diagnostics sidebar; re-fetched on auth/project change. */
+let diagnostics: DiagnosticsController | undefined;
+
+/** Meetings sidebar (upcoming/live video calls); refreshed on auth change. */
+let meetings: MeetingsController | undefined;
+
 /** Show the active workspace (tenant) name next to the Project & Tasks view title. */
 async function refreshWorkspaceHeader(context: vscode.ExtensionContext): Promise<void> {
   if (!projectView) return;
@@ -53,44 +70,86 @@ async function refreshWorkspaceHeader(context: vscode.ExtensionContext): Promise
   }
 }
 
-/** Embeddable BuilderForce web views opened inside VS Code (reuse the real pages, DRY). */
-const EMBED_VIEWS: { label: string; view: string }[] = [
-  { label: "Board (Kanban)", view: "kanban" },
-  { label: "Backlog", view: "backlog" },
-  { label: "Roadmap", view: "roadmap" },
-  { label: "Sprints", view: "sprints" },
-  { label: "Retrospectives", view: "retros" },
-  { label: "Planning Poker", view: "poker" },
-  { label: "Velocity", view: "velocity" },
-  { label: "PRDs & Specs", view: "prd" },
-  { label: "Ideas", view: "ideas" },
-  { label: "Feature ROI", view: "feature-roi" },
-];
-
-function projectHash(): string | undefined {
-  const p = getSelectedProject();
-  return p ? `projectId=${p.id}` : undefined;
-}
-
 export function activate(context: vscode.ExtensionContext): void {
   initProjectState(context.workspaceState);
   const tree = new SessionsTreeProvider(context.secrets);
   const projects = new ProjectsTreeProvider(context);
   const inbox = new InboxTreeProvider(context.secrets);
 
+  // Cross-surface live-status poller: one fetch of `GET /api/runtime/attention`
+  // feeds BOTH the Sessions and Project trees so a running / question-blocked
+  // session lights up in lockstep with the web app and the board. Repaints the
+  // two trees only when the surfaced state actually changes.
+  const attention = new AttentionPoller(context.secrets);
+
+  // Ambient "AI Manager" status bar item — the manager runs in the background
+  // (cron + manual) across a project or the whole tenant, so a human in the editor
+  // should see when it just acted without opening the web app. Rides the SAME
+  // attention poll (manager cadence travels on that signal). Hidden until a manager
+  // has actually run in this workspace. Clicking opens the web Manager tab.
+  const OPEN_MANAGER_CMD = "builderforce.openManager";
+  const managerStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 90);
+  managerStatus.command = OPEN_MANAGER_CMD;
+  const updateManagerStatus = () => {
+    const m = managerAttention();
+    if (!m.lastRunAt) { managerStatus.hide(); return; }
+    const agoMs = Date.now() - new Date(m.lastRunAt).getTime();
+    const ago = agoMs < 60_000 ? vscode.l10n.t("just now")
+      : agoMs < 3_600_000 ? vscode.l10n.t("{0}m ago", Math.floor(agoMs / 60_000))
+      : agoMs < 86_400_000 ? vscode.l10n.t("{0}h ago", Math.floor(agoMs / 3_600_000))
+      : vscode.l10n.t("{0}d ago", Math.floor(agoMs / 86_400_000));
+    managerStatus.text = m.recentlyActive
+      ? `$(compass) ${vscode.l10n.t("Manager active")}`
+      : `$(compass) ${vscode.l10n.t("Manager · {0}", ago)}`;
+    managerStatus.tooltip = vscode.l10n.t("AI Manager — last managed {0}. Click to open the Manager.", ago);
+    managerStatus.show();
+  };
+
+  context.subscriptions.push(
+    attention,
+    managerStatus,
+    vscode.commands.registerCommand(OPEN_MANAGER_CMD, () =>
+      vscode.env.openExternal(vscode.Uri.parse(`${appUrl()}/projects?tab=manager`))),
+    attention.onDidChange(() => {
+      tree.refresh(); projects.refresh(); inbox.refresh(); updateManagerStatus();
+      // Per-session chat tabs show the same live status as the Sessions rows, off the
+      // same map — repaint them on the same signal (no second poller).
+      BrainWebview.refreshTabStatus();
+    }),
+    // The in-webview Brain loop reports its own running / awaiting chats (the server
+    // can't see them) — repaint the Sessions tree so they light up in lockstep.
+    onLocalRunsChange(() => { tree.refresh(); BrainWebview.refreshTabStatus(); }),
+    // Switching the active project re-scopes the attention query.
+    onProjectChange(() => attention.refresh()),
+  );
+  attention.start();
+  updateManagerStatus();
+
   // The Brain panel is the ONE chat surface — keep the sidebars live as it writes:
   // a new/renamed conversation refreshes the Sessions list; a platform-catalog write
-  // (task/project/OKR) refreshes Project & Tasks.
+  // (task/project/OKR) refreshes Project & Tasks; either may have started/answered a
+  // run, so re-poll attention immediately rather than waiting for the next tick.
   BrainWebview.configure({
-    onChatsChanged: () => tree.refresh(),
+    onChatsChanged: () => { tree.refresh(); attention.refresh(); },
     onPlatformWrite: () => {
       bfApi.invalidateTasks();
       projects.refresh();
+      attention.refresh();
       void refreshWorkspaceHeader(context);
     },
+    // Merge the webview's in-flight chat runs into the live-status map so a chat
+    // that keeps executing after the user opens a new one still shows a spinner
+    // (or ❓ when paused on a confirm) in the Sessions tree. Keyed by the reporting
+    // panel — with per-session tabs several panels report at once.
+    onLocalRunsChanged: (sourceId, runs) => setLocalChatRuns(sourceId, runs),
   });
   projectView = vscode.window.createTreeView("builderforce.project", { treeDataProvider: projects });
   context.subscriptions.push(projectView);
+  // The Sessions list is scoped by the active project — surface that in its header so
+  // it's obvious you're looking at one project's chats vs. every conversation.
+  const sessionsView = vscode.window.createTreeView("builderforce.sessions", { treeDataProvider: tree });
+  sessionsView.description = getSelectedProject()?.name;
+  context.subscriptions.push(sessionsView);
   // Restore the workspace the editor was last acting as (re-scopes the tenant JWT).
   const savedTenant = context.globalState.get<number>(SELECTED_TENANT_KEY);
   if (typeof savedTenant === "number") bfApi.setSelectedWorkspace(savedTenant);
@@ -110,9 +169,44 @@ export function activate(context: vscode.ExtensionContext): void {
   insights = new InsightsController(context);
   context.subscriptions.push(insights);
 
+  // Evermind sidebar console — inspect what the active project's self-learning model
+  // has learned and steer its training (seed / inference / learning / teacher / teach
+  // from a transcript / learn-now), from the activity-bar sidebar.
+  evermindView = new EvermindViewProvider(context);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(EvermindViewProvider.viewType, evermindView, {
+      webviewOptions: { retainContextWhenHidden: true },
+    }),
+    vscode.commands.registerCommand("builderforce.refreshEvermind", () => evermindView?.triggerRefresh()),
+  );
+
+  // Security & compliance Diagnostics — SOC 2, Architecture, Quality, and Privacy
+  // & Data-Law audits run against the active project's repos, from the sidebar.
+  diagnostics = new DiagnosticsController(context);
+  context.subscriptions.push(
+    diagnostics,
+    vscode.commands.registerCommand("builderforce.refreshDiagnostics", () => diagnostics?.refresh()),
+    vscode.commands.registerCommand("builderforce.runDiagnostic", (row) => diagnostics?.run(row)),
+    vscode.commands.registerCommand("builderforce.openDiagnosticReport", (row) => diagnostics?.openReport(row)),
+  );
+
+  // Meetings sidebar — upcoming/live video calls for the workspace. Join in the
+  // browser (reliable camera) or natively in a VS Code webview.
+  meetings = new MeetingsController(context);
+  context.subscriptions.push(
+    meetings,
+    vscode.commands.registerCommand("builderforce.refreshMeetings", () => meetings?.refresh()),
+    vscode.commands.registerCommand("builderforce.joinMeetingBrowser", (item: MeetingItem) => joinMeetingInBrowser(item)),
+    vscode.commands.registerCommand("builderforce.joinMeetingNative", (item: MeetingItem) => joinMeetingNative(context, item)),
+    vscode.commands.registerCommand("builderforce.scheduleMeeting", () => openMeetingsWeb()),
+  );
+
+  // Editor activity capture — heartbeats + file-open navigation feed the billable
+  // timecard pipeline (source 'vscode'). Best-effort; no-op when signed out.
+  context.subscriptions.push(initActivity(context.secrets));
+
   context.subscriptions.push(
     participant,
-    vscode.window.registerTreeDataProvider("builderforce.sessions", tree),
     vscode.window.registerTreeDataProvider("builderforce.inbox", inbox),
     vscode.commands.registerCommand("builderforce.refreshInbox", () => inbox.refresh()),
     // Work Inbox entry points — each hands the unified Brain a job to do with its
@@ -161,6 +255,24 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand("builderforce.hideDoneTasks", () => projects.setHideDone(true)),
     vscode.commands.registerCommand("builderforce.showDoneTasks", () => projects.setHideDone(false)),
+    // Project & Tasks view arrangement: Flat ⇄ Hierarchy (epic → child tasks),
+    // plus group-by / sort / status-filter quick-picks.
+    vscode.commands.registerCommand("builderforce.projectViewHierarchy", () => projects.setHierarchy(true)),
+    vscode.commands.registerCommand("builderforce.projectViewFlat", () => projects.setHierarchy(false)),
+    vscode.commands.registerCommand("builderforce.projectGroupBy", () => projects.pickGroupBy()),
+    vscode.commands.registerCommand("builderforce.projectSortBy", () => projects.pickSortBy()),
+    vscode.commands.registerCommand("builderforce.projectFilterStatus", () => projects.pickStatusFilter()),
+    // "Needs attention" filter (blocked / overdue / stale) — paired on/off so the
+    // toolbar icon reflects the active state, like hide-done and Flat⇄Hierarchy.
+    vscode.commands.registerCommand("builderforce.projectFilterAttentionOn", () => projects.setNeedsAttention(true)),
+    vscode.commands.registerCommand("builderforce.projectFilterAttentionOff", () => projects.setNeedsAttention(false)),
+    // "Assigned to me" filter — paired on/off like the others.
+    vscode.commands.registerCommand("builderforce.projectFilterMineOn", () => projects.setAssignedToMe(true)),
+    vscode.commands.registerCommand("builderforce.projectFilterMineOff", () => projects.setAssignedToMe(false)),
+    // Change a work-item's type from the tree: task⇄epic, or promote an epic to an OKR.
+    vscode.commands.registerCommand("builderforce.convertTaskType", (node: TaskNode) =>
+      convertTaskType(context, projects, node?.task),
+    ),
     vscode.commands.registerCommand("builderforce.diagnose", async () => {
       output.clear();
       output.appendLine("BuilderForce connection diagnostics");
@@ -173,9 +285,14 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!t) return;
       // Open the unified Brain seeded for this task. The Brain has the shared platform
       // tools (tasks.get/update/…), so it can read + act on the task, not just chat.
+      // Auto-link the work item so the chat is tied to it (epics/gaps use their own
+      // ticket kind; everything else is a plain task).
+      const projectId = getSelectedProject()?.id;
+      const ticketKind = t.taskType === "epic" ? "epic" : t.taskType === "gap" ? "gap" : "task";
       BrainWebview.open(context, {
         kind: "task",
-        task: { id: t.id, key: t.key, title: t.title, projectId: getSelectedProject()?.id },
+        task: { id: t.id, key: t.key, title: t.title, taskType: t.taskType, projectId },
+        ticket: { kind: ticketKind, ref: String(t.id), title: t.title, projectId },
       });
     }),
     vscode.commands.registerCommand("builderforce.setTaskStatus", (node: TaskNode) =>
@@ -183,12 +300,22 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
     // Dispatch a PLATFORM run for the task (its assigned AgentHost / cloud agent) —
     // distinct from the local in-editor agent loop. Surfaces the run via a task session.
-    vscode.commands.registerCommand("builderforce.runTask", (node: TaskNode) =>
-      runTask(context, projects, node?.task),
-    ),
+    vscode.commands.registerCommand("builderforce.runTask", (node: TaskNode) => {
+      // Audited engagement signal: dispatching a run is billable activity.
+      trackVsix("agent_run", { ref: node?.task ? `task:${node.task.id}` : undefined, weight: 2 });
+      return runTask(context, projects, node?.task);
+    }),
+    // Log a meeting as PAID time (it's the worker's time) — prompts for minutes.
+    vscode.commands.registerCommand("builderforce.logMeeting", async () => {
+      const mins = await vscode.window.showInputBox({ prompt: "Meeting length in minutes", validateInput: (v) => (Number(v) > 0 ? null : "Enter a positive number") });
+      if (!mins) return;
+      const note = await vscode.window.showInputBox({ prompt: "Meeting note (optional)" });
+      trackVsix("meeting", { durationSeconds: Math.round(Number(mins) * 60), ref: "meeting", metadata: note ? { note } : undefined });
+      void vscode.window.showInformationMessage(`Logged a ${mins}-minute meeting as paid time.`);
+    }),
     // Review the tenant's pending human-in-the-loop approvals and resolve them.
-    vscode.commands.registerCommand("builderforce.humanRequests", () =>
-      reviewHumanRequests(context, projects),
+    vscode.commands.registerCommand("builderforce.humanRequests", (approvalId?: string) =>
+      reviewHumanRequests(context, projects, approvalId),
     ),
     // The Board renders NATIVELY in a webview from bfApi data (not the embedded web
     // page) — reliable inside a VS Code webview where the /embed iframe is not.
@@ -200,17 +327,33 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       if (project) BoardPanel.open(context, project.id, project.name);
     }),
-    vscode.commands.registerCommand("builderforce.openView", async () => {
+    // Project 360 — the whole-picture management view (health wheel, missing items,
+    // who's working / idle). Renders NATIVELY as a bundled React webview (the shared
+    // <Project360View>, same hosting model as the Brain chat), fed by /api/projects/:id/360.
+    vscode.commands.registerCommand("builderforce.openProject360", async () => {
+      let project = getSelectedProject();
+      if (!project) {
+        await selectProject(context, projects);
+        project = getSelectedProject();
+      }
+      if (project) Project360Panel.open(context, project.id, project.name);
+    }),
+    // Open a list-shaped project page (Backlog, PRDs, …) — NATIVE bundled-React
+    // webview screens (shared <ProjectListView>, same hosting model as the chat +
+    // Project 360), each fed by its own REST endpoint. Replaces the retired /embed
+    // "Open Page…" iframe picker, which never ran in the webview.
+    vscode.commands.registerCommand("builderforce.openPage", async () => {
       const pick = await vscode.window.showQuickPick(
-        EMBED_VIEWS.map((v) => ({ label: v.label, view: v.view })),
-        { title: "Open a BuilderForce page in VS Code", placeHolder: "Manage your workforce & tasks without leaving the editor" },
+        projectPageChoices().map((c) => ({ label: c.label, view: c.view })),
+        { title: vscode.l10n.t("Open a BuilderForce page"), placeHolder: vscode.l10n.t("Manage your project without leaving the editor") },
       );
       if (!pick) return;
-      if (pick.view === "kanban") {
-        void vscode.commands.executeCommand("builderforce.openBoard");
-        return;
+      let project = getSelectedProject();
+      if (!project) {
+        await selectProject(context, projects);
+        project = getSelectedProject();
       }
-      EmbedPanel.open(context, pick.view, { title: `BuilderForce: ${pick.label}`, hash: projectHash() });
+      if (project) ProjectPagePanel.open(context, pick.view, project.id, project.name);
     }),
     vscode.commands.registerCommand("builderforce.deleteSession", async (item: bfApi.BfBrainChat | string) => {
       const id = chatIdOf(item);
@@ -262,13 +405,30 @@ export function activate(context: vscode.ExtensionContext): void {
       setGroundingSummary(undefined);
       void maybeScan(context, false);
     }),
+    // Switching the active project re-pushes Brain init so an open chat's system
+    // prompt (and new-chat scoping) tracks the current project without a reopen, and
+    // re-labels the Sessions header to show which project's chats are in view.
+    onProjectChange(() => {
+      BrainWebview.refresh();
+      evermindView?.refresh();
+      sessionsView.description = getSelectedProject()?.name;
+    }),
+    // A manual model pick re-pushes Brain init so an open chat switches immediately
+    // (parity with project change; the native participant re-resolves per turn).
+    onModelChange(() => BrainWebview.refresh()),
   );
 
   void maybeScan(context, false);
 
-  // Track this VS Code coder-agent connection (human-in-the-loop) via heartbeat.
+  // Track this VS Code coder-agent connection (human-in-the-loop) via heartbeat, and
+  // on the same cadence poll for newly-assigned work so a ticket assigned on the web
+  // board is delivered to the editor (tracked HITL). One timer for both (DRY).
   void heartbeat(context);
-  const hb = setInterval(() => void heartbeat(context), 5 * 60_000);
+  void pollAssignedTasks(context, projects);
+  const hb = setInterval(() => {
+    void heartbeat(context);
+    void pollAssignedTasks(context, projects);
+  }, 5 * 60_000);
   context.subscriptions.push({ dispose: () => clearInterval(hb) });
 }
 
@@ -278,18 +438,75 @@ async function heartbeat(context: vscode.ExtensionContext): Promise<void> {
   await bfApi.connect(context.secrets, os.hostname(), version);
 }
 
+/** globalState key: the assigned-task ids we've already announced, so a poll only
+ *  notifies on newly-assigned work (and re-notifies if a task is unassigned then
+ *  reassigned). `undefined` = never polled on this machine → seed silently. */
+const ASSIGNED_SEEN_KEY = "builderforce.assignedTaskIdsSeen";
+
+/**
+ * Deliver assigned work to the editor: fetch the open tasks assigned to the signed-in
+ * user and raise a notification for any that appeared since the last poll. The FIRST
+ * poll on a machine seeds the seen-set silently so we don't announce the whole existing
+ * backlog. "Show my tasks" flips the Projects & Tasks tree to its assigned-to-me filter.
+ */
+async function pollAssignedTasks(
+  context: vscode.ExtensionContext,
+  projects: ProjectsTreeProvider,
+): Promise<void> {
+  if (!(await context.secrets.get(SECRET_KEY))) return;
+  const assigned = await bfApi.listAssignedTasks(context.secrets);
+  const currentIds = assigned.map((t) => t.id);
+  const prev = context.globalState.get<number[]>(ASSIGNED_SEEN_KEY);
+  await context.globalState.update(ASSIGNED_SEEN_KEY, currentIds);
+  if (prev === undefined) return; // first run — seed silently
+
+  const prevSet = new Set(prev);
+  const fresh = assigned.filter((t) => !prevSet.has(t.id));
+  if (fresh.length === 0) return;
+
+  projects.refresh();
+  const msg =
+    fresh.length === 1
+      ? vscode.l10n.t('BuilderForce: “{0}” was assigned to you.', fresh[0]!.title)
+      : vscode.l10n.t('BuilderForce: {0} tasks were assigned to you.', String(fresh.length));
+  const show = vscode.l10n.t('Show my tasks');
+  const action = await vscode.window.showInformationMessage(msg, show);
+  if (action === show) {
+    projects.setAssignedToMe(true);
+    await vscode.commands.executeCommand('builderforce.project.focus');
+  }
+}
+
+/**
+ * Gate a command on being signed in. Prompts once (Sign In → runs the sign-in flow)
+ * and returns false when there's no stored editor key, so the caller can bail. The
+ * one shared guard for every command that needs the tenant JWT.
+ */
+async function ensureSignedIn(context: vscode.ExtensionContext): Promise<boolean> {
+  if (await context.secrets.get(SECRET_KEY)) return true;
+  const action = await vscode.window.showInformationMessage(
+    "Sign in to your BuilderForce workspace first.",
+    "Sign In",
+  );
+  if (action === "Sign In") void vscode.commands.executeCommand("builderforce.signIn");
+  return false;
+}
+
+/**
+ * The shared 402 plan-limit response: show the surface-specific `message` with an
+ * "Open BuilderForce" action that deep-links to workspace settings, where the upgrade
+ * lives (a web-app action).
+ */
+async function handlePlanLimit(message: string): Promise<void> {
+  const action = await vscode.window.showErrorMessage(message, "Open BuilderForce");
+  if (action) void vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}/settings`));
+}
+
 async function selectProject(
   context: vscode.ExtensionContext,
   projects: ProjectsTreeProvider,
 ): Promise<void> {
-  if (!(await context.secrets.get(SECRET_KEY))) {
-    const action = await vscode.window.showInformationMessage(
-      "Sign in to your BuilderForce workspace first.",
-      "Sign In",
-    );
-    if (action === "Sign In") void vscode.commands.executeCommand("builderforce.signIn");
-    return;
-  }
+  if (!(await ensureSignedIn(context))) return;
   let list: bfApi.BfProject[];
   try {
     list = await bfApi.listProjects(context.secrets);
@@ -331,14 +548,7 @@ async function createProject(
   context: vscode.ExtensionContext,
   projects: ProjectsTreeProvider,
 ): Promise<void> {
-  if (!(await context.secrets.get(SECRET_KEY))) {
-    const action = await vscode.window.showInformationMessage(
-      "Sign in to your BuilderForce workspace first.",
-      "Sign In",
-    );
-    if (action === "Sign In") void vscode.commands.executeCommand("builderforce.signIn");
-    return;
-  }
+  if (!(await ensureSignedIn(context))) return;
   const name = await vscode.window.showInputBox({
     title: "Create BuilderForce project",
     prompt: "Name your project",
@@ -349,6 +559,7 @@ async function createProject(
   if (!name?.trim()) return;
   try {
     const project = await bfApi.createProject(context.secrets, name.trim());
+    invalidateProjectNames(); // a new project must appear in the Sessions/Inbox labels
     setSelectedProject({ id: project.id, name: project.name });
     bfApi.invalidateTasks(project.id);
     projects.refresh();
@@ -357,11 +568,7 @@ async function createProject(
     const message = (e as Error).message;
     // 402 = plan project limit reached → upgrading is a web-app action.
     if (/HTTP 402/.test(message)) {
-      const action = await vscode.window.showErrorMessage(
-        "BuilderForce: your plan's project limit is reached. Upgrade your workspace to add more.",
-        "Open BuilderForce",
-      );
-      if (action) void vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}/settings`));
+      await handlePlanLimit("BuilderForce: your plan's project limit is reached. Upgrade your workspace to add more.");
       return;
     }
     vscode.window.showErrorMessage(`BuilderForce: could not create project (${message}).`);
@@ -377,16 +584,7 @@ async function manageWorkspace(
   context: vscode.ExtensionContext,
   projects: ProjectsTreeProvider,
 ): Promise<void> {
-  if (!(await context.secrets.get(SECRET_KEY))) {
-    const action = await vscode.window.showInformationMessage(
-      "Sign in first, or create a workspace on the web.",
-      "Sign In",
-      "Open BuilderForce",
-    );
-    if (action === "Sign In") void vscode.commands.executeCommand("builderforce.signIn");
-    else if (action === "Open BuilderForce") void openWorkspaceWeb();
-    return;
-  }
+  if (!(await ensureSignedIn(context))) return;
 
   let workspaces: bfApi.BfWorkspace[];
   try {
@@ -465,6 +663,48 @@ function openWorkspaceWeb(): Thenable<boolean> {
   return vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}/tenants`));
 }
 
+/**
+ * Change a work-item's TYPE from the tree (task ⇄ epic, or promote to an OKR
+ * Objective). Promoting an epic to an OKR moves it off the board onto the OKRs tab
+ * (and satisfies the project's 360 direction), so we confirm that first. Server-side
+ * `POST /api/tasks/:id/convert-type` re-links children + scopes the new objective.
+ */
+async function convertTaskType(
+  context: vscode.ExtensionContext,
+  projects: ProjectsTreeProvider,
+  task?: bfApi.BfTask,
+): Promise<void> {
+  if (!task) return;
+  const isEpic = task.taskType === "epic";
+  const choices: { label: string; target: "task" | "epic" | "objective" }[] = [
+    { label: vscode.l10n.t("Promote to OKR objective"), target: "objective" },
+    isEpic
+      ? { label: vscode.l10n.t("Convert to task"), target: "task" }
+      : { label: vscode.l10n.t("Convert to epic"), target: "epic" },
+  ];
+  const pick = await vscode.window.showQuickPick(choices, {
+    title: vscode.l10n.t("Change type — {0}", task.key ?? task.title),
+  });
+  if (!pick) return;
+  if (pick.target === "objective") {
+    const ok = await vscode.window.showWarningMessage(
+      vscode.l10n.t("Promote this item to an OKR objective? Its child tasks are re-linked to the new objective and it leaves the board."),
+      { modal: true },
+      vscode.l10n.t("Promote"),
+    );
+    if (!ok) return;
+  }
+  const done = await bfApi.convertTaskType(context.secrets, task.id, pick.target);
+  if (!done) {
+    vscode.window.showErrorMessage(vscode.l10n.t("BuilderForce: could not change the item's type."));
+    return;
+  }
+  bfApi.invalidateTasks(getSelectedProject()?.id);
+  bfApi.invalidateObjectives(getSelectedProject()?.id);
+  projects.refresh();
+  vscode.window.showInformationMessage(vscode.l10n.t("BuilderForce: {0} → {1}", task.key ?? "item", pick.target));
+}
+
 async function setTaskStatus(
   context: vscode.ExtensionContext,
   projects: ProjectsTreeProvider,
@@ -505,14 +745,7 @@ async function runTask(
   task?: bfApi.BfTask,
 ): Promise<void> {
   if (!task) return;
-  if (!(await context.secrets.get(SECRET_KEY))) {
-    const action = await vscode.window.showInformationMessage(
-      "Sign in to your BuilderForce workspace first.",
-      "Sign In",
-    );
-    if (action === "Sign In") void vscode.commands.executeCommand("builderforce.signIn");
-    return;
-  }
+  if (!(await ensureSignedIn(context))) return;
 
   const label = task.key ?? task.title;
   try {
@@ -542,12 +775,27 @@ async function runTask(
     vscode.window.showInformationMessage(`BuilderForce: dispatched ${label} to the platform runtime.`);
   } catch (e) {
     const message = (e as Error).message;
-    if (/HTTP 402/.test(message)) {
+    const dispatchErr = e instanceof bfApi.BfDispatchError ? e : undefined;
+    if (dispatchErr?.httpStatus === 402 || /HTTP 402/.test(message)) {
+      await handlePlanLimit("BuilderForce: your plan's run limit is reached. Upgrade your workspace to dispatch more runs.");
+      return;
+    }
+    // Token budget exhausted (HTTP 429). Show the API's plan-tailored reason (e.g.
+    // "Plan daily token limit reached (10,000 tokens)…") with a direct upgrade path,
+    // instead of dumping the raw dispatch error — the whole point of this branch.
+    const isTokenLimit =
+      dispatchErr?.code === "plan_token_limit_exceeded" ||
+      dispatchErr?.code === "plan_monthly_token_limit_exceeded" ||
+      dispatchErr?.httpStatus === 429;
+    if (isTokenLimit) {
+      const reason = dispatchErr?.serverMessage ?? "Your workspace has reached its plan token limit for now.";
       const action = await vscode.window.showErrorMessage(
-        "BuilderForce: your plan's run limit is reached. Upgrade your workspace to dispatch more runs.",
-        "Open BuilderForce",
+        `BuilderForce: can't run ${label} — ${reason}`,
+        "Upgrade to Pro",
+        "View Usage",
       );
-      if (action) void vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}/settings`));
+      if (action === "Upgrade to Pro") void vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}/pricing`));
+      else if (action === "View Usage") void vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}/settings`));
       return;
     }
     if (/not_signed_in/.test(message)) {
@@ -569,15 +817,9 @@ async function runTask(
 async function reviewHumanRequests(
   context: vscode.ExtensionContext,
   projects: ProjectsTreeProvider,
+  requestedApprovalId?: string,
 ): Promise<void> {
-  if (!(await context.secrets.get(SECRET_KEY))) {
-    const action = await vscode.window.showInformationMessage(
-      "Sign in to your BuilderForce workspace first.",
-      "Sign In",
-    );
-    if (action === "Sign In") void vscode.commands.executeCommand("builderforce.signIn");
-    return;
-  }
+  if (!(await ensureSignedIn(context))) return;
 
   let pending: bfApi.BfApproval[];
   try {
@@ -592,7 +834,10 @@ async function reviewHumanRequests(
   }
 
   const isAnswerable = (a: bfApi.BfApproval): boolean => a.kind === "question" || a.kind === "feedback";
-  const pick = await vscode.window.showQuickPick(
+  const requested = requestedApprovalId
+    ? pending.find((a) => String(a.id) === String(requestedApprovalId))
+    : undefined;
+  const pick = requested ? { approval: requested } : await vscode.window.showQuickPick(
     pending.map((a) => ({
       label: `$(${isAnswerable(a) ? "comment" : "shield"}) ${a.description?.slice(0, 70) || a.actionType || a.kind || "Approval"}`,
       description: a.kind ?? "",
@@ -676,12 +921,15 @@ async function signIn(context: vscode.ExtensionContext): Promise<void> {
   bfApi.clearJwt();
   clearPlatformToolsCache();
   BrainWebview.refresh();
+  evermindView?.refresh();
   void vscode.commands.executeCommand("builderforce.refreshSessions");
   void vscode.commands.executeCommand("builderforce.refreshInbox");
   void heartbeat(context);
   void vscode.commands.executeCommand("builderforce.refreshProjects");
   void maybeScan(context, false);
   void insights?.start();
+  void diagnostics?.refresh();
+  meetings?.refresh();
 }
 
 async function signOut(
@@ -691,28 +939,148 @@ async function signOut(
   await auth.removeSession();
   bfApi.clearJwt();
   clearPlatformToolsCache();
+  clearPersonalityBlockCache();
   bfApi.setSelectedWorkspace(undefined);
   await context.globalState.update(SELECTED_TENANT_KEY, undefined);
   setGroundingSummary(undefined);
   setSelectedProject(undefined);
   vscode.window.showInformationMessage("BuilderForce: signed out.");
   BrainWebview.refresh();
+  evermindView?.refresh();
   void vscode.commands.executeCommand("builderforce.refreshSessions");
   void vscode.commands.executeCommand("builderforce.refreshInbox");
   void vscode.commands.executeCommand("builderforce.refreshProjects");
   void insights?.start();
+  void diagnostics?.refresh();
+  meetings?.refresh();
+}
+
+/** Human-facing provider names for the BYO groups. Falls back to the raw key. */
+const BYO_PROVIDER_LABELS: Record<string, string> = {
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+  google: "Google",
+  meta: "Meta",
+  xai: "xAI",
+  mistral: "Mistral",
+  deepseek: "DeepSeek",
+};
+
+function byoProviderLabel(vendor: string): string {
+  return BYO_PROVIDER_LABELS[vendor] ?? vendor.replace(/^./, (ch) => ch.toUpperCase());
 }
 
 async function pickModel(context: vscode.ExtensionContext): Promise<void> {
   try {
-    const models = await getModels(context.secrets, true);
+    const { models, canUsePremiumModels, premiumModels, canChooseModel, byo, premiumInfo } =
+      await getModels(context.secrets, true);
     const auto = "(auto — let the gateway choose)";
-    const pick = await vscode.window.showQuickPick([auto, ...models], {
+
+    // When premium is locked, the gateway tells us WHY and which step opens it.
+    // Same unlock vocabulary the chat error banner uses, so the picker and a failed
+    // turn name the same remedy.
+    const premiumUnlock = canUsePremiumModels
+      ? null
+      : premiumInfo?.unlock === "validate_card"
+        ? {
+            label: "$(credit-card) Add a card to unlock premium models",
+            detail: "Your plan allows premium; it needs a validated card on file",
+          }
+        : premiumInfo?.unlock === "upgrade"
+          ? {
+              label: "$(rocket) Upgrade to unlock premium models",
+              detail: "Any paid OpenRouter model, at cost + 1¢/request",
+            }
+          : null;
+
+    // Model choice is a gated entitlement (frontier access: paid plan, superadmin,
+    // premium override, or a connected BYO account). Without it the gateway rejects a
+    // pinned model, so offering one would be a dead control — clear the pin instead.
+    if (!canChooseModel) {
+      setSelectedModel(undefined);
+      const action = await vscode.window.showInformationMessage(
+        "Model choice needs a paid plan or a connected provider account. Connect your own Anthropic/OpenAI key to pick models and have turns billed to your account.",
+        "Open settings",
+      );
+      if (action) void vscode.commands.executeCommand("builderforce.openSettings");
+      return;
+    }
+
+    // Separator-grouped QuickPick, ordered by what it COSTS the user:
+    //   1. BYO — their own connected account. Billed to their key, $0 to us, so it
+    //      leads. Grouped per provider ("BYO — Anthropic") because a tenant can
+    //      connect several and needs to know whose key a pick will spend.
+    //   2. Plan models — included in the plan.
+    //   3. Premium — any paid OpenRouter model, metered at cost + 1¢/request.
+    // Groups the tenant isn't entitled to never render, so the picker can only ever
+    // offer models the gateway will accept.
+    const items: vscode.QuickPickItem[] = [{ label: auto, description: "Default · gateway picks per turn" }];
+
+    // Group the BYO models by their serving provider, preserving catalog order.
+    const byVendor = new Map<string, typeof byo.models>();
+    for (const m of byo.models) {
+      const list = byVendor.get(m.vendor) ?? [];
+      list.push(m);
+      byVendor.set(m.vendor, list);
+    }
+    for (const [vendor, vendorModels] of byVendor) {
+      items.push(
+        {
+          label: `BYO — ${byoProviderLabel(vendor)} (billed to your own key)`,
+          kind: vscode.QuickPickItemKind.Separator,
+        },
+        ...vendorModels.map((m) => ({
+          label: m.id,
+          description: `your ${byoProviderLabel(vendor)} account · ${m.tier}`,
+          detail:
+            m.contextWindow != null
+              ? `${m.contextWindow.toLocaleString()} token context · no platform charge`
+              : "no platform charge",
+        })),
+      );
+    }
+
+    items.push(
+      { label: "Plan models — included in your plan", kind: vscode.QuickPickItemKind.Separator },
+      ...models.map((m) => ({ label: m, description: "included in your plan" })),
+    );
+
+    if (canUsePremiumModels && premiumModels.length > 0) {
+      items.push(
+        { label: "Premium — any OpenRouter model (cost + 1¢/request)", kind: vscode.QuickPickItemKind.Separator },
+        ...premiumModels.map((m) => ({ label: m, description: "premium · metered at cost + 1¢/request" })),
+      );
+    } else if (premiumUnlock) {
+      // Premium is off — SAY SO, and name the step that turns it on. Silently
+      // omitting the group made the picker look like it was missing models the web
+      // app plainly offers. Picking this row opens the page that unlocks it rather
+      // than pinning anything.
+      items.push(
+        { label: "Premium — any OpenRouter model", kind: vscode.QuickPickItemKind.Separator },
+        { label: premiumUnlock.label, description: premiumUnlock.detail },
+      );
+    }
+
+    const pick = await vscode.window.showQuickPick(items, {
       title: "Select BuilderForce model",
-      placeHolder: "Pick a model for new turns",
+      placeHolder: byo.providers.length > 0
+        ? "Your connected accounts are listed first — those turns are billed to your own key"
+        : "Pick a model for new turns",
+      matchOnDescription: true,
+      matchOnDetail: true,
     });
     if (pick === undefined) return;
-    setSelectedModel(pick === auto ? undefined : pick);
+    // The unlock row is a call to action, not a model — send them to the page that
+    // grants the entitlement and leave the current pin untouched.
+    if (premiumUnlock && pick.label === premiumUnlock.label) {
+      void vscode.env.openExternal(
+        vscode.Uri.parse(
+          `${getWebBaseUrl()}${premiumInfo?.unlock === "upgrade" ? "/pricing?upgrade=pro" : "/pricing"}`,
+        ),
+      );
+      return;
+    }
+    setSelectedModel(pick.label === auto ? undefined : pick.label);
   } catch (e) {
     const message = (e as { message?: string }).message ?? String(e);
     if (message.includes("not_signed_in")) {

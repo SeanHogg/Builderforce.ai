@@ -51,6 +51,20 @@ export type ToolDefinition =
   | (ToolSummary & { kind: 'questionnaire'; about: string; scale: ScaleAnchor[]; sections: QuestionnaireSection[] })
   | (ToolSummary & { kind: 'quiz'; about: string; levels: QuizLevel[]; questions: QuizQuestion[] });
 
+/** Remediation lifecycle a diagnostic's filed ticket(s) are in (mirrors the
+ *  backend `RemediationState`). `none` = no remediation ticket → fall back to gaps. */
+export type RemediationState = 'none' | 'filed' | 'pr_open' | 'resolved';
+
+/** Real remediation status for a diagnostic, derived from its filed tickets
+ *  (mirrors the backend `RemediationSummary`). Drives the "Remediation PR opened"
+ *  badge on the diagnostics strip. */
+export interface RemediationSummary {
+  state: RemediationState;
+  total: number;
+  open: number;
+  prUrl: string | null;
+}
+
 export interface ToolMetric { label: string; value: string; hint?: string; tier?: number }
 export interface ToolRecommendation { title: string; detail: string }
 export interface ToolResult {
@@ -77,9 +91,15 @@ export interface SavedToolRun {
 export interface ProjectDiagnostic {
   toolId: string;
   name: string;
+  /** Emoji icon for the diagnostic (audit / tool). */
+  icon: string;
   score: number | null;
   scoreLabel: string | null;
   headline: string;
+  /** Number of open gaps (recommendations) the latest run flagged. */
+  gapCount: number;
+  /** Real remediation status derived from the diagnostic's filed ticket(s). */
+  remediation: RemediationSummary;
   kind: string;
   createdAt: string;
   /** The full latest run result, for the per-diagnostic results view. */
@@ -92,6 +112,20 @@ export interface ProjectScore {
   diagnostics: ProjectDiagnostic[];
 }
 
+/** Compact per-diagnostic summary carried on a rollup row (mirrors backend
+ *  `ProjectDiagnosticSummary`) — lets the project card render each diagnostic
+ *  from the single cached rollup read. */
+export interface ProjectDiagnosticSummary {
+  toolId: string;
+  name: string;
+  icon: string;
+  score: number | null;
+  scoreLabel: string | null;
+  gapCount: number;
+  /** Real remediation status (filed / PR-open / resolved) for the card badge. */
+  remediation: RemediationSummary;
+}
+
 export interface TenantProjectScore {
   projectId: number;
   name: string;
@@ -99,12 +133,35 @@ export interface TenantProjectScore {
   scoreLabel: string | null;
   diagnosticCount: number;
   lastRunAt: string;
+  diagnostics: ProjectDiagnosticSummary[];
 }
 
 /** Project diagnostic ratings rolled up to the workspace. */
 export interface TenantDiagnosticsRollup {
   result: ToolResult;
   projects: TenantProjectScore[];
+}
+
+/** A system-level audit type (SOC 2, Architecture, Quality, PM Vision) — an
+ *  externally-scored diagnostic run against a project. Mirrors the backend
+ *  `SystemAuditSummary`. */
+export interface SystemAuditSummary {
+  id: string;
+  name: string;
+  category: ToolCategory;
+  icon: string;
+  blurb: string;
+}
+
+/** Outcome of kicking off an audit run. */
+export interface AuditRunOutcome {
+  started: true;
+  auditId: string;
+  mode: 'agent' | 'deterministic';
+  run: SavedToolRun;
+  agentTask?: { taskId: number; status: string };
+  /** All remediation tickets filed (one per gap for ticketPerFinding audits). */
+  agentTasks?: Array<{ taskId: number; status: string }>;
 }
 
 /** Default input map for a definition (calculator defaults; questionnaires/quizzes start empty). */

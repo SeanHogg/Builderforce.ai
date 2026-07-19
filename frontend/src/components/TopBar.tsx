@@ -4,24 +4,28 @@ import { Select } from '@/components/Select';
 
 import Link from 'next/link';
 import Image from 'next/image';
+import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
 import { useRolePreview, type PreviewRole } from '@/lib/RolePreviewContext';
 import { useEmulation } from '@/lib/EmulationContext';
 import { useCart } from '@/lib/CartContext';
 import ShoppingCart from './ShoppingCart';
+import NotificationBell from './NotificationBell';
+import { ManagerStatusIndicator } from './ManagerStatusIndicator';
 import { TenantProjectSwitcher } from './TenantProjectSwitcher';
 
 const PREVIEW_ROLES: PreviewRole[] = ['owner', 'manager', 'developer', 'viewer'];
 
 function CartButton() {
   const { count, openCart } = useCart();
+  const t = useTranslations('topbar');
   return (
     <>
       <button
         type="button"
         onClick={openCart}
-        title="Shopping cart"
+        title={t('cart')}
         style={{
           position: 'relative',
           background: 'none',
@@ -33,7 +37,7 @@ function CartButton() {
           alignItems: 'center',
           justifyContent: 'center',
         }}
-        aria-label={count > 0 ? `Shopping cart, ${count} item${count !== 1 ? 's' : ''}` : 'Shopping cart'}
+        aria-label={count > 0 ? t('cartWithCount', { count }) : t('cart')}
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
@@ -69,6 +73,7 @@ function CartButton() {
 }
 
 export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
+  const t = useTranslations('topbar');
   const { logout, user, isAuthenticated } = useAuth();
   const { previewRole, startPreview, exitPreview } = useRolePreview();
   const { emulation } = useEmulation();
@@ -86,7 +91,7 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
           type="button"
           className="topbar-hamburger"
           onClick={onMenuClick}
-          aria-label="Open menu"
+          aria-label={t('openMenu')}
         >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <line x1="3" y1="6" x2="21" y2="6" />
@@ -97,21 +102,21 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
         <Link href={isAuthenticated ? '/dashboard' : '/'} className="brand" style={{ textDecoration: 'none' }}>
           <Image
             src="/agentHost.png"
-            alt="Builderforce"
+            alt={t('brandAlt')}
             width={28}
             height={28}
             className="brand-logo"
             style={{ filter: 'drop-shadow(0 0 8px var(--logo-glow))' }}
           />
-          <span className="brand-name">Builderforce.ai</span>
-          <span className="brand-badge">BETA</span>
+          <span className="brand-name">{t('brandName')}</span>
+          <span className="brand-badge">{t('betaBadge')}</span>
         </Link>
       </div>
       <div className="topbar-center">
         {previewRole ? (
           <span className="topbar-preview-info">
             <span aria-hidden="true">👁</span>
-            Previewing as <strong>{previewRole}</strong> — frontend-only, no API calls affected
+            {t('previewingAs', { role: previewRole })}
           </span>
         ) : (
           <Link href="/marketplace" className="tenant-chip topbar-center-link" style={{ textDecoration: 'none' }}>
@@ -119,7 +124,7 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
               <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
               <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
             </svg>
-            Marketplace
+            {t('marketplace')}
           </Link>
         )}
       </div>
@@ -132,13 +137,13 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
             {previewRole ? (
               <>
                 <span className="topbar-role-preview__badge">
-                  Preview: {previewRole}
+                  {t('previewBadge', { role: previewRole })}
                 </span>
                 <button
                   type="button"
                   className="topbar-role-preview__exit"
                   onClick={exitPreview}
-                  title="Exit role preview"
+                  title={t('exitPreview')}
                 >
                   ✕
                 </button>
@@ -148,9 +153,9 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
                 className="topbar-role-preview__select"
                 value=""
                 onChange={(e) => { if (e.target.value) startPreview(e.target.value as PreviewRole); }}
-                title="Preview as role (frontend-only)"
+                title={t('previewSelectTitle')}
               >
-                <option value="">Preview role…</option>
+                <option value="">{t('previewPlaceholder')}</option>
                 {PREVIEW_ROLES.map((r) => (
                   <option key={r} value={r}>{r}</option>
                 ))}
@@ -158,6 +163,10 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
             )}
           </div>
         )}
+
+        {isAuthenticated && <ManagerStatusIndicator />}
+
+        {isAuthenticated && <NotificationBell />}
 
         <CartButton />
 
@@ -176,7 +185,7 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
               alignItems: 'center',
               justifyContent: 'center',
             }}
-            title="Sign out"
+            title={t('signOut')}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />

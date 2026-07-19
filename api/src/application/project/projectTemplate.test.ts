@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   VANILLA_TEMPLATE,
-  projectWantsVanilla,
+  MOBILE_TEMPLATE,
+  templateForProject,
   templateLooksUnseeded,
   templateNeedsBackfill,
   ensureProjectTemplate,
@@ -17,27 +18,42 @@ const base: SeedableProject = {
   githubRepoUrl: null,
 };
 
-describe('projectWantsVanilla', () => {
-  it('seeds an explicit vanilla template regardless of modality/repo', () => {
-    expect(projectWantsVanilla({ ...base, template: 'vanilla', modality: 'video' })).toBe(true);
+describe('templateForProject', () => {
+  it('honours an explicit template regardless of modality/repo', () => {
+    expect(templateForProject({ ...base, template: 'vanilla', modality: 'video' })).toBe(VANILLA_TEMPLATE);
+    expect(templateForProject({ ...base, template: 'mobile', modality: 'designer' })).toBe(MOBILE_TEMPLATE);
+  });
+
+  it('returns null for an explicit template that does not exist', () => {
+    expect(templateForProject({ ...base, template: 'nope' })).toBeNull();
   });
 
   it('seeds a default designer project with no repo and no template', () => {
-    expect(projectWantsVanilla(base)).toBe(true);
+    expect(templateForProject(base)).toBe(VANILLA_TEMPLATE);
   });
 
   it('defaults a null modality to designer (and seeds)', () => {
-    expect(projectWantsVanilla({ ...base, modality: null })).toBe(true);
+    expect(templateForProject({ ...base, modality: null })).toBe(VANILLA_TEMPLATE);
+  });
+
+  // The React Native scaffold, not the vanilla Vite app — seeding a mobile
+  // project with src/main.jsx would leave it unable to run.
+  it('gives a mobile project the React Native scaffold', () => {
+    const template = templateForProject({ ...base, modality: 'mobile' });
+    expect(template).toBe(MOBILE_TEMPLATE);
+    expect(Object.keys(template!)).toContain('App.js');
+    expect(Object.keys(template!)).not.toContain('src/main.jsx');
   });
 
   it('skips repo-connected projects (files live in the git repo, not R2)', () => {
-    expect(projectWantsVanilla({ ...base, sourceControlRepoFullName: 'acme/app' })).toBe(false);
-    expect(projectWantsVanilla({ ...base, githubRepoUrl: 'https://github.com/acme/app' })).toBe(false);
+    expect(templateForProject({ ...base, sourceControlRepoFullName: 'acme/app' })).toBeNull();
+    expect(templateForProject({ ...base, githubRepoUrl: 'https://github.com/acme/app' })).toBeNull();
   });
 
-  it('skips non-designer modalities that do not run the Vite app', () => {
-    expect(projectWantsVanilla({ ...base, modality: 'video' })).toBe(false);
-    expect(projectWantsVanilla({ ...base, modality: 'llm' })).toBe(false);
+  it('skips modalities that do not run the Vite app', () => {
+    expect(templateForProject({ ...base, modality: 'video' })).toBeNull();
+    expect(templateForProject({ ...base, modality: 'llm' })).toBeNull();
+    expect(templateForProject({ ...base, modality: 'voice' })).toBeNull();
   });
 });
 
@@ -90,6 +106,24 @@ describe('templateNeedsBackfill', () => {
   it('is false once every required file has content (healthy project pays nothing)', () => {
     const objects: TemplateObject[] = Object.keys(VANILLA_TEMPLATE).map((path) => ({ path, size: 100 }));
     expect(templateNeedsBackfill(objects)).toBe(false);
+  });
+
+  // This gate runs on EVERY file-list, before the project is loaded, so it can't
+  // know the modality. If it only cleared vanilla workspaces, every healthy
+  // Mobile project would be flagged on every request and pay a project lookup
+  // forever. A complete workspace of ANY template has to clear it.
+  it('is false for a complete mobile workspace (no vanilla files present)', () => {
+    const objects: TemplateObject[] = Object.keys(MOBILE_TEMPLATE).map((path) => ({ path, size: 100 }));
+    expect(objects.some((o) => o.path === 'src/main.jsx')).toBe(false);
+    expect(templateNeedsBackfill(objects)).toBe(false);
+  });
+
+  it('is true for a partially-empty mobile workspace', () => {
+    const objects: TemplateObject[] = Object.keys(MOBILE_TEMPLATE).map((path) => ({
+      path,
+      size: path === 'App.js' ? 0 : 100,
+    }));
+    expect(templateNeedsBackfill(objects)).toBe(true);
   });
 });
 
@@ -149,6 +183,16 @@ describe('ensureProjectTemplate', () => {
     const r2 = fakeStorage(seeded);
     const written = await ensureProjectTemplate(r2 as unknown as R2Bucket, base);
     expect(written).toBe(0);
+  });
+
+  it('seeds the React Native scaffold for a fresh mobile project', async () => {
+    const r2 = fakeStorage();
+    const written = await ensureProjectTemplate(r2 as unknown as R2Bucket, { ...base, modality: 'mobile' });
+    expect(written).toBe(Object.keys(MOBILE_TEMPLATE).length);
+    expect(r2.store.get(prefix + 'App.js')).toContain("from 'react-native'");
+    expect(r2.store.get(prefix + 'vite.config.js')).toContain('react-native-web');
+    // The vanilla entry point must NOT be written into a mobile workspace.
+    expect(r2.store.has(prefix + 'src/main.jsx')).toBe(false);
   });
 
   it('does nothing for a project that does not want the vanilla template', async () => {

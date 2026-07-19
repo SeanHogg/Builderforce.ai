@@ -1,6 +1,6 @@
 {
   "name": "@seanhogg/builderforce-quality",
-  "version": "2026.6.29",
+  "version": "2026.7.5",
   "description": "Embeddable error-capture SDK for the Builderforce.ai Product Quality pillar — capture browser/Node errors and ship them to your keyed ingest endpoint in the canonical format.",
   "license": "MIT",
   "author": "Sean Hogg",

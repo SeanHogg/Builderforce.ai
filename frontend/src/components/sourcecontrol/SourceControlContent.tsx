@@ -1,6 +1,8 @@
 'use client';
 
 import { Select } from '@/components/Select';
+import { useTranslations } from 'next-intl';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -68,6 +70,9 @@ export function SourceControlContent({
    *  refresh its file tree to show the imported files. */
   onImported?: () => void;
 }) {
+  const confirm = useConfirm();
+  const tc = useTranslations('common');
+  const t = useTranslations('sourceControl');
   const [repos, setRepos] = useState<ProjectRepository[]>([]);
   const [creds, setCreds] = useState<IntegrationCredential[]>([]);
   const [loading, setLoading] = useState(true);
@@ -99,7 +104,7 @@ export function SourceControlContent({
         .then(([a, b]) => [...a, ...b]),
     ])
       .then(([r, c]) => { setRepos(r); setCreds(c); })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load repositories'))
+      .catch((e) => setError(e instanceof Error ? e.message : t('errLoad')))
       .finally(() => setLoading(false));
   }, [projectId]);
 
@@ -144,11 +149,11 @@ export function SourceControlContent({
   const submit = async () => {
     const o = owner.trim();
     const r = repo.trim();
-    if (!o || !r) { setError('Owner and repo are required.'); return; }
+    if (!o || !r) { setError(t('errOwnerRepoRequired')); return; }
     // Each box is a single path segment — reject a URL / slashes / spaces and say
     // what's expected (the most common cause of the GitHub 404 on Test).
     if (!isValidRepoSegment(o) || !isValidRepoSegment(r)) {
-      setError('Enter owner and repo as separate names, not a URL — e.g. for https://github.com/acme/app, owner = "acme", repo = "app". Letters, numbers, ".", "_" and "-" only.');
+      setError(t('errInvalidSegment'));
       return;
     }
     setSaving(true); setError(null);
@@ -169,14 +174,14 @@ export function SourceControlContent({
       else await reposApi.add(projectId, payload);
       closeForm(); load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : `Failed to ${editingId ? 'update' : 'add'} repository`);
+      setError(e instanceof Error ? e.message : (editingId ? t('errUpdate') : t('errAdd')));
     } finally {
       setSaving(false);
     }
   };
 
   const setDefault = async (id: string) => { await reposApi.setDefault(id); load(); };
-  const remove = async (id: string) => { if (confirm('Remove this repository from the project?')) { await reposApi.remove(id); load(); } };
+  const remove = async (id: string) => { if (await confirm(tc('removeRepositoryConfirm'))) { await reposApi.remove(id); load(); } };
 
   // Copy a secret-free config snapshot (incl. the reconstructed probe URL + the
   // latest test result) to the clipboard, for pasting into a bug report so a
@@ -193,7 +198,7 @@ export function SourceControlContent({
       setCopiedId(r.id);
       setTimeout(() => setCopiedId((cur) => (cur === r.id ? null : cur)), 2000);
     } catch {
-      setError('Could not copy to clipboard — your browser blocked it.');
+      setError(t('errClipboard'));
     }
   };
 
@@ -203,7 +208,7 @@ export function SourceControlContent({
       const res = await reposApi.test(id);
       setTestResult((prev) => ({ ...prev, [id]: res }));
     } catch (e) {
-      setTestResult((prev) => ({ ...prev, [id]: { ok: false, message: e instanceof Error ? e.message : 'Test failed' } }));
+      setTestResult((prev) => ({ ...prev, [id]: { ok: false, message: e instanceof Error ? e.message : t('testFailed') } }));
     } finally {
       setTesting(null);
     }
@@ -214,28 +219,28 @@ export function SourceControlContent({
   // backend the IDE reads from), then ask the IDE to refresh its file tree.
   const importRepo = async (r: ProjectRepository) => {
     if (!r.credentialId) {
-      setImportResult((p) => ({ ...p, [r.id]: { ok: false, message: 'Link an access key first.' } }));
+      setImportResult((p) => ({ ...p, [r.id]: { ok: false, message: t('linkKeyFirst') } }));
       return;
     }
     setImporting(r.id);
-    setImportResult((p) => ({ ...p, [r.id]: { ok: true, message: 'Reading repository…' } }));
+    setImportResult((p) => ({ ...p, [r.id]: { ok: true, message: t('readingRepo') } }));
     try {
       const manifest = await reposApi.contents(r.id, r.defaultBranch ?? undefined);
       if (manifest.files.length === 0) {
-        setImportResult((p) => ({ ...p, [r.id]: { ok: false, message: 'No importable files found on this branch.' } }));
+        setImportResult((p) => ({ ...p, [r.id]: { ok: false, message: t('noImportableFiles') } }));
         return;
       }
       let written = 0;
       for (const f of manifest.files) {
         await saveFile(projectId, f.path, f.content);
         written++;
-        setImportResult((p) => ({ ...p, [r.id]: { ok: true, message: `Importing… ${written}/${manifest.files.length}` } }));
+        setImportResult((p) => ({ ...p, [r.id]: { ok: true, message: t('importingProgress', { written, total: manifest.files.length }) } }));
       }
-      const suffix = manifest.truncated ? ` (capped at ${written} of ${manifest.discovered})` : '';
-      setImportResult((p) => ({ ...p, [r.id]: { ok: true, message: `Imported ${written} file(s)${suffix}.` } }));
+      const suffix = manifest.truncated ? t('importCapped', { written, discovered: manifest.discovered }) : '';
+      setImportResult((p) => ({ ...p, [r.id]: { ok: true, message: t('importedFiles', { count: written, suffix }) } }));
       onImported?.();
     } catch (e) {
-      setImportResult((p) => ({ ...p, [r.id]: { ok: false, message: e instanceof Error ? e.message : 'Import failed' } }));
+      setImportResult((p) => ({ ...p, [r.id]: { ok: false, message: e instanceof Error ? e.message : t('importFailed') } }));
     } finally {
       setImporting(null);
     }
@@ -248,17 +253,16 @@ export function SourceControlContent({
 
   return (
     <div style={cardStyle}>
-      <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 14 }}>Repositories</div>
+      <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 14 }}>{t('repositories')}</div>
       <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-        Repositories this project&apos;s agents can read and open pull requests against. Bind each repo to a
-        project integration key (above) or a workspace-wide key.
+        {t('intro')}
       </div>
 
       {loading ? (
-        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 12 }}>Loading…</div>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 12 }}>{tc('loading')}</div>
       ) : (
         <div style={{ marginTop: 12 }}>
-          {repos.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No repositories configured yet.</div>}
+          {repos.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('noRepos')}</div>}
           {repos.map((r) => {
             const result = testResult[r.id];
             const imp = importResult[r.id];
@@ -268,10 +272,10 @@ export function SourceControlContent({
                 <span style={{ fontSize: 13, color: 'var(--text-primary)', flex: 1 }}>
                   {r.owner}/{r.repo}
                   {r.defaultBranch && <span style={{ color: 'var(--text-muted)' }}> · {r.defaultBranch}</span>}
-                  {r.isDefault && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--coral-bright)' }}>default</span>}
+                  {r.isDefault && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--coral-bright)' }}>{t('defaultBadge')}</span>}
                   {r.credentialId
-                    ? <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>🔑 {credName(r.credentialId) ?? 'key'}</span>
-                    : <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--danger, #dc2626)' }}>no key</span>}
+                    ? <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>🔑 {credName(r.credentialId) ?? t('key')}</span>
+                    : <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--danger, #dc2626)' }}>{t('noKey')}</span>}
                 </span>
                 {result && (
                   <span style={{ fontSize: 11, color: result.ok ? 'var(--success, #16a34a)' : 'var(--danger, #dc2626)' }}>
@@ -284,30 +288,30 @@ export function SourceControlContent({
                   </span>
                 )}
                 <button type="button" style={btnSubtle} disabled={testing === r.id} onClick={() => test(r.id)}>
-                  {testing === r.id ? 'Testing…' : 'Test'}
+                  {testing === r.id ? t('testing') : t('test')}
                 </button>
                 <button
                   type="button"
                   style={btnSubtle}
                   disabled={importing === r.id}
-                  title="Import this repo's files into the IDE workspace so you can edit and run them in the browser"
+                  title={t('importTitle')}
                   onClick={() => importRepo(r)}
                 >
-                  {importing === r.id ? 'Importing…' : 'Import to IDE'}
+                  {importing === r.id ? t('importing') : t('importToIde')}
                 </button>
                 <button
                   type="button"
                   style={btnSubtle}
-                  title="Copy this repo's configuration (no secrets) for diagnosing a failed Test"
+                  title={t('copyConfigTitle')}
                   onClick={() => copyConfig(r)}
                 >
-                  {copiedId === r.id ? 'Copied!' : 'Copy'}
+                  {copiedId === r.id ? t('copied') : t('copy')}
                 </button>
-                {!r.isDefault && <button type="button" style={btnSubtle} onClick={() => setDefault(r.id)}>Set default</button>}
-                <button type="button" style={iconBtn} title="Edit repository" aria-label="Edit repository" onClick={() => openEdit(r)}>
+                {!r.isDefault && <button type="button" style={btnSubtle} onClick={() => setDefault(r.id)}>{t('setDefault')}</button>}
+                <button type="button" style={iconBtn} title={t('editRepository')} aria-label={t('editRepository')} onClick={() => openEdit(r)}>
                   <PencilIcon />
                 </button>
-                <button type="button" style={{ ...iconBtn, color: 'var(--danger, #dc2626)' }} title="Remove repository" aria-label="Remove repository" onClick={() => remove(r.id)}>
+                <button type="button" style={{ ...iconBtn, color: 'var(--danger, #dc2626)' }} title={t('removeRepository')} aria-label={t('removeRepository')} onClick={() => remove(r.id)}>
                   <TrashIcon />
                 </button>
               </div>
@@ -324,33 +328,33 @@ export function SourceControlContent({
             <Select value={provider} onChange={(e) => setProvider(e.target.value)} style={{ ...inputStyle, width: 130 }}>
               {SCM_PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
             </Select>
-            <input style={inputStyle} placeholder="owner (e.g. acme)" value={owner} onChange={(e) => onOwnerChange(e.target.value)} />
-            <input style={inputStyle} placeholder="repo (e.g. app)" value={repo} onChange={(e) => setRepo(e.target.value)} />
+            <input style={inputStyle} placeholder={t('ownerPlaceholder')} value={owner} onChange={(e) => onOwnerChange(e.target.value)} />
+            <input style={inputStyle} placeholder={t('repoPlaceholder')} value={repo} onChange={(e) => setRepo(e.target.value)} />
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -4 }}>
-            Owner and repo are separate names from the repo URL — for <code>https://github.com/acme/app</code>, owner is <code>acme</code> and repo is <code>app</code>. Paste a full URL into <em>owner</em> and we&apos;ll split it for you.
+            {t.rich('ownerRepoHelp', { code: (c) => <code>{c}</code>, em: (c) => <em>{c}</em> })}
           </div>
-          <input style={inputStyle} placeholder="host (optional — e.g. github.example.com for Enterprise; blank = github.com)" value={host} onChange={(e) => setHost(e.target.value)} />
-          <input style={inputStyle} placeholder="default branch (optional, e.g. main)" value={defaultBranch} onChange={(e) => setDefaultBranch(e.target.value)} />
+          <input style={inputStyle} placeholder={t('hostPlaceholder')} value={host} onChange={(e) => setHost(e.target.value)} />
+          <input style={inputStyle} placeholder={t('branchPlaceholder')} value={defaultBranch} onChange={(e) => setDefaultBranch(e.target.value)} />
           <Select value={credentialId} onChange={(e) => setCredentialId(e.target.value)} style={inputStyle}>
-            <option value="">— Select access key —</option>
+            <option value="">{t('selectAccessKey')}</option>
             {scmCreds.map((c) => (
-              <option key={c.id} value={c.id}>{c.name} ({c.provider}{c.projectId == null ? ', workspace' : ''})</option>
+              <option key={c.id} value={c.id}>{c.name} ({c.provider}{c.projectId == null ? t('workspaceSuffix') : ''})</option>
             ))}
           </Select>
           <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 8 }}>
             <input type="checkbox" checked={isDefault} onChange={(e) => setIsDefault(e.target.checked)} />
-            Set as the project&apos;s default repository
+            {t('setAsDefault')}
           </label>
           <div style={{ display: 'flex', gap: 8 }}>
             <button type="button" style={btnPrimary} disabled={saving} onClick={submit}>
-              {saving ? 'Saving…' : editingId ? 'Save changes' : 'Add repository'}
+              {saving ? tc('saving') : editingId ? t('saveChanges') : t('addRepository')}
             </button>
-            <button type="button" style={btnSubtle} onClick={closeForm}>Cancel</button>
+            <button type="button" style={btnSubtle} onClick={closeForm}>{tc('cancel')}</button>
           </div>
         </div>
       ) : (
-        <button type="button" style={{ ...btnPrimary, marginTop: 14 }} onClick={openAdd}>Add repository</button>
+        <button type="button" style={{ ...btnPrimary, marginTop: 14 }} onClick={openAdd}>{t('addRepository')}</button>
       )}
     </div>
   );

@@ -4,12 +4,13 @@ import { neon } from '@neondatabase/serverless';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
 import { resolveTicketRepoContext } from '../../application/repos/commitFileAsPendingChange';
 import { readRepoFile } from '../../application/repos/readRepoContents';
+import { importRepoContents } from '../../application/repos/importRepoContents';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
-import { and, desc, eq, gte, inArray, isNull } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { RuntimeService } from '../../application/runtime/RuntimeService';
 import {
   resolveCloudSurface, chooseCloudExecutor, probeContainerHealth, cloudAgentTypeLabel,
-  isTerminalExecutionStatus, parseCloudAgentRef, parseRepoId, buildFollowUpPayload, withDefaultModel,
+  isTerminalExecutionStatus, parseCloudAgentRef, parseRepoId, buildFollowUpPayload, withDefaultModel, withExecutor,
 } from '../../application/runtime/cloudDispatch';
 import { mintContainerRunToken, verifyContainerRunToken } from '../../application/runtime/containerRunToken';
 import { agentHostOnlineCondition } from '../../infrastructure/database/agentHostOnline';
@@ -17,19 +18,26 @@ import { resolveArtifacts } from '../../application/artifact/resolveArtifacts';
 import { enqueueExecutionMessage, listExecutionMessages, releasePendingSteers } from '../../application/runtime/executionSteering';
 import { subscribeExecution, unsubscribeExecution, notifyExecutionSubscribers } from '../../application/runtime/executionEvents';
 import {
-  runCloudExecution, markCloudExecutionRunning, prepareCloudRun, gitSecret, recordCloudToolEvent, recordPrdDirective,
+  markCloudExecutionRunning, prepareCloudRun, gitSecret, recordCloudToolEvent, recordPrdDirective,
   handleContainerOp, loadContainerRunContext, resolveCloudAgent, agentAllowsHostExecution, DEFAULT_CLOUD_REF,
 } from '../../application/runtime/cloudAgentEngine';
 import { CONTAINER_MAX_STEPS } from '../../application/runtime/cloudAgentTools';
-import { ExecutionStatus } from '../../domain/shared/types';
+import { enforceCloudRunCap } from '../../application/runtime/cloudRunLedger';
+import { evaluateExecutionApprovalGate } from '../../application/runtime/executionApprovalGate';
+import { ExecutionStatus, TenantRole } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
+import { millicentsToUsd } from '../../domain/shared/money';
+import { parseJsonArray } from '../../domain/shared/json';
 import type { Execution } from '../../domain/execution/Execution';
 import type { Env, HonoEnv } from '../../env';
-import { authMiddleware } from '../middleware/authMiddleware';
+import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentHosts, executions, projectInsightEvents, projectRepositories, projects, specs, tasks, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
-import { approvals } from '../../infrastructure/database/schema';
+import { approvals, chatTicketLinks, projectManagerConfigs } from '../../infrastructure/database/schema';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
+import { resolveProjectInferenceModel } from '../../application/llm/projectEvermind';
+import { executionTokenGate } from './executionTokenGate';
+import { authorizeManagedTaskExecution } from '../../application/kanban/managedExecutionGuard';
 
 /**
  * Runtime routes – task execution lifecycle.
@@ -42,12 +50,38 @@ import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelay
  * PATCH  /api/runtime/executions/:id/state   – agent callback: update state
  * GET    /api/runtime/tasks/:taskId/executions – history for a task
  * GET    /api/runtime/agents/:ref/tool-audit  – tool-audit timeline for one cloud agent
+ *
+ * AUTHORIZATION. Every route below `router.use('*', authMiddleware)` is tenant-
+ * authenticated. On top of that, each route carries an explicit role gate:
+ *   • READS (list / detail / timeline / cost / repo browsing) are member-level —
+ *     no extra gate, a VIEWER may observe the fleet.
+ *   • Anything that STARTS, cancels, steers, retries or reports on a billable run
+ *     is `requireRole(TenantRole.DEVELOPER)` — the platform's "build and run
+ *     agents" tier (see frontend ROLE_DESCRIPTION). This is what excludes a
+ *     read-only VIEWER from spending the tenant's cloud-run + token allowance.
+ *     It is deliberately NOT manager-level: the manager check for a run is the
+ *     separate GOVERNANCE gate (evaluateExecutionApprovalGate), which stops
+ *     high/urgent tickets and routes them to /api/approvals for MANAGER sign-off.
+ *     Machine tokens minted for on-prem agent hosts carry DEVELOPER (see
+ *     authRoutes agent-host key exchange), so host callbacks keep working.
+ * System/cron callers (autonomousExecutionSweep → maybeAutoRunOnLaneEntry, the CI
+ * auto-fix loop, incident/validation dispatch) never traverse these routes — they
+ * call the exported `dispatchCloudRunForTask` directly and so are unaffected by
+ * the gates. `/internal/container-op` is mounted ABOVE authMiddleware on purpose
+ * and authenticates with its own per-run HMAC token.
  */
 type RuntimeHonoEnv = HonoEnv & {
   Bindings: HonoEnv['Bindings'] & {
     AGENT_HOST_RELAY: DurableObjectNamespace<AgentHostRelayDO>;
   };
 };
+
+// The approval-gate primitives now live in the application layer so system callers
+// (autonomous lane trigger / cron sweep) can apply the SAME gate without a request
+// context — see application/runtime/executionApprovalGate.ts. Re-exported here
+// because existing importers reference them through this module.
+export { parseApprovalReplay, evaluateExecutionApprovalGate } from '../../application/runtime/executionApprovalGate';
+export type { ApprovalReplay, ApprovalGateTask, ExecutionApprovalGateResult } from '../../application/runtime/executionApprovalGate';
 
 /** ide_agents.base_model sentinel meaning "no explicit model — use the default"
  *  (mirrors cloudAgentEngine.AGENT_DEFAULT_MODEL_SENTINEL). */
@@ -68,11 +102,7 @@ function hiredAgentRoleKey(name: string | null | undefined, id: string): string 
 function projectHiredAgent(r: { id: string; name: string | null; bio: string | null; skills: unknown; base_model: string | null }): {
   id: string; name: string; roleKey: string; systemPrompt: string; skills: string[]; model?: string;
 } {
-  const skills = Array.isArray(r.skills)
-    ? (r.skills as unknown[]).map(String)
-    : typeof r.skills === 'string'
-      ? (() => { try { const v = JSON.parse(r.skills as string); return Array.isArray(v) ? v.map(String) : []; } catch { return []; } })()
-      : [];
+  const skills = parseJsonArray(r.skills).map(String);
   const rawModel = typeof r.base_model === 'string' ? r.base_model.trim() : '';
   const model = rawModel && rawModel !== AGENT_DEFAULT_MODEL_SENTINEL ? rawModel : undefined;
   return {
@@ -122,15 +152,6 @@ type ExecutionTaskRow = {
   projectId: number;
 };
 
-type ExecutionApprovalGateResult =
-  | { allowed: true }
-  | {
-      allowed: false;
-      approvalId: string;
-      status: 'pending';
-      reason: string;
-    };
-
 type ExecutionTelemetryBody = {
   inputTokens?: number;
   outputTokens?: number;
@@ -145,132 +166,6 @@ function parseOptionalNumber(value: string | undefined | null): number | null {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return null;
   return parsed;
-}
-
-function parseApprovalTaskId(metadata: string | null): number | null {
-  if (!metadata) return null;
-  try {
-    const parsed = JSON.parse(metadata) as { taskId?: unknown };
-    const value = parsed.taskId;
-    if (typeof value === 'number' && Number.isFinite(value)) return value;
-    if (typeof value === 'string') {
-      const n = Number(value);
-      if (Number.isFinite(n)) return n;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-function requiresTaskExecutionApproval(task: ExecutionTaskRow): boolean {
-  return task.priority === 'high' || task.priority === 'urgent';
-}
-
-/** Run context replayed when a `task.execution` approval is approved. */
-export interface ApprovalReplay {
-  taskId: number;
-  /** The original submit payload (carries the cloud-agent ref + model + repo pin). */
-  payload?: string;
-  /** A per-run pinned host, if the gated run targeted one. */
-  agentHostId?: number | null;
-}
-
-/**
- * Read the stored run context off a `task.execution` approval so approving it can
- * replay the original submit AS the same agent + model — the gate discards no run
- * detail (see {@link evaluateExecutionApprovalGate}). Returns null for approvals
- * without a parseable taskId (non-task.execution rows).
- */
-export function parseApprovalReplay(metadata: string | null): ApprovalReplay | null {
-  const taskId = parseApprovalTaskId(metadata);
-  if (taskId == null || !metadata) return null;
-  try {
-    const parsed = JSON.parse(metadata) as { payload?: unknown; agentHostId?: unknown };
-    const payload = typeof parsed.payload === 'string' ? parsed.payload : undefined;
-    const agentHostId =
-      typeof parsed.agentHostId === 'number' && Number.isFinite(parsed.agentHostId)
-        ? parsed.agentHostId
-        : null;
-    return { taskId, payload, agentHostId };
-  } catch {
-    return { taskId };
-  }
-}
-
-async function evaluateExecutionApprovalGate(
-  db: Db,
-  tenantId: number,
-  requestedBy: string,
-  task: ExecutionTaskRow,
-  requestedAgentHostId: number | null,
-  /** The original submit context, persisted so an approve replays the exact run. */
-  submitContext?: { payload?: string },
-): Promise<ExecutionApprovalGateResult> {
-  if (!requiresTaskExecutionApproval(task)) {
-    return { allowed: true };
-  }
-
-  const now = new Date();
-  const recentApprovals = await db
-    .select({
-      id: approvals.id,
-      status: approvals.status,
-      metadata: approvals.metadata,
-      expiresAt: approvals.expiresAt,
-      createdAt: approvals.createdAt,
-    })
-    .from(approvals)
-    .where(
-      and(
-        eq(approvals.tenantId, tenantId),
-        eq(approvals.actionType, 'task.execution'),
-      ),
-    )
-    .orderBy(desc(approvals.createdAt))
-    .limit(100);
-
-  const latestForTask = recentApprovals.find((row) => parseApprovalTaskId(row.metadata) === task.id);
-  if (latestForTask) {
-    if (latestForTask.status === 'approved' && (!latestForTask.expiresAt || latestForTask.expiresAt > now)) {
-      return { allowed: true };
-    }
-    if (latestForTask.status === 'pending' && (!latestForTask.expiresAt || latestForTask.expiresAt > now)) {
-      return {
-        allowed: false,
-        approvalId: latestForTask.id,
-        status: 'pending',
-        reason: 'Task execution is waiting for manager approval.',
-      };
-    }
-  }
-
-  const approvalId = crypto.randomUUID();
-  await db.insert(approvals).values({
-    id: approvalId,
-    tenantId,
-    agentHostId: task.assignedAgentHostId ?? requestedAgentHostId,
-    requestedBy,
-    actionType: 'task.execution',
-    description: `Approve execution of task #${task.id}: ${task.title}`,
-    metadata: JSON.stringify({
-      taskId: task.id,
-      priority: task.priority,
-      // Persist the run context so approving the request replays the exact run
-      // (as the same cloud agent + model + repo pin) — see parseApprovalReplay.
-      payload: submitContext?.payload ?? null,
-      agentHostId: task.assignedAgentHostId ?? requestedAgentHostId,
-    }),
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  return {
-    allowed: false,
-    approvalId,
-    status: 'pending',
-    reason: 'Task priority requires manager approval before execution.',
-  };
 }
 
 function normalizeCodeChanges(value: unknown): number | null {
@@ -351,12 +246,12 @@ type SubmittedExecution = { id: number; status: string; toPlain(): unknown };
 /**
  * Resolve the runtime engine + display label for a cloud-agent run from its
  * `ide_agents.id`. The ref is the one the caller pinned, else the ticket's
- * assigned agent (see {@link dispatchAndQueue}). When a ref resolves, the engine
- * and name are read from that agent's `ide_agents` record (authoritative,
- * tenant-scoped); otherwise the default engine (`builderforce-v2`) with no label.
+ * assigned agent (see {@link dispatchAndQueue}). When a ref resolves, the name is
+ * read from that agent's `ide_agents` record (authoritative, tenant-scoped); the
+ * engine is always the current version (never read from the DB).
  *
  * One indexed lookup per execution-submit (not a hot read path), so it is not
- * cached. Never throws — defaults to `DEFAULT_ENGINE_ID` (`builderforce-v2`; V1 retired) on any failure.
+ * cached. Never throws — falls back to the current engine with no label on any failure.
  */
 /**
  * Shared post-submit dispatch path for `/executions` and `/tasks/submit`.
@@ -408,6 +303,8 @@ export async function dispatchCloudRunForTask(
     .where(and(eq(tasks.id, params.taskId), eq(projects.tenantId, params.tenantId)))
     .limit(1);
   if (!taskRow) return null;
+  const authorization = await authorizeManagedTaskExecution(db, params.tenantId, params.taskId, params.payload);
+  if (!authorization.allowed) throw new Error(authorization.reason ?? 'managed execution is not authorized');
 
   // A per-run pinned host (e.g. an approved high-priority on-prem run) overrides
   // the task's assignee for THIS dispatch so host targeting survives the replay.
@@ -508,7 +405,19 @@ async function startDispatchedExecution(
   // Fold the agent's own model into the payload up front so EVERY surface — the
   // on-prem host included — runs AS the agent's model, never silently the gateway
   // default. (The cloud branch reuses this same effective payload below.)
-  const effectivePayload = withDefaultModel(payload, agent.baseModel);
+  //
+  // Project Evermind consumer emitter (single point, all surfaces). When the agent
+  // has NO explicit base model AND the project is configured to run on its own
+  // self-learning model, default to the project's CURRENT Evermind head (a concrete
+  // `evermind/<ref>`, resolved ONCE here — the run boundary → pull-on-boundary). Every
+  // surface then agrees: the cloud loop hard-pins the `evermind/` route, on-prem sends
+  // it to the gateway (which routes it to the evermind vendor). Precedence:
+  // payload pin > agent.baseModel > project Evermind > gateway default. Off/unseeded →
+  // undefined → today's behaviour. [[evermind-learning-architecture]]
+  const projectEvermindPin = agent.baseModel
+    ? undefined
+    : await resolveProjectInferenceModel(env as Env, db, tenantId, taskRow.projectId);
+  const effectivePayload = withDefaultModel(payload, agent.baseModel ?? projectEvermindPin);
 
   const message: DispatchMessage = {
     type: 'task.assign',
@@ -566,6 +475,27 @@ async function startDispatchedExecution(
   };
 
   if (!delivered) {
+    // Cloud-compute gate: a cloud run executes on OUR infra (unlike on-prem/VSIX),
+    // so it consumes the monthly "Cloud runs" allowance even when the tenant brings
+    // their own model (BYO tokens are $0 to us, but the orchestration isn't). This
+    // is the ONE choke point every cloud entry funnels through (Run-now, board,
+    // autofix), so gating here covers them all. Over the cap → fail fast with an
+    // upgrade hint rather than start a run we'd have to run for free. Superadmin /
+    // unlimited plans pass; a metering error fails OPEN (never blocks a real run).
+    const cloudGate = await enforceCloudRunCap(db, tenantId, env);
+    if (!cloudGate.allowed) {
+      const msg = `Monthly cloud-run allowance reached (${cloudGate.used}/${cloudGate.limit} on the ${cloudGate.effectivePlan} plan). Upgrade at builderforce.ai/pricing to run more cloud agents — on-prem and VS Code runs stay unlimited.`;
+      await recordCloudToolEvent(db, {
+        tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+        toolName: 'runtime.route', category: 'planning',
+        detail: { reason: 'cloud_run_limit_exceeded', used: cloudGate.used, limit: cloudGate.limit, plan: cloudGate.effectivePlan },
+        result: msg,
+      }).catch(() => { /* best-effort telemetry */ });
+      await runtimeService.update(execution.id, { status: ExecutionStatus.FAILED, errorMessage: msg }).catch(() => { /* terminal already */ });
+      await notifyDone();
+      return runtimeService.getExecution(execution.id).then((e) => e.toPlain()).catch(() => ({ id: execution.id, status: ExecutionStatus.FAILED }));
+    }
+
     // Route a container-surface run to the REAL long-lived Cloudflare Container
     // (AgentContainerDO) when it's bound; everything else — a durable-surface run,
     // and a container run with no Container binding — runs on the durable executor
@@ -575,20 +505,32 @@ async function startDispatchedExecution(
     const hasContainerBinding = wantsContainer && !!env.AGENT_CONTAINER;
     const hasCloudRunner = !!env.CLOUD_RUNNER;
 
-    const runWorkerFallback = async () => {
-      await runCloudExecution(env, runtimeService, db, execution.id, taskRow, tenantId, taskRow.projectId, agent.label ?? 'BuilderForce Agent', agent.ref, effectivePayload, artifacts);
-      await notifyDone();
+    // The payload the run is dispatched with. Once `orchestrate` resolves the executor
+    // it re-stamps this (and the executions row) with `executor` so the orphan reaper /
+    // read-path repair pick the right per-surface silence ceiling. The kickoff closures
+    // read this variable (not `effectivePayload`) so they carry the stamped copy.
+    let dispatchPayload = effectivePayload;
+
+    const failCloudRuntimeUnavailable = async (reason: string) => {
+      const msg = `Cloud execution could not start because no durable executor was available: ${reason}. `
+        + 'The unsafe in-request Worker fallback was not started because multi-step runs exceed its background-execution limit. '
+        + 'Verify the CLOUD_RUNNER Durable Object binding and deployment, then re-run the task.';
+      await runtimeService.update(execution.id, {
+        status: ExecutionStatus.FAILED,
+        errorMessage: msg,
+      }).catch(() => { /* already terminal/cancelled */ });
+      await recordCloudToolEvent(db, {
+        tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+        toolName: 'run.failed', category: 'error',
+        detail: { reason, phase: 'durable_kickoff' },
+        result: msg,
+      }).catch(() => { /* best-effort telemetry */ });
+      await notifyDone().catch(() => { /* best-effort live update */ });
     };
     const startDurable = async () => {
       const cloudRunner = env.CLOUD_RUNNER;
       if (!cloudRunner) {
-        await recordCloudToolEvent(db, {
-          tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
-          toolName: 'runtime.fallback', category: 'planning',
-          detail: { reason: 'no CLOUD_RUNNER binding', ranOn: 'worker' },
-          result: 'Durable Object binding (CLOUD_RUNNER) not configured — running on the interim Worker loop (may not survive long multi-step runs).',
-        });
-        await runWorkerFallback();
+        await failCloudRuntimeUnavailable('the CLOUD_RUNNER binding is not configured');
         return;
       }
       try {
@@ -599,26 +541,14 @@ async function startDispatchedExecution(
             executionId: execution.id, tenantId, projectId: taskRow.projectId,
             taskId: taskRow.id, taskTitle: taskRow.title, taskDescription: taskRow.description,
             cloudAgentRef: agent.ref, agentLabel: agent.label ?? 'BuilderForce Agent',
-            payload: effectivePayload, artifacts,
+            payload: dispatchPayload, artifacts,
           }),
         });
         if (!res.ok) {
-          await recordCloudToolEvent(db, {
-            tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
-            toolName: 'runtime.fallback', category: 'planning',
-            detail: { reason: `CloudRunnerDO /start ${res.status}`, ranOn: 'worker' },
-            result: `Durable Object kickoff returned ${res.status} — running on the interim Worker loop instead.`,
-          });
-          await runWorkerFallback();
+          await failCloudRuntimeUnavailable(`CloudRunnerDO /start returned HTTP ${res.status}`);
         }
       } catch (e) {
-        await recordCloudToolEvent(db, {
-          tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
-          toolName: 'runtime.fallback', category: 'planning',
-          detail: { reason: e instanceof Error ? e.message : String(e), ranOn: 'worker' },
-          result: 'Durable Object kickoff threw — running on the interim Worker loop instead.',
-        });
-        await runWorkerFallback();
+        await failCloudRuntimeUnavailable(`CloudRunnerDO /start threw: ${e instanceof Error ? e.message : String(e)}`);
       }
     };
 
@@ -634,7 +564,7 @@ async function startDispatchedExecution(
       try {
         const { systemPrompt, userContent } = await prepareCloudRun(
           env, db, execution.id, taskRow, tenantId, taskRow.projectId,
-          agent.label ?? 'BuilderForce Agent', agent.baseModel, artifacts, agent.ref, effectivePayload,
+          agent.label ?? 'BuilderForce Agent', agent.baseModel, artifacts, agent.ref, dispatchPayload,
           { shell: true },
         );
         const token = await mintContainerRunToken(env.JWT_SECRET, execution.id);
@@ -698,6 +628,18 @@ async function startDispatchedExecution(
       const containerHealthy = stub ? await probeContainerHealth(stub) : false;
       const executor = chooseCloudExecutor({ wantsContainer, hasContainerBinding, containerHealthy, hasCloudRunner });
 
+      // Stamp the resolved executor onto the payload + the executions row so the orphan
+      // reaper and read-path repair measure this run against the RIGHT silence ceiling:
+      // a long-lived 'durable'/'container' run heartbeats once per alarm tick and a tick
+      // spans one slow LLM step, so it must not be reaped at the serverless 90s wall
+      // (execution #136). The row is what the reaper reads; the kickoff body carries the
+      // same stamped copy so a self-heal re-dispatch keeps it.
+      dispatchPayload = executor === 'unavailable'
+        ? effectivePayload
+        : withExecutor(effectivePayload, executor);
+      await db.update(executions).set({ payload: dispatchPayload })
+        .where(eq(executions.id, execution.id)).catch(() => { /* best-effort — reaper falls back to the long-lived ceiling on an unstamped payload */ });
+
       await recordCloudToolEvent(db, {
         tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
         toolName: 'runtime.dispatch', category: 'planning',
@@ -708,19 +650,40 @@ async function startDispatchedExecution(
       // Explain a container→durable/worker downgrade so the timeline shows WHY.
       if (wantsContainer && executor !== 'container') {
         const why = !hasContainerBinding ? 'no long-lived Cloudflare Container is bound' : 'the Cloudflare Container is not live (health probe failed)';
+        const fallbackResult = executor === 'unavailable'
+          ? `${typeLabel}: ${why}, and no durable executor is available — failing without starting the unsafe in-request Worker loop.`
+          : `${typeLabel}: ${why} — running on the durable cloud executor instead, which executes the run to completion.`;
         await recordCloudToolEvent(db, {
           tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
           toolName: 'runtime.fallback', category: 'planning',
           detail: { requestedSurface: 'container', ranOn: executor, reason: !hasContainerBinding ? 'no AGENT_CONTAINER binding' : 'container /health unreachable' },
-          result: `${typeLabel}: ${why} — running on the ${executor} cloud executor instead, which executes the run to completion.`,
+          result: fallbackResult,
         });
       }
 
       if (executor === 'container' && stub) await startContainer(stub);
       else if (executor === 'durable') await startDurable();
-      else await runWorkerFallback();
+      else await failCloudRuntimeUnavailable('the CLOUD_RUNNER binding is not configured');
     };
-    waitUntil(orchestrate());
+    // orchestrate() degrades container→durable and fails fast when durable kickoff is
+    // unavailable. It never runs the multi-step loop inside waitUntil: that path is
+    // subject to the background-execution wall that caused the original timeouts.
+    // Catch any unexpected orchestration failure so the row is never stranded pending.
+    waitUntil(orchestrate().catch(async (err) => {
+      try {
+        const current = await runtimeService.getExecution(execution.id);
+        if (isTerminalExecutionStatus(current.status)) return;
+        const msg = `Cloud dispatch failed before any executor took the run: ${err instanceof Error ? err.message : String(err)}`;
+        await runtimeService.update(execution.id, { status: ExecutionStatus.FAILED, errorMessage: msg }).catch(() => { /* terminal already */ });
+        await recordCloudToolEvent(db, {
+          tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+          toolName: 'run.failed', category: 'error',
+          detail: { reason: err instanceof Error ? err.message : String(err), phase: 'dispatch' },
+          result: msg,
+        });
+        await notifyDone();
+      } catch { /* best-effort — the stale-execution reaper remains the backstop */ }
+    }));
   }
 
   // Announce the queued/dispatched execution immediately.
@@ -808,13 +771,16 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // The original AgentHostLink transport adapter used /api/runtime/sessions and
   // /api/runtime/tasks/submit. These endpoints are kept for CLI/agent compatibility.
 
-  router.post('/sessions', async (c) => {
+  // Mints a session handle for a run the caller is about to submit — part of the
+  // dispatch path, so it carries the same run-tier gate as the submit itself.
+  router.post('/sessions', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const body = await c.req.json<{ sessionId?: string }>().catch(() => ({} as any));
     const sessionId = body.sessionId ?? crypto.randomUUID();
     return c.json({ sessionId }, 201);
   });
 
-  router.post('/tasks/submit', async (c) => {
+  // STARTS a billable run (legacy BuilderForce Link submit path).
+  router.post('/tasks/submit', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const body = await c.req.json<{
       taskId:   number;
       agentId?: number;
@@ -848,6 +814,15 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     if (!taskRow) {
       return c.json({ error: 'Task not found' }, 404);
     }
+
+    const authorization = await authorizeManagedTaskExecution(db, c.get('tenantId'), body.taskId, body.payload);
+    if (!authorization.allowed) return c.json({ error: authorization.reason }, 409);
+
+    // Token gate — no budget → no run (shared adapter, so Run-now + this path + the
+    // board Run agree and the superadmin bypass is applied once). Fails open on a
+    // scan error; superadmin / unlimited tenants pass through.
+    const tokenBlock = await executionTokenGate(c, db);
+    if (tokenBlock) return tokenBlock;
 
     const gate = await evaluateExecutionApprovalGate(
       db,
@@ -890,15 +865,16 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     return c.json(owned.toPlain());
   });
 
-  router.post('/tasks/:id/cancel', async (c) => {
+  // CANCELS a run (legacy alias of /executions/:id/cancel).
+  router.post('/tasks/:id/cancel', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const id = Number(c.req.param('id'));
     if (!(await loadOwnedExecution(c, runtimeService, id))) return c.json({ error: 'Execution not found' }, 404);
     const execution = await runtimeService.cancel(id, c.get('userId'));
     return c.json(execution.toPlain());
   });
 
-  // Submit a task for execution
-  router.post('/executions', async (c) => {
+  // Submit a task for execution — the primary "start a billable run" entry point.
+  router.post('/executions', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const body = await c.req.json<{
       taskId:   number;
       agentId?: number;
@@ -931,6 +907,12 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     if (!taskRow) {
       return c.json({ error: 'Task not found' }, 404);
     }
+
+    // Token gate — no budget → no run (shared adapter, so Run-now + this path + the
+    // board Run agree and the superadmin bypass is applied once). Fails open on a
+    // scan error; superadmin / unlimited tenants pass through.
+    const tokenBlock = await executionTokenGate(c, db);
+    if (tokenBlock) return tokenBlock;
 
     const gate = await evaluateExecutionApprovalGate(
       db,
@@ -1138,6 +1120,128 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     return c.json({ active, runningCloudRefs: [...new Set(active.filter((a) => a.kind === 'cloud').map((a) => a.cloudAgentRef))] });
   });
 
+  // GET /api/runtime/attention  — the ONE cross-surface "what's live / what needs me"
+  // aggregator. Every surface (web Brain chat list + FloatingBrain badge, the board,
+  // the VS Code sessions/tasks trees, any modality) reads this SAME signal so a
+  // session's status follows it everywhere the user multitasks — switching chats on
+  // the web never changes whether the agent keeps executing in the background.
+  //
+  // Two derived states per work item, most-severe wins:
+  //   'awaiting_input' — an execution is PAUSED on ask_human (a pending question/feedback
+  //                      approval): a person must answer before it resumes.  [amber flag]
+  //   'running'        — an execution is pending/submitted/running: actively executing. [blue/pulse]
+  // (idle items are omitted entirely to keep the payload bounded.)
+  //
+  // Attribution: directly to the task via executions.task_id, and to a Brain chat via
+  // chat_ticket_links (chat → task/epic/gap). Intentionally uncached — a live operational
+  // surface that must reflect state this instant, same rationale as /active; it is three
+  // indexed, bounded queries with no N+1, and every consumer polls it adaptively.
+  router.get('/attention', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const projectIdRaw = c.req.query('projectId');
+    const projectId = projectIdRaw ? Number(projectIdRaw) : undefined;
+    const LIMIT = 500;
+
+    // 1) Every non-terminal execution for the tenant (optionally one project), with its task.
+    const execWhere = [eq(executions.tenantId, tenantId), inArray(executions.status, ['pending', 'submitted', 'running', 'paused'])];
+    if (projectId != null && Number.isFinite(projectId)) execWhere.push(eq(tasks.projectId, projectId));
+    const execRows = await db
+      .select({ id: executions.id, taskId: executions.taskId, status: executions.status })
+      .from(executions)
+      .innerJoin(tasks, eq(tasks.id, executions.taskId))
+      .where(and(...execWhere))
+      .orderBy(desc(executions.createdAt))
+      .limit(LIMIT);
+
+    // 2) Pending human questions (ask_human) — the authoritative "needs an answer" rows.
+    const approvalRows = await db
+      .select({ id: approvals.id, executionId: approvals.executionId })
+      .from(approvals)
+      .where(and(
+        eq(approvals.tenantId, tenantId),
+        eq(approvals.status, 'pending'),
+        inArray(approvals.kind, ['question', 'feedback']),
+      ))
+      .limit(LIMIT);
+
+    // execId → taskId (only executions we actually surfaced above, so already project-scoped).
+    const execTask = new Map<number, number>();
+    for (const e of execRows) if (e.taskId != null) execTask.set(e.id, e.taskId);
+    const approvalByExec = new Map<number, string>();
+    for (const a of approvalRows) if (a.executionId != null) approvalByExec.set(a.executionId, a.id);
+
+    // 3) Fold into per-task state (awaiting_input wins over running).
+    type Item = { state: 'running' | 'awaiting_input'; executionId?: number; approvalId?: string };
+    const taskState = new Map<number, Item>();
+    const setState = (taskId: number, next: Item) => {
+      const cur = taskState.get(taskId);
+      if (!cur || (next.state === 'awaiting_input' && cur.state !== 'awaiting_input')) taskState.set(taskId, next);
+      else if (cur.state === next.state && !cur.approvalId && next.approvalId) taskState.set(taskId, next);
+    };
+    for (const e of execRows) {
+      if (e.taskId == null) continue;
+      const approvalId = approvalByExec.get(e.id);
+      // A paused run, or any run carrying a pending question, is awaiting a person.
+      if (e.status === 'paused' || approvalId) setState(e.taskId, { state: 'awaiting_input', executionId: e.id, approvalId });
+      else setState(e.taskId, { state: 'running', executionId: e.id });
+    }
+
+    // 4) Propagate task state onto the Brain chats linked to those tasks (chat_ticket_links).
+    const taskIds = [...taskState.keys()];
+    const chatState: Record<number, Item & { taskId: number }> = {};
+    if (taskIds.length > 0) {
+      const linkRows = await db
+        .select({ chatId: chatTicketLinks.chatId, ticketRef: chatTicketLinks.ticketRef })
+        .from(chatTicketLinks)
+        .where(and(
+          eq(chatTicketLinks.tenantId, tenantId),
+          inArray(chatTicketLinks.ticketKind, ['task', 'epic', 'gap']),
+          inArray(chatTicketLinks.ticketRef, taskIds.map(String)),
+        ))
+        .limit(LIMIT);
+      for (const l of linkRows) {
+        const taskId = Number(l.ticketRef);
+        const item = taskState.get(taskId);
+        if (!item) continue;
+        const cur = chatState[l.chatId];
+        if (!cur || (item.state === 'awaiting_input' && cur.state !== 'awaiting_input')) {
+          chatState[l.chatId] = { ...item, taskId };
+        }
+      }
+    }
+
+    const tasksOut: Record<number, Item> = {};
+    for (const [taskId, item] of taskState) tasksOut[taskId] = item;
+
+    // 5) AI Manager cadence — the freshest `last managed` stamp across the manager's
+    // scope, so a human on ANY screen sees an ambient "Manager active" pulse when a
+    // pass just ran (cron or manual). A manager can be scoped to one project OR the
+    // whole tenant, so: project-scoped attention reads that project's stamp; the
+    // tenant-wide view reads MAX(last_run_at) across all the tenant's managed
+    // projects. One bounded aggregate — consistent with this endpoint's other reads.
+    const mgrWhere = projectId != null && Number.isFinite(projectId)
+      ? and(eq(projectManagerConfigs.tenantId, tenantId), eq(projectManagerConfigs.projectId, projectId))
+      : eq(projectManagerConfigs.tenantId, tenantId);
+    const [mgrRow] = await db
+      .select({ lastRunAt: sql<Date | null>`max(${projectManagerConfigs.lastRunAt})` })
+      .from(projectManagerConfigs)
+      .where(mgrWhere);
+    const lastRunAt = mgrRow?.lastRunAt ? new Date(mgrRow.lastRunAt) : null;
+    // "Active" = a pass landed within the last 3 min (the cron cadence is 5 min, a
+    // pass is seconds long, so this reads as "the manager is working on schedule").
+    const recentlyActive = lastRunAt != null && Date.now() - lastRunAt.getTime() < 3 * 60_000;
+
+    return c.json({
+      tasks: tasksOut,
+      chats: chatState,
+      counts: {
+        running: [...taskState.values()].filter((i) => i.state === 'running').length,
+        awaiting: [...taskState.values()].filter((i) => i.state === 'awaiting_input').length,
+      },
+      manager: { lastRunAt: lastRunAt ? lastRunAt.toISOString() : null, recentlyActive },
+    });
+  });
+
   // GET /api/runtime/hired-agents
   // The on-prem runtime fetches the tenant's HIRED agents to register them as
   // callable roles (agent-in-agent). Joins agent_purchases (active hires) to the
@@ -1194,7 +1298,9 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   });
 
   // Legacy telemetry / trace endpoints (used by some older integrations)
-  router.post('/executions/:id/telemetry', async (c) => {
+  // WRITES metered usage rows for a run (agent-host callback; host machine tokens
+  // carry DEVELOPER). Not a read — a viewer must not be able to forge usage.
+  router.post('/executions/:id/telemetry', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const id = Number(c.req.param('id'));
     const body = await c.req
       .json<ExecutionTelemetryBody>()
@@ -1486,7 +1592,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   // the host (which aborts the live session); cloud runs are halted by the
   // background loop's per-step cancel poll (see runCloudToolLoop). Without this,
   // cancel was cosmetic and the agent kept burning tokens to completion.
-  router.post('/executions/:id/cancel', async (c) => {
+  router.post('/executions/:id/cancel', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const id = Number(c.req.param('id'));
     if (!(await loadOwnedExecution(c, runtimeService, id))) return c.json({ error: 'Execution not found' }, 404);
     const execution = await runtimeService.cancel(id, c.get('userId'));
@@ -1533,7 +1639,8 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   //     (built on the prior run's committed work + the evolved PRD), and return the
   //     new execution id so the UI can follow it. This replaces the old silent
   //     no-op, which only ever forwarded to a live host and dropped everything else.
-  router.post('/executions/:id/messages', async (c) => {
+  // STEERS a live run and, on a terminal run, STARTS a brand-new billable one.
+  router.post('/executions/:id/messages', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const id = Number(c.req.param('id'));
     const body = await c.req.json<{ text?: string }>().catch(() => ({} as { text?: string }));
     const text = body.text?.trim();
@@ -1614,7 +1721,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   });
 
   // Agent callback: update execution state (running / completed / failed)
-  router.patch('/executions/:id/state', async (c) => {
+  router.patch('/executions/:id/state', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const id = Number(c.req.param('id'));
     if (!(await loadOwnedExecution(c, runtimeService, id))) return c.json({ error: 'Execution not found' }, 404);
     const body = await c.req.json<{
@@ -1718,7 +1825,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         `) as Array<{ cost_mc: string; tokens: string; requests: number }>;
         const r = rows[0];
         return {
-          estimatedCostUsd: Number(r?.cost_mc ?? 0) / 100_000,
+          estimatedCostUsd: millicentsToUsd(Number(r?.cost_mc ?? 0)),
           totalTokens: Number(r?.tokens ?? 0),
           requests: Number(r?.requests ?? 0),
         };
@@ -1736,12 +1843,28 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     if (!Number.isFinite(taskId)) return c.json({ changes: [] });
     const sql = neon((c.env as Env).NEON_DATABASE_URL);
     const rows = (await sql`
-      SELECT path, change, agent, execution_id AS "executionId", created_at AS "createdAt"
-      FROM task_file_changes
-      WHERE task_id = ${taskId} AND tenant_id = ${c.get('tenantId')}
-      ORDER BY created_at DESC
+      SELECT f.path, f.change, f.agent, f.execution_id AS "executionId", f.created_at AS "createdAt",
+        ARRAY(
+          SELECT DISTINCT substring(a.args from '"model"\\s*:\\s*"([^"]+)"')
+          FROM tool_audit_events a
+          WHERE a.execution_id = f.execution_id AND a.tenant_id = f.tenant_id
+            AND a.tool_name = 'llm.complete'
+            AND substring(a.args from '"model"\\s*:\\s*"([^"]+)"') IS NOT NULL
+        ) AS models,
+        COALESCE((
+          SELECT jsonb_agg(DISTINCT jsonb_build_object(
+            'model', u.model,
+            'byo', u.byo,
+            'provider', u.byo_provider
+          ))
+          FROM llm_usage_log u
+          WHERE u.execution_id = f.execution_id AND u.tenant_id = f.tenant_id
+        ), '[]'::jsonb) AS "modelUsage"
+      FROM task_file_changes f
+      WHERE f.task_id = ${taskId} AND f.tenant_id = ${c.get('tenantId')}
+      ORDER BY f.created_at DESC
       LIMIT 500
-    `) as Array<{ path: string; change: string; agent: string; executionId: number | null; createdAt: string }>;
+    `) as Array<{ path: string; change: string; agent: string; executionId: number | null; createdAt: string; models: string[]; modelUsage: Array<{ model: string; byo: boolean; provider: string | null }> }>;
     return c.json({ changes: rows });
   });
 
@@ -1833,8 +1956,69 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     return c.json({ bound: !noRepo, hasCredential: false, reason: r.reason });
   });
 
+  // GET /api/runtime/tasks/:taskId/repo-files
+  // List the files on the task's AGENT WORKING BRANCH (the ticket branch the run
+  // commits to), so the Brain composer's "Add context" can reference the agent's
+  // in-progress workspace — not just the repo's default branch. Reads server-side
+  // with the decrypted token via the SAME importRepoContents path the IDE hydrate
+  // uses; the token never reaches the browser. Falls back to the base branch when
+  // the ticket branch doesn't exist yet (a run that hasn't committed).
+  //
+  // Cached read-through keyed by a version token = the latest recorded file-change
+  // ts for the task: a fresh agent write bumps the token → next read is live; a
+  // settled run is served from cache, so re-opening the picker doesn't re-pull.
+  router.get('/tasks/:taskId/repo-files', async (c) => {
+    const taskId = Number(c.req.param('taskId'));
+    if (!Number.isFinite(taskId)) return c.json({ ok: false, reason: 'invalid task', files: [] }, 400);
+    const env = c.env as Env;
+    const tenantId = c.get('tenantId');
+
+    const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskId);
+    if (!repo.ok) return c.json({ ok: false, reason: repo.reason, files: [] });
+    const ctx = repo.ctx;
+
+    const load = async () => {
+      const read = { provider: ctx.provider, host: ctx.host, owner: ctx.owner, repo: ctx.repo, token: ctx.token };
+      // Prefer the agent's working branch; a run that hasn't committed has no such
+      // branch yet, so fall back to the base so the picker still shows the repo.
+      let result = await importRepoContents({ ...read, ref: ctx.branch });
+      let ref = ctx.branch;
+      if (!result.ok) { result = await importRepoContents({ ...read, ref: ctx.base }); ref = ctx.base; }
+      return {
+        ok: result.ok,
+        ref,
+        branch: ctx.branch,
+        base: ctx.base,
+        files: result.files,
+        truncated: result.truncated,
+        ...(result.ok ? {} : { reason: result.error ?? 'Failed to read repository' }),
+      };
+    };
+
+    // Version token = newest change row for this task (null when the run hasn't
+    // written anything yet — then the branch content is stable at the base).
+    const sql = neon(env.NEON_DATABASE_URL);
+    const [ver] = (await sql`
+      SELECT created_at AS "ts"
+      FROM task_file_changes
+      WHERE task_id = ${taskId} AND tenant_id = ${tenantId}
+      ORDER BY created_at DESC
+      LIMIT 1
+    `) as Array<{ ts: string }>;
+
+    const body = await getOrSetCached(
+      env,
+      `task-repo-files:${tenantId}:${taskId}:${ctx.branch}:${ver?.ts ?? 'base'}`,
+      load,
+      { kvTtlSeconds: 300, l1TtlMs: 30_000 },
+    );
+    return c.json(body);
+  });
+
   // Broadcast an existing task to all currently connected agentHosts in the tenant.
-  router.post('/tasks/:taskId/broadcast', async (c) => {
+  // STARTS a run and fans it out to every connected host — the widest-blast-radius
+  // dispatch in the file.
+  router.post('/tasks/:taskId/broadcast', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
     const taskId = Number(c.req.param('taskId'));
     const body = await c.req.json<{ payload?: string }>().catch((): { payload?: string } => ({}));
 
@@ -1843,6 +2027,9 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         id: tasks.id,
         title: tasks.title,
         description: tasks.description,
+        priority: tasks.priority,
+        projectId: tasks.projectId,
+        assignedAgentHostId: tasks.assignedAgentHostId,
       })
       .from(tasks)
       .innerJoin(projects, eq(projects.id, tasks.projectId))
@@ -1855,6 +2042,16 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
 
     if (!taskRow) {
       return c.json({ error: 'Task not found' }, 404);
+    }
+
+    // Broadcast starts a real run on every connected host, so it must clear the
+    // SAME governance gate as a targeted submit — otherwise it was a way to run a
+    // high/urgent ticket without the manager approval those tickets require.
+    const gate = await evaluateExecutionApprovalGate(
+      db, c.get('tenantId'), c.get('userId'), taskRow, null, { payload: body.payload },
+    );
+    if (!gate.allowed) {
+      return c.json({ status: 'awaiting_approval', approvalId: gate.approvalId, taskId: taskRow.id, reason: gate.reason }, 202);
     }
 
     const execution = await runtimeService.submit({

@@ -1,6 +1,8 @@
 import * as vscode from "vscode";
 import { listHumanRequests, type BfApproval } from "./bfApi";
 import { SECRET_KEY } from "./gateway";
+import { getSelectedProject, onProjectChange } from "./projectState";
+import { getProjectNames, projectLabel } from "./projectNames";
 
 /**
  * The Work Inbox (Activity Bar → BuilderForce → Inbox) — the proactive "what needs
@@ -10,6 +12,10 @@ import { SECRET_KEY } from "./gateway";
  * review pull requests + CI, fix production errors, and open a pull request. The
  * approvals are the only items NOT already shown elsewhere (the Project & Tasks tree
  * covers tasks), so this never duplicates another view.
+ *
+ * Like the Sessions list, the approvals key off the active project: with a project
+ * selected only that project's approvals show; with none selected every approval shows,
+ * each labelled with the project it belongs to (or "No project").
  */
 
 type InboxNode =
@@ -24,7 +30,15 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxNode> {
   private cache: { ts: number; approvals: BfApproval[] } | undefined;
   private static readonly TTL = 5_000;
 
-  constructor(private readonly secrets: vscode.SecretStorage) {}
+  // Set during getChildren so getTreeItem knows whether to label each approval with its
+  // project: unfiltered lists show the project; a project-scoped list implies it.
+  private filtered = false;
+  private projectNameById = new Map<number, string>();
+
+  constructor(private readonly secrets: vscode.SecretStorage) {
+    // The active project scopes this list — repaint when it changes.
+    onProjectChange(() => this.refresh());
+  }
 
   /** Drop the cache and repaint (after sign-in / resolving an approval). */
   refresh(): void {
@@ -59,11 +73,18 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxNode> {
     const label = a.description?.trim() || a.actionType || vscode.l10n.t("Approval request");
     const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
     item.id = `approval:${a.id}`;
-    item.description = a.kind === "question" ? vscode.l10n.t("question") : a.kind === "feedback" ? vscode.l10n.t("feedback") : vscode.l10n.t("approval");
+    const kind = a.kind === "question" ? vscode.l10n.t("question") : a.kind === "feedback" ? vscode.l10n.t("feedback") : vscode.l10n.t("approval");
+    // Unfiltered (all projects): prefix the project so a mixed queue stays legible.
+    const project = this.filtered ? undefined : projectLabel(this.projectNameById, a.projectId);
+    item.description = project ? `${project} · ${kind}` : kind;
     item.iconPath = new vscode.ThemeIcon(a.kind === "approval" ? "shield" : "comment-unresolved");
     item.tooltip = label;
     // Resolve through the SAME review flow the command palette uses (DRY).
-    item.command = { command: "builderforce.humanRequests", title: vscode.l10n.t("Review request") };
+    item.command = {
+      command: "builderforce.humanRequests",
+      title: vscode.l10n.t("Review request"),
+      arguments: [a.id],
+    };
     item.contextValue = "builderforceApproval";
     return item;
   }
@@ -73,7 +94,15 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxNode> {
     if (!this.cache || Date.now() - this.cache.ts >= InboxTreeProvider.TTL) {
       this.cache = { ts: Date.now(), approvals: await listHumanRequests(this.secrets, { status: "pending" }) };
     }
-    const approvals = this.cache.approvals;
+
+    const project = getSelectedProject();
+    this.filtered = !!project;
+    const approvals = project
+      ? this.cache.approvals.filter((a) => a.projectId === project.id)
+      : this.cache.approvals;
+    // Unfiltered: resolve project names for the per-row labels (best-effort, cached).
+    this.projectNameById = project ? new Map() : await getProjectNames(this.secrets);
+
     const top: InboxNode[] = approvals.length
       ? approvals.map((approval) => ({ kind: "approval" as const, approval }))
       : [{ kind: "empty" as const, label: vscode.l10n.t("Nothing needs you right now") }];

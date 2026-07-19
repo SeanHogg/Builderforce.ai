@@ -1,5 +1,5 @@
 /**
- * BuilderForce Agent Container — the long-lived process behind a "V2 Cloud Agent
+ * BuilderForce Agent Container — the long-lived process behind a "Cloud Agent
  * (Node/Container)" run (the `container` runtime surface). AgentContainerDO starts
  * this image and proxies `POST /run` to it.
  *
@@ -62,32 +62,72 @@ function runShell(command, cwd, proc) {
   });
 }
 
-/** Recursively list repo files under `dir` (skipping .git/node_modules), capped. */
-async function listFiles(dir, sub) {
-  const root = sub ? join(dir, sub) : dir;
-  const acc = [];
-  async function walk(d) {
-    if (acc.length >= MAX_LIST_ENTRIES) return;
-    let entries;
-    try { entries = await readdir(d, { withFileTypes: true }); } catch { return; }
-    for (const e of entries) {
-      if (acc.length >= MAX_LIST_ENTRIES) return;
-      if (e.name === '.git' || e.name === 'node_modules') continue;
-      const full = join(d, e.name);
-      if (e.isDirectory()) await walk(full);
-      else acc.push(relative(dir, full).split(sep).join('/'));
+/** Case-insensitive glob → RegExp (mirror of packages/agent-tools `globToRegExp`;
+ *  inlined because this container is plain ESM with no build step / package imports).
+ *  `**` crosses `/`, `*` stays within a segment, `?` is one non-slash char. */
+function globToRegExp(pattern) {
+  let re = '';
+  for (let i = 0; i < pattern.length; i++) {
+    const c = pattern[i];
+    if (c === '*') {
+      if (pattern[i + 1] === '*') { re += '.*'; i++; } else { re += '[^/]*'; }
+    } else if (c === '?') {
+      re += '[^/]';
+    } else {
+      re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
     }
   }
-  await walk(root);
-  return { ok: true, paths: acc, truncated: acc.length >= MAX_LIST_ENTRIES };
+  return new RegExp(`^${re}$`, 'i');
+}
+/** A slash-free glob matches the basename at any depth; otherwise the full path. */
+function matchGlob(p, pattern) {
+  const re = globToRegExp(pattern);
+  return pattern.includes('/') ? re.test(p) : re.test(p.slice(p.lastIndexOf('/') + 1));
+}
+
+/**
+ * List repo files under `dir` (skipping .git/node_modules), capped. BREADTH-FIRST so
+ * shallow files (root docs like ROADMAP.md) are collected before the cap is hit deep
+ * in a large subtree; sorted for stable output. `glob` filters by name (case-
+ * insensitive; a bare name matches the basename at any depth) so a file can be found
+ * without dumping the tree.
+ */
+async function listFiles(dir, sub, glob) {
+  const root = sub ? join(dir, sub) : dir;
+  const acc = [];
+  const queue = [root];
+  let truncated = false;
+  while (queue.length > 0) {
+    if (acc.length >= MAX_LIST_ENTRIES) { truncated = true; break; }
+    const d = queue.shift();
+    let entries;
+    try { entries = await readdir(d, { withFileTypes: true }); } catch { continue; }
+    for (const e of entries) {
+      if (e.name === '.git' || e.name === 'node_modules') continue;
+      const full = join(d, e.name);
+      if (e.isDirectory()) { queue.push(full); }
+      else {
+        if (acc.length >= MAX_LIST_ENTRIES) { truncated = true; break; }
+        acc.push(relative(dir, full).split(sep).join('/'));
+      }
+    }
+  }
+  acc.sort((a, b) => a.localeCompare(b));
+  const paths = glob ? acc.filter((p) => matchGlob(p, glob)) : acc;
+  return { ok: true, paths, truncated };
 }
 
 /** Execute one tool call. Repo reads/writes hit local disk (the clone); write also
- *  mirrors to the ticket branch via the Worker; run_command runs in the shell. */
+ *  mirrors to the ticket branch via the Worker; run_command and the git_* tools run
+ *  in the shell; memory_* and builtin_* relay to the Worker (no DB creds here). */
 async function execTool(spec, workdir, writtenPaths, name, parsed, proc) {
   if (name === 'list_files') {
     if (!workdir) return { ok: false, error: 'no repository bound to this task' };
-    return listFiles(workdir, typeof parsed.path === 'string' ? parsed.path : undefined);
+    return listFiles(
+      workdir,
+      typeof parsed.path === 'string' ? parsed.path : undefined,
+      typeof parsed.glob === 'string' && parsed.glob.trim() ? parsed.glob.trim() : undefined,
+    );
   }
   if (name === 'read_file') {
     const path = typeof parsed.path === 'string' ? parsed.path : '';
@@ -123,6 +163,22 @@ async function execTool(spec, workdir, writtenPaths, name, parsed, proc) {
   if (name.startsWith('git_')) {
     if (!workdir) return { ok: false, error: 'no repository checked out — git tools need a bound repo' };
     return gitTool(spec, workdir, proc, name, parsed);
+  }
+  // Durable cross-run memory. Like the platform tools, the container holds no DB
+  // creds, so both verbs relay to the Worker's `memory` op — which drives the SAME
+  // capability the durable surface uses, so a fact stored by a container run is
+  // recalled by a durable one and vice versa.
+  if (name === 'memory_recall') {
+    return op(spec, { op: 'memory', args: { action: 'recall', query: parsed.query, limit: parsed.limit } });
+  }
+  if (name === 'memory_remember') {
+    return op(spec, { op: 'memory', args: { action: 'remember', key: parsed.key, content: parsed.content, tags: parsed.tags, importance: parsed.importance } });
+  }
+  // Platform (project-management) tools — the container holds no DB creds, so it
+  // relays each `builtin_*` call back to the Worker, which runs the curated,
+  // subset-guarded tool in-process (create task / update OKR / read remaining work).
+  if (name.startsWith('builtin_')) {
+    return op(spec, { op: 'platform_tool', args: { name, arguments: parsed } });
   }
   return { ok: false, error: `unknown tool '${name}'` };
 }

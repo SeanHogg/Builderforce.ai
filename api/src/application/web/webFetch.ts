@@ -9,7 +9,7 @@
  * model's context window.
  */
 
-import { assertSafeUrl } from '../../infrastructure/net/ssrfGuard';
+import { assertSafeUrl, resolveAndAssertPublic } from '../../infrastructure/net/ssrfGuard';
 
 /** Max decoded text returned to the model (chars). A roadmap/docs page fits
  *  comfortably; anything larger is truncated with a marker. */
@@ -107,7 +107,12 @@ export async function fetchWebDocument(rawUrl: string): Promise<WebFetchResult> 
   const requestedUrl = rawUrl;
   const target = normalizeFetchUrl(rawUrl);
   // SSRF guard (allows http + https). Throws on internal/loopback/metadata hosts.
-  assertSafeUrl(target, { allowHttp: true });
+  const parsed = assertSafeUrl(target, { allowHttp: true });
+  // DNS-rebinding guard (best-effort, defence-in-depth): resolve the hostname over
+  // DoH and reject if it maps to a private IP. Fails OPEN on a DoH lookup failure —
+  // assertSafeUrl above already blocks literal private IPs, so this only closes the
+  // residual "public name → private IP" rebinding case when the lookup succeeds.
+  await resolveAndAssertPublic(parsed.hostname);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);

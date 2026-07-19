@@ -136,7 +136,7 @@ describe('recordCloudUsage → usage_snapshots AND llm_usage_log', () => {
       executionId: 42,
       taskId: 7,
       projectId: 3,
-      model: 'anthropic/claude-sonnet-4-6',
+      model: 'anthropic/claude-sonnet-5',
       inputTokens: 100,
       outputTokens: 40,
     });
@@ -161,7 +161,7 @@ describe('recordCloudUsage → usage_snapshots AND llm_usage_log', () => {
     expect(usage).toHaveLength(1);
     expect(usage[0]).toMatchObject({
       tenantId: 1,
-      model: 'anthropic/claude-sonnet-4-6',
+      model: 'anthropic/claude-sonnet-5',
       promptTokens: 100,
       completionTokens: 40,
       totalTokens: 140,

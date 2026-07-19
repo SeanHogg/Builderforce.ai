@@ -12,6 +12,8 @@ An agent's built-in capabilities are its starting point. Skills are how you exte
 
 Builderforce has two ways to get skills onto your agents: the **Skills Marketplace** (community-published, browse and assign) and **custom skills** (you build them, you own them). Both follow the same assignment model, and both are loaded automatically onto your BuilderForce Agents instances at startup.
 
+![The skills system: browse or publish skills in the marketplace, assign them at tenant, agentHost, project, or task scope with task-wins precedence, and the merged set loads into each agentHost's skill registry at startup](/blog/skills-marketplace.svg)
+
 ---
 
 ## What Is a Skill?

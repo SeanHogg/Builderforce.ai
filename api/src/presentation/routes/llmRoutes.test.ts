@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { Context } from 'hono';
 import type { HonoEnv } from '../../env';
+import type { TenantLlmCredentials } from '../../application/llm/tenantProviderKeyService';
 
 // Hoisted mocks — vi.mock must declare the spies via vi.hoisted so the
 // factory closures see them.
@@ -10,6 +11,15 @@ const mocks = vi.hoisted(() => ({
   signJwt:    vi.fn(),
   buildDatabase: vi.fn(),
   llmProxyForPlan: vi.fn(),
+  resolveTenantLlmCredentials: vi.fn<() => Promise<TenantLlmCredentials>>(async () => ({
+    anthropicOAuthToken: null,
+    openaiCodexAuth: null,
+    xaiOAuthToken: null,
+    vendorKeys: {},
+    configuredProviders: [],
+    unresolvedReasons: {},
+    vendorPriority: [],
+  })),
 }));
 
 vi.mock('../../infrastructure/auth/HashService', () => ({
@@ -20,26 +30,75 @@ vi.mock('../../infrastructure/auth/JwtService', () => ({
   verifyJwt: mocks.verifyJwt,
   signJwt: mocks.signJwt,
 }));
-vi.mock('../../infrastructure/database/connection', () => ({ buildDatabase: mocks.buildDatabase }));
+vi.mock('../../infrastructure/database/connection', () => ({
+  buildDatabase: mocks.buildDatabase,
+  buildTransactionalDatabase: (...args: unknown[]) => mocks.buildDatabase(...args),
+}));
 // Partial mock — keep every real LlmProxyService export (ChatCompletionRequest,
 // reorderPoolByShape, modelPoolForPlan, …) and override only the network call.
 vi.mock('../../application/llm/LlmProxyService', async (orig) => ({
   ...(await orig<typeof import('../../application/llm/LlmProxyService')>()),
   llmProxyForPlan: mocks.llmProxyForPlan,
 }));
+// Partial mock — keep the real provider-key exports and only stub the OAuth
+// resolver (it makes a raw neon() call the db mock doesn't cover) so the
+// completion path reaches proxyForCompletion.
+vi.mock('../../application/llm/tenantProviderKeyService', async (orig) => ({
+  ...(await orig<typeof import('../../application/llm/tenantProviderKeyService')>()),
+  resolveAnthropicOAuthToken: async () => null,
+  resolveTenantLlmCredentials: mocks.resolveTenantLlmCredentials,
+}));
 
 // Imports must follow the vi.mock calls above so the mocks are in place.
-const { requireTenantAccess } = await import('./llmRoutes');
-const { sanitizeToolName, restoreToolName, sanitizeRequestToolNames, restoreResponseToolNames, StreamingToolNameRestorer } =
+const { requireTenantAccess, byoModelsFor } = await import('./llmRoutes');
+const { vendorForModel } = await import('../../application/llm/vendors');
+const { sanitizeToolName, restoreToolName, sanitizeToolCallId, sanitizeRequestToolCalls, restoreResponseToolNames, StreamingToolNameRestorer } =
   await import('../../application/llm/toolNameSanitizer');
 
+beforeEach(() => {
+  mocks.resolveTenantLlmCredentials.mockResolvedValue({
+    anthropicOAuthToken: null,
+    openaiCodexAuth: null,
+    xaiOAuthToken: null,
+    vendorKeys: {},
+    configuredProviders: [],
+    unresolvedReasons: {},
+    vendorPriority: [],
+  });
+});
+
+describe('byoModelsFor', () => {
+  it('uses the bare direct-Anthropic ids, not the OpenRouter anthropic namespace', () => {
+    const models = byoModelsFor(['anthropic']);
+    expect(models.map((m) => m.id)).toContain('claude-sonnet-5');
+    expect(models.some((m) => m.id.startsWith('anthropic/'))).toBe(false);
+    expect(models.every((m) => vendorForModel(m.id) === 'anthropic')).toBe(true);
+  });
+
+  it('projects bespoke and OpenAI-compatible providers onto tenant-keyed routes', () => {
+    const cases = [
+      { provider: 'google' as const, vendor: 'googleai', prefix: 'googleai/' },
+      { provider: 'openai' as const, vendor: 'openai', prefix: 'direct/openai/' },
+      { provider: 'meta' as const, vendor: 'meta', prefix: 'direct/meta/' },
+      { provider: 'xai' as const, vendor: 'xai', prefix: 'direct/xai/' },
+    ];
+    for (const { provider, vendor, prefix } of cases) {
+      const models = byoModelsFor([provider]);
+      expect(models.length).toBeGreaterThan(0);
+      expect(models.every((m) => m.id.startsWith(prefix))).toBe(true);
+      expect(models.every((m) => vendorForModel(m.id) === vendor)).toBe(true);
+    }
+  });
+});
+
 // ---------------------------------------------------------------------------
-// Tool-name sanitizer — bidirectional dot escape for vendors that reject dots
-// (Anthropic). Sanitizer runs gateway-side; restoration brings the caller's
-// dotted namespace back on the response path.
+// Tool-call sanitizer — one gateway-side pass that makes tool NAMES (reversible
+// dot escape, restored on the response path) and tool-call IDs (deterministic
+// rewrite, never restored) safe for vendors that reject dots / non-`[A-Za-z0-9_-]`
+// ids (Anthropic).
 // ---------------------------------------------------------------------------
 
-describe('toolNameSanitizer', () => {
+describe('toolCallSanitizer', () => {
   it('escapes dots and restores them losslessly', () => {
     const cases = ['governance.snapshot', 'agile.kanban.list', 'no_dots', 'a.b.c.d'];
     for (const original of cases) {
@@ -68,11 +127,44 @@ describe('toolNameSanitizer', () => {
         { role: 'tool', name: 'governance.snapshot', tool_call_id: 'c1', content: '{}' },
       ],
     };
-    const out = sanitizeRequestToolNames(body) as typeof body;
+    const out = sanitizeRequestToolCalls(body) as typeof body;
     expect(out.tools[0]!.function.name).not.toMatch(/\./);
     expect((out.tool_choice.function as { name: string }).name).not.toMatch(/\./);
     expect((out.messages[1]!.tool_calls as Array<{ function: { name: string } }>)[0]!.function.name).not.toMatch(/\./);
     expect((out.messages[2] as { name: string }).name).not.toMatch(/\./);
+  });
+
+  it('rewrites foreign tool-call ids to Anthropic\'s charset, keeping use↔result paired', () => {
+    // A non-Anthropic provider minted an id with ':' and '/'. When the cascade
+    // later fails over into Anthropic, the id must already match ^[a-zA-Z0-9_-]+$
+    // AND the assistant tool_call id must still equal the tool result's tool_call_id.
+    const foreignId = 'call_abc:123/xyz';
+    const body = {
+      messages: [
+        {
+          role: 'assistant',
+          content: null,
+          tool_calls: [{ id: foreignId, type: 'function', function: { name: 'search', arguments: '{}' } }],
+        },
+        { role: 'tool', tool_call_id: foreignId, content: '{}' },
+      ],
+    };
+    const out = sanitizeRequestToolCalls(body) as typeof body;
+    const useId = (out.messages[0]!.tool_calls as Array<{ id: string }>)[0]!.id;
+    const resultId = (out.messages[1] as { tool_call_id: string }).tool_call_id;
+    expect(useId).toMatch(/^[a-zA-Z0-9_-]+$/);
+    expect(resultId).toMatch(/^[a-zA-Z0-9_-]+$/);
+    expect(useId).toBe(resultId); // deterministic → still paired
+  });
+
+  it('leaves already-valid tool-call ids untouched (idempotent across failover turns)', () => {
+    for (const id of ['c1', 'toolu_01ABC', 'call-9_x']) {
+      expect(sanitizeToolCallId(id)).toBe(id);
+    }
+    // Distinct foreign ids that collapse to the same characters do not collide.
+    expect(sanitizeToolCallId('a:b')).not.toBe(sanitizeToolCallId('a/b'));
+    // Deterministic: same input → same output (pairing guarantee).
+    expect(sanitizeToolCallId('x.y:z')).toBe(sanitizeToolCallId('x.y:z'));
   });
 
   it('restores tool_calls names in the response', () => {
@@ -346,6 +438,67 @@ const fakeExecutionCtx = {
   passThroughOnException: () => undefined,
 } as unknown as ExecutionContext;
 
+describe('POST /provider-keys/:provider/test', () => {
+  beforeEach(() => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(mockDb({
+      keyRow: { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'pro', billingStatus: 'active', tokenDailyLimitOverride: null },
+    }));
+    mocks.resolveTenantLlmCredentials.mockResolvedValue({
+      anthropicOAuthToken: null,
+      openaiCodexAuth: null,
+      xaiOAuthToken: null,
+      vendorKeys: { anthropic: 'sk-ant-test' },
+      configuredProviders: ['anthropic'],
+      unresolvedReasons: {},
+      vendorPriority: ['anthropic'],
+    });
+  });
+
+  it('returns a handled 200 result when the upstream credential test fails', async () => {
+    mocks.llmProxyForPlan.mockReturnValue({
+      complete: vi.fn(async () => ({
+        response: new Response(JSON.stringify({ error: { message: 'invalid x-api-key' } }), { status: 401 }),
+      })),
+    });
+    const req = new Request('http://test.local/provider-keys/anthropic/test', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer bfk_test' },
+    });
+
+    const res = await buildApp().request(req, {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      ok: false,
+      status: 'failed',
+      code: 'provider_test_failed',
+      error: 'anthropic connection test failed: invalid x-api-key',
+      details: { provider: 'anthropic', model: 'claude-sonnet-5', upstreamStatus: 401 },
+    });
+  });
+
+  it('returns a handled 200 result when the configured credential is unusable', async () => {
+    mocks.resolveTenantLlmCredentials.mockResolvedValue({
+      anthropicOAuthToken: null,
+      openaiCodexAuth: null,
+      xaiOAuthToken: null,
+      vendorKeys: {},
+      configuredProviders: ['anthropic'],
+      unresolvedReasons: { anthropic: 'revoked' },
+      vendorPriority: ['anthropic'],
+    });
+    const req = new Request('http://test.local/provider-keys/anthropic/test', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer bfk_test' },
+    });
+
+    const res = await buildApp().request(req, {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: false, status: 'revoked' });
+  });
+});
+
 describe('POST /v1/chat/completions strict-pin gate', () => {
   beforeEach(() => {
     mocks.hashSecret.mockReset();
@@ -354,7 +507,7 @@ describe('POST /v1/chat/completions strict-pin gate', () => {
     mocks.buildDatabase.mockReset();
   });
 
-  it('rejects free tenant without override with 403 strict_pin_not_allowed', async () => {
+  it('rejects free tenant without override with 402 strict_pin_not_allowed', async () => {
     mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
     const db = mockDb({
       keyRow:    { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
@@ -365,7 +518,7 @@ describe('POST /v1/chat/completions strict-pin gate', () => {
     const app = buildApp();
     const res = await app.request(strictPinRequest(), {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(402);
     const body = await res.json() as { code?: string };
     expect(body.code).toBe('strict_pin_not_allowed');
   });
@@ -383,10 +536,10 @@ describe('POST /v1/chat/completions strict-pin gate', () => {
     const app = buildApp();
     const res = await app.request(strictPinRequest(), {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
 
-    // We don't reach 403 strict_pin_not_allowed; the request progresses past
+    // We don't reach 402 strict_pin_not_allowed; the request progresses past
     // the gate to the vendor-key check, which returns 503 (no OPENROUTER_API_KEY
     // in baseEnv). Proves the gate did not fire.
-    expect(res.status).not.toBe(403);
+    expect(res.status).not.toBe(402);
     expect(res.status).toBe(503);
   });
 
@@ -402,7 +555,7 @@ describe('POST /v1/chat/completions strict-pin gate', () => {
     const app = buildApp();
     const res = await app.request(strictPinRequest(), {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
 
-    expect(res.status).not.toBe(403);
+    expect(res.status).not.toBe(402);
     expect(res.status).toBe(503); // missing OPENROUTER_API_KEY_PRO
   });
 
@@ -427,7 +580,7 @@ describe('POST /v1/chat/completions strict-pin gate', () => {
     const app = buildApp();
     const res = await app.request(req, {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(402);
     const body = await res.json() as { code?: string };
     expect(body.code).toBe('strict_pin_not_allowed');
   });
@@ -451,9 +604,70 @@ describe('POST /v1/chat/completions strict-pin gate', () => {
     const app = buildApp();
     const res = await app.request(req, {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(402);
     const body = await res.json() as { code?: string };
     expect(body.code).toBe('strict_pin_not_allowed');
+  });
+});
+
+describe('POST /v1/chat/completions agentic-turn capability floor', () => {
+  beforeEach(() => {
+    mocks.hashSecret.mockReset();
+    mocks.buildDatabase.mockReset();
+    mocks.llmProxyForPlan.mockReset();
+  });
+
+  function fakeProxyService() {
+    return {
+      complete: vi.fn(async () => ({
+        response: new Response('data: [DONE]\n\n', { headers: { 'content-type': 'text/event-stream' } }),
+        resolvedModel: 'x', resolvedVendor: 'v', retries: 0, failovers: [], paidOverflow: false,
+      })),
+    };
+  }
+
+  function chatRequest(body: Record<string, unknown>, token = 'bfk_tool') {
+    return new Request('http://test.local/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
+
+  const toolEnv = { ...(baseEnv as Record<string, unknown>), OPENROUTER_API_KEY: 'x' };
+
+  async function routeArgsFor(body: Record<string, unknown>) {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(mockDb({
+      keyRow:    { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'free', billingStatus: 'none', tokenDailyLimitOverride: null },
+      usageRow:  { used: 0, day: 0, month: 0 },
+    }));
+    mocks.llmProxyForPlan.mockReturnValue(fakeProxyService());
+    await buildApp().request(chatRequest(body), {}, toolEnv, fakeExecutionCtx);
+    // 4th positional arg to llmProxyForPlan is the routing options object.
+    return mocks.llmProxyForPlan.mock.calls.at(-1)?.[3] as
+      | { codingOnly?: boolean; backstopModels?: readonly string[] } | undefined;
+  }
+
+  it('floors an agentic (tools) turn onto the coder pool + paid coding backstop', async () => {
+    const { CODING_BACKSTOP_MODELS } = await import('../../application/llm/LlmProxyService');
+    const opts = await routeArgsFor({
+      messages: [{ role: 'user', content: 'edit the roadmap' }],
+      stream: true,
+      tools: [{ type: 'function', function: { name: 'write_file', parameters: { type: 'object' } } }],
+    });
+    expect(opts?.codingOnly).toBe(true);
+    expect(opts?.backstopModels).toEqual(CODING_BACKSTOP_MODELS);
+  });
+
+  it('keeps the general pool for a plain (no-tools) chat turn', async () => {
+    const opts = await routeArgsFor({
+      messages: [{ role: 'user', content: 'hello' }],
+      stream: true,
+    });
+    expect(opts?.codingOnly).toBeUndefined();
+    expect(opts?.backstopModels).toBeUndefined();
   });
 });
 
@@ -522,6 +736,96 @@ describe('POST /v1/chat/completions monthly token cap', () => {
     const res = await buildApp().request(plainRequest(), {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
 
     expect(res.status).not.toBe(429);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The unpinned free-plan turn — end to end through the real route.
+//
+// A free tenant's VSIX chat used to 402 on EVERY turn: the client filled in a
+// hardcoded `openai/gpt-4o-mini` whenever the user hadn't picked a model, and
+// that is a PAID OpenRouter model, so the premium gate refused a model the user
+// never chose ("Premium models … require a validated card on file"). The client
+// fix was to OMIT `model` entirely and let the gateway route the plan's pool.
+//
+// The pure-function half of that contract is covered in
+// LlmProxyService.unpinnedFreePlan.test.ts. THIS drives the actual Hono handler,
+// so the assertion is about the route's real gate order rather than a helper in
+// isolation — the closest thing to the live run short of credentials.
+// ---------------------------------------------------------------------------
+describe('POST /v1/chat/completions unpinned free-plan turn', () => {
+  beforeEach(() => {
+    mocks.hashSecret.mockReset();
+    mocks.buildDatabase.mockReset();
+  });
+
+  /** A free tenant, comfortably under both token caps. */
+  function freeTenantDb() {
+    return mockDb({
+      keyRow:    { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'free', billingStatus: 'none', tokenDailyLimitOverride: null },
+      usageRow:  { day: 100, month: 100 },
+    });
+  }
+
+  function chatRequest(body: Record<string, unknown>) {
+    return new Request('http://test.local/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer bfk_plain', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it('does NOT 402 when the body carries no model at all', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(freeTenantDb());
+
+    const res = await buildApp().request(
+      chatRequest({ messages: [{ role: 'user', content: 'hi' }] }),
+      {}, baseEnv as Record<string, unknown>, fakeExecutionCtx,
+    );
+
+    // Past the premium gate AND the strict-pin gate (both 402) → stops only at
+    // the missing-OPENROUTER_API_KEY check.
+    expect(res.status).not.toBe(402);
+    expect(res.status).toBe(503);
+  });
+
+  it('REGRESSION: the same turn WITH the old hardcoded fallback is refused 402', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(freeTenantDb());
+
+    const res = await buildApp().request(
+      chatRequest({ model: 'openai/gpt-4o-mini', messages: [{ role: 'user', content: 'hi' }] }),
+      {}, baseEnv as Record<string, unknown>, fakeExecutionCtx,
+    );
+
+    // This is the exact failure the user reported, reproduced through the route.
+    // If it ever stops being a 402 the client fix's rationale needs revisiting.
+    expect(res.status).toBe(402);
+    const body = await res.json() as { code?: string; unlock?: string; requiredPlan?: string };
+    expect(body.code).toBe('premium_model_not_allowed');
+    // The structured fields the client turns into an Upgrade / Add-a-card button.
+    expect(body.unlock).toBeTruthy();
+    expect(body.requiredPlan).toBe('pro');
+  });
+
+  it('does not 402 an unpinned turn that also asks for tools (the IDE chat shape)', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(freeTenantDb());
+
+    // The VSIX always sends tools; that switches the gateway to the CODING pool,
+    // which is a different pool lookup and therefore worth its own assertion.
+    const res = await buildApp().request(
+      chatRequest({
+        messages: [{ role: 'user', content: 'hi' }],
+        tools: [{ type: 'function', function: { name: 'read_file', parameters: { type: 'object', properties: {} } } }],
+      }),
+      {}, baseEnv as Record<string, unknown>, fakeExecutionCtx,
+    );
+
+    expect(res.status).not.toBe(402);
+    expect(res.status).toBe(503);
   });
 });
 

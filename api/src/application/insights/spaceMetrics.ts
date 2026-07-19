@@ -34,9 +34,10 @@ import {
   runModelOutcomes,
   tasks,
 } from '../../infrastructure/database/schema';
+import { clampScore as clamp } from '../../domain/shared/numbers';
+import { notSystemTask } from '../task/taskScope';
 
 const HOUR_MS = 3_600_000;
-const clamp = (n: number) => Math.max(0, Math.min(100, n));
 
 export interface SpaceDimension {
   /** 0..100, or null when there is no signal for the dimension. */
@@ -127,12 +128,36 @@ function num(v: unknown): number {
 }
 
 /** Fetch the window aggregates from existing tables, then summarize. */
-export async function computeSpaceMetrics(db: Db, tenantId: number, days: number): Promise<SpaceMetrics> {
+export async function computeSpaceMetrics(db: Db, tenantId: number, days: number, projectId?: number): Promise<SpaceMetrics> {
   const since = new Date(Date.now() - days * 24 * HOUR_MS);
+
+  // member_metrics_period is tenant-grained, so it must not be reused for a
+  // selected project. At project grain derive the same flow inputs directly
+  // from that project's tasks; Satisfaction remains unknown until project-
+  // grained survey data exists.
+  const projectTaskRows = projectId == null ? [] : await db
+    .select({
+      createdAt: tasks.createdAt,
+      completedAt: tasks.completedAt,
+      redoCount: tasks.redoCount,
+      reopenCount: tasks.reopenCount,
+      assignedUserId: tasks.assignedUserId,
+      assignedAgentHostId: tasks.assignedAgentHostId,
+      assignedAgentRef: tasks.assignedAgentRef,
+    })
+    .from(tasks)
+    .innerJoin(projects, eq(projects.id, tasks.projectId))
+    .where(and(
+      eq(projects.tenantId, tenantId),
+      eq(tasks.projectId, projectId),
+      eq(tasks.archived, false),
+      gte(tasks.updatedAt, since),
+      notSystemTask,
+    ));
 
   // S/E — member_metrics_period: most-recent snapshot per member overlapping the
   // window. Engagement (humans) for Satisfaction; cycle + rework for Efficiency.
-  const memberRows = await db
+  const memberRows = projectId != null ? [] : await db
     .select({
       memberKind: memberMetricsPeriod.memberKind,
       engagementScore: memberMetricsPeriod.engagementScore,
@@ -156,9 +181,29 @@ export async function computeSpaceMetrics(db: Db, tenantId: number, days: number
     completed += r.completedCount;
     rework += (r.redoCount ?? 0) + (r.reopenCount ?? 0);
   }
+  if (projectId != null) {
+    cycleWeighted = 0;
+    cycleWeight = 0;
+    completed = 0;
+    rework = 0;
+    for (const row of projectTaskRows) {
+      if (row.completedAt) {
+        const hours = (row.completedAt.getTime() - row.createdAt.getTime()) / HOUR_MS;
+        if (hours >= 0) { cycleWeighted += hours; cycleWeight += 1; }
+        completed += 1;
+      }
+      rework += (row.redoCount ?? 0) + (row.reopenCount ?? 0);
+    }
+  }
   const avgCycleTimeHours = cycleWeight > 0 ? cycleWeighted / cycleWeight : null;
   const reworkRate = completed > 0 ? rework / completed : null;
-  const activeMembers = memberRows.length;
+  const activeMembers = projectId == null
+    ? memberRows.length
+    : new Set(projectTaskRows.flatMap((row) => row.assignedUserId
+      ? [`human:${row.assignedUserId}`]
+      : row.assignedAgentHostId != null
+        ? [`host:${row.assignedAgentHostId}`]
+        : row.assignedAgentRef ? [`agent:${row.assignedAgentRef}`] : [])).size;
 
   // P — deployment_events: total + failures in the window.
   const [deployAgg] = await db
@@ -167,7 +212,11 @@ export async function computeSpaceMetrics(db: Db, tenantId: number, days: number
       failed: sql<string>`coalesce(sum(case when ${deploymentEvents.isFailure} then 1 else 0 end),0)`,
     })
     .from(deploymentEvents)
-    .where(and(eq(deploymentEvents.tenantId, tenantId), gte(deploymentEvents.deployedAt, since)));
+    .where(and(
+      eq(deploymentEvents.tenantId, tenantId),
+      ...(projectId != null ? [eq(deploymentEvents.projectId, projectId)] : []),
+      gte(deploymentEvents.deployedAt, since),
+    ));
 
   // A/C/E — run_model_outcomes: runs, merged, avg steps in the window.
   const [runAgg] = await db
@@ -177,7 +226,11 @@ export async function computeSpaceMetrics(db: Db, tenantId: number, days: number
       avgSteps: sql<string>`coalesce(avg(${runModelOutcomes.steps}),0)`,
     })
     .from(runModelOutcomes)
-    .where(and(eq(runModelOutcomes.tenantId, tenantId), gte(runModelOutcomes.createdAt, since)));
+    .where(and(
+      eq(runModelOutcomes.tenantId, tenantId),
+      ...(projectId != null ? [eq(runModelOutcomes.projectId, projectId)] : []),
+      gte(runModelOutcomes.createdAt, since),
+    ));
 
   // A — tasks completed in the window (tenant-scoped via project join).
   const [taskAgg] = await db
@@ -186,9 +239,11 @@ export async function computeSpaceMetrics(db: Db, tenantId: number, days: number
     .innerJoin(projects, eq(projects.id, tasks.projectId))
     .where(and(
       eq(projects.tenantId, tenantId),
+      ...(projectId != null ? [eq(tasks.projectId, projectId)] : []),
       eq(tasks.archived, false),
       sql`${tasks.completedAt} is not null`,
       gte(tasks.completedAt, since),
+      notSystemTask,
     ));
 
   const totalRuns = num(runAgg?.total);

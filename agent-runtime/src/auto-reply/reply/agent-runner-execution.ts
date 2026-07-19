@@ -94,6 +94,9 @@ export async function runAgentTurnWithFallback(params: {
       sessionKey: params.sessionKey,
       verboseLevel: params.resolvedVerboseLevel,
       isHeartbeat: params.isHeartbeat,
+      // The initiating user prompt (the "ticket") — threaded to the project-Evermind
+      // teacher so on-prem distils (task → answer), matching cloud + IDE.
+      ...(params.commandBody ? { prompt: params.commandBody } : {}),
     });
   }
   let runResult: Awaited<ReturnType<typeof runEmbeddedAgent>>;

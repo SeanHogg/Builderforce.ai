@@ -30,10 +30,12 @@ export interface CreateTaskDto {
   assignedAgentRef?: string | null;
   /** Human assignee (users.id). Mutually exclusive with the agent assignees. */
   assignedUserId?: string | null;
-  /** 'task' | 'epic' at creation (default 'task'). */
+  /** 'task' | 'epic' | 'gap' at creation (default 'task'). */
   taskType?: TaskType;
   /** Parent Epic's id — set when creating a child of an Epic. */
   parentTaskId?: number | null;
+  /** For a GAP task: the Done item whose review produced it (Validator sets this). */
+  gapOriginTaskId?: number | null;
   startDate?: string | null;
   dueDate?: string | null;
   persona?: string | null;
@@ -55,6 +57,10 @@ export interface UpdateTaskDto {
   releaseId?: string | null;
   /** Story-point estimate (drives derived sprint velocity). null = unestimated. */
   storyPoints?: number | null;
+  /** AI Manager business value 0-100 (a human edit pins businessValueSource='manual'). */
+  businessValue?: number | null;
+  businessValueRationale?: string | null;
+  businessValueSource?: string | null;
   assignedAgentType?: AgentType | null;
   assignedAgentHostId?: number | null;
   /** Cloud agent (ide_agents.id) assigned to this task. Mutually exclusive with host. */
@@ -94,6 +100,7 @@ export class TaskService {
      */
     private readonly recommendChildAssignee?: (
       projectId: number,
+      roleKey?: string,
     ) => Promise<{ memberKind: 'human' | 'cloud_agent' | 'host_agent'; memberRef: string } | null>,
   ) {}
 
@@ -164,6 +171,7 @@ export class TaskService {
         assignedUserId: dto.assignedUserId ?? null,
         taskType: dto.taskType,
         parentTaskId: dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null,
+        gapOriginTaskId: dto.gapOriginTaskId != null ? asTaskId(dto.gapOriginTaskId) : null,
         startDate: dto.startDate ? new Date(dto.startDate) : null,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
         persona: dto.persona ?? null,
@@ -248,7 +256,10 @@ export class TaskService {
       let agentRef = child.assignedAgentRef ?? null;
       let userId = child.assignedUserId ?? null;
       if (this.recommendChildAssignee && hostId == null && !agentRef && !userId) {
-        const pick = await this.recommendChildAssignee(task.projectId as number).catch(() => null);
+        // Role-aware fan-out: pass the child's best-fit producer role (from the
+        // decomposer) so a coding child lands on a developer-capable owner, not the
+        // most-available teammate regardless of role.
+        const pick = await this.recommendChildAssignee(task.projectId as number, child.roleKey ?? undefined).catch(() => null);
         if (pick?.memberKind === 'human') userId = pick.memberRef;
         else if (pick?.memberKind === 'host_agent') hostId = Number(pick.memberRef);
         else if (pick?.memberKind === 'cloud_agent') agentRef = pick.memberRef;

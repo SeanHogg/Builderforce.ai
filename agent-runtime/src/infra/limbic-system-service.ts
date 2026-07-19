@@ -218,16 +218,27 @@ export class LimbicSystemService {
     const profiles = active.map(getRoleProfile).filter((p): p is NonNullable<typeof p> => Boolean(p));
     if (profiles.length === 0) {
       this.setpoints = neutralState();
-      return this.currentSetpoints();
+    } else {
+      const acc = neutralState();
+      for (const name of LIMBIC_DIM_NAMES) acc[name] = 0;
+      for (const profile of profiles) {
+        const sp = deriveLimbicSetpoints(profile);
+        for (const name of LIMBIC_DIM_NAMES) acc[name] += sp[name];
+      }
+      for (const name of LIMBIC_DIM_NAMES) acc[name] /= profiles.length;
+      this.setpoints = acc;
     }
-    const acc = neutralState();
-    for (const name of LIMBIC_DIM_NAMES) acc[name] = 0;
-    for (const profile of profiles) {
-      const sp = deriveLimbicSetpoints(profile);
-      for (const name of LIMBIC_DIM_NAMES) acc[name] += sp[name];
+    // Keep the trainable model's resting baseline aligned with the active personas
+    // so GPU training + relaxation ride the personality setpoint, not a fixed
+    // neutral. Best-effort: the session may be null (heuristic-only) or predate
+    // setSetpoint (older builderforce-memory) — the heuristic homeostasis still uses
+    // `this.setpoints` regardless.
+    try {
+      const arr = LIMBIC_DIM_NAMES.map((n) => this.setpoints[n]);
+      (this.session as { setSetpoint?: (t?: unknown, explicit?: number[]) => void } | null)?.setSetpoint?.(undefined, arr);
+    } catch {
+      /* best-effort */
     }
-    for (const name of LIMBIC_DIM_NAMES) acc[name] /= profiles.length;
-    this.setpoints = acc;
     return this.currentSetpoints();
   }
 

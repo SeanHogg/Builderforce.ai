@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage } from "node:http";
-import { buildAgentMainSessionKey, normalizeAgentId } from "../routing/session-key.js";
+import { AGENT_ID_PATTERN, buildAgentMainSessionKey, normalizeAgentId } from "../routing/session-key.js";
 
 export function getHeader(req: IncomingMessage, name: string): string | undefined {
   const raw = req.headers[name.toLowerCase()];
@@ -40,8 +40,8 @@ export function resolveAgentIdFromModel(model: string | undefined): string | und
   }
 
   const m =
-    raw.match(/^builderforce[:/](?<agentId>[a-z0-9][a-z0-9_-]{0,63})$/i) ??
-    raw.match(/^agent:(?<agentId>[a-z0-9][a-z0-9_-]{0,63})$/i);
+    raw.match(new RegExp(`^builderforce[:/](?<agentId>${AGENT_ID_PATTERN})$`, "i")) ??
+    raw.match(new RegExp(`^agent:(?<agentId>${AGENT_ID_PATTERN})$`, "i"));
   const agentId = m?.groups?.agentId;
   if (!agentId) {
     return undefined;

@@ -62,6 +62,33 @@ export const CAPABILITIES = {
   'agents.create':        'manager',
   'agents.manage':        'manager',
 
+  // Starting / cancelling / steering an agent run. Mirrors the API's
+  // requireRole(DEVELOPER) on every dispatch-tier route in runtimeRoutes (submit,
+  // cancel, messages, state, broadcast, telemetry). DEVELOPER — not manager —
+  // because running agents IS the developer's job (see ROLE_DESCRIPTION.developer);
+  // the manager control for a run is the SEPARATE governance approval gate, which
+  // holds high/urgent tickets for sign-off in /api/approvals. Keeping both at
+  // manager would collapse two distinct controls and make the approval queue moot.
+  'runtime.execute':      'developer',
+  // Manage a project's self-learning Evermind model (seed base, flip inference /
+  // learning mode). Mirrors the API's requireRole(MANAGER) on the evermind routes.
+  'project.manageEvermind': 'manager',
+
+  // AI Manager — configure a project's manager policy (designate the manager,
+  // toggle auto-scoring/assign/prioritize, set the PR-merge policy) and trigger a
+  // manager run. Mirrors the API's requireRole(MANAGER) on PUT/POST /api/manager.
+  'manager.manage':       'manager',
+
+  // Board governance — override the execution-approval gate (whether high/urgent
+  // tickets need manager sign-off before an agent runs them). Mirrors the API's
+  // per-field requireRole(MANAGER) check on PATCH /api/boards/:id.
+  'board.manageApproval': 'manager',
+
+  // Ceremony cadence — create/edit/delete the recurring standup & planning
+  // schedules the cron sweep runs. Mirrors the API's requireRole(MANAGER) on the
+  // POST/PATCH/DELETE /api/agile/ceremonies/schedules routes (reads are open).
+  'ceremonies.manageSchedules': 'manager',
+
   // Enterprise insight lenses (the role-based dashboards from the platform
   // assessment). Gating them now means the lens surfaces light up for the right
   // audience the moment each is built — and show "Requires … role" until then.
@@ -102,6 +129,31 @@ export const CAPABILITIES = {
   'quality.view':          'developer', // browse error groups + triage status
   'quality.manageSources': 'manager',   // create/rotate/delete ingest sources
   'quality.fix':           'manager',   // dispatch a cloud agent to fix an error
+
+  // FACTS library — structured (subject,predicate,object) knowledge store. Reads
+  // open to any member; writes developer+ (mirrors the API requireRole(DEVELOPER)).
+  'facts.view':            'viewer',
+  'facts.manage':          'developer',
+
+  // RFP / RFQ Response — pre-sales proposal generation. Reads open to any member;
+  // creating/generating is developer+ (mirrors the API requireRole(DEVELOPER)).
+  'rfp.view':              'viewer',
+  'rfp.manage':            'developer',
+
+  // EMP buyer-checklist lenses (manager-gated, mirroring server requireRole(MANAGER)).
+  'insights.crossTeam':      'manager', // EMP-5  internal cross-team benchmarking
+  'insights.delayTaxonomy':  'manager', // EMP-9  delay root-cause taxonomy
+  'insights.pulse':          'manager', // EMP-15 pulse aggregate/admin (submit is any-role)
+  'finops.rdReconciliation': 'manager', // R&D derived-vs-reported reconciliation
+
+  // Blended human+agent workforce planning + periodic lens review snapshots.
+  'workforce.plan':          'manager',
+  'insights.snapshots':      'manager',
+
+  // Governance policy packs — the gates the agent runtime hard-enforces at its
+  // tool-call seam. Reads are open to any member (you may see the posture you run
+  // under); authoring mirrors the API's requireRole(MANAGER) on every write.
+  'policies.manage':         'manager',
 } as const satisfies Record<string, TenantRole>;
 
 export type Capability = keyof typeof CAPABILITIES;
@@ -130,4 +182,33 @@ export function usePermission(cap: Capability): PermissionResult {
   const role = useRole();
   const required = CAPABILITIES[cap];
   return { allowed: hasMinRole(role, required), role, required, requiredLabel: ROLE_LABEL[required] };
+}
+
+/**
+ * The current user's ACCOUNT TYPE. Distinct from workspace role: it's a GLOBAL
+ * property (a freelancer works across many tenants). 'freelancer' = a restricted
+ * gig/for-hire account that sees only the Profile / Find Work / Timecard shell.
+ * Undefined outside an AuthProvider so callers never crash the tree.
+ */
+export function useAccountType(): 'standard' | 'freelancer' | undefined {
+  const auth = useOptionalAuth();
+  return auth?.user?.accountType;
+}
+
+/** True when the signed-in user is a freelancer (restricted gig shell). The ONE
+ *  place this branch is decided, so nav/shell/route gating never drift. */
+export function useIsFreelancer(): boolean {
+  return useAccountType() === 'freelancer';
+}
+
+/**
+ * True when the signed-in user has opted IN to being hired talent. Independent of
+ * account type: a 'standard' builder can turn this on to publish a for-hire profile
+ * and pick up gigs while keeping the full builder shell (a dedicated 'freelancer'
+ * account is always for-hire). The ONE place this branch is decided, so the for-hire
+ * nav destinations + opt-in UI never drift.
+ */
+export function useAvailableForHire(): boolean {
+  const auth = useOptionalAuth();
+  return auth?.user?.accountType === 'freelancer' || !!auth?.user?.availableForHire;
 }

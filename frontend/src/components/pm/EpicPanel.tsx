@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
-import { tasksApi, type Task, type TaskPriority } from '@/lib/builderforceApi';
+import { tasksApi, type Task, type TaskPriority, type WorkItemKind } from '@/lib/builderforceApi';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 /**
  * Create/edit an Epic in a slide-out side panel. Shared by the Epics tree view
@@ -38,6 +39,7 @@ const fieldStyle: React.CSSProperties = {
 
 export function EpicPanel({ open, epic, projectId, onClose, onSaved }: EpicPanelProps) {
   const t = useTranslations('pm');
+  const confirm = useConfirm();
   const isEdit = epic != null;
   const [title, setTitle] = useState(epic?.title ?? '');
   const [description, setDescription] = useState(epic?.description ?? '');
@@ -47,6 +49,24 @@ export function EpicPanel({ open, epic, projectId, onClose, onSaved }: EpicPanel
   const [error, setError] = useState<string | null>(null);
 
   const targetProjectId = epic?.projectId ?? projectId;
+
+  // Change the item's TYPE (task⇄epic, or promote to an OKR Objective). Promoting
+  // to an objective removes this board item and creates a real OKR, so confirm first.
+  const convertTo = async (target: WorkItemKind) => {
+    if (!epic) return;
+    if (target === 'objective' && !(await confirm({ message: t('convertToOkrConfirm'), destructive: false }))) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await tasksApi.convertType(epic.id, target);
+      onSaved();
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const save = async () => {
     if (!title.trim()) { setError(t('epicTitleRequired')); return; }
@@ -121,6 +141,38 @@ export function EpicPanel({ open, epic, projectId, onClose, onSaved }: EpicPanel
             </Select>
           </div>
         </div>
+        {isEdit && (
+          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <label style={labelStyle}>{t('convertTypeHeading')}</label>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>{t('convertTypeHint')}</p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => convertTo('objective')}
+                disabled={busy}
+                style={{
+                  padding: '7px 14px', borderRadius: 6, border: '1px solid var(--border-subtle)',
+                  background: 'transparent', color: 'var(--text-primary)', fontWeight: 600,
+                  cursor: busy ? 'default' : 'pointer', fontSize: 13,
+                }}
+              >
+                {t('convertToOkr')}
+              </button>
+              <button
+                type="button"
+                onClick={() => convertTo('task')}
+                disabled={busy}
+                style={{
+                  padding: '7px 14px', borderRadius: 6, border: '1px solid var(--border-subtle)',
+                  background: 'transparent', color: 'var(--text-secondary)', fontWeight: 600,
+                  cursor: busy ? 'default' : 'pointer', fontSize: 13,
+                }}
+              >
+                {t('convertToTask')}
+              </button>
+            </div>
+          </div>
+        )}
         {error && <div style={{ color: 'var(--danger, #dc2626)', fontSize: 13 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8 }}>
           <button

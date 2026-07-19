@@ -1,11 +1,24 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 import type { Tenant } from '@/lib/types';
-import { createTenant, completeOnboarding } from '@/lib/auth';
+import { createTenant, completeOnboarding, saveOnboardingProgress, type OnboardingProgress } from '@/lib/auth';
 import { createProject } from '@/lib/api';
+import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { InstallBuilderForceAgents } from './InstallBuilderForceAgents';
 import { InviteTeamMembers } from './InviteTeamMembers';
+import { KanbanRosterCard } from './kanban/KanbanRosterCard';
+import { WizardTicketingStep } from './onboarding/WizardTicketingStep';
+import { WizardReposStep } from './onboarding/WizardReposStep';
+import { WizardAuditStep } from './onboarding/WizardAuditStep';
+import {
+  WizardTalentProfileStep,
+  WizardResumeStep,
+  WizardPublishStep,
+  WizardFindWorkStep,
+} from './onboarding/HiredWizardSteps';
+import { useIsFreelancer } from '@/lib/rbac';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -13,36 +26,43 @@ import { InviteTeamMembers } from './InviteTeamMembers';
 
 interface OnboardingStepperProps {
   webToken: string;
-  tenantToken: string | null;
-  tenant: Tenant | null;
+  tenantToken?: string | null;
+  tenant?: Tenant | null;
   existingProjectsCount?: number;
-  onWorkspaceCreated: (tenant: Tenant) => Promise<void>;
+  /** Persisted step progress (from `useOnboardingPrompt`) — resumes the wizard
+   *  where the user left off. Ignored when it belongs to the other track. */
+  initialProgress?: OnboardingProgress | null;
+  /** Builder track only — a hired account never creates a workspace. */
+  onWorkspaceCreated?: (tenant: Tenant) => Promise<void>;
   onComplete: () => void;
   onDismiss: () => void;
 }
 
-const INTENT_OPTIONS = [
-  { value: 'build', label: '🔨 Build a product or feature' },
-  { value: 'custom-agent', label: '🤖 Create a custom AI agent' },
-  { value: 'monetize', label: '💰 Make money with AI agents' },
-  { value: 'automate', label: '⚡ Automate my dev workflow' },
-  { value: 'learn', label: '📚 Learn and explore' },
+// Intent options — the emoji stays literal, the label is resolved through the
+// `onboarding.intent.*` i18n namespace at render time (all 5 locales).
+const INTENT_OPTIONS: { value: string; emoji: string }[] = [
+  { value: 'build', emoji: '🔨' },
+  { value: 'custom-agent', emoji: '🤖' },
+  { value: 'monetize', emoji: '💰' },
+  { value: 'automate', emoji: '⚡' },
+  { value: 'learn', emoji: '📚' },
 ];
 
-type StepId = 'workspace' | 'project' | 'install' | 'invite';
+type BuilderStepId = 'workspace' | 'project' | 'ticketing' | 'repos' | 'audit' | 'roster' | 'install' | 'invite';
+type HiredStepId = 'talentProfile' | 'resume' | 'publish' | 'findWork';
+type StepId = BuilderStepId | HiredStepId;
 
-interface Step {
-  id: StepId;
-  label: string;
-  description: string;
+// Step order per ACCOUNT TYPE. A builder ('standard') sets up a workspace, a
+// project and an agent roster; a hired account ('freelancer') has none of those
+// — its first five minutes are about becoming hireable. Labels are resolved
+// through the `onboarding.steps.*` i18n namespace (single source; all 5 locales).
+const BUILDER_STEP_IDS: StepId[] = ['workspace', 'project', 'ticketing', 'repos', 'audit', 'roster', 'install', 'invite'];
+const HIRED_STEP_IDS: StepId[] = ['talentProfile', 'resume', 'publish', 'findWork'];
+
+/** The ONE place the onboarding track is chosen, so no caller re-derives it. */
+export function stepsForAccountType(isFreelancer: boolean): StepId[] {
+  return isFreelancer ? HIRED_STEP_IDS : BUILDER_STEP_IDS;
 }
-
-const STEPS: Step[] = [
-  { id: 'workspace', label: 'Create Workspace', description: 'Set up your organization' },
-  { id: 'project',   label: 'Create a Project', description: 'Name your first project' },
-  { id: 'install',   label: 'Install BuilderForce Agents', description: 'Connect your AI agent' },
-  { id: 'invite',    label: 'Invite Team',       description: 'Bring your teammates' },
-];
 
 // ---------------------------------------------------------------------------
 // Component
@@ -50,24 +70,48 @@ const STEPS: Step[] = [
 
 export function OnboardingStepper({
   webToken,
-  tenantToken,
-  tenant,
+  tenantToken = null,
+  tenant = null,
   existingProjectsCount = 0,
+  initialProgress = null,
   onWorkspaceCreated,
   onComplete,
   onDismiss,
 }: OnboardingStepperProps) {
+  const t = useTranslations('onboarding');
+  // Both stepper mounts sit under ProjectScopeProvider (hoisted to AppBrainShell);
+  // the optional hook is defensive so the stepper stays usable outside that shell.
+  const projectScope = useOptionalProjectScope();
+  // The account type decides the whole track — a hired account never sees the
+  // workspace/project/repo steps, so none of the workspace gating applies to it.
+  const isHired = useIsFreelancer();
+  const stepIds = stepsForAccountType(isHired);
   const workspaceAlreadyExists = !!tenant;
-  const projectAlreadyExists = workspaceAlreadyExists && existingProjectsCount > 0;
+  // The project count falls back to the globally-scoped list (already loaded by
+  // ProjectScopeProvider — no extra fetch) so a caller that doesn't pass it still
+  // gets the right "you already have projects" state.
+  const projectCount = existingProjectsCount || (projectScope?.projects.length ?? 0);
+  const projectAlreadyExists = workspaceAlreadyExists && projectCount > 0;
 
-  const initialCompleted = new Set<number>();
-  if (workspaceAlreadyExists) initialCompleted.add(0);
-  if (projectAlreadyExists) initialCompleted.add(1);
+  // Completion is tracked by STEP ID, not index — ids are stable across the two
+  // tracks and any reordering, which is also what gets persisted (migration 0343).
+  const track: OnboardingProgress['track'] = isHired ? 'hired' : 'builder';
+  const resumable = initialProgress?.track === track ? initialProgress : null;
 
-  const initialActiveStep = projectAlreadyExists ? 2 : workspaceAlreadyExists ? 1 : 0;
+  const initialCompleted = new Set<StepId>(
+    (resumable?.completed ?? []).filter((id): id is StepId => (stepIds as string[]).includes(id)),
+  );
+  if (!isHired && workspaceAlreadyExists) initialCompleted.add('workspace');
+  if (!isHired && projectAlreadyExists) initialCompleted.add('project');
+
+  // Resume where the user left off; otherwise skip past whatever already exists.
+  const resumedIndex = resumable?.activeStep ? stepIds.indexOf(resumable.activeStep as StepId) : -1;
+  const initialActiveStep =
+    resumedIndex >= 0 ? resumedIndex : isHired ? 0 : projectAlreadyExists ? 2 : workspaceAlreadyExists ? 1 : 0;
 
   const [activeStep, setActiveStep] = useState<number>(initialActiveStep);
-  const [completedSteps, setCompletedSteps] = useState<Set<number>>(initialCompleted);
+  const [completedSteps, setCompletedSteps] = useState<Set<StepId>>(initialCompleted);
+  const currentStepId = stepIds[activeStep];
 
   // Step 1 – Workspace
   const [workspaceName, setWorkspaceName] = useState('');
@@ -81,15 +125,37 @@ export function OnboardingStepper({
   const [projectError, setProjectError] = useState<string | null>(null);
   const [projectLoading, setProjectLoading] = useState(false);
   const [projectCreated, setProjectCreated] = useState(false);
+  const [createdProjectId, setCreatedProjectId] = useState<number | null>(null);
 
   // Current workspace (may be passed in or created during step 1)
   const [currentTenant, setCurrentTenant] = useState<Tenant | null>(tenant);
 
-  const markComplete = (stepIndex: number) => {
-    setCompletedSteps((prev) => new Set([...prev, stepIndex]));
+  // Record progress server-side on every step transition so closing the wizard
+  // mid-way resumes here instead of restarting at step 1. Fire-and-forget: the
+  // helper swallows failures, which only ever cost the resume position.
+  const persistProgress = useCallback(
+    (completed: Set<StepId>, active: StepId | undefined) => {
+      void saveOnboardingProgress(webToken, {
+        track,
+        completed: [...completed],
+        activeStep: active ?? null,
+      });
+    },
+    [webToken, track],
+  );
+
+  const markComplete = (stepId: StepId | undefined, nextActive?: StepId) => {
+    if (!stepId) return;
+    // Compute the next set OUTSIDE the state updater — updaters must stay pure
+    // (React can call them twice in StrictMode, which would double the PUT).
+    const next = new Set([...completedSteps, stepId]);
+    setCompletedSteps(next);
+    persistProgress(next, nextActive ?? stepId);
   };
 
-  const canClose = completedSteps.has(0) || workspaceAlreadyExists;
+  // A builder must create a workspace before escaping the wizard; a hired
+  // account has nothing mandatory, so it can close at any point.
+  const canClose = isHired || completedSteps.has('workspace') || workspaceAlreadyExists;
 
   // ── Step 1: Create Workspace ─────────────────────────────────────────────
 
@@ -101,12 +167,12 @@ export function OnboardingStepper({
       setWorkspaceLoading(true);
       try {
         const newTenant = await createTenant(webToken, workspaceName.trim());
-        await onWorkspaceCreated(newTenant);
+        await onWorkspaceCreated?.(newTenant);
         setCurrentTenant(newTenant);
-        markComplete(0);
+        markComplete('workspace', 'project');
         setActiveStep(1);
       } catch (err) {
-        setWorkspaceError(err instanceof Error ? err.message : 'Failed to create workspace');
+        setWorkspaceError(err instanceof Error ? err.message : t('workspaceCreateFailed'));
       } finally {
         setWorkspaceLoading(false);
       }
@@ -123,16 +189,20 @@ export function OnboardingStepper({
       setProjectError(null);
       setProjectLoading(true);
       try {
-        await createProject({ name: projectName.trim(), description: projectDesc.trim() || undefined });
+        const created = await createProject({ name: projectName.trim(), description: projectDesc.trim() || undefined });
+        setCreatedProjectId(created?.id ?? null);
         setProjectCreated(true);
-        markComplete(1);
+        // Make the brand-new project the active global scope, so the user lands
+        // in it when the wizard closes instead of the all-projects view.
+        if (created?.id) projectScope?.adoptProject(created);
+        markComplete('project');
       } catch (err) {
-        setProjectError(err instanceof Error ? err.message : 'Failed to create project');
+        setProjectError(err instanceof Error ? err.message : t('projectCreateFailed'));
       } finally {
         setProjectLoading(false);
       }
     },
-    [projectName, projectDesc]
+    [projectName, projectDesc, projectScope]
   );
 
   const toggleIntent = (value: string) => {
@@ -144,14 +214,14 @@ export function OnboardingStepper({
   // ── Step navigation ──────────────────────────────────────────────────────
 
   const handleNext = () => {
-    markComplete(activeStep);
-    if (activeStep < STEPS.length - 1) {
+    markComplete(currentStepId, stepIds[activeStep + 1] ?? currentStepId);
+    if (activeStep < stepIds.length - 1) {
       setActiveStep((s) => s + 1);
     }
   };
 
   const handleFinish = async () => {
-    markComplete(activeStep);
+    markComplete(currentStepId);
     try {
       await completeOnboarding(webToken, selectedIntent.length > 0 ? selectedIntent : undefined);
     } catch {
@@ -171,7 +241,13 @@ export function OnboardingStepper({
 
   // ── Render ───────────────────────────────────────────────────────────────
 
-  const currentStepId = STEPS[activeStep]?.id;
+  // The ticketing / repos / audit / roster steps all act on ONE project. Prefer
+  // the project created in this wizard, then the globally-scoped project, then
+  // the first project in the workspace — otherwise a returning owner who already
+  // has projects would hit the "create a project first" placeholder on four
+  // consecutive steps and never reach those adoption hooks.
+  const activeProjectId =
+    createdProjectId ?? projectScope?.currentProjectId ?? projectScope?.projects[0]?.id ?? null;
 
   return (
     <div
@@ -192,7 +268,7 @@ export function OnboardingStepper({
           border: '1px solid var(--border-subtle)',
           borderRadius: 16,
           width: '100%',
-          maxWidth: 680,
+          maxWidth: 880,
           maxHeight: '92vh',
           overflow: 'auto',
           display: 'flex',
@@ -210,17 +286,17 @@ export function OnboardingStepper({
         >
           <div>
             <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>
-              Welcome to Builderforce
+              {isHired ? t('welcomeHired') : t('welcome')}
             </h2>
             <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
-              Let&apos;s get you set up in a few quick steps.
+              {isHired ? t('subtitleHired') : t('subtitle')}
             </p>
           </div>
           <button
             type="button"
             onClick={handleDismiss}
             disabled={!canClose}
-            title={canClose ? 'Close setup' : 'Create a workspace first'}
+            title={canClose ? t('closeSetup') : t('createWorkspaceFirst')}
             style={{
               background: 'transparent',
               border: '1px solid var(--border-subtle)',
@@ -232,7 +308,7 @@ export function OnboardingStepper({
               cursor: canClose ? 'pointer' : 'not-allowed',
               opacity: canClose ? 1 : 0.4,
             }}
-            aria-label="Close onboarding"
+            aria-label={t('closeOnboarding')}
           >
             ×
           </button>
@@ -245,16 +321,17 @@ export function OnboardingStepper({
             gap: 0,
             padding: '20px 24px 0',
             alignItems: 'center',
+            overflowX: 'auto',
           }}
         >
-          {STEPS.map((step, i) => {
-            const done = completedSteps.has(i);
+          {stepIds.map((stepId, i) => {
+            const done = completedSteps.has(stepId);
             const active = i === activeStep;
             return (
-              <div key={step.id} style={{ display: 'flex', alignItems: 'center', flex: i < STEPS.length - 1 ? 1 : undefined }}>
+              <div key={stepId} style={{ display: 'flex', alignItems: 'center', flex: i < stepIds.length - 1 ? 1 : undefined }}>
                 <button
                   type="button"
-                  onClick={() => done && setActiveStep(i)}
+                  onClick={() => { if (done) { setActiveStep(i); persistProgress(completedSteps, stepId); } }}
                   disabled={!done && !active}
                   style={{
                     display: 'flex',
@@ -266,6 +343,7 @@ export function OnboardingStepper({
                     cursor: done ? 'pointer' : 'default',
                     padding: 0,
                     minWidth: 60,
+                    flexShrink: 0,
                   }}
                 >
                   <div
@@ -302,15 +380,15 @@ export function OnboardingStepper({
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {step.label}
+                    {t(`steps.${stepId}.label`)}
                   </span>
                 </button>
-                {i < STEPS.length - 1 && (
+                {i < stepIds.length - 1 && (
                   <div
                     style={{
                       flex: 1,
                       height: 1,
-                      background: completedSteps.has(i) ? 'rgba(34,197,94,0.4)' : 'var(--border-subtle)',
+                      background: completedSteps.has(stepId) ? 'rgba(34,197,94,0.4)' : 'var(--border-subtle)',
                       margin: '0 4px',
                       marginBottom: 20,
                     }}
@@ -333,7 +411,7 @@ export function OnboardingStepper({
                     {currentTenant?.name}
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
-                    Workspace ready
+                    {t('workspaceReady')}
                   </div>
                 </div>
               ) : (
@@ -341,11 +419,11 @@ export function OnboardingStepper({
                   <label
                     style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}
                   >
-                    Workspace name
+                    {t('workspaceName')}
                   </label>
                   <input
                     type="text"
-                    placeholder="Acme Corp"
+                    placeholder={t('workspaceNamePlaceholder')}
                     value={workspaceName}
                     onChange={(e) => setWorkspaceName(e.target.value)}
                     disabled={workspaceLoading}
@@ -369,7 +447,7 @@ export function OnboardingStepper({
                     </p>
                   )}
                   <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 0, marginBottom: 20 }}>
-                    This is usually your company or team name. You can change it later.
+                    {t('workspaceNameHint')}
                   </p>
                   <button
                     type="submit"
@@ -386,7 +464,7 @@ export function OnboardingStepper({
                       opacity: workspaceLoading || !workspaceName.trim() ? 0.6 : 1,
                     }}
                   >
-                    {workspaceLoading ? 'Creating…' : 'Create Workspace'}
+                    {workspaceLoading ? t('creating') : t('createWorkspace')}
                   </button>
                 </form>
               )}
@@ -400,20 +478,20 @@ export function OnboardingStepper({
                 <div style={{ textAlign: 'center', padding: '20px 0' }}>
                   <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
                   <div style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)' }}>
-                    {existingProjectsCount} project{existingProjectsCount === 1 ? '' : 's'} ready
+                    {t('projectsReady', { count: projectCount })}
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
-                    You already have projects in this workspace.
+                    {t('projectsExist')}
                   </div>
                 </div>
               ) : projectCreated ? (
                 <div style={{ textAlign: 'center', padding: '20px 0' }}>
                   <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
                   <div style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)' }}>
-                    &ldquo;{projectName}&rdquo; created
+                    {t('projectCreated', { name: projectName })}
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
-                    Your project is ready.
+                    {t('projectReady')}
                   </div>
                 </div>
               ) : (
@@ -422,11 +500,11 @@ export function OnboardingStepper({
                     <label
                       style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}
                     >
-                      Project name <span style={{ color: 'var(--coral-bright)' }}>*</span>
+                      {t('projectName')} <span style={{ color: 'var(--coral-bright)' }}>*</span>
                     </label>
                     <input
                       type="text"
-                      placeholder="My Awesome App"
+                      placeholder={t('projectNamePlaceholder')}
                       value={projectName}
                       onChange={(e) => setProjectName(e.target.value)}
                       disabled={projectLoading}
@@ -449,10 +527,10 @@ export function OnboardingStepper({
                     <label
                       style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}
                     >
-                      Description <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span>
+                      {t('description')} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>{t('optional')}</span>
                     </label>
                     <textarea
-                      placeholder="What are you building?"
+                      placeholder={t('descriptionPlaceholder')}
                       value={projectDesc}
                       onChange={(e) => setProjectDesc(e.target.value)}
                       disabled={projectLoading}
@@ -477,8 +555,8 @@ export function OnboardingStepper({
                     <label
                       style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 10 }}
                     >
-                      What are you looking to do?{' '}
-                      <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional, select all that apply)</span>
+                      {t('intentQuestion')}{' '}
+                      <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>{t('intentHint')}</span>
                     </label>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                       {INTENT_OPTIONS.map((opt) => {
@@ -502,7 +580,7 @@ export function OnboardingStepper({
                               transition: 'all 0.15s',
                             }}
                           >
-                            {opt.label}
+                            {opt.emoji} {t(`intent.${opt.value}`)}
                           </button>
                         );
                       })}
@@ -530,14 +608,63 @@ export function OnboardingStepper({
                       opacity: projectLoading || !projectName.trim() ? 0.6 : 1,
                     }}
                   >
-                    {projectLoading ? 'Creating…' : 'Create Project'}
+                    {projectLoading ? t('creating') : t('createProject')}
                   </button>
                 </form>
               )}
             </div>
           )}
 
-          {/* ── Step 3: Install ── */}
+          {/* ── Step: Connect ticketing ── */}
+          {currentStepId === 'ticketing' && (
+            activeProjectId != null ? (
+              <WizardTicketingStep projectId={activeProjectId} />
+            ) : (
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '20px 0', textAlign: 'center' }}>
+                {t('needProject')}
+              </div>
+            )
+          )}
+
+          {/* ── Step: Connect repositories ── */}
+          {currentStepId === 'repos' && (
+            activeProjectId != null ? (
+              <WizardReposStep projectId={activeProjectId} />
+            ) : (
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '20px 0', textAlign: 'center' }}>
+                {t('needProject')}
+              </div>
+            )
+          )}
+
+          {/* ── Step: Run audits (the SOC 2 adoption hook) ── */}
+          {currentStepId === 'audit' && (
+            activeProjectId != null ? (
+              <WizardAuditStep projectId={activeProjectId} />
+            ) : (
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '20px 0', textAlign: 'center' }}>
+                {t('needProject')}
+              </div>
+            )
+          )}
+
+          {/* ── Step 3: Recommended Roster ── */}
+          {currentStepId === 'roster' && (
+            <div>
+              <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-muted)' }}>
+                {t('rosterIntro')}
+              </p>
+              {activeProjectId != null ? (
+                <KanbanRosterCard projectId={activeProjectId} />
+              ) : (
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '20px 0', textAlign: 'center' }}>
+                  {t('rosterNeedProject')}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Step 4: Install ── */}
           {currentStepId === 'install' && (
             <InstallBuilderForceAgents tenantToken={tenantToken} />
           )}
@@ -546,6 +673,12 @@ export function OnboardingStepper({
           {currentStepId === 'invite' && currentTenant && tenantToken && (
             <InviteTeamMembers tenantId={currentTenant.id} tenantToken={tenantToken} />
           )}
+
+          {/* ── Hired track: profile → résumé → publish → find work ── */}
+          {currentStepId === 'talentProfile' && <WizardTalentProfileStep />}
+          {currentStepId === 'resume' && <WizardResumeStep />}
+          {currentStepId === 'publish' && <WizardPublishStep />}
+          {currentStepId === 'findWork' && <WizardFindWorkStep />}
         </div>
 
         {/* Footer navigation */}
@@ -573,24 +706,25 @@ export function OnboardingStepper({
               opacity: activeStep === 0 ? 0.4 : 1,
             }}
           >
-            ← Back
+            {t('back')}
           </button>
 
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            Step {activeStep + 1} of {STEPS.length}
+            {t('stepOf', { current: activeStep + 1, total: stepIds.length })}
           </span>
 
-          {activeStep < STEPS.length - 1 ? (
+          {activeStep < stepIds.length - 1 ? (
             (() => {
+              // Only the builder track has mandatory steps (workspace, project).
               const nextDisabled =
-                (currentStepId === 'workspace' && !completedSteps.has(0) && !workspaceAlreadyExists) ||
-                (currentStepId === 'project' && !projectCreated && !completedSteps.has(1));
+                (currentStepId === 'workspace' && !completedSteps.has('workspace') && !workspaceAlreadyExists) ||
+                (currentStepId === 'project' && !projectCreated && !completedSteps.has('project'));
               return (
                 <button
                   type="button"
                   onClick={handleNext}
                   disabled={nextDisabled}
-                  title={nextDisabled ? 'Complete this step first' : undefined}
+                  title={nextDisabled ? t('completeFirst') : undefined}
                   style={{
                     padding: '8px 20px',
                     fontSize: 14,
@@ -603,7 +737,7 @@ export function OnboardingStepper({
                     opacity: nextDisabled ? 0.5 : 1,
                   }}
                 >
-                  Next →
+                  {t('next')}
                 </button>
               );
             })()
@@ -622,7 +756,7 @@ export function OnboardingStepper({
                 cursor: 'pointer',
               }}
             >
-              Finish setup ✓
+              {t('finishSetup')}
             </button>
           )}
         </div>

@@ -1,19 +1,19 @@
-import { and, eq, desc, isNotNull } from 'drizzle-orm';
+import { and, eq, desc, isNotNull, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
-import { toolRuns, projects } from '../../infrastructure/database/schema';
+import { toolRuns, projects, tasks } from '../../infrastructure/database/schema';
+import { deriveRemediation, type RemediationSummary, type RemediationTaskRow } from './remediationStatus';
 import { TOOLS, getTool } from './toolDefinitions';
 import { TOOL_DATA_PROVIDERS, hasDataProvider } from './toolDataProviders';
 import { toSummary, toDefinition, type ToolSummary, type ToolDefinition, type ToolResult } from './toolTypes';
 
-/** The architecture analysis ("Architect") is itself a diagnostic: when a run
- *  completes it records a project-scoped tool_run under this id, scored from the
- *  design-principles artifact. It has no self-assessment / compute form. */
-export const ARCHITECTURE_DIAGNOSTIC_ID = 'architecture-analysis';
-const EXTERNAL_DIAGNOSTIC_NAMES: Record<string, string> = {
-  [ARCHITECTURE_DIAGNOSTIC_ID]: 'Architecture Analysis',
-};
+import { ARCHITECTURE_DIAGNOSTIC_ID, EXTERNAL_DIAGNOSTIC_NAMES, EXTERNAL_DIAGNOSTIC_ICONS } from './auditIds';
+
+/** Re-exported so existing importers (e.g. AnalysisRunnerDO) keep their import
+ *  path. The canonical definition lives in `auditIds.ts` alongside the other
+ *  system-audit ids and their display names. */
+export { ARCHITECTURE_DIAGNOSTIC_ID };
 
 const LEVEL_NAMES = ['Initial', 'Managed', 'Defined', 'Quantitatively Managed', 'Optimizing'];
 const clampLevel = (n: number): number => Math.max(1, Math.min(5, Math.round(n)));
@@ -23,6 +23,13 @@ const levelName = (n: number): string => LEVEL_NAMES[clampLevel(n) - 1]!;
  *  externally-scored diagnostic like the architecture analysis. */
 export function diagnosticName(toolId: string): string {
   return getTool(toolId)?.name ?? EXTERNAL_DIAGNOSTIC_NAMES[toolId] ?? toolId;
+}
+
+/** Emoji icon for any diagnostic id — the system-audit icon, else the registered
+ *  tool's icon, else a neutral fallback. Lets every surface (project-card strip,
+ *  analytics gauges) label a diagnostic without re-deriving the mapping. */
+export function diagnosticIcon(toolId: string): string {
+  return EXTERNAL_DIAGNOSTIC_ICONS[toolId] ?? getTool(toolId)?.icon ?? '📊';
 }
 
 export interface SavedToolRun {
@@ -40,9 +47,18 @@ export interface SavedToolRun {
 export interface ProjectDiagnostic {
   toolId: string;
   name: string;
+  /** Emoji icon for the diagnostic (audit / tool). */
+  icon: string;
   score: number | null;
   scoreLabel: string | null;
   headline: string;
+  /** Number of open gaps (recommendations) the latest run flagged — the
+   *  "remediation outstanding" signal surfaced beside the score. */
+  gapCount: number;
+  /** Real remediation status derived from the diagnostic's filed ticket(s):
+   *  filed / PR-open / resolved (the marketing "Remediation PR opened" badge).
+   *  `state: 'none'` when no remediation ticket exists (fall back to gapCount). */
+  remediation: RemediationSummary;
   kind: string;
   createdAt: string;
   /** The full latest run result, for the per-diagnostic results view. */
@@ -55,6 +71,20 @@ export interface ProjectScore {
   diagnostics: ProjectDiagnostic[];
 }
 
+/** Compact per-diagnostic summary carried on a rollup row so the project-card
+ *  strip can render each diagnostic (SOC 2 etc.) without an N+1 score fetch. */
+export interface ProjectDiagnosticSummary {
+  toolId: string;
+  name: string;
+  icon: string;
+  score: number | null;
+  scoreLabel: string | null;
+  gapCount: number;
+  /** Real remediation status (filed / PR-open / resolved), so the project card
+   *  shows the true remediation signal, not just the raw gap count. */
+  remediation: RemediationSummary;
+}
+
 export interface TenantProjectScore {
   projectId: number;
   name: string;
@@ -62,6 +92,9 @@ export interface TenantProjectScore {
   scoreLabel: string | null;
   diagnosticCount: number;
   lastRunAt: string;
+  /** Per-diagnostic latest scores for this project (SOC 2, Quality, …), so the
+   *  project card can surface each one from the single cached rollup read. */
+  diagnostics: ProjectDiagnosticSummary[];
 }
 
 export interface TenantDiagnosticsRollup {
@@ -85,6 +118,36 @@ function meanScore(scores: Array<number | null | undefined>): number | null {
 
 export class ToolService {
   constructor(private readonly db: Db) {}
+
+  /**
+   * Non-archived tasks (title + lane + PR link) for the given projects, grouped by
+   * projectId — the join source for deriving each diagnostic's real remediation
+   * status. One query for the whole rollup / project score. Best-effort: returns an
+   * empty map on failure so scoring never blocks on the task read.
+   */
+  private async remediationTasksByProject(projectIds: number[]): Promise<Map<number, RemediationTaskRow[]>> {
+    const byProject = new Map<number, RemediationTaskRow[]>();
+    if (projectIds.length === 0) return byProject;
+    try {
+      const rows = await this.db
+        .select({
+          projectId: tasks.projectId,
+          title: tasks.title,
+          status: tasks.status,
+          githubPrUrl: tasks.githubPrUrl,
+        })
+        .from(tasks)
+        .where(and(inArray(tasks.projectId, projectIds), eq(tasks.archived, false)));
+      for (const r of rows) {
+        const list = byProject.get(r.projectId) ?? [];
+        list.push({ title: r.title, status: r.status, githubPrUrl: r.githubPrUrl });
+        byProject.set(r.projectId, list);
+      }
+    } catch {
+      // Task read failed — diagnostics still score, remediation just shows 'none'.
+    }
+    return byProject;
+  }
 
   /** Public — list every free tool (client-safe summaries + data-mode flag). */
   list(): ToolSummary[] {
@@ -207,14 +270,21 @@ export class ToolService {
       const latest = new Map<string, typeof toolRuns.$inferSelect>();
       for (const r of rows) if (!latest.has(r.toolId)) latest.set(r.toolId, r);
 
+      // Join the project's tasks to derive each diagnostic's real remediation state.
+      const projectTasks = (await this.remediationTasksByProject([projectId])).get(projectId) ?? [];
+
       const diagnostics: ProjectDiagnostic[] = [...latest.values()].map((r) => {
         const result = r.result as ToolResult;
+        const name = diagnosticName(r.toolId);
         return {
           toolId: r.toolId,
-          name: diagnosticName(r.toolId),
+          name,
+          icon: diagnosticIcon(r.toolId),
           score: result.score ?? null,
           scoreLabel: result.scoreLabel ?? null,
           headline: result.headline ?? '',
+          gapCount: result.recommendations?.length ?? 0,
+          remediation: deriveRemediation(name, projectTasks),
           kind: r.kind,
           createdAt: r.createdAt.toISOString(),
           result,
@@ -275,9 +345,27 @@ export class ToolService {
         : [];
       const nameById = new Map(names.map((p) => [p.id, p.name]));
 
+      // One task read for the whole rollup → each diagnostic's remediation state.
+      const tasksByProject = await this.remediationTasksByProject(projectIds);
+
       const projectScores: TenantProjectScore[] = projectIds.map((pid) => {
         const entry = byProject.get(pid)!;
+        const projectTasks = tasksByProject.get(pid) ?? [];
         const score = meanScore([...entry.latest.values()].map((r) => r.score ?? null));
+        const diagnostics: ProjectDiagnosticSummary[] = [...entry.latest.entries()]
+          .map(([toolId, r]) => {
+            const name = diagnosticName(toolId);
+            return {
+              toolId,
+              name,
+              icon: diagnosticIcon(toolId),
+              score: r.score ?? null,
+              scoreLabel: r.scoreLabel ?? null,
+              gapCount: r.recommendations?.length ?? 0,
+              remediation: deriveRemediation(name, projectTasks),
+            };
+          })
+          .sort((a, b) => a.name.localeCompare(b.name));
         return {
           projectId: pid,
           name: nameById.get(pid) ?? `#${pid}`,
@@ -285,6 +373,7 @@ export class ToolService {
           scoreLabel: score != null ? levelName(score) : null,
           diagnosticCount: entry.latest.size,
           lastRunAt: entry.lastRunAt.toISOString(),
+          diagnostics,
         };
       });
       projectScores.sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || a.name.localeCompare(b.name));

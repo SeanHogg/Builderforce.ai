@@ -1,4 +1,4 @@
-# Long-lived Cloudflare Container for a "V2 Cloud Agent (Node/Container)" run.
+# Long-lived Cloudflare Container for a "Cloud Agent (Node/Container)" run.
 # Boots a small Node HTTP server (server.mjs) that AgentContainerDO proxies /run to.
 # Includes git + bash so the agent has a REAL shell to clone the repo and run
 # builds/type-checks/lint/tests (run_command) before finishing.

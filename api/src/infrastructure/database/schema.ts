@@ -12,6 +12,7 @@ import {
   varchar,
   smallint,
   bigint,
+  bigserial,
   date,
   real,
   jsonb,
@@ -25,7 +26,7 @@ import { sql } from 'drizzle-orm';
 /**
  * Data model aligns with product flow (see README "Data model & API"):
  * Brain Storm (ideate) → Execute → Project → IDE (build) or Tasks + Workforce (assign to AgentHosts).
- * Unified chats: ide_project_chats (origin + optional projectId). Tasks link projects to agentHosts/executions.
+ * Unified chats: brain_chats (all modalities via `origin` + optional projectId). Tasks link projects to agentHosts/executions.
  */
 
 // custom tsvector type for full-text search
@@ -57,7 +58,14 @@ export const agentTypeEnum = pgEnum('agent_type', [
 // per-board `status` lane key): a plain `task`, or an `epic` that decomposes
 // into child tasks (parent_task_id) — see migration 0112.
 export const taskTypeEnum = pgEnum('task_type', [
-  'task', 'epic',
+  'task', 'epic', 'gap', 'security',
+  // Incident ticket (migration 0325): a first-class board card the Incident Manager
+  // agent works, bridged to a prod_incidents record.
+  'incident',
+  // Hireable work-item kinds (migration 0293): a full product/scope brief a
+  // Product-Manager agent authors + publishes for a fixed-bid build, and a UI/UX
+  // design (or design-review) gig. Both are publishable to the Gig Marketplace.
+  'product', 'design',
 ]);
 
 export const tenantStatusEnum = pgEnum('tenant_status', [
@@ -123,16 +131,6 @@ export const executionStatusEnum = pgEnum('execution_status', [
   'paused',
 ]);
 
-export const auditEventTypeEnum = pgEnum('audit_event_type', [
-  'user_registered', 'user_login',
-  'task_submitted', 'task_cancelled',
-  'execution_started', 'execution_completed', 'execution_failed',
-  'agent_registered',
-  'member_added', 'member_removed',
-  'project_created', 'project_updated',
-  'task_created', 'task_updated',
-]);
-
 export const agentHostStatusEnum = pgEnum('agent_host_status', ['active', 'inactive', 'suspended']);
 export const agentHostDirectoryStatusEnum = pgEnum('agent_host_directory_status', ['pending', 'synced', 'error']);
 
@@ -164,6 +162,12 @@ export const users = pgTable('users', {
   avatarUrl:     varchar('avatar_url', { length: 500 }),
   bio:           text('bio'),
   passwordHash:  varchar('password_hash', { length: 255 }),
+  /** When the user proved they own this email address — set by OTP verification on
+   *  password signup, or immediately for OAuth/magic-link (the provider/inbox vouches).
+   *  NULL = unverified: the account exists but cannot obtain a session until a code is
+   *  entered. Backfilled to created_at for every pre-existing account (mig 0285) so the
+   *  gate only ever traps NEW password signups. Stops fake/unowned-email accounts. */
+  emailVerifiedAt: timestamp('email_verified_at'),
   mfaEnabled:    boolean('mfa_enabled').notNull().default(false),
   mfaSecretEnc:  text('mfa_secret_enc'),
   mfaTempSecretEnc: text('mfa_temp_secret_enc'),
@@ -173,9 +177,29 @@ export const users = pgTable('users', {
   mfaLastVerifiedAt: timestamp('mfa_last_verified_at'),
   isSuperadmin:           boolean('is_superadmin').notNull().default(false),
   isSuspended:            boolean('is_suspended').notNull().default(false),
+  /** Account-type discriminator. GLOBAL (a freelancer works across many tenants).
+   *  'standard' = normal builder; 'freelancer' = restricted gig account (minimal
+   *  shell: profile + gigs + timecard). Drives shell/nav gating. (0269) */
+  accountType:            varchar('account_type', { length: 20 }).notNull().default('standard'),
+  /** When the user EXPLICITLY chose their account type (Build vs Hired). NULL for
+   *  OAuth/magic-link accounts that were auto-provisioned before picking a role —
+   *  the onboarding gate uses this to force a one-time role choice. (0278) */
+  accountTypeSelectedAt:  timestamp('account_type_selected_at'),
+  /** Opt-in to being hired talent. INDEPENDENT of accountType: a 'standard' builder
+   *  can turn this on to publish a for-hire profile + bid on gigs while keeping the
+   *  full builder shell. Always true for 'freelancer' accounts. Discoverability is
+   *  still gated on a PUBLISHED profile; this drives the opt-in UX + bid gate. (0282) */
+  availableForHire:       boolean('available_for_hire').notNull().default(false),
   sessionVersion:         integer('session_version').notNull().default(0),
   onboardingCompletedAt:  timestamp('onboarding_completed_at'),
+  /** JSON `{ track, completed[], activeStep }` — which setup-wizard steps are done,
+   *  by STEP ID so it survives track changes/reordering. Lets a user resume the
+   *  wizard where they left off instead of restarting at step 1. (0343) */
+  onboardingProgress:     text('onboarding_progress'),
   userIntent:             text('user_intent'), // JSON array of intent strings, set during onboarding
+  /** JSON PsychometricProfile (Pro) — this human's OWN personality; null = none. Same
+   *  shape agents/personas use, so a person and an agent are described the same way. */
+  psychometric:           text('psychometric'),
   createdAt:              timestamp('created_at').notNull().defaultNow(),
   updatedAt:              timestamp('updated_at').notNull().defaultNow(),
 });
@@ -244,6 +268,19 @@ export const legalDocuments = pgTable('legal_documents', {
   createdAt:    timestamp('created_at').notNull().defaultNow(),
   updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 });
+
+export const legalDocumentVersions = pgTable('legal_document_versions', {
+  id:           serial('id').primaryKey(),
+  documentType: legalDocumentTypeEnum('document_type').notNull(),
+  version:      varchar('version', { length: 50 }).notNull(),
+  title:        varchar('title', { length: 255 }).notNull(),
+  content:      text('content').notNull(),
+  changeKind:   varchar('change_kind', { length: 16 }).notNull().default('publish'),
+  changedBy:    varchar('changed_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('legal_document_versions_type_idx').on(t.documentType, t.createdAt),
+]);
 
 export const userLegalAcceptances = pgTable('user_legal_acceptances', {
   userId:       varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -351,6 +388,19 @@ export const llmUsageLog = pgTable('llm_usage_log', {
    *  `paid_overflow_daily_cap` so a Free tenant can't run up arbitrary spend on
    *  our keys via a tight retry loop. */
   paidOverflow:     boolean('paid_overflow').notNull().default(false),
+  /** True when this call was served by the tenant's OWN provider credential — a
+   *  BYO API key or a connected subscription (migration 0284). The platform pays
+   *  nothing for these tokens, so `cost_usd_millicents` is forced to 0, and a BYO
+   *  row on the on-prem / VSIX `surface` is EXEMPT from the plan token allowance
+   *  (see tokenUsage.ts). BYO cloud-agent rows still count (charged). */
+  byo:              boolean('byo').notNull().default(false),
+  /** Connected LLM provider credential that funded a BYO call (for example
+   *  'anthropic' or 'google'). Null for platform-funded calls. */
+  byoProvider:      varchar('byo_provider', { length: 32 }),
+  /** Which agent modality produced this row (migration 0284): 'web' | 'vsix' |
+   *  'on_prem' | 'cloud' | 'sdk'. Drives the BYO metering exemption above so
+   *  own-machine (on-prem/VSIX) BYO usage is free while cloud BYO is charged. */
+  surface:          varchar('surface', { length: 16 }).notNull().default('web'),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -621,8 +671,38 @@ export const tenants = pgTable('tenants', {
   billingPaymentBrand:    varchar('billing_payment_brand', { length: 50 }),
   billingPaymentLast4:    varchar('billing_payment_last4', { length: 4 }),
   billingUpdatedAt:       timestamp('billing_updated_at'),
+  /**
+   * Explicit card-validation flow for PREMIUM (any-paid-OpenRouter) model selection
+   * (migration 0342). A tenant may select any paid OpenRouter model (billed at
+   * OpenRouter cost + a flat 1¢/request) only with a PAID plan AND a card that has
+   * been through the provider's validation flow (SetupIntent / $0 auth):
+   *   card_validated_at    → stamped when the provider confirms a usable card (NULL
+   *                          until then). Presence = "validated card on file".
+   *   card_validation_status → none | pending | validated | failed (drives the UI).
+   * See `cardValidationService.ts` + `evaluatePremiumModelAccess`.
+   */
+  cardValidatedAt:        timestamp('card_validated_at', { withTimezone: true }),
+  cardValidationStatus:   varchar('card_validation_status', { length: 16 }).notNull().default('none').$type<'none' | 'pending' | 'validated' | 'failed'>(),
   externalCustomerId:     varchar('external_customer_id', { length: 255 }),
   externalSubscriptionId: varchar('external_subscription_id', { length: 255 }),
+  /**
+   * The VALIDATED card — the $0-SetupIntent card that unlocks PREMIUM model
+   * selection (migrations 0346/0347).
+   *
+   * Deliberately SEPARATE from `billing_payment_brand`/`billing_payment_last4`,
+   * which describe the card that bills the SUBSCRIPTION. The two are frequently
+   * the same card but need not be, and sharing one pair of columns meant whichever
+   * flow wrote last won — so the card shown to the user could disagree with the
+   * one `external_payment_method_id` would actually detach.
+   *
+   * `externalPaymentMethodId` is the processor handle: it lets us detach exactly
+   * this card rather than sweeping the customer, and swap a replacement in before
+   * revoking the old one. Null on rows validated before 0346 (customer-wide
+   * fallback).
+   */
+  externalPaymentMethodId: varchar('external_payment_method_id', { length: 255 }),
+  cardBrand:              varchar('card_brand', { length: 50 }),
+  cardLast4:              varchar('card_last4', { length: 4 }),
   seatCount:              integer('seat_count'),
   /**
    * When the introductory Pro trial ends (migration 0204). Set on tenant creation
@@ -771,6 +851,11 @@ export const projects = pgTable('projects', {
   description:     text('description'),
   /** IDE: template used to seed initial files (e.g. "vanilla"). */
   template:        varchar('template', { length: 50 }),
+  /** The KANBAN template selected for this project's board (migration 0274) — a
+   *  built-in slug ('standard-swe') or a kanban_templates.id. Distinct from
+   *  {@link template} (IDE file scaffold). Drives lane roles/requirements + the
+   *  recommended roster. Null = the legacy hardcoded default board. */
+  kanbanTemplateId: varchar('kanban_template_id', { length: 120 }),
   rootWorkingDirectory: text('root_working_directory'),
   status:          projectStatusEnum('status').notNull().default('active'),
   sourceControlIntegrationId: integer('source_control_integration_id').references(() => sourceControlIntegrations.id, { onDelete: 'set null' }),
@@ -892,6 +977,12 @@ export const tasks = pgTable('tasks', {
   // PRD/spec link moved to the task_specs junction (0098): a task references 1..N
   // project PRDs (one optional primary) — see `taskSpecs` below.
   archived:          boolean('archived').notNull().default(false),
+  /** Gig Marketplace (0293): this work item is published (or publishable) as a
+   *  hireable gig, and the back-ref to the published posting. Canonical link is
+   *  jobPostings.sourceTicketId; jobPostingId is a denormalized convenience kept in
+   *  sync on publish so the board can badge "Published" without a reverse scan. */
+  hireable:          boolean('hireable').notNull().default(false),
+  jobPostingId:      varchar('job_posting_id', { length: 36 }),
   /** Lifecycle metrics (migration 0117). completedAt is the REAL timestamp the
    *  task entered a done-class lane (replaces the updatedAt proxy); null once it
    *  leaves. lastWorkedAt is the latest "work stopped" signal (baseline for
@@ -920,9 +1011,240 @@ export const tasks = pgTable('tasks', {
    *  (EMP-4) + productivity metrics. Captured from the issue tracker on board sync
    *  (Jira estimate) or set on the board. Null = unestimated. */
   storyPoints:       real('story_points'),
+  /** AI Manager (0265): the ticket's business value 0-100. Null = unscored — the
+   *  manager backfills it (AI-scored with a rationale, or RICE-derived from PMO
+   *  fields). Drives the manager's backlog ranking. Editable by a human PM. */
+  businessValue:         integer('business_value'),
+  /** One-line justification for {@link businessValue} (shown on the card/drawer). */
+  businessValueRationale: text('business_value_rationale'),
+  /** How the score was set: 'ai' | 'rice' | 'manual'. A manual edit pins it so the
+   *  manager never overwrites a human's number. */
+  businessValueSource:   varchar('business_value_source', { length: 12 }),
+  /** The manager's computed backlog rank (1 = do this first). Null = unranked. The
+   *  priority-aware autonomous dispatcher + the board default sort read this so the
+   *  team works highest-value/most-urgent tickets first, not oldest-updated. */
+  managerRank:           integer('manager_rank'),
+  /** Validator agent review bookkeeping (0270). A Done item may be reviewed MANY
+   *  times (on entry to Done, then re-swept on a schedule) — the full history lives
+   *  in {@link taskReviews}; these denormalise the LATEST pass for cheap board
+   *  rendering. reviewCount increments per pass; lastReviewVerdict is
+   *  'complete' | 'gaps'. */
+  reviewCount:           integer('review_count').notNull().default(0),
+  lastReviewedAt:        timestamp('last_reviewed_at'),
+  lastReviewVerdict:     varchar('last_review_verdict', { length: 16 }),
+  /** For a GAP-typed task: the Done item whose review produced it (null otherwise).
+   *  Typed AnyPgColumn to break the self-reference inference cycle. ON DELETE SET
+   *  NULL so deleting the origin keeps the gap as standalone work. */
+  gapOriginTaskId:       integer('gap_origin_task_id').references((): AnyPgColumn => tasks.id, { onDelete: 'set null' }),
+  /** Denormalised ticket ROLE/DIAGNOSTIC audit verdict (migration 0275) — the
+   *  full result lives in {@link ticketAudits}; these render the board flag chip
+   *  without a join. auditStatus is null(unaudited) | 'pass' | 'flagged';
+   *  auditFlagCount is how many required lane requirements are unmet. */
+  auditStatus:           varchar('audit_status', { length: 12 }),
+  auditFlagCount:        integer('audit_flag_count').notNull().default(0),
+  /** Security-finding metadata (migration 0290) — set on a SECURITY-typed task the
+   *  Security agent mints for a SOC 2 finding. severity is
+   *  'critical'|'high'|'medium'|'low'|'info'; tsc is the Trust Service Criterion the
+   *  finding maps to; securityAuditId links back to the {@link securityAudits} run.
+   *  Null on ordinary task/epic/gap rows. */
+  securitySeverity:      varchar('security_severity', { length: 12 }),
+  securityTsc:           varchar('security_tsc', { length: 32 }),
+  securityAuditId:       integer('security_audit_id'),
+  /** Incident metadata (migration 0325) — set on an INCIDENT-typed task the Incident
+   *  Manager agent opens. severity is 'sev1'..'sev4'; status is
+   *  'triage'|'investigating'|'mitigated'|'resolved'; incidentSystem is the
+   *  classified affected system; incidentId links to the {@link prodIncidents}
+   *  record. Null on ordinary task/epic/gap/security rows. */
+  incidentSeverity:      varchar('incident_severity', { length: 16 }),
+  incidentStatus:        varchar('incident_status', { length: 20 }),
+  incidentSystem:        varchar('incident_system', { length: 120 }),
+  incidentId:            uuid('incident_id'),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 });
+
+// ---------------------------------------------------------------------------
+// Validator agent: review ledger + work-delta provenance (migration 0270)
+// ---------------------------------------------------------------------------
+
+/**
+ * One row per Validator review PASS over a task. A Done item is reviewed
+ * repeatedly (on Done + a recurring sweep), so this is the append-only audit
+ * trail; the task row denormalises the latest pass. verdict is
+ * 'complete' | 'gaps'; gapsCount is how many GAP tasks the pass minted.
+ */
+export const taskReviews = pgTable('task_reviews', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  taskId:      integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  /** ide_agents.id of the Validator (or 'system' for automation). No FK — raw-SQL table. */
+  reviewerRef: varchar('reviewer_ref', { length: 64 }),
+  verdict:     varchar('verdict', { length: 16 }).notNull(),   // 'complete' | 'gaps'
+  summary:     text('summary'),
+  gapsCount:   integer('gaps_count').notNull().default(0),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Security agent: ticket-access config + audit runs (migration 0291)
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-tenant setup configuration deciding WHO can see the access-restricted
+ * SECURITY tickets the Security agent files. Default-DENY: every audience toggle
+ * off + empty allowlists ⇒ only tenant Owner/Admin see them. A tenant opts whole
+ * audiences in (humans / hired agents / talent) and/or names specific users/agents.
+ * Read + enforced by SecurityTicketAccessService on every task read surface.
+ */
+export const securityTicketAccess = pgTable('security_ticket_access', {
+  tenantId:       integer('tenant_id').primaryKey().references(() => tenants.id, { onDelete: 'cascade' }),
+  /** { humans:boolean, hired:boolean, talent:boolean } — whole-population opt-ins. */
+  audiences:      jsonb('audiences').notNull().default(sql`'{"humans":false,"hired":false,"talent":false}'::jsonb`),
+  /** Explicit per-user grants (users.id values). */
+  allowUserIds:   jsonb('allow_user_ids').notNull().default(sql`'[]'::jsonb`),
+  /** Explicit per-agent grants (ide_agents.id values). */
+  allowAgentRefs: jsonb('allow_agent_refs').notNull().default(sql`'[]'::jsonb`),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+  updatedBy:      varchar('updated_by', { length: 64 }),
+});
+
+/**
+ * One row per Security-agent audit RUN — the surfaced "Security Audit result".
+ * Goes running → complete|failed; on finish it carries the one-paragraph summary
+ * and the rollups (counts by severity, counts by Trust Service Criterion). Each
+ * finding it produces is a SECURITY task linked back via tasks.security_audit_id.
+ */
+export const securityAudits = pgTable('security_audits', {
+  id:               serial('id').primaryKey(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  /** The project (repo) the audit ran against; its findings are filed into it. */
+  projectId:        integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  /** The transient anchor task the cloud run hangs on (dispatch is task-centric). */
+  anchorTaskId:     integer('anchor_task_id'),
+  /** ide_agents.id of the Security agent that ran the audit (or 'system'). */
+  agentRef:         varchar('agent_ref', { length: 64 }),
+  status:           varchar('status', { length: 16 }).notNull().default('running'), // 'running'|'complete'|'failed'
+  triggerSource:    varchar('trigger_source', { length: 16 }).notNull().default('cron'), // 'cron'|'manual'
+  summary:          text('summary'),
+  findingsCount:    integer('findings_count').notNull().default(0),
+  countsBySeverity: jsonb('counts_by_severity'),
+  countsByTsc:      jsonb('counts_by_tsc'),
+  startedAt:        timestamp('started_at').notNull().defaultNow(),
+  finishedAt:       timestamp('finished_at'),
+});
+
+/**
+ * Provenance ledger for "a chat turn changed code". Every modality (VS Code, web
+ * Brain, MCP, CLI, cloud agent) records a delta here when its work produces a
+ * code change, classified improvement|fix|bug and (optionally) tied to the ticket
+ * it created — giving the operator visibility of ad-hoc work that used to land
+ * silently. Feeds the delta drawer + insight surfaces.
+ */
+export const workDeltas = pgTable('work_deltas', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:  integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  /** The ticket this delta created/updated (null if it could not be created). */
+  taskId:     integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  /** The Brain chat/session that produced the delta (null for headless runs). */
+  chatId:     integer('chat_id').references(() => brainChats.id, { onDelete: 'set null' }),
+  /** Interaction surface: 'ide' | 'web' | 'mcp' | 'cli' | 'cloud'. */
+  modality:   varchar('modality', { length: 32 }).notNull().default('unknown'),
+  /** Classification of the change: 'improvement' | 'fix' | 'bug'. */
+  kind:       varchar('kind', { length: 16 }).notNull(),
+  summary:    text('summary').notNull(),
+  detail:     text('detail'),
+  /** Files touched by the change (string[]). */
+  files:      jsonb('files'),
+  /** User id or agent ref that authored the turn. */
+  createdBy:  varchar('created_by', { length: 64 }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// AI Manager coordination layer (migration 0265)
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-project manager designation + policy. A row overrides the default-on tenant
+ * system service: it names a manager (an AI agent OR a human, assignee-encoded)
+ * and tunes what the manager is allowed to do (assign, backfill value, rank, and
+ * how much PR authority it has). Absent row = the system service manages the
+ * project with tenant-default policy.
+ */
+export const projectManagerConfigs = pgTable('project_manager_configs', {
+  id:                uuid('id').primaryKey().defaultRandom(),
+  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:         integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  /** Designated manager, assignee-encoded ('u:<userId>' | 'c:<cloudRef>' | 'h:<hostId>').
+   *  Null = the tenant system service manages this project (no named manager). */
+  managerRef:        text('manager_ref'),
+  /** Master switch for this project — false skips it entirely. */
+  enabled:           boolean('enabled').notNull().default(true),
+  /** PR authority: 'immediate' | 'on_green' | 'queue'. Tenant default 'immediate'. */
+  prMergePolicy:     varchar('pr_merge_policy', { length: 12 }).notNull().default('immediate'),
+  autoAssign:        boolean('auto_assign').notNull().default(true),
+  autoBusinessValue: boolean('auto_business_value').notNull().default(true),
+  autoPrioritize:    boolean('auto_prioritize').notNull().default(true),
+  /** The manager's DOMAIN focus/persona (see managerTypes.ts): a built-in ('general' |
+   *  'delivery' | 'qa' | 'service_desk' | 'devops') or a `role:<key>` custom-role type
+   *  (up to a 60-char role key). Shapes what it values + prioritizes. */
+  managerType:       varchar('manager_type', { length: 80 }).notNull().default('general'),
+  lastRunAt:         timestamp('last_run_at'),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byProject: uniqueIndex('uq_project_manager_configs_project').on(t.tenantId, t.projectId),
+}));
+
+/**
+ * Standing human guidance the AI Manager honors on every pass — the persisted output
+ * of a "coaching session" (Manager-tab box or the manager.coach chat tool). A row
+ * scoped to one project applies to that project's passes; project_id NULL applies
+ * tenant-wide (a manager that manages the whole tenant). See migration 0327.
+ */
+export const managerDirectives = pgTable('manager_directives', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:  integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  directive:  text('directive').notNull(),
+  status:     varchar('status', { length: 16 }).notNull().default('active'),
+  createdBy:  varchar('created_by', { length: 36 }),
+  source:     varchar('source', { length: 16 }).notNull().default('coach'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  expiresAt:  timestamp('expires_at'),
+}, (t) => ({
+  byScope: index('idx_manager_directives_scope').on(t.tenantId, t.projectId, t.status),
+}));
+
+/**
+ * Audit feed of every decision the manager took (ranked, assigned, scored, merged,
+ * flagged…). Backs the Manager surface "activity" list so a human can see — and
+ * trust — exactly what the AI manager did and why.
+ */
+export const managerActions = pgTable('manager_actions', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:  integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  /** The ticket the action was about (null for project-wide actions like a re-rank). */
+  taskId:     integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  /** The board task that REPRESENTS the manual manager run this decision belongs to
+   *  (0286). Set for actions taken during a "Run manager now" pass so the run task can
+   *  show exactly what it changed; null for cron-sweep decisions (feed-only). */
+  runTaskId:  integer('run_task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  /** 'prioritize' | 'assign' | 'score_value' | 'dispatch' | 'merge_pr' | 'close_pr' |
+   *  'flag' (a required check is unmet — written only when the verdict CHANGES) |
+   *  'coordinate' (the manager staffed a flagged ticket's missing role/reviewer). */
+  actionType: varchar('action_type', { length: 24 }).notNull(),
+  summary:    text('summary').notNull(),
+  /** Structured JSON payload for drill-in. */
+  detail:     text('detail'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byFeed: index('idx_manager_actions_feed').on(t.tenantId, t.projectId, t.createdAt),
+  byRunTask: index('idx_manager_actions_run_task').on(t.runTaskId),
+}));
 
 // ---------------------------------------------------------------------------
 // Workforce member profiles + lifecycle metrics (migrations 0116–0118)
@@ -1126,6 +1448,14 @@ export const ideAgents = pgTable('ide_agents', {
   tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   projectId:        integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
   name:             varchar('name', { length: 255 }).notNull(),
+  /** Stable built-in-agent marker (e.g. 'validator', 'security'). NULL for ordinary
+   *  user/marketplace agents. Decouples a built-in's IDENTITY from its display name,
+   *  so `name` can be renamed freely (to feel like a teammate) while dispatch and the
+   *  card's type indicator key off this instead. See migration 0289. */
+  builtinKind:      varchar('builtin_kind', { length: 32 }),
+  /** Explicit role keys this agent may act as (JSON string[]). NULL falls back to
+   *  builtin_kind-derived + fuzzy title/skill matching — see roleCapability.ts. */
+  roleKeys:         jsonb('role_keys'),
   title:            varchar('title', { length: 255 }),
   bio:              text('bio'),
   skills:           text('skills'),              // JSON string[] as text
@@ -1134,8 +1464,11 @@ export const ideAgents = pgTable('ide_agents', {
   hireCount:        integer('hire_count').notNull().default(0),
   runtimeSupport:   varchar('runtime_support', { length: 16 }).notNull().default('cloud'),
   preferredRuntime: varchar('preferred_runtime', { length: 16 }),
-  engine:           varchar('engine', { length: 32 }),
+  // (vestigial `engine` column dropped in migration 0321 — one engine, resolved from
+  //  CURRENT_ENGINE_ID at run time, never persisted.)
   runtimeSurface:   varchar('runtime_surface', { length: 16 }),
+  /** JSON PsychometricProfile (Pro) — this agent's OWN personality; null = none. Compiled at run time. */
+  psychometric:     text('psychometric'),
   priceCents:       integer('price_cents').notNull().default(0),
   pricingModel:     varchar('pricing_model', { length: 24 }).notNull().default('flat_fee'),
   priceUnit:        varchar('price_unit', { length: 100 }),
@@ -1229,16 +1562,49 @@ export const executionMessages = pgTable('execution_messages', {
   createdAt:   timestamp('created_at').notNull().defaultNow(),
 });
 
-export const auditEvents = pgTable('audit_events', {
-  id:           serial('id').primaryKey(),
-  tenantId:     integer('tenant_id').references(() => tenants.id),
-  userId:       varchar('user_id', { length: 36 }),
-  eventType:    auditEventTypeEnum('event_type').notNull(),
-  resourceType: varchar('resource_type', { length: 100 }),
-  resourceId:   varchar('resource_id', { length: 100 }),
-  metadata:     text('metadata'),
+/**
+ * Unified activity / audit log (migration 0287) — the ONE canonical, append-only
+ * stream of "who did what, to what, when" across the whole workforce: team
+ * members, external talent / hires, and AI agents alike. Replaces the fragmented
+ * per-domain event tables as the single trace surface; written through the
+ * `recordActivity()` emitter (application/activity/activityLog.ts).
+ *
+ * Actor is polymorphic via (actorType, actorRef) — see the migration header for
+ * the per-type ref mapping. actorName is denormalised so the timeline renders
+ * without a heterogeneous fan-join. `verb` is free-form so new event kinds need
+ * no migration.
+ */
+export const activityLog = pgTable('activity_log', {
+  id:           bigserial('id', { mode: 'number' }).primaryKey(),
+  /** Nullable ONLY for platform-global events (pre-tenant login/registration),
+   *  absorbed from the retired audit_events table (mig 0295). Tenant-scoped reads
+   *  filter on tenantId, so a global row is simply invisible to any one tenant. */
+  tenantId:     integer('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:    integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  /** human | hire | cloud_agent | host_agent | system */
+  actorType:    varchar('actor_type', { length: 16 }).notNull(),
+  /** Id into the per-type table (users.id / ide_agents.id / agent_hosts.id); null for system. */
+  actorRef:     varchar('actor_ref', { length: 64 }),
+  /** Denormalised display label — avoids a per-row fan-join across actor tables. */
+  actorName:    varchar('actor_name', { length: 255 }),
+  /** freelancer_engagements.id — binds a cross-tenant hire action; nullable. */
+  engagementId: varchar('engagement_id', { length: 36 }),
+  /** Free-form action verb: 'task.created', 'comment.added', 'deploy.recorded', … */
+  verb:         varchar('verb', { length: 64 }).notNull(),
+  targetType:   varchar('target_type', { length: 32 }),
+  targetId:     varchar('target_id', { length: 64 }),
+  targetLabel:  varchar('target_label', { length: 300 }),
+  summary:      text('summary'),
+  metadata:     jsonb('metadata'),
+  occurredAt:   timestamp('occurred_at').notNull().defaultNow(),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
-});
+}, (t) => [
+  index('idx_activity_log_tenant_time').on(t.tenantId, t.occurredAt),
+  index('idx_activity_log_actor').on(t.tenantId, t.actorType, t.actorRef, t.occurredAt),
+  index('idx_activity_log_target').on(t.tenantId, t.targetType, t.targetId),
+  index('idx_activity_log_project').on(t.tenantId, t.projectId, t.occurredAt),
+]);
 
 // ---------------------------------------------------------------------------
 // Skill assignments
@@ -1575,6 +1941,13 @@ export const workflows = pgTable('workflows', {
   projectId:    integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   /** Source definition this run was instantiated from (0094); null for ad-hoc runs. */
   workflowDefinitionId: uuid('workflow_definition_id').references(() => workflowDefinitions.id, { onDelete: 'set null' }),
+  /** Reliability linkage (0337): the incident/monitor whose event fired this run —
+   *  set on event-trigger runs and on a manual runbook launched from an incident, so
+   *  the incident detail can list "workflows run for this incident". Null otherwise.
+   *  Plain uuids (no ORM FK) — mirrors monitors.current_incident_id; the value is only
+   *  ever an equality filter and the tables are declared later in this module. */
+  sourceIncidentId: uuid('source_incident_id'),
+  sourceMonitorId:  uuid('source_monitor_id'),
   /** Where this run executes: 'host' (self-hosted agentHost) | 'cloud' (builderforce-hosted). */
   runtime:      varchar('runtime', { length: 16 }).notNull().default('host'),
   /** ide_agents.id of the cloud agent serving the run when runtime='cloud'. */
@@ -1655,10 +2028,12 @@ export const ideProjects = pgTable('ide_projects', {
   /** The backing projects row holding this build's files/datasets/training/site/repo. */
   storageProjectId:    integer('storage_project_id').notNull().unique().references(() => projects.id, { onDelete: 'cascade' }),
   name:                varchar('name', { length: 255 }).notNull(),
-  /** 'designer' | 'video' | 'llm' | 'voice'. */
+  /** 'designer' | 'mobile' | 'video' | 'evermind' | 'finetune' | 'voice' (legacy: 'llm' → evermind). */
   modality:            text('modality').notNull().default('designer'),
   status:              text('status').notNull().default('active'),
-  /** LLM modality requires a workflow; the assigned (possibly forked-custom) definition. */
+  /** Optional automation workflow attached to this IDE project (any modality; the
+   *  assigned, possibly forked-custom definition). LLM projects provision their model
+   *  via an Evermind recipe at creation instead — this is no longer required. */
   workflowDefinitionId: uuid('workflow_definition_id').references((): AnyPgColumn => workflowDefinitions.id, { onDelete: 'set null' }),
   createdAt:           timestamp('created_at').notNull().defaultNow(),
   updatedAt:           timestamp('updated_at').notNull().defaultNow(),
@@ -1679,7 +2054,7 @@ export const workflowTriggers = pgTable('workflow_triggers', {
   segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   definitionId:  uuid('definition_id').notNull().references(() => workflowDefinitions.id, { onDelete: 'cascade' }),
   nodeId:        varchar('node_id', { length: 128 }).notNull(),
-  triggerType:   varchar('trigger_type', { length: 32 }).notNull(),  // schedule|webhook|rss|inbound-email
+  triggerType:   varchar('trigger_type', { length: 32 }).notNull(),  // schedule|webhook|rss|inbound-email|monitor-breach|incident-created|incident-resolved|incident-status-change
   enabled:       boolean('enabled').notNull().default(true),
   config:        text('config').notNull().default('{}'),             // JSON of the trigger node config
   // Run target snapshot, inherited from the definition at sync time.
@@ -1829,41 +2204,19 @@ export const approvalRules = pgTable('approval_rules', {
 });
 
 // ---------------------------------------------------------------------------
-// Brain chats (legacy) — superseded by ide_project_chats for the product flow:
-// Brain Storm → Project → IDE or Tasks/Workforce. Kept for reference only.
+// Chat memories — compressed summaries of individual chats
 // ---------------------------------------------------------------------------
-
-export const brainChats = pgTable('brain_chats', {
-  id:         serial('id').primaryKey(),
-  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  userId:     varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
-  projectId:  integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
-  title:      varchar('title', { length: 500 }).notNull().default('New chat'),
-  isArchived: boolean('is_archived').notNull().default(false),
-  createdAt:  timestamp('created_at').notNull().defaultNow(),
-  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
-});
-
-export const brainMessages = pgTable('brain_messages', {
-  id:        serial('id').primaryKey(),
-  chatId:    integer('chat_id').notNull().references(() => brainChats.id, { onDelete: 'cascade' }),
-  role:      varchar('role', { length: 16 }).notNull(),  // 'user' | 'assistant' | 'system'
-  content:   text('content').notNull().default(''),
-  metadata:  text('metadata'),  // JSON string (attachments, model info, etc.)
-  seq:       integer('seq').notNull().default(0),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-});
-
-// ---------------------------------------------------------------------------
-// Chat memories — compressed summaries of individual brain chats
-// ---------------------------------------------------------------------------
+// (The legacy Brain-only `brain_chats`/`brain_messages` tables — superseded by the
+// unified chats table in 0026 and orphaned — were dropped in migration 0271; the
+// unified table itself was renamed brain_chats there. See `brainChats` below.)
 
 export const chatMemories = pgTable('chat_memories', {
   id:             serial('id').primaryKey(),
   tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
-  chatId:         integer('chat_id').references(() => brainChats.id, { onDelete: 'cascade' }).unique(),
+  // Vestigial link to the old legacy brain_chats (dropped 0272) — chat memories
+  // are keyed on agent_host_session_id in practice; no FK (plain nullable id).
+  chatId:         integer('chat_id').unique(),
   agentHostSessionId:  integer('agent_host_session_id').references(() => chatSessions.id, { onDelete: 'cascade' }).unique(),
   projectId:      integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   summary:        text('summary').notNull().default(''),
@@ -1886,11 +2239,18 @@ export const projectMemories = pgTable('project_memories', {
 });
 
 // ---------------------------------------------------------------------------
-// Project chats (unified) — Brain Storm, IDE, and project-level chat.
-// origin = 'brainstorm' | 'ide' | 'project' tells the page which tools/actions to load.
+// Brain chats (unified, all-modality) — Brain Storm, IDE, and project-level chat
+// in ONE table (this is the store the live Brain reads/writes on every surface —
+// web, VS Code, on-prem). origin = 'brainstorm' | 'ide' | 'project' | 'team' tells
+// the page which tools/actions to load. origin='team' is the canonical, always-there
+// GROUP chat for a whole team — ONE per (tenant, projectId), projectId NULL for the
+// tenant-wide team chat (see migration 0294's uq_team_chat_scope). Named
+// `ide_project_chats` until migration 0272
+// renamed it `brain_chats` (the `ide_` prefix was a historical artifact — it
+// started IDE-only, then 0026 generalized it via the origin column).
 // ---------------------------------------------------------------------------
 
-export const ideProjectChats = pgTable('ide_project_chats', {
+export const brainChats = pgTable('brain_chats', {
   id:        serial('id').primaryKey(),
   projectId: integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
   tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
@@ -1900,9 +2260,83 @@ export const ideProjectChats = pgTable('ide_project_chats', {
   title:      varchar('title', { length: 500 }).notNull().default('New chat'),
   summary:    text('summary'),
   isArchived: boolean('is_archived').notNull().default(false),
+  /** LOCK primitive (0288): 'shared' = visible/joinable by any tenant teammate
+   *  (chats are global to project+tenant); 'locked' = private to owner + members. */
+  visibility: varchar('visibility', { length: 16 }).notNull().default('shared'),
+  /** What this chat is MAKING (0345) — a capability id from the client-side
+   *  registry (document / slides / dataviz / spreadsheet / website / design /
+   *  mobile / animation / game3d). Shapes the system prompt and the export format.
+   *  NULL = no capability ("anything"). Free-form: an unknown id reads as NULL. */
+  capability: varchar('capability', { length: 64 }),
+  /** Consolidation pointer (0266): when this chat was merged into another, the
+   *  surviving chat's id. Set with isArchived=true so the source drops out of the
+   *  list but any ticket still resolves to the one surviving conversation. */
+  mergedIntoChatId: integer('merged_into_chat_id').references((): AnyPgColumn => brainChats.id, { onDelete: 'set null' }),
+  /** TEAM CHAT scope (0294): when origin='team', which workforce team this chat is
+   *  the group channel for. NULL (with projectId also NULL) = the tenant-wide
+   *  "broader team" chat; projectId set = the project team chat. */
+  teamId:     integer('team_id').references(() => teams.id, { onDelete: 'cascade' }),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
 });
+
+// ---------------------------------------------------------------------------
+// Human chat participants (migration 0288) — the shared-access model. Until now a
+// brain_chats row had a single owner (user_id) and every access check filtered by
+// it, so a chat was strictly single-owner. This table is the human equivalent of
+// an agent invite (agent_assignments scope='chat'): a member (active user_id, or a
+// pending invited_email that converts on next access) may open, read, and post in a
+// chat they do not own. Owner-only admin (rename/archive/invite) stays on user_id.
+// ---------------------------------------------------------------------------
+
+export const chatMembers = pgTable('chat_members', {
+  id:           serial('id').primaryKey(),
+  chatId:       integer('chat_id').notNull().references(() => brainChats.id, { onDelete: 'cascade' }),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  /** Resolved member (an existing account); NULL while the invite is pending. */
+  userId:       varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'cascade' }),
+  /** Lower-cased; set for a cold invite whose email has no account yet. */
+  invitedEmail: varchar('invited_email', { length: 255 }),
+  role:         varchar('role', { length: 24 }).notNull().default('participant'),
+  /** 'active' (has access now) | 'pending' (email invite, converts on access). */
+  status:       varchar('status', { length: 16 }).notNull().default('active'),
+  invitedBy:    varchar('invited_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_chat_members_user').on(t.chatId, t.userId),
+  index('idx_chat_members_user').on(t.tenantId, t.userId),
+]);
+
+// ---------------------------------------------------------------------------
+// Chat <-> ticket links (0266) — a many-to-many, lineage-aware edge between a
+// Brain chat and a work item of ANY tier (portfolio | objective | initiative |
+// epic | task). MANY chats can reference one ticket; ONE chat can reference MANY
+// tickets (a brainstorm that spawned several). ticketRef is the target id AS TEXT
+// (tasks.id is int; the strategy-tier ids are UUIDs) so one column addresses
+// every tier — resolved against the right table by ticketKind at read time.
+// ---------------------------------------------------------------------------
+
+export const chatTicketLinks = pgTable('chat_ticket_links', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  chatId:     integer('chat_id').notNull().references(() => brainChats.id, { onDelete: 'cascade' }),
+  /** 'portfolio'|'objective'|'initiative'|'roadmap'|'spec'|'epic'|'gap'|'task' (spine + roadmap + spec + gap). */
+  ticketKind: varchar('ticket_kind', { length: 12 }).notNull(),
+  /** Target id as text — tasks.id (epic/gap/task) or a UUID (portfolio/objective/initiative/roadmap/spec). */
+  ticketRef:  varchar('ticket_ref', { length: 64 }).notNull(),
+  /** Lineage: 'created' (ticket spawned from this chat) | 'linked' (attached later). */
+  linkType:   varchar('link_type', { length: 16 }).notNull().default('linked'),
+  /** User id or agent ref that made the link (provenance). */
+  createdBy:  varchar('created_by', { length: 64 }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_chat_ticket_links').on(t.chatId, t.ticketKind, t.ticketRef),
+  index('idx_chat_ticket_links_chat').on(t.tenantId, t.chatId),
+  index('idx_chat_ticket_links_ticket').on(t.tenantId, t.ticketKind, t.ticketRef),
+]);
 
 // ---------------------------------------------------------------------------
 // Cron jobs (agentHost-scoped, optionally project-associated, synced via GUID)
@@ -1927,15 +2361,52 @@ export const cronJobs = pgTable('cron_jobs', {
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 });
 
-export const ideProjectChatMessages = pgTable('ide_project_chat_messages', {
+export const brainChatMessages = pgTable('brain_chat_messages', {
   id:        serial('id').primaryKey(),
-  chatId:    integer('chat_id').notNull().references(() => ideProjectChats.id, { onDelete: 'cascade' }),
+  chatId:    integer('chat_id').notNull().references(() => brainChats.id, { onDelete: 'cascade' }),
   role:      varchar('role', { length: 16 }).notNull(),
   content:   text('content').notNull().default(''),
   metadata:  text('metadata'),
+  /** Optional producer idempotency key (for example executionId:phase). */
+  eventKey:  varchar('event_key', { length: 160 }),
   seq:       integer('seq').notNull().default(0),
   createdAt: timestamp('created_at').notNull().defaultNow(),
-});
+}, (t) => [
+  uniqueIndex('uq_brain_chat_messages_event').on(t.chatId, t.eventKey),
+]);
+
+// ---------------------------------------------------------------------------
+// Brain chat TRACE (0330) — the tool/LLM-turn timeline that survives a reload.
+// A Brain run streams a sequence of trace events (llm | tool | recall | learn |
+// reconcile | message | error) that the webview renders as the "thinking" /
+// tool-call timeline. Those events lived only in the browser, so reopening a
+// chat lost every tool turn. This table persists them (append-only, per chat)
+// so the frontend can rehydrate the timeline on chat load. Kept deliberately
+// simple: one row per event, JSON args/result as text, durations for the UI.
+// ---------------------------------------------------------------------------
+
+export const brainChatTrace = pgTable('brain_chat_trace', {
+  id:         serial('id').primaryKey(),
+  chatId:     integer('chat_id').notNull().references(() => brainChats.id, { onDelete: 'cascade' }),
+  /** Monotonic per-run turn ordinal (groups events of the same assistant turn). */
+  turnSeq:    integer('turn_seq'),
+  /** 'llm'|'tool'|'message'|'recall'|'learn'|'reconcile'|'error'. */
+  kind:       varchar('kind', { length: 24 }).notNull(),
+  /** Short human label (tool name, model id, step name). */
+  label:      varchar('label', { length: 120 }),
+  /** JSON-as-text: the tool/LLM call arguments (bounded by the caller). */
+  argsJson:   text('args_json'),
+  /** JSON-as-text: the tool/LLM result (bounded by the caller). */
+  resultJson: text('result_json'),
+  isError:    boolean('is_error').notNull().default(false),
+  /** Full-step wall time (ms). */
+  durationMs: integer('duration_ms'),
+  /** Time-to-first-token (ms) for an 'llm' step; null otherwise. */
+  ttftMs:     integer('ttft_ms'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_brain_chat_trace_chat').on(t.chatId, t.id),
+]);
 
 // ---------------------------------------------------------------------------
 // OAuth accounts — one user → many providers (added by migration 0034)
@@ -1973,6 +2444,21 @@ export const magicLinkTokens = pgTable('magic_link_tokens', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
+/** One-time 6-digit email-ownership codes issued at password signup (and re-issued when
+ *  an unverified account tries to sign in). The code itself is never stored — only its
+ *  SHA-256 hash. A row is consumed on success, superseded when a newer code is issued,
+ *  and rejected once `attempts` hits the cap or `expiresAt` passes. (mig 0285) */
+export const emailVerificationCodes = pgTable('email_verification_codes', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  userId:     varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  email:      varchar('email', { length: 255 }).notNull(),
+  codeHash:   varchar('code_hash', { length: 64 }).notNull(),
+  expiresAt:  timestamp('expires_at').notNull(),
+  attempts:   integer('attempts').notNull().default(0),
+  consumedAt: timestamp('consumed_at'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+});
+
 // ===========================================================================
 // PHASE 6 — Dev Analytics & Team Intelligence (DevDynamics)
 // ===========================================================================
@@ -1983,6 +2469,7 @@ export const magicLinkTokens = pgTable('magic_link_tokens', {
 
 export const integrationProviderEnum = pgEnum('integration_provider', [
   'github', 'gitlab', 'bitbucket', 'jira', 'confluence', 'freshservice', 'rally', 'freshworks',
+  'freshdesk',
   'google_calendar',
   // 0221 — single-pane / migration connectors
   'servicenow', 'linear', 'sentry', 'pagerduty', 'monday', 'asana', 'clickup',
@@ -2242,6 +2729,9 @@ export const teams = pgTable('teams', {
   segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
   name:        varchar('name', { length: 255 }).notNull(),
   description: text('description'),
+  /** A team can give itself an avatar (0294) — shown on the team card + as the face
+   *  of its team chat. An /api/brain/upload R2 URL or any image URL. */
+  avatarUrl:   varchar('avatar_url', { length: 500 }),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 });
@@ -2295,6 +2785,8 @@ export const reportSchedules = pgTable('report_schedules', {
   /** JSON array of email addresses */
   recipients:   text('recipients').notNull().default('[]'),
   isEnabled:    boolean('is_enabled').notNull().default(true),
+  /** Attached tabular artifact format for the delivered report (EMP-20, mig 0318). */
+  exportFormat: varchar('export_format', { length: 8 }).notNull().default('csv'), // csv | html
   lastRunAt:    timestamp('last_run_at'),
   nextRunAt:    timestamp('next_run_at'),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
@@ -2344,6 +2836,22 @@ export const agentMemory = pgTable('agent_memory', {
   content:    text('content').notNull(),
   /** JSON array of tag strings, stored as text. */
   tags:       text('tags').notNull().default('[]'),
+  importance: real('importance').notNull().default(0.5),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+});
+
+// Shared per-PROJECT write-through facts store (migration 0276) — the project-scoped
+// twin of agent_memory. Every surface (VS Code, web Brain, cloud, on-prem) reads +
+// writes the same project facts, so a fact one run learns is recalled by all. The
+// (tenant_id, project_id, key) uniqueness is enforced in the migration (upsert target).
+export const projectFacts = pgTable('project_facts', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:  integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  key:        varchar('key', { length: 255 }).notNull(),
+  content:    text('content').notNull(),
+  source:     varchar('source', { length: 64 }).notNull().default('agent'),
   importance: real('importance').notNull().default(0.5),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
@@ -2801,6 +3309,12 @@ export const objectives = pgTable('objectives', {
   segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   portfolioId:  uuid('portfolio_id').references(() => portfolios.id, { onDelete: 'set null' }),
   initiativeId: uuid('initiative_id').references(() => initiatives.id, { onDelete: 'set null' }),
+  /** Direct PROJECT scope (0268) — a fourth scope axis alongside portfolio/initiative.
+   *  An objective created "for a project" (the Brain's `objectives.create` with a
+   *  projectId, the OKR tab's project scope) lives here; the Project 360 counts these
+   *  as the project's linked goals (its Direction dimension) without needing a task or
+   *  initiative link. Null = an org/portfolio/initiative-level objective. */
+  projectId:    integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   title:        varchar('title', { length: 255 }).notNull(),
   description:  text('description'),
   period:       varchar('period', { length: 20 }), // e.g. '2026-Q2' — DERIVED from startDate (0225); kept for reporting/grouping
@@ -2867,9 +3381,13 @@ export const productReleases = pgTable('product_releases', {
   id:          uuid('id').primaryKey().defaultRandom(),
   tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  // Project scope + delivery dates for the release-picker (EMP-10a, migration 0316).
+  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   name:        varchar('name', { length: 255 }).notNull(),
   version:     varchar('version', { length: 50 }),
   releaseDate: timestamp('release_date'),
+  targetDate:  timestamp('target_date'),
+  releasedAt:  timestamp('released_at'),
   status:      varchar('status', { length: 20 }).notNull().default('planned'),
   notes:       text('notes'),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
@@ -3063,6 +3581,8 @@ export const ceremonySessions = pgTable('ceremony_sessions', {
   turnStartedAt:  timestamp('turn_started_at'),
   startedAt:      timestamp('started_at').notNull().defaultNow(),
   endedAt:        timestamp('ended_at'),
+  /** Set when the frequent cron sweep auto-opened this session from a schedule (0349). */
+  scheduleId:     uuid('schedule_id'),
   createdAt:      timestamp('created_at').notNull().defaultNow(),
   updatedAt:      timestamp('updated_at').notNull().defaultNow(),
 });
@@ -3079,6 +3599,150 @@ export const ceremonyParticipants = pgTable('ceremony_participants', {
   durationMs:  integer('duration_ms').notNull().default(0),
   createdAt:   timestamp('created_at').notNull().defaultNow(),
   updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Ceremony schedules (migration 0349) — the cadence layer that makes standups /
+// plannings run themselves. The frequent cron sweep (runDueCeremonies) opens a
+// ceremony_sessions row with its roster pre-seeded for every enabled row whose
+// nextRunAt has elapsed, then re-arms nextRunAt from the cron expression.
+//
+// Cadence is the SAME representation as qaSchedules / workflowTriggers (5-field
+// cron + IANA timezone via domain/workflowSchedule.nextCronTime) — one cadence
+// language across every scheduled subsystem. `kind` mirrors ceremonySessions.kind
+// exactly; retros are their own subsystem (retrospectives) and are not modelled here.
+// ---------------------------------------------------------------------------
+
+export const ceremonySchedules = pgTable('ceremony_schedules', {
+  id:               uuid('id').primaryKey().defaultRandom(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:        uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:        integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  kind:             varchar('kind', { length: 16 }).notNull().default('standup'),   // 'standup' | 'planning'
+  cron:             varchar('cron', { length: 120 }).notNull(),
+  timezone:         varchar('timezone', { length: 64 }).notNull().default('UTC'),
+  enabled:          boolean('enabled').notNull().default(true),
+  /** Stamped onto the auto-opened session; null inherits the board's setting. */
+  turnMode:         varchar('turn_mode', { length: 16 }),
+  turnSeconds:      integer('turn_seconds'),
+  /** 'members' (derive from project members) | 'roster' (explicit participants). */
+  participantScope: varchar('participant_scope', { length: 16 }).notNull().default('members'),
+  /** JSON array of { kind, ref, name }; used when participantScope = 'roster'. */
+  participants:     text('participants').notNull().default('[]'),
+  maxParticipants:  integer('max_participants').notNull().default(25),
+  /** Server-side dispatch when the opened session completes (was client-driven). */
+  autoDispatch:     boolean('auto_dispatch').notNull().default(false),
+  nextRunAt:        timestamp('next_run_at'),
+  lastRunAt:        timestamp('last_run_at'),
+  lastStatus:       varchar('last_status', { length: 24 }),
+  lastSessionId:    uuid('last_session_id'),
+  createdBy:        varchar('created_by', { length: 36 }),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Live video/audio collaboration — scheduled meetings + calendar connections
+// (migration 0292). A meeting is a standup / planning / retro / ad-hoc / direct
+// call; peers exchange WebRTC media via the CeremonyRoomDO relay keyed off
+// `roomKey`. Calendars are per-user OAuth grants used to schedule + list events.
+// ---------------------------------------------------------------------------
+
+export const meetings = pgTable('meetings', {
+  id:               uuid('id').primaryKey().defaultRandom(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:        uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  // Nullable: an ad-hoc / direct call need not belong to a project.
+  projectId:        integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  kind:             varchar('kind', { length: 16 }).notNull().default('adhoc'),        // standup|planning|retrospective|adhoc|direct|interview|review
+  title:            varchar('title', { length: 255 }).notNull(),
+  description:      text('description'),
+  /** Gig Marketplace (0293): track a review/interview meeting against the exact
+   *  work item, job posting, or engagement it concerns (all optional back-links). */
+  ticketId:         integer('ticket_id').references((): AnyPgColumn => tasks.id, { onDelete: 'set null' }),
+  jobId:            varchar('job_id', { length: 36 }),
+  engagementId:     varchar('engagement_id', { length: 36 }),
+  /** Team Chat backchannel (0294): the meeting IS a team chat — joining opens this
+   *  conversation, and people who can't attend still post their updates here so the
+   *  chat keeps going after the call. Resolved to the scope's canonical team chat. */
+  chatId:           integer('chat_id').references((): AnyPgColumn => brainChats.id, { onDelete: 'set null' }),
+  scheduledAt:      timestamp('scheduled_at', { withTimezone: true }),                 // null = start-now
+  durationMinutes:  integer('duration_minutes').notNull().default(30),
+  status:           varchar('status', { length: 16 }).notNull().default('scheduled'),  // scheduled|live|ended|cancelled
+  createdBy:        varchar('created_by', { length: 64 }),
+  roomKey:          varchar('room_key', { length: 64 }).notNull(),                     // media relay room (media:<roomKey>)
+  videoEnabled:     boolean('video_enabled').notNull().default(true),
+  calendarProvider: varchar('calendar_provider', { length: 16 }),                      // google|microsoft
+  calendarEventId:  varchar('calendar_event_id', { length: 255 }),
+  calendarHtmlLink: text('calendar_html_link'),
+  startedAt:        timestamp('started_at', { withTimezone: true }),
+  endedAt:          timestamp('ended_at', { withTimezone: true }),
+  /** Recording/transcription (0330): the generated minutes (recap + decisions +
+   *  action items) built from the transcript on meeting end. Also posted into the
+   *  linked team chat as the durable artifact. Null until summarized. */
+  summary:            text('summary'),
+  summaryGeneratedAt: timestamp('summary_generated_at', { withTimezone: true }),
+  createdAt:        timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * meeting_transcript_segments (0330) — the running transcript of a live meeting.
+ * One row per spoken line: a human line captured client-side (browser
+ * SpeechRecognition) or an AGENT line produced by an LLM turn. Ordered by `atMs`
+ * (ms since the meeting started).
+ */
+export const meetingTranscriptSegments = pgTable('meeting_transcript_segments', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  meetingId:   uuid('meeting_id').notNull().references(() => meetings.id, { onDelete: 'cascade' }),
+  speakerRef:  varchar('speaker_ref', { length: 64 }).notNull(),
+  speakerName: varchar('speaker_name', { length: 255 }).notNull(),
+  speakerKind: varchar('speaker_kind', { length: 16 }).notNull().default('human'), // human|agent
+  text:        text('text').notNull(),
+  atMs:        bigint('at_ms', { mode: 'number' }).notNull().default(0),
+  createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const meetingAttendees = pgTable('meeting_attendees', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  meetingId:   uuid('meeting_id').notNull().references(() => meetings.id, { onDelete: 'cascade' }),
+  memberKind:  varchar('member_kind', { length: 16 }).notNull().default('human'),      // human|cloud_agent|host_agent
+  memberRef:   varchar('member_ref', { length: 64 }).notNull(),
+  memberName:  varchar('member_name', { length: 255 }).notNull(),
+  email:       varchar('email', { length: 255 }),
+  role:        varchar('role', { length: 16 }).notNull().default('attendee'),          // host|attendee
+  response:    varchar('response', { length: 16 }).notNull().default('invited'),       // invited|accepted|declined|tentative
+  joinedAt:    timestamp('joined_at', { withTimezone: true }),
+  leftAt:      timestamp('left_at', { withTimezone: true }),
+  createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const userAvailability = pgTable('user_availability', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  userId:     varchar('user_id', { length: 64 }).notNull(),
+  timezone:   varchar('timezone', { length: 64 }).notNull().default('UTC'),
+  // Weekly recurring windows: [{ day: 0-6 (0=Sun), start: minutesFromMidnight, end: minutes }]
+  windows:    jsonb('windows').notNull().default('[]'),
+  updatedAt:  timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt:  timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const calendarConnections = pgTable('calendar_connections', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  userId:        varchar('user_id', { length: 64 }).notNull(),                         // users.id (the connector)
+  provider:      varchar('provider', { length: 16 }).notNull(),                        // google|microsoft
+  accountEmail:  varchar('account_email', { length: 255 }),
+  accessToken:   text('access_token').notNull(),
+  refreshToken:  text('refresh_token'),
+  expiresAt:     timestamp('expires_at', { withTimezone: true }),
+  scope:         text('scope'),
+  calendarId:    varchar('calendar_id', { length: 255 }).notNull().default('primary'),
+  createdAt:     timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
@@ -3540,6 +4204,20 @@ export const boards = pgTable('boards', {
    *  so only live work is shown (migration 0194). Display-only — does not affect
    *  the coordinator lifecycle or capacity. */
   hideDoneItems:        boolean('hide_done_items').notNull().default(false),
+  /** Governance gate: when true (default), running a HIGH/URGENT priority ticket
+   *  on this board first opens a manager-approval request before the agent
+   *  executes (see evaluateExecutionApprovalGate). A manager can set this FALSE to
+   *  OVERRIDE the gate so high/urgent work runs without approval (migration 0257). */
+  requireExecutionApproval: boolean('require_execution_approval').notNull().default(true),
+  /** The kanban template this board was provisioned from (migration 0274) — a
+   *  built-in slug ('standard-swe') or a kanban_templates.id. Null = the legacy
+   *  hardcoded default lanes. Records provenance; re-applying overwrites lanes. */
+  templateId:          varchar('template_id', { length: 120 }),
+  /** Lifecycle-managed (PRD §5.5): when true the ticket's Assignee is the COORDINATOR
+   *  and is never the default per-stage executor — the owner→executor auto-run fallback
+   *  is suppressed and the per-stage producer is resolved by role capability. Default
+   *  false = legacy behaviour (migration 0335). */
+  lifecycleManaged:    boolean('lifecycle_managed').notNull().default(false),
   createdAt:            timestamp('created_at').notNull().defaultNow(),
   updatedAt:            timestamp('updated_at').notNull().defaultNow(),
 });
@@ -3562,6 +4240,10 @@ export const swimlanes = pgTable('swimlanes', {
   actionTarget:     varchar('action_target', { length: 64 }), // target lane key (move_ticket) | workflow id (run_workflow)
   successPolicy:    varchar('success_policy', { length: 16 }).notNull().default('all'), // 'all' | 'any' | 'n_of_m'
   successThreshold: integer('success_threshold'),             // required when successPolicy='n_of_m'
+  // How strictly this lane's requirements (swimlane_requirements) gate entry
+  // (migration 0274): 'off' = audit-only, 'soft' = flag + round-trip the reviewer
+  // (default), 'hard' = block the auto-advance until required checks are satisfied.
+  requirementGate:  varchar('requirement_gate', { length: 8 }).notNull().default('soft'),
   createdAt:     timestamp('created_at').notNull().defaultNow(),
   updatedAt:     timestamp('updated_at').notNull().defaultNow(),
   // UNIQUE (board_id, key) enforced in migration 0064 (kept out of the pgTable
@@ -3622,6 +4304,181 @@ export const swimlaneTransitions = pgTable('swimlane_transitions', {
   workflowStatus: varchar('workflow_status', { length: 16 }),
   detail:         text('detail'),
   at:             timestamp('at').notNull().defaultNow(),
+});
+
+// ── Agentic Workforce Kanban: roles, templates & per-lane requirements (0274) ─
+// One primitive — a KanbanTemplate binding {roles, required checks, gate} to each
+// lane — powers the built-in Standard SWE board, custom kanbans, the recommended
+// roster, per-ticket auditing, and swimlane gating. Built-in roles/templates live
+// as TS constants; these tables hold only tenant-created/forked/published rows.
+
+/** Tenant-extensible tail of the job-function role taxonomy (canonical set in code). */
+export const jobRoles = pgTable('job_roles', {
+  id:          varchar('id', { length: 36 }).primaryKey(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  key:         varchar('key', { length: 60 }).notNull(),
+  name:        varchar('name', { length: 120 }).notNull(),
+  description: text('description'),
+  discipline:  varchar('discipline', { length: 60 }).notNull().default('engineering'),
+  color:       varchar('color', { length: 24 }),
+  icon:        varchar('icon', { length: 16 }),
+  position:    integer('position').notNull().default(0),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+/** A reusable / shareable / sellable kanban board definition (marketplace artifact). */
+export const kanbanTemplates = pgTable('kanban_templates', {
+  id:               varchar('id', { length: 36 }).primaryKey(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  slug:             varchar('slug', { length: 120 }).notNull(),
+  name:             varchar('name', { length: 160 }).notNull(),
+  description:      text('description'),
+  category:         varchar('category', { length: 60 }).notNull().default('software'),
+  teamType:         varchar('team_type', { length: 80 }),
+  parentTemplateId: varchar('parent_template_id', { length: 120 }),
+  authorId:         varchar('author_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  published:        boolean('published').notNull().default(false),
+  visibility:       varchar('visibility', { length: 10 }).notNull().default('private'), // private|tenant|public
+  priceCents:       integer('price_cents'),
+  pricingModel:     varchar('pricing_model', { length: 20 }),
+  priceUnit:        varchar('price_unit', { length: 40 }),
+  installCount:     integer('install_count').notNull().default(0),
+  version:          integer('version').notNull().default(1),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+});
+
+/** A lane within a kanban template. */
+export const kanbanTemplateLanes = pgTable('kanban_template_lanes', {
+  id:              varchar('id', { length: 36 }).primaryKey(),
+  templateId:      varchar('template_id', { length: 36 }).notNull().references(() => kanbanTemplates.id, { onDelete: 'cascade' }),
+  key:             varchar('key', { length: 120 }).notNull(),
+  name:            varchar('name', { length: 255 }).notNull(),
+  position:        integer('position').notNull().default(0),
+  isTerminal:      boolean('is_terminal').notNull().default(false),
+  gate:            varchar('gate', { length: 16 }).notNull().default('auto'),
+  requirementGate: varchar('requirement_gate', { length: 8 }).notNull().default('soft'),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+});
+
+/** Roles responsible + checks (role sign-off / diagnostic) required at a template lane. */
+export const kanbanTemplateLaneRequirements = pgTable('kanban_template_lane_requirements', {
+  id:             varchar('id', { length: 36 }).primaryKey(),
+  laneId:         varchar('lane_id', { length: 36 }).notNull().references(() => kanbanTemplateLanes.id, { onDelete: 'cascade' }),
+  kind:           varchar('kind', { length: 16 }).notNull(),   // role | diagnostic | review
+  ref:            varchar('ref', { length: 120 }).notNull(),   // role key | diagnostic tool id
+  responsibility: varchar('responsibility', { length: 16 }),   // owner | reviewer | contributor
+  isRequired:     boolean('is_required').notNull().default(true),
+  description:    text('description'),
+  position:       integer('position').notNull().default(0),
+  ticketType:     varchar('ticket_type', { length: 32 }),      // null = all ticket types
+  quorum:         integer('quorum'),                            // N-of-M; null = all required
+  condition:      varchar('condition', { length: 48 }),        // small enum predicate
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+});
+
+/** LIVE per-lane requirements materialised onto a board's swimlanes when a template
+ *  is applied (and directly editable). Keeps the running board self-describing for
+ *  the audit + gating engines regardless of template provenance. */
+export const swimlaneRequirements = pgTable('swimlane_requirements', {
+  id:             varchar('id', { length: 36 }).primaryKey(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  swimlaneId:     uuid('swimlane_id').notNull().references(() => swimlanes.id, { onDelete: 'cascade' }),
+  kind:           varchar('kind', { length: 16 }).notNull(),
+  ref:            varchar('ref', { length: 120 }).notNull(),
+  responsibility: varchar('responsibility', { length: 16 }),
+  isRequired:     boolean('is_required').notNull().default(true),
+  description:    text('description'),
+  position:       integer('position').notNull().default(0),
+  ticketType:     varchar('ticket_type', { length: 32 }),      // null = all ticket types
+  quorum:         integer('quorum'),                            // N-of-M; null = all required
+  condition:      varchar('condition', { length: 48 }),        // small enum predicate
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+});
+
+/** Explicit roster role assignment — a manager pinning an existing agent / human
+ *  member / hired contractor to a role. `projectId` NULL = workspace-default (applies
+ *  to every project); set = project-specific. The roster merges these into each role's
+ *  `filledBy` (via='assignment'). */
+export const projectRoleAssignments = pgTable('project_role_assignments', {
+  id:           varchar('id', { length: 36 }).primaryKey(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:    integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  roleKey:      varchar('role_key', { length: 120 }).notNull(),
+  assigneeKind: varchar('assignee_kind', { length: 16 }).notNull(), // agent | human | hire
+  assigneeRef:  varchar('assignee_ref', { length: 128 }).notNull(),
+  assigneeName: varchar('assignee_name', { length: 200 }),
+  createdBy:    varchar('created_by', { length: 36 }),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+});
+
+/** Append-only ledger: a member acting AS a role approved / requested-changes on a
+ *  ticket at a lane. The audit engine reads this to satisfy role/review requirements. */
+export const ticketRoleSignoffs = pgTable('ticket_role_signoffs', {
+  id:         varchar('id', { length: 36 }).primaryKey(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  taskId:     integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  laneKey:    varchar('lane_key', { length: 120 }),
+  roleKey:    varchar('role_key', { length: 60 }).notNull(),
+  memberKind: varchar('member_kind', { length: 16 }),
+  memberRef:  varchar('member_ref', { length: 64 }),
+  /** Denormalized signer display name — the accountability record must never be an
+   *  anonymous "system"; captured at write time so history survives a rename/delete. */
+  memberName: varchar('member_name', { length: 255 }),
+  verdict:    varchar('verdict', { length: 20 }).notNull().default('approved'), // approved | changes_requested | waived | delegated
+  summary:    text('summary'),
+  /** Verifiable link to the actual work backing this sign-off — the interaction that
+   *  makes it more than a rubber stamp: { executionId?, prdRevision?, prUrl?, diffFiles?, reviewThreadRef?, toolRunId? }. */
+  contribution: jsonb('contribution'),
+  waiveReason:  text('waive_reason'), // required for waived/delegated
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+});
+
+/** The per-ticket Participation Manifest — the forward-looking, stateful roster of
+ *  who MUST participate on a ticket, who has, and with what evidence. Derived from
+ *  the applicable process template and kept live; a Resource Assessment step ADDS
+ *  rows (source='assessment') so the manifest is dynamic. Each row may materialize
+ *  as a child task (childTaskId) so the parent ticket's %-complete rolls up. */
+export const ticketParticipants = pgTable('ticket_participants', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  taskId:         integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  stageKey:       varchar('stage_key', { length: 120 }),
+  roleKey:        varchar('role_key', { length: 120 }).notNull(),
+  responsibility: varchar('responsibility', { length: 16 }).notNull().default('owner'), // owner | reviewer | contributor
+  required:       boolean('required').notNull().default(true),
+  source:         varchar('source', { length: 16 }).notNull().default('template'), // template | assessment | manual
+  assigneeKind:   varchar('assignee_kind', { length: 16 }), // agent | human | hire | null (unresolved)
+  assigneeRef:    varchar('assignee_ref', { length: 128 }),
+  assigneeName:   varchar('assignee_name', { length: 255 }),
+  // pending|assigned|in_progress|completed|changes_requested|waived|skipped|unstaffed
+  state:          varchar('state', { length: 24 }).notNull().default('pending'),
+  signoffId:      varchar('signoff_id', { length: 36 }).references(() => ticketRoleSignoffs.id, { onDelete: 'set null' }),
+  childTaskId:    integer('child_task_id').references((): AnyPgColumn => tasks.id, { onDelete: 'set null' }),
+  evidence:       jsonb('evidence'),
+  quorumGroup:    varchar('quorum_group', { length: 160 }),
+  note:           text('note'),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uidx_ticket_participants_slot').on(t.taskId, t.stageKey, t.roleKey, t.responsibility, t.source),
+  index('idx_ticket_participants_task').on(t.taskId),
+  index('idx_ticket_participants_tenant').on(t.tenantId),
+  index('idx_ticket_participants_child').on(t.childTaskId),
+]);
+
+/** Computed per-ticket audit result (upserted; one row per task). */
+export const ticketAudits = pgTable('ticket_audits', {
+  taskId:         integer('task_id').primaryKey().references(() => tasks.id, { onDelete: 'cascade' }),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  boardId:        uuid('board_id').references(() => boards.id, { onDelete: 'set null' }),
+  status:         varchar('status', { length: 12 }).notNull().default('pass'), // pass | flagged
+  coverage:       integer('coverage').notNull().default(100),
+  requiredCount:  integer('required_count').notNull().default(0),
+  satisfiedCount: integer('satisfied_count').notNull().default(0),
+  missing:        text('missing'),  // JSON array of unmet requirements
+  computedAt:     timestamp('computed_at').notNull().defaultNow(),
 });
 
 // ── Slice 2: External board connections & bidirectional sync ────────────────
@@ -3962,8 +4819,17 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
    *  so it is idempotent across the multiple terminal paths). No FK — executions is
    *  pruned independently and a scored outcome should survive the run row. The
    *  `.unique()` backs the scorer's `onConflictDoNothing({ target: executionId })`
-   *  (migration 0197 creates `run_model_outcomes_execution_id_key`). */
-  executionId:      integer('execution_id').notNull().unique(),
+   *  (migration 0197 creates `run_model_outcomes_execution_id_key`). NULLABLE since
+   *  migration 0283: client/IDE/on-prem runs have no cloud execution and instead
+   *  key on `clientRunId`. */
+  executionId:      integer('execution_id').unique(),
+  /** Where the outcome came from: 'cloud' (default) | 'onprem' | 'ide' | 'external'
+   *  (migration 0283). Lets analytics split learned-routing quality by surface. */
+  source:           varchar('source', { length: 16 }).notNull().default('cloud'),
+  /** The client's own idempotency key for a NON-cloud run (no execution id).
+   *  Partial-unique so client runs upsert on it while cloud rows (NULL) don't
+   *  collide (migration 0283). */
+  clientRunId:      varchar('client_run_id', { length: 128 }),
   cloudAgentRef:    varchar('cloud_agent_ref', { length: 64 }),
   /** The cached task action-type label at scoring time (defaults to 'other'). */
   actionType:       varchar('action_type', { length: 32 }).notNull().default('other'),
@@ -3980,6 +4846,19 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
   steps:            integer('steps').notNull().default(0),
   costUsdMillicents: integer('cost_usd_millicents').notNull().default(0),
   terminalStatus:   varchar('terminal_status', { length: 16 }).notNull(), // completed|failed|cancelled
+  // ── Literal tool-use + human-review telemetry (migration 0333) ─────────────
+  // Captured by the scorer from tool_audit_events / approvals / the PR row so trait
+  // reinforcement reads REAL counts (toolErrorRate = tool_errors/tool_calls;
+  // humanRejected = an approval rejected OR the PR closed unmerged) instead of the old
+  // degraded/cancelled PROXIES. NULLABLE on purpose: rows scored BEFORE 0333 stay NULL
+  // and `outcomeToSignal` falls back to the historical proxy for those alone.
+  /** Total tool calls the run made (category='tool' audit events). */
+  toolCalls:        integer('tool_calls'),
+  /** How many of those tool calls returned an error (`ok:false`). */
+  toolErrors:       integer('tool_errors'),
+  /** A human rejected the work: a bubbled-up approval was rejected OR the PR was
+   *  closed without merging. */
+  humanRejected:    boolean('human_rejected'),
   // ── Semantic evaluation (Layer 6 — eval, migration 0222) ──────────────────
   // Quality scores for the run's deliverable, 0..1. Nullable: populated by the
   // evaluator on terminal (lexical, inline, zero-cost) or upgraded by the
@@ -3993,6 +4872,60 @@ export const runModelOutcomes = pgTable('run_model_outcomes', {
   /** 'lexical' | 'llm' — which evaluation backend scored this run. */
   evalMethod:       varchar('eval_method', { length: 8 }),
   createdAt:        timestamp('created_at').notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Personality LEARNING + TRACKING (migration 0324, Gaps 6 & 7).
+//   personalityEvents      — one row each time a personality/persona is applied to a
+//                            run; the durable spine the /api/personality events
+//                            endpoint + PersonalityUsagePanel read.
+//   traitReinforcements    — proposed/applied/dismissed outcome-driven trait nudges
+//                            with full provenance (vector before/after), so the
+//                            static trait vector can self-update reversibly + audited.
+// ---------------------------------------------------------------------------
+
+/** Which personality was applied to a run (agent, run/session, source, summary). */
+export const personalityEvents = pgTable('personality_events', {
+  id:                serial('id').primaryKey(),
+  tenantId:          integer('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
+  /** ide_agents.id (== run_model_outcomes.cloud_agent_ref) whose personality applied. */
+  agentRef:          varchar('agent_ref', { length: 64 }).notNull(),
+  /** The run: executionId for cloud runs; runId/sessionKey for the embedded runner. */
+  executionId:       integer('execution_id'),
+  runId:             varchar('run_id', { length: 128 }),
+  sessionKey:        varchar('session_key', { length: 255 }),
+  /** 'agent' | 'persona' | 'blended' | a raw profile source. */
+  profileSource:     varchar('profile_source', { length: 24 }).notNull().default('agent'),
+  /** JSON string[] of the persona/agent names applied. */
+  personaIds:        text('persona_ids'),
+  directivesSummary: text('directives_summary'),
+  directiveCount:    integer('directive_count').notNull().default(0),
+  thinkLevel:        varchar('think_level', { length: 16 }),
+  reasoningLevel:    varchar('reasoning_level', { length: 8 }),
+  temperature:       real('temperature'),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+});
+
+/** A proposed/applied/dismissed outcome-driven trait reinforcement (reversible). */
+export const traitReinforcements = pgTable('trait_reinforcements', {
+  id:            serial('id').primaryKey(),
+  tenantId:      integer('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
+  agentRef:      varchar('agent_ref', { length: 64 }).notNull(),
+  /** 'proposed' | 'applied' | 'dismissed'. */
+  status:        varchar('status', { length: 16 }).notNull().default('proposed'),
+  /** JSON Record<dimensionId, number> — the bounded per-dimension nudges. */
+  deltas:        text('deltas').notNull(),
+  /** JSON string[] — the reason for each nudge. */
+  rationale:     text('rationale'),
+  basedOnRuns:   integer('based_on_runs').notNull().default(0),
+  windowDays:    integer('window_days').notNull().default(0),
+  /** Reversibility: the exact vector before/after the change (after null until applied). */
+  vectorBefore:  text('vector_before'),
+  vectorAfter:   text('vector_after'),
+  autoApplied:   boolean('auto_applied').notNull().default(false),
+  proposedAt:    timestamp('proposed_at').notNull().defaultNow(),
+  decidedAt:     timestamp('decided_at'),
+  decidedBy:     varchar('decided_by', { length: 128 }),
 });
 
 // ---------------------------------------------------------------------------
@@ -4257,6 +5190,8 @@ export const marketplacePersonas = pgTable('marketplace_personas', {
   tags:         text('tags').notNull().default('[]'),
   /** Persona body: { voice, perspective, decisionStyle, outputPrefix, capabilities[], systemDirectives? }. */
   persona:      jsonb('persona').notNull().default(sql`'{}'::jsonb`),
+  /** JSON PsychometricProfile (Pro) — the behaviour-bearing trait vector; null = none. Compiled at run time. */
+  psychometric: text('psychometric'),
   /** 'private' | 'tenant' | 'public' */
   visibility:   varchar('visibility', { length: 16 }).notNull().default('private'),
   authorName:   varchar('author_name', { length: 255 }),
@@ -4303,6 +5238,24 @@ export const marketplaceKnowledge = pgTable('marketplace_knowledge', {
 }));
 
 /**
+ * knowledge_listing_purchases (migration 0320) — proof a tenant bought a PAID
+ * knowledge listing, which unlocks install for the whole workspace. Free listings
+ * need no row. One purchase per (listing, tenant).
+ */
+export const knowledgeListingPurchases = pgTable('knowledge_listing_purchases', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  listingId:    uuid('listing_id').notNull().references(() => marketplaceKnowledge.id, { onDelete: 'cascade' }),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  purchasedBy:  varchar('purchased_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  priceCents:   integer('price_cents').notNull().default(0),
+  provider:     varchar('provider', { length: 24 }).notNull().default('manual'),
+  externalRef:  varchar('external_ref', { length: 255 }),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  uniq: uniqueIndex('knowledge_listing_purchase_unique').on(t.listingId, t.tenantId),
+}));
+
+/**
  * tenant_models — the tenant "LLM" object (migration 0211). A reusable, named
  * bundle of { base model + system prompt + params (+ optional persona / BYO key /
  * future trained model) } that any cloud agent, on-prem host, or the Designer can
@@ -4332,6 +5285,57 @@ export const tenantModels = pgTable('tenant_models', {
 }, (t) => ({
   byTenant: index('idx_tenant_models_tenant').on(t.tenantId),
   uqSlug:   uniqueIndex('uq_tenant_models_slug').on(t.tenantId, t.slug),
+}));
+
+/**
+ * project_evermind (migration 0258) — the per-project, self-learning Evermind
+ * model pointer. The canonical weights live in R2 as versioned immutable objects
+ * (`evermind/project/<tenantId>/<projectId>/v<version>/…`); this row tracks the
+ * CURRENT version + learning mode. The ProjectEvermindCoordinator Durable Object
+ * is the single serialized writer (concurrent-learning + FedAvg merge); every
+ * surface reads `version` and runs a local replica. See [[evermind-learning-architecture]].
+ */
+export const projectEvermind = pgTable('project_evermind', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:     integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  name:          text('name').notNull().default('Project Evermind'),
+  /** Current canonical version (monotonic). 0 = not yet seeded (no model in R2). */
+  version:       integer('version').notNull().default(0),
+  /** 'connected' (pull + contribute) | 'offline-frozen' (pinned, no write-back). */
+  mode:          varchar('mode', { length: 16 }).notNull().default('connected'),
+  /** Total merged learning contributions across this model's life (telemetry). */
+  contributions: integer('contributions').notNull().default(0),
+  /**
+   * Opt-in consumer flag (migration 0264). When TRUE + seeded, agent runs for this
+   * project's tasks resolve their inference model to the project's current Evermind
+   * head — the emitter of the `project_evermind:<projectId>` pin. Independent of
+   * `mode` (write-back): read without contributing, or contribute without reading.
+   */
+  inferenceEnabled: boolean('inference_enabled').notNull().default(false),
+  /**
+   * Optional frontier-LLM TEACHER (migration 0277). When set to a gateway model id
+   * (e.g. `claude-opus-4-8`, a Mistral/GLM id), the coordinator distills: it asks
+   * that model for the exemplary version of each run and adapts the SSM on the
+   * teacher's output instead of the raw run text (teacher→student). NULL = learn
+   * from raw run text only (no teacher call, no teacher token cost).
+   */
+  teacherModel:  text('teacher_model'),
+  lastLearnedAt: timestamp('last_learned_at'),
+  /**
+   * Auto-quarantine bookkeeping (migration 0339). `serveFailureStreak` counts
+   * CONSECUTIVE incoherent serves (reset to 0 by any coherent serve or a manual
+   * re-enable); when it reaches the threshold the head is force-disabled and
+   * `quarantinedAt`/`quarantineReason` are stamped so a broken head stops answering
+   * users in gibberish. See `recordEvermindServeOutcome`.
+   */
+  serveFailureStreak: integer('serve_failure_streak').notNull().default(0),
+  quarantinedAt:     timestamp('quarantined_at'),
+  quarantineReason:  text('quarantine_reason'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  uqProject: uniqueIndex('uq_project_evermind_project').on(t.tenantId, t.projectId),
 }));
 
 // ── Insight-lens object tiers (migration 0220) ───────────────────────────────
@@ -4396,6 +5400,10 @@ export const toolRuns = pgTable('tool_runs', {
   // When set, the run was scored AGAINST this project; it contributes to the
   // project's diagnostic rating (which rolls up to the tenant). Null = workspace.
   projectId:  integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  // When set, the diagnostic was scored against a single ticket (migration 0275) —
+  // the ticket audit engine checks kind='diagnostic' requirements by looking for a
+  // tool_run on the task. Null = project/workspace-scoped run.
+  taskId:     integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
   toolId:     varchar('tool_id', { length: 64 }).notNull(),
   kind:       varchar('kind', { length: 16 }).notNull().default('self'), // self | data
   input:      jsonb('input').notNull().default(sql`'{}'::jsonb`),
@@ -4405,6 +5413,56 @@ export const toolRuns = pgTable('tool_runs', {
 }, (t) => ({
   byTenantTool: index('idx_tool_runs_tenant_tool').on(t.tenantId, t.toolId, t.createdAt),
   byProject: index('idx_tool_runs_project').on(t.tenantId, t.projectId, t.toolId, t.createdAt),
+}));
+
+/**
+ * Anonymous marketing session (migration 0279) — a logged-out visitor who runs a
+ * free Diagnostics & Tools diagnostic IS a lead. Keyed by a client-generated
+ * stable `visitorId`; tracks run volume + first-touch attribution and is stamped
+ * `converted` when the visitor creates an account. Not tenant-scoped (pre-signup).
+ */
+export const marketingSessions = pgTable('marketing_sessions', {
+  id:              uuid('id').primaryKey().defaultRandom(),
+  visitorId:       varchar('visitor_id', { length: 64 }).notNull(),
+  toolRuns:        integer('tool_runs').notNull().default(0),
+  lastToolId:      varchar('last_tool_id', { length: 64 }),
+  landingPath:     text('landing_path'),
+  referrer:        text('referrer'),
+  userAgent:       text('user_agent'),
+  utm:             jsonb('utm').notNull().default(sql`'{}'::jsonb`),
+  converted:       boolean('converted').notNull().default(false),
+  convertedUserId: varchar('converted_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  convertedAt:     timestamp('converted_at'),
+  // Guest Brain/Ideas chat metering (migration 0297) — a logged-out visitor can
+  // try the Brain before signing up; usage is counted per UTC day on this same
+  // lead row. `guestChatDay` is the UTC day the counters below apply to (reset
+  // when a new day's first message lands). Per-IP metering is KV-side.
+  guestChatDay:    date('guest_chat_day'),
+  guestChatCount:  integer('guest_chat_count').notNull().default(0),
+  guestChatTokens: integer('guest_chat_tokens').notNull().default(0),
+  firstSeenAt:     timestamp('first_seen_at').notNull().defaultNow(),
+  lastSeenAt:      timestamp('last_seen_at').notNull().defaultNow(),
+}, (t) => ({
+  byVisitor: uniqueIndex('uq_marketing_sessions_visitor').on(t.visitorId),
+  byLastSeen: index('idx_marketing_sessions_last_seen').on(t.lastSeenAt),
+}));
+
+/**
+ * Latest anonymous tool result per (visitor, tool) (migration 0279) — upserted on
+ * every free run so a returning visitor can see their diagnostics again and we can
+ * target them with a sign-up. Bounded (one row per visitor+tool) via upsert.
+ */
+export const marketingToolRuns = pgTable('marketing_tool_runs', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  visitorId:  varchar('visitor_id', { length: 64 }).notNull(),
+  toolId:     varchar('tool_id', { length: 64 }).notNull(),
+  input:      jsonb('input').notNull().default(sql`'{}'::jsonb`),
+  result:     jsonb('result').notNull().default(sql`'{}'::jsonb`),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byVisitorTool: uniqueIndex('uq_marketing_tool_runs').on(t.visitorId, t.toolId),
+  byVisitor: index('idx_marketing_tool_runs_visitor').on(t.visitorId, t.updatedAt),
 }));
 
 /**
@@ -4462,13 +5520,17 @@ export const knowledgeDocuments = pgTable('knowledge_documents', {
   tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
   projectId:     integer('project_id').references(() => projects.id, { onDelete: 'set null' }), // null = workspace-wide
-  docType:       varchar('doc_type', { length: 16 }).notNull().default('sop'),   // 'sop' | 'process' | 'doc'
+  docType:       varchar('doc_type', { length: 16 }).notNull().default('sop'),   // 'sop' | 'process' | 'doc' | 'postmortem' | 'known_error'
   title:         varchar('title', { length: 255 }).notNull(),
   summary:       varchar('summary', { length: 500 }),
   content:       text('content').notNull().default(''),
   status:        varchar('status', { length: 16 }).notNull().default('draft'),   // 'draft' | 'published' | 'archived'
   versionNumber: integer('version_number').notNull().default(0),                 // monotonic published version
   requiresAck:   boolean('requires_ack').notNull().default(false),
+  /** For an incident RCA / post-mortem (docType 'postmortem'), the prod_incidents
+   *  record it reviews (migration 0328) — the Knowledge → incident back-link. Null on
+   *  ordinary docs. */
+  sourceIncidentId: uuid('source_incident_id'),
   createdBy:     varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   updatedBy:     varchar('updated_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   publishedAt:   timestamp('published_at'),
@@ -4574,12 +5636,217 @@ export const prodIncidents = pgTable('prod_incidents', {
   impact:         text('impact'),
   rootCause:      text('root_cause'),
   postmortemUrl:  varchar('postmortem_url', { length: 512 }),
+  // Active-response fields (migration 0325): the bridge to the board + war-room +
+  // escalation state that turns this metrics record into a live incident.
+  boardTaskId:        integer('board_task_id'),               // linked 'incident' kanban task
+  affectedSystem:     varchar('affected_system', { length: 120 }),
+  assignedAgentRef:   varchar('assigned_agent_ref', { length: 64 }),
+  warRoomChatId:      integer('war_room_chat_id'),            // → brainChats.id (serial)
+  escalationPolicyId: uuid('escalation_policy_id'),           // → escalationPolicies.id
+  escalationLevel:    integer('escalation_level').notNull().default(0),
+  lastEscalatedAt:    timestamp('last_escalated_at'),
+  externalUrl:        varchar('external_url', { length: 512 }),
   createdAt:      timestamp('created_at').notNull().defaultNow(),
   updatedAt:      timestamp('updated_at').notNull().defaultNow(),
 }, (t) => ({
   byStarted: index('idx_prod_incidents_started').on(t.tenantId, t.startedAt),
   byStatus:  index('idx_prod_incidents_status').on(t.tenantId, t.status),
   uqExternal: uniqueIndex('uq_prod_incidents_external').on(t.tenantId, t.source, t.externalRef),
+}));
+
+/** Incident → implicated DELIVERY ticket(s) (PRD §5.10): the ticket(s) whose change
+ *  caused an incident, so RCA can pull their Accountability Reports and see where the
+ *  process was skipped/waived. Distinct from `boardTaskId` (the incident's OWN ticket)
+ *  and from remediation follow-ups (`tasks.incidentId`). Migration 0335. */
+export const prodIncidentImplicatedTasks = pgTable('prod_incident_implicated_tasks', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  incidentId: uuid('incident_id').notNull().references(() => prodIncidents.id, { onDelete: 'cascade' }),
+  taskId:     integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  relation:   varchar('relation', { length: 24 }).notNull().default('implicated'), // implicated | suspected | ruled_out
+  note:       text('note'),
+  createdBy:  varchar('created_by', { length: 36 }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uidx_incident_implicated_task').on(t.incidentId, t.taskId),
+  index('idx_incident_implicated_incident').on(t.incidentId),
+  index('idx_incident_implicated_tenant').on(t.tenantId),
+]);
+
+// ---------------------------------------------------------------------------
+// Incident management: on-call, escalation, contacts, timeline (migration 0325)
+// ---------------------------------------------------------------------------
+
+/** A named on-call list. Who is on call NOW is resolved from the ordered
+ *  {@link onCallMembers}: 'manual' → currentIndex; 'daily'/'weekly' → time-sliced
+ *  round-robin. */
+export const onCallRotations = pgTable('on_call_rotations', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:    integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  name:         varchar('name', { length: 255 }).notNull(),
+  description:  text('description'),
+  rotationKind: varchar('rotation_kind', { length: 16 }).notNull().default('manual'), // manual|daily|weekly
+  currentIndex: integer('current_index').notNull().default(0),
+  active:       boolean('active').notNull().default(true),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant: index('idx_on_call_rotations_tenant').on(t.tenantId, t.active),
+}));
+
+/** An ordered participant of an on-call rotation. memberRef is assignee-encoded:
+ *  'u:<userId>' | 'c:<agentRef>' | 'contact:<businessContactId>'. */
+export const onCallMembers = pgTable('on_call_members', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  rotationId:  uuid('rotation_id').notNull().references(() => onCallRotations.id, { onDelete: 'cascade' }),
+  memberRef:   varchar('member_ref', { length: 72 }).notNull(),
+  displayName: varchar('display_name', { length: 255 }),
+  position:    integer('position').notNull().default(0),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byRotation: index('idx_on_call_members_rotation').on(t.rotationId, t.position),
+}));
+
+/** A timed escalation policy. Matches incidents (optionally by severity); its
+ *  {@link escalationLevels} fire in order until the incident is acknowledged. */
+export const escalationPolicies = pgTable('escalation_policies', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:     integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  name:          varchar('name', { length: 255 }).notNull(),
+  description:   text('description'),
+  matchSeverity: varchar('match_severity', { length: 16 }), // null = any
+  active:        boolean('active').notNull().default(true),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant: index('idx_escalation_policies_tenant').on(t.tenantId, t.active),
+}));
+
+/** One timed step of an escalation policy: at afterMinutes past the incident start,
+ *  if still unacknowledged, page targetKind/targetRef through the enabled channels. */
+export const escalationLevels = pgTable('escalation_levels', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  policyId:     uuid('policy_id').notNull().references(() => escalationPolicies.id, { onDelete: 'cascade' }),
+  level:        integer('level').notNull().default(1),
+  afterMinutes: integer('after_minutes').notNull().default(15),
+  targetKind:   varchar('target_kind', { length: 24 }).notNull().default('oncall_rotation'), // oncall_rotation|user|contact|team_chat
+  targetRef:    varchar('target_ref', { length: 72 }),
+  notifyTeams:  boolean('notify_teams').notNull().default(true),
+  notifySlack:  boolean('notify_slack').notNull().default(true),
+  notifyEmail:  boolean('notify_email').notNull().default(true),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byPolicy: index('idx_escalation_levels_policy').on(t.policyId, t.level),
+}));
+
+/** A business contact — a stakeholder to talk to during an incident. */
+export const businessContacts = pgTable('business_contacts', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  name:      varchar('name', { length: 255 }).notNull(),
+  roleTitle: varchar('role_title', { length: 255 }),
+  company:   varchar('company', { length: 255 }),
+  email:     varchar('email', { length: 255 }),
+  phone:     varchar('phone', { length: 64 }),
+  teamsId:   varchar('teams_id', { length: 255 }),
+  notes:     text('notes'),
+  tags:      jsonb('tags').notNull().default(sql`'[]'::jsonb`),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant: index('idx_business_contacts_tenant').on(t.tenantId, t.name),
+}));
+
+// ---------------------------------------------------------------------------
+// Active monitoring: diagram boards + monitor pins + monitor history (migration 0329)
+// ---------------------------------------------------------------------------
+
+/** An uploaded diagram / architecture image the team overlays monitor pins on. The
+ *  image itself lives in R2 (via /api/brain/upload); we keep the key + dimensions. */
+export const monitoringBoards = pgTable('monitoring_boards', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  name:        varchar('name', { length: 255 }).notNull(),
+  imageKey:    varchar('image_key', { length: 512 }),   // R2 key
+  imageWidth:  integer('image_width'),
+  imageHeight: integer('image_height'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant: index('idx_monitoring_boards_tenant').on(t.tenantId),
+}));
+
+/** A monitor pinned on a board. pos_x/pos_y are 0..1 fractions of the image. A breach
+ *  opens an incident (current_incident_id) and pages on-call. */
+export const monitors = pgTable('monitors', {
+  id:                  uuid('id').primaryKey().defaultRandom(),
+  tenantId:            integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:           uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  boardId:             uuid('board_id').notNull().references(() => monitoringBoards.id, { onDelete: 'cascade' }),
+  projectId:           integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  label:               varchar('label', { length: 255 }).notNull(),
+  description:         text('description'),
+  posX:                real('pos_x').notNull().default(0.5),
+  posY:                real('pos_y').notNull().default(0.5),
+  monitorType:         varchar('monitor_type', { length: 20 }).notNull().default('webhook'), // heartbeat|http_check|webhook|metric_threshold|manual
+  config:              jsonb('config').notNull().default(sql`'{}'::jsonb`),
+  affectedSystem:      varchar('affected_system', { length: 120 }),
+  severity:            varchar('severity', { length: 16 }).notNull().default('sev3'),
+  escalationPolicyId:  uuid('escalation_policy_id'),
+  status:              varchar('status', { length: 16 }).notNull().default('unknown'), // ok|breached|unknown
+  consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+  lastSignalAt:        timestamp('last_signal_at'),
+  lastCheckedAt:       timestamp('last_checked_at'),
+  lastStatusChangeAt:  timestamp('last_status_change_at'),
+  currentIncidentId:   uuid('current_incident_id'),
+  webhookSecret:       varchar('webhook_secret', { length: 64 }),
+  active:              boolean('active').notNull().default(true),
+  createdAt:           timestamp('created_at').notNull().defaultNow(),
+  updatedAt:           timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byBoard:  index('idx_monitors_board').on(t.boardId),
+  byStatus: index('idx_monitors_tenant_status').on(t.tenantId, t.status),
+  byActive: index('idx_monitors_active').on(t.active, t.monitorType),
+}));
+
+/** A monitor's own signal/breach/recovery history (its incidents live in prodIncidents). */
+export const monitorEvents = pgTable('monitor_events', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  monitorId:  uuid('monitor_id').notNull().references(() => monitors.id, { onDelete: 'cascade' }),
+  kind:       varchar('kind', { length: 16 }).notNull().default('signal'), // signal|breach|recovery|check|error
+  status:     varchar('status', { length: 16 }),
+  message:    text('message'),
+  incidentId: uuid('incident_id'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byMonitor: index('idx_monitor_events_monitor').on(t.monitorId, t.createdAt),
+}));
+
+/** Append-only incident timeline + notification log (the war-room feed + paging
+ *  audit). */
+export const incidentEvents = pgTable('incident_events', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  incidentId: uuid('incident_id').notNull().references(() => prodIncidents.id, { onDelete: 'cascade' }),
+  kind:       varchar('kind', { length: 24 }).notNull().default('note'), // created|classified|assigned|escalated|notified|status_change|note|resolved
+  actorRef:   varchar('actor_ref', { length: 72 }),
+  message:    text('message'),
+  channel:    varchar('channel', { length: 16 }),
+  target:     varchar('target', { length: 255 }),
+  level:      integer('level'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byIncident: index('idx_incident_events_incident').on(t.incidentId, t.createdAt),
 }));
 
 /** A customer-support ticket — Support Issues / Tech Support Tix / Support-Tix-
@@ -4933,8 +6200,24 @@ export const errorEvents = pgTable('error_events', {
   release:      varchar('release', { length: 255 }),
   environment:  varchar('environment', { length: 64 }),
   userKey:      varchar('user_key', { length: 255 }),
+  // Adapter that produced this event ('native' | 'otlp' | 'sentry' | 'posthog' |
+  // 'logrocket') — powers the by-source volume breakdown in /api/quality/stats.
+  source:       varchar('source', { length: 32 }),
   payload:      jsonb('payload'),
   createdAt:    timestamp('created_at').notNull().defaultNow(),
+});
+
+/**
+ * Outbound-fetch consumption ledger (migration 0262) — one row per Brain
+ * `/fetch-url` request that hit the wire. COUNT(*) over a window is the metered
+ * quantity for the `outbound_fetches` consumption meter + the abuse cap gate,
+ * mirroring error_events / ingestion_usage_log.
+ */
+export const outboundFetchLog = pgTable('outbound_fetch_log', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  url:       text('url'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
 /**
@@ -5100,3 +6383,538 @@ export const savedQueries = pgTable('saved_queries', {
 }, (t) => ({
   byTenant: index('idx_saved_queries_tenant').on(t.tenantId),
 }));
+
+// ---------------------------------------------------------------------------
+// Freelance worker marketplace (0269)
+//
+// A freelancer (users.account_type='freelancer') publishes a for-hire profile,
+// is hired across many tenants/projects via engagements, and has time measured
+// from an audited activity-signal stream that resolves into billable timecards.
+// ---------------------------------------------------------------------------
+
+/** One per freelancer user: skills / resume / rate + public-or-private toggle. */
+export const freelancerProfiles = pgTable('freelancer_profiles', {
+  userId:                 varchar('user_id', { length: 36 }).primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  headline:               varchar('headline', { length: 200 }),
+  bio:                    text('bio'),
+  slug:                   varchar('slug', { length: 60 }),         // vanity alias for the public URL (/talent/:slug); unique, case-insensitive (0280)
+  avatarKey:              varchar('avatar_key', { length: 300 }),  // R2 key for uploaded profile picture; served at GET /:id/avatar (0280)
+  discipline:             varchar('discipline', { length: 60 }),  // developer|dba|designer|... (card role)
+  skills:                 text('skills'),                          // JSON string[]
+  hourlyRateCents:        integer('hourly_rate_cents'),
+  currency:               varchar('currency', { length: 3 }).notNull().default('USD'),
+  visibility:             varchar('visibility', { length: 10 }).notNull().default('private'), // public|private
+  published:              boolean('published').notNull().default(false),
+  availability:           varchar('availability', { length: 20 }).notNull().default('open'),  // open|limited|unavailable
+  location:               varchar('location', { length: 120 }),
+  timezone:               varchar('timezone', { length: 60 }),
+  hiredVideoUserId:       varchar('hired_video_user_id', { length: 120 }),
+  hiredVideoConnectionId: varchar('hired_video_connection_id', { length: 120 }),
+  hiredVideoResumeId:     varchar('hired_video_resume_id', { length: 120 }),
+  hiredVideoClaimUrl:     varchar('hired_video_claim_url', { length: 500 }),
+  resumeKey:              varchar('resume_key', { length: 300 }),
+  resumeFilename:         varchar('resume_filename', { length: 255 }),
+  resumeExtract:          text('resume_extract'),                  // cached hired.video getProfile JSON
+  createdAt:              timestamp('created_at').notNull().defaultNow(),
+  updatedAt:              timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byPublished: index('idx_freelancer_profiles_published').on(t.published),
+}));
+
+/** Employer hires a freelancer (optionally onto a project). Hire record + the
+ *  cross-tenant membership bridge. Soft-terminate via terminatedAt. */
+export const freelancerEngagements = pgTable('freelancer_engagements', {
+  id:                 varchar('id', { length: 36 }).primaryKey(),
+  tenantId:           integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:          integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  freelancerUserId:   varchar('freelancer_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  status:             varchar('status', { length: 20 }).notNull().default('invited'), // invited|interviewing|active|declined|terminated
+  /** Gig Marketplace (0293): how much of the employer workspace an ACTIVE engagement
+   *  grants this freelancer — enforced by EngagementAccessService. Default 'project'
+   *  = view + work the engaged project's board (incl. moving a ticket to In Review). */
+  accessScope:        varchar('access_scope', { length: 20 }).notNull().default('project'), // project|board_readonly|tenant
+  rateCents:          integer('rate_cents'),
+  currency:           varchar('currency', { length: 3 }).notNull().default('USD'),
+  title:              varchar('title', { length: 200 }),
+  note:               text('note'),
+  createdByUserId:    varchar('created_by_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  invitedAt:          timestamp('invited_at').notNull().defaultNow(),
+  hiredAt:            timestamp('hired_at'),
+  terminatedAt:       timestamp('terminated_at'),
+  terminatedReason:   text('terminated_reason'),
+  createdAt:          timestamp('created_at').notNull().defaultNow(),
+  updatedAt:          timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant:     index('idx_engagements_tenant').on(t.tenantId),
+  byFreelancer: index('idx_engagements_freelancer').on(t.freelancerUserId),
+}));
+
+/** Raw audited "click sense" + engagement stream (portal + VSIX). Append-only. */
+export const activitySignals = pgTable('activity_signals', {
+  id:               bigint('id', { mode: 'number' }).primaryKey(),   // DB bigserial
+  userId:           varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tenantId:         integer('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
+  engagementId:     varchar('engagement_id', { length: 36 }).references(() => freelancerEngagements.id, { onDelete: 'set null' }),
+  projectId:        integer('project_id'),
+  source:           varchar('source', { length: 20 }).notNull(),   // portal|vscode|agent|meeting|system
+  kind:             varchar('kind', { length: 40 }).notNull(),     // nav|tool_exec|ticket_move|project_update|agent_message|agent_run|meeting|heartbeat
+  ref:              varchar('ref', { length: 300 }),
+  weight:           integer('weight').notNull().default(1),
+  durationSeconds:  integer('duration_seconds'),
+  metadata:         text('metadata'),
+  sessionId:        varchar('session_id', { length: 64 }),
+  occurredAt:       timestamp('occurred_at').notNull().defaultNow(),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byUserDay:      index('idx_signals_user_day').on(t.userId, t.occurredAt),
+  byEngagement:   index('idx_signals_engagement').on(t.engagementId, t.occurredAt),
+}));
+
+/** Resolved billable blocks — "what did you do today". Editable pre-submit.
+ *  Named timecardEntries (table timecard_entries) to avoid the existing per-task
+ *  `time_entries`/`timeEntries` (migration 0247) — a different subsystem. */
+export const timecardEntries = pgTable('timecard_entries', {
+  id:            varchar('id', { length: 36 }).primaryKey(),
+  engagementId:  varchar('engagement_id', { length: 36 }).notNull().references(() => freelancerEngagements.id, { onDelete: 'cascade' }),
+  userId:        varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  workDate:      date('work_date').notNull(),
+  minutes:       integer('minutes').notNull().default(0),
+  source:        varchar('source', { length: 20 }).notNull().default('auto'), // auto|manual|meeting
+  description:   text('description'),
+  billable:      boolean('billable').notNull().default(true),
+  resolvedFrom:  text('resolved_from'),   // JSON audit
+  timecardId:    varchar('timecard_id', { length: 36 }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byEngagementDate: index('idx_timecard_entries_engagement_date').on(t.engagementId, t.workDate),
+  byCard:           index('idx_timecard_entries_card').on(t.timecardId),
+}));
+
+/** Approvable per-engagement period rollup. */
+export const timecards = pgTable('timecards', {
+  id:                 varchar('id', { length: 36 }).primaryKey(),
+  engagementId:       varchar('engagement_id', { length: 36 }).notNull().references(() => freelancerEngagements.id, { onDelete: 'cascade' }),
+  userId:             varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tenantId:           integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  periodStart:        date('period_start').notNull(),
+  periodEnd:          date('period_end').notNull(),
+  status:             varchar('status', { length: 20 }).notNull().default('draft'), // draft|submitted|approved|rejected|paid
+  totalMinutes:       integer('total_minutes').notNull().default(0),
+  billableMinutes:    integer('billable_minutes').notNull().default(0),
+  rateCents:          integer('rate_cents'),
+  currency:           varchar('currency', { length: 3 }).notNull().default('USD'),
+  amountCents:        integer('amount_cents').notNull().default(0),
+  submittedAt:        timestamp('submitted_at'),
+  approvedAt:         timestamp('approved_at'),
+  approvedByUserId:   varchar('approved_by_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  rejectReason:       text('reject_reason'),
+  createdAt:          timestamp('created_at').notNull().defaultNow(),
+  updatedAt:          timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byEngagement: index('idx_timecards_engagement').on(t.engagementId),
+}));
+
+// ---------------------------------------------------------------------------
+// Freelance marketplace — two-sided (0273): job postings + proposals (bidding),
+// reviews/reputation, invoices/payment status, in-app notifications.
+// ---------------------------------------------------------------------------
+
+/** An employer posts work freelancers can BID on (distinct from a direct hire). */
+export const jobPostings = pgTable('job_postings', {
+  id:               varchar('id', { length: 36 }).primaryKey(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:        integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  title:            varchar('title', { length: 200 }).notNull(),
+  description:      text('description'),
+  discipline:       varchar('discipline', { length: 60 }),
+  skills:           text('skills'),                        // JSON string[]
+  rateMinCents:     integer('rate_min_cents'),
+  rateMaxCents:     integer('rate_max_cents'),
+  currency:         varchar('currency', { length: 3 }).notNull().default('USD'),
+  status:           varchar('status', { length: 20 }).notNull().default('open'),      // open|closed|filled
+  visibility:       varchar('visibility', { length: 10 }).notNull().default('public'), // public|private
+  /** Gig Marketplace (0293): the work item this gig was published FROM (one-click
+   *  "Publish to Marketplace"), the gig shape, the billing/engagement shape, and the
+   *  free-text acceptance criteria a proposal is AI-evaluated against. */
+  sourceTicketId:   integer('source_ticket_id').references(() => tasks.id, { onDelete: 'set null' }),
+  postingType:      varchar('posting_type', { length: 20 }).notNull().default('project_bid'), // project_bid|design|fte
+  engagementType:   varchar('engagement_type', { length: 20 }),                        // fixed_bid|hourly|fte
+  requirements:     text('requirements'),
+  createdByUserId:  varchar('created_by_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  closedAt:         timestamp('closed_at'),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byStatus: index('idx_job_postings_open').on(t.status),
+  byTenant: index('idx_job_postings_tenant').on(t.tenantId),
+}));
+
+/** A freelancer's bid on a job. One live proposal per (job, freelancer). */
+export const jobProposals = pgTable('job_proposals', {
+  id:                varchar('id', { length: 36 }).primaryKey(),
+  jobId:             varchar('job_id', { length: 36 }).notNull().references(() => jobPostings.id, { onDelete: 'cascade' }),
+  freelancerUserId:  varchar('freelancer_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  coverNote:         text('cover_note'),
+  rateCents:         integer('rate_cents'),
+  currency:          varchar('currency', { length: 3 }).notNull().default('USD'),
+  status:            varchar('status', { length: 20 }).notNull().default('submitted'), // submitted|shortlisted|accepted|declined|withdrawn
+  /** Gig Marketplace (0293): 0..100 cached overall from the latest AI proposal
+   *  evaluation (list display), and the courteous decline message shown to the
+   *  candidate when they aren't selected. */
+  lastEvalOverall:   integer('last_eval_overall'),
+  declineReason:     text('decline_reason'),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byFreelancer: index('idx_proposals_freelancer').on(t.freelancerUserId),
+}));
+
+/** Polymorphic AI evaluation of a proposal (a bid) OR a deliverable proposal —
+ *  the LLM-as-judge (semanticEval) verdict scoring it against the posting's
+ *  requirements/acceptance criteria. History-preserving (one row per eval run). */
+export const proposalEvaluations = pgTable('proposal_evaluations', {
+  id:                 varchar('id', { length: 36 }).primaryKey(),
+  tenantId:           integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  subjectType:        varchar('subject_type', { length: 20 }).notNull(),   // job_proposal|deliverable
+  subjectId:          varchar('subject_id', { length: 36 }).notNull(),
+  jobId:              varchar('job_id', { length: 36 }).references(() => jobPostings.id, { onDelete: 'set null' }),
+  faithfulness:       real('faithfulness'),
+  answerRelevance:    real('answer_relevance'),
+  contextRelevance:   real('context_relevance'),
+  hallucinationRate:  real('hallucination_rate'),
+  overall:            real('overall').notNull().default(0),                // 0..1 composite
+  method:             varchar('method', { length: 10 }).notNull().default('lexical'), // llm|lexical
+  summary:            text('summary'),
+  evaluatedByUserId:  varchar('evaluated_by_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:          timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  bySubject: index('idx_proposal_evals_subject').on(t.subjectType, t.subjectId),
+  byTenant:  index('idx_proposal_evals_tenant').on(t.tenantId, t.createdAt),
+}));
+
+/** A hired worker "presents a proposal" against the published scope — tied to the
+ *  engagement (+ optional ticket / posting). AI-evaluable via proposalEvaluations. */
+export const deliverableProposals = pgTable('deliverable_proposals', {
+  id:               varchar('id', { length: 36 }).primaryKey(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  engagementId:     varchar('engagement_id', { length: 36 }).notNull().references(() => freelancerEngagements.id, { onDelete: 'cascade' }),
+  ticketId:         integer('ticket_id').references(() => tasks.id, { onDelete: 'set null' }),
+  jobId:            varchar('job_id', { length: 36 }).references(() => jobPostings.id, { onDelete: 'set null' }),
+  authorUserId:     varchar('author_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  title:            varchar('title', { length: 200 }).notNull(),
+  body:             text('body'),
+  status:           varchar('status', { length: 20 }).notNull().default('submitted'), // submitted|accepted|changes_requested|withdrawn
+  lastEvalOverall:  integer('last_eval_overall'),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byEngagement: index('idx_deliverable_proposals_engagement').on(t.engagementId),
+  byTenant:     index('idx_deliverable_proposals_tenant').on(t.tenantId, t.createdAt),
+}));
+
+/** Employer's rating of a freelancer for an engagement (reputation). One per engagement. */
+export const freelancerReviews = pgTable('freelancer_reviews', {
+  id:                varchar('id', { length: 36 }).primaryKey(),
+  engagementId:      varchar('engagement_id', { length: 36 }).notNull().references(() => freelancerEngagements.id, { onDelete: 'cascade' }),
+  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  freelancerUserId:  varchar('freelancer_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  reviewerUserId:    varchar('reviewer_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  rating:            integer('rating').notNull(),   // 1..5
+  comment:           text('comment'),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byFreelancer: index('idx_reviews_freelancer').on(t.freelancerUserId),
+}));
+
+/** Invoice generated on timecard approval; carries payment status. One per timecard. */
+export const freelancerInvoices = pgTable('freelancer_invoices', {
+  id:                varchar('id', { length: 36 }).primaryKey(),
+  timecardId:        varchar('timecard_id', { length: 36 }).notNull().references(() => timecards.id, { onDelete: 'cascade' }),
+  engagementId:      varchar('engagement_id', { length: 36 }).notNull().references(() => freelancerEngagements.id, { onDelete: 'cascade' }),
+  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  freelancerUserId:  varchar('freelancer_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  amountCents:       integer('amount_cents').notNull().default(0),
+  currency:          varchar('currency', { length: 3 }).notNull().default('USD'),
+  status:            varchar('status', { length: 20 }).notNull().default('pending'), // pending|paid|void
+  externalRef:       varchar('external_ref', { length: 200 }),
+  issuedAt:          timestamp('issued_at').notNull().defaultNow(),
+  paidAt:            timestamp('paid_at'),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant:     index('idx_invoices_tenant').on(t.tenantId),
+  byFreelancer: index('idx_invoices_freelancer').on(t.freelancerUserId),
+}));
+
+/** In-app notifications for both sides of the marketplace. */
+export const freelancerNotifications = pgTable('freelancer_notifications', {
+  id:         bigint('id', { mode: 'number' }).primaryKey(),   // DB bigserial
+  userId:     varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tenantId:   integer('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
+  kind:       varchar('kind', { length: 40 }).notNull(),
+  title:      varchar('title', { length: 200 }).notNull(),
+  body:       text('body'),
+  ref:        varchar('ref', { length: 200 }),
+  readAt:     timestamp('read_at'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byUser: index('idx_notifications_user').on(t.userId, t.createdAt),
+}));
+
+// ---------------------------------------------------------------------------
+// FACTS library — structured (subject, predicate, object) triples with
+// provenance. Powers /api/facts + the /facts page; recallable by agent tooling.
+// Migration 0300. project_id NULL → tenant-global fact; set → project-scoped.
+// ---------------------------------------------------------------------------
+export const facts = pgTable('facts', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:  integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  subject:    varchar('subject', { length: 255 }).notNull(),
+  predicate:  varchar('predicate', { length: 255 }).notNull(),
+  object:     text('object').notNull(),
+  source:     varchar('source', { length: 255 }),
+  confidence: real('confidence'),
+  createdBy:  varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:  timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_facts_tenant_updated').on(t.tenantId, t.updatedAt),
+  index('idx_facts_tenant_subject').on(t.tenantId, t.subject),
+  index('idx_facts_tenant_predicate').on(t.tenantId, t.predicate),
+  index('idx_facts_tenant_project').on(t.tenantId, t.projectId),
+]);
+
+// ---------------------------------------------------------------------------
+// RFP / RFQ Response (PRD 15, migration 0335) — pre-sales proposal generation.
+// A request captures the asking business's brand + requirements and is either
+// greenfield or grounded on an existing project; a response is the co-branded
+// proposal (capability roster + P&L + phase plan + risks + branded document).
+// ---------------------------------------------------------------------------
+export const rfpRequests = pgTable('rfp_requests', {
+  id:               uuid('id').primaryKey().defaultRandom(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:        uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  title:            varchar('title', { length: 255 }).notNull(),
+  requesterOrgName: varchar('requester_org_name', { length: 255 }),
+  requesterBrand:   jsonb('requester_brand'),                 // BrandPalette of the asking business
+  requirements:     text('requirements'),
+  sourceMode:       varchar('source_mode', { length: 16 }).notNull().default('new').$type<'new' | 'existing_project'>(),
+  basedOnProjectId: integer('based_on_project_id').references(() => projects.id, { onDelete: 'set null' }),
+  marginPct:        real('margin_pct'),
+  marketingPct:     real('marketing_pct'),
+  contingencyPct:   real('contingency_pct'),
+  dueDate:          timestamp('due_date', { withTimezone: true }),
+  status:           varchar('status', { length: 24 }).notNull().default('draft').$type<'draft' | 'analyzing' | 'ready' | 'submitted'>(),
+  createdBy:        varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:        timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_rfp_requests_tenant').on(t.tenantId, t.updatedAt),
+  index('idx_rfp_requests_project').on(t.basedOnProjectId),
+]);
+
+export const rfpResponses = pgTable('rfp_responses', {
+  id:                 uuid('id').primaryKey().defaultRandom(),
+  tenantId:           integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:          uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  requestId:          uuid('request_id').notNull().references(() => rfpRequests.id, { onDelete: 'cascade' }),
+  projectId:          integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  status:             varchar('status', { length: 24 }).notNull().default('draft').$type<'draft' | 'ready' | 'submitted'>(),
+  body:               jsonb('body'),                          // RfpResponseBody (typed in application/rfp/types.ts)
+  docHtml:            text('doc_html'),
+  quotedPriceUsdCents: integer('quoted_price_usd_cents'),
+  marginPct:          real('margin_pct'),
+  scanRefreshed:      boolean('scan_refreshed').notNull().default(false),
+  generatedBy:        jsonb('generated_by'),                  // { cto, productOwner } agent refs
+  createdBy:          varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:          timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:          timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_rfp_responses_tenant').on(t.tenantId, t.updatedAt),
+  index('idx_rfp_responses_request').on(t.requestId, t.createdAt),
+  index('idx_rfp_responses_project').on(t.projectId),
+]);
+
+// ---------------------------------------------------------------------------
+// Generic, timestamped catalog adoption event log (skill | persona | prompt).
+// Feeds the over-time series in /api/catalog-analytics. Append-only. Mig 0301.
+// ---------------------------------------------------------------------------
+export const catalogAdoptionEvents = pgTable('catalog_adoption_events', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  kind:       varchar('kind', { length: 16 }).notNull(),
+  itemId:     varchar('item_id', { length: 128 }).notNull(),
+  itemName:   varchar('item_name', { length: 255 }),
+  eventType:  varchar('event_type', { length: 16 }).notNull().default('install'),
+  actorId:    varchar('actor_id', { length: 64 }),
+  createdAt:  timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_catalog_events_tenant_kind_time').on(t.tenantId, t.kind, t.createdAt),
+  index('idx_catalog_events_tenant_kind_item').on(t.tenantId, t.kind, t.itemId),
+]);
+
+// ---------------------------------------------------------------------------
+// Persona-role 2D RBAC — the lateral "lens persona" dimension (migration 0308).
+// Orthogonal to the four-tier access level: reorders/highlights lenses, NOT an
+// access grant. Exactly one is_primary per (tenant,user) (partial-unique in mig).
+// ---------------------------------------------------------------------------
+export const memberPersonas = pgTable('member_personas', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  userId:    varchar('user_id', { length: 64 }).notNull(),
+  persona:   varchar('persona', { length: 16 }).notNull(),
+  isPrimary: boolean('is_primary').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  unique('uq_member_persona').on(t.tenantId, t.userId, t.persona),
+]);
+
+// ---------------------------------------------------------------------------
+// Annual-calendar cadence — periodic lens review snapshots (migration 0309).
+// A frozen point-in-time capture of an insight lens for a review period,
+// written by the cron sweep; (tenant,lens,period) is the upsert target.
+// ---------------------------------------------------------------------------
+export const lensSnapshots = pgTable('lens_snapshots', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  lens:        varchar('lens', { length: 32 }).notNull(),
+  period:      varchar('period', { length: 16 }).notNull(),
+  payload:     jsonb('payload').notNull().default({}),
+  generatedAt: timestamp('generated_at').notNull().defaultNow(),
+}, (t) => [
+  unique('uq_lens_snapshot').on(t.tenantId, t.lens, t.period),
+]);
+
+// ---------------------------------------------------------------------------
+// EMP-9 — delay root-cause taxonomy (migration 0315). One reason per task.
+// ---------------------------------------------------------------------------
+export const delayReasons = pgTable('delay_reasons', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  taskId:     integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  reasonCode: varchar('reason_code', { length: 24 }).notNull(),
+  notes:      text('notes'),
+  createdBy:  varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  uqTask: uniqueIndex('uq_delay_reasons_task').on(t.taskId),
+}));
+
+// ---------------------------------------------------------------------------
+// EMP-15 — internal sentiment / pulse survey (migration 0317).
+// ---------------------------------------------------------------------------
+export const pulseSurveys = pgTable('pulse_surveys', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  question:  varchar('question', { length: 255 }).notNull(),
+  scale:     integer('scale').notNull().default(5),
+  active:    boolean('active').notNull().default(true),
+  createdBy: varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  closedAt:  timestamp('closed_at'),
+});
+
+export const pulseResponses = pgTable('pulse_responses', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  surveyId:  uuid('survey_id').notNull().references(() => pulseSurveys.id, { onDelete: 'cascade' }),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  userId:    varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  score:     integer('score').notNull(),
+  comment:   text('comment'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  uqUser: uniqueIndex('uq_pulse_response_user').on(t.surveyId, t.userId),
+}));
+
+// ---------------------------------------------------------------------------
+// EMP-16 — manager coaching notes attached to a workforce member (mig 0311).
+// Polymorphic (member_kind, member_ref) identity; no FK on member_ref.
+// ---------------------------------------------------------------------------
+export const coachingNotes = pgTable('coaching_notes', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  memberKind: varchar('member_kind', { length: 16 }).notNull(),
+  memberRef:  varchar('member_ref', { length: 64 }).notNull(),
+  note:       text('note').notNull(),
+  authorId:   varchar('author_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_coaching_notes_member').on(t.tenantId, t.memberKind, t.memberRef),
+]);
+
+// ---------------------------------------------------------------------------
+// Dismissed forecast anomalies (LENS forecast, migration 0305). A manager mutes
+// a known/explained z-score outlier so it stops surfacing on the forecast lens.
+// One row per (tenant, metric, point_day); additive (no rows == all shown).
+// ---------------------------------------------------------------------------
+export const forecastAnomalyAcks = pgTable('forecast_anomaly_acks', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  metric:    varchar('metric', { length: 24 }).notNull(),
+  pointDay:  varchar('point_day', { length: 10 }).notNull(),
+  note:      text('note'),
+  ackedBy:   varchar('acked_by', { length: 36 }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  uqAck:    uniqueIndex('uq_forecast_anomaly_ack').on(t.tenantId, t.metric, t.pointDay),
+  byMetric: index('idx_forecast_anomaly_ack_metric').on(t.tenantId, t.metric),
+}));
+
+// ---------------------------------------------------------------------------
+// Policy packs (migration 0348) — the authoring store behind `PolicyGate`
+// enforcement. `evaluatePolicyGate` was already hard-enforced at three tool-call
+// seams, but nothing wrote gates; these two tables are that missing writer.
+//
+// Scoping is NULL-as-wildcard: a pack with `projectId`/`agentRef` NULL applies
+// tenant-wide, so the resolver is one predicate rather than a scope discriminator.
+// `policyGates` mirrors the `PolicyGate` wire type field-for-field (gateKey = the
+// wire `id`), so resolution is a projection, not a translation.
+// ---------------------------------------------------------------------------
+export const policyPacks = pgTable('policy_packs', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:   uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  name:        varchar('name', { length: 200 }).notNull(),
+  description: text('description'),
+  enabled:     boolean('enabled').notNull().default(true),
+  /** NULL = every project. */
+  projectId:   integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  /** NULL = every agent. */
+  agentRef:    varchar('agent_ref', { length: 128 }),
+  createdBy:   varchar('created_by', { length: 64 }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_policy_packs_tenant').on(t.tenantId, t.enabled),
+  index('idx_policy_packs_project').on(t.tenantId, t.projectId),
+]);
+
+export const policyGates = pgTable('policy_gates', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  packId:    uuid('pack_id').notNull().references(() => policyPacks.id, { onDelete: 'cascade' }),
+  /** The `PolicyGate.id` on the wire — echoed back in a block/approval decision. */
+  gateKey:   varchar('gate_key', { length: 128 }).notNull(),
+  /** NULL or '*' governs EVERY tool (how a broad deny posture is authored). */
+  tool:      varchar('tool', { length: 128 }),
+  effect:    varchar('effect', { length: 20 }).notNull(),
+  directive: text('directive'),
+  reason:    text('reason'),
+  position:  integer('position').notNull().default(0),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_policy_gate_key').on(t.packId, t.gateKey),
+  index('idx_policy_gates_pack').on(t.packId, t.position),
+]);

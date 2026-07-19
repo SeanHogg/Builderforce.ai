@@ -28,16 +28,26 @@ import {
 export interface BrainPersistenceAdapter {
   listChats(params?: { projectId?: string; limit?: number; offset?: number }): Promise<BrainChat[]>;
   getChat(id: number): Promise<BrainChat>;
-  createChat(body: { title?: string; projectId?: number | null }): Promise<BrainChat>;
-  updateChat(id: number, body: { title?: string; projectId?: number | null }): Promise<BrainChat>;
+  createChat(body: { title?: string; projectId?: number | null; capability?: string | null }): Promise<BrainChat>;
+  updateChat(id: number, body: { title?: string; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null }): Promise<BrainChat>;
   deleteChat(id: number): Promise<unknown>;
   summarizeChat(id: number): Promise<{ summary: string } | { error: string }>;
   getMessages(chatId: number, limit?: number): Promise<BrainMessage[]>;
+  /** Subscribe to durable message invalidations for one chat. The callback carries
+   * no data; the hook reconciles from persistence as the source of truth. */
+  subscribeMessages?(chatId: number, onChanged: () => void): () => void;
   sendMessages(
     chatId: number,
     messages: Array<{ role: string; content: string; metadata?: string }>,
   ): Promise<BrainMessage[]>;
   setMessageFeedback(messageId: number, feedback: 'up' | 'down' | null): Promise<unknown>;
+  /**
+   * Ask an invited agent participant to reply — a chat-scoped run that answers AS
+   * the addressed agent and returns the posted assistant turn (attributed to it via
+   * metadata.authoredBy). Called after a user directs a message to an @agent.
+   * Optional: when absent, directing to an agent just posts the turn (legacy).
+   */
+  requestAgentReply?(chatId: number, input: { agentRef: string; agentName?: string }): Promise<BrainMessage>;
   upload(file: File): Promise<{ key: string; name: string; type: string }>;
   uploadUrl(key: string): string;
   /**

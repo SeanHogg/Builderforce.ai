@@ -25,28 +25,53 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useBrainConfig } from './config';
-import type { BrainMessage, BrainModality, ChatInputAttachment } from './types';
+import { isStepMessage, type BrainMessage, type BrainModality, type ChatInputAttachment } from './types';
 import type { BrainToolSpec, ChatCompletionMessage, ContentPart } from './streamChatCompletion';
+import type { EvermindRunHooks } from './evermindMemory';
+import type { ReasoningIntent } from './effort';
 import { prepareImageDataUrl } from './imagePrep';
+import { scopeToConsolidation } from './consolidation';
+import { withDirectedMetadata, isDirectedToParticipant, type DirectedRecipient } from './directedMessage';
 import { buildBrainTriageReport, type BrainTraceEvent } from './brainTriage';
+import type { ChatErrorAction } from './chatError';
 import {
   startRun,
+  stopRun,
   isRunning,
   subscribeRun,
   getRunSnapshot,
   getRunTrace,
   resolveRunConfirm,
+  clearRunError,
 } from './brainRunStore';
 
 export interface UseBrainConversationOptions {
   chatId: number | null;
   modality?: BrainModality;
+  /**
+   * The chat's project. Forwarded to the run so the loop's "a code change is always
+   * tied to a ticket" backstop can mint a `from_delta` ticket for this project when
+   * an IDE run changed code without recording one. Omit for a non-project chat / the
+   * web Brain (no file tools → the backstop never fires).
+   */
+  projectId?: number | null;
   /** Extra system-prompt context (e.g. an IDE's open file + content). */
   extraSystem?: string;
   /** Override the system prompt entirely (e.g. a fixed Brain Storm persona). */
   systemPrompt?: string;
   /** Override the model (e.g. run the Brain as a specific assigned agent). */
   model?: string;
+  /**
+   * `max_tokens` for this conversation's completions — the host's Effort control
+   * (see `effort.ts`, the single effort→params map). Omit for the 4096 default.
+   */
+  maxTokens?: number;
+  /**
+   * Vendor-neutral reasoning intent (the host's Thinking toggle). Build it with
+   * `reasoningForRun({ effort, thinking })` so the level tracks Effort. Omit /
+   * `undefined` ⇒ no `reasoning` field on the wire at all.
+   */
+  reasoning?: ReasoningIntent;
   /** Tool specs from the page-action registry. */
   toolSpecs?: BrainToolSpec[];
   /** Dispatch a tool call to the registry. */
@@ -64,25 +89,76 @@ export interface UseBrainConversationOptions {
   ensureChatId?: () => Promise<number | null>;
   /** Notify the host (chats hook) that this chat got new activity. */
   onActivity?: (chatId: number) => void;
+  /**
+   * Fired once when the FIRST user turn of a chat is persisted, with that turn's text —
+   * the seam the host uses to auto-name a still-"New chat" conversation from what it's
+   * about (wired to `useBrainChats.autoTitle`). Best-effort and idempotent on the host
+   * side; omit to leave chats untitled.
+   */
+  onFirstUserTurn?: (chatId: number, text: string) => void;
+  /**
+   * Project-Evermind memory hooks, bound by the host to the active chat's project.
+   * When set, a run recalls the project's learned memories before answering
+   * (grounding the reply) and records recall/learn/reconcile steps in the trace.
+   * Omit for a non-project chat.
+   */
+  evermind?: EvermindRunHooks;
+  /**
+   * Optional async per-turn system-prompt augment, called at run start with the
+   * latest user text. Its non-empty return is appended to the system prompt for
+   * that run. This is the seam a host uses for a PER-TURN async fetch the sync
+   * `resolveSystemPrompt` / `extraSystem` cannot do — e.g. a fresh limbic/affect
+   * block appraised against this turn's prompt (VS Code parity). Best-effort: a
+   * throw / empty return just skips it. Omit when the static `extraSystem`
+   * personality block is enough.
+   */
+  augmentSystemPrompt?: (userText: string) => Promise<string | undefined>;
 }
 
 export interface UseBrainConversation {
   messages: BrainMessage[];
   loadingMessages: boolean;
+  /** Force a transcript refetch without changing the chat id (e.g. after a merge). */
+  reloadMessages: () => void;
   sending: boolean;
   error: string;
+  /**
+   * What the user can DO about {@link error}: reconnect an expired session, upgrade
+   * a plan, or add a card. Decided ONCE from the gateway's structured error body
+   * (see `chatErrorAction`), so an error banner renders the fix without
+   * pattern-matching the message text. Null when only dismissing applies.
+   */
+  errorAction: ChatErrorAction | null;
   /** Live assistant delta buffer (rendered as a trailing bubble while streaming). */
   streamingText: string;
   copiedMessageId: number | null;
   feedbackMap: Record<number, 'up' | 'down'>;
   pendingAttachments: ChatInputAttachment[];
   uploading: boolean;
-  send(text: string): Promise<void>;
+  /**
+   * Persist + answer a user turn. Resolves `true` once the turn is safely
+   * persisted and the run has started (the message can no longer be lost), or
+   * `false` if it failed before persisting (e.g. the token expired mid-send) —
+   * so a composer can restore the text the user typed instead of dropping it.
+   */
+  send(text: string, opts?: { addressedTo?: DirectedRecipient | null }): Promise<boolean>;
+  /**
+   * Stop the in-flight run for the active chat: aborts the streaming LLM request
+   * and unwinds the agent loop (no error surfaced). No-op when nothing is
+   * running. Pair with `sending` to drive a Stop button.
+   */
+  stop(): void;
   copyMessage(msg: BrainMessage): Promise<void>;
   submitFeedback(msg: BrainMessage, value: 'up' | 'down'): Promise<void>;
   attach(file: File): Promise<void>;
   removeAttachment(key: string): void;
   setError(msg: string): void;
+  /**
+   * Dismiss the current error banner. Clears BOTH the hook's local error and the
+   * run cell's error (a failed LLM stream / tool loop sets the latter, which
+   * `setError('')` alone can't reach) — so the user can always close the banner.
+   */
+  clearError(): void;
   /** A tool call awaiting the user's Approve/Cancel decision (or null). */
   pendingConfirm: { name: string; args: unknown } | null;
   /** Resolve the pending confirmation. */
@@ -100,12 +176,26 @@ export interface UseBrainConversation {
    */
   trace: BrainTraceEvent[];
   /**
+   * Connected providers the gateway could NOT use this run (e.g. an expired Claude
+   * subscription that fell back to the shared pool). A mounted view renders a passive
+   * "reconnect your account" banner off this; empty when everything resolved.
+   */
+  byoUnresolved: string[];
+  /**
+   * BYO providers that hit a usage/capacity cap this run (e.g. Anthropic monthly
+   * spend limit, Meta MUSE quota exhausted). A mounted view renders a "manage your
+   * API keys" banner so the user can top up or switch providers. Empty when no cap
+   * was hit this run.
+   */
+  providerCap: string[];
+  /**
    * Assemble a paste-able triage report of the active chat's execution — the LLM
    * steps, the full tool chain (args + results), intermediate assistant messages,
    * every error, and the visible transcript. `agentLabel` names the persona the
-   * Brain ran as. Mirrors the host/cloud "Copy triage info" report.
+   * Brain ran as; `surface` names where it ran (e.g. `VS Code (VSIX)`). Mirrors the
+   * host/cloud "Copy triage info" report.
    */
-  buildTriageReport(agentLabel?: string): string;
+  buildTriageReport(agentLabel?: string, surface?: string): string;
 }
 
 export function useBrainConversation(options: UseBrainConversationOptions): UseBrainConversation {
@@ -113,18 +203,28 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
   const {
     chatId,
     modality = 'designer',
+    projectId,
     extraSystem,
     systemPrompt,
     model,
+    maxTokens,
+    reasoning,
     toolSpecs,
     runTool,
     needsConfirm,
     ensureChatId,
     onActivity,
+    onFirstUserTurn,
+    evermind,
+    augmentSystemPrompt,
   } = options;
 
   const [messages, setMessages] = useState<BrainMessage[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  // Bumped by reloadMessages() to force a transcript refetch without changing the
+  // chat id — e.g. after another chat is merged INTO this one server-side.
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const reloadMessages = useCallback(() => setReloadNonce((n) => n + 1), []);
   const [localSending, setLocalSending] = useState(false);
   const [localError, setLocalError] = useState('');
   const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null);
@@ -164,7 +264,14 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         if (!cancelled) setLoadingMessages(false);
       });
     return () => { cancelled = true; };
-  }, [persistence, chatId]);
+  }, [persistence, chatId, reloadNonce]);
+
+  // Agent lifecycle messages are written outside this browser's run store. Subscribe
+  // to the host's chat invalidation channel and re-read durable state on each push.
+  useEffect(() => {
+    if (chatId == null || !persistence.subscribeMessages) return;
+    return persistence.subscribeMessages(chatId, reloadMessages);
+  }, [persistence, chatId, reloadMessages]);
 
   // A run (possibly started in another, now-unmounted Brain instance) persisted
   // assistant messages — splice them in without a refetch. The store delivers
@@ -206,28 +313,37 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       resolvedSystemPrompt: fullSystemPrompt,
       tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : undefined,
       model,
+      maxTokens,
+      reasoning,
       runTool,
       needsConfirm,
       stream,
       persistence,
       onActivity,
+      evermind,
+      augmentSystemPrompt,
       seed,
       userTurn,
+      projectId,
     }),
-    [fullSystemPrompt, toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity],
+    [fullSystemPrompt, toolSpecs, model, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId],
   );
 
   const send = useCallback(
-    async (text: string) => {
+    async (text: string, opts?: { addressedTo?: DirectedRecipient | null }): Promise<boolean> => {
       const trimmed = text.trim();
-      if (!trimmed || localSending || isRunning(chatId)) return;
+      if (!trimmed || localSending || isRunning(chatId)) return false;
+      // A message addressed to a participant (an invited agent/human) is a chat
+      // turn for THEM, not a directive for the BRAIN — persist it, but don't run
+      // the agent loop. `null`/omitted means the BRAIN (existing behavior).
+      const addressedTo = opts?.addressedTo ?? null;
 
       let id = chatId;
       if (id == null) {
         id = (await ensureChatId?.()) ?? null;
         if (id == null) {
           setLocalError('Could not start a chat.');
-          return;
+          return false;
         }
       }
       // Claim the auto-reply guard for this chat: a user-driven send must not be
@@ -246,7 +362,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
         const refs = attachments.map((a) => `[Attached: ${a.name}](${persistence.uploadUrl(a.key)})`).join('\n');
         displayContent = `${trimmed}\n\n${refs}`;
       }
-      const metadata = attachments.length > 0 ? JSON.stringify({ attachments }) : undefined;
+      const metadata = withDirectedMetadata(addressedTo, attachments.length > 0 ? { attachments } : undefined);
 
       // Model-visible content: inline images as `image_url` vision parts (the
       // gateway routes these to a vision model), keeping any non-image
@@ -268,20 +384,57 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       try {
         const [userMsg] = await persistence.sendMessages(id, [{ role: 'user', content: displayContent, metadata }]);
         setMessages((prev) => [...prev, userMsg]);
+        onActivity?.(id);
+        // First user turn of this chat → let the host auto-name it from the topic
+        // (so it stops reading "New chat"). Uses the raw typed text, not the
+        // attachment-decorated display content.
+        if (messages.length === 0) onFirstUserTurn?.(id, trimmed);
+        // Addressed to a participant, not the BRAIN: the turn is posted to the
+        // chat (visible to everyone) and the BRAIN loop stays idle. The auto-reply
+        // guard was already claimed above, and the effect below also skips it, so
+        // a later reload won't answer it either.
+        if (addressedTo) {
+          // An @agent participant actually answers: a chat-scoped run replies AS
+          // that agent and posts an assistant turn attributed to it. A @human just
+          // gets the posted turn (they'll be notified out-of-band).
+          if (addressedTo.kind === 'agent' && persistence.requestAgentReply) {
+            try {
+              const reply = await persistence.requestAgentReply(id, { agentRef: addressedTo.ref, agentName: addressedTo.name });
+              setMessages((prev) => [...prev, reply]);
+              onActivity?.(id);
+            } catch (e) {
+              setLocalError(e instanceof Error ? e.message : 'The agent could not reply.');
+            }
+          }
+          return true;
+        }
         // Seed the rich transcript from the prior persisted history (the closure
         // `messages`, excluding the just-sent user turn), then append this turn.
-        const seed: ChatCompletionMessage[] = messages.map((m) => ({
-          role: m.role as ChatCompletionMessage['role'],
-          content: m.content,
-        }));
+        // Scoped to the last consolidation marker: a consolidated chat sends the
+        // summary as its base context instead of the full (large) history.
+        const seed: ChatCompletionMessage[] = scopeToConsolidation(messages)
+          // Durable tool/memory STEP rows (persisted for the timeline) are NOT model
+          // turns — exclude them so a reload never re-sends an orphaned tool message
+          // (which 400s strict vendors) into the transcript.
+          .filter((m) => !isStepMessage(m))
+          .map((m) => ({
+            role: m.role as ChatCompletionMessage['role'],
+            content: m.content,
+          }));
         await startRun(id, buildRequest(seed, modelContent));
+        return true;
       } catch (e) {
+        // Persisting the user turn failed (commonly an expired token) — the turn
+        // was NOT saved. Restore the attachments too so the whole message can be
+        // resent, and signal failure so the composer keeps the typed text.
+        setPendingAttachments(attachments);
         setLocalError(e instanceof Error ? e.message : 'Send failed');
+        return false;
       } finally {
         setLocalSending(false);
       }
     },
-    [persistence, chatId, localSending, pendingAttachments, messages, ensureChatId, buildRequest],
+    [persistence, chatId, localSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity, onFirstUserTurn],
   );
 
   // Auto-reply when a chat loads with a trailing unanswered user message
@@ -293,13 +446,19 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     if (isRunning(chatId)) return;
     const last = messages[messages.length - 1];
     if (last.role !== 'user') return;
+    // A trailing message addressed to a participant is NOT a directive for the
+    // BRAIN — leave it unanswered (the participant owns the reply).
+    if (isDirectedToParticipant(last)) return;
     if (autoRepliedChatIdRef.current === chatId) return;
     autoRepliedChatIdRef.current = chatId;
     setLocalError('');
-    const seed: ChatCompletionMessage[] = messages.slice(0, -1).map((m) => ({
-      role: m.role as ChatCompletionMessage['role'],
-      content: m.content,
-    }));
+    const seed: ChatCompletionMessage[] = scopeToConsolidation(messages.slice(0, -1))
+      // Exclude durable tool/memory STEP rows (see the send() seed above).
+      .filter((m) => !isStepMessage(m))
+      .map((m) => ({
+        role: m.role as ChatCompletionMessage['role'],
+        content: m.content,
+      }));
     void startRun(chatId, buildRequest(seed, last.content));
   }, [chatId, loadingMessages, localSending, messages, buildRequest]);
 
@@ -358,39 +517,62 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     if (chatId != null) resolveRunConfirm(chatId, ok);
   }, [chatId]);
 
+  const clearError = useCallback(() => {
+    setLocalError('');
+    clearRunError(chatId);
+  }, [chatId]);
+
+  const stop = useCallback(() => {
+    if (chatId != null) stopRun(chatId);
+  }, [chatId]);
+
   const buildTriageReport = useCallback(
-    (agentLabel?: string) =>
+    (agentLabel?: string, surface?: string) =>
       buildBrainTriageReport({
         capturedAt: new Date().toISOString(),
         events: getRunTrace(chatId),
         messages,
         chatId,
         agentLabel,
+        surface,
+        configuredModel: model,
         error: localError || snapshot.error,
       }),
-    [chatId, messages, localError, snapshot.error],
+    [chatId, messages, localError, snapshot.error, model],
   );
 
   return {
     messages,
     loadingMessages,
+    reloadMessages,
     sending: localSending || snapshot.running,
     error: localError || snapshot.error,
+    /** What the user can DO about `error` (reconnect / upgrade / add a card), when
+     *  the failure was actionable. Only meaningful for a RUN error — a local error
+     *  (e.g. a failed rename) has no gateway verdict behind it. */
+    errorAction: localError ? null : snapshot.errorAction,
     streamingText: snapshot.streamingText,
     copiedMessageId,
     feedbackMap,
     pendingAttachments,
     uploading,
     send,
+    stop,
     copyMessage,
     submitFeedback,
     attach,
     removeAttachment,
     setError: setLocalError,
+    clearError,
     pendingConfirm: snapshot.pendingConfirm,
     resolveConfirm,
     hasTrace: snapshot.hasTrace,
     trace: snapshot.trace,
+    /** Connected providers the gateway couldn't use this run (e.g. an expired Claude
+     *  subscription) — a mounted view renders a passive "reconnect your account"
+     *  banner off this. Empty when everything resolved. */
+    byoUnresolved: snapshot.byoUnresolved,
+    providerCap: snapshot.providerCap,
     buildTriageReport,
   };
 }

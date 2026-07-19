@@ -1,5 +1,7 @@
 import * as vscode from "vscode";
+import type { EvermindLearnOutcome } from "@seanhogg/builderforce-brain-embedded";
 import { getApiKey, getBaseUrl } from "./gateway";
+import { ttlCache } from "./ttlCache";
 
 export interface BfProject {
   id: number;
@@ -16,6 +18,28 @@ export interface BfTask {
   priority?: string;
   description?: string | null;
   assignedUserId?: string | null;
+  /** 'task' (default), 'epic' (decomposes into child tasks), or 'gap' (a validator-
+   *  minted follow-up). Drives the sidebar Hierarchy view (mirrors the API's `taskType`). */
+  taskType?: "task" | "epic" | "gap";
+  /** Parent epic's id (null/undefined for top-level tasks) — the nesting edge for
+   *  the Hierarchy view (mirrors the API's `parentTaskId`). */
+  parentTaskId?: number | null;
+  /** Last-touched timestamp + due date (ISO) — drive the "Needs attention" filter
+   *  (stale / overdue). Present in the API's `toPlain()` payload. */
+  updatedAt?: string | null;
+  dueDate?: string | null;
+}
+
+/** A project-scoped OKR Objective + the board items that deliver it — the top tier
+ *  of the Hierarchy view (Objective → Epic → task → subtask). Sourced from the
+ *  project rollup (`GET /api/pmo/rollup?kind=project`). */
+export interface BfObjective {
+  id: string;
+  title: string;
+  progress: number;
+  status?: string;
+  /** Ids of the tasks/epics linked to this objective (its delivery lineage). */
+  linkedTaskIds: number[];
 }
 
 /** The terminal task status. Single source of truth for "done" across surfaces
@@ -57,6 +81,9 @@ export interface BfApproval {
   executionId?: number | null;
   agentHostId?: number | null;
   cloudAgentRef?: string | null;
+  /** The project this approval belongs to (via its execution's task), or null when it
+   *  isn't tied to a task. Server-enriched so the Inbox can scope/label by project. */
+  projectId?: number | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -146,6 +173,29 @@ export function clearJwt(): void {
   scopedJwt = undefined;
   rescopeUnsupported = false;
   workspaceCache = undefined;
+  currentUserId = undefined;
+  evermindHeadCache.invalidate();
+}
+
+// The signed-in human's user id (from GET /api/vscode/me), cached for the session so
+// the "assigned to me" task filter doesn't refetch. `null` = resolved-but-unavailable
+// (older API); undefined = not yet fetched. Cleared on sign-out via clearJwt.
+let currentUserId: string | null | undefined;
+
+/**
+ * The signed-in user's id — for the "Assigned to me" task filter. Cached; returns
+ * null when the identity endpoint isn't reachable (older API), so the caller can
+ * degrade the filter to a no-op rather than hide everything.
+ */
+export async function getCurrentUserId(secrets: vscode.SecretStorage): Promise<string | null> {
+  if (currentUserId !== undefined) return currentUserId;
+  try {
+    const r = await authed<{ userId?: string }>(secrets, "/api/vscode/me");
+    currentUserId = r?.userId ?? null;
+  } catch {
+    currentUserId = null;
+  }
+  return currentUserId;
 }
 
 // The active workspace's {id, name}, cached until the workspace changes / sign-out.
@@ -186,6 +236,28 @@ export async function getCurrentWorkspace(
 /** The tenant JWT for embedding web pages (handed to the iframe via postMessage). */
 export function getTenantJwt(secrets: vscode.SecretStorage): Promise<string | undefined> {
   return exchangeJwt(secrets);
+}
+
+/** Tenant roles that can change project settings (mirrors the API's requireRole(MANAGER)). */
+const MANAGER_ROLES = new Set(["owner", "admin", "manager"]);
+
+/**
+ * Whether the signed-in user can manage the active workspace (owner/admin/manager) —
+ * a best-effort UX gate for the Evermind console's write controls. Resolved from the
+ * workspace list's `role`; the API enforces authoritatively regardless, so a false
+ * negative just shows disabled controls (never a security hole). Degrades to false
+ * when the role can't be resolved (signed out / older API).
+ */
+export async function canManageActiveWorkspace(secrets: vscode.SecretStorage): Promise<boolean> {
+  try {
+    const token = await exchangeJwt(secrets);
+    if (!token || !baseJwt) return false;
+    const id = selectedTenantId ?? baseJwt.tenantId;
+    const role = (await listWorkspaces(secrets)).find((w) => w.id === id)?.role;
+    return role != null && MANAGER_ROLES.has(role.toLowerCase());
+  } catch {
+    return false;
+  }
 }
 
 async function authed<T>(
@@ -278,6 +350,106 @@ export async function listProjects(secrets: vscode.SecretStorage): Promise<BfPro
   return r?.projects ?? [];
 }
 
+/**
+ * The per-project Evermind head — the self-learning model assigned to a project.
+ * Mirrors the api `headCore` response (projectEvermindRoutes.ts). `inferenceEnabled`
+ * is the manager opt-in that governs whether the project's agent runs execute ON
+ * its Evermind; `seeded` is `version > 0`.
+ */
+export interface BfProjectEvermindHead {
+  version: number;
+  ref: string | null;
+  mode?: string;
+  name?: string | null;
+  contributions?: number;
+  inferenceEnabled: boolean;
+  seeded: boolean;
+}
+
+// Single-process, short-TTL cache (shared ttlCache): the head is slow-changing yet
+// read on every chat turn's model resolution. Caches a negative (undefined) head too,
+// so an unreachable/unowned project isn't refetched every turn. Busted on sign-out
+// (clearJwt) and via invalidateProjectEvermind.
+const evermindHeadCache = ttlCache<number, BfProjectEvermindHead | undefined>(60_000);
+
+/**
+ * The project's Evermind head (GET /api/projects/:id/evermind/head). Used to decide
+ * whether an editor chat turn should run on the project's Evermind — honoring the
+ * SAME `inferenceEnabled` opt-in the cloud/on-prem dispatcher uses. Degrades to
+ * undefined when the endpoint isn't reachable / project not owned, so chat always
+ * falls back to the default model.
+ */
+export async function getProjectEvermindHead(
+  secrets: vscode.SecretStorage,
+  projectId: number,
+  force = false,
+): Promise<BfProjectEvermindHead | undefined> {
+  const cached = evermindHeadCache.get(projectId);
+  if (!force && cached) return cached.value;
+  let head: BfProjectEvermindHead | undefined;
+  try {
+    head = await authed<BfProjectEvermindHead>(secrets, `/api/projects/${projectId}/evermind/head`);
+  } catch {
+    head = undefined; // not deployed / not owned / offline — chat falls back to default
+  }
+  evermindHeadCache.set(projectId, head);
+  return head;
+}
+
+/** Invalidate the cached Evermind head (e.g. after toggling inference in the web app). */
+export function invalidateProjectEvermind(projectId?: number): void {
+  evermindHeadCache.invalidate(projectId);
+}
+
+/** One durable belief in the SHARED per-project facts store (server-side, not local disk). */
+export interface BfProjectFact {
+  key: string;
+  content: string;
+}
+
+/**
+ * Recall the project's shared facts (GET /api/projects/:id/facts). The SAME store the
+ * cloud + on-prem agents read, so the editor recalls beliefs any surface wrote.
+ * Degrades to [] when signed out / not deployed / project not owned.
+ */
+export async function recallProjectFacts(
+  secrets: vscode.SecretStorage,
+  projectId: number,
+  query?: string,
+  limit = 5,
+): Promise<BfProjectFact[]> {
+  try {
+    const qs = new URLSearchParams();
+    if (query) qs.set('query', query);
+    qs.set('limit', String(limit));
+    const r = await authed<{ facts: BfProjectFact[] }>(secrets, `/api/projects/${projectId}/facts?${qs.toString()}`);
+    return r?.facts ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Write-through a belief to the project's SHARED facts store (POST …/facts). Replaces
+ * by stable key server-side, so cloud/on-prem/editor runs all see it. Best-effort.
+ */
+export async function rememberProjectFact(
+  secrets: vscode.SecretStorage,
+  projectId: number,
+  key: string,
+  content: string,
+): Promise<boolean> {
+  try {
+    const r = await authed<{ ok?: boolean }>(secrets, `/api/projects/${projectId}/facts`, {
+      method: 'POST',
+      body: JSON.stringify({ key, content, source: 'vscode' }),
+    });
+    return !!r?.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** A workspace (tenant) the signed-in user belongs to. */
 export interface BfWorkspace {
   id: number;
@@ -325,8 +497,8 @@ export async function createProject(
 }
 
 // Tasks cache: single-process, short TTL, busted by refresh / status change.
-const taskCache = new Map<number, { ts: number; tasks: BfTask[] }>();
 const TASKS_TTL = 30_000;
+const taskCache = ttlCache<number, BfTask[]>(TASKS_TTL);
 
 export async function listTasks(
   secrets: vscode.SecretStorage,
@@ -334,16 +506,104 @@ export async function listTasks(
   force = false,
 ): Promise<BfTask[]> {
   const cached = taskCache.get(projectId);
-  if (!force && cached && Date.now() - cached.ts < TASKS_TTL) return cached.tasks;
+  if (!force && cached) return cached.value;
   const r = await authed<{ tasks: BfTask[] }>(secrets, `/api/tasks?project_id=${projectId}`);
   const tasks = r?.tasks ?? [];
-  taskCache.set(projectId, { ts: Date.now(), tasks });
+  taskCache.set(projectId, tasks);
   return tasks;
 }
 
 export function invalidateTasks(projectId?: number): void {
-  if (projectId == null) taskCache.clear();
-  else taskCache.delete(projectId);
+  taskCache.invalidate(projectId);
+}
+
+/** An OPEN work item assigned to the signed-in user, delivered by the API's
+ *  /api/vscode/tasks channel (mirrors that endpoint's row shape). This is how work
+ *  reaches the editor as an assignable runtime: assign a ticket to the user on the
+ *  web board and it surfaces here (tracked HITL). */
+export interface BfAssignedTask {
+  id: number;
+  key: string;
+  title: string;
+  status: string;
+  priority: string;
+  projectId: number;
+  projectPublicId: string;
+  projectName: string;
+  githubPrUrl: string | null;
+  updatedAt: string | null;
+}
+
+/**
+ * The open tasks assigned to the signed-in user (GET /api/vscode/tasks). Uncached —
+ * the caller polls it on the heartbeat cadence to detect newly-assigned work, so a
+ * stale cache would defeat the point. Degrades to [] when signed out / not deployed.
+ */
+export async function listAssignedTasks(secrets: vscode.SecretStorage): Promise<BfAssignedTask[]> {
+  try {
+    const r = await authed<{ tasks: BfAssignedTask[] }>(secrets, "/api/vscode/tasks");
+    return r?.tasks ?? [];
+  } catch {
+    return [];
+  }
+}
+
+// Project-scoped OKR objectives, cached briefly like tasks so the Hierarchy view's
+// top tier doesn't refetch on every expand. Keyed by project id.
+const objectiveCache = ttlCache<number, BfObjective[]>(TASKS_TTL);
+
+/**
+ * The project's OKR Objectives + their delivery links — the top tier of the
+ * Hierarchy view. Reads the composed project rollup (already read-through cached
+ * server-side, 60s). Degrades to [] when the rollup isn't reachable (older API /
+ * not a manager), so the tree still renders its board items.
+ */
+export async function listProjectObjectives(
+  secrets: vscode.SecretStorage,
+  projectId: number,
+  force = false,
+): Promise<BfObjective[]> {
+  const cached = objectiveCache.get(projectId);
+  if (!force && cached) return cached.value;
+  try {
+    const r = await authed<{
+      okr?: { objectives?: Array<{ id: string; title: string; progress: number; status?: string; links?: Array<{ kind: string; refId: string }> }> };
+    }>(secrets, `/api/pmo/rollup?kind=project&id=${projectId}`);
+    const objectives: BfObjective[] = (r?.okr?.objectives ?? []).map((o) => ({
+      id: o.id,
+      title: o.title,
+      progress: o.progress ?? 0,
+      status: o.status,
+      linkedTaskIds: (o.links ?? [])
+        .filter((l) => l.kind === "task" || l.kind === "epic")
+        .map((l) => Number(l.refId))
+        .filter((n) => Number.isFinite(n)),
+    }));
+    objectiveCache.set(projectId, objectives);
+    return objectives;
+  } catch {
+    return [];
+  }
+}
+
+export function invalidateObjectives(projectId?: number): void {
+  objectiveCache.invalidate(projectId);
+}
+
+/** Change a board item's type — task⇄epic, or promote it to an OKR Objective
+ *  ('objective'). Server re-links children + scopes the new objective to the
+ *  project. Returns false on failure so the caller can surface an error. */
+export async function convertTaskType(
+  secrets: vscode.SecretStorage,
+  id: number,
+  target: "task" | "epic" | "objective",
+): Promise<boolean> {
+  try {
+    await authed(secrets, `/api/tasks/${id}/convert-type`, { method: "POST", body: JSON.stringify({ target }) });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** A server-side Brain conversation (GET /api/brain/chats). The SAME unified chat
@@ -355,6 +615,36 @@ export interface BfBrainChat {
   origin?: string;
   createdAt?: string;
   updatedAt?: string;
+  /** Agents/humans invited into the chat (multi-party chat). Refs resolve to
+   *  display names via {@link listAgentPool}. Absent on older servers. */
+  participants?: Array<{ ref: string; kind: string }>;
+}
+
+/** An agent in the tenant's pool, id→display-name (for resolving participant refs). */
+export interface BfAgentPoolEntry {
+  ref: string;
+  name: string;
+}
+
+/**
+ * The tenant's agent pool (workforce owned/purchased + registered agents), so a
+ * chat's participant refs can be shown as names/initials. Stable tenant data —
+ * the caller should fetch once and cache. Degrades to [] when signed out.
+ */
+export async function listAgentPool(secrets: vscode.SecretStorage): Promise<BfAgentPoolEntry[]> {
+  try {
+    const [mine, purchased, registered] = await Promise.all([
+      authed<Array<{ id: string | number; name: string }>>(secrets, '/api/workforce/agents/mine').catch(() => undefined),
+      authed<Array<{ id: string | number; name: string }>>(secrets, '/api/workforce/agents/purchased').catch(() => undefined),
+      authed<Array<{ id: string | number; name: string; isActive?: boolean }>>(secrets, '/api/agents').catch(() => undefined),
+    ]);
+    const byRef = new Map<string, string>();
+    for (const a of [...(mine ?? []), ...(purchased ?? [])]) byRef.set(String(a.id), a.name);
+    for (const a of registered ?? []) if (a.isActive !== false) byRef.set(String(a.id), a.name);
+    return [...byRef.entries()].map(([ref, name]) => ({ ref, name }));
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -372,6 +662,124 @@ export async function listBrainChats(
     return r?.chats ?? [];
   } catch {
     return [];
+  }
+}
+
+/**
+ * Create a Brain conversation (POST /api/brain/chats) and return its id — the SAME
+ * unified store the webview + web app use. The native `@builderforce` chat handler
+ * creates one lazily for a session so the work it does (created tickets, from_delta
+ * code-change captures) links back to a real conversation, exactly like the webview
+ * Brain. Returns null when signed out / unreachable (the handler then runs unlinked).
+ */
+export async function createBrainChat(
+  secrets: vscode.SecretStorage,
+  input: { title?: string; projectId?: number | null },
+): Promise<number | null> {
+  try {
+    const r = await authed<{ id?: number }>(secrets, `/api/brain/chats`, {
+      method: "POST",
+      body: JSON.stringify({ title: input.title, projectId: input.projectId ?? null }),
+    });
+    return typeof r?.id === "number" ? r.id : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Append turns to a Brain conversation (POST /api/brain/chats/:id/messages) so the
+ * native chat's transcript is persisted into the SAME store the webview + web app
+ * read — the linked chat then carries the actual conversation, not just ticket
+ * lineage. Returns the server's TRUTHFUL learn-gate outcome for the persisted turn
+ * (the same `evermindLearn` the webview/web adapters attach) so the caller can surface
+ * a learn/skip line + self-heal a project-less chat. Best-effort: returns null on any
+ * failure so it never breaks the chat turn.
+ */
+export async function appendBrainMessages(
+  secrets: vscode.SecretStorage,
+  chatId: number,
+  messages: Array<{ role: string; content: string }>,
+): Promise<EvermindLearnOutcome | null> {
+  if (messages.length === 0) return null;
+  try {
+    const r = await authed<{ evermindLearn?: EvermindLearnOutcome }>(secrets, `/api/brain/chats/${chatId}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ messages }),
+    });
+    return r?.evermindLearn ?? null;
+  } catch {
+    /* best-effort persistence — never blocks the chat turn */
+    return null;
+  }
+}
+
+/**
+ * Adopt a project onto a Brain chat (PATCH /api/brain/chats/:id) — used by the native
+ * participant's self-heal: when the server reports the chat is `not-attached` but the
+ * IDE has an active project, bind it so the NEXT turn trains that project's Evermind
+ * (parity with the webview App's adopt-on-open). Best-effort; swallows errors.
+ */
+export async function updateBrainChatProject(
+  secrets: vscode.SecretStorage,
+  chatId: number,
+  projectId: number,
+): Promise<void> {
+  try {
+    await authed(secrets, `/api/brain/chats/${chatId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ projectId }),
+    });
+  } catch {
+    /* best-effort — a failed adopt just leaves the chat unscoped until next time */
+  }
+}
+
+/** Cross-surface "needs attention" state for a work item (GET /api/runtime/attention).
+ *  `awaiting_input` = an agent paused on ask_human and a person must answer;
+ *  `running` = actively executing. Idle items are omitted. */
+export type BfAttentionState = "running" | "awaiting_input";
+export interface BfAttentionItem {
+  state: BfAttentionState;
+  executionId?: number;
+  approvalId?: string;
+}
+/** AI Manager cadence carried on the same attention signal (tenant-wide, or the
+ *  selected project) so the editor can show an ambient "Manager active" status. */
+export interface BfAttentionManager {
+  /** ISO of the freshest manager pass in scope, or null if never managed. */
+  lastRunAt: string | null;
+  /** A pass landed in the last few minutes. */
+  recentlyActive: boolean;
+}
+export interface BfAttention {
+  /** Keyed by task id. */
+  tasks: Record<number, BfAttentionItem>;
+  /** Keyed by Brain chat id (a chat inherits the state of its linked task). */
+  chats: Record<number, BfAttentionItem & { taskId?: number }>;
+  counts: { running: number; awaiting: number };
+  /** AI Manager cadence (present on every response). */
+  manager?: BfAttentionManager;
+}
+
+const EMPTY_ATTENTION: BfAttention = { tasks: {}, chats: {}, counts: { running: 0, awaiting: 0 }, manager: { lastRunAt: null, recentlyActive: false } };
+
+/**
+ * Fetch the tenant's live "what's running / what needs a human answer" map — the
+ * SAME signal the web app renders, so the Sessions and Project trees light up in
+ * lockstep with the board and the browser. Scoped to `projectId` when given.
+ * Degrades to an empty map when signed out / unreachable (never throws).
+ */
+export async function getAttention(
+  secrets: vscode.SecretStorage,
+  projectId?: number,
+): Promise<BfAttention> {
+  try {
+    const q = projectId != null ? `?projectId=${projectId}` : "";
+    const r = await authed<BfAttention>(secrets, `/api/runtime/attention${q}`);
+    return r ?? EMPTY_ATTENTION;
+  } catch {
+    return EMPTY_ATTENTION;
   }
 }
 
@@ -396,6 +804,35 @@ export async function updateTaskStatus(
 ): Promise<void> {
   // Partial merge on the server — only status changes (and triggers lane automation).
   await authed(secrets, `/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
+}
+
+/** One activity signal the VSIX reports for the billable-timecard pipeline. */
+export interface VsixActivitySignal {
+  kind: string;
+  ref?: string;
+  weight?: number;
+  durationSeconds?: number;
+  projectId?: number;
+  occurredAt?: string;
+  metadata?: unknown;
+}
+
+/**
+ * Push a batch of audited "click sense" signals from the editor (source 'vscode').
+ * Best-effort: capture must never disrupt the editor, so errors are swallowed. The
+ * server attributes each signal to the signed-in user + active tenant and resolves
+ * it into billable time (see api/src/presentation/routes/activityRoutes.ts).
+ */
+export async function postActivitySignals(
+  secrets: vscode.SecretStorage,
+  signals: VsixActivitySignal[],
+): Promise<void> {
+  if (signals.length === 0) return;
+  try {
+    await authed(secrets, `/api/activity/ingest`, { method: "POST", body: JSON.stringify({ signals }) });
+  } catch {
+    /* best-effort activity capture */
+  }
 }
 
 /**
@@ -433,14 +870,36 @@ async function authedRaw<T>(
 }
 
 /**
+ * A failed platform dispatch, carrying the structured detail the command layer needs
+ * to show a SPECIFIC, actionable message instead of the raw HTTP dump. `httpStatus`
+ * branches the outcome (402 → run-limit upgrade, 429 → token-budget), `code` is the
+ * gateway's machine code (e.g. `plan_token_limit_exceeded`), and `serverMessage` is
+ * the human-readable reason the API already tailored to the tenant's plan.
+ */
+export class BfDispatchError extends Error {
+  readonly httpStatus: number;
+  readonly code?: string;
+  readonly serverMessage?: string;
+  constructor(message: string, detail: { httpStatus: number; code?: string; serverMessage?: string }) {
+    super(message);
+    this.name = "BfDispatchError";
+    this.httpStatus = detail.httpStatus;
+    this.code = detail.code;
+    this.serverMessage = detail.serverMessage;
+  }
+}
+
+/**
  * Dispatch a PLATFORM run for a task — the SAME endpoint the web app's
  * `runtimeApi.submitExecution` hits (POST /api/runtime/executions). This is DISTINCT
  * from the local in-editor agent loop: it asks the platform to run the task on its
  * assigned AgentHost / cloud agent. The run is then observable on the board / web app.
  *
  * Returns either the started execution (HTTP 201) or, when a priority/policy gate fires,
- * an `awaitingApproval` descriptor (HTTP 202). Throws on 402 (plan limit) with a
- * `HTTP 402` message so the caller can route to an upgrade, and on other 4xx/5xx.
+ * an `awaitingApproval` descriptor (HTTP 202). On any other status throws a
+ * {@link BfDispatchError} carrying the HTTP status, the gateway's machine `code`, and
+ * the server's tailored message so the command layer can branch (402 → run-limit
+ * upgrade, 429 → token-budget) and show the specific reason.
  */
 export async function submitExecution(
   secrets: vscode.SecretStorage,
@@ -448,7 +907,7 @@ export async function submitExecution(
   opts?: { agentHostId?: number | null; sessionId?: string; payload?: string },
 ): Promise<BfSubmitResult> {
   const { status, body, text } = await authedRaw<
-    BfExecution & { status?: string; approvalId?: string; reason?: string }
+    BfExecution & { status?: string; approvalId?: string; reason?: string; error?: string; code?: string }
   >(secrets, "/api/runtime/executions", {
     method: "POST",
     body: JSON.stringify({ taskId, ...opts }),
@@ -460,8 +919,14 @@ export async function submitExecution(
   if (status === 201 || status === 200) {
     return { execution: body as BfExecution };
   }
-  // Surface the verbatim status so the command layer can branch (402 → upgrade).
-  throw new Error(`/api/runtime/executions → HTTP ${status} ${text.slice(0, 200)}`);
+  // Non-2xx: hand the command layer structured detail (status + code + the server's
+  // tailored message) instead of a raw dump. Falls back to the verbatim status line
+  // when the body carried no JSON `error` (e.g. an infra 5xx).
+  const serverMessage = typeof body?.error === "string" ? body.error : undefined;
+  throw new BfDispatchError(
+    serverMessage ?? `/api/runtime/executions → HTTP ${status} ${text.slice(0, 200)}`,
+    { httpStatus: status, code: typeof body?.code === "string" ? body.code : undefined, serverMessage },
+  );
 }
 
 /**
@@ -531,4 +996,126 @@ export async function connect(
   } catch {
     return false;
   }
+}
+
+// ── Diagnostics (security & compliance system audits) ─────────────────────────
+// The same `/api/tools` diagnostics engine the web app uses: a data-driven list of
+// system audits (SOC 2, Architecture, Quality, Privacy & Data-Law) that run against
+// a project's connected repos and record a per-project rating that rolls up to the
+// workspace. See api/src/application/tools/systemAudits.ts.
+
+/** A system-level audit type (mirrors the api `SystemAuditSummary`). */
+export interface BfSystemAudit {
+  id: string;
+  name: string;
+  category: string;
+  icon: string;
+  blurb: string;
+}
+
+/** One diagnostic's latest result for a project (mirrors the api `ProjectDiagnostic`). */
+export interface BfProjectDiagnostic {
+  toolId: string;
+  name: string;
+  score: number | null;
+  scoreLabel: string | null;
+  headline: string;
+  createdAt: string;
+  result?: {
+    headline: string;
+    summary?: string;
+    metrics?: Array<{ label: string; value: string; hint?: string }>;
+    recommendations?: Array<{ title: string; detail: string }>;
+  };
+}
+
+/** A project's diagnostic rating (mirrors the api `ProjectScore`). */
+export interface BfProjectScore {
+  result: { headline: string; summary?: string; score: number | null; scoreLabel: string | null };
+  diagnostics: BfProjectDiagnostic[];
+}
+
+/**
+ * The catalog of system audit types (GET /api/tools/audits). Public data — powers
+ * the Diagnostics sidebar. Degrades to [] when signed out / unreachable.
+ */
+export async function listSystemAudits(secrets: vscode.SecretStorage): Promise<BfSystemAudit[]> {
+  try {
+    const r = await authed<{ audits: BfSystemAudit[] }>(secrets, "/api/tools/audits");
+    return r?.audits ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * A project's diagnostic rating + each diagnostic's latest run (GET
+ * /api/tools/projects/:id/score, manager+). Degrades to undefined when not a
+ * manager / not deployed / project not owned, so the tree still lists the audit
+ * types without scores.
+ */
+export async function getProjectDiagnostics(
+  secrets: vscode.SecretStorage,
+  projectId: number,
+): Promise<BfProjectScore | undefined> {
+  try {
+    return await authed<BfProjectScore>(secrets, `/api/tools/projects/${projectId}/score`);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Run a system audit against a project (POST /api/tools/audits/:id/run, manager+):
+ * scores + records a report, notifies the user, and files the agent remediation
+ * ticket. Returns true on success (202/201). Throws on non-2xx so the command layer
+ * can surface WHY (e.g. 403 not a manager, 400 no repo).
+ */
+export async function runAudit(
+  secrets: vscode.SecretStorage,
+  auditId: string,
+  projectId: number,
+): Promise<boolean> {
+  const r = await authed<{ started?: boolean }>(
+    secrets,
+    `/api/tools/audits/${encodeURIComponent(auditId)}/run`,
+    { method: "POST", body: JSON.stringify({ projectId }) },
+  );
+  return !!r;
+}
+
+// ── Meetings (live video/audio) ───────────────────────────────────────────────
+export interface BfMeeting {
+  id: string;
+  title: string;
+  kind: string;
+  status: "scheduled" | "live" | "ended" | "cancelled";
+  scheduledAt: string | null;
+  durationMinutes: number;
+  roomKey: string;
+  videoEnabled: boolean;
+}
+export interface BfMeetingAttendee { memberRef: string; memberName: string; response: string; }
+export interface BfMeetingDetail { meeting: BfMeeting; attendees: BfMeetingAttendee[]; }
+export interface BfMeetingJoin {
+  roomKey: string;
+  videoEnabled: boolean;
+  iceServers: unknown[];
+  meeting: BfMeetingDetail;
+}
+
+/** Upcoming + live meetings for the active workspace (authorization-scoped server-side). */
+export async function listMeetings(secrets: vscode.SecretStorage): Promise<BfMeetingDetail[]> {
+  const r = await authed<{ meetings: BfMeetingDetail[] }>(secrets, "/api/meetings?scope=upcoming");
+  return r?.meetings ?? [];
+}
+
+/** Join a meeting — marks presence and returns the media room key + ICE config. */
+export async function joinMeeting(secrets: vscode.SecretStorage, id: string): Promise<BfMeetingJoin> {
+  const r = await authed<BfMeetingJoin>(secrets, `/api/meetings/${encodeURIComponent(id)}/join`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  if (!r) throw new Error("not signed in");
+  return r;
 }

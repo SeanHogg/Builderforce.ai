@@ -27,6 +27,31 @@ export async function sendSlackNotification(webhookUrl: string, text: string): P
   }).catch(() => { /* best-effort */ });
 }
 
+/**
+ * Post to an MS Teams Incoming Webhook. Teams' webhook expects a MessageCard (or an
+ * Adaptive Card) — we send a compact MessageCard with a title + text. Best-effort,
+ * mirroring the Slack sender. `themeColor` tints the card accent (e.g. severity red).
+ */
+export async function sendTeamsNotification(
+  webhookUrl: string,
+  title: string,
+  text: string,
+  themeColor = 'D7263D',
+): Promise<void> {
+  await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      '@type': 'MessageCard',
+      '@context': 'https://schema.org/extensions',
+      themeColor,
+      summary: title,
+      title,
+      text,
+    }),
+  }).catch(() => { /* best-effort */ });
+}
+
 export async function sendEmailNotification(
   apiKey: string,
   from: string,

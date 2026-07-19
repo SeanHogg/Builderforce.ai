@@ -16,9 +16,11 @@
 import { neon } from '@neondatabase/serverless';
 import {
   agentMemorySignal,
+  compilePsychometricProfile,
   lowerAgentSpec,
   type AgentExecParams,
   type AgentSpec,
+  type LimbicPsychProfile,
 } from '@builderforce/agent-tools';
 import type { Env } from '../../env';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
@@ -101,6 +103,22 @@ export interface ResolvedWorkforceModel {
   /** Persona + memory system directives to prepend to the request. */
   directives: string;
   inferenceMode: 'base' | 'lora' | 'hybrid';
+  /** Execution levers (think/reasoning/temperature) compiled from the agent's own
+   *  psychometric personality, so a caller applies the persona's temperature/reasoning
+   *  instead of a hardcoded default. Empty object when the agent has no profile. */
+  execParams: AgentExecParams;
+}
+
+/** Parse the stored `ide_agents.psychometric` JSON into a profile, or `undefined`
+ *  when absent/malformed/traitless (a fully neutral vector compiles to nothing). */
+function parseAgentPsychometric(raw: unknown): LimbicPsychProfile | undefined {
+  if (typeof raw !== 'string' || !raw) return undefined;
+  try {
+    const p = JSON.parse(raw) as LimbicPsychProfile;
+    return p && typeof p === 'object' && p.vector ? p : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** The published agent's base config — query-INDEPENDENT, so it is read-through
@@ -114,11 +132,19 @@ async function loadWorkforceAgentBase(env: Env, agentId: string): Promise<Workfo
     `workforce_model:resolve:${agentId}`,
     async (): Promise<WorkforceAgentBase | null> => {
       const rows = await neon(env.NEON_DATABASE_URL)`
-        SELECT name, title, bio, skills, base_model, r2_artifact_key, mamba_state, inference_mode
+        SELECT name, title, bio, skills, base_model, r2_artifact_key, mamba_state, inference_mode, psychometric
         FROM ide_agents WHERE id = ${agentId} LIMIT 1
       `;
       const a = rows[0] as Record<string, unknown> | undefined;
       if (!a) return null;
+      // Compile the agent's OWN personality (ide_agents.psychometric) into persona
+      // directives + exec levers so a Workforce agent executes UNDER its traits on every
+      // path that resolves it (team-chat reply, dedicated chat, OpenAI-standard gateway) —
+      // previously these descriptor fields existed but were never filled here, so the
+      // personality was silently dropped. Compiled ONCE per cached agent base (no per-turn
+      // recompute).
+      const profile = parseAgentPsychometric(a.psychometric);
+      const compiled = profile ? compilePsychometricProfile(profile) : undefined;
       const descriptor: AgentDescriptor = {
         name: String(a.name ?? ''),
         title: String(a.title ?? ''),
@@ -126,6 +152,8 @@ async function loadWorkforceAgentBase(env: Env, agentId: string): Promise<Workfo
         skills: (a.skills as string[] | string | null) ?? null,
         r2_artifact_key: (a.r2_artifact_key as string | null) ?? null,
         mamba_state: a.mamba_state,
+        ...(compiled && compiled.directives.length ? { personaDirectives: compiled.directives } : {}),
+        ...(compiled ? { execParams: compiled.params } : {}),
       };
       return {
         baseModel: (a.base_model as string | null) ?? null,
@@ -165,9 +193,18 @@ export async function resolveWorkforceModel(
     ? await recallAgentKnowledge(env, neon(env.NEON_DATABASE_URL), agentId, query)
     : '';
 
+  // `buildAgentInference` lowers the descriptor to BOTH the system prompt (now carrying
+  // the compiled persona directives) AND the persona exec levers — so a caller injects
+  // the personality into the prompt AND applies its temperature/reasoning, from one lowering.
+  const { systemPrompt, execParams } = buildAgentInference({
+    ...base.descriptor,
+    recalledContext: recalledContext || undefined,
+  });
+
   return {
     baseModel: base.baseModel,
-    directives: buildAgentSystemPrompt({ ...base.descriptor, recalledContext: recalledContext || undefined }),
+    directives: systemPrompt,
     inferenceMode: base.inferenceMode,
+    execParams,
   };
 }

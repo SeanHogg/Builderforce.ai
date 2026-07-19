@@ -10,7 +10,7 @@
  */
 import { and, eq, gte, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
-import { memberMetricsPeriod, deploymentEvents, runModelOutcomes } from '../../infrastructure/database/schema';
+import { memberMetricsPeriod, deploymentEvents, runModelOutcomes, ticketAudits, tasks } from '../../infrastructure/database/schema';
 import { computeProjectDeliveryMetrics } from '../metrics/workforceMetrics';
 import { getTool } from './toolDefinitions';
 import type { QuestionnaireTool, ToolResult, ToolMetric, ToolRecommendation } from './toolTypes';
@@ -205,8 +205,59 @@ const agenticMaturityProvider: ToolDataProvider = async (db, tenantId, days, pro
   });
 };
 
+/**
+ * Ticket Role & Diagnostic Coverage — scored objectively from the per-ticket audit
+ * ledger (ticket_audits). Backs the Manager AI agent's ticket-coverage diagnostic.
+ */
+const ticketRoleCoverageProvider: ToolDataProvider = async (db, tenantId, _days, projectId) => {
+  const forProject = projectId != null;
+  const [agg] = await db
+    .select({
+      total: sql<number>`count(*)::int`,
+      flagged: sql<number>`count(*) filter (where ${ticketAudits.status} = 'flagged')::int`,
+      withReqs: sql<number>`count(*) filter (where ${ticketAudits.requiredCount} > 0)::int`,
+      avgCoverage: sql<number | null>`avg(${ticketAudits.coverage}) filter (where ${ticketAudits.requiredCount} > 0)`,
+    })
+    .from(ticketAudits)
+    .innerJoin(tasks, eq(ticketAudits.taskId, tasks.id))
+    .where(and(eq(ticketAudits.tenantId, tenantId), ...(forProject ? [eq(tasks.projectId, projectId!)] : [])));
+
+  const withReqs = Number(agg?.withReqs) || 0;
+  const flagged = Number(agg?.flagged) || 0;
+  if (withReqs === 0) {
+    return {
+      headline: 'No audited tickets yet',
+      summary: 'Move some tickets through a role-gated board (or apply a kanban template) and check back.',
+      score: null, scoreLabel: null,
+      metrics: [{ label: 'Audited tickets', value: '0' }],
+      recommendations: [{ title: 'Apply a kanban template', detail: 'Give each lane a responsible role + required checks so tickets can be audited.' }],
+    };
+  }
+
+  const passRate = (withReqs - flagged) / withReqs;
+  const avgCoverage = agg?.avgCoverage != null ? Math.round(Number(agg.avgCoverage)) : null;
+  const level = passRate >= 0.95 ? 5 : passRate >= 0.85 ? 4 : passRate >= 0.6 ? 3 : passRate >= 0.3 ? 2 : 1;
+
+  return {
+    headline: `Level ${level} — ${LEVEL_NAMES[level - 1]}`,
+    summary: `${Math.round(passRate * 100)}% of tickets with required checks passed their audit${flagged ? ` — ${flagged} flagged for review.` : '.'}`,
+    score: level,
+    scoreLabel: LEVEL_NAMES[level - 1],
+    metrics: [
+      { label: 'Tickets audited', value: String(withReqs) },
+      { label: 'Passing coverage', value: `${Math.round(passRate * 100)}%`, tier: level },
+      { label: 'Flagged for review', value: String(flagged), tier: flagged === 0 ? 5 : Math.max(1, 5 - Math.min(4, flagged)) },
+      ...(avgCoverage != null ? [{ label: 'Avg. required-check coverage', value: `${avgCoverage}%` }] : []),
+    ],
+    recommendations: flagged > 0
+      ? [{ title: `Resolve ${flagged} flagged ${flagged === 1 ? 'ticket' : 'tickets'}`, detail: 'Open the Ticket Audit panel to see which required role or diagnostic each flagged ticket is missing, and route it back to the responsible role.' }]
+      : [{ title: 'Coverage is healthy', detail: 'Keep required roles + diagnostics attached to your lanes as the board evolves.' }],
+  };
+};
+
 export const TOOL_DATA_PROVIDERS: Record<string, ToolDataProvider> = {
   'agentic-maturity': agenticMaturityProvider,
+  'ticket-role-coverage': ticketRoleCoverageProvider,
 };
 
 export function hasDataProvider(toolId: string): boolean {

@@ -1,9 +1,9 @@
 # PRD 13 — Learned Model Routing (action-type labels → outcome analytics → routing, with SSM recall)
 
 **Status:** Draft — ready for implementation in a fresh chat.
-**Owner track:** T3 · Gateway & LLM (`api/src/application/llm/**`, route `llmRoutes.ts`) with cross-cutting touches in T4 · Cloud Runtime (`api/src/application/runtime/**`) and a later T6/SSM increment (`SSMjs`/`MambaKit`).
+**Owner track:** T3 · Gateway & LLM (`api/src/application/llm/**`, route `llmRoutes.ts`) with cross-cutting touches in T4 · Cloud Runtime (`api/src/application/runtime/**`) and a later T6/SSM increment (`@seanhogg/builderforce-memory`).
 **Migration band:** draw the next free numbers from `api/migrations/` (latest is `0196` at time of writing → start at `0197`; confirm before writing).
-**Depends on / extends:** [[claude-direct-coding-floor]] (cascade + `pickCloudModel`), the cloud agent engine (`cloudAgentEngine.ts`), `recordUsageRow`/`llm_usage_log`, the SSM Hippocampus loop (MambaKit/SSMjs).
+**Depends on / extends:** [[claude-direct-coding-floor]] (cascade + `pickCloudModel`), the cloud agent engine (`cloudAgentEngine.ts`), `recordUsageRow`/`llm_usage_log`, the SSM Hippocampus loop (builderforce-memory).
 
 ---
 
@@ -73,7 +73,7 @@ Two backstops keep it safe: routing **degrades to today's static order** wheneve
 | Layer | Authority? | Where it runs | Cost |
 |---|---|---|---|
 | **Routing table** — the `(scope, action_type, model) → rank` decision | **Yes** (shared, works headless) | **Server-side, as a tiny KV blob** read at run start | **1 KV `get` of a few-KB blob per run. Zero SQL on the hot path, zero per-page-load cost.** |
-| **SSM semantic recall** — "this task *looks like* prior SQL tickets where Gemini won" | No (a *bias* on top of the table) | **Client GPU (WebGPU/MambaKit) when interactive**; skipped headless | **Zero server CPU, zero DB.** Heavy embed+kNN runs on the user's machine for free. |
+| **SSM semantic recall** — "this task *looks like* prior SQL tickets where Gemini won" | No (a *bias* on top of the table) | **Client GPU (WebGPU/builderforce-memory) when interactive**; skipped headless | **Zero server CPU, zero DB.** Heavy embed+kNN runs on the user's machine for free. |
 
 This is the cost-optimal reading of "move intelligence to the client": **the expensive SSM compute moves to the client's GPU (free, when present); the cheap-but-must-always-work decision stays a server KV lookup.**
 
@@ -84,7 +84,7 @@ This is the cost-optimal reading of "move intelligence to the client": **the exp
 - Net steady-state cost per run: **decision = 1 cached KV get; terminal = 1 outcome upsert + 1 blob RMW.** No per-request aggregation, no N+1, no page-load DB calls.
 
 ### SSM recall placement (client-first, headless-safe)
-- The per-codebase SSM hippocampus (MambaKit/SSMjs, WebGPU) already runs **in the browser** with **IndexedDB-backed** weights/memories (`idbFactory` injection — see the SSM Hippocampus loop; **IndexedDB, not LocalStorage** — weights are MB-scale binary, LocalStorage is ~5 MB string-only and synchronous).
+- The per-codebase SSM hippocampus (builderforce-memory, WebGPU) already runs **in the browser** with **IndexedDB-backed** weights/memories (`idbFactory` injection — see the SSM Hippocampus loop; **IndexedDB, not LocalStorage** — weights are MB-scale binary, LocalStorage is ~5 MB string-only and synchronous).
 - **Interactive run:** when a human launches a run from a tab, the client computes the SSM recall **bias** locally (embed the task → kNN over this repo's prior `(task, winning_model)` memories) and includes a small `routingBias: { model: weight }` map in the run payload. The server merges it as a nudge over the KV table. **Zero server cost.**
 - **Headless run:** no client → no bias → routing uses the KV table alone. Fully functional, just without the semantic nudge.
 - **Sync/transport:** reuse the **existing execution-steering WebSocket relay** (don't add a new socket) to (a) push new server-side outcomes to connected clients so their local SSM memory stays current, and (b) optionally let a client persist a distilled memory snapshot server-side (R2/KV) so a *new* device warm-starts instead of relearning. The authoritative routing table never depends on this sync — it's pure client personalization.
@@ -163,7 +163,7 @@ The decision artifact from §4.1. A compact JSON blob per scope (`project:<id>`,
 
 ### 6.6 SSM / Samba recall layer — **client-side compute, server-side merge** (phase 3 — separable increment)
 Implements §4.1's client-first placement. **The heavy SSM work runs on the user's GPU; the server never embeds or runs kNN.**
-- **Client (frontend / MambaKit-SSMjs, WebGPU + IndexedDB):** a `useModelRecallBias()` hook embeds the task text, runs kNN over this repo's locally-held `(task-embedding → winning_model, score)` memories, and returns a `routingBias: { model: weight }` map. Included in the run payload **only when launching interactively** (the `useTaskRunner` submit path). Persisted in IndexedDB via the SSMjs `idbFactory` injection; **never LocalStorage.**
+- **Client (frontend / builderforce-memory, WebGPU + IndexedDB):** a `useModelRecallBias()` hook embeds the task text, runs kNN over this repo's locally-held `(task-embedding → winning_model, score)` memories, and returns a `routingBias: { model: weight }` map. Included in the run payload **only when launching interactively** (the `useTaskRunner` submit path). Persisted in IndexedDB via the builderforce-memory `idbFactory` injection; **never LocalStorage.**
 - **Server:** `pickCloudModel` already accepts `routingBias` (6.3) and merges it as a pre-sort nudge. **No server SSM dependency** — headless runs simply omit it.
 - **Sync (reuse the existing execution-steering WebSocket relay — do NOT add a socket):** push new `run_model_outcomes` (action_type + resolved_model + score + task summary) to connected clients so their local SSM memory stays fresh; optionally let a client persist a distilled memory snapshot to R2/KV so a new device warm-starts. The authoritative `routing:<scope>` blob is independent of this — SSM is pure personalization bias.
 - Gated behind a client capability check (WebGPU present) + the kill switch; absent → identical to Phase 2 (KV-table-only routing).

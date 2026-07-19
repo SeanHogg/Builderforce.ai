@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { specsApi, type Spec } from '@/lib/builderforceApi';
 import { ChatMessageContent } from '../ChatMessageContent';
 
@@ -19,6 +21,8 @@ export function PrdCreateModal({
   onCreated: (spec: Spec) => void | Promise<void>;
   onClose: () => void;
 }) {
+  const t = useTranslations('prdCreate');
+  const tc = useTranslations('common');
   const [goal, setGoal] = useState('');
   const [prd, setPrd] = useState('');
   const [preview, setPreview] = useState(true);
@@ -34,34 +38,23 @@ export function PrdCreateModal({
       const spec = await specsApi.create({ projectId, goal: goal.trim(), prd: prd.trim() || null, status: 'draft' });
       await onCreated(spec);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create PRD');
+      setError(err instanceof Error ? err.message : t('createError'));
       setIsCreating(false);
     }
   };
 
   return (
-    <div
-      className="modal-overlay"
-      role="presentation"
-      style={{ zIndex: 10004, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
+    <SlideOutPanel open onClose={onClose} title={t('title')} width="min(720px, 96vw)">
       <div
         style={{
-          background: 'var(--panel-drawer-bg)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 12,
-          padding: 24,
-          maxWidth: 720,
-          width: '100%',
-          maxHeight: '90vh',
+          padding: 20,
+          height: '100%',
+          minHeight: 0,
           display: 'flex',
           flexDirection: 'column',
-          overflow: 'hidden',
+          gap: 14,
         }}
-        onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 16 }}>New PRD</div>
         {error && (
           <div style={{ padding: '10px 14px', fontSize: 13, background: 'var(--error-bg)', border: '1px solid var(--error-border)', color: 'var(--error-text)', borderRadius: 8, marginBottom: 12 }}>
             {error}
@@ -69,13 +62,13 @@ export function PrdCreateModal({
         )}
         <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: 14, flex: 1, minHeight: 0 }}>
           <div>
-            <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Goal / Title *</label>
+            <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>{t('goalLabel')}</label>
             <input
               required
               autoFocus
               value={goal}
               onChange={(e) => setGoal(e.target.value)}
-              placeholder="e.g. User authentication flow"
+              placeholder={t('goalPlaceholder')}
               style={{
                 width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--border-subtle)',
                 borderRadius: 8, background: 'var(--bg-deep)', color: 'var(--text-primary)',
@@ -84,20 +77,20 @@ export function PrdCreateModal({
           </div>
           <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>Content (Markdown)</label>
+              <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('contentLabel')}</label>
               <button
                 type="button"
                 onClick={() => setPreview((p) => !p)}
                 style={{ fontSize: 12, padding: '4px 8px', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 6, color: 'var(--text-secondary)', cursor: 'pointer' }}
               >
-                {preview ? 'Edit' : 'Preview'}
+                {preview ? tc('edit') : t('preview')}
               </button>
             </div>
             <div style={{ flex: 1, minHeight: 200, display: 'grid', gridTemplateColumns: preview ? '1fr 1fr' : '1fr', gap: 12 }}>
               <textarea
                 value={prd}
                 onChange={(e) => setPrd(e.target.value)}
-                placeholder="# Overview&#10;&#10;Describe the product requirements..."
+                placeholder={t('contentPlaceholder')}
                 style={{
                   width: '100%', minHeight: 200, padding: '10px 12px', fontSize: 13, fontFamily: 'var(--font-mono)',
                   border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--bg-deep)',
@@ -107,7 +100,7 @@ export function PrdCreateModal({
               {preview && (
                 <div style={{ minHeight: 200, padding: 12, background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 8, overflow: 'auto', fontSize: 13 }}>
                   <div className="chat-message-markdown">
-                    {prd ? <ChatMessageContent content={prd} /> : <span style={{ color: 'var(--text-muted)' }}>Preview will appear here</span>}
+                    {prd ? <ChatMessageContent content={prd} /> : <span style={{ color: 'var(--text-muted)' }}>{t('previewPlaceholder')}</span>}
                   </div>
                 </div>
               )}
@@ -115,7 +108,7 @@ export function PrdCreateModal({
           </div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
             <button type="button" onClick={onClose} style={{ padding: '8px 16px', fontSize: 13, color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer' }}>
-              Cancel
+              {tc('cancel')}
             </button>
             <button
               type="submit"
@@ -127,11 +120,11 @@ export function PrdCreateModal({
                 cursor: isCreating || !goal.trim() ? 'not-allowed' : 'pointer', opacity: isCreating || !goal.trim() ? 0.7 : 1,
               }}
             >
-              {isCreating ? 'Creating…' : 'Create'}
+              {isCreating ? t('creating') : t('create')}
             </button>
           </div>
         </form>
       </div>
-    </div>
+    </SlideOutPanel>
   );
 }

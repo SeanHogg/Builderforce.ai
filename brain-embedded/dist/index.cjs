@@ -20,14 +20,85 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var src_exports = {};
 __export(src_exports, {
+  ADDRESSED_TO_META_KEY: () => ADDRESSED_TO_META_KEY,
+  AUTHORED_BY_META_KEY: () => AUTHORED_BY_META_KEY,
   BrainActionsProvider: () => BrainActionsProvider,
   BrainContextProvider: () => BrainContextProvider,
   BrainProvider: () => BrainProvider,
+  BrainRequestError: () => BrainRequestError,
+  CODE_CHANGE_TOOLS: () => CODE_CHANGE_TOOLS,
+  CONSOLIDATION_MARKER_PREFIX: () => CONSOLIDATION_MARKER_PREFIX,
+  CONSOLIDATION_META: () => CONSOLIDATION_META,
+  DEFAULT_CHAT_TITLE: () => DEFAULT_CHAT_TITLE,
+  EVERMIND_LEARN_MIN_CHARS: () => EVERMIND_LEARN_MIN_CHARS,
+  NOT_STARTED_TASK_STATUSES: () => NOT_STARTED_TASK_STATUSES,
+  PROVENANCE_META_KEY: () => PROVENANCE_META_KEY,
+  STEP_MESSAGE_ROLE: () => STEP_MESSAGE_ROLE,
+  TICKET_RECORDING_TOOLS: () => TICKET_RECORDING_TOOLS,
+  accountUsedInTrace: () => accountUsedInTrace,
+  activeMentionToken: () => activeMentionToken,
+  allowanceState: () => allowanceState,
+  attachEvermindLearn: () => attachEvermindLearn,
+  brainRequestError: () => brainRequestError,
   buildBrainTriageReport: () => buildBrainTriageReport,
+  byoReasonHint: () => byoReasonHint,
+  byoUnresolvedInTrace: () => byoUnresolvedInTrace,
+  byoUnresolvedSummary: () => byoUnresolvedSummary,
+  chatErrorAction: () => chatErrorAction,
+  chatWorkLinkingDirective: () => chatWorkLinkingDirective,
+  classifyModelFunding: () => classifyModelFunding,
+  clearRunError: () => clearRunError,
+  codeChangeFile: () => codeChangeFile,
+  computeBrainDiagnostics: () => computeBrainDiagnostics,
+  consolidationMarkerContent: () => consolidationMarkerContent,
+  consolidationMetadata: () => consolidationMetadata,
+  countReconciledMemories: () => countReconciledMemories,
+  deriveChatTitle: () => deriveChatTitle,
+  effortProfile: () => effortProfile,
+  filterMentionCandidates: () => filterMentionCandidates,
+  formatBrainDiagnostics: () => formatBrainDiagnostics,
+  formatBrainProvenance: () => formatBrainProvenance,
+  formatChatDiagnostics: () => formatChatDiagnostics,
+  formatEvermindLearnStep: () => formatEvermindLearnStep,
+  formatEvermindMemoryBlock: () => formatEvermindMemoryBlock,
+  getGlobalRunState: () => getGlobalRunState,
+  getLastResolvedModel: () => getLastResolvedModel,
+  getMcpToolStatus: () => getMcpToolStatus,
+  getRunSnapshot: () => getRunSnapshot,
+  getRunTrace: () => getRunTrace,
+  isCodeChangeTool: () => isCodeChangeTool,
+  isConnectedAccountUnused: () => isConnectedAccountUnused,
+  isConsolidationMarker: () => isConsolidationMarker,
+  isDirectedToParticipant: () => isDirectedToParticipant,
+  isEffort: () => isEffort,
+  isEvermindModel: () => isEvermindModel,
   isFailedToolResult: () => isFailedToolResult,
+  isRunning: () => isRunning,
+  isStepMessage: () => isStepMessage,
+  isTicketRecordingTool: () => isTicketRecordingTool,
+  lastConsolidationIndex: () => lastConsolidationIndex,
+  linkedTicketsToAdvance: () => linkedTicketsToAdvance,
+  mentionRecipient: () => mentionRecipient,
+  modelsUsedInTrace: () => modelsUsedInTrace,
+  parseByoUnresolved: () => parseByoUnresolved,
+  parseDirectedRecipient: () => parseDirectedRecipient,
+  parseMessageAuthor: () => parseMessageAuthor,
+  parseMessageProvenance: () => parseMessageProvenance,
   prepareImageDataUrl: () => prepareImageDataUrl,
+  reasoningForRun: () => reasoningForRun,
+  resolveRecipient: () => resolveRecipient,
+  resolveRunConfirm: () => resolveRunConfirm,
+  runBrainLoop: () => startRun,
   savePendingPrompt: () => savePendingPrompt,
+  scopeToConsolidation: () => scopeToConsolidation,
+  setLastResolvedModel: () => setLastResolvedModel,
+  setMcpToolStatus: () => setMcpToolStatus,
+  startRun: () => startRun,
+  stopRun: () => stopRun,
   streamChatCompletion: () => streamChatCompletion,
+  subscribeRun: () => subscribeRun,
+  subscribeRunStore: () => subscribeRunStore,
+  subscribeToChatMessages: () => subscribeToChatMessages,
   takePendingPrompt: () => takePendingPrompt,
   useBrainActions: () => useBrainActions,
   useBrainChats: () => useBrainChats,
@@ -36,7 +107,10 @@ __export(src_exports, {
   useBrainConversation: () => useBrainConversation,
   useMcpExtensions: () => useMcpExtensions,
   useOptionalBrainContext: () => useOptionalBrainContext,
-  useRegisterBrainActions: () => useRegisterBrainActions
+  useRegisterBrainActions: () => useRegisterBrainActions,
+  withDirectedMetadata: () => withDirectedMetadata,
+  withProvenanceMetadata: () => withProvenanceMetadata,
+  workItemLinkFromCreate: () => workItemLinkFromCreate
 });
 module.exports = __toCommonJS(src_exports);
 
@@ -174,11 +248,69 @@ function extractXmlToolCalls(raw) {
   return { text: f.cleanText(), toolCalls: f.toolCalls() };
 }
 
+// src/chatError.ts
+var BrainRequestError = class extends Error {
+  status;
+  code;
+  reason;
+  unlock;
+  requiredPlan;
+  feature;
+  constructor(message, init) {
+    super(message);
+    this.name = "BrainRequestError";
+    this.status = init.status;
+    this.code = init.code;
+    this.reason = init.reason;
+    this.unlock = init.unlock;
+    this.requiredPlan = init.requiredPlan;
+    this.feature = init.feature;
+  }
+};
+function str(v) {
+  return typeof v === "string" && v.length > 0 ? v : void 0;
+}
+function brainRequestError(status2, body, statusText) {
+  const b = body ?? {};
+  const message = str(b.error) || str(b.message) || statusText || `Request failed (${status2})`;
+  return new BrainRequestError(message, {
+    status: status2,
+    code: str(b.code),
+    reason: str(b.reason),
+    unlock: str(b.unlock),
+    requiredPlan: str(b.requiredPlan),
+    feature: str(b.feature)
+  });
+}
+var AUTH_PROSE = /invalid or expired token|unauthor/i;
+var CARD_PROSE = /validated card|add a card|card on file/i;
+var UPGRADE_PROSE = /requires? a paid plan|upgrade to (pro|teams)|plan (token )?limit|not included in your plan/i;
+function chatErrorAction(err) {
+  const message = err instanceof Error ? err.message : typeof err === "string" ? err : "";
+  if (err instanceof BrainRequestError) {
+    const base = { requiredPlan: err.requiredPlan, feature: err.feature };
+    if (err.status === 401) return { kind: "auth", ...base };
+    if (err.unlock === "validate_card" || err.reason === "card_required") {
+      return { kind: "validate_card", ...base };
+    }
+    if (err.unlock === "upgrade" || err.reason === "plan_required" || err.status === 402) {
+      return { kind: "upgrade", ...base };
+    }
+    if (err.status === 429 && /plan_.*limit/.test(err.code ?? "")) {
+      return { kind: "upgrade", ...base };
+    }
+  }
+  if (!message) return null;
+  if (AUTH_PROSE.test(message)) return { kind: "auth" };
+  if (CARD_PROSE.test(message)) return { kind: "validate_card" };
+  if (UPGRADE_PROSE.test(message)) return { kind: "upgrade" };
+  return null;
+}
+
 // src/streamChatCompletion.ts
 async function defaultMapError(res) {
   const body = await res.json().catch(() => ({}));
-  const msg = typeof body.error === "string" && body.error || typeof body.message === "string" && body.message || res.statusText || `Request failed (${res.status})`;
-  return new Error(msg);
+  return brainRequestError(res.status, body, res.statusText);
 }
 async function streamChatCompletion(opts, handlers = {}) {
   const { transport } = opts;
@@ -186,15 +318,28 @@ async function streamChatCompletion(opts, handlers = {}) {
   const headers = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
   const body = {
-    model: opts.model ?? transport.defaultModel ?? "openai/gpt-4o-mini",
     messages: opts.messages,
     temperature: opts.temperature ?? 0.3,
     max_tokens: opts.maxTokens ?? 4096,
-    stream: true
+    stream: true,
+    // Ask the gateway to emit a trailing `usage` chunk (OpenAI stream_options).
+    // Providers that ignore it simply omit usage — the parse below is tolerant.
+    stream_options: { include_usage: true }
   };
+  const model = opts.model ?? transport.defaultModel;
+  if (model) body.model = model;
   if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools;
     body.tool_choice = opts.tool_choice ?? "auto";
+  }
+  if (opts.reasoning && opts.reasoning.level !== "off") {
+    body.reasoning = { level: opts.reasoning.level };
+  }
+  if (opts.metadata) {
+    const meta = Object.fromEntries(
+      Object.entries(opts.metadata).filter(([, v]) => v !== void 0 && v !== null)
+    );
+    if (Object.keys(meta).length > 0) body.metadata = meta;
   }
   const doFetch = transport.fetch ?? ((input, init) => fetch(input, init));
   const res = await doFetch(`${transport.baseUrl}/llm/v1/chat/completions`, {
@@ -205,6 +350,43 @@ async function streamChatCompletion(opts, handlers = {}) {
   });
   if (res.status === 401) transport.onUnauthorized?.(res, !!token);
   if (!res.ok) throw await (transport.mapError ?? defaultMapError)(res);
+  let headerModel = null;
+  try {
+    headerModel = res.headers?.get?.("x-builderforce-model") || null;
+  } catch {
+    headerModel = null;
+  }
+  let streamModel = null;
+  const resolvedModel = () => headerModel ?? streamModel ?? void 0;
+  let headerAccount = null;
+  try {
+    headerAccount = res.headers?.get?.("x-builderforce-account") || null;
+  } catch {
+    headerAccount = null;
+  }
+  const account = () => headerAccount ?? void 0;
+  let headerByoUnresolved = null;
+  try {
+    headerByoUnresolved = res.headers?.get?.("x-builderforce-byo-unresolved") || null;
+  } catch {
+    headerByoUnresolved = null;
+  }
+  const byoUnresolved = () => headerByoUnresolved ?? void 0;
+  let headerProviderCap = null;
+  try {
+    headerProviderCap = res.headers?.get?.("x-builderforce-provider-cap") || null;
+  } catch {
+    headerProviderCap = null;
+  }
+  const providerCap = () => headerProviderCap ?? void 0;
+  let usage;
+  const readUsage = (u) => {
+    if (!u || typeof u !== "object") return;
+    const o = u;
+    const num = (x) => typeof x === "number" && Number.isFinite(x) ? x : void 0;
+    const next = { prompt: num(o.prompt_tokens), completion: num(o.completion_tokens), total: num(o.total_tokens) };
+    if (next.prompt != null || next.completion != null || next.total != null) usage = next;
+  };
   const toolAcc = /* @__PURE__ */ new Map();
   const xml = new XmlToolCallFilter();
   let finishReason = null;
@@ -212,6 +394,8 @@ async function streamChatCompletion(opts, handlers = {}) {
   const reader = res.body?.getReader();
   if (!reader) {
     const data = await res.json().catch(() => null);
+    if (typeof data?.model === "string" && data.model) streamModel = data.model;
+    readUsage(data?.usage);
     const choice = data?.choices?.[0];
     const { text, toolCalls: xmlCalls } = extractXmlToolCalls(choice?.message?.content ?? "");
     if (text) handlers.onTextDelta?.(text);
@@ -221,7 +405,7 @@ async function streamChatCompletion(opts, handlers = {}) {
     });
     finishReason = choice?.finish_reason ?? null;
     handlers.onDone?.(finishReason);
-    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason };
+    return { text, toolCalls: [...assemble(toolAcc), ...xmlCalls], finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
   }
   const decoder = new TextDecoder();
   let buffer = "";
@@ -239,7 +423,7 @@ async function streamChatCompletion(opts, handlers = {}) {
         const tail2 = xml.flush();
         if (tail2) handlers.onTextDelta?.(tail2);
         handlers.onDone?.(finishReason);
-        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason };
+        return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), providerCap: providerCap(), usage };
       }
       let parsed;
       try {
@@ -247,6 +431,8 @@ async function streamChatCompletion(opts, handlers = {}) {
       } catch {
         continue;
       }
+      if (!streamModel && typeof parsed.model === "string" && parsed.model) streamModel = parsed.model;
+      if (parsed.usage) readUsage(parsed.usage);
       const choice = parsed.choices?.[0];
       if (choice?.finish_reason) finishReason = choice.finish_reason;
       const contentDelta = (typeof choice?.delta?.content === "string" ? choice.delta.content : null) || parsed.response || parsed.text || parsed.delta || "";
@@ -276,7 +462,7 @@ async function streamChatCompletion(opts, handlers = {}) {
   const tail = xml.flush();
   if (tail) handlers.onTextDelta?.(tail);
   handlers.onDone?.(finishReason);
-  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason };
+  return { text: xml.cleanText(), toolCalls: allToolCalls(), finishReason, resolvedModel: resolvedModel(), account: account(), byoUnresolved: byoUnresolved(), usage };
 }
 function assemble(acc) {
   return [...acc.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => ({ id: v.id, name: v.name, args: v.args })).filter((c) => c.name.length > 0);
@@ -305,6 +491,40 @@ function useBrainConfig() {
   const ctx = (0, import_react.useContext)(BrainConfigContext);
   if (!ctx) throw new Error("useBrainConfig must be used within a BrainProvider");
   return ctx;
+}
+
+// src/effort.ts
+var EFFORT_PROFILES = {
+  quick: {
+    effort: "quick",
+    maxTokens: 2048,
+    reasoningLevel: "low",
+    thinkingBudgetTokens: 2048,
+    directive: "Effort: favour a fast, concise, direct answer. Keep exploration minimal unless the task truly requires more."
+  },
+  balanced: {
+    effort: "balanced",
+    maxTokens: 4096,
+    reasoningLevel: "medium",
+    thinkingBudgetTokens: 8192,
+    directive: ""
+  },
+  thorough: {
+    effort: "thorough",
+    maxTokens: 16384,
+    reasoningLevel: "high",
+    thinkingBudgetTokens: 16384,
+    directive: "Effort: apply maximum rigor. Be exhaustive, consider edge cases, verify your work, and do not stop until the task is fully complete."
+  }
+};
+function effortProfile(effort) {
+  return EFFORT_PROFILES[effort] ?? EFFORT_PROFILES.balanced;
+}
+function isEffort(value) {
+  return value === "quick" || value === "balanced" || value === "thorough";
+}
+function reasoningForRun(o) {
+  return o.thinking ? { level: effortProfile(o.effort).reasoningLevel } : void 0;
 }
 
 // src/imagePrep.ts
@@ -353,6 +573,85 @@ async function prepareImageDataUrl(file) {
     if (dataUrlBytes(dataUrl) <= MAX_DATA_URL_BYTES) return { dataUrl };
   }
   return { tooLarge: true };
+}
+
+// src/evermindMemory.ts
+var EVERMIND_LEARN_MIN_CHARS = 40;
+var RECONCILE_OVERLAP = 0.6;
+var STOP = /* @__PURE__ */ new Set([
+  "the",
+  "a",
+  "an",
+  "and",
+  "or",
+  "to",
+  "of",
+  "in",
+  "on",
+  "for",
+  "with",
+  "is",
+  "are",
+  "be",
+  "as",
+  "at",
+  "by",
+  "it",
+  "this",
+  "that",
+  "from",
+  "you",
+  "your",
+  "i",
+  "we",
+  "they",
+  "he",
+  "she",
+  "can",
+  "will",
+  "how",
+  "do",
+  "does",
+  "what",
+  "why",
+  "when",
+  "which",
+  "use",
+  "using",
+  "used",
+  "please",
+  "need",
+  "want",
+  "me",
+  "my",
+  "so",
+  "if"
+]);
+function tokenSet(s) {
+  return new Set((s.toLowerCase().match(/[a-z0-9_]+/g) ?? []).filter((w) => w.length >= 2 && !STOP.has(w)));
+}
+function formatEvermindMemoryBlock(items) {
+  if (items.length === 0) return "";
+  const lines = items.map((it, i) => `${i + 1}. ${it.text.replace(/\s+/g, " ").trim()}`).filter((l) => l.length > 3);
+  if (lines.length === 0) return "";
+  return [
+    "[Evermind Memory \u2014 recalled from this project's self-learning model]",
+    "Prior learnings this project recalled as relevant to the request. Treat them as grounding; if any is outdated or wrong, correct it in your answer (this project learns write-through \u2014 your reply updates its memory).",
+    ...lines
+  ].join("\n");
+}
+function countReconciledMemories(items, answer) {
+  const ans = tokenSet(answer);
+  if (ans.size === 0) return 0;
+  let n = 0;
+  for (const it of items) {
+    const mem = tokenSet(it.text);
+    if (mem.size === 0) continue;
+    let hit = 0;
+    for (const tok of mem) if (ans.has(tok)) hit++;
+    if (hit / mem.size >= RECONCILE_OVERLAP) n++;
+  }
+  return n;
 }
 
 // src/BrainActionsContext.tsx
@@ -435,10 +734,40 @@ function useRegisterBrainActions(actions) {
 
 // src/useMcpExtensions.ts
 var import_react3 = require("react");
+
+// src/lastResolvedModel.ts
+var lastResolvedModel;
+function setLastResolvedModel(model) {
+  const trimmed = typeof model === "string" ? model.trim() : "";
+  if (trimmed) lastResolvedModel = trimmed;
+}
+function getLastResolvedModel() {
+  return lastResolvedModel;
+}
+
+// src/mcpToolStatus.ts
+var status = { count: 0, error: null, loading: true };
+function setMcpToolStatus(next) {
+  status = next;
+}
+function getMcpToolStatus() {
+  return status;
+}
+
+// src/useMcpExtensions.ts
 var CREATE_DEDUPE_MS = 8e3;
 var recentCreates = /* @__PURE__ */ new Map();
 function nowMs() {
   return typeof Date !== "undefined" ? Date.now() : 0;
+}
+var CURRENT_MODEL_TOOL = "session.current_model";
+function withObservedModel(tool, args) {
+  if (tool !== CURRENT_MODEL_TOOL) return args;
+  const observed = getLastResolvedModel();
+  if (!observed) return args;
+  const supplied = args ?? {};
+  if (typeof supplied.model === "string" && supplied.model.trim()) return args;
+  return { ...supplied, model: observed };
 }
 function stableStringify(value) {
   if (value == null || typeof value !== "object") return JSON.stringify(value) ?? "null";
@@ -456,6 +785,7 @@ function useMcpExtensions(options) {
   const { transport } = useBrainConfig();
   const [entries, setEntries] = (0, import_react3.useState)([]);
   const [loading, setLoading] = (0, import_react3.useState)(true);
+  const [error, setError] = (0, import_react3.useState)(null);
   const skipKey = (options?.skipExtensionIds ?? []).join(",");
   const onToolResultRef = (0, import_react3.useRef)(options?.onToolResult);
   onToolResultRef.current = options?.onToolResult;
@@ -465,10 +795,17 @@ function useMcpExtensions(options) {
     const headers = { Accept: "application/json" };
     if (token) headers.Authorization = `Bearer ${token}`;
     const skip = new Set(skipKey ? skipKey.split(",") : []);
-    fetch(`${transport.baseUrl}/llm/v1/mcp/tools`, { headers }).then((res) => res.ok ? res.json() : { tools: [] }).then((body) => {
-      if (!cancelled) setEntries((body.tools ?? []).filter((t) => !skip.has(t.extensionId)));
-    }).catch(() => {
-      if (!cancelled) setEntries([]);
+    fetch(`${transport.baseUrl}/llm/v1/mcp/tools`, { headers }).then(async (res) => {
+      if (!res.ok) throw new Error(`tool catalog unavailable (HTTP ${res.status})`);
+      return await res.json();
+    }).then((body) => {
+      if (cancelled) return;
+      setEntries((body.tools ?? []).filter((t) => !skip.has(t.extensionId)));
+      setError(null);
+    }).catch((e) => {
+      if (cancelled) return;
+      setEntries([]);
+      setError(e instanceof Error ? e.message : "tool catalog fetch failed");
     }).finally(() => {
       if (!cancelled) setLoading(false);
     });
@@ -494,7 +831,7 @@ function useMcpExtensions(options) {
           const res = await fetch(`${transport.baseUrl}/llm/v1/mcp/call`, {
             method: "POST",
             headers,
-            body: JSON.stringify({ extensionId: entry.extensionId, tool: entry.tool, arguments: args })
+            body: JSON.stringify({ extensionId: entry.extensionId, tool: entry.tool, arguments: withObservedModel(entry.tool, args) })
           });
           const body = await res.json().catch(() => ({}));
           const out = !res.ok ? { error: body.error ?? `MCP call failed (${res.status})` } : body.result ?? body;
@@ -526,7 +863,10 @@ function useMcpExtensions(options) {
     [entries, transport]
   );
   useRegisterBrainActions(actions);
-  return { loading, toolCount: actions.length };
+  (0, import_react3.useEffect)(() => {
+    setMcpToolStatus({ count: actions.length, error, loading });
+  }, [actions.length, error, loading]);
+  return { loading, toolCount: actions.length, error };
 }
 
 // src/BrainContext.tsx
@@ -579,7 +919,7 @@ function BrainContextProvider({ children }) {
   const setContext = (0, import_react4.useCallback)((patch) => {
     setPageContext((prev) => {
       const next = { ...prev, ...patch };
-      if (next.projectId === prev.projectId && next.viewingProjectId === prev.viewingProjectId && next.modality === prev.modality && next.extraSystem === prev.extraSystem && next.initialChatId === prev.initialChatId) {
+      if (next.projectId === prev.projectId && next.viewingProjectId === prev.viewingProjectId && next.modality === prev.modality && next.extraSystem === prev.extraSystem && next.initialChatId === prev.initialChatId && next.initialPrompt === prev.initialPrompt && next.initialTicket === prev.initialTicket) {
         return prev;
       }
       return next;
@@ -602,6 +942,15 @@ function useOptionalBrainContext() {
 
 // src/useBrainChats.ts
 var import_react5 = require("react");
+var DEFAULT_CHAT_TITLE = "New chat";
+function deriveChatTitle(text) {
+  const firstLine = (text.split("\n").find((l) => l.trim()) ?? "").replace(/\s+/g, " ").trim();
+  if (!firstLine) return "";
+  if (firstLine.length <= 60) return firstLine;
+  const cut = firstLine.slice(0, 60);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > 30 ? cut.slice(0, lastSpace) : cut).trim()}\u2026`;
+}
 function useBrainChats(options = {}) {
   const { persistence } = useBrainConfig();
   const { filterProjectId, pinnedProjectId, activeChatId: controlledActiveId, onActiveChatChange } = options;
@@ -610,6 +959,9 @@ function useBrainChats(options = {}) {
   const [error, setError] = (0, import_react5.useState)("");
   const [internalActiveId, setInternalActiveId] = (0, import_react5.useState)(null);
   const assigningRef = (0, import_react5.useRef)(false);
+  const chatsRef = (0, import_react5.useRef)(chats);
+  chatsRef.current = chats;
+  const autoTitledRef = (0, import_react5.useRef)(/* @__PURE__ */ new Set());
   const isControlled = controlledActiveId !== void 0;
   const activeChatId = isControlled ? controlledActiveId ?? null : internalActiveId;
   const activeIdRef = (0, import_react5.useRef)(activeChatId);
@@ -663,7 +1015,7 @@ function useBrainChats(options = {}) {
     setError("");
     try {
       const projectId = opts?.projectId !== void 0 ? opts.projectId : defaultProjectId();
-      const chat = await persistence.createChat({ title: opts?.title ?? "New chat", projectId });
+      const chat = await persistence.createChat({ title: opts?.title ?? "New chat", projectId, capability: opts?.capability ?? null });
       setChats((prev) => [chat, ...prev]);
       setActiveChatId(chat.id);
       return chat;
@@ -672,6 +1024,17 @@ function useBrainChats(options = {}) {
       return null;
     }
   }, [persistence, defaultProjectId, setActiveChatId]);
+  const setCapability = (0, import_react5.useCallback)(async (id, capability) => {
+    const prevValue = chatsRef.current.find((c) => c.id === id)?.capability ?? null;
+    setChats((prev) => prev.map((c) => c.id === id ? { ...c, capability } : c));
+    try {
+      const updated = await persistence.updateChat(id, { capability });
+      setChats((prev) => prev.map((c) => c.id === id ? { ...c, capability: updated.capability ?? null } : c));
+    } catch (e) {
+      setChats((prev) => prev.map((c) => c.id === id ? { ...c, capability: prevValue } : c));
+      setError(e instanceof Error ? e.message : "Failed to set capability");
+    }
+  }, [persistence]);
   const rename = (0, import_react5.useCallback)(async (id, title) => {
     const trimmed = title.trim();
     if (!trimmed) return;
@@ -680,6 +1043,20 @@ function useBrainChats(options = {}) {
       setChats((prev) => prev.map((c) => c.id === id ? { ...c, title: updated.title } : c));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Rename failed");
+    }
+  }, [persistence]);
+  const autoTitle = (0, import_react5.useCallback)(async (id, firstUserText) => {
+    if (autoTitledRef.current.has(id)) return;
+    const chat = chatsRef.current.find((c) => c.id === id);
+    if (chat && chat.title && chat.title !== DEFAULT_CHAT_TITLE) return;
+    const title = deriveChatTitle(firstUserText);
+    if (!title) return;
+    autoTitledRef.current.add(id);
+    try {
+      const updated = await persistence.updateChat(id, { title });
+      setChats((prev) => prev.map((c) => c.id === id ? { ...c, title: updated.title } : c));
+    } catch {
+      autoTitledRef.current.delete(id);
     }
   }, [persistence]);
   const summarize = (0, import_react5.useCallback)(async (id) => {
@@ -738,6 +1115,8 @@ function useBrainChats(options = {}) {
     select,
     create,
     rename,
+    setCapability,
+    autoTitle,
     summarize,
     remove,
     assignToProject,
@@ -748,6 +1127,131 @@ function useBrainChats(options = {}) {
 
 // src/useBrainConversation.ts
 var import_react6 = require("react");
+
+// src/types.ts
+var STEP_MESSAGE_ROLE = "tool";
+function isStepMessage(m) {
+  return m.role === STEP_MESSAGE_ROLE;
+}
+function attachEvermindLearn(messages, outcome) {
+  if (!outcome) return messages;
+  return messages.map((m) => m.role === "assistant" ? { ...m, evermindLearn: outcome } : m);
+}
+function formatEvermindLearnStep(outcome) {
+  if (!outcome) return null;
+  const targets = outcome.targets;
+  if (targets && targets.length > 0) {
+    const label = (t) => `${t.name} (proj #${t.projectId}${t.version ? ` v${t.version}` : ""})`;
+    const learned = targets.filter((t) => t.learned);
+    const skipped = targets.filter((t) => !t.learned && t.reason && t.reason !== "too-short");
+    const parts = [];
+    if (learned.length > 0) parts.push(`Contributed this turn to ${learned.map(label).join(", ")}`);
+    for (const t of skipped) {
+      const why = t.reason === "not-seeded" ? "not set up yet" : t.reason === "frozen" ? "frozen (read-only)" : String(t.reason);
+      parts.push(`skipped ${label(t)} \u2014 ${why}`);
+    }
+    return parts.length > 0 ? `\u{1F9E0} ${parts.join("; ")}.` : null;
+  }
+  if (outcome.learned) return `\u{1F9E0} Contributed this turn to the project Evermind (v${outcome.version}).`;
+  switch (outcome.reason) {
+    case "not-attached":
+      return "\u{1F9E0} Not learned this turn \u2014 this chat isn't attached to a project, so it can't train a project Evermind.";
+    case "not-seeded":
+      return "\u{1F9E0} Not learned this turn \u2014 this project's Evermind isn't set up yet.";
+    case "frozen":
+      return "\u{1F9E0} Not learned this turn \u2014 this project's Evermind is frozen (read-only).";
+    default:
+      return null;
+  }
+}
+
+// src/consolidation.ts
+var CONSOLIDATION_META = { consolidation: true };
+function consolidationMetadata() {
+  return JSON.stringify(CONSOLIDATION_META);
+}
+function isConsolidationMarker(msg) {
+  if (!msg.metadata) return false;
+  try {
+    return JSON.parse(msg.metadata)?.consolidation === true;
+  } catch {
+    return false;
+  }
+}
+function lastConsolidationIndex(messages) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (isConsolidationMarker(messages[i])) return i;
+  }
+  return -1;
+}
+function scopeToConsolidation(messages) {
+  const idx = lastConsolidationIndex(messages);
+  return idx >= 0 ? messages.slice(idx) : messages;
+}
+var CONSOLIDATION_MARKER_PREFIX = "\u{1F4CC} **Consolidated summary** \u2014 context continues from here.\n\n";
+function consolidationMarkerContent(summary) {
+  return `${CONSOLIDATION_MARKER_PREFIX}${summary.trim()}`;
+}
+
+// src/directedMessage.ts
+var ADDRESSED_TO_META_KEY = "addressedTo";
+var AUTHORED_BY_META_KEY = "authoredBy";
+function parseMessageAuthor(msg) {
+  if (!msg.metadata) return null;
+  try {
+    const a = JSON.parse(msg.metadata).authoredBy;
+    if (a && typeof a.ref === "string" && typeof a.name === "string" && (a.kind === "agent" || a.kind === "human")) {
+      return { kind: a.kind, ref: a.ref, name: a.name };
+    }
+  } catch {
+  }
+  return null;
+}
+function withDirectedMetadata(recipient, base) {
+  const meta = { ...base ?? {} };
+  if (recipient) meta[ADDRESSED_TO_META_KEY] = recipient;
+  return Object.keys(meta).length > 0 ? JSON.stringify(meta) : void 0;
+}
+function parseDirectedRecipient(msg) {
+  if (!msg.metadata) return null;
+  try {
+    const a = JSON.parse(msg.metadata).addressedTo;
+    if (a && typeof a.ref === "string" && typeof a.name === "string" && (a.kind === "agent" || a.kind === "human")) {
+      return { kind: a.kind, ref: a.ref, name: a.name };
+    }
+  } catch {
+  }
+  return null;
+}
+function isDirectedToParticipant(msg) {
+  return parseDirectedRecipient(msg) !== null;
+}
+function activeMentionToken(text, caret) {
+  const at = text.lastIndexOf("@", Math.max(0, caret - 1));
+  if (at < 0 || at >= caret) return null;
+  if (at > 0 && !/\s/.test(text[at - 1])) return null;
+  const query = text.slice(at + 1, caret);
+  if (/[\s@]/.test(query)) return null;
+  return { query, start: at, end: caret };
+}
+function filterMentionCandidates(participants, query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return participants;
+  return participants.map((p) => ({ p, idx: p.name.toLowerCase().indexOf(q) })).filter((s) => s.idx >= 0).sort((a, b) => a.idx - b.idx || a.p.name.localeCompare(b.p.name)).map((s) => s.p);
+}
+function mentionRecipient(text, participants) {
+  const m = /^\s*@([^\s@]+)/.exec(text);
+  if (!m) return null;
+  const tag = m[1].toLowerCase();
+  return participants.find((p) => {
+    const name = p.name.toLowerCase();
+    return name === tag || name.split(/\s+/)[0] === tag || name.startsWith(tag);
+  }) ?? null;
+}
+function resolveRecipient(choice, mention) {
+  if (choice === "brain") return null;
+  return choice ?? mention;
+}
 
 // src/brainTriage.ts
 function isFailedToolResult(result) {
@@ -763,20 +1267,211 @@ function isFailedToolResult(result) {
   }
   return false;
 }
+var FILE_WRITE_TOOL = /(attachments|files?|project_files)[._](write|save|update)/i;
+var FILE_SAVE_CLAIM = /\b(saved|updated|wrote|written|edited|persisted|added)\b[^.!?\n]*\b(file|attachment|roadmap|document|upload|\.md|\.csv|\.txt|\.json)\b/i;
+var TICKET_WRITE_TOOL = /(tasks|objectives|key_results|initiatives|portfolios|specs|roadmap)[._]create|chats[._]link_ticket|tickets[._]from_delta/i;
+var TICKET_CLAIM = /\b(created|filed|opened|logged|added|linked|tracked)\b[^.!?\n]*\b(ticket|task|gap|epic|issue|objective|bug|card|board)\b/i;
+function detectUnbackedWriteClaim(events, messages) {
+  const wroteOk = events.some(
+    (e) => e.category === "tool" && FILE_WRITE_TOOL.test(e.label) && !e.isError && !isFailedToolResult(e.result)
+  );
+  if (wroteOk) return false;
+  return messages.some((m) => m.role === "assistant" && typeof m.content === "string" && FILE_SAVE_CLAIM.test(m.content));
+}
+function detectUnbackedTicketClaim(events, messages) {
+  const filedOk = events.some(
+    (e) => e.category === "tool" && TICKET_WRITE_TOOL.test(e.label) && !e.isError && !isFailedToolResult(e.result)
+  );
+  if (filedOk) return false;
+  return messages.some((m) => m.role === "assistant" && typeof m.content === "string" && TICKET_CLAIM.test(m.content));
+}
 function cap(s, n = 2e3) {
-  const str = typeof s === "string" ? s : JSON.stringify(s ?? "");
-  return str.length > n ? str.slice(0, n) + `\u2026 (+${str.length - n} chars)` : str;
+  const str2 = typeof s === "string" ? s : JSON.stringify(s ?? "");
+  return str2.length > n ? str2.slice(0, n) + `\u2026 (+${str2.length - n} chars)` : str2;
+}
+function isEvermindModel(model) {
+  return /(^|\/)evermind\b|^project_evermind:|^tenant_model:/i.test(model);
+}
+function modelsUsedInTrace(events) {
+  const seen = [];
+  for (const ev of events) {
+    if (ev.category !== "llm" && ev.category !== "error") continue;
+    const m = ev.args?.model;
+    if (typeof m === "string" && m && m !== "default" && !seen.includes(m)) seen.push(m);
+  }
+  return seen;
+}
+function accountUsedInTrace(events) {
+  let account;
+  for (const ev of events) {
+    if (ev.category !== "llm") continue;
+    const a = ev.args?.account;
+    if (typeof a === "string" && a) account = a;
+  }
+  return account;
+}
+function byoUnresolvedInTrace(events) {
+  const seen = [];
+  for (const ev of events) {
+    if (ev.category !== "llm") continue;
+    const raw = ev.args?.byoUnresolved;
+    if (typeof raw !== "string" || !raw) continue;
+    for (const p of raw.split(",").map((s) => s.trim()).filter(Boolean)) {
+      if (!seen.includes(p)) seen.push(p);
+    }
+  }
+  return seen;
+}
+function parseByoUnresolved(entries) {
+  return entries.map((e) => {
+    const i = e.indexOf(":");
+    return i === -1 ? { provider: e, reason: "" } : { provider: e.slice(0, i), reason: e.slice(i + 1) };
+  });
+}
+function byoReasonHint(reason) {
+  switch (reason) {
+    case "revoked":
+      return "its token was revoked or expired \u2014 reconnect it in the web app under Settings \u25B8 API Keys";
+    case "expired":
+      return "its token expired and the refresh failed (often transient) \u2014 retry, or reconnect it under Settings \u25B8 API Keys";
+    case "undecryptable":
+      return "its stored credential could not be read \u2014 re-enter it under Settings \u25B8 API Keys";
+    case "other-workspace":
+      return "you connected this account in a DIFFERENT workspace \u2014 switch to that workspace, or connect it in this one under Settings \u25B8 API Keys";
+    default:
+      return "it could not be used this run \u2014 reconnect it under Settings \u25B8 API Keys";
+  }
+}
+function byoUnresolvedSummary(entry) {
+  return `${entry.provider}${entry.reason ? ` (${entry.reason})` : ""}: ${byoReasonHint(entry.reason)}`;
+}
+function accountLabel(account) {
+  return account === "own" ? "the tenant's own connected account" : account === "shared_byo_unused" ? "the shared model pool (a connected account existed but was NOT used)" : account === "shared" ? "the shared model pool" : account;
+}
+function formatBrainProvenance(events, opts = {}) {
+  const lines = [];
+  if (opts.surface) lines.push(`Surface: ${opts.surface}`);
+  lines.push(`Configured model: ${opts.configuredModel || "(gateway auto-select)"}`);
+  const used = modelsUsedInTrace(events);
+  if (used.length) lines.push(`Models used: ${used.join(", ")}`);
+  const evermind = used.filter(isEvermindModel);
+  if (evermind.length) lines.push(`Evermind: yes \u2014 ${evermind.join(", ")}`);
+  const account = accountUsedInTrace(events);
+  if (account) lines.push(`Account: ${accountLabel(account)}`);
+  const byoUnresolved = parseByoUnresolved(byoUnresolvedInTrace(events));
+  if (byoUnresolved.length) {
+    lines.push("\u26A0 CONNECTED ACCOUNT NOT USED \u2014 a connected account existed but the run fell back to the shared pool instead of your own model:");
+    for (const e of byoUnresolved) lines.push(`  \u2022 ${byoUnresolvedSummary(e)}`);
+  }
+  return lines;
+}
+function byteLen(v) {
+  const s = typeof v === "string" ? v : JSON.stringify(v ?? "");
+  return s.length;
+}
+function computeBrainDiagnostics(events, requestedModel) {
+  const llm = events.filter((e) => e.category === "llm");
+  const toolEvents = events.filter((e) => e.category === "tool");
+  const errors = events.filter((e) => e.isError || e.category === "error");
+  const loopExhausted = events.some((e) => e.label === "agent.loop" && e.isError);
+  let promptTokenPeak = 0;
+  let completionTokenTotal = 0;
+  let lastPromptTokens = 0;
+  let tokensMeasured = false;
+  let emptyOrLengthFinishes = 0;
+  let downgradeEvents = 0;
+  const req = requestedModel && requestedModel !== "default" ? requestedModel : void 0;
+  for (const ev of llm) {
+    const u = ev.usage;
+    if (u) {
+      tokensMeasured = true;
+      if (typeof u.prompt === "number") {
+        promptTokenPeak = Math.max(promptTokenPeak, u.prompt);
+        lastPromptTokens = u.prompt;
+      }
+      if (typeof u.completion === "number") completionTokenTotal += u.completion;
+    }
+    const finish = ev.finishReason ?? null;
+    const emptyText = typeof ev.textChars === "number" && ev.textChars === 0;
+    const toolCallsThisTurn = ev.args?.toolCalls;
+    const askedNoTools = typeof toolCallsThisTurn === "number" ? toolCallsThisTurn === 0 : true;
+    if (finish === "length" || emptyText && askedNoTools) emptyOrLengthFinishes += 1;
+    const resolved = ev.args?.model;
+    if (req && typeof resolved === "string" && resolved && resolved !== "default" && resolved !== req) downgradeEvents += 1;
+  }
+  let toolResultBytes = 0;
+  let truncatedToolResults = 0;
+  let largestToolResult = null;
+  for (const ev of toolEvents) {
+    const bytes = typeof ev.resultBytes === "number" ? ev.resultBytes : byteLen(ev.result);
+    toolResultBytes += bytes;
+    if (ev.truncated) truncatedToolResults += 1;
+    if (!largestToolResult || bytes > largestToolResult.bytes) largestToolResult = { label: ev.label, bytes };
+  }
+  const modelsUsed = modelsUsedInTrace(events);
+  const evermindUsed = modelsUsed.filter(isEvermindModel);
+  const contextSignal = promptTokenPeak >= 24e3 || truncatedToolResults > 0 || downgradeEvents > 0 || largestToolResult != null && largestToolResult.bytes >= 2e4;
+  const degradationSignal = evermindUsed.length > 0 && emptyOrLengthFinishes > 0 && (!tokensMeasured || promptTokenPeak < 24e3) && truncatedToolResults === 0;
+  const likelyCause = contextSignal && !degradationSignal ? "context-exhaustion" : degradationSignal && !contextSignal ? "model-degradation" : "inconclusive";
+  return {
+    turns: llm.length,
+    toolCalls: toolEvents.length,
+    errors: errors.length,
+    loopExhausted,
+    tokensMeasured,
+    promptTokenPeak,
+    completionTokenTotal,
+    lastPromptTokens,
+    toolResultBytes,
+    truncatedToolResults,
+    largestToolResult,
+    modelsUsed,
+    evermindUsed,
+    downgradeEvents,
+    emptyOrLengthFinishes,
+    likelyCause
+  };
+}
+function kb(bytes) {
+  return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
+}
+function formatBrainDiagnostics(d) {
+  const verdict = d.likelyCause === "context-exhaustion" ? "Likely CONTEXT EXHAUSTION (case A) \u2014 the transcript outgrew the model window." : d.likelyCause === "model-degradation" ? "Likely MODEL DEGRADATION (case B) \u2014 an Evermind/SSM turn returned empty while tokens stayed low." : "Inconclusive \u2014 not enough signal to separate context exhaustion from model degradation.";
+  const lines = ["--- Diagnostics ---", `Likely cause: ${verdict}`];
+  lines.push(`Turns: ${d.turns} \xB7 Tool calls: ${d.toolCalls} \xB7 Errors: ${d.errors}${d.loopExhausted ? " \xB7 LOOP EXHAUSTED" : ""}`);
+  if (d.tokensMeasured) {
+    lines.push(
+      `Tokens: prompt peak ${d.promptTokenPeak.toLocaleString()} \xB7 last-turn prompt ${d.lastPromptTokens.toLocaleString()} \xB7 completion total ${d.completionTokenTotal.toLocaleString()}`
+    );
+  } else {
+    lines.push("Tokens: not reported by the gateway for this run.");
+  }
+  lines.push(
+    `Tool results: ${kb(d.toolResultBytes)} total${d.largestToolResult ? ` \xB7 largest ${d.largestToolResult.label} (${kb(d.largestToolResult.bytes)})` : ""}${d.truncatedToolResults ? ` \xB7 ${d.truncatedToolResults} truncated before the model saw them` : ""}`
+  );
+  if (d.downgradeEvents > 0) lines.push(`Model downgrades: ${d.downgradeEvents} turn(s) answered by a different model than requested (gateway failover).`);
+  if (d.emptyOrLengthFinishes > 0) lines.push(`Degenerate turns: ${d.emptyOrLengthFinishes} ended on \`length\` or returned empty text.`);
+  if (d.evermindUsed.length) lines.push(`Evermind/SSM answered: ${d.evermindUsed.join(", ")}`);
+  return lines;
 }
 function buildBrainTriageReport(opts) {
-  const { capturedAt, events, messages = [], chatId, chatTitle, agentLabel, error } = opts;
+  const { capturedAt, events, messages = [], chatId, chatTitle, agentLabel, configuredModel, surface, error } = opts;
   const errors = events.filter((e) => e.isError || e.category === "error");
   const lines = [];
   lines.push("=== BuilderForce Brain Triage ===");
   lines.push(`Captured:  ${capturedAt}`);
   if (chatId != null) lines.push(`Chat:      #${chatId}${chatTitle ? ` \u2014 ${chatTitle}` : ""}`);
   lines.push(`Brain:     ${agentLabel || "Brain (default)"}`);
+  lines.push(...formatBrainProvenance(events, { configuredModel, surface }));
   lines.push(`Steps: ${events.length} \xB7 Errors: ${errors.length} \xB7 Messages: ${messages.length}`);
   if (error) lines.push(`Last error: ${error}`);
+  lines.push("", ...formatBrainDiagnostics(computeBrainDiagnostics(events, configuredModel)));
+  if (detectUnbackedWriteClaim(events, messages)) {
+    lines.push("", "\u26A0 UNBACKED WRITE CLAIM \u2014 an assistant turn claimed it saved/updated a file, but no file-write tool (attachments.write / project_files.save) succeeded in this run. The file was NOT modified.");
+  }
+  if (detectUnbackedTicketClaim(events, messages)) {
+    lines.push("", "\u26A0 UNBACKED TICKET CLAIM \u2014 an assistant turn claimed it created/filed/linked a ticket or gap, but no create/link tool (tasks.create / chats.link_ticket / tickets.from_delta) succeeded in this run. Nothing was filed or linked to the chat.");
+  }
   if (errors.length) {
     lines.push("", `--- Errors (${errors.length}) ---`);
     for (const ev of errors) {
@@ -806,22 +1501,248 @@ function buildBrainTriageReport(opts) {
   return lines.join("\n");
 }
 
+// src/provenance.ts
+var PROVENANCE_META_KEY = "provenance";
+function isConnectedAccountUnused(prov) {
+  return prov?.account === "shared_byo_unused";
+}
+function parseMessageProvenance(msg) {
+  if (!msg.metadata) return null;
+  try {
+    const p = JSON.parse(msg.metadata).provenance;
+    if (p && typeof p.model === "string" && p.model.length > 0) {
+      const ev = p.evermind;
+      const evermind = ev && typeof ev.version === "number" && ev.version >= 1 ? { version: ev.version } : void 0;
+      const account = p.account === "own" || p.account === "shared" || p.account === "shared_byo_unused" ? p.account : void 0;
+      return {
+        model: p.model,
+        ...account ? { account } : {},
+        ...typeof p.vendor === "string" ? { vendor: p.vendor } : {},
+        ...evermind ? { evermind } : {}
+      };
+    }
+  } catch {
+  }
+  return null;
+}
+function withProvenanceMetadata(provenance, base) {
+  const meta = { ...base ?? {} };
+  if (provenance) meta[PROVENANCE_META_KEY] = provenance;
+  return Object.keys(meta).length > 0 ? JSON.stringify(meta) : void 0;
+}
+
+// src/chatWorkLinking.ts
+var TICKET_RECORDING_TOOLS = /* @__PURE__ */ new Set([
+  "builtin_tickets_from_delta",
+  "builtin_chats_link_ticket",
+  "builtin_reviews_record"
+]);
+var CODE_CHANGE_TOOLS = /* @__PURE__ */ new Set([
+  "write_file",
+  "edit_file",
+  "delete_file"
+]);
+function isCodeChangeTool(name) {
+  return CODE_CHANGE_TOOLS.has(name);
+}
+var CREATE_TOOL_KIND = {
+  builtin_objectives_create: "objective",
+  builtin_specs_create: "spec",
+  builtin_portfolios_create: "portfolio",
+  builtin_initiatives_create: "initiative"
+};
+function workItemLinkFromCreate(toolName, result) {
+  if (!result || typeof result !== "object") return null;
+  const row = result;
+  const id = row.id;
+  const ref = typeof id === "number" ? String(id) : typeof id === "string" && id.trim() ? id : null;
+  if (!ref) return null;
+  const linkType = row.deduped === true ? "linked" : "created";
+  if (toolName === "builtin_tasks_create") {
+    const t = typeof row.taskType === "string" ? row.taskType : "task";
+    const kind2 = t === "epic" || t === "gap" ? t : "task";
+    return { kind: kind2, ref, linkType };
+  }
+  const kind = CREATE_TOOL_KIND[toolName];
+  return kind ? { kind, ref, linkType } : null;
+}
+function isTicketRecordingTool(name) {
+  return TICKET_RECORDING_TOOLS.has(name);
+}
+var READ_ONLY_PLATFORM_SUFFIXES = [
+  "_list",
+  "_get",
+  "_search",
+  "_recall",
+  "_read",
+  "_assignees",
+  "_audit",
+  "_trace",
+  "_tree",
+  "_rollup",
+  "_runs",
+  "_graph",
+  "_triggers",
+  "_metrics",
+  "_usage",
+  "_query",
+  "_health",
+  "_models",
+  "_providers",
+  "_proposals",
+  "_ticket_lineage",
+  "_get_messages",
+  "_run_targets",
+  "_activity_calendar",
+  "_check_key",
+  "_browse_public",
+  "_tool_audit",
+  "_task_file_changes",
+  "_list_active",
+  "_list_agents",
+  "_list_all",
+  "_list_for_task",
+  "_list_mine",
+  "_list_recent",
+  "_list_tickets",
+  "_list_sessions",
+  "_list_users",
+  "_list_templates",
+  "_list_purchased",
+  "_list_directories",
+  "_list_error_groups",
+  "_list_pull_requests",
+  "_get_session",
+  "_get_stats",
+  "_get_user",
+  "_get_config",
+  "_get_access",
+  "_get_error_group"
+];
+function isReadOnlyPlatformTool(name) {
+  if (!name.startsWith("builtin_")) return false;
+  return READ_ONLY_PLATFORM_SUFFIXES.some((s) => name.endsWith(s));
+}
+var NOT_STARTED_TASK_STATUSES = /* @__PURE__ */ new Set(["backlog", "todo", "ready"]);
+var TASK_TIER_KINDS = /* @__PURE__ */ new Set(["task", "epic", "gap"]);
+function linkedTicketsToAdvance(listResult) {
+  let rows = listResult;
+  if (typeof rows === "string") {
+    try {
+      rows = JSON.parse(rows);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(rows)) return [];
+  const out = [];
+  for (const r of rows) {
+    if (!r || typeof r !== "object") continue;
+    const row = r;
+    if (typeof row.kind !== "string" || !TASK_TIER_KINDS.has(row.kind)) continue;
+    if (row.exists === false) continue;
+    const ref = typeof row.ref === "number" ? String(row.ref) : typeof row.ref === "string" && row.ref.trim() ? row.ref : null;
+    if (!ref) continue;
+    if (typeof row.status !== "string" || !NOT_STARTED_TASK_STATUSES.has(row.status.toLowerCase())) continue;
+    out.push({ kind: row.kind, ref });
+  }
+  return out;
+}
+function codeChangeFile(args) {
+  if (args && typeof args === "object" && "path" in args) {
+    const p = args.path;
+    if (typeof p === "string" && p.trim()) return p;
+  }
+  return null;
+}
+function chatWorkLinkingDirective(chatId) {
+  return `You are working inside Brain chat #${chatId}. Tie the work of this conversation back to it:
+\u2022 When your investigation concludes that something needs to be DONE \u2014 a bug to fix, a missing capability, a follow-up, or a gap you identified \u2014 do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (builtin_tasks_create with exactly one assignee and taskType "task", "epic", or "gap"; or the matching builtin_*_create for an objective, spec, or roadmap item) AND link it with builtin_chats_link_ticket (chatId=${chatId}, linkType="created"). The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.
+\u2022 Every created ticket must be resource-scoped before you report success: inspect its template manifest with builtin_kanban_participants; infer all additional roles required by its description and acceptance criteria; add each with builtin_kanban_assess_resource; then call builtin_kanban_accountability and explicitly report any unstaffed resource gaps. For an epic or multi-role ticket, call builtin_kanban_materialize_work_items so each required resource has an assigned child work item. Call builtin_kanban_coordinate when work should begin now. Never treat 0 required roles / 0 sign-offs as complete.
+\u2022 When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide") so the change becomes a ticket linked to this chat that completes when it ships.
+\u2022 Keep the board honest about STATUS. The MOMENT you start actively working an existing linked task/epic/gap \u2014 investigating its fix, editing code for it, or driving it \u2014 move it out of the backlog with builtin_tasks_update (id=<the ticket's ref>, status="in_progress"). When the work is finished and shipped, advance it to "in_review" (or "done" if it needs no review). Never leave a ticket you are actively working sitting in backlog.
+\u2022 Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked \u2014 both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.`;
+}
+
 // src/brainRunStore.ts
+function provenanceMetadata(result) {
+  const model = result.resolvedModel;
+  if (!model) return void 0;
+  const a = result.account;
+  const account = a === "own" || a === "shared" || a === "shared_byo_unused" ? a : void 0;
+  return withProvenanceMetadata({ model, ...account ? { account } : {} });
+}
+var ANNOUNCED_ACTION = new RegExp(
+  [
+    "calling (the|this|that|a|it|them|these) [\\w\\s-]*?(tool|function|api|now)",
+    "(i will|i'll|let me|going to|about to|now) (call|use|invoke|run|query|fetch|retrieve|look ?up|pull|check|get)\\b",
+    "(one|just a) (moment|second|sec)\\b",
+    "(fetching|retrieving|querying|loading|checking) (it|that|this|the data|now)\\b",
+    "stand ?by\\b"
+  ].join("|"),
+  "i"
+);
+function announcesUntakenAction(text) {
+  const t = text.trim();
+  if (!t) return false;
+  const tail = t.slice(-240);
+  return ANNOUNCED_ACTION.test(tail);
+}
 var MAX_TOOL_ITERATIONS = 25;
 var HISTORY_WINDOW = 80;
+var DEDUP_READ_TOOLS = /* @__PURE__ */ new Set(["read_file", "search_code", "list_files"]);
+var isDedupableRead = (name) => DEDUP_READ_TOOLS.has(name) || isReadOnlyPlatformTool(name);
+function accrueByoUnresolved(c, raw) {
+  if (!raw) return;
+  const before = c.byoUnresolved.length;
+  const next = new Set(c.byoUnresolved);
+  for (const p of raw.split(",").map((s) => s.trim()).filter(Boolean)) next.add(p);
+  if (next.size !== before) c.byoUnresolved = [...next];
+}
+function accrueProviderCap(c, raw) {
+  if (!raw) return;
+  const before = c.providerCap.length;
+  const next = new Set(c.providerCap);
+  for (const p of raw.split(",").map((s) => s.trim()).filter(Boolean)) next.add(p);
+  if (next.size !== before) c.providerCap = [...next];
+}
+var HISTORY_TOKEN_BUDGET = 24e3;
+var MAX_TOOL_RESULT_CHARS = 6e3;
+function estimateTokens(chars) {
+  return Math.ceil(chars / 4);
+}
+function messageTokens(m) {
+  let chars = typeof m.content === "string" ? m.content.length : JSON.stringify(m.content ?? "").length;
+  if (m.tool_calls) chars += JSON.stringify(m.tool_calls).length;
+  return estimateTokens(chars) + 4;
+}
+function trimToolResult(out) {
+  const full = JSON.stringify(out ?? null);
+  const bytes = full.length;
+  if (bytes <= MAX_TOOL_RESULT_CHARS) return { content: full, bytes, truncated: false };
+  const itemNote = Array.isArray(out) ? ` The full result had ${out.length} items; re-call this tool with a narrower filter (e.g. status, projectId, or limit) to see specific ones.` : " The full result was large; re-call with a narrower query if you need the elided fields.";
+  const head = full.slice(0, MAX_TOOL_RESULT_CHARS);
+  const content = `${head}
+\u2026[truncated ${bytes - MAX_TOOL_RESULT_CHARS} of ${bytes} chars to protect the context window.${itemNote}]`;
+  return { content, bytes, truncated: true };
+}
 var MAX_CELLS = 50;
 var MAX_TRACE_EVENTS = 500;
 var MAX_APPENDED = 50;
 var cells = /* @__PURE__ */ new Map();
+var storeListeners = /* @__PURE__ */ new Set();
 var EMPTY_SNAPSHOT = {
   running: false,
   streamingText: "",
   error: "",
+  errorAction: null,
   pendingConfirm: null,
   messagesEpoch: 0,
   appended: [],
   hasTrace: false,
-  trace: []
+  trace: [],
+  byoUnresolved: [],
+  providerCap: []
 };
 function makeCell() {
   return {
@@ -830,11 +1751,19 @@ function makeCell() {
     running: false,
     streamingText: "",
     error: "",
+    errorAction: null,
     pendingConfirm: null,
     confirmResolver: null,
     appended: [],
     messagesEpoch: 0,
     listeners: /* @__PURE__ */ new Set(),
+    abort: null,
+    byoUnresolved: [],
+    providerCap: [],
+    codeChanged: false,
+    ticketRecorded: false,
+    touchedFiles: [],
+    compactMemo: null,
     snapshot: EMPTY_SNAPSHOT
   };
 }
@@ -863,18 +1792,48 @@ function emit(c) {
     running: c.running,
     streamingText: c.streamingText,
     error: c.error,
+    errorAction: c.errorAction,
     pendingConfirm: c.pendingConfirm,
     messagesEpoch: c.messagesEpoch,
     appended: c.appended,
     hasTrace: c.trace.length > 0,
-    trace: c.trace
+    trace: c.trace,
+    byoUnresolved: c.byoUnresolved,
+    providerCap: c.providerCap
   };
   for (const l of c.listeners) l();
+  for (const l of storeListeners) l();
 }
 function pushTrace(c, ev) {
   c.trace.push(ev);
   if (c.trace.length > MAX_TRACE_EVENTS) c.trace.splice(0, c.trace.length - MAX_TRACE_EVENTS);
   emit(c);
+}
+var STEP_RESULT_CAP = 4e3;
+function persistStep(chatId, persistence, ev) {
+  let result = ev.result ?? null;
+  try {
+    const s = JSON.stringify(result);
+    if (s.length > STEP_RESULT_CAP) result = `${s.slice(0, STEP_RESULT_CAP)}\u2026[${s.length - STEP_RESULT_CAP} more chars]`;
+  } catch {
+    result = String(result);
+  }
+  const metadata = JSON.stringify({
+    kind: "step",
+    category: ev.category,
+    label: ev.label,
+    args: ev.args ?? null,
+    result,
+    isError: ev.isError ?? false,
+    ...ev.durationMs != null ? { durationMs: ev.durationMs } : {},
+    ts: ev.ts
+  });
+  void persistence.sendMessages(chatId, [{ role: "tool", content: "", metadata }]).catch(() => {
+  });
+}
+function pushDurableStep(c, chatId, persistence, ev) {
+  pushTrace(c, ev);
+  persistStep(chatId, persistence, ev);
 }
 function recordAppended(c, msg) {
   const next = [...c.appended, msg];
@@ -894,6 +1853,18 @@ function parseArgs(raw) {
     return {};
   }
 }
+function latestUserText(convo) {
+  for (let i = convo.length - 1; i >= 0; i--) {
+    const m = convo[i];
+    if (m.role !== "user") continue;
+    if (typeof m.content === "string") return m.content.trim();
+    if (Array.isArray(m.content)) {
+      return m.content.map((p) => p && typeof p === "object" && "text" in p && typeof p.text === "string" ? p.text : "").join(" ").trim();
+    }
+    return "";
+  }
+  return "";
+}
 function windowed(convo) {
   let w = convo.slice(-HISTORY_WINDOW);
   while (w.length > 0 && w[0].role !== "user") w = w.slice(1);
@@ -901,7 +1872,117 @@ function windowed(convo) {
     const lastUser = convo.map((m) => m.role).lastIndexOf("user");
     w = lastUser >= 0 ? convo.slice(lastUser) : convo.slice();
   }
-  return w;
+  return tokenBounded(w);
+}
+function tokenBounded(w) {
+  let total = w.reduce((sum, m) => sum + messageTokens(m), 0);
+  if (total <= HISTORY_TOKEN_BUDGET) return w;
+  const lastUser = w.map((m) => m.role).lastIndexOf("user");
+  let start = 0;
+  while (total > HISTORY_TOKEN_BUDGET && start < lastUser) {
+    total -= messageTokens(w[start]);
+    start += 1;
+  }
+  let trimmed = w.slice(start);
+  while (trimmed.length > 1 && trimmed[0].role !== "user") trimmed = trimmed.slice(1);
+  return trimmed;
+}
+var COMPACT_TAIL_TURNS = 8;
+function compactTailStart(convo, tailTurns) {
+  let start = Math.max(0, convo.length - tailTurns);
+  while (start < convo.length && convo[start].role === "tool") start += 1;
+  return start;
+}
+function pinnedDirectiveIndex(convo, tailTurns) {
+  const tailStart = compactTailStart(convo, tailTurns);
+  const lastUser = convo.map((m) => m.role).lastIndexOf("user");
+  return lastUser >= 0 && lastUser < tailStart ? lastUser : -1;
+}
+function compactMiddleRange(convo, tailTurns) {
+  return { start: 0, end: compactTailStart(convo, tailTurns) };
+}
+function assembleCompacted(systemPrompt, convo, note, tailTurns) {
+  const tailStart = compactTailStart(convo, tailTurns);
+  const out = [{ role: "system", content: systemPrompt }];
+  out.push({ role: "assistant", content: note });
+  const directiveIdx = pinnedDirectiveIndex(convo, tailTurns);
+  if (directiveIdx >= 0) out.push(convo[directiveIdx]);
+  out.push(...convo.slice(tailStart));
+  return out;
+}
+function renderForSummary(msgs) {
+  return msgs.map((m) => {
+    const content = typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "");
+    const calls = m.tool_calls?.length ? ` [called: ${m.tool_calls.map((t) => t.function?.name).filter(Boolean).join(", ")}]` : "";
+    return `${m.role}${calls}: ${content}`;
+  }).join("\n\n");
+}
+async function summarizeMiddle(stream, model, msgs, signal) {
+  if (msgs.length === 0) return null;
+  try {
+    const res = await stream({
+      messages: [
+        {
+          role: "system",
+          content: "You compress an in-progress AI agent transcript into a concise MEMORY the agent keeps working from. Capture: the CURRENT outstanding instruction from the user (the most recent user message is authoritative \u2014 earlier requests it supersedes are history, not the active task), concrete facts/answers discovered, tool results that matter (ids, paths, values), decisions made, and what still remains to do. Be information-dense; drop pleasantries. No preamble."
+        },
+        { role: "user", content: renderForSummary(msgs) }
+      ],
+      model,
+      signal
+    });
+    const out = (res.text ?? "").trim();
+    return out.length > 0 ? out : null;
+  } catch {
+    return null;
+  }
+}
+async function buildWorkingTranscript(c, systemPrompt, stream, model) {
+  const convo = c.transcript;
+  const total = convo.reduce((sum, m) => sum + messageTokens(m), 0);
+  if (total <= HISTORY_TOKEN_BUDGET) {
+    c.compactMemo = null;
+    return [{ role: "system", content: systemPrompt }, ...windowed(convo)];
+  }
+  const stale = !c.compactMemo || convo.length - c.compactMemo.atLen >= COMPACT_TAIL_TURNS;
+  let note = c.compactMemo?.note ?? null;
+  if (stale) {
+    const { start, end } = compactMiddleRange(convo, COMPACT_TAIL_TURNS);
+    const middle = convo.slice(start, end);
+    const summary = await summarizeMiddle(stream, model, middle, c.abort?.signal);
+    if (summary != null) {
+      note = `Compressed memory of ${middle.length} earlier step(s):
+${summary}`;
+      c.compactMemo = { note, atLen: convo.length };
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: "context.compacted",
+        args: { droppedMessages: middle.length },
+        result: `Compressed ${middle.length} earlier step(s) into a memory to stay within the context window.`
+      });
+      emit(c);
+    }
+  }
+  if (note == null) {
+    return [{ role: "system", content: systemPrompt }, ...windowed(convo)];
+  }
+  return assembleCompacted(systemPrompt, convo, note, COMPACT_TAIL_TURNS);
+}
+function subscribeRunStore(listener) {
+  storeListeners.add(listener);
+  return () => {
+    storeListeners.delete(listener);
+  };
+}
+function getGlobalRunState() {
+  const running = [];
+  const awaiting = [];
+  for (const [id, cell] of cells) {
+    if (cell.pendingConfirm) awaiting.push(id);
+    else if (cell.running) running.push(id);
+  }
+  return { running, awaiting };
 }
 function subscribeRun(chatId, listener) {
   const c = getCell(chatId);
@@ -921,6 +2002,27 @@ function getRunTrace(chatId) {
   if (chatId == null) return [];
   return cells.get(chatId)?.trace ?? [];
 }
+function stopRun(chatId) {
+  const c = cells.get(chatId);
+  if (!c || !c.running) return;
+  c.abort?.abort();
+  if (c.confirmResolver) {
+    const resolve = c.confirmResolver;
+    c.confirmResolver = null;
+    c.pendingConfirm = null;
+    resolve(false);
+  }
+  c.streamingText = "";
+  pushTrace(c, { ts: nowIso(), category: "message", label: "agent.stopped", result: "Stopped by user." });
+}
+function clearRunError(chatId) {
+  if (chatId == null) return;
+  const c = cells.get(chatId);
+  if (!c || !c.error) return;
+  c.error = "";
+  c.errorAction = null;
+  emit(c);
+}
 function resolveRunConfirm(chatId, ok) {
   const c = cells.get(chatId);
   if (!c || !c.confirmResolver) return;
@@ -935,42 +2037,228 @@ async function startRun(chatId, req) {
   if (c.running) return;
   c.running = true;
   c.error = "";
+  c.errorAction = null;
   c.streamingText = "";
+  c.byoUnresolved = [];
+  c.providerCap = [];
+  c.codeChanged = false;
+  c.ticketRecorded = false;
+  c.touchedFiles = [];
+  c.abort = new AbortController();
   if (req.seed && c.transcript.length === 0) c.transcript = req.seed.slice();
   if (req.userTurn !== void 0) c.transcript.push({ role: "user", content: req.userTurn });
   emit(c);
   try {
     await runLoop(chatId, c, req);
   } catch (e) {
-    c.error = e instanceof Error ? e.message : "Reply failed";
+    if (!c.abort?.signal.aborted) {
+      c.error = e instanceof Error ? e.message : "Reply failed";
+      c.errorAction = chatErrorAction(e);
+    }
   } finally {
+    const aborted = c.abort?.signal.aborted ?? false;
     c.running = false;
     c.streamingText = "";
+    c.abort = null;
+    if (!aborted && c.codeChanged && !c.ticketRecorded && req.projectId != null && req.runTool) {
+      await recordCodeChangeTicket(chatId, c, req).catch(() => {
+      });
+    }
+    if (!aborted && c.codeChanged && req.projectId != null && req.runTool) {
+      await advanceLinkedTickets(chatId, c, req).catch(() => {
+      });
+    }
     emit(c);
   }
 }
+async function recordCodeChangeTicket(chatId, c, req) {
+  if (!req.runTool || req.projectId == null) return;
+  const files = c.touchedFiles.slice(0, 50);
+  const summary = files.length ? `Code change (${files.length} file${files.length === 1 ? "" : "s"}) from Brain chat #${chatId}` : `Code change from Brain chat #${chatId}`;
+  const toolStart = nowMs2();
+  let out;
+  try {
+    out = await req.runTool("builtin_tickets_from_delta", {
+      projectId: req.projectId,
+      summary,
+      detail: "Auto-captured: this chat changed code without recording a ticket, so the platform minted one to keep the work visible on the board and linked to the conversation.",
+      files,
+      kind: "improvement",
+      modality: "ide",
+      chatId
+    });
+  } catch (e) {
+    out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  pushDurableStep(c, chatId, req.persistence, {
+    ts: nowIso(),
+    category: "tool",
+    label: "builtin_tickets_from_delta",
+    durationMs: nowMs2() - toolStart,
+    args: { projectId: req.projectId, summary, files, auto: true, chatId },
+    result: out ?? null,
+    isError: isFailedToolResult(out)
+  });
+}
+async function advanceLinkedTickets(chatId, c, req) {
+  if (!req.runTool) return;
+  let listed;
+  try {
+    listed = await req.runTool("builtin_chats_list_tickets", { chatId });
+  } catch {
+    return;
+  }
+  const toAdvance = linkedTicketsToAdvance(listed);
+  for (const t of toAdvance) {
+    const id = Number(t.ref);
+    if (!Number.isInteger(id)) continue;
+    const toolStart = nowMs2();
+    let out;
+    try {
+      out = await req.runTool("builtin_tasks_update", { id, status: "in_progress" });
+    } catch (e) {
+      out = { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+    pushDurableStep(c, chatId, req.persistence, {
+      ts: nowIso(),
+      category: "tool",
+      label: "builtin_tasks_update",
+      durationMs: nowMs2() - toolStart,
+      args: { id, status: "in_progress", auto: true, reason: "worked-ticket-off-backlog" },
+      result: out ?? null,
+      isError: isFailedToolResult(out)
+    });
+  }
+}
+async function autoLinkCreatedItem(chatId, c, persistence, runTool, toolName, out) {
+  const link = workItemLinkFromCreate(toolName, out);
+  if (!link) return;
+  const toolStart = nowMs2();
+  let result;
+  try {
+    result = await runTool("builtin_chats_link_ticket", {
+      chatId,
+      kind: link.kind,
+      ref: link.ref,
+      linkType: link.linkType
+    });
+  } catch (e) {
+    result = { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  if (!isFailedToolResult(result)) c.ticketRecorded = true;
+  pushDurableStep(c, chatId, persistence, {
+    ts: nowIso(),
+    category: "tool",
+    label: "builtin_chats_link_ticket",
+    durationMs: nowMs2() - toolStart,
+    args: { chatId, kind: link.kind, ref: link.ref, linkType: link.linkType, auto: true },
+    result: result ?? null,
+    isError: isFailedToolResult(result)
+  });
+}
 async function runLoop(chatId, c, req) {
-  const { resolvedSystemPrompt, tools: toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity } = req;
+  const { resolvedSystemPrompt, tools: toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
   const convo = c.transcript;
   const tools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0;
+  const metadata = {
+    chatId,
+    ...req.projectId != null ? { projectId: req.projectId } : {}
+  };
+  let systemPrompt = resolvedSystemPrompt;
+  let recalled = null;
+  if (evermind?.recall) {
+    const query = latestUserText(convo);
+    if (query) {
+      try {
+        recalled = await evermind.recall(query);
+      } catch {
+        recalled = null;
+      }
+      if (recalled?.seeded && recalled.items.length > 0) {
+        const block = formatEvermindMemoryBlock(recalled.items);
+        if (block) {
+          systemPrompt = `${systemPrompt}
+
+${block}`;
+          pushDurableStep(c, chatId, persistence, {
+            ts: nowIso(),
+            category: "recall",
+            label: "evermind.recall",
+            args: { query, version: recalled.version },
+            result: { count: recalled.items.length, version: recalled.version, mode: recalled.mode, items: recalled.items }
+          });
+        }
+      }
+    }
+  }
+  if (evermind?.answer && !c.abort?.signal.aborted) {
+    const query = latestUserText(convo);
+    if (query) {
+      let memAnswer = null;
+      try {
+        memAnswer = await evermind.answer(query);
+      } catch {
+        memAnswer = null;
+      }
+      const finalText = memAnswer?.text.trim();
+      if (finalText) {
+        convo.push({ role: "assistant", content: finalText });
+        const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: finalText }]);
+        c.streamingText = "";
+        recordAppended(c, assistantMsg);
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: "recall",
+          label: memAnswer.source === "evermind" ? "evermind.answer" : "memory.answer",
+          args: { query },
+          result: {
+            source: memAnswer.source,
+            skippedLlm: true,
+            ...memAnswer.evermindVersion != null ? { version: memAnswer.evermindVersion } : {}
+          }
+        });
+        emit(c);
+        onActivity?.(chatId);
+        return;
+      }
+    }
+  }
+  if (req.augmentSystemPrompt) {
+    try {
+      const extra = await req.augmentSystemPrompt(latestUserText(convo));
+      if (typeof extra === "string" && extra.trim()) {
+        systemPrompt = `${systemPrompt}
+
+${extra}`;
+      }
+    } catch {
+    }
+  }
+  systemPrompt = `${systemPrompt}
+
+${chatWorkLinkingDirective(chatId)}`;
+  const readDedupe = /* @__PURE__ */ new Set();
+  let usedAnnouncementRecovery = false;
   for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
+    if (c.abort?.signal.aborted) return;
     c.streamingText = "";
     emit(c);
-    const working = [
-      { role: "system", content: resolvedSystemPrompt },
-      ...windowed(convo)
-    ];
+    const working = await buildWorkingTranscript(c, systemPrompt, stream, model);
+    if (c.abort?.signal.aborted) return;
     const llmStart = nowMs2();
+    let firstTokenAt;
     let result;
     try {
       result = await stream(
-        { messages: working, tools, tool_choice: tools ? "auto" : void 0, model },
+        { messages: working, tools, tool_choice: tools ? "auto" : void 0, model, maxTokens, reasoning, metadata, signal: c.abort?.signal },
         { onTextDelta: (d) => {
+          if (firstTokenAt === void 0) firstTokenAt = nowMs2();
           c.streamingText += d;
           emit(c);
         } }
       );
     } catch (e) {
+      if (c.abort?.signal.aborted) return;
       pushTrace(c, {
         ts: nowIso(),
         category: "error",
@@ -982,13 +2270,46 @@ async function runLoop(chatId, c, req) {
       });
       throw e;
     }
+    accrueByoUnresolved(c, result.byoUnresolved);
+    accrueProviderCap(c, result.providerCap);
+    const resolved = result.resolvedModel ?? model ?? "default";
+    const requested = model ?? "default";
+    setLastResolvedModel(result.resolvedModel);
+    if (requested !== "default" && resolved !== "default" && resolved !== requested) {
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: "llm.model_downgrade",
+        args: { requestedModel: requested, model: resolved, step: iter },
+        result: `Gateway answered with ${resolved} instead of the requested ${requested} (failover) \u2014 a smaller context window can truncate long transcripts.`
+      });
+    }
     pushTrace(c, {
       ts: nowIso(),
       category: "llm",
       label: "llm.complete",
       durationMs: nowMs2() - llmStart,
-      args: { model: model ?? "default", step: iter, toolCalls: result.toolCalls.length },
-      result: `${result.toolCalls.length} tool call(s) \xB7 ${result.text.length} chars \xB7 finish: ${result.finishReason ?? "\u2014"}`
+      ttftMs: firstTokenAt !== void 0 ? firstTokenAt - llmStart : void 0,
+      // `model` is the model the gateway ACTUALLY used (resolved), falling back to
+      // what we requested when the gateway didn't report one. `requestedModel`
+      // keeps the caller's ask (empty/'default' ⇒ gateway auto-selects) so triage
+      // can tell "what I asked for" from "what answered".
+      args: {
+        model: resolved,
+        requestedModel: requested,
+        step: iter,
+        toolCalls: result.toolCalls.length,
+        // Which account served the turn + any connected-BYO provider the gateway
+        // could NOT resolve — so triage tells "ran on the shared pool despite a
+        // connected Claude account (expired?)" apart from "nothing connected".
+        account: result.account,
+        byoUnresolved: result.byoUnresolved
+      },
+      // Structured diagnostics fields — the A-vs-B triage reads these directly.
+      usage: result.usage,
+      finishReason: result.finishReason,
+      textChars: result.text.length,
+      result: `${result.toolCalls.length} tool call(s) \xB7 ${result.text.length} chars \xB7 finish: ${result.finishReason ?? "\u2014"}${result.usage?.prompt != null ? ` \xB7 prompt ${result.usage.prompt} tok` : ""}`
     });
     if (result.text.trim()) {
       pushTrace(c, { ts: nowIso(), category: "message", label: "agent.message", args: { step: iter }, result: result.text });
@@ -1007,7 +2328,8 @@ async function runLoop(chatId, c, req) {
       });
       const narration = result.text.trim();
       if (narration) {
-        const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: result.text }]);
+        const meta = provenanceMetadata(result);
+        const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: result.text, ...meta ? { metadata: meta } : {} }]);
         recordAppended(c, narrationMsg);
       }
       c.streamingText = "";
@@ -1022,9 +2344,23 @@ async function runLoop(chatId, c, req) {
           });
           if (!ok) {
             convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify({ cancelled: true, reason: "User declined this action." }) });
-            pushTrace(c, { ts: nowIso(), category: "tool", label: tc.name, args, result: { cancelled: true, reason: "User declined this action." } });
+            pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: "tool", label: tc.name, args, result: { cancelled: true, reason: "User declined this action." } });
             continue;
           }
+        }
+        const isReadTool = isDedupableRead(tc.name);
+        const dedupeKey = `${tc.name}:${tc.args ?? ""}`;
+        if (isReadTool) {
+          if (readDedupe.has(dedupeKey)) {
+            const stub = {
+              note: `Duplicate ${tc.name} call \u2014 identical arguments to an earlier call this turn, whose result is already in the conversation above. Reuse that result instead of re-reading; do not repeat it (this saves context and avoids looping).`
+            };
+            convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(stub) });
+            pushTrace(c, { ts: nowIso(), category: "tool", label: tc.name, args, result: stub });
+            continue;
+          }
+        } else {
+          readDedupe.clear();
         }
         const toolStart = nowMs2();
         let out;
@@ -1034,29 +2370,159 @@ async function runLoop(chatId, c, req) {
           const message = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
           out = { ok: false, error: message };
           convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(out) });
-          pushTrace(c, { ts: nowIso(), category: "tool", label: tc.name, durationMs: nowMs2() - toolStart, args, result: out, isError: true });
+          pushDurableStep(c, chatId, persistence, { ts: nowIso(), category: "tool", label: tc.name, durationMs: nowMs2() - toolStart, args, result: out, isError: true });
           continue;
         }
-        convo.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(out ?? null) });
-        pushTrace(c, { ts: nowIso(), category: "tool", label: tc.name, durationMs: nowMs2() - toolStart, args, result: out ?? null, isError: isFailedToolResult(out) });
+        if (isCodeChangeTool(tc.name)) {
+          c.codeChanged = true;
+          const f = codeChangeFile(args);
+          if (f && !c.touchedFiles.includes(f)) c.touchedFiles.push(f);
+        }
+        if (isTicketRecordingTool(tc.name)) c.ticketRecorded = true;
+        if (runTool) await autoLinkCreatedItem(chatId, c, persistence, runTool, tc.name, out);
+        const trimmedOut = trimToolResult(out ?? null);
+        convo.push({ role: "tool", tool_call_id: tc.id, content: trimmedOut.content });
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: "tool",
+          label: tc.name,
+          durationMs: nowMs2() - toolStart,
+          args,
+          result: out ?? null,
+          isError: isFailedToolResult(out),
+          resultBytes: trimmedOut.bytes,
+          truncated: trimmedOut.truncated
+        });
+        if (isReadTool && !isFailedToolResult(out)) readDedupe.add(dedupeKey);
       }
+      continue;
+    }
+    if (runTool && (toolSpecs?.length ?? 0) > 0 && !usedAnnouncementRecovery && announcesUntakenAction(result.text)) {
+      usedAnnouncementRecovery = true;
+      const narration = result.text.trim();
+      if (narration) {
+        const meta = provenanceMetadata(result);
+        const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: narration, ...meta ? { metadata: meta } : {} }]);
+        recordAppended(c, narrationMsg);
+      }
+      convo.push({ role: "assistant", content: result.text });
+      convo.push({
+        role: "user",
+        content: "You said you would call a tool but did not actually call one \u2014 your last turn made zero tool calls. Make the call NOW in this turn, then answer using its result. If no tool can give you that data, say plainly which data you are missing and answer with what you already have. Do not announce another call."
+      });
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: "loop.recover_announced_tool_call",
+        args: { step: iter },
+        result: "Model announced a tool call without making one \u2014 re-prompted once."
+      });
+      c.streamingText = "";
+      emit(c);
       continue;
     }
     const finalText = result.text.trim() || "No response.";
     convo.push({ role: "assistant", content: finalText });
-    const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: finalText }]);
+    const finalMeta = provenanceMetadata(result);
+    const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: finalText, ...finalMeta ? { metadata: finalMeta } : {} }]);
     c.streamingText = "";
     recordAppended(c, assistantMsg);
     emit(c);
+    const learn = assistantMsg?.evermindLearn;
+    if (learn?.learned) {
+      pushDurableStep(c, chatId, persistence, {
+        ts: nowIso(),
+        category: "learn",
+        label: "evermind.learn",
+        // `targets` carries the per-Evermind breakdown (a project can fan out to many)
+        // so the timeline can name each by id; the renderer falls back to `version` alone.
+        result: { version: learn.version, queued: true, ...learn.targets ? { targets: learn.targets } : {} }
+      });
+      const reconciled = recalled?.items ? countReconciledMemories(recalled.items, finalText) : 0;
+      if (reconciled > 0) {
+        pushDurableStep(c, chatId, persistence, {
+          ts: nowIso(),
+          category: "reconcile",
+          label: "evermind.reconcile",
+          result: { count: reconciled, version: learn.version }
+        });
+      }
+    } else if (learn && learn.reason && learn.reason !== "too-short") {
+      pushDurableStep(c, chatId, persistence, {
+        ts: nowIso(),
+        category: "learn",
+        label: "evermind.learn",
+        result: { version: learn.version, skipped: true, reason: learn.reason, ...learn.targets ? { targets: learn.targets } : {} }
+      });
+    }
+    if (evermind?.cacheAnswer) {
+      const q = latestUserText(convo);
+      if (q) {
+        void Promise.resolve(evermind.cacheAnswer(q, finalText)).catch(() => {
+        });
+      }
+    }
     onActivity?.(chatId);
     return;
   }
+  c.streamingText = "";
+  if (!c.abort?.signal.aborted) {
+    const closeStart = nowMs2();
+    try {
+      const working = [
+        { role: "system", content: systemPrompt },
+        ...windowed(convo),
+        {
+          role: "user",
+          content: "You have reached your tool-call budget for this turn. Do NOT call any more tools. Answer the user now, in prose, using what you have already gathered \u2014 summarise your findings and state plainly anything you could not finish."
+        }
+      ];
+      let closeFirstTokenAt;
+      const closing = await stream(
+        // No `tools` → the model can't call another tool and must produce text.
+        { messages: working, model, maxTokens, reasoning, metadata, signal: c.abort?.signal },
+        { onTextDelta: (d) => {
+          if (closeFirstTokenAt === void 0) closeFirstTokenAt = nowMs2();
+          c.streamingText += d;
+          emit(c);
+        } }
+      );
+      accrueByoUnresolved(c, closing.byoUnresolved);
+      accrueProviderCap(c, closing.providerCap);
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "llm",
+        label: "llm.complete",
+        durationMs: nowMs2() - closeStart,
+        ttftMs: closeFirstTokenAt !== void 0 ? closeFirstTokenAt - closeStart : void 0,
+        args: { model: closing.resolvedModel ?? model ?? "default", requestedModel: model ?? "default", step: MAX_TOOL_ITERATIONS, toolCalls: 0, forcedFinish: true, account: closing.account, byoUnresolved: closing.byoUnresolved },
+        usage: closing.usage,
+        finishReason: closing.finishReason,
+        textChars: closing.text.length,
+        result: `forced final synthesis (tool budget reached) \xB7 ${closing.text.length} chars \xB7 finish: ${closing.finishReason ?? "\u2014"}`
+      });
+      const closingText = closing.text.trim();
+      if (closingText) {
+        convo.push({ role: "assistant", content: closingText });
+        const meta = provenanceMetadata(closing);
+        const [assistantMsg] = await persistence.sendMessages(chatId, [{ role: "assistant", content: closingText, ...meta ? { metadata: meta } : {} }]);
+        c.streamingText = "";
+        recordAppended(c, assistantMsg);
+        emit(c);
+        onActivity?.(chatId);
+        return;
+      }
+    } catch (e) {
+      if (c.abort?.signal.aborted) return;
+    }
+  }
+  if (c.abort?.signal.aborted) return;
   c.streamingText = "";
   pushTrace(c, {
     ts: nowIso(),
     category: "error",
     label: "agent.loop",
-    result: `Loop exhausted after ${MAX_TOOL_ITERATIONS} tool iterations`,
+    result: `Loop exhausted after ${MAX_TOOL_ITERATIONS} tool iterations (a forced final answer without tools also came back empty)`,
     isError: true
   });
   c.error = "The assistant kept calling tools without finishing. Try rephrasing.";
@@ -1069,17 +2535,25 @@ function useBrainConversation(options) {
   const {
     chatId,
     modality = "designer",
+    projectId,
     extraSystem,
     systemPrompt,
     model,
+    maxTokens,
+    reasoning,
     toolSpecs,
     runTool,
     needsConfirm,
     ensureChatId,
-    onActivity
+    onActivity,
+    onFirstUserTurn,
+    evermind,
+    augmentSystemPrompt
   } = options;
   const [messages, setMessages] = (0, import_react6.useState)([]);
   const [loadingMessages, setLoadingMessages] = (0, import_react6.useState)(false);
+  const [reloadNonce, setReloadNonce] = (0, import_react6.useState)(0);
+  const reloadMessages = (0, import_react6.useCallback)(() => setReloadNonce((n) => n + 1), []);
   const [localSending, setLocalSending] = (0, import_react6.useState)(false);
   const [localError, setLocalError] = (0, import_react6.useState)("");
   const [copiedMessageId, setCopiedMessageId] = (0, import_react6.useState)(null);
@@ -1111,7 +2585,11 @@ function useBrainConversation(options) {
     return () => {
       cancelled = true;
     };
-  }, [persistence, chatId]);
+  }, [persistence, chatId, reloadNonce]);
+  (0, import_react6.useEffect)(() => {
+    if (chatId == null || !persistence.subscribeMessages) return;
+    return persistence.subscribeMessages(chatId, reloadMessages);
+  }, [persistence, chatId, reloadMessages]);
   (0, import_react6.useEffect)(() => {
     const appended = snapshot.appended;
     if (appended.length === 0) return;
@@ -1141,26 +2619,32 @@ ${extraSystem}` : resolvedSystemPrompt;
       resolvedSystemPrompt: fullSystemPrompt,
       tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0,
       model,
+      maxTokens,
+      reasoning,
       runTool,
       needsConfirm,
       stream,
       persistence,
       onActivity,
+      evermind,
+      augmentSystemPrompt,
       seed,
-      userTurn
+      userTurn,
+      projectId
     }),
-    [fullSystemPrompt, toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity]
+    [fullSystemPrompt, toolSpecs, model, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId]
   );
   const send = (0, import_react6.useCallback)(
-    async (text) => {
+    async (text, opts) => {
       const trimmed = text.trim();
-      if (!trimmed || localSending || isRunning(chatId)) return;
+      if (!trimmed || localSending || isRunning(chatId)) return false;
+      const addressedTo = opts?.addressedTo ?? null;
       let id = chatId;
       if (id == null) {
         id = await ensureChatId?.() ?? null;
         if (id == null) {
           setLocalError("Could not start a chat.");
-          return;
+          return false;
         }
       }
       autoRepliedChatIdRef.current = id;
@@ -1175,7 +2659,7 @@ ${extraSystem}` : resolvedSystemPrompt;
 
 ${refs}`;
       }
-      const metadata = attachments.length > 0 ? JSON.stringify({ attachments }) : void 0;
+      const metadata = withDirectedMetadata(addressedTo, attachments.length > 0 ? { attachments } : void 0);
       const imageAtts = attachments.filter((a) => a.imageUrl);
       let modelContent = displayContent;
       if (imageAtts.length > 0) {
@@ -1189,28 +2673,46 @@ ${refs}`;
       try {
         const [userMsg] = await persistence.sendMessages(id, [{ role: "user", content: displayContent, metadata }]);
         setMessages((prev) => [...prev, userMsg]);
-        const seed = messages.map((m) => ({
+        onActivity?.(id);
+        if (messages.length === 0) onFirstUserTurn?.(id, trimmed);
+        if (addressedTo) {
+          if (addressedTo.kind === "agent" && persistence.requestAgentReply) {
+            try {
+              const reply = await persistence.requestAgentReply(id, { agentRef: addressedTo.ref, agentName: addressedTo.name });
+              setMessages((prev) => [...prev, reply]);
+              onActivity?.(id);
+            } catch (e) {
+              setLocalError(e instanceof Error ? e.message : "The agent could not reply.");
+            }
+          }
+          return true;
+        }
+        const seed = scopeToConsolidation(messages).filter((m) => !isStepMessage(m)).map((m) => ({
           role: m.role,
           content: m.content
         }));
         await startRun(id, buildRequest(seed, modelContent));
+        return true;
       } catch (e) {
+        setPendingAttachments(attachments);
         setLocalError(e instanceof Error ? e.message : "Send failed");
+        return false;
       } finally {
         setLocalSending(false);
       }
     },
-    [persistence, chatId, localSending, pendingAttachments, messages, ensureChatId, buildRequest]
+    [persistence, chatId, localSending, pendingAttachments, messages, ensureChatId, buildRequest, onActivity, onFirstUserTurn]
   );
   (0, import_react6.useEffect)(() => {
     if (chatId == null || loadingMessages || localSending || messages.length === 0) return;
     if (isRunning(chatId)) return;
     const last = messages[messages.length - 1];
     if (last.role !== "user") return;
+    if (isDirectedToParticipant(last)) return;
     if (autoRepliedChatIdRef.current === chatId) return;
     autoRepliedChatIdRef.current = chatId;
     setLocalError("");
-    const seed = messages.slice(0, -1).map((m) => ({
+    const seed = scopeToConsolidation(messages.slice(0, -1)).filter((m) => !isStepMessage(m)).map((m) => ({
       role: m.role,
       content: m.content
     }));
@@ -1265,38 +2767,108 @@ ${refs}`;
   const resolveConfirm = (0, import_react6.useCallback)((ok) => {
     if (chatId != null) resolveRunConfirm(chatId, ok);
   }, [chatId]);
+  const clearError = (0, import_react6.useCallback)(() => {
+    setLocalError("");
+    clearRunError(chatId);
+  }, [chatId]);
+  const stop = (0, import_react6.useCallback)(() => {
+    if (chatId != null) stopRun(chatId);
+  }, [chatId]);
   const buildTriageReport = (0, import_react6.useCallback)(
-    (agentLabel) => buildBrainTriageReport({
+    (agentLabel, surface) => buildBrainTriageReport({
       capturedAt: (/* @__PURE__ */ new Date()).toISOString(),
       events: getRunTrace(chatId),
       messages,
       chatId,
       agentLabel,
+      surface,
+      configuredModel: model,
       error: localError || snapshot.error
     }),
-    [chatId, messages, localError, snapshot.error]
+    [chatId, messages, localError, snapshot.error, model]
   );
   return {
     messages,
     loadingMessages,
+    reloadMessages,
     sending: localSending || snapshot.running,
     error: localError || snapshot.error,
+    /** What the user can DO about `error` (reconnect / upgrade / add a card), when
+     *  the failure was actionable. Only meaningful for a RUN error — a local error
+     *  (e.g. a failed rename) has no gateway verdict behind it. */
+    errorAction: localError ? null : snapshot.errorAction,
     streamingText: snapshot.streamingText,
     copiedMessageId,
     feedbackMap,
     pendingAttachments,
     uploading,
     send,
+    stop,
     copyMessage,
     submitFeedback,
     attach,
     removeAttachment,
     setError: setLocalError,
+    clearError,
     pendingConfirm: snapshot.pendingConfirm,
     resolveConfirm,
     hasTrace: snapshot.hasTrace,
     trace: snapshot.trace,
+    /** Connected providers the gateway couldn't use this run (e.g. an expired Claude
+     *  subscription) — a mounted view renders a passive "reconnect your account"
+     *  banner off this. Empty when everything resolved. */
+    byoUnresolved: snapshot.byoUnresolved,
+    providerCap: snapshot.providerCap,
     buildTriageReport
+  };
+}
+
+// src/chatMessageSubscription.ts
+function subscribeToChatMessages(baseUrl, getToken, chatId, onChanged) {
+  let stopped = false;
+  let socket = null;
+  let retry = null;
+  let attempt = 0;
+  const connect = () => {
+    if (stopped || typeof WebSocket === "undefined") return;
+    const token = getToken();
+    if (!token) return;
+    const url = new URL(`/api/brain/chats/${chatId}/stream`, baseUrl);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    url.searchParams.set("token", token);
+    try {
+      socket = new WebSocket(url.toString());
+    } catch {
+      scheduleReconnect();
+      return;
+    }
+    socket.onopen = () => {
+      attempt = 0;
+    };
+    socket.onmessage = (event) => {
+      try {
+        const frame = JSON.parse(String(event.data));
+        if (frame.type === "changed") onChanged();
+      } catch {
+      }
+    };
+    socket.onclose = () => scheduleReconnect();
+    socket.onerror = () => socket?.close();
+  };
+  const scheduleReconnect = () => {
+    if (stopped || retry) return;
+    const delay = Math.min(1e3 * 2 ** attempt++, 3e4);
+    retry = setTimeout(() => {
+      retry = null;
+      connect();
+    }, delay);
+  };
+  connect();
+  return () => {
+    stopped = true;
+    if (retry) clearTimeout(retry);
+    socket?.close();
+    socket = null;
   };
 }
 
@@ -1321,16 +2893,278 @@ function takePendingPrompt() {
     return null;
   }
 }
+
+// src/chatDiagnostics.ts
+function classifyModelFunding(model, surface) {
+  if (!model) return "auto";
+  const byo = (surface?.byo?.models ?? []).find((m) => m.id === model);
+  if (byo?.vendor) return `byo:${byo.vendor}`;
+  if ((surface?.data ?? []).some((m) => m.id === model)) return "plan";
+  return "premium";
+}
+function fmtProject(id, name) {
+  if (id == null) return "none";
+  return name ? `${name} (#${id})` : `#${id}`;
+}
+var METER_LABEL = {
+  ai_tokens: "AI tokens",
+  ingestion: "Data ingested",
+  error_events: "Error events",
+  outbound_fetches: "Web fetches",
+  cloud_runs: "Cloud runs"
+};
+function fmtMeterValue(value, unit) {
+  if (value < 0) return "\u221E";
+  if (unit !== "bytes") return value.toLocaleString("en-US");
+  if (value < 1024) return `${value} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let v = value / 1024;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v >= 10 ? Math.round(v) : Math.round(v * 10) / 10} ${units[i]}`;
+}
+function fmtMeter(m) {
+  const label = METER_LABEL[m.key] ?? m.key;
+  if (m.unlimited) return `${label}: ${fmtMeterValue(m.used, m.unit)} used (unlimited)`;
+  return `${label}: ${fmtMeterValue(m.used, m.unit)} / ${fmtMeterValue(m.limit, m.unit)} (${m.percentUsed}%) \xB7 ${fmtMeterValue(m.remaining, m.unit)} left`;
+}
+function tokenMeter(a) {
+  return (a?.meters ?? []).find((m) => m.key === "ai_tokens");
+}
+function allowanceState(meter) {
+  if (!meter || meter.unlimited) return "ok";
+  if (meter.remaining <= 0) return "exhausted";
+  return meter.percentUsed >= 80 ? "warn" : "ok";
+}
+function diagnosticsSignals(d) {
+  const out = [];
+  const ev = d.evermind;
+  if (d.projectId == null || d.lastLearn?.reason === "not-attached") {
+    out.push(
+      "\u26A0\uFE0F Chat is NOT attached to a project (chat.projectId is null). The learn gate keys on the CHAT's project, so this chat contributes NOTHING to any Evermind \u2014 even though the panel shows the selected project as connected. Attach the chat to a project (or re-open it so the self-heal adopts the active project)."
+    );
+  } else if (d.selectedProjectId != null && d.selectedProjectId !== d.projectId) {
+    out.push(
+      `\u26A0\uFE0F Chat's project (#${d.projectId}) differs from the panel's selected project (#${d.selectedProjectId}). The Evermind panel reflects the SELECTED project; this chat feeds project #${d.projectId}. They are different models \u2014 compare the versions below.`
+    );
+  }
+  if (ev && ev.version < 1) {
+    out.push(
+      `\u26A0\uFE0F The chat's project Evermind is UNSEEDED (v0). Until a base model is seeded (version \u2265 1) the gate returns "not-seeded" and no turn contributes. This is why a learn step can report v0.`
+    );
+  }
+  if (ev && ev.version >= 1 && ev.mode !== "connected") {
+    out.push(`\u26A0\uFE0F The chat's project Evermind is "${ev.mode}" (not connected) \u2014 read-only, so turns don't contribute.`);
+  }
+  if (d.lastLearn && d.lastLearn.learned && ev && ev.version >= 1 && d.lastLearn.version !== ev.version) {
+    out.push(
+      `\u26A0\uFE0F Last turn reported learn version v${d.lastLearn.version} but the chat's project head is v${ev.version}. A version mismatch means the learn step and the panel are resolving DIFFERENT projects/heads.`
+    );
+  }
+  if ((d.agents?.length ?? 0) === 0) {
+    out.push("\u2139\uFE0F No agents are invited into this chat (chats.list_agents is empty), so dispatched agents post nothing back here.");
+  }
+  const tools = d.tools;
+  if (tools && !tools.loading) {
+    if (tools.error) {
+      out.push(
+        `\u26A0\uFE0F The MCP tool catalog FAILED to load (${tools.error}), so the Brain has ${tools.count} tools and cannot fetch project data. Turns will say "I don't have that data" or announce a tool call and stop \u2014 with 0 tool calls in the trace. This is a wiring fault, not a model fault.`
+      );
+    } else if (tools.count === 0) {
+      out.push(
+        '\u26A0\uFE0F The model has ZERO tools registered, so it cannot read tasks, projects, or any platform data \u2014 every data question can only be answered from the prompt. Expect "I don\'t have that data" and 0 tool calls. Check that McpExtensionsBridge is mounted and `/llm/v1/mcp/tools` returns a catalog.'
+      );
+    }
+  }
+  const acct = d.account;
+  const tokens = tokenMeter(acct);
+  if (acct) {
+    const free = acct.plan === "free";
+    const noCard = acct.billingStatus === "none" || acct.billingStatus == null;
+    if (free && noCard) {
+      out.push(
+        "\u2139\uFE0F Free plan with NO payment method on file. Expect the smaller monthly token allowance, no premium/frontier models, and turns funded by the shared free pool \u2014 none of this is a fault. Adding a card (or connecting your own provider account) lifts all three."
+      );
+    } else if (free) {
+      out.push("\u2139\uFE0F Free plan \u2014 premium/frontier models are not entitled and the monthly token allowance is the free tier's.");
+    }
+    if (acct.billingStatus === "past_due") {
+      out.push("\u26A0\uFE0F Billing status is past_due \u2014 plan entitlements may be suspended until payment succeeds, which reads as sudden model/quota downgrade.");
+    }
+    const tokenState = allowanceState(tokens);
+    if (tokens && tokenState === "exhausted") {
+      out.push(
+        `\u26A0\uFE0F AI token allowance is EXHAUSTED (${tokens.used.toLocaleString("en-US")} / ${tokens.limit.toLocaleString("en-US")} this period). The gateway returns 429 \`plan_token_limit_exceeded\`, so turns fail or stop mid-answer until ${acct.resetsAt ?? "the period resets"}.`
+      );
+    } else if (tokens && tokenState === "warn") {
+      out.push(
+        `\u26A0\uFE0F AI token allowance is ${tokens.percentUsed}% used (${tokens.remaining.toLocaleString("en-US")} left, resets ${acct.resetsAt ?? "at period end"}). Long turns may be cut off by the cap before the model finishes.`
+      );
+    }
+    if (acct.modelFunding === "premium" && acct.canUsePremiumModels === false) {
+      out.push(
+        `\u26A0\uFE0F Model "${acct.model}" is a premium/metered model but this plan is NOT entitled to premium models \u2014 the gateway rejects it (402) or falls back to the plan pool, which is why answers look weaker than the picked model implies.`
+      );
+    }
+    if ((acct.byoProviders?.length ?? 0) === 0 && free) {
+      out.push("\u2139\uFE0F No bring-your-own provider accounts connected, so every turn spends the plan allowance above. Connecting your own Claude/OpenAI account makes turns $0 against the plan.");
+    }
+  }
+  return out;
+}
+function formatChatDiagnostics(d) {
+  const lines = ["## Chat diagnostics"];
+  if (d.surface) lines.push(`- Surface: ${d.surface}`);
+  lines.push(`- Chat: ${d.chatTitle?.trim() ? `"${d.chatTitle.trim()}"` : "Untitled"}${d.chatId != null ? ` (#${d.chatId})` : ""}${d.chatVisibility ? ` \xB7 ${d.chatVisibility}` : ""}`);
+  lines.push(`- Chat's project: ${fmtProject(d.projectId, d.projectName)}`);
+  if (d.selectedProjectId != null && d.selectedProjectId !== d.projectId) {
+    lines.push(`- Panel's selected project: #${d.selectedProjectId}`);
+  }
+  lines.push(`- Tenant: ${d.tenantId != null ? `#${d.tenantId}` : "unknown"} \xB7 User: ${d.userId ?? "unknown"}`);
+  const acct = d.account;
+  if (acct) {
+    lines.push(
+      `- Plan: ${acct.plan ?? "unknown"} \xB7 billing ${acct.billingStatus ?? "none"}${acct.billingStatus === "none" || acct.billingStatus == null ? " (no payment method on file)" : ""}${acct.canUsePremiumModels != null ? ` \xB7 premium models ${acct.canUsePremiumModels ? "entitled" : "NOT entitled"}` : ""}`
+    );
+    lines.push(
+      `- Model: ${acct.model ?? "auto (gateway routes per turn)"}${acct.modelFunding ? ` \xB7 funded by ${acct.modelFunding}` : ""}${acct.planModelCount != null ? ` \xB7 ${acct.planModelCount} models in plan pool` : ""} \xB7 BYO accounts: ${acct.byoProviders?.length ? acct.byoProviders.join(", ") : "none"}`
+    );
+    const meters = acct.meters ?? [];
+    if (meters.length) {
+      lines.push(`- Usage this period${acct.periodStart ? ` (since ${acct.periodStart}` : ""}${acct.resetsAt ? `${acct.periodStart ? ", " : " ("}resets ${acct.resetsAt})` : acct.periodStart ? ")" : ""}:`);
+      for (const m of meters) lines.push(`  - ${fmtMeter(m)}`);
+    } else {
+      lines.push("- Usage this period: not available (consumption snapshot unavailable)");
+    }
+    if (acct.extensionVersion || acct.baseUrl) {
+      lines.push(`- Client: ${acct.extensionVersion ? `v${acct.extensionVersion}` : "unknown version"}${acct.baseUrl ? ` \u2192 ${acct.baseUrl}` : ""}`);
+    }
+  } else {
+    lines.push("- Plan / usage: not gathered (account snapshot unavailable \u2014 signed out, or the consumption endpoint failed)");
+  }
+  const tools = d.tools;
+  if (tools) {
+    lines.push(
+      `- Tools available to the model: ${tools.count}${tools.loading ? " (catalog still loading)" : ""}${tools.error ? ` \xB7 catalog error: ${tools.error}` : ""}`
+    );
+  }
+  const ev = d.evermind;
+  if (ev) {
+    lines.push(
+      `- Evermind (chat's project): v${ev.version} \xB7 ${ev.mode}${ev.inferenceEnabled != null ? ` \xB7 inference ${ev.inferenceEnabled ? "on" : "off"}` : ""} \xB7 teacher ${ev.teacherModel ? ev.teacherModel : "none"}${ev.contributions != null ? ` \xB7 Learned ${ev.contributions}` : ""}${ev.pending != null ? ` \xB7 Queued ${ev.pending}` : ""} \xB7 Last learned ${ev.lastLearnedAt ? ev.lastLearnedAt : "never"}`
+    );
+  } else {
+    lines.push(`- Evermind (chat's project): not resolved (no project, or head unavailable)`);
+  }
+  if (d.lastLearn) {
+    lines.push(
+      `- Last turn learn gate: learned=${d.lastLearn.learned} \xB7 reported v${d.lastLearn.version}${d.lastLearn.reason ? ` \xB7 reason=${d.lastLearn.reason}` : ""}`
+    );
+  } else {
+    lines.push("- Last turn learn gate: unknown (no assistant turn carried a learn outcome)");
+  }
+  const agents = d.agents ?? [];
+  lines.push(`- Agents in chat (${agents.length})${agents.length ? ": " + agents.map((a) => `${a.agentRef} (${a.role})`).join(", ") : ""}`);
+  const tickets = d.tickets ?? [];
+  if (tickets.length) {
+    lines.push(`- Linked tickets (${tickets.length}):`);
+    for (const tk of tickets) {
+      lines.push(`  - ${tk.kind} #${tk.ref}${tk.label ? ` "${tk.label}"` : ""}${tk.linkType || tk.status ? ` [${[tk.linkType, tk.status].filter(Boolean).join(", ")}]` : ""}`);
+    }
+  } else {
+    lines.push("- Linked tickets (0)");
+  }
+  const signals = diagnosticsSignals(d);
+  if (signals.length) {
+    lines.push("", "### Signals");
+    for (const s of signals) lines.push(`- ${s}`);
+  }
+  return lines;
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  ADDRESSED_TO_META_KEY,
+  AUTHORED_BY_META_KEY,
   BrainActionsProvider,
   BrainContextProvider,
   BrainProvider,
+  BrainRequestError,
+  CODE_CHANGE_TOOLS,
+  CONSOLIDATION_MARKER_PREFIX,
+  CONSOLIDATION_META,
+  DEFAULT_CHAT_TITLE,
+  EVERMIND_LEARN_MIN_CHARS,
+  NOT_STARTED_TASK_STATUSES,
+  PROVENANCE_META_KEY,
+  STEP_MESSAGE_ROLE,
+  TICKET_RECORDING_TOOLS,
+  accountUsedInTrace,
+  activeMentionToken,
+  allowanceState,
+  attachEvermindLearn,
+  brainRequestError,
   buildBrainTriageReport,
+  byoReasonHint,
+  byoUnresolvedInTrace,
+  byoUnresolvedSummary,
+  chatErrorAction,
+  chatWorkLinkingDirective,
+  classifyModelFunding,
+  clearRunError,
+  codeChangeFile,
+  computeBrainDiagnostics,
+  consolidationMarkerContent,
+  consolidationMetadata,
+  countReconciledMemories,
+  deriveChatTitle,
+  effortProfile,
+  filterMentionCandidates,
+  formatBrainDiagnostics,
+  formatBrainProvenance,
+  formatChatDiagnostics,
+  formatEvermindLearnStep,
+  formatEvermindMemoryBlock,
+  getGlobalRunState,
+  getLastResolvedModel,
+  getMcpToolStatus,
+  getRunSnapshot,
+  getRunTrace,
+  isCodeChangeTool,
+  isConnectedAccountUnused,
+  isConsolidationMarker,
+  isDirectedToParticipant,
+  isEffort,
+  isEvermindModel,
   isFailedToolResult,
+  isRunning,
+  isStepMessage,
+  isTicketRecordingTool,
+  lastConsolidationIndex,
+  linkedTicketsToAdvance,
+  mentionRecipient,
+  modelsUsedInTrace,
+  parseByoUnresolved,
+  parseDirectedRecipient,
+  parseMessageAuthor,
+  parseMessageProvenance,
   prepareImageDataUrl,
+  reasoningForRun,
+  resolveRecipient,
+  resolveRunConfirm,
+  runBrainLoop,
   savePendingPrompt,
+  scopeToConsolidation,
+  setLastResolvedModel,
+  setMcpToolStatus,
+  startRun,
+  stopRun,
   streamChatCompletion,
+  subscribeRun,
+  subscribeRunStore,
+  subscribeToChatMessages,
   takePendingPrompt,
   useBrainActions,
   useBrainChats,
@@ -1339,6 +3173,9 @@ function takePendingPrompt() {
   useBrainConversation,
   useMcpExtensions,
   useOptionalBrainContext,
-  useRegisterBrainActions
+  useRegisterBrainActions,
+  withDirectedMetadata,
+  withProvenanceMetadata,
+  workItemLinkFromCreate
 });
 //# sourceMappingURL=index.cjs.map

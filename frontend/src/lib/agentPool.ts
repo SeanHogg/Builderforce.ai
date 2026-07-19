@@ -56,3 +56,21 @@ export async function loadAgentPool(): Promise<PoolAgent[]> {
     .map((a) => ({ kind: 'registered', ref: String(a.id), name: a.name, meta: a.type, baseModel: null }));
   return [...wf, ...reg];
 }
+
+// Shared session cache for the pool (stable tenant data — a 3-endpoint fan-out).
+// The Brain surface reads it from several places at once (persona picker, the
+// chat↔ticket adapter, the composer's recipient picker); this dedups those into
+// ONE fetch instead of 3× the fan-out. `refreshAgentPool()` busts it after a
+// mutation (e.g. creating/acquiring an agent) so the next read is fresh.
+let poolPromise: Promise<PoolAgent[]> | null = null;
+
+/** Load the agent pool through the shared session cache (see {@link loadAgentPool}). */
+export function loadAgentPoolCached(): Promise<PoolAgent[]> {
+  if (!poolPromise) poolPromise = loadAgentPool().catch((e) => { poolPromise = null; throw e; });
+  return poolPromise;
+}
+
+/** Invalidate the cached pool so the next {@link loadAgentPoolCached} refetches. */
+export function refreshAgentPool(): void {
+  poolPromise = null;
+}

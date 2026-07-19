@@ -1,6 +1,6 @@
 {
   "name": "@seanhogg/builderforce-agents",
-  "version": "2026.6.29",
+  "version": "2026.7.10",
   "description": "BuilderForce Agents — distributed AI coding agent runtime with secure orchestration",
   "keywords": [
     "ai",
@@ -212,8 +212,8 @@
     "node-llama-cpp": "3.15.1"
   },
   "optionalDependencies": {
-    "@seanhogg/builderforce-memory": "^2026.6.28",
-    "@seanhogg/builderforce-memory-engine": "^2026.6.28"
+    "@seanhogg/builderforce-memory": "^2026.7.11",
+    "@seanhogg/builderforce-memory-engine": "^2026.7.11"
   },
   "engines": {
     "node": ">=22.12.0"

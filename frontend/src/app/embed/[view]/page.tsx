@@ -21,6 +21,7 @@ import { PmVisualizersContent } from '../../../components/pm/PmVisualizersConten
 import { DependencyGraph } from '../../../components/pm/DependencyGraph';
 import { RiceMatrix } from '../../../components/pm/RiceMatrix';
 import { RoiDashboard } from '../../../components/pm/RoiDashboard';
+import { WorkforceAgents } from '../../../components/workforce/WorkforceAgents';
 
 /**
  * The framed BuilderForce surface. ONE dynamic route serves every embeddable
@@ -171,6 +172,10 @@ function renderSurface(view: string, projectId: number | null): React.ReactNode 
     case 'rice-matrix':
       return <PmScopeProvider projectId={projectId}><RiceMatrix /></PmScopeProvider>;
     case 'roi-dashboard':
+    case 'feature-roi':
+      // Both keys surface the ROI dashboard (feature-ROI models). Handling
+      // 'feature-roi' explicitly keeps its EMBED_VIEWS `available: true` honest —
+      // without this case it fell through to the tracker lookup and rendered null.
       return <PmScopeProvider projectId={projectId}><RoiDashboard /></PmScopeProvider>;
     case 'soc2':
       // SOC 2 Control Tracker — bespoke (readiness scoreboard + baseline seed).
@@ -179,6 +184,10 @@ function renderSurface(view: string, projectId: number | null): React.ReactNode 
       return <PokerSurface />;
     case 'retros':
       return <RetroSurface />;
+    case 'workforce':
+      // The unified workforce directory — same grid as /workforce (people + agents
+      // + remote hosts + VS Code editors). tenantId is resolved from the frame auth.
+      return <WorkforceAgents />;
     default: {
       // Every other governance tracker is the one generic CRUD surface (DRY).
       const cfg = TRACKER_CONFIGS[view];

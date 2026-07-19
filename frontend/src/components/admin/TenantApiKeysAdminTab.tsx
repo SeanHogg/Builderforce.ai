@@ -2,6 +2,7 @@
 
 import { Select } from '@/components/Select';
 
+import { useTranslations } from 'next-intl';
 import { useEffect, useState } from 'react';
 import {
   adminApi,
@@ -14,6 +15,7 @@ import { AllowedOriginsField } from '@/components/AllowedOriginsField';
 import { AllowedOriginsBadge } from '@/components/AllowedOriginsBadge';
 import { TenantApiKeyEditor } from '@/components/TenantApiKeyEditor';
 import { TenantApiKeyUsageDrawer } from '@/components/TenantApiKeyUsageDrawer';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 /**
  * Superadmin tab for minting / listing / revoking tenant `bfk_*` keys
@@ -21,6 +23,8 @@ import { TenantApiKeyUsageDrawer } from '@/components/TenantApiKeyUsageDrawer';
  * so the parent doesn't pass a `canShow` prop, the component decides.
  */
 export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
+  const t = useTranslations('admin');
+  const confirm = useConfirm();
   const [tenants, setTenants] = useState<AdminTenant[]>([]);
   const [tenantId, setTenantId] = useState<number | null>(null);
   const [keys, setKeys] = useState<AdminTenantApiKey[]>([]);
@@ -69,7 +73,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
 
   const handleMint = async () => {
     if (tenantId == null) return;
-    const name = newName.trim() || 'Admin-issued tenant API key';
+    const name = newName.trim() || t('apikeys.defaultKeyName');
     setCreating(true);
     setError(null);
     try {
@@ -82,7 +86,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
       setNewName('');
       setNewAllowedOrigins(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Mint failed');
+      setError(e instanceof Error ? e.message : t('apikeys.mintFailed'));
     } finally {
       setCreating(false);
     }
@@ -97,7 +101,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
       setKeys((prev) => prev.map((k) => k.id === keyId ? updated : k));
       setEditingKeyId(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Update failed');
+      setError(e instanceof Error ? e.message : t('apikeys.updateFailed'));
     } finally {
       setSavingEdit(false);
     }
@@ -105,14 +109,14 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
 
   const handleRevoke = async (keyId: string) => {
     if (tenantId == null) return;
-    if (!confirm('Revoke this API key? Apps using it will stop working immediately.')) return;
+    if (!(await confirm(t('apikeys.revokeConfirm')))) return;
     setRevoking(keyId);
     setError(null);
     try {
       await adminApi.revokeTenantApiKey(tenantId, keyId);
       setKeys((prev) => prev.map((k) => k.id === keyId ? { ...k, revokedAt: new Date().toISOString() } : k));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Revoke failed');
+      setError(e instanceof Error ? e.message : t('apikeys.revokeFailed'));
     } finally {
       setRevoking(null);
     }
@@ -123,7 +127,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
   return (
     <div>
       <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-        <label htmlFor="apikeys-tenant" style={{ fontSize: 13, color: 'var(--text-muted)' }}>Tenant:</label>
+        <label htmlFor="apikeys-tenant" style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('apikeys.tenantLabel')}</label>
         <Select
           id="apikeys-tenant"
           value={tenantId ?? ''}
@@ -140,13 +144,13 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
         </Select>
         {tenantId != null && (
           <button type="button" className="btn-ghost" onClick={() => setTenantId(tenantId)}>
-            ↻ Refresh
+            ↻ {t('common.refresh')}
           </button>
         )}
       </div>
 
       {error && (
-        <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 12 }}>Error: {error}</div>
+        <div style={{ fontSize: 12, color: 'var(--coral-bright)', marginBottom: 12 }}>{t('apikeys.errorPrefix', { message: error })}</div>
       )}
 
       {revealedKey && (
@@ -164,12 +168,12 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
         background: 'var(--bg-base)', borderRadius: 12,
         border: '1px solid var(--border-subtle)',
       }}>
-        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Mint a new bfk_* key</div>
+        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>{t('apikeys.mintTitle')}</div>
         <input
           type="text"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
-          placeholder="e.g. hired.video production"
+          placeholder={t('apikeys.namePlaceholder')}
           disabled={creating || tenantId == null}
           style={{
             width: '100%', padding: '8px 12px', fontSize: 13, marginBottom: 14,
@@ -180,7 +184,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
         />
 
         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 8 }}>
-          Browser access
+          {t('apikeys.browserAccess')}
         </div>
         <AllowedOriginsField
           value={newAllowedOrigins}
@@ -195,7 +199,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
           disabled={creating || tenantId == null}
           style={{ marginTop: 8 }}
         >
-          {creating ? 'Minting…' : 'Mint'}
+          {creating ? t('apikeys.minting') : t('apikeys.mint')}
         </button>
       </div>
 
@@ -203,20 +207,20 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Browser</th>
-              <th>Created by</th>
-              <th>Created</th>
-              <th>Last used</th>
-              <th>Status</th>
+              <th>{t('apikeys.colName')}</th>
+              <th>{t('apikeys.colBrowser')}</th>
+              <th>{t('apikeys.colCreatedBy')}</th>
+              <th>{t('apikeys.colCreated')}</th>
+              <th>{t('apikeys.colLastUsed')}</th>
+              <th>{t('apikeys.colStatus')}</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</td></tr>
+              <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{t('common.loading')}</td></tr>
             ) : keys.length === 0 ? (
-              <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No keys for this tenant.</td></tr>
+              <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{t('apikeys.noKeys')}</td></tr>
             ) : keys.flatMap((k) => {
               const revoked = !!k.revokedAt;
               const isEditing = editingKeyId === k.id;
@@ -227,7 +231,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
                   <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{k.createdByUserId ?? '—'}</td>
                   <td>{fmtDate(k.createdAt)}</td>
                   <td>{fmtDate(k.lastUsedAt)}</td>
-                  <td>{revoked ? `Revoked ${fmtDate(k.revokedAt)}` : 'Active'}</td>
+                  <td>{revoked ? t('apikeys.revokedAt', { date: fmtDate(k.revokedAt) }) : t('apikeys.statusActive')}</td>
                   <td style={{ display: 'flex', gap: 6 }}>
                     {!isEditing && (
                       <>
@@ -236,7 +240,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
                           className="btn-ghost"
                           onClick={() => setExpandedKeyId(expandedKeyId === k.id ? null : k.id)}
                         >
-                          {expandedKeyId === k.id ? 'Hide' : 'Activity'}
+                          {expandedKeyId === k.id ? t('apikeys.hide') : t('apikeys.activity')}
                         </button>
                         {!revoked && (
                           <>
@@ -245,7 +249,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
                               className="btn-ghost"
                               onClick={() => setEditingKeyId(k.id)}
                             >
-                              Edit
+                              {t('apikeys.edit')}
                             </button>
                             <button
                               type="button"
@@ -253,7 +257,7 @@ export function TenantApiKeysAdminTab({ active }: { active: boolean }) {
                               onClick={() => void handleRevoke(k.id)}
                               disabled={revoking === k.id}
                             >
-                              {revoking === k.id ? '…' : 'Revoke'}
+                              {revoking === k.id ? '…' : t('apikeys.revoke')}
                             </button>
                           </>
                         )}

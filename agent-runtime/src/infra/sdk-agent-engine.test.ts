@@ -6,7 +6,7 @@ vi.mock("../agents/claude-agent-sdk-runner.js", () => ({
   runClaudeAgentSdkV2: (params: unknown, sinks: unknown) => runMock(params, sinks),
 }));
 
-import { ENGINE_IDS } from "@builderforce/agent-tools";
+import { CURRENT_ENGINE_ID } from "@builderforce/agent-tools";
 import { ClaudeSdkAgentEngine } from "./sdk-agent-engine.js";
 
 function makeEngine(over?: Partial<ConstructorParameters<typeof ClaudeSdkAgentEngine>[0]>) {
@@ -24,9 +24,9 @@ function makeEngine(over?: Partial<ConstructorParameters<typeof ClaudeSdkAgentEn
 }
 
 describe("ClaudeSdkAgentEngine", () => {
-  it("carries the shared v2 engine id", () => {
+  it("carries the shared current engine id", () => {
     const { engine } = makeEngine();
-    expect(engine.id).toBe(ENGINE_IDS.v2);
+    expect(engine.id).toBe(CURRENT_ENGINE_ID);
   });
 
   it("maps AgentRunInput → SDK params and SDK result → a terminal AgentRunResult", async () => {

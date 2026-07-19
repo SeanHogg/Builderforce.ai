@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   isCapacityLimitBody,
+  isContextOverflowBody,
   throwClassified4xx,
   VendorFatalError,
   VendorRetryableError,
@@ -34,6 +35,18 @@ describe('isCapacityLimitBody', () => {
     ];
     for (const body of payloadBugs) {
       expect(isCapacityLimitBody(body)).toBe(false);
+    }
+  });
+});
+
+describe('context overflow classification', () => {
+  it('normalizes an upstream 400 context error to retryable 413', () => {
+    expect(isContextOverflowBody('This model maximum context length is 32768 tokens; your input has 43133 tokens')).toBe(true);
+    expect(() => throwClassified4xx('openrouter', 'xiaomi/mimo-v2.5', 400, 'maximum context length is 32768 tokens')).toThrow(VendorRetryableError);
+    try {
+      throwClassified4xx('openrouter', 'xiaomi/mimo-v2.5', 400, 'maximum context length is 32768 tokens');
+    } catch (e) {
+      expect((e as VendorRetryableError).status).toBe(413);
     }
   });
 });

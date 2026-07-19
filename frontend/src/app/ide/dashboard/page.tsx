@@ -6,33 +6,42 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { persistLastProjectId } from '@/lib/auth';
+import { Select } from '@/components/Select';
 import {
   listIdeProjects,
   createIdeProject,
   deleteIdeProject,
   listIdeContainers,
 } from '@/lib/api';
-import { workflowDefinitions, type WorkflowDefinitionSummary } from '@/lib/builderforceApi';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
-import { MODALITIES, getModality, type ProjectModality } from '@/lib/modality';
+import { type ProjectModality } from '@/lib/modality';
+import { useModalityCopy, useLocalizedModalities } from '@/lib/useModalityCopy';
+import { EVERMIND_RECIPES, DEFAULT_EVERMIND_RECIPE, getEvermindRecipe, type EvermindRecipeId } from '@/lib/evermindRecipes';
+import { useLlmModels } from '@/lib/useLlmModels';
+import { listEvermindModels, type PublishedEvermindModel } from '@/lib/studioModelsApi';
 import type { IdeProject, IdeContainerOption } from '@/lib/types';
 import { IdeProjectCard } from '@/components/IdeProjectCard';
 import { IdeProjectDetailsModal } from '@/components/IdeProjectDetailsModal';
 import { ViewToggle } from '@/components/ViewToggle';
 import { UpgradeModal } from '@/components/UpgradeModal';
+import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 type IdeView = 'grouped' | 'card' | 'table';
 
 /**
  * IDE Dashboard — the IDE's landing page and IDE-project launcher.
  *
- * Lists every IDE project (the buildable artifact: Designer / Video / LLM /
- * Voice), each a first-class child of a Project. Three views: Grouped (by the
+ * Lists every IDE project (the buildable artifact: Designer / Video / Evermind /
+ * Fine-tune / Voice), each a first-class child of a Project. Three views: Grouped (by the
  * parent Project), Card, and List. Creating one optionally nests it under a
  * Project; opening it launches the editor at its backing storage project.
  */
 export default function IDEDashboardPage() {
   const t = useTranslations('ide');
+  const modalityCopy = useModalityCopy();
+  const localizedModalities = useLocalizedModalities();
+  const confirm = useConfirm();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, hasTenant } = useAuth();
@@ -60,12 +69,16 @@ export default function IDEDashboardPage() {
   const [createType, setCreateType] = useState<ProjectModality | null>(null);
   const [newName, setNewName] = useState('');
   const [newParent, setNewParent] = useState<number | null>(null);
-  const [newWorkflow, setNewWorkflow] = useState<string | null>(null);
+  // Evermind modality: the one-click Evermind recipe (+ optional published model to seed from).
+  const [recipe, setRecipe] = useState<EvermindRecipeId>(DEFAULT_EVERMIND_RECIPE);
+  const [seedModelSlug, setSeedModelSlug] = useState<string | null>(null);
+  const [publishedModels, setPublishedModels] = useState<PublishedEvermindModel[]>([]);
+  const [publishedLoaded, setPublishedLoaded] = useState(false);
   const [containers, setContainers] = useState<IdeContainerOption[]>([]);
-  const [workflows, setWorkflows] = useState<WorkflowDefinitionSummary[]>([]);
-  const [workflowsLoaded, setWorkflowsLoaded] = useState(false);
   const [creating, setCreating] = useState(false);
   const [planError, setPlanError] = useState<PlanLimitError | null>(null);
+  // Model list is used only to preset a coding recipe's teacher (free plans self-learn).
+  const { codingModels, canChooseModel } = useLlmModels();
 
   // Details (rename + reassign) modal state
   const [detailsFor, setDetailsFor] = useState<IdeProject | null>(null);
@@ -97,14 +110,16 @@ export default function IDEDashboardPage() {
     if (!createType) return;
     setNewParent(currentProjectId ?? null);
     listIdeContainers().then(setContainers).catch(() => setContainers([]));
-    // LLM projects must run a workflow — load the tenant's definitions to pick from.
-    if (createType === 'llm') {
-      setNewWorkflow(null);
-      setWorkflowsLoaded(false);
-      workflowDefinitions.list()
-        .then(setWorkflows)
-        .catch(() => setWorkflows([]))
-        .finally(() => setWorkflowsLoaded(true));
+    // Evermind projects pick an Evermind recipe. Reset to the default, and load the
+    // tenant's published models so the "seed from a published model" recipe can offer them.
+    if (createType === 'evermind') {
+      setRecipe(DEFAULT_EVERMIND_RECIPE);
+      setSeedModelSlug(null);
+      setPublishedLoaded(false);
+      listEvermindModels()
+        .then(setPublishedModels)
+        .catch(() => setPublishedModels([]))
+        .finally(() => setPublishedLoaded(true));
     }
   }, [createType, currentProjectId]);
 
@@ -114,7 +129,7 @@ export default function IDEDashboardPage() {
   };
 
   const handleDelete = async (p: IdeProject) => {
-    if (!confirm(t('deleteConfirm', { name: p.name }))) return;
+    if (!(await confirm(t('deleteConfirm', { name: p.name })))) return;
     try {
       await deleteIdeProject(p.id);
       setIdeProjects((prev) => prev.filter((x) => x.id !== p.id));
@@ -123,19 +138,30 @@ export default function IDEDashboardPage() {
     }
   };
 
-  const llmNeedsWorkflow = createType === 'llm' && !newWorkflow;
+  const activeRecipe = getEvermindRecipe(recipe);
+  // The only Evermind blocker left: the "seed from a published model" recipe needs a model.
+  const evermindNeedsSeed = createType === 'evermind' && !!activeRecipe.needsSeedModel && !seedModelSlug;
 
   const submitCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!createType || !newName.trim() || creating || llmNeedsWorkflow) return;
+    if (!createType || !newName.trim() || creating || evermindNeedsSeed) return;
     setCreating(true);
     setError(null);
     try {
+      // Preset a coding recipe's teacher to the tenant's top coding model, but only
+      // when the plan may pick a model at all (free plans self-learn on raw text).
+      const teacherModel = activeRecipe.teacher === 'coding' && canChooseModel ? (codingModels[0] ?? null) : null;
       const created = await createIdeProject({
         name: newName.trim(),
         modality: createType,
         containerProjectId: newParent,
-        ...(createType === 'llm' ? { workflowDefinitionId: newWorkflow } : {}),
+        ...(createType === 'evermind'
+          ? {
+              evermindRecipe: recipe,
+              evermindTeacherModel: teacherModel,
+              evermindSeedModelSlug: activeRecipe.needsSeedModel ? seedModelSlug : null,
+            }
+          : {}),
       });
       persistLastProjectId(String(created.storageProjectId));
       router.push(`/ide/${created.storageProjectPublicId}`);
@@ -212,7 +238,7 @@ export default function IDEDashboardPage() {
         <section style={{ marginTop: 24 }}>
           <h2 style={{ fontSize: '1rem', fontWeight: 600, margin: '0 0 12px', color: 'var(--text-secondary)' }}>{t('newIdeProject')}</h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16 }}>
-            {MODALITIES.map((m) => {
+            {localizedModalities.map((m) => {
               const disabled = !!m.comingSoon;
               return (
                 <button
@@ -249,7 +275,7 @@ export default function IDEDashboardPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <FilterChip label={t('all')} active={!typeParam} onClick={clearTypeFilter} />
-                {MODALITIES.map((m) => (
+                {localizedModalities.map((m) => (
                   <FilterChip
                     key={m.id}
                     label={`${m.icon} ${m.label}`}
@@ -323,17 +349,19 @@ export default function IDEDashboardPage() {
         </section>
       </main>
 
-      {/* New IDE project modal */}
-      {createType && (
-        <div className="modal-overlay" style={{ zIndex: 50 }}>
-          <div className="rounded-xl p-6 w-full max-w-md border border-gray-700" style={{ background: 'var(--bg-elevated)' }}>
-            <h3 className="text-lg font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>
-              {t('newModalityProject', { label: getModality(createType).label })}
-            </h3>
-            <p className="mb-4" style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{getModality(createType).tagline}</p>
+      {/* New IDE project — slide-out create panel */}
+      <SlideOutPanel
+        open={createType != null}
+        onClose={() => setCreateType(null)}
+        title={createType ? t('newModalityProject', { label: modalityCopy(createType).label }) : ''}
+        width="min(480px, 96vw)"
+      >
+        {createType && (
+          <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: 0 }}>{modalityCopy(createType).tagline}</p>
             <form onSubmit={submitCreate} className="space-y-4">
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {MODALITIES.filter((m) => !m.comingSoon).map((m) => (
+                {localizedModalities.filter((m) => !m.comingSoon).map((m) => (
                   <FilterChip key={m.id} label={`${m.icon} ${m.label}`} active={createType === m.id} onClick={() => setCreateType(m.id)} />
                 ))}
               </div>
@@ -343,42 +371,81 @@ export default function IDEDashboardPage() {
               </div>
               <div>
                 <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>{t('parentOptional')}</label>
-                <select value={newParent ?? ''} onChange={(e) => setNewParent(e.target.value ? Number(e.target.value) : null)} style={inputStyle}>
+                <Select value={newParent ?? ''} onChange={(e) => setNewParent(e.target.value ? Number(e.target.value) : null)} style={inputStyle}>
                   <option value="">{t('ungrouped')}</option>
                   {containers.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
-                </select>
+                </Select>
               </div>
-              {createType === 'llm' && (
+              {createType === 'evermind' && (
                 <div>
-                  <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>{t('workflowRequired')}</label>
-                  {workflowsLoaded && workflows.length === 0 ? (
-                    <div style={{ fontSize: 13, color: 'var(--text-secondary)', background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '10px 14px' }}>
-                      {t('noWorkflowsYet')}{' '}
-                      <a href="/workflows" style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>{t('goToWorkflows')}</a>
+                  <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>{t('recipeLabel')}</label>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>{t('recipeHint')}</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {EVERMIND_RECIPES.map((r) => {
+                      const selected = recipe === r.id;
+                      const noModels = !!r.needsSeedModel && publishedLoaded && publishedModels.length === 0;
+                      return (
+                        <button
+                          key={r.id}
+                          type="button"
+                          disabled={noModels}
+                          aria-pressed={selected}
+                          onClick={() => { setRecipe(r.id); if (!r.needsSeedModel) setSeedModelSlug(null); }}
+                          style={{
+                            display: 'flex', alignItems: 'flex-start', gap: 10, textAlign: 'left', width: '100%',
+                            padding: '10px 12px', borderRadius: 10, cursor: noModels ? 'not-allowed' : 'pointer',
+                            background: selected ? 'var(--surface-interactive)' : 'var(--bg-deep)',
+                            border: `1px solid ${selected ? 'var(--coral-bright)' : 'var(--border-subtle)'}`,
+                            opacity: noModels ? 0.55 : 1,
+                          }}
+                        >
+                          <span aria-hidden style={{ fontSize: 20, lineHeight: 1 }}>{r.icon}</span>
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{t(r.nameKey)}</span>
+                              {r.recommended && (
+                                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--coral-bright)', border: '1px solid var(--coral-bright)', borderRadius: 6, padding: '0 6px' }}>
+                                  {t('recipeRecommended')}
+                                </span>
+                              )}
+                            </span>
+                            <span style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.4 }}>
+                              {t(r.descKey)}{noModels ? ` — ${t('recipeSeedNoModels')}` : ''}
+                            </span>
+                          </span>
+                          <span aria-hidden style={{ fontSize: 14, color: selected ? 'var(--coral-bright)' : 'var(--text-muted)', flexShrink: 0 }}>
+                            {selected ? '●' : '○'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {activeRecipe.needsSeedModel && publishedModels.length > 0 && (
+                    <div style={{ marginTop: 10 }}>
+                      <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>{t('recipeSeedModelLabel')}</label>
+                      <Select value={seedModelSlug ?? ''} onChange={(e) => setSeedModelSlug(e.target.value || null)} required style={inputStyle}>
+                        <option value="">{t('recipeSeedSelect')}</option>
+                        {publishedModels.map((m) => (<option key={m.slug} value={m.slug}>{m.name}</option>))}
+                      </Select>
                     </div>
-                  ) : (
-                    <select value={newWorkflow ?? ''} onChange={(e) => setNewWorkflow(e.target.value || null)} required style={inputStyle}>
-                      <option value="">{t('selectWorkflow')}</option>
-                      {workflows.map((w) => (<option key={w.id} value={w.id}>{w.name}</option>))}
-                    </select>
                   )}
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>{t('workflowHint')}</p>
                 </div>
               )}
-              <div className="flex gap-3 justify-end">
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
                 <button type="button" onClick={() => setCreateType(null)} style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer' }}>{t('cancel')}</button>
                 <button
                   type="submit"
-                  disabled={creating || !newName.trim() || llmNeedsWorkflow}
-                  style={{ padding: '8px 18px', fontSize: '0.875rem', fontWeight: 600, background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: '#fff', border: 'none', borderRadius: 10, cursor: creating || !newName.trim() || llmNeedsWorkflow ? 'not-allowed' : 'pointer', opacity: creating || !newName.trim() || llmNeedsWorkflow ? 0.7 : 1 }}
+                  disabled={creating || !newName.trim() || evermindNeedsSeed}
+                  style={{ padding: '8px 18px', fontSize: '0.875rem', fontWeight: 600, background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))', color: '#fff', border: 'none', borderRadius: 10, cursor: creating || !newName.trim() || evermindNeedsSeed ? 'not-allowed' : 'pointer', opacity: creating || !newName.trim() || evermindNeedsSeed ? 0.7 : 1 }}
                 >
                   {creating ? t('creating') : t('createOpen')}
                 </button>
               </div>
             </form>
           </div>
-        </div>
-      )}
+        )}
+      </SlideOutPanel>
 
       {detailsFor && (
         <IdeProjectDetailsModal
@@ -406,6 +473,7 @@ function IdeProjectTable({ items, onOpen, onDetails, onDelete }: {
   onDelete: (p: IdeProject) => void;
 }) {
   const t = useTranslations('ide');
+  const modalityCopy = useModalityCopy();
   return (
     <div style={{ border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -419,7 +487,7 @@ function IdeProjectTable({ items, onOpen, onDetails, onDelete }: {
         </thead>
         <tbody>
           {items.map((p) => {
-            const m = getModality(p.modality);
+            const m = modalityCopy(p.modality);
             return (
               <tr key={p.id} style={{ borderTop: '1px solid var(--border-subtle)', cursor: 'pointer' }} onClick={() => onOpen(p)}>
                 <td style={td}>

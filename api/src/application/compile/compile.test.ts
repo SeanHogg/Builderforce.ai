@@ -68,6 +68,28 @@ describe('compile() registry', () => {
     expect(spec.identity.name).toContain('Delivery');
   });
 
+  it('diagnostic: grounds the improvement agent in recalled SOPs', async () => {
+    const findings: ToolResult = {
+      headline: 'Maturity: developing',
+      summary: 'One gap found.',
+      metrics: [],
+      recommendations: [{ title: 'Add CI gates', detail: 'Block merges on red tests.' }],
+    };
+    const spec = await compile(
+      { modality: 'diagnostic', findings, subject: 'Delivery' },
+      {
+        recallKnowledge: async () => [
+          { id: 'sop-1', title: 'CI Gates SOP', docType: 'sop', excerpt: 'Merges block on red CI.' },
+        ],
+      },
+    );
+    const step = (spec.steps as Array<{ description: string; config: Record<string, unknown> }>)[0]!;
+    expect(step.config.groundingDocId).toBe('sop-1');
+    expect(step.description).toContain('CI Gates SOP');
+    expect(spec.memory?.recalledContext).toContain('CI Gates SOP');
+    expect(spec.identity.bio).toContain('documented SOP');
+  });
+
   it('policy: lowers gates onto the spec', async () => {
     const spec = await compile({
       modality: 'policy',

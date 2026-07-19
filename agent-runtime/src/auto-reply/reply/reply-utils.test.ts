@@ -7,7 +7,6 @@ import { normalizeReplyPayload } from "./normalize-reply.js";
 import { createReplyReferencePlanner } from "./reply-reference.js";
 import {
   extractShortModelName,
-  hasTemplateVariables,
   resolveResponsePrefixTemplate,
 } from "./response-prefix-template.js";
 import { createStreamingDirectiveAccumulator } from "./streaming-directives.js";
@@ -793,17 +792,3 @@ describe("extractShortModelName", () => {
   });
 });
 
-describe("hasTemplateVariables", () => {
-  it("returns false for empty string", () => {
-    expect(hasTemplateVariables("")).toBe(false);
-  });
-
-  it("handles consecutive calls correctly (regex lastIndex reset)", () => {
-    // First call
-    expect(hasTemplateVariables("[{model}]")).toBe(true);
-    // Second call should still work
-    expect(hasTemplateVariables("[{model}]")).toBe(true);
-    // Static string should return false
-    expect(hasTemplateVariables("[Claude]")).toBe(false);
-  });
-});

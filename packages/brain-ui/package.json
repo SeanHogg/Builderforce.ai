@@ -1,7 +1,7 @@
 {
   "name": "@seanhogg/builderforce-brain-ui",
-  "version": "2026.6.36",
-  "description": "Shared React UI for the BuilderForce Brain — the <BrainTimeline> transcript (lineage/timeline dots, thinking steps, collapsible tool input/output, image bubbles) and a <Markdown> renderer. Presentational only; driven by the brain-embedded core's messages + live trace, themed via CSS variables so the SAME component renders identically on the web app and inside a VS Code webview.",
+  "version": "2026.7.33",
+  "description": "Shared React UI for the BuilderForce Brain — the <BrainTimeline> transcript (lineage/timeline dots, thinking steps, collapsible tool input/output, image bubbles), a <Markdown> renderer, and the <Project360View> whole-picture project health surface (two-ring sunburst, gaps, workforce). Presentational only; driven by the brain-embedded core / the /api/projects/:id/360 rollup, themed via CSS variables so the SAME components render identically on the web app and inside a VS Code webview.",
   "license": "MIT",
   "author": "Sean Hogg",
   "type": "module",
@@ -22,7 +22,10 @@
   ],
   "scripts": {
     "build": "tsup --config tsup.config.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@seanhogg/builderforce-brain-embedded": "link:../../brain-embedded",
@@ -39,6 +42,7 @@
     "react": "^18",
     "react-dom": "^18",
     "tsup": "^8.5.1",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
   }
 }

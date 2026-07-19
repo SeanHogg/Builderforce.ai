@@ -18,7 +18,7 @@ export const BRAND = {
   ogImageWidth: 1200,
   ogImageHeight: 630,
   /** ISO 8601 — update on each content deploy */
-  dateModified: '2026-06-27T00:00:00Z',
+  dateModified: '2026-07-05T00:00:00Z',
 } as const;
 
 /* ════════════════════ STATS ════════════════════ */
@@ -44,6 +44,10 @@ export const STATS = {
     aiExecutiveTeam: 'Builderforce.ai acts as your AI CTO, CIO and Security Officer — building your AI agent workforce, connecting your systems, and governing every action with approvals and an audit trail.',
     freeForever: 'Free plan is $0/month forever, no credit card required.',
     agenticTester: 'The Agentic Tester is an autonomous QA agent: point it at your app, give it logins, and it drives a real browser through your highest-traffic flows on a schedule — filing the bugs it finds straight onto your board.',
+    collaboration: 'Builderforce.ai is a real-time collaboration platform for a mixed workforce of humans and AI agents: they share one Kanban board, chat in multi-party threads addressable to a person or an @agent, meet over live WebRTC video, and coordinate on shared calendars — from the web or inside VS Code.',
+    teamChat: 'Builderforce.ai team chat is multi-party: threads are shared across a project, you invite humans by email and AI agents into the room, and you address each message to a specific participant — a message to a human just talks to them, while an @agent mention makes that agent reply and act on the board within your own permissions.',
+    meetings: 'Builderforce.ai runs live video meetings over mesh WebRTC directly on your project board — cameras in standups and retros, a bookable team calendar with per-user availability and "Find a time", and Google/Microsoft calendar sync — joinable from the web or natively inside VS Code, with media flowing peer-to-peer and never through the server.',
+    vsCodeCommandCenter: 'The BuilderForce VS Code extension is a command center for a workforce of humans and AI agents: multi-party team chat, live session status showing which runs are executing or need your answer, native video meetings, an Evermind training console, and human-in-the-loop approvals — all without leaving the editor.',
     zeroGpuBills: 'All training runs on your local WebGPU device — zero cloud GPU bills.',
     browserNative: 'Fine-tune models up to 2 billion parameters directly in Chrome with WebGPU.',
     datasetSpeed: 'Generate an instruction-tuning dataset in under 30 seconds from a single capability prompt.',
@@ -129,6 +133,42 @@ export const FEATURES: Feature[] = [
     longDesc: 'Evermind is the brain of the platform — a self-updating model governed by Write-Through Cognition: new knowledge is written straight through, so an update replaces what came before with no reconciliation step. A shared-expert hybrid generator (dense backbone + routed SSM experts) learns online and runs on WebGPU, so it wins on currency, footprint, and ownership rather than raw scale — in the browser, on-device, or inside every agent.',
   },
   {
+    icon: '🎓',
+    title: 'Distill a Frontier Model Into Your Own',
+    shortDesc: 'Pin any frontier model as a teacher and train your own private model on its best answers.',
+    longDesc: 'Pin any frontier LLM — Opus, Mistral, GLM and more — as a teacher for a project\'s Evermind. For every real piece of work your team ships, the teacher produces the ideal answer to that task and your own model learns from it, steadily absorbing frontier-level quality into a small model you own and run on-device. It\'s cost-gated and best-effort: it only spends when there\'s token budget, and a teacher miss falls back to learning from the raw work so a lesson is never lost.',
+  },
+  {
+    icon: '🧠',
+    title: 'A Learning Brain for Every Project',
+    shortDesc: 'Every project gets its own self-updating model that learns from your team\'s work.',
+    longDesc: 'Each project is provisioned with its own Evermind on day one — a self-updating model that learns from every run across all four studios: design, voice, LLM, and video. Corrections stick across sessions through a shared write-through fact store, so the brain that helped yesterday is smarter today. Inference stays off until you opt in, and the model is editable right in the LLM Studio.',
+  },
+  {
+    icon: '🧑‍🏭',
+    title: 'Agentic Workforce Kanban',
+    shortDesc: 'Staff a deep role roster of humans and AI agents on a sign-off-gated board.',
+    longDesc: 'Go beyond a to-do list: staff each project from a first-class job-role taxonomy — humans and AI agents in the same roster — starting from a recommended set built for your team. Swimlanes can require the right reviewer before a ticket advances, and every "Done" carries a per-ticket role and diagnostic sign-off audit, so quality is gated at the board rather than hoped for after the fact.',
+  },
+  {
+    icon: '🧰',
+    title: 'Kanban Template Marketplace',
+    shortDesc: 'Buy, sell, and install ready-made board templates with lanes, roles, and gates.',
+    longDesc: 'Package a delivery process — lanes, required roles, review gates, and a recommended roster — as a Kanban template, then publish it to the marketplace to sell or share. Install a proven template into any project in one click, so a team inherits a governed, role-gated workflow instead of assembling one from scratch.',
+  },
+  {
+    icon: '✅',
+    title: 'Validator Agent — Proof of Done',
+    shortDesc: 'An agent that checks "Done" really is done and files the gaps it finds.',
+    longDesc: 'Ad-hoc chat work becomes visible tickets automatically, and a built-in Validator agent reviews every item marked Done — recording a verdict and opening GAP tasks for anything that falls short. One shared merge-to-Done path covers human approval, green CI, and post-deploy, so nothing slips through as "finished" without proof.',
+  },
+  {
+    icon: '🧭',
+    title: 'Learned Model Routing',
+    shortDesc: 'The platform learns which model is best — and cheapest — for each kind of task.',
+    longDesc: 'Every run is scored on its outcome, and a learned router reorders which model handles each action type accordingly — cheaper models take the work they do well, premium models are reserved for where they earn it. Combined with the semantic cache, your token bill bends down as the platform learns your workload, with a one-flag kill switch whenever you want manual control.',
+  },
+  {
     icon: '▦',
     title: 'Kanban Board & Project Management',
     shortDesc: 'Plan, assign & track work on a live agent Kanban board.',
@@ -147,10 +187,28 @@ export const FEATURES: Feature[] = [
     longDesc: 'The BuilderForce VS Code extension brings the entire platform into your editor: chat with agents, assign and run tasks, review and validate their work, and manage your whole agent workforce — all without leaving VS Code. Human-in-the-loop approvals happen right where you code.',
   },
   {
+    icon: '🎥',
+    title: 'Live Meetings, Standups & Shared Calendars',
+    shortDesc: 'Video standups, retros and calls — right on your board.',
+    longDesc: 'See and hear your team, not just co-edit a board. Turn on cameras for the whole round-table during a standup, planning, or retro; start ad-hoc or direct calls; and run it all over mesh WebRTC so media flows peer-to-peer and never touches the server. A shared team calendar overlays your meetings and connected Google/Microsoft events, shades each person\'s availability, and "Find a time" proposes slots where every invitee is genuinely free. Join from the web or natively inside VS Code.',
+  },
+  {
+    icon: '💬',
+    title: 'Multi-Party Team Chat — Humans + Agents',
+    shortDesc: 'Shared threads you can address to a person or an @agent.',
+    longDesc: 'Chat is real collaboration, not a solo prompt box. Threads are shared across your project, you invite humans by email and AI agents into the room, and you address each message to a specific participant. Talk to a teammate and the agent loop stays idle; @-mention an agent and it replies as itself — running a bounded, permission-scoped tool loop to create a task, update an OKR, or read the board, never exceeding your own access. The same conversation works on the web and in VS Code.',
+  },
+  {
     icon: '🧪',
     title: 'Agentic Tester — Autonomous QA',
     shortDesc: 'An AI agent that browser-tests your app on a schedule.',
     longDesc: 'The Agentic Tester is a hireable QA agent. Point it at your project\'s URL, save the logins it should use, and it drives a real browser through your highest-traffic flows — ranking what to test from real usage heatmaps, logging in as each persona, and capturing console errors, failed requests, and crashes. Run it on demand or schedule it as part of a workflow; every bug it finds lands straight on your Kanban board.',
+  },
+  {
+    icon: '💼',
+    title: 'Hire Human Talent',
+    shortDesc: 'Bring on freelance developers, DBAs and designers — and pay only for tracked time.',
+    longDesc: 'Beyond AI agents, hire real people: the Talent Marketplace lists vetted freelance developers, DBAs, designers and specialists with résumés (powered by hired.video), skills and hourly rates. Interview, hire across any project, and see billable hours captured automatically from the work they do in the portal and VS Code — every timecard is yours to approve before you pay. Humans and agents work side by side on the same board.',
   },
   {
     icon: '🧠',
@@ -193,6 +251,42 @@ export const FEATURES: Feature[] = [
     title: 'Single-Pane Board Connectors',
     shortDesc: 'Two-way sync with Jira, Linear, Sentry, PagerDuty & more.',
     longDesc: 'Connect the trackers and incident tools you already run — Jira, Linear, monday, Asana, ClickUp, ServiceNow, Freshservice, Sentry, PagerDuty, and GitHub — and sync work two-ways. Agents pick up and act on a ticket or incident wherever it originates, and changes flow back to the system of record. One pane to orchestrate across everything, with no migration and no lock-in.',
+  },
+  {
+    icon: '🚨',
+    title: 'Incident Management & On-Call',
+    shortDesc: 'A help-desk agent, on-call rotations, escalation, paging, and a war-room — that learn.',
+    longDesc: 'Run incidents where the work already lives. A Help-Desk / Incident-Manager agent triages, on-call rotations decide who is paged, timed escalation walks the chain, and Teams, Slack, or email paging reaches the responder — with a per-incident war-room feed for humans and agents together. When it resolves, the root-cause analysis is published to your Knowledge base and fed to the project\'s Evermind, so the workforce learns and stops repeating the same failure.',
+  },
+  {
+    icon: '📡',
+    title: 'Active Monitoring Canvas',
+    shortDesc: 'Pin live monitors onto your architecture diagram — a breach starts the investigation.',
+    longDesc: 'Upload your architecture diagram and pin heartbeat, HTTP, webhook, or metric monitors directly onto the systems they watch. A sweep evaluates them every five minutes, and a breach doesn\'t just light up red — it auto-starts the on-call investigation: monitor → signal → incident → paging, on one surface. Monitoring that opens the ticket and calls the responder instead of just drawing a chart.',
+  },
+  {
+    icon: '⚖️',
+    title: 'Role-Gated Accountability',
+    shortDesc: 'Proof that the right role did each part of the work — an immutable sign-off record.',
+    longDesc: 'Every ticket carries a participation manifest: the roles it requires, resolved to the humans and agents capable of each — so a Product Manager is never dispatched to write code and a producer stage runs a producer. An append-only Accountability Report records Who, When, Verdict, Comments, and Contribution per role, gated by default-deny sign-off permissions, with a Resource Assessment that flags a missing role as a blocking gap. Quality is proven at the board, not hoped for after the fact.',
+  },
+  {
+    icon: '📄',
+    title: 'Automated RFP & Proposal Response',
+    shortDesc: 'Turn an analyzed codebase into a branded, costed proposal.',
+    longDesc: 'Answer a request for proposal from what you\'ve already built. CTO and Product-Owner agents read a project\'s analyzed capabilities and generate a co-branded proposal — cost and P&L, a phased delivery Gantt, risks, dependencies, and a capability roster matched to the ask — blending the requester\'s brand palette and logo with yours. Freshness-gated grounding re-scans a stale project before it answers, so the proposal reflects the real system.',
+  },
+  {
+    icon: '🧑‍💼',
+    title: 'AI Managers & Coaching',
+    shortDesc: 'Typed managers you can coach — Dev, QA, Service-Desk, DevOps.',
+    longDesc: 'Managers aren\'t generic. A manager type — Dev, QA, Service-Desk, DevOps, or a custom role from your catalog — shapes how a manager agent runs its reports. When one gets it wrong, a human runs a Coaching Session: a directive or a task, with an expiry and a done state, that steers the manager\'s behavior going forward. Feedback becomes durable guidance, not a one-off correction lost to the next run.',
+  },
+  {
+    icon: '⚡',
+    title: 'Memory-First Answering',
+    shortDesc: 'Answer from the project\'s own memory before spending a paid model call.',
+    longDesc: 'The cheapest token is the one you never spend. Before a paid model call, the Brain consults the project\'s own memory — an exact-repeat question-and-answer cache plus opt-in inference on the project\'s Evermind — and short-circuits the LLM entirely on a confident hit. Learning fans out to every Evermind under the project (its own and its IDE builds\'), so a lesson taught once answers everywhere. Your token bill falls as the project\'s memory grows.',
   },
   {
     icon: '🗂️',
@@ -467,6 +561,18 @@ export const COMPETITIVE_COMPARISON: CompetitiveCategory[] = [
     ],
   },
   {
+    id: 'self-improving',
+    title: 'Self-Improving Models & Proof of Done',
+    blurb: 'Models that learn from your work, route themselves by outcome, and prove that "Done" is really done — capabilities frozen single-agent tools structurally lack.',
+    rows: [
+      { feature: 'Trains your own model on your work', note: 'Frontier-model teacher distillation', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
+      { feature: 'Self-updating model per project', note: 'Evermind, runs on-device', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
+      { feature: 'Learned, outcome-based model routing', note: 'scores runs, reorders models', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
+      { feature: 'Validator agent — proof of Done', note: 'opens GAP tasks on shortfall', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
+      { feature: 'Role-gated board with sign-off audit', note: 'per-ticket role + diagnostic', values: { builderforce: '✅', copilot: '❌', cursor: '❌', claudeCode: '❌', devin: '❌', openhands: '❌', aider: '❌', continueDev: '❌' } },
+    ],
+  },
+  {
     id: 'orchestration',
     title: 'Multi-Agent Orchestration',
     blurb: 'Coordinating specialized agents across structured workflows, not single-pass prompts.',
@@ -660,6 +766,14 @@ export const HOMEPAGE_FAQ: FaqItem[] = [
     answer: 'Yes. The Quality pillar ingests runtime errors from a browser SDK, OpenTelemetry, Sentry, PostHog, or LogRocket, groups them by fingerprint into deduplicated error groups, then turns any group into a fix task a cloud agent picks up and ships as a pull request. Unlike a monitoring dashboard that ends at a stack trace, the same platform that surfaces the crash assigns it, fixes it, and opens the PR.',
   },
   {
+    question: 'Can my team meet over video in Builderforce?',
+    answer: 'Yes. Builderforce runs live video and audio meetings over mesh WebRTC directly on your project board — turn on cameras for a standup, planning, or retro round-table, or start ad-hoc and direct calls. Media flows peer-to-peer and never touches the server. A shared team calendar overlays your meetings and connected Google or Microsoft Calendar events, shades each person\'s availability, and "Find a time" proposes slots where every invitee is genuinely free. You can join a meeting from the web or natively inside VS Code.',
+  },
+  {
+    question: 'Can I chat with both humans and AI agents in the same thread?',
+    answer: 'Yes — that is multi-party team chat. Threads are shared across your project, you invite humans by email and AI agents into the room, and you address each message to a specific participant. A message to a human just talks to them (the agent loop stays idle); an @agent mention makes that agent reply as itself and run a bounded, permission-scoped tool loop to create a task, update an OKR, or read the board — never exceeding your own access. The same conversation works on the web and in VS Code.',
+  },
+  {
     question: 'Do I have to migrate off Jira or Linear to use Builderforce?',
     answer: 'No. Board connectors sync work two-ways with the tools you already run — Jira, Linear, monday, Asana, ClickUp, ServiceNow, Freshservice, Sentry, PagerDuty, and GitHub. Agents pick up and act on a ticket or incident wherever it originates, and changes flow back to the system of record. You get one pane to orchestrate across everything with no migration and no lock-in.',
   },
@@ -688,6 +802,22 @@ export const HOMEPAGE_FAQ: FaqItem[] = [
     answer: 'Builderforce supports LoRA fine-tuning of transformer and SSM (State Space Model) architectures up to 2 billion parameters. Training runs on your local GPU via the WebGPU API in Chrome, Edge, or any WebGPU-capable browser.',
   },
   {
+    question: 'Can Builderforce manage incidents and on-call?',
+    answer: 'Yes. Builderforce runs incidents end-to-end: a Help-Desk / Incident-Manager agent triages, on-call rotations decide who is paged, timed escalation walks the chain, and Teams, Slack, or email paging reaches the responder — with a per-incident war-room feed for humans and agents. Monitors pinned onto your architecture diagram sweep every five minutes and a breach auto-starts the investigation. When an incident resolves, its root-cause analysis is published to your Knowledge base and fed to the project\'s Evermind, so the workforce learns and stops repeating the same failure.',
+  },
+  {
+    question: 'How does Builderforce prove the right role did each part of the work?',
+    answer: 'Every ticket carries a participation manifest — the roles it requires, resolved to the humans and agents capable of each, so a Product Manager is never dispatched to write code. An append-only Accountability Report records Who, When, Verdict, Comments, and Contribution per role, gated by default-deny sign-off permissions, with a Resource Assessment that flags a missing role as a blocking gap. Quality is proven at the board with an immutable record, not hoped for after the fact.',
+  },
+  {
+    question: 'Can Builderforce answer without spending tokens on a model?',
+    answer: 'Yes. Before a paid model call, the Brain consults the project\'s own memory — an exact-repeat question-and-answer cache plus opt-in inference on the project\'s Evermind — and short-circuits the LLM entirely on a confident hit. Learning fans out to every Evermind under a project, so a lesson taught once answers everywhere. Combined with the semantic response cache, the token bill falls as the project\'s memory grows.',
+  },
+  {
+    question: 'Can Builderforce respond to an RFP or RFQ?',
+    answer: 'Yes. CTO and Product-Owner agents turn an analyzed project into a branded, costed proposal — cost and P&L, a phased delivery Gantt, risks, dependencies, and a capability roster matched to the ask — co-branded with the requester\'s palette and logo. Freshness-gated grounding re-scans a stale project before it answers, so the proposal reflects the real system. RFP responses live as a tab on the project itself.',
+  },
+  {
     question: 'Is my data private during training?',
     answer: 'Yes — 100% private. All training computation happens locally on your device using WebGPU. Your datasets, model weights, and training artifacts are never sent to external servers during training. Finished LoRA adapters are persisted to encrypted Cloudflare R2 storage.',
   },
@@ -698,6 +828,26 @@ export const HOMEPAGE_FAQ: FaqItem[] = [
   {
     question: 'Can I integrate Builderforce agents with BuilderForce Agents?',
     answer: 'Yes — models trained on Builderforce can be exported and published as Evermind models that your self-hosted BuilderForce Agents gateway calls directly as the model, not just as a memory layer. The platform supports the full pipeline: train a custom SSM in the browser, publish it, and route live traffic to it over the OpenAI-compatible API.',
+  },
+  {
+    question: 'Can I train my own model on a frontier model\'s answers?',
+    answer: 'Yes — that is teacher distillation. Pin any frontier LLM (Opus, Mistral, GLM and more) as a teacher for a project\'s Evermind. For each real piece of work your team ships, the teacher produces the ideal answer to that task, and your own model learns from that exemplar instead of the raw text — so it steadily absorbs frontier-level quality into a small model you own and run on-device. It is cost-gated (it only spends when you have token budget) and best-effort (a teacher miss falls back to learning from the raw work), so a lesson is never lost.',
+  },
+  {
+    question: 'Does each project get its own model?',
+    answer: 'Yes. Every project is provisioned with its own Evermind on creation — a self-updating model that learns from every run across all four studios (design, voice, LLM, and video) through one shared learning mechanism. Corrected facts persist across sessions in a write-through fact store shared by the web app, VS Code, cloud, and on-prem agents, so the brain that helped yesterday is smarter today. Inference stays off until you opt in, and the model is editable in the LLM Studio.',
+  },
+  {
+    question: 'Can I gate my board so only the right role can finish a ticket?',
+    answer: 'Yes — that is the Agentic Workforce Kanban. Staff each project from a first-class job-role taxonomy of humans and AI agents, and configure swimlanes to require the right reviewer before a ticket can advance. Every item marked Done carries a per-ticket role and diagnostic sign-off audit, and a role-coverage diagnostic flags gaps on the board, so quality is enforced rather than assumed.',
+  },
+  {
+    question: 'How does Builderforce check that work marked Done is really done?',
+    answer: 'A built-in Validator agent reviews every item marked Done, records a verdict, and opens GAP tasks for anything that falls short. Ad-hoc chat work is also captured as visible tickets automatically, and one shared merge-to-Done path covers human approval, green CI, and post-deploy — so nothing is reported as finished without proof.',
+  },
+  {
+    question: 'Can I buy or sell a Kanban board template?',
+    answer: 'Yes. Package a delivery process — lanes, required roles, review gates, and a recommended roster — as a Kanban template and publish it to the marketplace to sell or share. Any team can install a proven template into a project in one click and inherit a governed, role-gated workflow instead of building one from scratch.',
   },
 ];
 
@@ -733,7 +883,11 @@ export const EVERMIND_FAQ: FaqItem[] = [
   },
   {
     question: 'Does Evermind have benchmarks — how do I know a model I train is any good?',
-    answer: 'Yes. Every model you train in the Studio is scored on-device before you publish it. The built-in benchmarking harness holds out a slice of your corpus the model never trains on, then reports the standard language-model yardsticks — held-out perplexity, bits-per-token, top-1 and top-k next-token accuracy, and generation throughput — and can A/B two checkpoints so you can see whether a fresh adaptation actually improved on the last one. It runs entirely in your browser with no GPU bill and no data leaving your machine, so you publish on evidence, not vibes. The same harness is the open measurement instrument behind the Evermind technical report.',
+    answer: 'Yes. Every model you train in the Studio is scored on-device before you publish it. The built-in benchmarking harness holds out a slice of your corpus the model never trains on, then reports the standard language-model yardsticks — held-out perplexity, bits-per-token, top-1 and top-k next-token accuracy, and generation throughput — plus a held-out coding pass@1 gate that runs generated solutions against unseen test cases, so a model is measured on whether it actually writes passing code, not just on perplexity. It can A/B two checkpoints so you can see whether a fresh adaptation actually improved on the last one, runs entirely in your browser with no GPU bill and no data leaving your machine, and is the open measurement instrument behind the Evermind technical report.',
+  },
+  {
+    question: 'Can Evermind learn from a frontier model like Opus or Mistral?',
+    answer: 'Yes — through teacher distillation. You can pin any frontier LLM (Opus, Mistral, GLM and more) as a teacher for a project\'s Evermind. For each real task your team ships, the teacher is asked for the ideal answer through the metered gateway, and the SSM adapts on the pair of (task context → teacher exemplar) rather than on the raw run text. Over time your own small, on-device model absorbs the quality of a much larger one, while you keep ownership and currency. The teacher call is cost-gated to your token budget and best-effort — a miss falls back to learning from the raw work — so distillation never stalls the learning loop.',
   },
 ];
 
@@ -830,6 +984,123 @@ export const REGISTER_FAQ: FaqItem[] = [
     answer: 'No — Builderforce charges zero commission on agents you publish to the Workforce Registry. You keep 100% of any revenue from your published agents.',
   },
 ];
+
+/**
+ * Register page — right-hand marketing panel, one variant per account type the
+ * chooser toggles between: `standard` (Build with AI) and `freelancer` (Get
+ * hired). Single source of truth so the panel copy stays consistent with the
+ * rest of the marketing site; the register client switches on `accountType`.
+ */
+export interface RegisterMarketingVariant {
+  /** Short eyebrow tag shown above the heading. */
+  eyebrow: string;
+  heading: string;
+  intro: string;
+  /** Four headline metrics rendered as stat cards. */
+  stats: { value: string; label: string }[];
+  /** Value-prop bullets (emoji + one line). */
+  bullets: { icon: string; title: string; desc: string }[];
+  /** Pull-quote reinforcing the differentiator. */
+  quote: string;
+  faq: FaqItem[];
+}
+
+export const REGISTER_MARKETING: Record<'standard' | 'freelancer', RegisterMarketingVariant> = {
+  standard: {
+    eyebrow: 'Build with AI',
+    heading: 'Your AI Agent Workspace Awaits',
+    intro:
+      'Train custom AI agents in your browser, put them to work on a live Kanban board alongside your team, and orchestrate the whole workforce without ever leaving VS Code.',
+    stats: [
+      { value: '$0', label: 'Free forever' },
+      { value: '14 days', label: 'Pro trial included' },
+      { value: '2B+', label: 'Params in-browser' },
+      { value: '0%', label: 'Agent commission' },
+    ],
+    bullets: [
+      { icon: '🧠', title: 'Evermind', desc: 'A self-updating model that learns as it works and never goes stale.' },
+      { icon: '🔁', title: 'Train & reuse agents', desc: 'WebGPU LoRA fine-tuning, then call your specialists from inside your agent.' },
+      { icon: '▦', title: 'Live Kanban workforce', desc: 'Humans and AI agents ship on the same board, backlog to done.' },
+      { icon: '🧩', title: 'Never leave VS Code', desc: 'Chat, assign, review, and approve — all inside your editor.' },
+      { icon: '🧪', title: 'Agentic Tester', desc: 'An autonomous QA agent that browser-tests your app and files bugs.' },
+      { icon: '🗺️', title: 'Planning Spine', desc: 'Portfolio → task on one dated, cost-bearing Gantt with CAPEX/OPEX rollup.' },
+    ],
+    quote:
+      'Unlike cloud training platforms that charge per GPU-hour, Builderforce runs training on your local WebGPU device at zero cost.',
+    faq: REGISTER_FAQ,
+  },
+  freelancer: {
+    eyebrow: 'Get hired',
+    heading: 'Get Hired. Get Paid for Every Hour.',
+    intro:
+      'Publish a for-hire profile with your hired.video résumé, get discovered across every team on the platform, and let your billable hours capture themselves as you work in the portal and VS Code.',
+    stats: [
+      { value: '0%', label: 'Commission on your rate' },
+      { value: 'Auto', label: 'Time tracked as you work' },
+      { value: 'Cross-tenant', label: 'Gigs from any team' },
+      { value: 'hired.video', label: 'Résumé built in' },
+    ],
+    bullets: [
+      { icon: '💼', title: 'For-hire profile', desc: 'Set your rate, showcase skills, go public or stay invite-only.' },
+      { icon: '🎬', title: 'hired.video résumé', desc: 'Your video résumé travels with your profile — no re-uploading.' },
+      { icon: '🔎', title: 'Find Work', desc: 'Browse and get matched to gigs across every tenant on Builderforce.' },
+      { icon: '⏱️', title: 'Automatic timecards', desc: 'Billable hours are captured from real activity — no manual logging.' },
+      { icon: '🤝', title: 'Work beside AI agents', desc: 'Sit on the same board as humans and agents on any project you join.' },
+      { icon: '✅', title: 'Approve-then-pay', desc: 'Every timecard is reviewed before payment, so billing stays clean.' },
+    ],
+    quote:
+      'Keep 100% of your rate — Builderforce takes zero commission, and every billable hour is captured automatically from the work you actually do.',
+    faq: [
+      {
+        question: 'Does Builderforce take a commission on my rate?',
+        answer: 'No. Builderforce charges zero commission on freelance engagements — you keep 100% of your hourly rate. Clients pay for tracked, approved hours only.',
+      },
+      {
+        question: 'How are my hours tracked?',
+        answer: 'Billable hours are captured automatically from the activity you generate in the portal and the VS Code extension. You never fill in a manual timesheet, and every timecard is yours (and the client\'s) to review before payment.',
+      },
+      {
+        question: 'Who can see my profile?',
+        answer: 'You choose. A for-hire profile can be public (discoverable by any team on the platform) or private (visible only to teams you share it with). Either way it carries your skills, hourly rate, and hired.video résumé.',
+      },
+      {
+        question: 'Do I need my own clients to start?',
+        answer: 'No. Once your profile is live you can browse Find Work and get matched to gigs from any tenant on Builderforce, then interview and get hired across projects — all without leaving the platform.',
+      },
+    ],
+  },
+};
+
+/**
+ * Login page — right-hand marketing panel. Login has no account-type chooser, so
+ * it's a single variant (reusing the register panel's shape so the two auth
+ * surfaces stay visually identical). Copy is welcome-back framed but still sells
+ * the platform to logged-out visitors who land here. Uses the `standard`
+ * MarketingVisual (the agent-workforce graph).
+ */
+export const LOGIN_MARKETING: RegisterMarketingVariant = {
+  eyebrow: 'Welcome back',
+  heading: 'Pick Up Right Where You Left Off',
+  intro:
+    'Sign in to your AI agent workspace — your trained models, live Kanban board, and the whole agent workforce are exactly where you left them.',
+  stats: [
+    { value: '$0', label: 'Free forever' },
+    { value: '<60s', label: 'To sign in' },
+    { value: '2B+', label: 'Params in-browser' },
+    { value: '0%', label: 'Agent commission' },
+  ],
+  bullets: [
+    { icon: '🧠', title: 'Evermind', desc: 'A self-updating model that learns as it works and never goes stale.' },
+    { icon: '🔁', title: 'Your trained agents', desc: 'Call the specialists you fine-tuned with WebGPU LoRA, right where you left them.' },
+    { icon: '▦', title: 'Live Kanban workforce', desc: 'Humans and AI agents ship on the same board, backlog to done.' },
+    { icon: '🧩', title: 'Never leave VS Code', desc: 'Chat, assign, review, and approve — all inside your editor.' },
+    { icon: '🔑', title: 'Passwordless sign-in', desc: 'Magic links and OAuth with Google, GitHub, LinkedIn, and Microsoft.' },
+    { icon: '🧪', title: 'Agentic Tester', desc: 'An autonomous QA agent that browser-tests your app and files bugs.' },
+  ],
+  quote:
+    'Your work stays yours — Builderforce runs training on your local WebGPU device at zero cost, with no GPU bills and no vendor lock-in.',
+  faq: LOGIN_FAQ,
+};
 
 /** Blog index FAQ */
 export const BLOG_FAQ: FaqItem[] = [
@@ -983,6 +1254,42 @@ export const DEFINED_TERMS: DefinedTermEntry[] = [
     name: 'Agentic Maturity Index',
     description: 'A CMMI/COBIT-style maturity model that rates how a technology organization runs across six practices — software delivery, release & operations (DORA), quality assurance, project management, agentic AI operations, and governance & security — on a 1–5 scale (Initial → Optimizing). Builderforce.ai scores it two ways: a free, logged-out self-assessment, and a data-driven diagnostic that derives each practice level objectively from real telemetry (cycle time, DORA, rework, run outcomes), then outputs a prioritized plan to mature and innovate.',
   },
+  {
+    name: 'Frontier-model teacher distillation',
+    description: 'A training mode on Builderforce.ai where any frontier LLM (such as Opus, Mistral, or GLM) is pinned as a teacher for a project\'s Evermind. For each real task the team ships, the teacher is asked for the ideal answer through the metered gateway, and the self-updating model adapts on the pair of (task context → teacher exemplar) rather than on the raw run text — so a small, on-device model steadily absorbs the quality of a much larger one. The teacher call is cost-gated to the tenant\'s token budget and best-effort, falling back to raw-text learning on a miss so the learning loop never stalls.',
+  },
+  {
+    name: 'Project Evermind',
+    description: 'A per-project instance of Builderforce.ai\'s self-updating Evermind model, provisioned automatically when a project is created. It learns from every run across all four studios (design, voice, LLM, and video) through one shared learning mechanism and a single-writer coordinator, and reads corrected facts from a write-through fact store shared by the web app, VS Code, cloud, and on-prem agents. Inference is opt-in per project, and the model is editable in the LLM Studio.',
+  },
+  {
+    name: 'Agentic Workforce Kanban',
+    description: 'Builderforce.ai\'s role-gated delivery board where each project is staffed from a first-class job-role taxonomy of humans and AI agents, starting from a recommended roster. Swimlanes can require a specific reviewer before a ticket advances, every completed ticket carries a role and diagnostic sign-off audit, and a role-coverage diagnostic surfaces gaps — so quality is enforced on the board rather than assumed. Governed board templates (lanes, roles, gates, and rosters) can be published to, sold on, and installed from a marketplace.',
+  },
+  {
+    name: 'Validator agent',
+    description: 'A built-in Builderforce.ai agent, seeded into every workspace, that reviews each work item marked Done, records a verdict in a review ledger, and opens GAP tasks for anything incomplete. Ad-hoc chat work is captured as visible tickets automatically, and one shared merge-to-Done path (human approval, green CI, and post-deploy) routes through the validator, so nothing is reported as finished without proof.',
+  },
+  {
+    name: 'Learned model routing',
+    description: 'A cost-and-quality optimization on Builderforce.ai that scores every run on its outcome and reorders which model handles each action type accordingly — cheaper models take the work they do well while premium models are reserved for tasks that need them. Combined with the cross-surface semantic cache, the token bill bends down as the platform learns a team\'s workload, with a single kill-switch flag for manual control.',
+  },
+  {
+    name: 'Memory-first inference',
+    description: 'A token-saving pattern on Builderforce.ai where, before any paid model call, the Brain consults the project\'s own memory — an exact-repeat question-and-answer cache plus opt-in inference on the project\'s Evermind — and short-circuits the frontier LLM entirely on a confident hit. The decision is single-sourced so every surface (web and VS Code) behaves identically, and learning fans out to every Evermind under a project (its own head and its IDE builds\'), so a lesson taught once answers everywhere and the token bill falls as memory grows.',
+  },
+  {
+    name: 'Role-gated accountability',
+    description: 'Builderforce.ai\'s model for proving the right role did each part of a ticket. A per-ticket participation manifest resolves the required roles to the humans and agents capable of each — so a role-incapable owner (for example a Product Manager) is never dispatched to a producer stage — and an append-only Accountability Report records Who, When, Verdict, Comments, and Contribution per role, gated by default-deny sign-off permissions, with a Resource Assessment that surfaces a missing role as a blocking gap. Quality is proven on the board with an immutable record rather than assumed after the fact.',
+  },
+  {
+    name: 'Incident management with learned RCA',
+    description: 'Builderforce.ai\'s end-to-end incident response: a Help-Desk / Incident-Manager agent triages, on-call rotations decide who is paged, timed escalation walks the chain, Teams/Slack/email paging reaches the responder, and a per-incident war-room feed coordinates humans and agents. Active monitors pinned onto an uploaded architecture diagram sweep every five minutes and a breach auto-starts the investigation. On resolution the root-cause analysis is published to the Knowledge base and fed to the project\'s Evermind, so the workforce learns and stops repeating the same failure.',
+  },
+  {
+    name: 'Automated RFP response',
+    description: 'A pre-sales capability on Builderforce.ai where CTO and Product-Owner agents turn a project\'s analyzed capabilities into a branded, costed proposal — cost and P&L, a phased delivery Gantt, risks, dependencies, and a capability roster matched to the ask — co-branded with the requester\'s palette and logo. Freshness-gated grounding re-runs the deterministic system audits before answering, so the proposal reflects the system as it is today. RFP responses live as a tab on the project itself.',
+  },
 ];
 
 /* ════════════════════ PRODUCT SURFACES (public capability tour) ════════════════════ */
@@ -1038,6 +1345,7 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
       { icon: '🔗', title: 'Board Connectors', desc: 'Two-way sync with Jira, Linear, monday, Asana, ClickUp, ServiceNow, Freshservice, Sentry, PagerDuty, and GitHub — orchestrate across the trackers you already run, with no migration.', href: '/projects?tab=connections' },
       { icon: '🕸️', title: 'Workforce Mesh', desc: 'Discover and dispatch work across local and remote AgentHosts — capacity sharing across machines and tenants.', href: '/workforce' },
       { icon: '💬', title: 'Chats', desc: 'Talk to your agents directly, or watch them collaborate in shared conversations.', href: '/workforce?tab=chats' },
+      { icon: '🧑‍🏭', title: 'Workforce Kanban & Templates', desc: 'Staff a project from a role roster of humans and AI agents on a sign-off-gated board, then buy, sell, or install ready-made board templates — lanes, required roles, review gates, and a recommended roster — from the marketplace.', href: '/projects?tab=templates' },
     ],
   },
   {
@@ -1102,6 +1410,7 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
       { href: '/marketplace', label: 'Workforce Registry' },
       { href: '/agents', label: 'BuilderForce Agents' },
       { href: '/tools', label: 'Diagnostics & Tools' },
+      { href: '/soc2', label: 'SOC 2 & System Audits' },
       { href: '/blog', label: 'Blog' },
     ],
   },
@@ -1349,17 +1658,23 @@ export const INTEGRATION_SLUG_MAP: Record<string, IntegrationSeo> = Object.fromE
 export const RELATED_ARTICLES: Record<string, string[]> = {
   product: [
     'transitioning-to-an-agentic-workforce',
+    'real-time-collaboration-humans-and-agents',
     'define-a-need-the-agentic-system-solves-it',
     'agent-tech-stack-all-seven-layers',
     'evermind-self-updating-model',
     'system-of-record-for-agentic-work',
     'planning-spine-cost-bearing-delivery',
     'quality-error-observability-one-click-fix',
+    'incident-management-on-call-and-war-rooms',
+    'role-gated-accountability-proof-of-participation',
+    'automated-rfp-response-from-your-codebase',
+    'memory-first-inference-skip-the-llm',
   ],
   // Evermind technology page / feature teaser.
   evermind: [
     'evermind-self-updating-model',
     'inside-evermind-architecture',
+    'memory-first-inference-skip-the-llm',
     'transitioning-to-an-agentic-workforce',
     'agent-tech-stack-all-seven-layers',
     'semantic-response-cache',
@@ -1371,6 +1686,7 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   ],
   pricing: [
     'evermind-self-updating-model',
+    'memory-first-inference-skip-the-llm',
     'system-of-record-for-agentic-work',
     'semantic-response-cache',
   ],
@@ -1384,21 +1700,23 @@ export const RELATED_ARTICLES: Record<string, string[]> = {
   // Feature routes — associated blog content shown on each logged-out feature
   // teaser (RouteMarketing). Keyed by the route path minus its leading slash.
   brainstorm: ['product-ideation-with-builderforce', 'specs-and-planning-with-ai', 'getting-started-with-ai-agents'],
-  ide: ['in-browser-ide-and-collaboration', 'product-ideation-with-builderforce', 'getting-started-with-ai-agents'],
+  ide: ['vs-code-command-center-for-your-agentic-workforce', 'in-browser-ide-and-collaboration', 'product-ideation-with-builderforce'],
   training: ['webgpu-lora-explained', 'inside-evermind-architecture', 'evermind-self-updating-model', 'ai-dataset-generation-best-practices'],
   workflows: ['define-a-need-the-agentic-system-solves-it', 'multi-agent-orchestration', 'autonomous-swimlane-execution'],
-  projects: ['planning-spine-cost-bearing-delivery', 'autonomous-swimlane-execution', 'task-execution-and-observability'],
-  workforce: ['fleet-management-and-agent-routing', 'autonomous-swimlane-execution', 'multi-agent-orchestration'],
+  projects: ['planning-spine-cost-bearing-delivery', 'role-gated-accountability-proof-of-participation', 'autonomous-swimlane-execution', 'task-execution-and-observability'],
+  workforce: ['real-time-collaboration-humans-and-agents', 'multi-party-team-chat-humans-and-agents', 'fleet-management-and-agent-routing'],
+  meetings: ['video-meetings-standups-and-shared-calendars', 'real-time-collaboration-humans-and-agents', 'multi-party-team-chat-humans-and-agents'],
   skills: ['skills-assignment-and-the-marketplace', 'builderforce-agents-and-agent-integration', 'best-ai-coding-agents-compared'],
-  personas: ['builderforce-agents-and-agent-integration', 'multi-agent-orchestration', 'skills-assignment-and-the-marketplace'],
+  personas: ['ai-agent-personality-psychometric-personas', 'builderforce-agents-and-agent-integration', 'multi-agent-orchestration'],
   'content-manager': ['skills-assignment-and-the-marketplace', 'product-ideation-with-builderforce'],
-  security: ['every-role-operating-picture', 'security-and-multi-tenant-architecture', 'knowledge-management-sops-and-compliance'],
+  security: ['every-role-operating-picture', 'role-gated-accountability-proof-of-participation', 'security-and-multi-tenant-architecture', 'cobit-governance-readiness-for-agentic-it'],
+  soc2: ['cobit-governance-readiness-for-agentic-it', 'security-and-multi-tenant-architecture', 'knowledge-management-sops-and-compliance'],
   contributors: ['every-role-operating-picture', 'task-execution-and-observability', 'multi-agent-orchestration'],
-  dashboard: ['system-of-record-for-agentic-work', 'every-role-operating-picture', 'introduction-and-overview'],
+  dashboard: ['system-of-record-for-agentic-work', 'real-time-collaboration-humans-and-agents', 'every-role-operating-picture'],
   agents: ['builderforce-agents-and-agent-integration', 'fleet-management-and-agent-routing', 'single-pane-board-connectors'],
   prompts: ['specs-and-planning-with-ai', 'product-ideation-with-builderforce', 'getting-started-with-ai-agents'],
-  diagnostics: ['ai-development-maturity-diagnostic', 'system-of-record-for-agentic-work', 'every-role-operating-picture'],
+  diagnostics: ['ai-development-maturity-diagnostic', 'cobit-governance-readiness-for-agentic-it', 'system-of-record-for-agentic-work'],
   // Newer enterprise surfaces.
   knowledge: ['knowledge-management-sops-and-compliance', 'every-role-operating-picture', 'security-and-multi-tenant-architecture'],
-  quality: ['quality-error-observability-one-click-fix', 'agentic-tester-autonomous-qa', 'task-execution-and-observability'],
+  quality: ['quality-error-observability-one-click-fix', 'incident-management-on-call-and-war-rooms', 'agentic-tester-autonomous-qa', 'task-execution-and-observability'],
 };

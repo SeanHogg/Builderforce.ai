@@ -26,16 +26,16 @@ import {
   projects,
 } from '../../infrastructure/database/schema';
 import type { HonoEnv, Env } from '../../env';
-import type { Db } from '../../infrastructure/database/connection';
+import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
+import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
 import { RepoService, type AgentHostDispatcher } from '../../application/repos/RepoService';
 import { resolveRepoCredential, isResolveError } from '../../application/repos/resolveRepoCredential';
 import { importRepoContents } from '../../application/repos/importRepoContents';
 import { enforceIngestionCap, recordIngestion } from '../../application/ingestion/ingestionLedger';
 import { githubStatusMessage } from '../../application/integrations/githubTestError';
-import { mergePullRequest, normalizeMergeMethod } from '../../application/repos/mergePullRequest';
-import { markPullRequestMergedById } from '../../application/repos/recordPullRequestRow';
-import { getPullRequestDetail, invalidatePullRequestDetail } from '../../application/repos/getPullRequestDetail';
+import { mergeRecordedPullRequest } from '../../application/repos/mergeRecordedPr';
+import { getPullRequestDetail } from '../../application/repos/getPullRequestDetail';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { resolveHostAuth } from '../../infrastructure/auth/agentHostAuth';
 import type { CreatePrMessage } from '../../application/repos/prDispatch';
@@ -356,7 +356,8 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     // data-ingestion allowance (consumption meter). Graceful backpressure: repos
     // already imported stay fully usable; only fresh pulls stop until the month
     // resets or they upgrade. 402 carries the plan-limit body the client renders.
-    const gate = await enforceIngestionCap(db, tenantId);
+    const ingestionDb = buildTransactionalDatabase(c.env as Env);
+    const gate = await enforceIngestionCap(db, tenantId, ingestionDb, c.env as Env);
     if (!gate.allowed) {
       return c.json({
         error: `Monthly data-ingestion allowance reached (${gate.limit.toLocaleString()} bytes). Already-imported repositories stay available; upgrade or wait for the monthly reset to import more.`,
@@ -379,7 +380,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
 
     // Meter the bytes actually pulled (post-cap), attributed to the repo's project.
     const bytesIngested = result.files.reduce((sum, f) => sum + f.content.length, 0);
-    c.executionCtx.waitUntil(recordIngestion(db, {
+    c.executionCtx.waitUntil(recordIngestion(ingestionDb, {
       tenantId,
       projectId: resolved.repo.projectId ?? null,
       source: 'repo_import',
@@ -523,47 +524,34 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     const id = c.req.param('id');
     const body = await c.req.json<{ method?: string }>().catch(() => ({} as { method?: string }));
 
-    const [row] = await db
-      .select()
-      .from(pullRequests)
-      .where(and(eq(pullRequests.id, id), eq(pullRequests.tenantId, tenantId)))
-      .limit(1);
-    if (!row) return c.json({ error: 'Pull request not found' }, 404);
-    if (row.status === 'merged') return c.json({ ok: true, alreadyMerged: true, pullRequest: row });
-    if (!row.repoId) return c.json({ error: 'PR has no linked repo to merge against' }, 409);
-    if (row.number == null) return c.json({ error: 'PR has no provider number yet (still being opened)' }, 409);
-
-    const env = c.env as { INTEGRATION_ENCRYPTION_SECRET?: string; JWT_SECRET?: string };
-    const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
-    const resolved = await resolveRepoCredential(db, secret, tenantId, row.repoId);
-    if (isResolveError(resolved)) return c.json({ error: resolved.error }, resolved.status);
-
-    const result = await mergePullRequest({
-      provider: resolved.repo.provider, host: resolved.repo.host,
-      owner: resolved.repo.owner, repo: resolved.repo.repo, token: resolved.token,
-      number: row.number, method: normalizeMergeMethod(body.method),
-      commitTitle: `Task #${row.taskId ?? ''}: merge ${row.branchName ?? ''}`.trim(),
+    // Shared with the AI Manager's autonomous PR coordination so the human "Approve
+    // & Merge" and the manager merge never drift (resolve credential → provider
+    // merge → mark merged → bust cache).
+    const result = await mergeRecordedPullRequest(db, c.env as Env, {
+      tenantId, prId: id, method: body.method, mergedBy: userId ?? null,
     });
-
     if (!result.ok) {
-      const httpStatus = result.code === 'unsupported' ? 501
-        : (result.code === 'conflict' || result.code === 'not_mergeable') ? 409
-        : 502;
-      return c.json({ error: result.reason, code: result.code }, httpStatus);
+      return c.json({ error: result.error, code: result.code }, result.httpStatus as 409);
     }
+    if (result.alreadyMerged) return c.json({ ok: true, alreadyMerged: true, pullRequest: result.pullRequest });
 
-    const updated = await markPullRequestMergedById(db, id, tenantId, {
-      mergeSha: result.sha ?? null,
-      mergedBy: userId ?? null,
-    });
-
-    // Bust the cached live detail keyed by the PRE-merge updatedAt token.
-    await invalidatePullRequestDetail(
-      c.env as Env, id,
-      row.updatedAt instanceof Date ? row.updatedAt.toISOString() : String(row.updatedAt),
-    ).catch(() => { /* cache miss is fine */ });
-
-    return c.json({ ok: true, merged: result.merged, sha: result.sha, pullRequest: updated ?? row });
+    // Unified audit stream: a merge, attributed to whoever approved it.
+    const pr = result.pullRequest as { id?: string; number?: number | null; taskId?: number | null; projectId?: number | null } | null;
+    c.executionCtx.waitUntil((async () => {
+      const actor = await resolveActorFromContext(c.env as Env, db, c);
+      await recordActivity(c.env as Env, db, {
+        tenantId,
+        projectId: pr?.projectId ?? null,
+        actor,
+        verb: 'pr.merged',
+        targetType: 'pull_request',
+        targetId: pr?.id ?? id,
+        targetLabel: pr?.number != null ? `PR #${pr.number}` : 'Pull request',
+        summary: `Merged ${pr?.number != null ? `PR #${pr.number}` : 'a pull request'}`,
+        metadata: { taskId: pr?.taskId ?? null, sha: result.sha ?? null },
+      });
+    })().catch(() => {}));
+    return c.json({ ok: true, merged: result.merged, sha: result.sha, pullRequest: result.pullRequest });
   });
 
   return router;

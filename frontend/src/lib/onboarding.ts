@@ -15,7 +15,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
-import { AUTH_API_URL, checkUnauthorizedAndRedirect, getMyTenants } from './auth';
+import { AUTH_API_URL, checkUnauthorizedAndRedirect, getMe, getMyTenants, type OnboardingProgress } from './auth';
 
 export interface ActiveTermsDoc {
   documentType: 'terms';
@@ -35,8 +35,72 @@ export interface TermsStatus {
 export type OnboardingPhase =
   | 'pre-auth'
   | 'pending-terms'
+  | 'pending-role'
   | 'pending-tenant'
   | 'ready';
+
+const ONBOARDING_DISMISSED_KEY = 'bf_onboarding_dismissed';
+
+export interface OnboardingPrompt {
+  /** True when the setup wizard should be rendered. */
+  show: boolean;
+  /** False while the decision is still resolving (callers may hold rendering). */
+  checked: boolean;
+  /** Persisted step progress from the same `getMe` call — pass it to the stepper
+   *  so it resumes where the user left off without a second round-trip. */
+  progress: OnboardingProgress | null;
+  /** Wizard finished — hide it for this session. */
+  complete: () => void;
+  /** Wizard dismissed — hide it and remember the dismissal. */
+  dismiss: () => void;
+}
+
+/**
+ * The ONE decision of whether a signed-in user still needs the setup wizard.
+ * Both the builder dashboard and the hired (freelancer) dashboard mount the
+ * stepper, so the "has it been completed / dismissed / does this role even get
+ * onboarding" rules live here rather than being re-implemented per page. Which
+ * STEPS the wizard shows is the stepper's own call (account-type track).
+ */
+export function useOnboardingPrompt(): OnboardingPrompt {
+  const { isAuthenticated, webToken, hasTenant, tenant } = useAuth();
+  const [show, setShow] = useState(false);
+  const [checked, setChecked] = useState(false);
+  const [progress, setProgress] = useState<OnboardingProgress | null>(null);
+
+  useEffect(() => {
+    if (!isAuthenticated || !webToken || checked) return;
+
+    // Invited members of an existing workspace never see setup — only owners do.
+    // (A hired account has no workspace, so this never applies to it.)
+    if (hasTenant && tenant?.role && tenant.role !== 'owner') {
+      setChecked(true);
+      return;
+    }
+
+    if (typeof window !== 'undefined' && localStorage.getItem(ONBOARDING_DISMISSED_KEY) === '1') {
+      setChecked(true);
+      return;
+    }
+
+    getMe(webToken)
+      .then(({ onboardingCompletedAt, onboardingProgress }) => {
+        setProgress(onboardingProgress);
+        if (!onboardingCompletedAt) setShow(true);
+      })
+      .catch(() => { /* a failed check must never block the user */ })
+      .finally(() => setChecked(true));
+  }, [isAuthenticated, webToken, checked, hasTenant, tenant]);
+
+  const complete = useCallback(() => setShow(false), []);
+
+  const dismiss = useCallback(() => {
+    if (typeof window !== 'undefined') localStorage.setItem(ONBOARDING_DISMISSED_KEY, '1');
+    setShow(false);
+  }, []);
+
+  return { show, checked, progress, complete, dismiss };
+}
 
 export interface OnboardingState {
   phase: OnboardingPhase;
@@ -46,7 +110,10 @@ export interface OnboardingState {
   terms: ActiveTermsDoc | null;
   /** Accept the active terms version. Resolves once the gate advances. */
   acceptTerms: () => Promise<void>;
-  /** Re-fetch terms status (e.g. after admin publishes a new version). */
+  /** Make the one-time account-type choice (Build vs Hired). Resolves once the
+   *  gate advances past `pending-role`. */
+  selectRole: (accountType: 'standard' | 'freelancer') => Promise<void>;
+  /** Re-fetch terms + role status (e.g. after admin publishes a new version). */
   refresh: () => Promise<void>;
 }
 
@@ -87,24 +154,31 @@ export async function acceptActiveTerms(
  * should consume `phase` here so all gates evolve together.
  */
 export function useOnboardingState(): OnboardingState {
-  const { webToken, tenantToken, selectTenant } = useAuth();
+  const { webToken, tenantToken, selectTenant, selectAccountType } = useAuth();
 
   const [terms, setTerms] = useState<ActiveTermsDoc | null>(null);
   const [needsTerms, setNeedsTerms] = useState<boolean | null>(null);
+  const [needsRole, setNeedsRole] = useState<boolean | null>(null);
   const [loading, setLoading] = useState<boolean>(!!webToken);
 
   const load = useCallback(async () => {
     if (!webToken) {
       setTerms(null);
       setNeedsTerms(null);
+      setNeedsRole(null);
       setLoading(false);
       return;
     }
     setLoading(true);
     try {
-      const status = await fetchTermsStatus(webToken);
+      // Terms + role status resolve together — both gate the chrome.
+      const [status, me] = await Promise.all([
+        fetchTermsStatus(webToken),
+        getMe(webToken),
+      ]);
       setTerms(status.terms);
       setNeedsTerms(status.needsAcceptance);
+      setNeedsRole(!me.accountTypeSelected);
     } finally {
       setLoading(false);
     }
@@ -113,6 +187,11 @@ export function useOnboardingState(): OnboardingState {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const selectRole = useCallback(async (accountType: 'standard' | 'freelancer') => {
+    await selectAccountType(accountType);
+    setNeedsRole(false);
+  }, [selectAccountType]);
 
   const acceptTerms = useCallback(async () => {
     if (!webToken || !terms) throw new Error('Cannot accept terms before loading');
@@ -140,6 +219,11 @@ export function useOnboardingState(): OnboardingState {
     phase = 'pre-auth';
   } else if (needsTerms === null || needsTerms === true) {
     phase = 'pending-terms';
+  } else if (needsRole === null || needsRole === true) {
+    // Role choice comes AFTER terms and BEFORE any workspace/tenant step — it
+    // decides whether the user even needs a builder workspace (a freelancer does
+    // not). Blocks until an OAuth/magic-link account picks Build vs Hired.
+    phase = 'pending-role';
   } else if (!tenantToken) {
     phase = 'pending-tenant';
   } else {
@@ -151,6 +235,7 @@ export function useOnboardingState(): OnboardingState {
     loading,
     terms,
     acceptTerms,
+    selectRole,
     refresh: load,
   };
 }

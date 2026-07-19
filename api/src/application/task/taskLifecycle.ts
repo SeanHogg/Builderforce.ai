@@ -125,7 +125,48 @@ export async function recordStatusTransition(env: Env, db: Db, input: RecordTran
   // (no segment) or when nothing subscribed; never blocks the metrics path.
   if (nowDone && !wasDone) {
     await releaseWorkItemWebhook(db, { tenantId, taskId }).catch(() => {});
+    // FAST Validator review: the moment work is Done, kick an acceptance review (if the
+    // tenant has a Validator) instead of waiting for the daily sweep. Dynamic import
+    // breaks the taskLifecycle → validationDispatch → runtimeRoutes → taskLifecycle
+    // cycle; best-effort (the review run is non-mutating, so no completion loop).
+    await import('../validation/validationDispatch')
+      .then((m) => m.triggerFastValidatorReview(env, db, { tenantId, taskId }))
+      .catch(() => {});
   }
+}
+
+/**
+ * Mark the task linked to a just-merged/deployed PR as Done — the SINGLE completion
+ * path shared by the human "Approve & Merge" route, the AI Manager sweep, and the
+ * green-CI / post-deploy webhooks, so "merge & deploy → ticket complete" can never
+ * drift or be forgotten on one path. Best-effort + idempotent: a no-op when the task
+ * is missing or already in a done-class lane. Sets the `status` column AND folds the
+ * transition into the lifecycle metrics (completedAt / DORA / release webhook) via
+ * {@link recordStatusTransition} — the plain db.update the manager used skipped the
+ * metrics, which this closes.
+ */
+export async function completeTaskOnMerge(
+  env: Env,
+  db: Db,
+  input: { tenantId: number; taskId: number; actorUserId?: string | null },
+): Promise<void> {
+  const [t] = await db
+    .select({ status: tasks.status, projectId: tasks.projectId })
+    .from(tasks)
+    .where(eq(tasks.id, input.taskId))
+    .limit(1);
+  if (!t) return;
+  const ordinals = await loadOrdinals(env, db, t.projectId);
+  if (isDoneClass(t.status, ordinals)) return; // already complete — nothing to do
+  await db.update(tasks).set({ status: TaskStatus.DONE, updatedAt: new Date() }).where(eq(tasks.id, input.taskId));
+  await recordStatusTransition(env, db, {
+    tenantId: input.tenantId,
+    projectId: t.projectId,
+    taskId: input.taskId,
+    fromStatus: t.status,
+    toStatus: TaskStatus.DONE,
+    actorUserId: input.actorUserId ?? null,
+  }).catch(() => { /* metrics are best-effort; completion already persisted */ });
 }
 
 /**

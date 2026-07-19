@@ -113,6 +113,10 @@
   --chat-input-disabled-icon: var(--text-muted);
   --chat-input-disabled-send-bg: var(--surface-interactive);
   --chat-input-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  /* Focused / non-empty composer: highlight the whole box in accent (blue),
+     matching the VS Code composer's activated state across every modality. */
+  --chat-input-active-border: var(--accent);
+  --chat-input-active-ring: 0 0 0 1px var(--accent);
 
   /* Semantic: error / success (contrast-safe in both themes) */
   --error: #f87171;
@@ -150,6 +154,9 @@
   --bf-error-text: var(--error-text);
   --bf-error-bg: var(--error-bg);
   --bf-success: var(--success);
+  --bf-success-bg: var(--success-bg);
+  --bf-warning: var(--warning);
+  --bf-warning-bg: var(--warning-bg);
   --bf-font-mono: var(--font-mono);
 }
 
@@ -1136,6 +1143,31 @@ html[data-theme='light'] .nebula {
 .usage-meter {
   margin-bottom: 10px;
 }
+/* Collapsible "USAGE" section header — full-width toggle with a chevron. */
+.usage-meter .usage-meter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 10px 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  text-align: left;
+}
+.usage-meter .usage-meter-head:hover,
+.usage-meter .usage-meter-head:focus-visible {
+  color: var(--text-primary, var(--fg));
+  outline: none;
+}
+/* A card's title routes to that resource's configuration / key entry point. */
+.usage-meter .usage-meter-title-link:hover,
+.usage-meter .usage-meter-title-link:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
 .usage-meter .usage-meter-link {
   text-decoration: none;
 }
@@ -1552,13 +1584,6 @@ textarea.input { resize: vertical; line-height: 1.5; }
   color: var(--text);
 }
 
-.admin-tabs {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
-}
-
 .admin-tab {
   padding: 8px 14px;
   border-radius: var(--radius-md);
@@ -1581,10 +1606,6 @@ textarea.input { resize: vertical; line-height: 1.5; }
   background: var(--accent-subtle);
   color: var(--text-strong);
   border-color: rgba(77, 158, 255, 0.2);
-}
-
-.admin-content {
-  min-height: 200px;
 }
 
 /* Alerts */
@@ -1835,17 +1856,27 @@ textarea.input { resize: vertical; line-height: 1.5; }
   flex-direction: column;
   border-right: 1px solid var(--border);
   background: var(--bg-muted);
+  /* A grid item's automatic minimum size is its CONTENT size, so without this the
+     sidebar grows past the row and .bs-shell's `overflow: hidden` clips the chat
+     list instead of letting it scroll (many chats => unreachable rows). */
+  min-height: 0;
+  overflow: hidden;
 }
 
 .bs-sidebar-header {
   padding: 8px 10px;
   border-bottom: 1px solid var(--border);
+  /* Header keeps its size; the list below it absorbs the remaining height. */
+  flex: 0 0 auto;
 }
 
 .bs-chat-list {
-  flex: 1;
-  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 4px;
+  overscroll-behavior: contain;
 }
 
 .bs-chat-item {
@@ -1866,15 +1897,21 @@ textarea.input { resize: vertical; line-height: 1.5; }
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 .bs-empty {
   flex: 1;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-direction: column;
   gap: 12px;
+  padding: 16px 0;
+  /* The capability tiles make this taller than a short viewport — scroll here
+     rather than pushing the panel past its row. */
+  overflow-y: auto;
   color: var(--muted);
 }
 
@@ -2022,6 +2059,26 @@ textarea.input { resize: vertical; line-height: 1.5; }
   color: #22c55e;
   padding: 2px 8px;
   border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 600;
+}
+/* "Attention needed" — distinct from yellow (in-review) and red (blocked).
+   Used for GAP task-type badges minted by the Validator. */
+.badge-amber {
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 6px);
+  font-size: 11px;
+  font-weight: 600;
+}
+/* "Live / urgent" — used for INCIDENT task-type + severity accents. Distinct from
+   red (blocked/security) and amber (gap/in-review); reads in both themes. */
+.badge-orange {
+  background: rgba(249, 115, 22, 0.2);
+  color: #fb923c;
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 6px);
   font-size: 11px;
   font-weight: 600;
 }
@@ -2268,8 +2325,11 @@ textarea.input { resize: vertical; line-height: 1.5; }
 
   .page-inner { padding: 12px 8px; max-width: 100%; margin: 0; }
 
-  .bs-shell { grid-template-columns: 1fr; height: auto; min-height: 0; }
-  .bs-sidebar { max-height: 200px; border-right: none; border-bottom: 1px solid var(--border); }
+  /* Stacked on a phone: the sidebar becomes a capped, self-scrolling strip above
+     the conversation, and the shell grows with its content (the page scrolls). */
+  .bs-shell { grid-template-columns: 1fr; height: auto; min-height: 0; overflow: visible; }
+  .bs-sidebar { max-height: 45vh; border-right: none; border-bottom: 1px solid var(--border); }
+  .bs-main { overflow: visible; }
 
   /* Slide-out drawers go full-width on mobile so they don't leave a thin sliver
      of the page showing through on the left (the inline `width: min(…, 96vw)`
@@ -2971,3 +3031,102 @@ textarea.input { resize: vertical; line-height: 1.5; }
   margin: 28px auto;
   border-radius: 12px;
 }
+
+/* Document-scale Markdown typography (see DocumentMarkdown.tsx). Shared by every
+   long-form surface — knowledge/SOP viewer, legal Terms/Privacy — so a document
+   reads at document scale, not chat scale. All colours come from theme tokens so
+   it works in both light and dark; sizes use rem so it stays fluid on mobile. */
+.markdown-body {
+  color: var(--text-primary, #e5e7eb);
+  font-size: 0.95rem;
+  line-height: 1.7;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.markdown-body > :first-child { margin-top: 0; }
+.markdown-body > :last-child { margin-bottom: 0; }
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  color: var(--text-primary, #f3f4f6);
+  font-family: var(--font-display, inherit);
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 1.8em 0 0.6em;
+}
+.markdown-body h1 { font-size: 1.7rem; }
+.markdown-body h2 {
+  font-size: 1.35rem;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border, #333);
+}
+.markdown-body h3 { font-size: 1.15rem; }
+.markdown-body h4 { font-size: 1rem; }
+.markdown-body h5,
+.markdown-body h6 { font-size: 0.9rem; color: var(--text-muted, #9ca3af); }
+.markdown-body p { margin: 0.9em 0; }
+.markdown-body a {
+  color: var(--coral-bright, #ff6b5e);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.markdown-body a:hover { opacity: 0.85; }
+.markdown-body ul,
+.markdown-body ol { margin: 0.9em 0; padding-left: 1.6em; }
+.markdown-body li { margin: 0.35em 0; }
+.markdown-body li > ul,
+.markdown-body li > ol { margin: 0.35em 0; }
+.markdown-body blockquote {
+  margin: 1.1em 0;
+  padding: 0.4em 1em;
+  border-left: 3px solid var(--border, #444);
+  color: var(--text-muted, #9ca3af);
+  background: var(--surface, rgba(127, 127, 127, 0.06));
+  border-radius: 0 8px 8px 0;
+}
+.markdown-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  padding: 0.15em 0.4em;
+  border-radius: 5px;
+  background: var(--surface, rgba(127, 127, 127, 0.12));
+  border: 1px solid var(--border-subtle, var(--border, #333));
+}
+.markdown-body pre {
+  margin: 1.1em 0;
+  padding: 1em;
+  overflow-x: auto;
+  border-radius: 10px;
+  background: var(--surface, #111827);
+  border: 1px solid var(--border, #333);
+}
+.markdown-body pre code {
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+.markdown-body hr {
+  margin: 2em 0;
+  border: none;
+  border-top: 1px solid var(--border, #333);
+}
+.markdown-body img { max-width: 100%; height: auto; border-radius: 10px; }
+.markdown-body table {
+  width: 100%;
+  margin: 1.1em 0;
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+.markdown-body th,
+.markdown-body td {
+  padding: 0.5em 0.8em;
+  border: 1px solid var(--border, #333);
+  text-align: left;
+}
+.markdown-body th { background: var(--surface, rgba(127, 127, 127, 0.08)); font-weight: 600; }

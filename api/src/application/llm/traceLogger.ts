@@ -17,7 +17,7 @@
  * pre-generate one); routes pass that same id here.
  */
 import { eq } from 'drizzle-orm';
-import { buildDatabase } from '../../infrastructure/database/connection';
+import { buildTransactionalDatabase } from '../../infrastructure/database/connection';
 import { llmTraces } from '../../infrastructure/database/schema';
 import type { ProxyResult } from './LlmProxyService';
 import type { HonoEnv } from '../../env';
@@ -142,7 +142,7 @@ export function logTrace(env: Env, ctx: ExecutionContext, input: TraceInput): vo
     callerMetadata:    jsonOrNull(input.callerMetadata ?? null),
   };
   ctx.waitUntil(
-    buildDatabase(env)
+    buildTransactionalDatabase(env)
       .insert(llmTraces)
       .values(row)
       .catch(() => { /* tracing must never fail the request */ }),
@@ -166,7 +166,7 @@ export function backfillTraceUsage(
   usage: { promptTokens?: number; completionTokens?: number; totalTokens?: number },
 ): void {
   ctx.waitUntil(
-    buildDatabase(env)
+    buildTransactionalDatabase(env)
       .update(llmTraces)
       .set({
         promptTokens:     usage.promptTokens ?? 0,

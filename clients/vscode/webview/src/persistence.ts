@@ -5,29 +5,16 @@
  * exact same server-side conversation as on the web: one unified brain.
  */
 
-import type { BrainPersistenceAdapter, BrainChat, BrainMessage } from '@seanhogg/builderforce-brain-embedded';
+import type { BrainPersistenceAdapter, BrainChat, BrainMessage, EvermindLearnOutcome } from '@seanhogg/builderforce-brain-embedded';
+import { attachEvermindLearn, subscribeToChatMessages } from '@seanhogg/builderforce-brain-embedded';
+import { authedFetch } from './authedFetch';
 
 export function createPersistence(
   baseUrl: string,
   getToken: () => string | null,
   onUnauthorized: () => void,
 ): BrainPersistenceAdapter {
-  const req = async <T>(path: string, init?: RequestInit): Promise<T> => {
-    const token = getToken();
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...((init?.headers as Record<string, string>) ?? {}),
-    };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    const res = await fetch(`${baseUrl}${path}`, { ...init, headers });
-    if (res.status === 401) onUnauthorized();
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(body || res.statusText || `HTTP ${res.status}`);
-    }
-    if (res.status === 204) return undefined as T;
-    return (await res.json()) as T;
-  };
+  const req = authedFetch(baseUrl, getToken, onUnauthorized);
 
   return {
     listChats: (p) => {
@@ -45,13 +32,24 @@ export function createPersistence(
     summarizeChat: (id) => req(`/api/brain/chats/${id}/summarize`, { method: 'POST' }),
     getMessages: (id, limit) =>
       req<{ messages: BrainMessage[] }>(`/api/brain/chats/${id}/messages${limit != null ? `?limit=${limit}` : ''}`).then((r) => r.messages),
+    subscribeMessages: (id, onChanged) => subscribeToChatMessages(baseUrl, getToken, id, onChanged),
     sendMessages: (id, msgs) =>
-      req<{ messages: BrainMessage[] }>(`/api/brain/chats/${id}/messages`, {
+      req<{ messages: BrainMessage[]; evermindLearn?: EvermindLearnOutcome }>(`/api/brain/chats/${id}/messages`, {
         method: 'POST',
         body: JSON.stringify({ messages: msgs }),
-      }).then((r) => r.messages),
+        // Attach the server's TRUTHFUL learn-gate outcome (transient) to the assistant
+        // turn(s) this POST persisted, so the run loop renders a learn step when the
+        // server contributed — and an EXPLAINED skip step (with reason) when it did not.
+        // WITHOUT this the VSIX dropped the outcome and every turn was silent about
+        // learning, leaving "Connected, yet nothing learned" an unexplained mystery.
+      }).then((r) => attachEvermindLearn(r.messages, r.evermindLearn)),
     setMessageFeedback: (mid, fb) =>
       req(`/api/brain/messages/${mid}/feedback`, { method: 'PATCH', body: JSON.stringify({ feedback: fb }) }),
+    requestAgentReply: (id, input) =>
+      req<{ message: BrainMessage }>(`/api/brain/chats/${id}/agent-reply`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }).then((r) => r.message),
     upload: async (file) => {
       const token = getToken();
       const form = new FormData();

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   analyticsApi,
   type ActivityCalendar,
@@ -68,12 +69,13 @@ function buildWeeks(from: Date, to: Date, cells: CalendarCell[]): Week[] {
 }
 
 function Heatmap({ from, to, cells, kind }: { from: Date; to: Date; cells: CalendarCell[]; kind: 'human' | 'agent' }) {
+  const t = useTranslations('contributors');
   const weeks = useMemo(() => buildWeeks(from, to, cells), [from, to, cells]);
   const width = weeks.length * (CELL + GAP) + 30;
   const height = 7 * (CELL + GAP) + 20;
 
   return (
-    <svg width={width} height={height} role="img" aria-label="Contribution calendar" style={{ display: 'block' }}>
+    <svg width={width} height={height} role="img" aria-label={t('calendarAria')} style={{ display: 'block' }}>
       {/* Weekday labels */}
       {['Mon', 'Wed', 'Fri'].map((lbl, i) => (
         <text key={lbl} x={0} y={20 + (i * 2 + 1) * (CELL + GAP) + CELL} fontSize={9} fill="var(--text-muted)">{lbl}</text>
@@ -93,7 +95,7 @@ function Heatmap({ from, to, cells, kind }: { from: Date; to: Date; cells: Calen
                 fill={cellColor(day.cell, kind)}
                 stroke="rgba(0,0,0,0.06)"
               >
-                <title>{`${day.date}: ${day.cell?.count ?? 0} contributions`}</title>
+                <title>{t('tileTitle', { date: day.date, count: day.cell?.count ?? 0 })}</title>
               </rect>
             ) : null,
           )}
@@ -104,6 +106,7 @@ function Heatmap({ from, to, cells, kind }: { from: Date; to: Date; cells: Calen
 }
 
 function KindBadge({ kind }: { kind: 'human' | 'agent' }) {
+  const t = useTranslations('contributors');
   const isAgent = kind === 'agent';
   return (
     <span style={{
@@ -112,7 +115,7 @@ function KindBadge({ kind }: { kind: 'human' | 'agent' }) {
       background: isAgent ? 'rgba(138,75,224,0.12)' : 'rgba(38,166,65,0.12)',
       border: `1px solid ${isAgent ? 'rgba(138,75,224,0.4)' : 'rgba(38,166,65,0.4)'}`,
     }}>
-      {isAgent ? '🤖 Agent' : '👤 Human'}
+      {isAgent ? `🤖 ${t('badge.agent')}` : `👤 ${t('badge.human')}`}
     </span>
   );
 }
@@ -126,6 +129,7 @@ function KindBadge({ kind }: { kind: 'human' | 'agent' }) {
  * (checkbox-select members → merge), so this surface is activity-only.
  */
 export function ContributorsView() {
+  const t = useTranslations('contributors');
   const [data, setData] = useState<ActivityCalendar | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -150,7 +154,7 @@ export function ContributorsView() {
       await analyticsApi.syncAgents();
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to sync agents');
+      setError(e instanceof Error ? e.message : t('syncFailed'));
     } finally {
       setSyncing(false);
     }
@@ -181,33 +185,33 @@ export function ContributorsView() {
             background: 'var(--accent, #2563eb)', color: '#fff', border: 'none', opacity: syncing ? 0.6 : 1,
           }}
         >
-          {syncing ? 'Syncing…' : 'Sync AI agents'}
+          {syncing ? t('syncing') : t('syncAgents')}
         </button>
       </div>
 
       <TenantActivityPanel />
 
-      {loading && <div style={cardStyle}>Loading activity…</div>}
+      {loading && <div style={cardStyle}>{t('loading')}</div>}
       {error && <div style={{ ...cardStyle, borderColor: 'var(--danger, #e5484d)', color: 'var(--danger, #e5484d)' }}>{error}</div>}
 
       {data && !loading && (
         <>
           {/* Summary stats */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
-            <Stat label="Contributions (365d)" value={totalContributions.toLocaleString()} />
-            <Stat label="Team members" value={String(data.contributors.length)} />
-            <Stat label="Humans" value={String(humans.length)} accent="#39d353" />
-            <Stat label="AI agents" value={String(agents.length)} accent="#b388ff" />
+            <Stat label={t('stat.contributions')} value={totalContributions.toLocaleString()} />
+            <Stat label={t('stat.teamMembers')} value={String(data.contributors.length)} />
+            <Stat label={t('stat.humans')} value={String(humans.length)} accent="#39d353" />
+            <Stat label={t('stat.agents')} value={String(agents.length)} accent="#b388ff" />
           </div>
 
           {/* Team / selected calendar */}
           <div style={{ ...cardStyle, marginBottom: 20, overflowX: 'auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
               <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>
-                {selectedContributor ? selectedContributor.displayName : 'Whole team'}
+                {selectedContributor ? selectedContributor.displayName : t('wholeTeam')}
               </h2>
               {selectedContributor && (
-                <button onClick={() => setSelected(null)} style={linkBtn}>← Back to team</button>
+                <button onClick={() => setSelected(null)} style={linkBtn}>{t('backToTeam')}</button>
               )}
             </div>
             <Heatmap from={from} to={to} cells={teamCells} kind={teamKind} />
@@ -217,12 +221,12 @@ export function ContributorsView() {
           {/* Per-contributor rows */}
           <div style={cardStyle}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Leaderboard</h2>
+              <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>{t('leaderboard')}</h2>
               <ViewToggle value={viewMode} onChange={setViewMode} />
             </div>
             {data.contributors.length === 0 ? (
               <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: 8 }}>
-                No contributors yet. Connect a repo integration to ingest human activity, or click <b>Sync AI agents</b> to add your agentHosts.
+                {t('empty')}
               </div>
             ) : viewMode === 'card' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -251,11 +255,11 @@ export function ContributorsView() {
                 <table style={tableStyle}>
                   <thead>
                     <tr style={theadRowStyle}>
-                      <th style={thStyle}>#</th>
-                      <th style={thStyle}>Contributor</th>
-                      <th style={thStyle}>Type</th>
-                      <th style={thStyle}>Role</th>
-                      <th style={{ ...thStyle, textAlign: 'right' }}>Contributions</th>
+                      <th style={thStyle}>{t('col.rank')}</th>
+                      <th style={thStyle}>{t('col.contributor')}</th>
+                      <th style={thStyle}>{t('col.type')}</th>
+                      <th style={thStyle}>{t('col.role')}</th>
+                      <th style={{ ...thStyle, textAlign: 'right' }}>{t('col.contributions')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -297,14 +301,15 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
 }
 
 function Legend() {
+  const t = useTranslations('contributors');
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, fontSize: 11, color: 'var(--text-muted)' }}>
-      <span>Less</span>
+      <span>{t('legend.less')}</span>
       {[EMPTY, ...GREEN].map((c, i) => (
         <span key={i} style={{ width: CELL, height: CELL, borderRadius: 2, background: c, display: 'inline-block' }} />
       ))}
-      <span>More</span>
-      <span style={{ marginLeft: 12 }}>Agents:</span>
+      <span>{t('legend.more')}</span>
+      <span style={{ marginLeft: 12 }}>{t('legend.agents')}</span>
       {PURPLE.map((c, i) => (
         <span key={i} style={{ width: CELL, height: CELL, borderRadius: 2, background: c, display: 'inline-block' }} />
       ))}

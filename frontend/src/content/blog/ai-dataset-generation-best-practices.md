@@ -10,6 +10,8 @@ author: Sean Hogg
 
 The quality of your fine-tuned agent depends almost entirely on the quality of its training data. Garbage in, garbage out — but with a few deliberate practices, you can generate datasets that make a real difference.
 
+![Dataset best-practice pipeline from a sharp capability prompt through diverse samples, sample review, and AI evaluation to a versioned JSONL export, with an iterate feedback loop](/blog/dataset-generation.svg)
+
 ## Start with a Sharp Capability Prompt
 
 The capability prompt is the seed for your entire dataset. Vague prompts produce generic datasets; specific prompts produce targeted, useful ones.

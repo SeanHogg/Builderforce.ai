@@ -14,7 +14,7 @@ import { and, desc, eq, inArray } from 'drizzle-orm';
 import type { HonoEnv, Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { buildPlanLimitsGuard } from '../middleware/planLimitsGuard';
+import { requireFeature } from '../middleware/featureGate';
 import {
   ideProjects,
   studioVoiceCloneLicenses,
@@ -73,9 +73,10 @@ export function createStudioVoiceCloneRoutes(db: Db): Hono<HonoEnv> {
     const userId = c.get('userId');
     const env = c.env as Env;
 
-    const guard = buildPlanLimitsGuard(db);
-    const proCheck = await guard.checkProFeature(tenantId, 'Voice Cloning');
-    if (proCheck) return c.json(proCheck, 402);
+    // One shared gate: superadmin → premiumOverride → plan grant, else a 402 upgrade
+    // payload naming the feature + required plan. Voice cloning is a paid feature.
+    const gate = await requireFeature(c, 'voiceCloning');
+    if (gate) return gate;
 
     const form = await c.req.formData();
     const name = String(form.get('name') ?? '').trim();
@@ -299,6 +300,18 @@ export function createStudioVoiceCloneRoutes(db: Db): Hono<HonoEnv> {
     if (!clone) return c.json({ error: 'Not found' }, 404);
     if (clone.tenantId !== tenantId) return c.json({ error: 'Forbidden' }, 403);
 
+    // Right-to-delete: collect the tenants who licensed this clone BEFORE the row
+    // cascade removes the license bookkeeping. Their cached list (which merges in
+    // licensed clones) must be invalidated too, or a deleted clone lingers in a
+    // licensee's list for up to the cache TTL after the owner exercises deletion.
+    const licenseeRows = await db
+      .select({ tenantId: studioVoiceCloneLicenses.tenantId })
+      .from(studioVoiceCloneLicenses)
+      .where(eq(studioVoiceCloneLicenses.cloneId, cloneId));
+    const licenseeTenantIds = [...new Set(licenseeRows.map((r) => r.tenantId))].filter(
+      (id) => id !== tenantId,
+    );
+
     // Purge R2 objects (reference + every synthesized voiceover) before the row
     // cascade removes their bookkeeping.
     if (env.UPLOADS) {
@@ -313,6 +326,10 @@ export function createStudioVoiceCloneRoutes(db: Db): Hono<HonoEnv> {
     await db.delete(studioVoiceClones).where(eq(studioVoiceClones.id, cloneId));
     await bumpCacheVersion(env, `voiceclones:${tenantId}`);
     if (clone.visibility === 'marketplace') await bumpCacheVersion(env, 'voiceclones:marketplace');
+    // Invalidate every licensee's list cache so the deletion is immediate for them too.
+    await Promise.all(
+      licenseeTenantIds.map((id) => bumpCacheVersion(env, `voiceclones:${id}`)),
+    );
     return c.json({ deleted: true });
   });
 
