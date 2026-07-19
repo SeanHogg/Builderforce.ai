@@ -50,6 +50,8 @@ Both remaining card residuals shared ONE root cause: card validation persisted b
 
 Localized across all five catalogs (`ide.modality.mobile.*`, `ide.device.*`, `ide.centerPreview/centerCode`). Open follow-ups (no native runtime; QR needs a publish rather than hot reload) are in the roadmap.
 
+**7. Four adjacent gap-register items closed in the same pass.** (a) `IDENew.tsx` now guards the Evermind panel with `Number.isFinite(projectIdNum)` like its two siblings, instead of `!= null` which is true for `NaN`. (b) `ProjectEvermindPanel` no longer renders a nameless header for IDE builds: the shared projects list deliberately filters out `is_ide_storage` rows, so the panel now falls back to fetching the project directly — fixing all four hosts (Designer/Voice/Video/agent panel) at once, with no request at all on the non-IDE path. (c) The stale mis-rooted duplicate at `Builderforce.ai/Builderforce.ai/frontend/src/components/ide/EvermindBrainMap.tsx` (git-tracked, outside every tsconfig root, 12 days behind the real file) is `git rm`'d. (d) The "pre-existing test failures, unfixed" entry is obsolete — see item 6.
+
 ---
 
 ## ✅ RESOLVED 2026-07-19 — Card removal, route-level 402 coverage, one plan-tier source (api 2026.7.105 · VSIX 2026.7.87 · frontend 2026.7.76)
