@@ -12,7 +12,7 @@
  */
 import { Hono } from 'hono';
 import { and, desc, eq, gt, ilike, inArray, isNull, sql } from 'drizzle-orm';
-import type { Env, HonoEnv } from '../../env';
+import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
 import { superAdminMiddleware } from '../middleware/superAdminMiddleware';
 import { buildDatabase, buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
 import { writeAdminAudit, type AdminAuditOpts } from '../../infrastructure/audit/adminAudit';

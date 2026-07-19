@@ -97,6 +97,70 @@ body {
   color: var(--vscode-badge-foreground, #fff);
 }
 
+/*
+ * Account-tier chip in the chat header. Colour (tone) is set inline from the
+ * plan state — free / free-exhausted / paid — using the same --bf-* editor theme
+ * tokens as everything else, so it reads correctly in light and dark themes.
+ * Narrow panels are the norm here, so the allowance readout is the first thing
+ * to drop and the chip itself never forces the header to overflow.
+ */
+.bf-plan-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  padding: 1px 7px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.bf-plan-badge:hover {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+
+.bf-plan-badge:focus-visible {
+  outline: 1px solid var(--bf-border-strong);
+  outline-offset: 1px;
+}
+
+/* The allowance readout is supporting detail: lower contrast, and the first
+   thing to go when the panel is too narrow to hold the whole header. */
+.bf-plan-badge__meter {
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bf-plan-badge__cta {
+  font-weight: 700;
+  opacity: 0.75;
+}
+
+.bf-plan-badge__cta::before {
+  content: '·';
+  margin-right: 5px;
+  opacity: 0.6;
+}
+
+@media (max-width: 340px) {
+  .bf-plan-badge__meter,
+  .bf-plan-badge__cta {
+    display: none;
+  }
+}
+
 .bf-header__spacer {
   flex: 1 1 auto;
 }
@@ -116,6 +180,17 @@ body {
   border: 1px solid var(--bf-border);
   background: var(--vscode-dropdown-background, var(--bf-surface));
   color: var(--vscode-dropdown-foreground, var(--bf-text));
+}
+
+/* Native <option> rows are painted by the OS/webview and do NOT inherit the
+   <select>'s background — they only pick up `color`, so a themed select ends up
+   drawing light text on a default light popup (unreadable). Every option needs
+   its OWN opaque bg/fg pair; the Canvas/CanvasText system colors are the
+   guaranteed-legible fallback and follow the OS light/dark setting. Applies to
+   every native select in the webview, not just .bf-select. */
+select option {
+  background: var(--vscode-dropdown-background, Canvas);
+  color: var(--vscode-dropdown-foreground, CanvasText);
 }
 
 /* Inline chat-title editor — same footprint as the select it replaces, but the

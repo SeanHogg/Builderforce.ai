@@ -20,6 +20,7 @@ import {
   getRunSnapshot,
   getRunTrace,
   formatChatDiagnostics,
+  classifyModelFunding,
   type BrainTraceEvent,
   type ChatDiagnosticsData,
 } from '@seanhogg/builderforce-brain-embedded';
@@ -59,7 +60,7 @@ import {
   type RecipientChoice,
 } from '@/lib/brain';
 import type { BrainChat, BrainMessage, BrainChatTraceRow } from '@/lib/builderforceApi';
-import { agentAssignmentsApi, reposApi, runtimeApi, brain, type AgentAssignment, type ProjectRepository, type ChatAgentInvite, type ChatMemberInfo, type TicketKind } from '@/lib/builderforceApi';
+import { agentAssignmentsApi, reposApi, runtimeApi, brain, consumptionApi, llmApi, type AgentAssignment, type ProjectRepository, type ChatAgentInvite, type ChatMemberInfo, type TicketKind } from '@/lib/builderforceApi';
 import { dispatchBrainDataChanged } from '@/lib/brain/brainDataEvent';
 import { loadAgentPoolCached, type PoolAgent } from '@/lib/agentPool';
 import { getModality } from '@/lib/modality';
@@ -845,11 +846,25 @@ export function BrainPanel({
       // per source: a failed fetch degrades to null/[] so the copy never breaks.
       const chatId = chats.activeChatId;
       const chatProjectId = chats.activeChat?.projectId ?? null;
-      const [agents, tickets, contrib] = await Promise.all([
+      const [agents, tickets, contrib, consumption, modelSurface] = await Promise.all([
         chatId != null ? brain.listChatAgents(chatId).catch(() => []) : Promise.resolve([]),
         chatId != null ? brain.listChatTickets(chatId).catch(() => []) : Promise.resolve([]),
         chatProjectId != null ? getProjectEvermindContributions(chatProjectId).catch(() => null) : Promise.resolve(null),
+        // Plan + month-to-date allowance, and the model entitlement surface. Both are
+        // best-effort: a free/card-less tenant's report must SAY so rather than read as
+        // an unexplained capability failure, but neither fetch may block the copy.
+        consumptionApi.get().catch(() => null),
+        llmApi.models().catch(() => null),
       ]);
+      // Normalize the two `/llm/v1/models` payload shapes (configured ⇒ `data[].model`,
+      // unconfigured ⇒ `models[]`) into the flat surface the shared funding classifier
+      // reads, so web and VS Code report the same `plan`/`byo:<vendor>`/`premium` key.
+      const surface = modelSurface
+        ? {
+            data: ('data' in modelSurface ? modelSurface.data.map((m) => m.model) : modelSurface.models).map((id) => ({ id })),
+            byo: { models: modelSurface.byo?.models ?? [] },
+          }
+        : null;
       const lastLearn = [...conv.messages].reverse().find((m) => m.role === 'assistant' && m.evermindLearn)?.evermindLearn ?? null;
       const tenant = getStoredTenant();
       const user = getStoredUser();
@@ -876,6 +891,20 @@ export function BrainPanel({
         lastLearn,
         agents: agents.map((a) => ({ agentRef: a.agentRef, role: a.role })),
         tickets: tickets.map((tk) => ({ kind: tk.kind, ref: tk.ref, label: tk.label, linkType: tk.linkType, status: tk.status })),
+        // WHO the user is to the platform: tier, whether a card is on file, what is left
+        // of each allowance, and what the plan entitles them to model-wise.
+        account: {
+          plan: consumption?.plan.effective ?? null,
+          billingStatus: consumption?.plan.billingStatus ?? null,
+          periodStart: consumption?.period.start ?? null,
+          resetsAt: consumption?.period.resetsAt ?? null,
+          meters: consumption?.meters ?? [],
+          model: personaModel ?? null,
+          modelFunding: surface ? classifyModelFunding(personaModel, surface) : null,
+          canUsePremiumModels: modelSurface?.canUsePremiumModels,
+          planModelCount: surface?.data.length,
+          byoProviders: modelSurface?.byo?.providers ?? [],
+        },
       };
       const diagBlock = formatChatDiagnostics(diagnostics).join('\n');
       await navigator.clipboard.writeText(`${diagBlock}\n\n${conv.buildTriageReport(personaLabel)}`);
@@ -884,7 +913,7 @@ export function BrainPanel({
       setCaptureState('error');
     }
     setTimeout(() => setCaptureState('idle'), 2000);
-  }, [conv, personaLabel, chats.activeChatId, chats.activeChat, projects, pinnedProjectId, viewingProjectId]);
+  }, [conv, personaLabel, personaModel, chats.activeChatId, chats.activeChat, projects, pinnedProjectId, viewingProjectId]);
 
   // Shared chrome for the "capture execution" icon button (page + docked headers).
   const captureButton = (

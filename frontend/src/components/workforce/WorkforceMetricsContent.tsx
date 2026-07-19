@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { Select } from '@/components/Select';
 import { membersApi, empMetricsApi, type DisciplineRollup, type DoraRollup, type MemberScorecard } from '@/lib/builderforceApi';
 import { MemberProfileEditor } from './MemberProfileEditor';
 import { EngagementSection } from './EngagementSection';
@@ -70,7 +71,7 @@ export function WorkforceMetricsContent() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ fontWeight: 600, fontSize: 14 }}>Performance</div>
+        <div style={{ fontWeight: 600, fontSize: 14 }}>{t('performance.title')}</div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
           {[7, 14, 30].map((d) => (
             <button key={d} onClick={() => setDays(d)} style={{
@@ -99,10 +100,10 @@ export function WorkforceMetricsContent() {
       {/* Scorecards */}
       <div style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
-          <div style={{ fontWeight: 600, fontSize: 13 }}>Member scorecards <span style={{ color: 'var(--muted)', fontWeight: 400 }}>· last {days}d · click a row to edit capability/availability</span></div>
+          <div style={{ fontWeight: 600, fontSize: 13 }}>{t('performance.scorecards')} <span style={{ color: 'var(--muted)', fontWeight: 400 }}>{t('performance.scorecardsSub', { days })}</span></div>
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontSize: 12, color: 'var(--muted)' }}>{t('discipline')}</span>
-            <select
+            <Select
               value={discipline}
               onChange={(e) => setDiscipline(e.target.value)}
               style={{ padding: '4px 10px', borderRadius: 8, fontSize: 12, cursor: 'pointer', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-secondary)' }}
@@ -110,7 +111,7 @@ export function WorkforceMetricsContent() {
               <option value="">{t('allDisciplines')}</option>
               {DISCIPLINE_OPTIONS.map((d) => <option key={d} value={d}>{t(`disciplineOptions.${d}`)}</option>)}
               <option value="unassigned">{t('unassigned')}</option>
-            </select>
+            </Select>
           </div>
         </div>
         {/* Discipline rollup chips (computed from the full, unfiltered set). */}
@@ -130,25 +131,25 @@ export function WorkforceMetricsContent() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                <th style={{ ...th, textAlign: 'left' }}>Member</th>
+                <th style={{ ...th, textAlign: 'left' }}>{t('performance.colMember')}</th>
                 <th style={{ ...th, textAlign: 'left' }}>{t('discipline')}</th>
-                <th style={th}>Assigned</th>
-                <th style={th}>Completed</th>
-                <th style={th}>Redo</th>
-                <th style={th}>Reopen</th>
-                <th style={th}>Cycle</th>
-                <th style={th}>Pickup</th>
-                <th style={th}>Idle→done</th>
-                <th style={th}>Hygiene</th>
-                <th style={th}>Engage</th>
-                <th style={th}>Effective</th>
+                <th style={th}>{t('performance.colAssigned')}</th>
+                <th style={th}>{t('performance.colCompleted')}</th>
+                <th style={th}>{t('performance.colRedo')}</th>
+                <th style={th}>{t('performance.colReopen')}</th>
+                <th style={th}>{t('performance.colCycle')}</th>
+                <th style={th}>{t('performance.colPickup')}</th>
+                <th style={th}>{t('performance.colIdleDone')}</th>
+                <th style={th}>{t('performance.colHygiene')}</th>
+                <th style={th}>{t('performance.colEngage')}</th>
+                <th style={th}>{t('performance.colEffective')}</th>
               </tr>
             </thead>
             <tbody>
               {members == null ? (
-                <tr><td style={{ ...td, textAlign: 'left', color: 'var(--muted)' }} colSpan={12}>Loading…</td></tr>
+                <tr><td style={{ ...td, textAlign: 'left', color: 'var(--muted)' }} colSpan={12}>{t('performance.loading')}</td></tr>
               ) : members.length === 0 ? (
-                <tr><td style={{ ...td, textAlign: 'left', color: 'var(--muted)' }} colSpan={12}>No activity in this window.</td></tr>
+                <tr><td style={{ ...td, textAlign: 'left', color: 'var(--muted)' }} colSpan={12}>{t('performance.noActivity')}</td></tr>
               ) : members.map((m) => (
                 <tr key={`${m.memberKind}:${m.memberRef}`} onClick={() => setEditing(m)}
                   style={{ borderBottom: '1px solid var(--border-subtle)', cursor: 'pointer' }}>

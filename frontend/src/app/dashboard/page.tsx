@@ -8,7 +8,7 @@ import type { Project, Tenant } from '@/lib/types';
 import { fetchProjects } from '@/lib/api';
 import { useAuth } from '@/lib/AuthContext';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
-import { getMe } from '@/lib/auth';
+import { useOnboardingPrompt } from '@/lib/onboarding';
 import { ChatInput } from '@/components/ChatInput';
 import PageContainer from '@/components/PageContainer';
 import { ProjectsContent } from '@/components/ProjectsContent';
@@ -27,8 +27,6 @@ import { DashboardKnowledgeTab } from '@/components/dashboard/DashboardKnowledge
 import { WorkforcePresenceStripView } from '@/components/workforce/WorkforcePresenceStrip';
 import { useWorkforcePresence } from '@/lib/useWorkforcePresence';
 import { agentHosts, tasksApi, approvalsApi, type AgentHost } from '@/lib/builderforceApi';
-
-const ONBOARDING_DISMISSED_KEY = 'bf_onboarding_dismissed';
 
 const DASHBOARD_TABS = ['projects', 'workforce', 'ide', 'ideas', 'quality', 'knowledge'] as const;
 type DashboardTab = (typeof DASHBOARD_TABS)[number];
@@ -67,9 +65,14 @@ export default function DashboardPage() {
     [router],
   );
 
-  // Onboarding stepper state
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [onboardingChecked, setOnboardingChecked] = useState(false);
+  // Onboarding wizard — the show/dismiss decision is shared with the hired
+  // dashboard (useOnboardingPrompt); the stepper picks its own account-type track.
+  const {
+    show: showOnboarding,
+    checked: onboardingChecked,
+    complete: handleOnboardingComplete,
+    dismiss: handleOnboardingDismiss,
+  } = useOnboardingPrompt();
 
   // Auth guard — allow staying on dashboard if not yet onboarded (no tenant yet)
   useEffect(() => {
@@ -79,51 +82,12 @@ export default function DashboardPage() {
     // No redirect to /tenants here — the onboarding stepper handles workspace creation
   }, [isAuthenticated, router]);
 
-  // Check onboarding status once we have a web token.
-  // Only owners go through onboarding — invited members skip it entirely.
-  useEffect(() => {
-    if (!isAuthenticated || !webToken || onboardingChecked) return;
-
-    // If the user has a workspace selected and they're not an owner in it, skip onboarding.
-    if (hasTenant && tenant?.role && tenant.role !== 'owner') {
-      setOnboardingChecked(true);
-      return;
-    }
-
-    const dismissed = typeof window !== 'undefined' && localStorage.getItem(ONBOARDING_DISMISSED_KEY) === '1';
-    if (dismissed) {
-      setOnboardingChecked(true);
-      return;
-    }
-    getMe(webToken)
-      .then(({ onboardingCompletedAt }) => {
-        if (!onboardingCompletedAt) {
-          setShowOnboarding(true);
-        }
-      })
-      .catch(() => {
-        // If the check fails, don't block the user — just skip onboarding
-      })
-      .finally(() => setOnboardingChecked(true));
-  }, [isAuthenticated, webToken, onboardingChecked, hasTenant, tenant]);
-
   const handleOnboardingWorkspaceCreated = useCallback(
     async (newTenant: Tenant) => {
       await selectTenant(newTenant);
     },
     [selectTenant]
   );
-
-  const handleOnboardingComplete = useCallback(() => {
-    setShowOnboarding(false);
-  }, []);
-
-  const handleOnboardingDismiss = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(ONBOARDING_DISMISSED_KEY, '1');
-    }
-    setShowOnboarding(false);
-  }, []);
 
   useEffect(() => {
     if (!isAuthenticated || !hasTenant) return;

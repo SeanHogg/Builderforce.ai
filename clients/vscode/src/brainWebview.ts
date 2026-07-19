@@ -28,6 +28,9 @@ interface BrainInbound extends WebviewInbound {
    *  per-session tab can name itself and bind to the chat it was opened for. */
   chatId?: number;
   title?: string;
+  /** For `open.web`: a path on the web app to open in the browser (the host owns the
+   *  web base URL), e.g. the pricing or billing page behind an upgrade click. */
+  path?: string;
 }
 
 /** A work item to auto-link to the chat the intent opens, so the conversation is
@@ -107,7 +110,17 @@ function buildLabels(): Record<string, string> {
     "app.rename": t("Rename chat"),
     "app.renamePlaceholder": t("Chat name"),
     "app.noProject": t("No project"),
-    "app.copyChat": t("Copy chat diagnostics (identity + Evermind state + transcript)"),
+    // Account tier chip + the actionable half of an entitlement error. The chip
+    // says which plan funds this chat (and what allowance is left on a metered
+    // one); the banner buttons take the user to the page that unblocks the turn.
+    "app.planFreeHint": t("You are on the Free plan — chats run on the included BuilderForce models. Click to see plans and upgrade."),
+    "app.planPaidHint": t("Your workspace is on the {plan} plan. Click to manage your plan."),
+    "app.planTokensLeft": t("{count} tokens left"),
+    "app.planNoTokens": t("no tokens left"),
+    "app.upgrade": t("Upgrade"),
+    "app.upgradeToPlan": t("Upgrade to {plan}"),
+    "app.addCard": t("Add a card"),
+    "app.copyChat": t("Copy chat diagnostics (plan + usage + identity + Evermind state + transcript)"),
     // Pending ask_user question, restated at the composer so a blocked chat is
     // answerable without hunting back through the transcript for its card.
     "app.askPending": t("Answer needed"),
@@ -355,6 +368,18 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
           typeof msg.ref === "string" ? msg.ref : undefined,
         );
         break;
+      // Open a web-app page in the browser — the account chip and the error
+      // banner's Upgrade / Add-a-card buttons. The webview supplies only the PATH;
+      // the host owns the base URL (setting-driven, `getWebBaseUrl`), and the path
+      // is constrained to a same-origin absolute path so a compromised webview
+      // can't turn this into an open redirect.
+      case "open.web": {
+        const path = typeof msg.path === "string" ? msg.path : "";
+        if (/^\/[^/\\]/.test(path)) {
+          void vscode.env.openExternal(vscode.Uri.parse(`${getWebBaseUrl()}${path}`));
+        }
+        break;
+      }
       // Run the existing connection-diagnostics command (opens the output channel).
       case "diagnose":
         void vscode.commands.executeCommand("builderforce.diagnose");
@@ -570,6 +595,9 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
     void this.panel.webview.postMessage({
       type: "init",
       baseUrl: getBaseUrl(),
+      // The installed build, for the diagnostics report (a stale VSIX explains a
+      // surprising share of "this was already fixed" reports).
+      extensionVersion: this.ctx.extension.packageJSON.version as string,
       token,
       // Manual pick > active project's Evermind pin > configured default. Sending the
       // `project_evermind:<id>` pin lets the gateway serve the project's CURRENT learned

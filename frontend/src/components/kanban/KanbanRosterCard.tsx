@@ -14,7 +14,7 @@ import { createCloudAgent } from '@/lib/api';
 import { usePermission } from '@/lib/rbac';
 import type { RecommendedRoster, TemplateSummary, FlaggedTicket, RosterRole, AssigneeKind } from '@/lib/kanban';
 import { RoleAssigneePicker, useAssignableWorkforce } from '@/components/workforce/RoleAssigneePicker';
-import { ThemedSelect } from '@/components/ThemedSelect';
+import { Select } from '@/components/Select';
 
 const chip = (bg: string, fg: string): React.CSSProperties => ({
   display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 999,
@@ -122,17 +122,19 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
       {/* Template picker */}
       <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <label htmlFor="kanban-template" style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('templateLabel')}</label>
-        <ThemedSelect
+        <Select
           id="kanban-template"
           disabled={!canManage || busy}
           value={roster?.templateId ?? ''}
-          onChange={onPickTemplate}
-          style={{ flex: '1 1 200px', minWidth: 180 }}
-          options={templates.map((tpl) => ({
-            value: tpl.id,
-            label: `${tpl.name}${tpl.builtin ? ` · ${t('builtin')}` : ''}`,
-          }))}
-        />
+          onChange={(e) => onPickTemplate(e.target.value)}
+          style={{ flex: '1 1 200px', minWidth: 180, fontSize: 13 }}
+        >
+          {templates.map((tpl) => (
+            <option key={tpl.id} value={tpl.id}>
+              {tpl.name}{tpl.builtin ? ` · ${t('builtin')}` : ''}
+            </option>
+          ))}
+        </Select>
         {busy && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('applying')}</span>}
       </div>
 

@@ -39,7 +39,7 @@
   "now": "à l'instant",
   "Rename chat": "Renommer la conversation",
   "New chat name": "Nouveau nom de la conversation",
-  "Copy chat transcript (for triage)": "Copier la transcription de la conversation (pour le diagnostic)",
+  "Copy chat diagnostics (plan + usage + identity + Evermind state + transcript)": "Copier le diagnostic de la conversation (forfait + consommation + identité + état Evermind + transcription)",
   "Consolidate": "Consolider",
   "Summarize this chat into a compact context the rest of the conversation builds on": "Résumer cette conversation en un contexte compact sur lequel s'appuie la suite de l'échange",
   "Consolidating…": "Consolidation…",
@@ -158,5 +158,14 @@
   "Routed per turn: your connected accounts first, then your plan.": "Routage à chaque tour : d’abord vos comptes connectés, puis votre forfait.",
   "Billed to your own {provider} account — no plan credit used.": "Facturé sur votre propre compte {provider} : aucun crédit du forfait n’est utilisé.",
   "Included in your plan.": "Inclus dans votre forfait.",
-  "Premium — metered at cost + 1¢ per request.": "Premium : facturé à l’usage, au coût + 1 ¢ par requête."
+  "Premium — metered at cost + 1¢ per request.": "Premium : facturé à l’usage, au coût + 1 ¢ par requête.",
+  "You are on the Free plan — chats run on the included BuilderForce models. Click to see plans and upgrade.": "Vous êtes sur le forfait Free : les conversations utilisent les modèles BuilderForce inclus. Cliquez pour voir les forfaits et passer à un niveau supérieur.",
+  "Your workspace is on the {plan} plan. Click to manage your plan.": "Votre espace de travail est sur le forfait {plan}. Cliquez pour gérer votre forfait.",
+  "{count} tokens left": "{count} jetons restants",
+  "no tokens left": "plus de jetons",
+  "Upgrade": "Améliorer",
+  "Upgrade to {plan}": "Passer à {plan}",
+  "Add a card": "Ajouter une carte",
+  "Chat diagnostics copied to clipboard.": "Diagnostic de la conversation copié dans le presse-papiers.",
+  "Upgrade to {0}": "Passer à {0}"
 }

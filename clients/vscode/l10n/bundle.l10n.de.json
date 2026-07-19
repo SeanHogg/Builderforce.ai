@@ -39,7 +39,7 @@
   "now": "jetzt",
   "Rename chat": "Chat umbenennen",
   "New chat name": "Neuer Chat-Name",
-  "Copy chat transcript (for triage)": "Chat-Transkript kopieren (zur Fehlersuche)",
+  "Copy chat diagnostics (plan + usage + identity + Evermind state + transcript)": "Chat-Diagnose kopieren (Tarif + Verbrauch + Identität + Evermind-Status + Transkript)",
   "Consolidate": "Zusammenfassen",
   "Summarize this chat into a compact context the rest of the conversation builds on": "Diesen Chat zu einem kompakten Kontext zusammenfassen, auf dem das restliche Gespräch aufbaut",
   "Consolidating…": "Wird zusammengefasst…",
@@ -158,5 +158,14 @@
   "Routed per turn: your connected accounts first, then your plan.": "Pro Zug geroutet: zuerst deine verbundenen Konten, dann dein Tarif.",
   "Billed to your own {provider} account — no plan credit used.": "Wird deinem eigenen {provider}-Konto berechnet – kein Tarifguthaben wird verbraucht.",
   "Included in your plan.": "In deinem Tarif enthalten.",
-  "Premium — metered at cost + 1¢ per request.": "Premium – nach Verbrauch abgerechnet: Selbstkosten + 1 ¢ pro Anfrage."
+  "Premium — metered at cost + 1¢ per request.": "Premium – nach Verbrauch abgerechnet: Selbstkosten + 1 ¢ pro Anfrage.",
+  "You are on the Free plan — chats run on the included BuilderForce models. Click to see plans and upgrade.": "Sie nutzen den Free-Tarif — Chats laufen auf den enthaltenen BuilderForce-Modellen. Klicken Sie, um Tarife anzuzeigen und zu upgraden.",
+  "Your workspace is on the {plan} plan. Click to manage your plan.": "Ihr Arbeitsbereich nutzt den {plan}-Tarif. Klicken Sie, um Ihren Tarif zu verwalten.",
+  "{count} tokens left": "{count} Token übrig",
+  "no tokens left": "keine Token mehr",
+  "Upgrade": "Upgraden",
+  "Upgrade to {plan}": "Auf {plan} upgraden",
+  "Add a card": "Karte hinzufügen",
+  "Chat diagnostics copied to clipboard.": "Chat-Diagnose in die Zwischenablage kopiert.",
+  "Upgrade to {0}": "Auf {0} upgraden"
 }

@@ -39,6 +39,62 @@ export type OnboardingPhase =
   | 'pending-tenant'
   | 'ready';
 
+const ONBOARDING_DISMISSED_KEY = 'bf_onboarding_dismissed';
+
+export interface OnboardingPrompt {
+  /** True when the setup wizard should be rendered. */
+  show: boolean;
+  /** False while the decision is still resolving (callers may hold rendering). */
+  checked: boolean;
+  /** Wizard finished — hide it for this session. */
+  complete: () => void;
+  /** Wizard dismissed — hide it and remember the dismissal. */
+  dismiss: () => void;
+}
+
+/**
+ * The ONE decision of whether a signed-in user still needs the setup wizard.
+ * Both the builder dashboard and the hired (freelancer) dashboard mount the
+ * stepper, so the "has it been completed / dismissed / does this role even get
+ * onboarding" rules live here rather than being re-implemented per page. Which
+ * STEPS the wizard shows is the stepper's own call (account-type track).
+ */
+export function useOnboardingPrompt(): OnboardingPrompt {
+  const { isAuthenticated, webToken, hasTenant, tenant } = useAuth();
+  const [show, setShow] = useState(false);
+  const [checked, setChecked] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthenticated || !webToken || checked) return;
+
+    // Invited members of an existing workspace never see setup — only owners do.
+    // (A hired account has no workspace, so this never applies to it.)
+    if (hasTenant && tenant?.role && tenant.role !== 'owner') {
+      setChecked(true);
+      return;
+    }
+
+    if (typeof window !== 'undefined' && localStorage.getItem(ONBOARDING_DISMISSED_KEY) === '1') {
+      setChecked(true);
+      return;
+    }
+
+    getMe(webToken)
+      .then(({ onboardingCompletedAt }) => { if (!onboardingCompletedAt) setShow(true); })
+      .catch(() => { /* a failed check must never block the user */ })
+      .finally(() => setChecked(true));
+  }, [isAuthenticated, webToken, checked, hasTenant, tenant]);
+
+  const complete = useCallback(() => setShow(false), []);
+
+  const dismiss = useCallback(() => {
+    if (typeof window !== 'undefined') localStorage.setItem(ONBOARDING_DISMISSED_KEY, '1');
+    setShow(false);
+  }, []);
+
+  return { show, checked, complete, dismiss };
+}
+
 export interface OnboardingState {
   phase: OnboardingPhase;
   /** True while the gate is still resolving its initial state. */

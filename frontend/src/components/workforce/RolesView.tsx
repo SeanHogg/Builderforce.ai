@@ -10,6 +10,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { Select } from '@/components/Select';
 import { kanbanApi } from '@/lib/builderforceApi';
 import { usePermission } from '@/lib/rbac';
 import { ROLE_DISCIPLINES, useRoles } from '@/lib/useRoles';
@@ -143,9 +144,9 @@ export function RolesView() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('templateLabel')}</label>
-          <select value={templateId} onChange={(e) => setTemplateId(e.target.value)} style={{ ...input, minWidth: 180 }}>
+          <Select value={templateId} onChange={(e) => setTemplateId(e.target.value)} style={{ ...input, minWidth: 180 }}>
             {templates.map((tpl) => <option key={tpl.id} value={tpl.id}>{tpl.name}</option>)}
-          </select>
+          </Select>
           {canManage && (
             <button type="button" onClick={() => setShowNew((v) => !v)} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 8, cursor: 'pointer', background: 'var(--accent, #2563eb)', color: '#fff', border: 'none' }}>
               {t('newRole')}
@@ -159,9 +160,9 @@ export function RolesView() {
       {showNew && canManage && (
         <div style={{ ...card, marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <input style={{ ...input, flex: '1 1 200px' }} placeholder={t('roleNamePlaceholder')} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-          <select style={input} value={form.discipline} onChange={(e) => setForm((f) => ({ ...f, discipline: e.target.value as Discipline }))}>
+          <Select style={input} value={form.discipline} onChange={(e) => setForm((f) => ({ ...f, discipline: e.target.value as Discipline }))}>
             {ROLE_DISCIPLINES.map((d) => <option key={d} value={d}>{t(`discipline.${d}`)}</option>)}
-          </select>
+          </Select>
           <button type="button" disabled={creating || !form.name.trim()} onClick={onCreate} style={{ fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 8, cursor: 'pointer', background: 'var(--accent, #2563eb)', color: '#fff', border: 'none', opacity: creating || !form.name.trim() ? 0.6 : 1 }}>
             {creating ? t('creating') : t('addRole')}
           </button>

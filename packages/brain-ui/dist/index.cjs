@@ -1011,6 +1011,12 @@ function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ar
 // src/chatTickets/ChatTicketsPanel.tsx
 var import_react4 = require("react");
 
+// src/optionStyle.ts
+var nativeOptionStyle = {
+  background: "var(--bf-ev-surface-solid, var(--bg-surface, var(--vscode-dropdown-background, Canvas)))",
+  color: "var(--bf-ev-text, var(--text-primary, var(--vscode-dropdown-foreground, CanvasText)))"
+};
+
 // src/chatTickets/types.ts
 var TICKET_KINDS = ["task", "epic", "gap", "objective", "initiative", "portfolio", "roadmap", "spec"];
 var RUNNABLE_KINDS = ["task", "epic", "gap"];
@@ -1204,12 +1210,12 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         runKey === key && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("select", { "aria-label": labels.pickAgent, value: "", onChange: (e) => {
           if (e.target.value) void runTicket(tk, e.target.value);
         }, style: S.select, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("option", { value: "", children: labels.pickAgent }),
-          agents.map((a) => /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("option", { value: a.agentRef, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("option", { style: S.option, value: "", children: labels.pickAgent }),
+          agents.map((a) => /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("option", { style: S.option, value: a.agentRef, children: [
             "\u2605 ",
             poolName(a.agentRef)
           ] }, a.id)),
-          pool.filter((p) => !agents.some((a) => a.agentRef === p.ref)).map((p) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("option", { value: p.ref, children: p.name }, p.ref))
+          pool.filter((p) => !agents.some((a) => a.agentRef === p.ref)).map((p) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("option", { style: S.option, value: p.ref, children: p.name }, p.ref))
         ] })
       ] }, tk.linkId);
     }) }),
@@ -1434,7 +1440,7 @@ function LinkForm({ search, projectId, existing, labels, onLink }) {
       setKind(e.target.value);
       setRef("");
       setQuery("");
-    }, style: S.select, children: TICKET_KINDS.map((k) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("option", { value: k, children: labels.kind[k] }, k)) }),
+    }, style: S.select, children: TICKET_KINDS.map((k) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("option", { style: S.option, value: k, children: labels.kind[k] }, k)) }),
     /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
       "input",
       {
@@ -1447,13 +1453,13 @@ function LinkForm({ search, projectId, existing, labels, onLink }) {
       }
     ),
     /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("select", { "aria-label": labels.pickTicket, value: ref, onChange: (e) => setRef(e.target.value), style: { ...S.select, minWidth: 200 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("option", { value: "", children: labels.pickTicket }),
-      shown.map((o) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("option", { value: o.ref, children: o.label }, o.ref))
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("option", { style: S.option, value: "", children: labels.pickTicket }),
+      shown.map((o) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("option", { style: S.option, value: o.ref, children: o.label }, o.ref))
     ] }),
     loading ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { style: S.muted, children: labels.searching }) : shown.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { style: S.muted, children: labels.noMatches }) : atCap ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { style: S.muted, children: labels.refine }) : null,
     /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("select", { "aria-label": labels.linkTypeLabel, value: linkType, onChange: (e) => setLinkType(e.target.value), style: S.select, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("option", { value: "linked", children: labels.linkTypeLinked }),
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("option", { value: "created", children: labels.linkTypeCreated })
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("option", { style: S.option, value: "linked", children: labels.linkTypeLinked }),
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("option", { style: S.option, value: "created", children: labels.linkTypeCreated })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("button", { type: "button", onClick: () => void submit(), disabled: busy || !ref, style: S.pill(true), children: busy ? "\u2026" : labels.linkAction })
   ] });
@@ -1471,8 +1477,8 @@ function AgentsSection({ agents, pool, labels, onInvite, onRemove, busy }) {
       const p = pool.find((x) => x.ref === e.target.value);
       if (p) void onInvite(p.ref, p.kind);
     }, style: { ...S.select, maxWidth: 260 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("option", { value: "", children: labels.inviteAgent }),
-      uninvited.map((p) => /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("option", { value: p.ref, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("option", { style: S.option, value: "", children: labels.inviteAgent }),
+      uninvited.map((p) => /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("option", { style: S.option, value: p.ref, children: [
         p.name,
         " \u2014 ",
         p.meta
@@ -1571,6 +1577,9 @@ var S = {
   // `colorScheme` makes the browser draw the native <select> (and its OS/UA popup)
   // in the editor's active scheme even where the token background doesn't reach.
   select: { minWidth: 120, padding: "4px 8px", fontSize: 12, borderRadius: 8, border: `1px solid ${V.border}`, background: V.field, color: V.fieldText, colorScheme: "inherit" },
+  // The option popup is drawn by the OS and does NOT inherit `select`'s background,
+  // so each option needs its own opaque pair — see nativeOptionStyle.
+  option: nativeOptionStyle,
   icon: { fontSize: 12, lineHeight: 1, padding: "2px 4px", cursor: "pointer", background: "transparent", border: "none", color: V.muted },
   pill: (active) => ({
     fontSize: 12,
@@ -2393,10 +2402,7 @@ var select = {
   color: C.text,
   boxSizing: "border-box"
 };
-var optionStyle = {
-  background: "var(--bf-ev-surface-solid, var(--bg-surface, var(--vscode-dropdown-background, Canvas)))",
-  color: "var(--bf-ev-text, var(--text-primary, var(--vscode-dropdown-foreground, CanvasText)))"
-};
+var optionStyle = nativeOptionStyle;
 function primaryBtn(disabled) {
   return {
     padding: "8px 14px",

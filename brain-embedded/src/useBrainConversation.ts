@@ -33,6 +33,7 @@ import { prepareImageDataUrl } from './imagePrep';
 import { scopeToConsolidation } from './consolidation';
 import { withDirectedMetadata, isDirectedToParticipant, type DirectedRecipient } from './directedMessage';
 import { buildBrainTriageReport, type BrainTraceEvent } from './brainTriage';
+import type { ChatErrorAction } from './chatError';
 import {
   startRun,
   stopRun,
@@ -121,6 +122,13 @@ export interface UseBrainConversation {
   reloadMessages: () => void;
   sending: boolean;
   error: string;
+  /**
+   * What the user can DO about {@link error}: reconnect an expired session, upgrade
+   * a plan, or add a card. Decided ONCE from the gateway's structured error body
+   * (see `chatErrorAction`), so an error banner renders the fix without
+   * pattern-matching the message text. Null when only dismissing applies.
+   */
+  errorAction: ChatErrorAction | null;
   /** Live assistant delta buffer (rendered as a trailing bubble while streaming). */
   streamingText: string;
   copiedMessageId: number | null;
@@ -539,6 +547,10 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     reloadMessages,
     sending: localSending || snapshot.running,
     error: localError || snapshot.error,
+    /** What the user can DO about `error` (reconnect / upgrade / add a card), when
+     *  the failure was actionable. Only meaningful for a RUN error — a local error
+     *  (e.g. a failed rename) has no gateway verdict behind it. */
+    errorAction: localError ? null : snapshot.errorAction,
     streamingText: snapshot.streamingText,
     copiedMessageId,
     feedbackMap,

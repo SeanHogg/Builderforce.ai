@@ -31,6 +31,12 @@ export type {
   AssembledToolCall,
 } from './streamChatCompletion';
 
+// Actionable chat errors: the gateway's structured entitlement fields survive the
+// fetch boundary, and ONE classifier turns any failure into the fix a user can take
+// (reconnect / upgrade / add a card). Consumed by the run store AND the banner UI.
+export { BrainRequestError, brainRequestError, chatErrorAction } from './chatError';
+export type { ChatErrorAction, ChatErrorActionKind } from './chatError';
+
 // Composer Effort → real request params (max_tokens + vendor-neutral reasoning
 // intent) + the level's prose nudge. The ONE effort table: hosts render their
 // menu from it and the request builder consumes it, so they cannot drift.
@@ -183,5 +189,5 @@ export type { BrainChat, BrainMessage, BrainModality, ChatInputAttachment, Everm
 export { STEP_MESSAGE_ROLE, isStepMessage, attachEvermindLearn, formatEvermindLearnStep } from './types';
 
 // "Copy diagnostics" — pure serializer for the chat's identity + Evermind wiring state
-export { formatChatDiagnostics } from './chatDiagnostics';
-export type { ChatDiagnosticsData, ChatDiagnosticsEvermind } from './chatDiagnostics';
+export { formatChatDiagnostics, classifyModelFunding } from './chatDiagnostics';
+export type { ChatDiagnosticsData, ChatDiagnosticsEvermind, ChatDiagnosticsAccount, ChatDiagnosticsMeter } from './chatDiagnostics';

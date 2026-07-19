@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { kanbanApi } from '@/lib/builderforceApi';
 import type { AccountabilityReport, ManifestParticipant, JobRole } from '@/lib/kanban';
 import { usePermission } from '@/lib/rbac';
+import { Select } from '@/components/Select';
 import {
   tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle,
 } from '@/components/dataTableStyles';
@@ -183,7 +184,7 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{t('assess.title')}</div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('assess.help')}</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-            <select
+            <Select
               value={addRole}
               onChange={(e) => setAddRole(e.target.value)}
               aria-label={t('assess.rolePlaceholder')}
@@ -193,7 +194,7 @@ export function AccountabilityTab({ taskId }: { taskId: number }) {
               {roles.map((r) => (
                 <option key={r.key} value={r.key} style={{ background: 'var(--bg-deep, #ffffff)', color: 'var(--text-primary)' }}>{r.name}</option>
               ))}
-            </select>
+            </Select>
             <input
               value={addNote}
               onChange={(e) => setAddNote(e.target.value)}

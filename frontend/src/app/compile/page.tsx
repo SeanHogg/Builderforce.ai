@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
+import { Select } from '@/components/Select';
 import {
   compileApi,
   type CompiledAgentSpec,
@@ -145,13 +146,13 @@ export default function CompilePage() {
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
             <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 8 }}>
               {t('surfaceLabel')}
-              <select
+              <Select
                 value={surface}
                 onChange={(e) => setSurface(e.target.value as CompileSurface)}
                 style={{ fontSize: 13, padding: '6px 10px', borderRadius: 8, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
               >
                 {SURFACES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
+              </Select>
             </label>
             <div style={{ flex: 1 }} />
             <button

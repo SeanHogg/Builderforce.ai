@@ -2405,7 +2405,23 @@
     },
     "performance": {
       "activityTitle": "Contribution activity",
-      "activitySub": "Whole-team activity — humans via git/PR, agents via telemetry."
+      "activitySub": "Whole-team activity — humans via git/PR, agents via telemetry.",
+      "title": "Performance",
+      "scorecards": "Member scorecards",
+      "scorecardsSub": "· last {days}d · click a row to edit capability/availability",
+      "loading": "Loading…",
+      "noActivity": "No activity in this window.",
+      "colMember": "Member",
+      "colAssigned": "Assigned",
+      "colCompleted": "Completed",
+      "colRedo": "Redo",
+      "colReopen": "Reopen",
+      "colCycle": "Cycle",
+      "colPickup": "Pickup",
+      "colIdleDone": "Idle→done",
+      "colHygiene": "Hygiene",
+      "colEngage": "Engage",
+      "colEffective": "Effective"
     },
     "consolidate": {
       "title": "Consolidate people",
@@ -3099,7 +3115,8 @@
       "hours": "Hours",
       "labor": "Labor",
       "aiSpend": "AI spend",
-      "qualified": "Qualified"
+      "qualified": "Qualified",
+      "optionalPh": "(optional)"
     },
     "soc": {
       "coverage": "Control coverage",
@@ -6172,6 +6189,13 @@
       "caption": "How the open work breaks down across priority levels.",
       "empty": "No open tickets to chart yet."
     },
+    "subnav": {
+      "label": "Manager sections",
+      "overview": "Overview",
+      "backlog": "Backlog",
+      "activity": "Activity",
+      "policy": "Policy"
+    },
     "insightNudge": "{unscored} tickets still need a business value and {unranked} aren’t ranked — run the manager to catch them up.",
     "policy": {
       "title": "How this backlog is managed",
@@ -6237,7 +6261,8 @@
       "dispatch": "Dispatched",
       "sync_pr": "Updated PR",
       "merge_pr": "Merged PR",
-      "flag": "Flagged"
+      "flag": "Flagged",
+      "coordinate": "Staffed"
     },
     "runTasks": {
       "title": "Manager tasks",
@@ -8046,6 +8071,18 @@
       },
       "invite": {
         "label": "Invite Team"
+      },
+      "talentProfile": {
+        "label": "Your Profile"
+      },
+      "resume": {
+        "label": "Résumé"
+      },
+      "publish": {
+        "label": "Publish"
+      },
+      "findWork": {
+        "label": "Find Work"
       }
     },
     "ticketing": {
@@ -8114,6 +8151,25 @@
       "monetize": "Make money with AI agents",
       "automate": "Automate my dev workflow",
       "learn": "Learn and explore"
+    },
+    "welcomeHired": "Welcome to Builderforce",
+    "subtitleHired": "Let's get you hireable in a few quick steps.",
+    "talentProfile": {
+      "intro": "Employers search on these fields — the more you fill in, the more often you show up."
+    },
+    "resumeStep": {
+      "intro": "Upload a résumé and we can fill in your headline, summary and skills for you.",
+      "skipHint": "Optional — you can add this later from your profile."
+    },
+    "publishStep": {
+      "intro": "Publishing lists you in the talent marketplace. You can unpublish at any time."
+    },
+    "findWorkStep": {
+      "intro": "You're set up. Here's where the work happens.",
+      "gigs": "Browse gigs",
+      "gigsHint": "Open roles matched to your skills and rate.",
+      "timecard": "Log your hours",
+      "timecardHint": "Submit timecards and track what you've been paid."
     }
   },
   "soc2": {

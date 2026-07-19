@@ -3,7 +3,7 @@ import { and, desc, eq, gt, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { AuthService } from '../../application/auth/AuthService';
 import { DeviceAuthService } from '../../application/auth/DeviceAuthService';
 import { resolveAppBaseUrl, type HonoEnv } from '../../env';
-import { sendWelcomeEmail } from '../../infrastructure/email/EmailService';
+import { sendWelcomeEmail, sendAccountTypeSelectedEmail } from '../../infrastructure/email/EmailService';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { TenantRole, type UserId } from '../../domain/shared/types';
 import {
@@ -778,11 +778,14 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       // account — the welcome goes here, not at the (still-unverified) insert.
       // Guarded by the `!user.emailVerifiedAt` branch, so a re-submit can't
       // send it twice. Fire-and-forget: mail failure must not fail the session.
+      // The role was chosen on the register form, so the welcome carries the
+      // role-specific next steps directly — no follow-up account-type email.
       void sendWelcomeEmail(
         c.env,
         user.email,
         user.displayName ?? user.username ?? '',
         resolveAppBaseUrl(c.env),
+        user.accountType === 'freelancer' ? 'freelancer' : 'standard',
       );
     }
 
@@ -1055,6 +1058,17 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     if (accountType === 'freelancer') {
       await provisionFreelancer(c, row);
     }
+
+    // The role-specific next steps. Only reachable past the idempotency guard
+    // above, so the choice — and this email — happen exactly once per account.
+    // Fire-and-forget: mail must not fail the role selection.
+    void sendAccountTypeSelectedEmail(
+      c.env,
+      row.email,
+      row.displayName ?? row.username ?? '',
+      resolveAppBaseUrl(c.env),
+      accountType,
+    );
 
     return c.json({ user: toUserResponse(row) });
   });

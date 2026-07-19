@@ -19,6 +19,7 @@ import {
   effortProfile,
   isEffort,
   reasoningForRun,
+  classifyModelFunding,
   type Effort,
   type BrainConfig,
   type BrainChat,
@@ -38,6 +39,8 @@ import {
 } from '@seanhogg/builderforce-brain-ui';
 import { createChatTicketsAdapter } from './chatTicketsAdapter';
 import { EvermindStatusBadge } from './EvermindStatusBadge';
+import { PlanBadge, fetchPlanSnapshot } from './accountPlan';
+import { ChatErrorBanner } from './ChatErrorBanner';
 import {
   getToken,
   getEditorContext,
@@ -258,26 +261,27 @@ function describeModelFunding(
   t: (key: string, fallback: string) => string,
 ): { name: string; funding: string } | null {
   if (!surface) return null;
-  // No pinned model: the gateway routes each turn itself.
-  if (!model) {
+  // SHARED classifier (see classifyModelFunding) — the diagnostics report records the
+  // same key this sentence is rendered from, so the two can't drift.
+  const funding = classifyModelFunding(model, surface);
+  if (funding === 'auto') {
     return {
       name: t('app.modelAuto', 'Auto — the gateway chooses'),
       funding: t('app.modelFundingAuto', 'Routed per turn: your connected accounts first, then your plan.'),
     };
   }
-  const byoMatch = (surface.byo?.models ?? []).find((m) => m.id === model);
-  if (byoMatch?.vendor) {
+  if (funding.startsWith('byo:')) {
     return {
-      name: model,
+      name: model!,
       funding: t('app.modelFundingByo', 'Billed to your own {provider} account — no plan credit used.')
-        .replace('{provider}', providerLabel(byoMatch.vendor)),
+        .replace('{provider}', providerLabel(funding.slice(4))),
     };
   }
-  if ((surface.data ?? []).some((m) => m.id === model)) {
-    return { name: model, funding: t('app.modelFundingPlan', 'Included in your plan.') };
+  if (funding === 'plan') {
+    return { name: model!, funding: t('app.modelFundingPlan', 'Included in your plan.') };
   }
   // Not in the plan pool and not BYO-servable ⇒ the premium (metered) tier.
-  return { name: model, funding: t('app.modelFundingPremium', 'Premium — metered at cost + 1¢ per request.') };
+  return { name: model!, funding: t('app.modelFundingPremium', 'Premium — metered at cost + 1¢ per request.') };
 }
 
 /* Toolbar glyphs — inline SVG so they render crisply in the editor's light AND
@@ -1203,10 +1207,10 @@ function Chat({ init }: { init: InitData }) {
       ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [pendingQuestion]);
 
-  // An expired/invalid session surfaces as a 401 whose body mentions the token.
-  // We offer an explicit "Reconnect" affordance for it (re-exchange the token),
-  // on top of the always-available dismiss.
-  const isAuthError = /invalid or expired token|unauthor/i.test(conv.error);
+  // What the user can DO about a failed turn (reconnect an expired session, upgrade
+  // a plan, add a card) is decided ONCE from the gateway's structured error — see
+  // `chatErrorAction` — and rendered by <ChatErrorBanner>, which owns its own
+  // actions. Nothing here pattern-matches error prose.
   const reconnect = useCallback(() => {
     void refreshToken();
     conv.clearError();
@@ -1248,7 +1252,7 @@ function Chat({ init }: { init: InitData }) {
   const copyTranscript = useCallback(async () => {
     const pid = associatedProjectId;
     const claims = decodeTokenClaims(getToken());
-    const [agents, tickets, evermind] = await Promise.all([
+    const [agents, tickets, evermind, consumption] = await Promise.all([
       chatId != null ? ticketAdapter.listAgents(chatId).catch(() => []) : Promise.resolve([]),
       chatId != null ? ticketAdapter.listTickets(chatId).catch(() => []) : Promise.resolve([]),
       pid != null
@@ -1256,6 +1260,12 @@ function Chat({ init }: { init: InitData }) {
             `/api/projects/${pid}/evermind/contributions`,
           ).catch(() => null)
         : Promise.resolve(null),
+      // Plan + month-to-date quota. Open to any tenant-scoped JWT (no role gate), so a
+      // brand-new free member can produce a report that states their own tier and
+      // allowance instead of one that looks like an unexplained capability failure.
+      // Shared read-through cache — the same snapshot the header's PlanBadge shows,
+      // so the report and the chip can't disagree (and it's usually already loaded).
+      fetchPlanSnapshot(apiReq),
     ]);
     // The learn-gate outcome for the most recent assistant turn (the persistence adapter
     // attaches it from the server's send-messages response).
@@ -1284,6 +1294,23 @@ function Chat({ init }: { init: InitData }) {
       lastLearn,
       agents: agents.map((a) => ({ agentRef: a.agentRef, role: a.role })),
       tickets: tickets.map((tk) => ({ kind: tk.kind, ref: tk.ref, label: tk.label, linkType: tk.linkType, status: tk.status })),
+      // WHO the user is to the platform: tier, whether a card is on file, what is left
+      // of each allowance, and what the plan actually entitles them to model-wise. The
+      // model surface is already loaded for the picker — reused, not refetched.
+      account: {
+        plan: consumption?.plan.effective ?? null,
+        billingStatus: consumption?.plan.billingStatus ?? null,
+        periodStart: consumption?.period.start ?? null,
+        resetsAt: consumption?.period.resetsAt ?? null,
+        meters: consumption?.meters ?? [],
+        model: init.model ?? null,
+        modelFunding: modelSurface ? classifyModelFunding(init.model, modelSurface) : null,
+        canUsePremiumModels: modelSurface?.canUsePremiumModels,
+        planModelCount: modelSurface?.data?.length,
+        byoProviders: modelSurface?.byo?.providers ?? [],
+        extensionVersion: init.extensionVersion ?? null,
+        baseUrl: init.baseUrl ?? null,
+      },
     };
     post('copy', {
       text: buildTranscript({
@@ -1300,7 +1327,7 @@ function Chat({ init }: { init: InitData }) {
     });
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1500);
-  }, [conv.messages, conv.trace, conv.error, init.model, associatedProject, associatedProjectId, activeChat?.title, chatVisibility, chatId, ticketAdapter, apiReq, init.project?.id]);
+  }, [conv.messages, conv.trace, conv.error, init.model, init.extensionVersion, init.baseUrl, modelSurface, associatedProject, associatedProjectId, activeChat?.title, chatVisibility, chatId, ticketAdapter, apiReq, init.project?.id]);
 
   // Consolidate: summarize the whole chat into ONE compact assistant message tagged
   // as a consolidation marker. It's shown back to the user (the "flag"), and the
@@ -1394,6 +1421,10 @@ function Chat({ init }: { init: InitData }) {
         {associatedProject
           ? <span className="bf-header__brand">BuilderForce</span>
           : <span className="bf-header__beta">{t('app.beta', 'beta')}</span>}
+        {/* Account tier, always visible: which plan is funding this chat and (on a
+            metered plan) what allowance is left. Click opens the web app to change
+            it. Self-gating — renders nothing until it knows the plan. */}
+        <PlanBadge apiReq={apiReq} t={t} />
         <div className="bf-header__spacer" />
         {renaming ? (
           <input
@@ -1531,26 +1562,13 @@ function Chat({ init }: { init: InitData }) {
         </div>
       )}
 
-      {conv.error && (
-        <div className="bf-error" role="alert">
-          <span className="bf-error__msg">{conv.error}</span>
-          <div className="bf-error__actions">
-            {isAuthError && (
-              <button className="bf-btn bf-btn--primary" onClick={reconnect}>
-                {t('app.reconnect', 'Reconnect')}
-              </button>
-            )}
-            <button
-              className="bf-btn bf-btn--icon"
-              onClick={conv.clearError}
-              title={t('app.dismiss', 'Dismiss')}
-              aria-label={t('app.dismiss', 'Dismiss')}
-            >
-              ×
-            </button>
-          </div>
-        </div>
-      )}
+      <ChatErrorBanner
+        error={conv.error}
+        action={conv.errorAction}
+        onReconnect={reconnect}
+        onDismiss={conv.clearError}
+        t={t}
+      />
 
       {conv.pendingConfirm && (
         <div className="bf-confirm">

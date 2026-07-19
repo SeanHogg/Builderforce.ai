@@ -11,6 +11,7 @@ import { MediaControls } from '@/components/video/MediaControls';
 import { MeetingTranscriptList } from './MeetingTranscriptList';
 import { BrainPanel } from '@/components/brain/BrainPanel';
 import { useIsMobile } from '@/lib/useIsMobile';
+import { Select } from '@/components/Select';
 
 const TILE_SIZE_KEY = 'bf.meetingTileSize';
 
@@ -266,14 +267,14 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
               </div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                 {agents.length > 1 && (
-                  <select
+                  <Select
                     value={askAgentRef}
                     onChange={(e) => setAskAgentRef(e.target.value)}
                     aria-label={t('askWhichAgent')}
                     style={{ fontSize: 13, padding: '7px 8px', borderRadius: 8, background: 'var(--bg-base)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
                   >
                     {agents.map((a) => <option key={a.ref} value={a.ref}>{a.name}</option>)}
-                  </select>
+                  </Select>
                 )}
                 <input
                   value={ask}

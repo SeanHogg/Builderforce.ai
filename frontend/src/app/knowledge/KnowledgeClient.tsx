@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
 import { RoleGate } from '@/components/RoleGate';
+import { Select } from '@/components/Select';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { GaugeChart } from '@/components/charts/GaugeChart';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
@@ -240,14 +241,14 @@ function Library({ projectId, t }: { projectId: number | null; t: ReturnType<typ
         </div>
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('searchPlaceholder')} style={inputStyle} />
         {allTags.length > 0 && (
-          <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} style={inputStyle}>
+          <Select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} style={inputStyle}>
             <option value="">{t('allTags')}</option>
             {allTags.map((tg) => (
               <option key={tg} value={tg}>
                 {tg}
               </option>
             ))}
-          </select>
+          </Select>
         )}
       </div>
 

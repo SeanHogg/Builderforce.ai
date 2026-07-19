@@ -13,6 +13,8 @@ import { MessagesButton } from '@/components/freelance/MessagesButton';
 import { RateClientButton } from '@/components/freelance/RateClientButton';
 import { useAvailableForHire } from '@/lib/rbac';
 import { useAuth } from '@/lib/AuthContext';
+import { useOnboardingPrompt } from '@/lib/onboarding';
+import { OnboardingStepper } from '@/components/OnboardingStepper';
 import {
   listMyEngagements, listMyTimecards, listMyInvoices, getTodayActivity,
   type Engagement, type Timecard, type Invoice,
@@ -53,8 +55,11 @@ export default function FreelancerDashboardPage() {
   const t = useTranslations('freelancerDashboard');
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, webToken } = useAuth();
   const forHire = useAvailableForHire();
+  // A hired account never reaches /dashboard (the shell blocks it), so this is
+  // where its setup wizard lives — same shared decision, hired step track.
+  const onboarding = useOnboardingPrompt();
 
   const [engagements, setEngagements] = useState<Engagement[]>([]);
   const [timecards, setTimecards] = useState<Timecard[]>([]);
@@ -133,6 +138,13 @@ export default function FreelancerDashboardPage() {
 
   return (
     <PageContainer style={{ padding: 0 }}>
+      {onboarding.show && webToken && (
+        <OnboardingStepper
+          webToken={webToken}
+          onComplete={onboarding.complete}
+          onDismiss={onboarding.dismiss}
+        />
+      )}
       <main style={{ padding: '24px 16px', maxWidth: 1100, margin: '0 auto' }}>
         <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
           <div>

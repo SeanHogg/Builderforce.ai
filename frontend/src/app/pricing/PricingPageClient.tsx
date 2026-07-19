@@ -10,6 +10,7 @@ import JsonLd from '@/components/JsonLd';
 import PageContainer from '@/components/PageContainer';
 import RelatedArticles from '@/components/blog/RelatedArticles';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { PremiumModelUnlock } from '@/components/llm/PremiumModelUnlock';
 import { pricingSchema } from '@/lib/structured-data';
 
 type Plan = 'free' | 'pro' | 'teams';
@@ -355,6 +356,14 @@ export default function PricingPageClient() {
               </button>
             )}
           </div>
+
+          {/* Card validation, on the billing console rather than only beside a model
+              picker. Premium access needs a paid plan AND a validated card, so a
+              tenant told "add and validate a card" had nowhere to go — the control
+              lived exclusively inside <ModelSelect>, which the VS Code extension and
+              every non-model surface deep-link away from. Self-gating: renders
+              nothing for an already-entitled tenant. */}
+          <PremiumModelUnlock />
           </>
           )}
 
