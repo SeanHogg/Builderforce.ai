@@ -125,3 +125,79 @@ describe('card.validated — replace swap', () => {
     expect(mocks.detachCards).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * A subscription that ENDS releases the card with it.
+ *
+ * `DELETE /card-validation` refuses while a paid plan is live (those cards bill
+ * the renewal), which left a mid-cycle canceller unable to clear their card until
+ * the period elapsed — and then only by coming back to do it by hand. Premium
+ * needs a paid plan, so the card goes when the subscription does.
+ */
+describe('subscription.cancelled — card release', () => {
+  beforeEach(() => {
+    mocks.parseWebhook.mockResolvedValue({
+      type: 'subscription.cancelled',
+      externalCustomerId: 'cus_1',
+      externalSubscriptionId: 'sub_1',
+      raw: {},
+    });
+    mocks.clearCardValidationByCustomer.mockResolvedValue({ known: true, clearedPaymentMethodId: 'pm_old' });
+  });
+
+  it('clears our record and detaches the card at the processor', async () => {
+    const res = await cardValidatedPost();
+
+    expect(res.status).toBe(200);
+    expect(mocks.clearCardValidationByCustomer).toHaveBeenCalledWith(expect.anything(), 'cus_1');
+    expect(mocks.detachCards).toHaveBeenCalledWith({ paymentMethodId: 'pm_old' });
+  });
+
+  it('runs the downgrade FIRST, so cleanup can never race the plan write', async () => {
+    const order: string[] = [];
+    tenantService.handleWebhookEvent.mockImplementation(async () => { order.push('downgrade'); });
+    mocks.clearCardValidationByCustomer.mockImplementation(async () => {
+      order.push('clear');
+      return { known: true, clearedPaymentMethodId: 'pm_old' };
+    });
+
+    await cardValidatedPost();
+
+    expect(order).toEqual(['downgrade', 'clear']);
+  });
+
+  it('detaches nothing when the tenant had no card on file', async () => {
+    mocks.clearCardValidationByCustomer.mockResolvedValue({ known: true, clearedPaymentMethodId: null });
+
+    await cardValidatedPost();
+
+    expect(mocks.detachCards).not.toHaveBeenCalled();
+  });
+
+  it('still ACKs the downgrade when card cleanup fails', async () => {
+    // The provider is waiting on the SUBSCRIPTION change. Failing the webhook over
+    // card cleanup would have it retry a downgrade that already succeeded.
+    mocks.clearCardValidationByCustomer.mockRejectedValue(new Error('db down'));
+
+    const res = await cardValidatedPost();
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({ processed: true });
+  });
+
+  it('leaves the card alone on a NON-terminal subscription event', async () => {
+    // past_due is a grace period, not an ending — revoking the card there would
+    // make recovering from a failed payment harder, not easier.
+    mocks.parseWebhook.mockResolvedValue({
+      type: 'subscription.past_due',
+      externalCustomerId: 'cus_1',
+      externalSubscriptionId: 'sub_1',
+      raw: {},
+    });
+
+    await cardValidatedPost();
+
+    expect(mocks.clearCardValidationByCustomer).not.toHaveBeenCalled();
+    expect(mocks.detachCards).not.toHaveBeenCalled();
+  });
+});
