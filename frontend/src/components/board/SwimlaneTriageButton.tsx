@@ -3,6 +3,7 @@
 import { useState, useCallback, type CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import { tasksApi, type AutoRunDiagnostic, type AutoRunReason } from '@/lib/builderforceApi';
+import { RoleGate } from '@/components/RoleGate';
 
 /** Minimal ticket shape the triage control needs from the board. */
 export interface TriageTask {
@@ -172,24 +173,28 @@ export function SwimlaneTriageButton({ tasks, isActive, onDispatched }: Props) {
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>{t('title')}</span>
-            <button
-              type="button"
-              disabled={eligibleCount === 0 || running.size > 0}
-              onClick={() => void runAll()}
-              style={{
-                fontSize: 10,
-                fontWeight: 600,
-                padding: '3px 8px',
-                borderRadius: 6,
-                border: '1px solid var(--border)',
-                background: eligibleCount > 0 ? 'var(--coral-bright)' : 'var(--bg-elevated)',
-                color: eligibleCount > 0 ? '#fff' : 'var(--text-muted)',
-                cursor: eligibleCount > 0 ? 'pointer' : 'not-allowed',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {t('runAll', { count: eligibleCount })}
-            </button>
+            {/* The DIAGNOSIS (why each ticket is/isn't auto-running) is a read and
+                stays open — only the dispatch is gated to DEVELOPER+. */}
+            <RoleGate capability="runtime.execute" style={{ flexShrink: 0 }}>
+              <button
+                type="button"
+                disabled={eligibleCount === 0 || running.size > 0}
+                onClick={() => void runAll()}
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  padding: '3px 8px',
+                  borderRadius: 6,
+                  border: '1px solid var(--border)',
+                  background: eligibleCount > 0 ? 'var(--coral-bright)' : 'var(--bg-elevated)',
+                  color: eligibleCount > 0 ? '#fff' : 'var(--text-muted)',
+                  cursor: eligibleCount > 0 ? 'pointer' : 'not-allowed',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {t('runAll', { count: eligibleCount })}
+              </button>
+            </RoleGate>
           </div>
 
           {loading && <div style={{ fontSize: 11, color: 'var(--text-muted)', padding: '6px 2px' }}>{t('loading')}</div>}
@@ -223,25 +228,27 @@ export function SwimlaneTriageButton({ tasks, isActive, onDispatched }: Props) {
                     </span>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  disabled={!canRun || isRunning}
-                  onClick={() => void runOne(tk.id)}
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 600,
-                    padding: '3px 8px',
-                    borderRadius: 6,
-                    border: '1px solid var(--border)',
-                    background: canRun && !isRunning ? 'var(--coral-bright)' : 'var(--bg-elevated)',
-                    color: canRun && !isRunning ? '#fff' : 'var(--text-muted)',
-                    cursor: canRun && !isRunning ? 'pointer' : 'not-allowed',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
-                  }}
-                >
-                  {isRunning ? t('running') : t('run')}
-                </button>
+                <RoleGate capability="runtime.execute" style={{ flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    disabled={!canRun || isRunning}
+                    onClick={() => void runOne(tk.id)}
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      border: '1px solid var(--border)',
+                      background: canRun && !isRunning ? 'var(--coral-bright)' : 'var(--bg-elevated)',
+                      color: canRun && !isRunning ? '#fff' : 'var(--text-muted)',
+                      cursor: canRun && !isRunning ? 'pointer' : 'not-allowed',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {isRunning ? t('running') : t('run')}
+                  </button>
+                </RoleGate>
               </div>
             );
           })}

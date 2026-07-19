@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { runtimeApi, type ActiveRun } from '@/lib/builderforceApi';
+import { RoleGate } from '@/components/RoleGate';
 
 /**
  * Fleet "what's running right now": every non-terminal execution across the
@@ -118,20 +119,24 @@ export function ActiveRunsPanel() {
               <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
                 {fmtElapsed(r.elapsedMs)}
               </span>
-              <button
-                type="button"
-                onClick={() => void cancel(r.id)}
-                disabled={cancelling.has(r.id)}
-                style={{
-                  fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6,
-                  border: '1px solid var(--border-subtle)', background: 'var(--bg-base)',
-                  color: 'var(--coral-bright, #f4726e)',
-                  cursor: cancelling.has(r.id) ? 'default' : 'pointer', opacity: cancelling.has(r.id) ? 0.5 : 1,
-                  flexShrink: 0,
-                }}
-              >
-                {cancelling.has(r.id) ? 'Cancelling…' : 'Cancel'}
-              </button>
+              {/* Watching the fleet is a read; CANCELLING a run is dispatch-tier
+                  (requireRole(DEVELOPER) on /api/runtime/executions/:id/cancel). */}
+              <RoleGate capability="runtime.execute" style={{ flexShrink: 0 }}>
+                <button
+                  type="button"
+                  onClick={() => void cancel(r.id)}
+                  disabled={cancelling.has(r.id)}
+                  style={{
+                    fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6,
+                    border: '1px solid var(--border-subtle)', background: 'var(--bg-base)',
+                    color: 'var(--coral-bright, #f4726e)',
+                    cursor: cancelling.has(r.id) ? 'default' : 'pointer', opacity: cancelling.has(r.id) ? 0.5 : 1,
+                    flexShrink: 0,
+                  }}
+                >
+                  {cancelling.has(r.id) ? 'Cancelling…' : 'Cancel'}
+                </button>
+              </RoleGate>
             </div>
           );
         })}

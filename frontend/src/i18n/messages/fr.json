@@ -933,7 +933,9 @@
     "clearanceNeededBody": "Ceci est un élément de sécurité restreint. Vous n'avez pas l'autorisation d'en voir les détails. Demandez l'accès à un propriétaire ou responsable de l'espace.",
     "typeProduct": "Produit",
     "typeDesign": "Design",
-    "typeIncident": "Incident"
+    "typeIncident": "Incident",
+    "requiresRoleHint": "{role, select, viewer {Nécessite le rôle Observateur} developer {Nécessite le rôle Développeur} manager {Nécessite le rôle Gestionnaire} owner {Nécessite le rôle Propriétaire} other {Nécessite le rôle {role}}}",
+    "requiresDeveloperRole": "Nécessite le rôle Développeur"
   },
   "prdCreate": {
     "title": "Nouveau PRD",
@@ -2167,9 +2169,10 @@
     "surface": "Surface d'exécution",
     "surfaceLabel": {
       "durable": "Durable (cloud, sans serveur à la demande)",
-      "container": "Conteneur Cloudflare longue durée (pour les exécutions très longues)"
+      "container": "Conteneur Cloudflare longue durée (pour les exécutions très longues)",
+      "github_actions": "GitHub Actions (s'exécute sur les runners de votre dépôt)"
     },
-    "surfaceHelp": "Les deux exécutent la tâche complète dans le cloud (tout Cloudflare). Durable s'exécute à la demande sur un Durable Object (par étape) — l'option par défaut. Le conteneur Cloudflare longue durée maintient un processus actif pour des tâches très longues et continues (revient à Durable tant que l'infrastructure de conteneurs n'est pas activée).",
+    "surfaceHelp": "Toutes exécutent la tâche complète à distance. Durable s'exécute à la demande sur un Durable Object (par étape) — l'option par défaut. Le conteneur Cloudflare longue durée maintient un processus actif pour des tâches très longues et continues (revient à Durable tant que l'infrastructure de conteneurs n'est pas activée). GitHub Actions exécute l'agent sur les runners du dépôt lié, avec un système de fichiers et une chaîne d'outils réels et une limite de 60 minutes — cela nécessite que le workflow de l'agent Builderforce (.github/workflows/builderforce-agent.yml) soit présent dans le dépôt, sinon l'exécution revient à Durable.",
     "baseModel": "Modèle de base (facultatif)",
     "baseModelDefault": "Par défaut builderforce.ai (meilleur modèle de codage)",
     "baseModelHelp": "Le modèle d'appel d'outils et de codage sur lequel cet agent s'exécute — choisissez l'un de vos LLM ou un modèle du pool. Une exécution fixe un modèle pour toute la tâche ; laissez par défaut pour utiliser le meilleur modèle de codage de votre forfait.",
@@ -9014,7 +9017,15 @@
     "noFileChangesYet": "Aucune modification de fichier pour l'instant.",
     "noFileChangesRecorded": "Cette exécution n'a enregistré aucune modification de fichier.",
     "noToolCalls": "Aucun appel d'outil enregistré.",
-    "failedToRerun": "Échec de la réexécution"
+    "failedToRerun": "Échec de la réexécution",
+    "revert": "Annuler l’exécution",
+    "reverting": "Annulation…",
+    "revertHint": "Ferme la pull request ouverte par cette exécution et supprime la branche qu’elle a écrite. Refusé si autre chose y a touché.",
+    "revertConfirmTitle": "Annuler cette exécution ?",
+    "revertConfirmMessage": "Cela ferme la pull request ouverte par l’exécution n° {id} et supprime la branche qu’elle a écrite. Cette action est irréversible. Elle sera refusée si la pull request a déjà été fusionnée ou si autre chose a modifié la branche.",
+    "revertConfirmAction": "Annuler l’exécution",
+    "revertDone": "Annulée — branche {branch} supprimée ({commits} commit(s)).",
+    "failedToRevert": "Échec de l’annulation de cette exécution"
   },
   "aiTraining": {
     "title": "Entraînement de modèles IA",

@@ -101,7 +101,21 @@ export type OidcVerification =
  * throwing, because the caller answers with 401 and the reason is the only clue
  * the workflow author gets.
  */
-export async function verifyGitHubOidcToken(env: Env, token: string): Promise<OidcVerification> {
+export async function verifyGitHubOidcToken(
+  env: Env,
+  token: string,
+  /**
+   * The audience the caller requires. Defaults to the deploy audience so the
+   * original call site is unchanged.
+   *
+   * Passing this is NOT optional in spirit for new surfaces: the audience is the
+   * only thing stopping a token minted by one Builderforce workflow being
+   * replayed against another. A deploy token must not be able to drive an agent
+   * run (which spends LLM budget and writes code), and vice versa — so each
+   * workflow requests its own audience and each route demands exactly that one.
+   */
+  expectedAudience: string = BUILDERFORCE_OIDC_AUDIENCE,
+): Promise<OidcVerification> {
   const [headerSeg, payloadSeg, signatureSeg] = token.split('.');
   if (!headerSeg || !payloadSeg || !signatureSeg) {
     return { ok: false, error: 'Malformed token.' };
@@ -122,8 +136,8 @@ export async function verifyGitHubOidcToken(env: Env, token: string): Promise<Oi
   // `aud` may be a string or an array per the JWT spec.
   const aud = payload.aud;
   const audiences = Array.isArray(aud) ? aud : [aud];
-  if (!audiences.includes(BUILDERFORCE_OIDC_AUDIENCE)) {
-    return { ok: false, error: `Token audience must be "${BUILDERFORCE_OIDC_AUDIENCE}".` };
+  if (!audiences.includes(expectedAudience)) {
+    return { ok: false, error: `Token audience must be "${expectedAudience}".` };
   }
 
   const now = Math.floor(Date.now() / 1000);

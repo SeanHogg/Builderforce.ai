@@ -70,6 +70,12 @@ export const CAPABILITIES = {
   // holds high/urgent tickets for sign-off in /api/approvals. Keeping both at
   // manager would collapse two distinct controls and make the approval queue moot.
   'runtime.execute':      'developer',
+  // REVERTING a finished run — closing the PR it opened and deleting the branch it
+  // wrote. Mirrors requireRole(MANAGER) on POST /api/runtime/executions/:id/revert.
+  // Deliberately a tier ABOVE runtime.execute: starting a run is the developer's
+  // job, but destroying its output (commits a human may already have reviewed) is
+  // a governance action and irreversible.
+  'runtime.revert':       'manager',
   // Manage a project's self-learning Evermind model (seed base, flip inference /
   // learning mode). Mirrors the API's requireRole(MANAGER) on the evermind routes.
   'project.manageEvermind': 'manager',
