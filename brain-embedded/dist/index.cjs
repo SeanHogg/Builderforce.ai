@@ -992,7 +992,7 @@ function useBrainChats(options = {}) {
     setError("");
     try {
       const projectId = opts?.projectId !== void 0 ? opts.projectId : defaultProjectId();
-      const chat = await persistence.createChat({ title: opts?.title ?? "New chat", projectId });
+      const chat = await persistence.createChat({ title: opts?.title ?? "New chat", projectId, capability: opts?.capability ?? null });
       setChats((prev) => [chat, ...prev]);
       setActiveChatId(chat.id);
       return chat;
@@ -1001,6 +1001,17 @@ function useBrainChats(options = {}) {
       return null;
     }
   }, [persistence, defaultProjectId, setActiveChatId]);
+  const setCapability = (0, import_react5.useCallback)(async (id, capability) => {
+    const prevValue = chatsRef.current.find((c) => c.id === id)?.capability ?? null;
+    setChats((prev) => prev.map((c) => c.id === id ? { ...c, capability } : c));
+    try {
+      const updated = await persistence.updateChat(id, { capability });
+      setChats((prev) => prev.map((c) => c.id === id ? { ...c, capability: updated.capability ?? null } : c));
+    } catch (e) {
+      setChats((prev) => prev.map((c) => c.id === id ? { ...c, capability: prevValue } : c));
+      setError(e instanceof Error ? e.message : "Failed to set capability");
+    }
+  }, [persistence]);
   const rename = (0, import_react5.useCallback)(async (id, title) => {
     const trimmed = title.trim();
     if (!trimmed) return;
@@ -1081,6 +1092,7 @@ function useBrainChats(options = {}) {
     select,
     create,
     rename,
+    setCapability,
     autoTitle,
     summarize,
     remove,

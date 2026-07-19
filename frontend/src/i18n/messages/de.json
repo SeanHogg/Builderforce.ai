@@ -5715,6 +5715,74 @@
     "brainTitle": "Brain",
     "emptyHint": "Starte einen neuen Chat oder wähle einen aus, um zu beginnen.",
     "startNewChat": "Neuen Chat starten",
+    "capabilities": {
+      "makingLabel": "Erstellen",
+      "pickerAria": "Was möchtest du erstellen?",
+      "none": "Beliebig",
+      "tilesHintBrainstorm": "…oder beginne mit dem, was du erstellen willst",
+      "tilesHintIde": "…oder beginne mit dem, was du bauen willst",
+      "document": {
+        "label": "Dokument",
+        "hint": "Schreibe ein strukturiertes Dokument mit Überschriften, Abschnitten und Tabellen.",
+        "starter": "Schreibe ein Dokument über "
+      },
+      "slides": {
+        "label": "Folien",
+        "hint": "Erstelle eine Präsentation – eine Folie pro Abschnitt.",
+        "starter": "Erstelle eine Präsentation über "
+      },
+      "dataviz": {
+        "label": "Datenvisualisierung",
+        "hint": "Mache Daten als eingebettete Diagramme sichtbar, mit den Zahlen darunter.",
+        "starter": "Visualisiere "
+      },
+      "spreadsheet": {
+        "label": "Tabelle",
+        "hint": "Modelliere Zahlen als Tabelle mit Formeln und Summen.",
+        "starter": "Erstelle eine Tabelle, die "
+      },
+      "website": {
+        "label": "Website",
+        "hint": "Baue eine Web-App oder Website als echte, direkt anlegbare Dateien.",
+        "starter": "Baue eine Website, die "
+      },
+      "design": {
+        "label": "Design",
+        "hint": "Gestalte die Oberfläche – Layout, Abstände, Typografie und Theme-Tokens.",
+        "starter": "Gestalte die Oberfläche für "
+      },
+      "mobile": {
+        "label": "Mobil",
+        "hint": "Baue eine Mobile-First-App mit nativ wirkender Navigation.",
+        "starter": "Baue eine mobile App, die "
+      },
+      "animation": {
+        "label": "Animation",
+        "hint": "Füge gezielte Bewegung mit klarer Dauer und Easing hinzu.",
+        "starter": "Animiere "
+      },
+      "game3d": {
+        "label": "3D-Spiel",
+        "hint": "Baue ein 3D-Spiel – Szene, Kamera, Eingabe und Game-Loop.",
+        "starter": "Baue ein 3D-Spiel, in dem "
+      },
+      "export": {
+        "docx": "Word herunterladen",
+        "pptx": "PowerPoint herunterladen",
+        "csv": "CSV herunterladen",
+        "working": "Wird vorbereitet…",
+        "failed": "Export fehlgeschlagen",
+        "untitled": "Ohne Titel"
+      }
+    },
+    "messageActions": {
+      "copy": "Kopieren",
+      "copied": "Kopiert!",
+      "goodResponse": "Gute Antwort",
+      "badResponse": "Schlechte Antwort",
+      "thumbsUp": "Daumen hoch",
+      "thumbsDown": "Daumen runter"
+    },
     "newProjectPlaceholder": "Name des neuen Projekts",
     "createAndAssign": "Erstellen und zuweisen",
     "actingAs": "Handelt als",
@@ -5743,7 +5811,17 @@
     "openInIde": "In der IDE öffnen →",
     "brainModality": "Brain — {modality}",
     "brainAs": "Brain als {name}",
-    "chatHistory": "Chat-Verlauf"
+    "chatHistory": "Chat-Verlauf",
+    "upgrade": "Upgrade",
+    "upgradeToPlan": "Auf {plan} upgraden",
+    "addCard": "Karte hinzufügen",
+    "cardValidationFailed": "Kartenprüfung fehlgeschlagen."
+  },
+  "chatMessage": {
+    "copy": "Kopieren",
+    "apply": "Anwenden →",
+    "createFile": "Datei erstellen",
+    "downloadAs": "{ext} herunterladen"
   },
   "modelExport": {
     "subtitle": "Exportieren Sie ein veröffentlichtes Modell in ein portables Artefakt – ein Hugging-Face-Repo, ONNX, safetensors oder GGUF – und laden Sie es herunter. Das Modell wird serverseitig erzeugt; es ist kein Token erforderlich.",
@@ -6180,7 +6258,8 @@
       "unscored": "Ohne Wert",
       "unranked": "Nicht eingeordnet",
       "unowned": "Ohne Verantwortlichen",
-      "openPullRequests": "Offene PRs"
+      "openPullRequests": "Offene PRs",
+      "flagged": "Abdeckungslücken"
     },
     "chart": {
       "title": "Backlog nach Priorität",
@@ -6195,6 +6274,7 @@
       "policy": "Richtlinie"
     },
     "insightNudge": "{unscored} Tickets brauchen noch einen Geschäftswert und {unranked} sind nicht eingeordnet – führen Sie den Manager aus, um sie aufzuholen.",
+    "coverageNudge": "{flagged} Tickets fehlt eine erforderliche Rolle oder ein Prüfer – der Manager besetzt sie beim nächsten Durchlauf automatisch.",
     "policy": {
       "title": "Wie dieses Backlog verwaltet wird",
       "subtitle": "Legen Sie fest, wer das Backlog führt und wie viel automatisch geschieht. Sie können das jederzeit ändern.",
@@ -9746,5 +9826,34 @@
       "third_party": "Drittanbieter"
     },
     "downloadDoc": "Herunterladen"
+  },
+  "planBadge": {
+    "tier": {
+      "free": "Free",
+      "pro": "Pro",
+      "teams": "Teams"
+    },
+    "freeHint": "Sie nutzen den Free-Tarif — Chats laufen mit den enthaltenen BuilderForce-Modellen. Klicken Sie, um Tarife anzuzeigen und zu upgraden.",
+    "paidHint": "Ihr Workspace nutzt den Tarif {plan}. Klicken Sie, um Ihren Tarif zu verwalten.",
+    "tokensLeft": "Noch {count} Token",
+    "noTokens": "keine Token mehr",
+    "upgrade": "Upgrade"
+  },
+  "billing": {
+    "cardOnFileTitle": "Hinterlegte Karte",
+    "cardOnFileHint": "Der Zugang zu Premium-Modellen wird über diese Karte geprüft. Ein Austausch startet eine neue 0-$-Prüfung.",
+    "cardPendingHint": "Wir warten auf die Bestätigung Ihrer Bank. Premium-Modelle werden freigeschaltet, sobald sie vorliegt.",
+    "cardNoDetails": "Kartendaten nicht verfügbar",
+    "cardStatusValidated": "Verifiziert",
+    "cardStatusPending": "Wird geprüft…",
+    "cardStatusFailed": "Prüfung fehlgeschlagen",
+    "replaceCard": "Karte ersetzen",
+    "retryCard": "Erneut versuchen",
+    "cardWorking": "Wird ausgeführt…",
+    "replaceCardTitle": "Karte ersetzen?",
+    "replaceCardWarning": "Premium-Modelle pausieren, während die neue Karte geprüft wird. Ihr Tarif und alles Übrige laufen weiter.",
+    "retryCardMessage": "Wir starten eine neue 0-$-Prüfung. Ihre Karte wird nicht belastet.",
+    "replaceCardConfirm": "Weiter",
+    "cardValidationFailed": "Die Kartenprüfung konnte nicht gestartet werden. Bitte versuchen Sie es erneut."
   }
 }

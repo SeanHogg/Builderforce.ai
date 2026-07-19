@@ -30,6 +30,7 @@ import {
   type WorkflowTriggerInfo,
 } from '@/lib/builderforceApi';
 import { fetchProjects } from '@/lib/api';
+import { downloadText } from '@/lib/download';
 import type { Project } from '@/lib/types';
 import { BuilderNode, type BuilderNodeData } from './BuilderNode';
 import { NodeConfigPanel } from './NodeConfigPanel';
@@ -357,12 +358,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
       const id = await save();
       if (!id) return;
       const yaml = await workflowDefinitions.exportYaml(id);
-      const url = URL.createObjectURL(new Blob([yaml], { type: 'application/yaml' }));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${(name.trim() || 'workflow').replace(/[^a-z0-9-_]+/gi, '_')}.yaml`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadText(yaml, `${(name.trim() || 'workflow').replace(/[^a-z0-9-_]+/gi, '_')}.yaml`, 'application/yaml');
     } catch (e) {
       setStatus(e instanceof Error ? e.message : t('statusExportFailed'));
     } finally {

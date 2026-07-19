@@ -141,6 +141,7 @@ export default function FreelancerDashboardPage() {
       {onboarding.show && webToken && (
         <OnboardingStepper
           webToken={webToken}
+          initialProgress={onboarding.progress}
           onComplete={onboarding.complete}
           onDismiss={onboarding.dismiss}
         />

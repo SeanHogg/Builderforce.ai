@@ -11,6 +11,14 @@ export interface BrainChat {
   projectId: number | null;
   /** Where the chat was created (e.g. 'brainstorm' | 'ide' | 'project'). */
   origin?: string;
+  /**
+   * What this chat is MAKING — a capability id from the host's registry
+   * ('document' | 'slides' | 'dataviz' | 'spreadsheet' | 'website' | 'design' |
+   * 'mobile' | 'animation' | 'game3d'). Shapes the system prompt and the export
+   * format. `null`/absent = no capability. Opaque here: the package stores and
+   * forwards it, the host owns the catalogue.
+   */
+  capability?: string | null;
   createdAt: string;
   updatedAt: string;
 }

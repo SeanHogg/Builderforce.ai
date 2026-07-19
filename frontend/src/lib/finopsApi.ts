@@ -3,6 +3,7 @@
  * Reports. Talks to /api/finops on the auth API. Manager-gated server-side.
  */
 import { apiRequest, getApiBaseUrl, getAuthHeaders } from './apiClient';
+import { downloadBlob } from './download';
 
 // ── R&D Tax Credits ──────────────────────────────────────────────────────────
 
@@ -175,12 +176,5 @@ export async function downloadAuditReport(format: 'csv' | 'json', period?: strin
   });
   if (!res.ok) throw new Error(`Export failed (${res.status})`);
   const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `audit-report-${period ?? 'current'}.${format}`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  downloadBlob(blob, `audit-report-${period ?? 'current'}.${format}`);
 }

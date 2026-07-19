@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { usePermissionDebugger, type PermissionRegistration } from '@/lib/PermissionDebuggerContext';
 import { useEmulation } from '@/lib/EmulationContext';
 import { useRolePreview } from '@/lib/RolePreviewContext';
+import { downloadText, toCsv } from '@/lib/download';
 
 type PanelTab = 'page' | 'user' | 'role' | 'missing';
 
@@ -50,18 +51,12 @@ export default function PermissionDebuggerPanel() {
   }
 
   function exportCsv() {
-    const header = 'permission,status,grantedVia,apiEndpoint,count';
-    const rows = (panelTab === 'role' ? roleGrouped : displayed).map((g) =>
-      [`"${g.permission}"`, `"${g.status}"`, `"${g.grantedVia ?? ''}"`, `"${(g as PermissionRegistration & { count?: number }).apiEndpoint ?? ''}"`, String((g as PermissionRegistration & { count?: number }).count ?? 1)].join(','),
-    );
-    const csv = [header, ...rows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'permission-debug.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+    const rows = (panelTab === 'role' ? roleGrouped : displayed).map((g) => {
+      const withCount = g as PermissionRegistration & { count?: number; apiEndpoint?: string };
+      return [g.permission, g.status, g.grantedVia ?? '', withCount.apiEndpoint ?? '', withCount.count ?? 1];
+    });
+    const csv = toCsv(['permission', 'status', 'grantedVia', 'apiEndpoint', 'count'], rows);
+    downloadText(csv, 'permission-debug.csv', 'text/csv');
   }
 
   function statusColor(status: string) {

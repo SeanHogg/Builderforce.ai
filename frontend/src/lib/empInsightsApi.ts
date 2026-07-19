@@ -1,4 +1,5 @@
 import { apiRequest, apiRequestText } from './apiClient';
+import { downloadText } from './download';
 
 /**
  * EMP insight lenses client (cross-team benchmarking, delay taxonomy, dataset
@@ -81,10 +82,5 @@ export const empInsightsApi = {
 /** Trigger a browser download of an already-fetched export string. */
 export function downloadExport(text: string, dataset: string, format: ExportFormat): void {
   const type = format === 'html' ? 'text/html' : 'text/csv';
-  const url = URL.createObjectURL(new Blob([text], { type }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${dataset}-${new Date().toISOString().slice(0, 10)}.${format}`;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadText(text, `${dataset}-${new Date().toISOString().slice(0, 10)}.${format}`, type);
 }
