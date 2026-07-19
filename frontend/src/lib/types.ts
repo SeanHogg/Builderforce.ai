@@ -310,8 +310,9 @@ export interface PublishedAgent {
   preferred_runtime?: 'cloud' | 'host' | null;
   /** Agent runtime engine — always the current version (read-only denormalized value). */
   engine?: 'builderforce-v3';
-  /** Cloud execution surface (migration 0105): durable DO vs long-lived Cloudflare Container. */
-  runtime_surface?: 'durable' | 'container';
+  /** Cloud execution surface (migration 0105): durable DO, long-lived Cloudflare
+   *  Container, or the linked repo's own GitHub Actions runners. */
+  runtime_surface?: 'durable' | 'container' | 'github_actions';
   price_cents?: number;
   pricing_model?: 'flat_fee' | 'consumption';
   price_unit?: string | null;

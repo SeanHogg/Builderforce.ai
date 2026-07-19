@@ -2086,6 +2086,20 @@ export const runtimeApi = {
     request<Execution>(`/api/runtime/executions/${id}/cancel`, { method: 'POST' }),
 
   /**
+   * Revert a finished run: close the PR it opened and delete the ticket branch it
+   * wrote. Manager-gated and destructive — always confirm before calling.
+   *
+   * The server REFUSES with a 409 (message = the exact reason) whenever it cannot
+   * prove the artifacts are still only this run's: a merged PR, a branch that
+   * advanced, foreign commits or paths, unreadable evidence, or a provider that
+   * cannot support the operation. Surface that message verbatim.
+   */
+  revert: (id: number): Promise<{ reverted: true; branch: string; branchDeleted: boolean; prClosed: boolean; commits: number }> =>
+    request<{ reverted: true; branch: string; branchDeleted: boolean; prClosed: boolean; commits: number }>(
+      `/api/runtime/executions/${id}/revert`, { method: 'POST' },
+    ),
+
+  /**
    * Send a direction to an execution from the Output tab. If the run is still
    * live, the executing agent (self-hosted or cloud) receives it as an additional
    * instruction and steers mid-run (`steered: true`). If the run has already

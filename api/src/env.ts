@@ -317,11 +317,28 @@ export interface Env {
 
   // ---------------------------------------------------------------------------
   // GitHub App (optional — required for /api/webhooks/github)
+  //
+  // When GITHUB_APP_ID + GITHUB_APP_PRIVATE_KEY are both set, repo operations
+  // authenticate as a GitHub App installation (short-lived, least-privilege,
+  // survives the departure of whoever connected the repo) instead of the
+  // tenant's stored user PAT. Unset = the pre-App behaviour, unchanged: see
+  // resolveRepoAuth in application/repos/githubClient.ts for the fallback order.
   // ---------------------------------------------------------------------------
 
   /** Webhook secret configured in the GitHub App or repository webhook settings.
    *  Set via: wrangler secret put GITHUB_WEBHOOK_SECRET */
   GITHUB_WEBHOOK_SECRET?: string;
+
+  /** Numeric App ID from the GitHub App's settings page.
+   *  Set via: wrangler secret put GITHUB_APP_ID */
+  GITHUB_APP_ID?: string;
+
+  /** The App's PEM private key. GitHub issues these in PKCS#1 form
+   *  ("BEGIN RSA PRIVATE KEY"); WebCrypto needs PKCS#8, and githubApp.ts
+   *  converts transparently, so paste the file exactly as downloaded.
+   *  Escaped "\n" sequences are tolerated for secret stores that mangle newlines.
+   *  Set via: wrangler secret put GITHUB_APP_PRIVATE_KEY */
+  GITHUB_APP_PRIVATE_KEY?: string;
 
   /** Secret token configured on the GitLab project/group webhook (sent as the
    *  `X-Gitlab-Token` header). Set via: wrangler secret put GITLAB_WEBHOOK_SECRET */

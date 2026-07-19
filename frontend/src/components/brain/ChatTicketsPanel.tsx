@@ -22,6 +22,7 @@ import {
 } from '@/lib/builderforceApi';
 import { loadAgentPool } from '@/lib/agentPool';
 import { onBrainDataChanged } from '@/lib/brain/brainDataEvent';
+import { usePermission } from '@/lib/rbac';
 
 export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
   chatId: number;
@@ -30,7 +31,18 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
   onChanged?: () => void;
 }) {
   const t = useTranslations('brain.tickets');
+  const tc = useTranslations('common');
   const router = useRouter();
+  // "Tag to execute" DISPATCHES a run, so it needs the same DEVELOPER+ gate as
+  // every other run control. The button itself lives in the shared
+  // @seanhogg/builderforce-brain-ui package, which is surface-agnostic (it also
+  // renders in the VS Code webview, where there is no tenant-role context) and
+  // exposes no gating prop — so we can't wrap it in <RoleGate> from here. The
+  // honest signal instead rides the adapter: the panel already catches a thrown
+  // Error from runTicket and flashes its message, so a viewer gets the same
+  // "Requires Developer role" explanation rather than a surprise 403. Nothing is
+  // hidden — the Run affordance still renders.
+  const { allowed: canDispatchRun } = usePermission('runtime.execute');
 
   // Open a linked work item in its own view. Routes to the surface the item lives on
   // (board for task/epic/gap + spec-in-project; Portfolio ▸ OKRs tab for the strategy
@@ -114,6 +126,7 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
     runTicket: async (kind, ref, agentRef) => {
       // "Tag to execute": ensure the agent participates, assign it to the ticket,
       // then start a run — reuses the board's dispatch (assignee + run-now).
+      if (!canDispatchRun) throw new Error(tc('requiresDeveloperRole'));
       await brain.inviteChatAgent(chatId, { agentRef }).catch(() => {});
       await tasksApi.update(Number(ref), { assignedAgentRef: agentRef });
       const res = await tasksApi.runNow(Number(ref));
@@ -128,7 +141,7 @@ export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
       return pending.filter((q) => (q.kind === 'question' || q.kind === 'feedback') && q.taskId != null && taskIds.has(q.taskId));
     },
     answerQuestion: (id, responseText) => approvalsApi.decide(id, { status: 'answered', responseText }).then(() => undefined),
-  }), [chatId]);
+  }), [chatId, canDispatchRun, tc]);
 
   return (
     <div style={{ margin: '0 12px' }}>

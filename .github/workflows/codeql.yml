@@ -1,0 +1,60 @@
+name: CodeQL
+
+# Static analysis for the whole TypeScript/JavaScript surface.
+#
+# Why this exists: the platform already ships a weekly SOC 2 sweep
+# (api/src/application/tools/AuditRunner.ts) that looks for secrets and unsafe
+# patterns using PATH AND FILENAME HEURISTICS over the GitHub contents API — it
+# never parses the code. That catches `*.pem` in a tree listing; it cannot catch
+# a tainted-input-to-`eval` dataflow. CodeQL does real semantic analysis, per
+# PR, for free on this repo, and its alerts are ingested back into the platform's
+# own findings pipeline (see api/src/application/security/githubAlerts.ts), so
+# the heuristic sweep and the real analysis land in the same place.
+#
+# `security-and-quality` is used rather than the default `security` pack: the
+# quality queries catch the dead-code and unused-import classes that the
+# repo's own conventions call out, and the noise is manageable at this size.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly full scan so advisories that land in the query pack after a PR
+    # merged still surface, rather than waiting for the next touch of that file.
+    - cron: '30 4 * * 1'
+
+# Least privilege: CodeQL only needs to read the code and write its own alerts.
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze JS/TS
+    runs-on: ubuntu-latest
+    # The repo is large (20+ packages, vendored trees). The default 6h job limit
+    # is far more than needed but the default CodeQL step timeout is not.
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-and-quality
+          config-file: ./.github/codeql-config.yml
+
+      # No build step: the javascript-typescript extractor reads source directly.
+      # A build would only pull in dist/ output that the config already excludes.
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:javascript-typescript

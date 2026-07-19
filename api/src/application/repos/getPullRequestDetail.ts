@@ -32,6 +32,17 @@ export interface PullRequestDetail {
   /** Combined CI status for the head commit: success | failure | pending | null. */
   checks: 'success' | 'failure' | 'pending' | null;
   checksTotal: number;
+  /**
+   * SHA of the PR head commit. Required to publish a Check Run (the Checks API
+   * targets a commit, not a PR) — see application/checks/publishCheckRun.ts.
+   *
+   * CAUTION: this rides the same 30s-TTL cache as the rest of the detail, so a
+   * force-push can leave it stale for up to that window. Callers that must hit
+   * the exact current head — anything writing a check run — should bust the
+   * cache first via `invalidatePullRequestDetail`, because a check posted to a
+   * superseded SHA silently never appears on the PR.
+   */
+  headSha: string | null;
   /** Reason the detail could not be fetched (kept for the UI to surface inline). */
   error?: string;
 }
@@ -47,7 +58,7 @@ export interface PrCoords {
 
 const UNSUPPORTED = (error?: string): PullRequestDetail => ({
   supported: false, state: null, merged: false, draft: false, mergeable: null, mergeableState: null, allowedMergeMethods: null,
-  additions: null, deletions: null, changedFiles: null, checks: null, checksTotal: 0, error,
+  additions: null, deletions: null, changedFiles: null, checks: null, checksTotal: 0, headSha: null, error,
 });
 
 function ghHeaders(token: string): Record<string, string> {
@@ -90,6 +101,10 @@ async function fetchGitlabDetail(coords: PrCoords): Promise<PullRequestDetail> {
     changedFiles: mr.changes_count ? Number(mr.changes_count) || null : null,
     checks,
     checksTotal: checks ? 1 : 0,
+    // GitLab exposes `sha` on the MR, but nothing consumes a head SHA on this
+    // provider today (the Checks API is GitHub-only), so it stays null rather
+    // than adding an unused field to the parse.
+    headSha: null,
   };
 }
 
@@ -116,6 +131,7 @@ async function fetchBitbucketDetail(coords: PrCoords): Promise<PullRequestDetail
     changedFiles: null,
     checks: null,
     checksTotal: 0,
+    headSha: null,
   };
 }
 
@@ -172,6 +188,7 @@ async function fetchDetail(coords: PrCoords): Promise<PullRequestDetail> {
     changedFiles: pr.changed_files ?? null,
     checks,
     checksTotal,
+    headSha: sha ?? null,
   };
 }
 

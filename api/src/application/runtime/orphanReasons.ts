@@ -57,20 +57,35 @@ export const SERVERLESS_WALL_MS = 45_000;
 export const CLOUD_LONG_LIVED_SILENCE_MS = 5 * 60_000;
 
 /**
- * The silence ceiling for the executor a run landed on (stamped on the payload by
- * dispatch; see {@link ../runtime/cloudDispatch.parseExecutor}). EVERY cloud executor
- * now gets {@link CLOUD_LONG_LIVED_SILENCE_MS}: there used to be a second, tight 90s
- * ceiling for an in-request serverless 'worker' loop, but that executor was never
- * reachable and has been removed, leaving only the two long-lived surfaces. Reaping a
- * live tick mid-completion (false positive) is far worse than a few extra minutes
- * before failing a genuinely dead run (false negative), so the generous ceiling is
- * also the right default for an UNKNOWN executor (older/unstamped payloads).
+ * A GitHub Actions run is QUEUED before it is running: after `workflow_dispatch`
+ * returns, GitHub must schedule a runner, boot it, check out the repo and install
+ * Node before our runner script can send its first heartbeat. On a busy queue (or
+ * a repo at its concurrency cap) that gap routinely exceeds five minutes with the
+ * run perfectly healthy.
  *
- * `executor` is retained so call sites keep reading as "the ceiling FOR THIS RUN" and
- * a future per-surface ceiling needs no call-site churn — it is deliberately unused.
+ * So the long-lived ceiling would reap essentially every Actions run before it
+ * ever started. This surface gets its own, much larger ceiling covering the
+ * schedule + boot + checkout window plus a real step. The asymmetry is the whole
+ * reason {@link cloudSilenceCeilingMs} takes an executor.
  */
-export function cloudSilenceCeilingMs(_executor?: string | null): number {
-  return CLOUD_LONG_LIVED_SILENCE_MS;
+export const CLOUD_GITHUB_ACTIONS_SILENCE_MS = 20 * 60_000;
+
+/**
+ * The silence ceiling for the executor a run landed on (stamped on the payload by
+ * dispatch; see {@link ../runtime/cloudDispatch.parseExecutor}).
+ *
+ * `durable` and `container` share {@link CLOUD_LONG_LIVED_SILENCE_MS}: both are
+ * already-running processes, so silence really does mean "crashed or hung".
+ * `github_actions` cannot assume that — see
+ * {@link CLOUD_GITHUB_ACTIONS_SILENCE_MS}.
+ *
+ * Reaping a live run (false positive) is far worse than a few extra minutes
+ * before failing a genuinely dead one (false negative), so the generous
+ * long-lived ceiling remains the default for an UNKNOWN executor (older or
+ * unstamped payloads).
+ */
+export function cloudSilenceCeilingMs(executor?: string | null): number {
+  return executor === 'github_actions' ? CLOUD_GITHUB_ACTIONS_SILENCE_MS : CLOUD_LONG_LIVED_SILENCE_MS;
 }
 
 /**

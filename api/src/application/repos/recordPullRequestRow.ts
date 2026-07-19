@@ -12,6 +12,37 @@ import { and, desc, eq, isNull, ne, sql } from 'drizzle-orm';
 import { deploymentEvents, pullRequests } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 
+/**
+ * The column projection every PR-lookup helper below returns. It was duplicated
+ * verbatim across findOpenPullRequestByTask / findMergedPullRequestBySha /
+ * findOpenPullRequestByProject, so a column added for one caller silently missed
+ * the other two — which is exactly how `number` came to be absent from all three
+ * despite the ordering clauses already referencing it.
+ *
+ * `number` is included because publishing a Check Run needs the PR head SHA, and
+ * the only way to that SHA is getPullRequestDetail(…, { number }).
+ */
+const PR_REF_COLUMNS = {
+  id: pullRequests.id,
+  tenantId: pullRequests.tenantId,
+  taskId: pullRequests.taskId,
+  projectId: pullRequests.projectId,
+  repoId: pullRequests.repoId,
+  buildStatus: pullRequests.buildStatus,
+  number: pullRequests.number,
+} as const;
+
+/** Shape returned by the PR-lookup helpers. */
+export type PullRequestRef = {
+  id: string;
+  tenantId: number;
+  taskId: number | null;
+  projectId: number;
+  repoId: string | null;
+  buildStatus: string | null;
+  number: number | null;
+};
+
 export interface RecordPullRequestInput {
   tenantId: number;
   segmentId?: string | null;
@@ -107,6 +138,23 @@ export async function markPullRequestMergedById(
   return row ?? null;
 }
 
+/**
+ * Flag a PR row CLOSED (not merged) by its id — the DB-side counterpart of
+ * {@link closePullRequest}, used when a run is reverted.
+ *
+ * Deliberately does NOT write a {@link deploymentEvents} row: a closed PR shipped
+ * nothing, so counting it as a deployment would inflate DORA frequency with work
+ * that was thrown away.
+ */
+export async function markPullRequestClosedById(db: Db, id: string, tenantId: number) {
+  const [row] = await db
+    .update(pullRequests)
+    .set({ status: 'closed', updatedAt: new Date() })
+    .where(and(eq(pullRequests.id, id), eq(pullRequests.tenantId, tenantId)))
+    .returning();
+  return row ?? null;
+}
+
 /** Flag the latest still-open PR row for a task merged (green-CI webhook merge). */
 export async function markPullRequestMergedByTask(
   db: Db,
@@ -129,14 +177,7 @@ export async function markPullRequestMergedByTask(
  *  pre-merge phase so the build status + reason land on the right PR row. */
 export async function findOpenPullRequestByTask(db: Db, tenantId: number, taskId: number) {
   const [row] = await db
-    .select({
-      id: pullRequests.id,
-      tenantId: pullRequests.tenantId,
-      taskId: pullRequests.taskId,
-      projectId: pullRequests.projectId,
-      repoId: pullRequests.repoId,
-      buildStatus: pullRequests.buildStatus,
-    })
+    .select(PR_REF_COLUMNS)
     .from(pullRequests)
     .where(and(eq(pullRequests.taskId, taskId), eq(pullRequests.tenantId, tenantId), ne(pullRequests.status, 'merged')))
     // Prefer a row with a real provider number, then newest (same precedence as the GET route).
@@ -148,14 +189,7 @@ export async function findOpenPullRequestByTask(db: Db, tenantId: number, taskId
 /** Find the merged PR a post-merge CI build belongs to, by its recorded merge SHA. */
 export async function findMergedPullRequestBySha(db: Db, mergeSha: string) {
   const [row] = await db
-    .select({
-      id: pullRequests.id,
-      tenantId: pullRequests.tenantId,
-      taskId: pullRequests.taskId,
-      projectId: pullRequests.projectId,
-      repoId: pullRequests.repoId,
-      buildStatus: pullRequests.buildStatus,
-    })
+    .select(PR_REF_COLUMNS)
     .from(pullRequests)
     .where(eq(pullRequests.mergeSha, mergeSha))
     .limit(1);
@@ -174,14 +208,7 @@ export async function findMergedPullRequestBySha(db: Db, mergeSha: string) {
  */
 export async function findOpenPullRequestByProject(db: Db, tenantId: number, projectId: number) {
   const [row] = await db
-    .select({
-      id: pullRequests.id,
-      tenantId: pullRequests.tenantId,
-      taskId: pullRequests.taskId,
-      projectId: pullRequests.projectId,
-      repoId: pullRequests.repoId,
-      buildStatus: pullRequests.buildStatus,
-    })
+    .select(PR_REF_COLUMNS)
     .from(pullRequests)
     .where(and(eq(pullRequests.projectId, projectId), eq(pullRequests.tenantId, tenantId), ne(pullRequests.status, 'merged')))
     .orderBy(sql`${pullRequests.number} is not null desc`, desc(pullRequests.createdAt))

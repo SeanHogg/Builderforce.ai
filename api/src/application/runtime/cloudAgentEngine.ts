@@ -21,6 +21,8 @@ import { commitPrdAsPendingChange } from '../repos/commitPrdToRepo';
 import { createPullRequest } from '../repos/createPullRequest';
 import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutoMergeEnabled } from '../repos/mergeBranchToBase';
 import { recordPullRequestRow, markPullRequestMergedById } from '../repos/recordPullRequestRow';
+import { publishAgentRunVerdict } from '../checks/publishTaskVerdict';
+import { postRepoPrComment } from '../repos/postPrComment';
 import { claimTaskPrOpen, releaseTaskPrClaim } from '../repos/openTaskPullRequest';
 import { readRepoFile, listRepoFiles, searchRepoCode, listBranchDiff } from '../repos/readRepoContents';
 import { verifyWrittenFiles } from '../repos/verifyWrittenFiles';
@@ -63,11 +65,14 @@ import { reasoningParamsForModel } from '../llm/reasoningCapability';
 import { contributeTextToProjectEverminds, buildEvermindLessonsBlock } from '../llm/projectEvermind';
 import { buildProjectFactsBlock } from '../llm/projectFacts';
 import { scoreRunOutcome, finalizeLearnWeight } from './scoreRunOutcome';
+import { recordCloudToolEvent } from './cloudToolEvents';
+import { recordRunRollbackSnapshot, teardownRunBranch, teardownCrashedRunArtifacts } from './runRollback';
 import { handleCloudRunCrash } from './cloudSelfHeal';
 import { cloudCrashReason } from './orphanReasons';
 import { RuntimeService } from './RuntimeService';
 import { ExecutionStatus } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
+import { resolveAppBaseUrl } from '../../env';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { boards, executions, tasks, specs, toolAuditEvents, usageSnapshots, projects, approvals, projectAgents } from '../../infrastructure/database/schema';
@@ -436,48 +441,12 @@ export async function recordPrdDirective(
 }
 
 /**
- * Record one cloud-agent tool-audit event so cloud runs are observable on the
- * Timeline exactly like self-hosted agents (which push tool-audit via the relay).
- * Cloud runs have no agent_host_id / live session, so rows are keyed by the cloud
- * agent ref + execution id (migration 0092). Best-effort — never throws.
+ * The cloud tool-audit emitter now lives in `./cloudToolEvents` (so modules this
+ * engine depends on can emit without an import cycle). Re-exported here because
+ * this module has always been its public door — every existing importer, in this
+ * file and across the routes, keeps working unchanged.
  */
-export async function recordCloudToolEvent(
-  db: Db,
-  args: {
-    tenantId: number;
-    cloudAgentRef?: string;
-    /** The execution this event belongs to, or `null` for a task-scoped event
-     *  (e.g. a Done-transition `pr_opened` with no live execution). When null,
-     *  pass `sessionKey` (e.g. `task:<id>`) so the row still has a correlation key. */
-    executionId: number | null;
-    /** Override the default `exec:<id>` correlation key. Required when
-     *  `executionId` is null so the row isn't keyed `exec:null`. */
-    sessionKey?: string;
-    toolName: string;
-    category: string;
-    toolCallId?: string;
-    detail?: unknown;
-    result?: string;
-    durationMs?: number;
-  },
-): Promise<void> {
-  try {
-    await db.insert(toolAuditEvents).values({
-      tenantId:     args.tenantId,
-      agentHostId:  null,
-      cloudAgentRef: args.cloudAgentRef ?? null,
-      executionId:  args.executionId,
-      sessionKey:   args.sessionKey ?? (args.executionId != null ? `exec:${args.executionId}` : null),
-      toolCallId:   args.toolCallId ?? null,
-      toolName:     args.toolName,
-      category:     args.category,
-      args:         args.detail != null ? JSON.stringify(args.detail) : null,
-      result:       args.result ?? null,
-      durationMs:   args.durationMs ?? null,
-      ts:           new Date(),
-    });
-  } catch { /* telemetry is best-effort — never break the run */ }
-}
+export { recordCloudToolEvent };
 
 /** Real-coder recognition set (auto-route pool + BYO frontier flagships) for O(1)
  *  membership on the hot per-turn path — so a connected-account coder (e.g. Meta MUSE
@@ -1286,6 +1255,12 @@ export async function handleContainerOp(
     if (outcome === 'ineligible') {
       const updated = await runtimeService.getExecution(executionId).catch(() => null);
       if (updated) notifyExecutionSubscribers(executionId, { type: 'done', executionId, status: updated.status, execution: updated.toPlain(), ts: new Date().toISOString() });
+      // Terminal FAILURE with no PR to protect — sweep the ticket branch this run
+      // half-wrote, subject to the same shared safety decision the cancel path
+      // uses (never the default branch, never under an open PR, never a branch
+      // carrying commits this run did not author). Best-effort.
+      await teardownCrashedRunArtifacts(env, db, { executionId, secret: gitSecret(env) })
+        .catch(() => { /* a sweep must never mask the real crash */ });
       // Terminal (no self-heal requeue) — score the failed run. A requeue defers
       // scoring to the durable surface's terminal chokepoint instead.
       await scoreRunOutcome(env, db, { executionId }).catch(() => { /* best-effort */ });
@@ -2260,6 +2235,11 @@ export async function finalizeCloudRun(
   // When files were produced but no PR ends up open, capture WHY so the run's
   // summary / timeline explains it instead of silently showing no Pull Request tab.
   let noPrReason = '';
+  // The PR this finalize opened, hoisted so the rollback snapshot below can record
+  // exactly what a later revert would have to close.
+  let openedPrNumber: number | null = null;
+  let openedPrUrl: string | null = null;
+  let openedPrRowId: string | null = null;
   // Atomic single-PR claim (0140): take it BEFORE the external create so this inline
   // run-end finalize can't open a duplicate PR alongside a concurrent human Done-drag
   // (which finalizes via openTaskPullRequest, taking the same claim). Lost claim =>
@@ -2287,6 +2267,8 @@ export async function finalizeCloudRun(
     // correlates the post-merge build back to this task).
     let prRowId: string | null = null;
     if (pr.ok) {
+      openedPrNumber = pr.number;
+      openedPrUrl = pr.url;
       const recordedStatus = autoMerge && !cloudAutoMergeRequiresGreen(env) ? 'merged' : 'open';
       const prRow = await recordPullRequestRow(db, {
         tenantId, segmentId: repoCtx.segmentId, projectId: repoCtx.projectId, repoId: repoCtx.repoId,
@@ -2294,6 +2276,7 @@ export async function finalizeCloudRun(
         branchName: repoCtx.branch, baseBranch: repoCtx.base, status: recordedStatus,
       }).catch(() => null);
       prRowId = prRow?.id ?? null;
+      openedPrRowId = prRowId;
     }
 
     await db.update(tasks)
@@ -2345,6 +2328,36 @@ export async function finalizeCloudRun(
     noPrReason = repoMiss || 'no repository linked to this project';
   }
 
+  // ── rollback bookkeeping ────────────────────────────────────────────────────
+  // Two mutually exclusive outcomes for the run's repository artifacts:
+  //
+  //  (a) The run finished and left work behind → SNAPSHOT it, so a human can
+  //      revert this run later. This includes a run that produced files but whose
+  //      PR create FAILED: the commits are still real work on a real branch, and
+  //      the honest response is to make them revertable, NOT to delete them.
+  //  (b) The run was CANCELLED → its half-written branch is residue → hand it to
+  //      the shared teardown decision, which deletes it ONLY if it can prove the
+  //      branch is nothing but this run's abandoned work.
+  //
+  // Failures do not reach here (the crash path finalizes via handleCloudRunCrash),
+  // which calls the same teardown at ITS terminal branch. Both are best-effort and
+  // must never change the run's own outcome.
+  if (repoCtx && writtenPaths.size > 0) {
+    if (cancelled) {
+      await teardownRunBranch(env, db, {
+        tenantId, executionId, taskId: taskRow.id, repoCtx,
+        writtenPaths: [...writtenPaths], cloudAgentRef, agentLabel,
+      }).catch(() => { /* teardown is a sweep — never fail a run over it */ });
+    } else {
+      await recordRunRollbackSnapshot(db, {
+        tenantId, executionId, taskId: taskRow.id, repoCtx,
+        writtenPaths: [...writtenPaths],
+        prNumber: openedPrNumber, prUrl: openedPrUrl, prRowId: openedPrRowId,
+        agentLabel,
+      }).catch(() => null);
+    }
+  }
+
   // No PR opened despite changes — make the reason explicit in the timeline so a
   // human knows what to fix (link a repo / fix the credential / inspect the error).
   const noPrNote = noPrReason && !cancelled ? ` — no PR opened: ${noPrReason}` : '';
@@ -2388,6 +2401,51 @@ export async function finalizeCloudRun(
     // grouped under it), not just the one projectId — the same resolver the chat learn
     // gate uses, so a cloud run contributes to all the project's Everminds. Best-effort.
     await contributeTextToProjectEverminds(env, db, tenantId, repoCtx.projectId, output, learnWeight, taskRow.title).catch(() => { /* best-effort */ });
+  }
+
+  // Publish this run's outcome onto the PR itself so a reviewer on github.com
+  // sees the verdict where the merge decision is actually made — previously the
+  // agent's result existed only in the Builderforce UI. Rides the same terminal
+  // chokepoint as everything else here, so BOTH cloud surfaces (durable DO and
+  // container) get it from this one call site.
+  //
+  // Publishes a Check Run when the tenant has the GitHub App installed, and
+  // degrades to a commit status on a user token (the Checks API is App-only).
+  // Strictly best-effort: annotating a PR must never change the run's outcome.
+  if (writtenPaths.size > 0 || prOpened) {
+    await publishAgentRunVerdict(env, db, tenantId, taskRow.id, {
+      executionId,
+      outcome: cancelled ? 'cancelled' : autoMergeFailed ? 'failed' : 'completed',
+      // Reuse the run summary verbatim, including the unverified caveat — the
+      // whole point of the check is that a reviewer sees what the agent claims
+      // AND that it was not verified in-agent.
+      summary: output + unverifiedNote,
+      filesChanged: [...writtenPaths],
+      appBaseUrl: resolveAppBaseUrl(env),
+    }).catch(() => { /* best-effort */ });
+  }
+
+  // The check run above answers "green or red" in the merge box; it cannot carry
+  // the narrative. Post the run summary onto the PR CONVERSATION too, so a
+  // reviewer on github.com reads what the agent did — and the "not verified
+  // in-agent" caveat — without leaving the review they're already in.
+  //
+  // Scoped to this executionId so a second agent pass on the same PR adds a
+  // second summary, while a webhook redelivery or a retried finalize of THIS run
+  // is deduped by the hidden marker. Strictly best-effort.
+  if (prOpened && openedPrNumber != null && repoCtx?.repoId) {
+    const files = [...writtenPaths];
+    const fileBlock = files.length
+      ? `\n\n**Files changed (${files.length})**\n${files.slice(0, 50).map((f) => `- \`${f}\``).join('\n')}${
+          files.length > 50 ? `\n- …and ${files.length - 50} more` : ''
+        }`
+      : '';
+    const runUrl = resolveAppBaseUrl(env) ? `\n\n[View the full run](${resolveAppBaseUrl(env)}/executions/${executionId})` : '';
+    await postRepoPrComment(
+      env, db, tenantId, repoCtx.repoId, openedPrNumber,
+      `### 🤖 ${agentLabel} — task #${taskRow.id}\n\n${output}${fileBlock}${unverifiedNote}${runUrl}`,
+      { kind: 'agent-run', scope: executionId },
+    ).catch(() => { /* best-effort */ });
   }
 
   return { ok: !autoMergeFailed, output: output + unverifiedNote };

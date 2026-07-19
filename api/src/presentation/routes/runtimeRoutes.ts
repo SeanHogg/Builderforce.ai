@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { neon } from '@neondatabase/serverless';
 import { resolveDefaultRepoForTask } from '../../application/repos/resolveDefaultRepo';
+import { dispatchGithubActionsRun, githubActionsAvailable } from '../../application/runtime/githubActionsDispatch';
 import { resolveTicketRepoContext } from '../../application/repos/commitFileAsPendingChange';
 import { readRepoFile } from '../../application/repos/readRepoContents';
 import { importRepoContents } from '../../application/repos/importRepoContents';
@@ -24,6 +25,8 @@ import {
 import { CONTAINER_MAX_STEPS } from '../../application/runtime/cloudAgentTools';
 import { enforceCloudRunCap } from '../../application/runtime/cloudRunLedger';
 import { evaluateExecutionApprovalGate } from '../../application/runtime/executionApprovalGate';
+import { revertRun } from '../../application/runtime/runRollback';
+import { resolveActorFromContext } from '../../application/activity/activityLog';
 import { ExecutionStatus, TenantRole } from '../../domain/shared/types';
 import type { ResolvedArtifacts } from '../../domain/shared/types';
 import { millicentsToUsd } from '../../domain/shared/money';
@@ -504,6 +507,11 @@ async function startDispatchedExecution(
     const wantsContainer = surface === 'container';
     const hasContainerBinding = wantsContainer && !!env.AGENT_CONTAINER;
     const hasCloudRunner = !!env.CLOUD_RUNNER;
+    // The GitHub Actions surface has no binding and no liveness probe — a runner
+    // does not exist until GitHub schedules one — so the pre-flight is "can this
+    // be QUEUED": a linked GitHub repo whose default branch carries the agent
+    // workflow. Resolved inside orchestrate() because it costs a GitHub call.
+    const wantsGithubActions = surface === 'github_actions';
 
     // The payload the run is dispatched with. Once `orchestrate` resolves the executor
     // it re-stamps this (and the executions row) with `executor` so the orphan reaper /
@@ -527,6 +535,38 @@ async function startDispatchedExecution(
       }).catch(() => { /* best-effort telemetry */ });
       await notifyDone().catch(() => { /* best-effort live update */ });
     };
+    /**
+     * Queue the run onto the repo's GitHub Actions runners.
+     *
+     * Unlike the other two starters this hands off to infrastructure we do not
+     * control and cannot call back into: `workflow_dispatch` returns 204 meaning
+     * "accepted into GitHub's queue", not "a runner started". The run becomes
+     * real only when the runner's first heartbeat reaches
+     * /api/runtime/github-actions/op — which is why this surface carries a much
+     * larger orphan-reaper ceiling (CLOUD_GITHUB_ACTIONS_SILENCE_MS).
+     *
+     * A dispatch that GitHub rejects IS terminal, though: nothing was queued, so
+     * no runner will ever call back and the run would otherwise sit pending until
+     * reaped ~20 minutes later with a misleading "silent run" reason.
+     */
+    const startGithubActions = async () => {
+      const res = await dispatchGithubActionsRun(env, db, {
+        tenantId, taskId: taskRow.id, executionId: execution.id,
+      }).catch((e) => ({ ok: false as const, code: 'threw', reason: e instanceof Error ? e.message : String(e) }));
+
+      if (!res.ok) {
+        await failCloudRuntimeUnavailable(`GitHub Actions dispatch failed: ${res.reason}`);
+        return;
+      }
+
+      await recordCloudToolEvent(db, {
+        tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+        toolName: 'runtime.queued', category: 'planning',
+        detail: { surface: 'github_actions' },
+        result: 'Queued on GitHub Actions — waiting for a runner to be scheduled.',
+      }).catch(() => { /* best-effort telemetry */ });
+    };
+
     const startDurable = async () => {
       const cloudRunner = env.CLOUD_RUNNER;
       if (!cloudRunner) {
@@ -626,7 +666,15 @@ async function startDispatchedExecution(
         ? env.AGENT_CONTAINER.get(env.AGENT_CONTAINER.idFromName(`exec:${execution.id}`))
         : null;
       const containerHealthy = stub ? await probeContainerHealth(stub) : false;
-      const executor = chooseCloudExecutor({ wantsContainer, hasContainerBinding, containerHealthy, hasCloudRunner });
+      const actionsAvailable = wantsGithubActions
+        ? await resolveDefaultRepoForTask(db, tenantId, taskRow.id)
+            .then((r) => (r ? githubActionsAvailable(env, db, tenantId, r.repoId) : false))
+            .catch(() => false)
+        : false;
+      const executor = chooseCloudExecutor({
+        wantsContainer, hasContainerBinding, containerHealthy, hasCloudRunner,
+        wantsGithubActions, githubActionsAvailable: actionsAvailable,
+      });
 
       // Stamp the resolved executor onto the payload + the executions row so the orphan
       // reaper and read-path repair measure this run against the RIGHT silence ceiling:
@@ -661,7 +709,20 @@ async function startDispatchedExecution(
         });
       }
 
-      if (executor === 'container' && stub) await startContainer(stub);
+      // Explain a github_actions→durable downgrade the same way the container
+      // downgrade is explained, so the timeline says WHY rather than silently
+      // running somewhere the tenant did not choose.
+      if (wantsGithubActions && executor !== 'github_actions') {
+        await recordCloudToolEvent(db, {
+          tenantId, cloudAgentRef: agent.ref, executionId: execution.id,
+          toolName: 'runtime.fallback', category: 'planning',
+          detail: { requestedSurface: 'github_actions', ranOn: executor, reason: 'agent workflow not available on the linked repo' },
+          result: `${typeLabel}: the GitHub Actions agent workflow is not present on the linked repo — running on the ${executor} executor instead.`,
+        });
+      }
+
+      if (executor === 'github_actions') await startGithubActions();
+      else if (executor === 'container' && stub) await startContainer(stub);
       else if (executor === 'durable') await startDurable();
       else await failCloudRuntimeUnavailable('the CLOUD_RUNNER binding is not configured');
     };
@@ -1621,6 +1682,38 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     });
 
     return c.json(execution.toPlain());
+  });
+
+  // Revert a completed run: close the pull request it opened and delete the ticket
+  // branch it wrote, once the shared teardown decision can PROVE nothing else
+  // touched them. Refusals (merged PR, advanced branch, foreign commits/paths,
+  // unreadable evidence, unsupported provider) come back as a 409 carrying the
+  // reason verbatim so the UI can explain exactly what blocked it.
+  //
+  // MANAGER — not the DEVELOPER tier the rest of this file's dispatch routes use.
+  // Starting a run is a developer's job; DESTROYING the output of one, including
+  // commits a human may have reviewed, is a governance action.
+  router.post('/executions/:id/revert', requireRole(TenantRole.MANAGER) as never, async (c) => {
+    const id = Number(c.req.param('id'));
+    const owned = await loadOwnedExecution(c, runtimeService, id);
+    if (!owned) return c.json({ error: 'Execution not found' }, 404);
+
+    // Only a settled run can be reverted — a live one is still writing, so cancel
+    // it first (which routes into the automatic teardown sweep instead).
+    if (!isTerminalExecutionStatus(owned.status)) {
+      return c.json({ error: 'Only a finished run can be reverted — cancel it first.', refusal: 'run_not_terminal' }, 409);
+    }
+
+    const outcome = await revertRun(c.env, db, {
+      tenantId: c.get('tenantId'),
+      executionId: id,
+      actor: await resolveActorFromContext(c.env, db, c as unknown as Context<HonoEnv>),
+      secret: gitSecret(c.env),
+    });
+    if (!outcome.reverted) {
+      return c.json({ error: outcome.reason, refusal: outcome.refusal }, 409);
+    }
+    return c.json(outcome);
   });
 
   // Send a follow-up direction to a running/queued execution so the user can

@@ -20,6 +20,8 @@ import {
   type TaskRepoStatus,
 } from '@/lib/builderforceApi';
 import { unifiedDiff } from '@/lib/unifiedDiff';
+import { RoleGate } from '@/components/RoleGate';
+import { useConfirm } from '@/components/ConfirmProvider';
 import { RunAgentControl } from '../task/RunAgentControl';
 import { ApprovalResolveControl } from '../humanRequests/ApprovalResolveControl';
 import { ChatMessageBubble } from '../ChatMessageBubble';
@@ -193,6 +195,7 @@ function isGenuineToolCall(ev: ExecutionTraceToolEvent): boolean {
 
 export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task: Task; agentHosts: AgentHost[]; onTaskChanged?: () => void }) {
   const t = useTranslations('agentExecution');
+  const confirm = useConfirm();
   const [executions, setExecutions] = useState<Execution[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [trace, setTrace] = useState<ExecutionTrace | null>(null);
@@ -214,6 +217,9 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
   // Re-run (retry/resume) of a terminal execution from its chip.
   const [rerunningId, setRerunningId] = useState<number | null>(null);
   const [rerunError, setRerunError] = useState<string | null>(null);
+  const [revertingId, setRevertingId] = useState<number | null>(null);
+  const [revertError, setRevertError] = useState<string | null>(null);
+  const [revertNotice, setRevertNotice] = useState<string | null>(null);
   // Ticket-level spend (finest grain of the ticket → project → account rollup).
   const [taskCost, setTaskCost] = useState<{ estimatedCostUsd: number; totalTokens: number; requests: number } | null>(null);
   const [coordinated, setCoordinated] = useState(false);
@@ -543,6 +549,37 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
     try { await runtimeApi.cancel(selectedId); loadExecutions(); } catch { /* ignore */ }
   };
 
+  // Revert a finished run — close the PR it opened and delete the branch it wrote.
+  // This is IRREVERSIBLE and one of the few places a confirm modal is the right
+  // control (repo convention: modals for destructive approvals only). The server
+  // refuses with a 409 whenever it can't prove the artifacts are still only this
+  // run's; that reason is shown verbatim rather than being flattened to "failed",
+  // because knowing WHY it refused is the whole point.
+  const revert = async (e: Execution) => {
+    if (revertingId != null) return;
+    const accepted = await confirm({
+      title: t('revertConfirmTitle'),
+      message: t('revertConfirmMessage', { id: e.id }),
+      confirmLabel: t('revertConfirmAction'),
+      destructive: true,
+    });
+    if (!accepted) return;
+    setRevertingId(e.id);
+    setRevertError(null);
+    setRevertNotice(null);
+    try {
+      const result = await runtimeApi.revert(e.id);
+      setRevertNotice(t('revertDone', { branch: result.branch, commits: result.commits }));
+      loadExecutions();
+      loadTaskChanges();
+      onTaskChanged?.();
+    } catch (err) {
+      setRevertError(err instanceof Error ? err.message : t('failedToRevert'));
+    } finally {
+      setRevertingId(null);
+    }
+  };
+
   // Re-run a terminal execution (failed/cancelled) — or resume a paused one — by
   // re-submitting the task with the original run's target + payload (its model +
   // cloud-agent ref), so the retry runs as the same agent rather than the default.
@@ -689,11 +726,46 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
             )}
             <div style={{ flex: 1 }} />
             {isRunning && (
-              <button type="button" onClick={cancel} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                {t('cancel')}
-              </button>
+              /* Cancelling a run is a dispatch-tier action (requireRole(DEVELOPER) on
+                 /api/runtime/executions/:id/cancel) — everything else in this header
+                 (status, agent, live/polling indicator) is read-only and stays open. */
+              <RoleGate capability="runtime.execute">
+                <button type="button" onClick={cancel} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                  {t('cancel')}
+                </button>
+              </RoleGate>
+            )}
+            {!isRunning && (
+              /* Reverting a finished run is DESTRUCTIVE (closes its PR, deletes its
+                 branch) — manager-gated server-side, so gate it at the same tier
+                 here. RoleGate disables rather than hides, so a developer still
+                 sees the control and the role it needs. */
+              <RoleGate capability="runtime.revert">
+                <button
+                  type="button"
+                  onClick={() => selected && revert(selected)}
+                  disabled={revertingId != null}
+                  title={t('revertHint')}
+                  style={{
+                    fontSize: 11, padding: '4px 10px', borderRadius: 6,
+                    border: '1px solid var(--danger, #dc2626)', background: 'var(--bg-base)',
+                    color: 'var(--danger, #dc2626)',
+                    cursor: revertingId != null ? 'default' : 'pointer',
+                    opacity: revertingId != null ? 0.6 : 1,
+                  }}
+                >
+                  {revertingId === selected?.id ? t('reverting') : t('revert')}
+                </button>
+              </RoleGate>
             )}
           </div>
+
+          {revertError && (
+            <div style={{ fontSize: 12, color: 'var(--danger, #dc2626)', marginBottom: 12, lineHeight: 1.5 }}>{revertError}</div>
+          )}
+          {revertNotice && (
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12, lineHeight: 1.5 }}>{revertNotice}</div>
+          )}
 
           {errorMessage && (
             <div style={{ marginBottom: 12 }}>
@@ -746,8 +818,13 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                 )}
               </div>
 
-              {/* Chatbox — steer the running agent */}
-              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              {/* Chatbox — steer the running agent (or spawn a follow-up run on a
+                  terminal one). Both are dispatch: POST /api/runtime/executions/:id/messages
+                  is requireRole(DEVELOPER). Gated as a BLOCK so a viewer doesn't type a
+                  directive into a composer that can never send. READING the thread above
+                  is untouched. */}
+              <RoleGate capability="runtime.execute" variant="block" style={{ marginTop: 10 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
                 <textarea
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
@@ -766,6 +843,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
                   {sending ? (isRunning ? t('sendingLabel') : t('startingLabel')) : isRunning ? t('send') : t('startRun')}
                 </button>
               </div>
+              </RoleGate>
 
               {/* This panel is a minimal per-execution view; the agent streams its
                   full logs / tool calls / timeline to Observability. */}

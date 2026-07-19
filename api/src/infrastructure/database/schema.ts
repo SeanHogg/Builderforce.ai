@@ -6918,3 +6918,44 @@ export const policyGates = pgTable('policy_gates', {
   uniqueIndex('uq_policy_gate_key').on(t.packId, t.gateKey),
   index('idx_policy_gates_pack').on(t.packId, t.position),
 ]);
+
+// ---------------------------------------------------------------------------
+// Execution rollback (0350) — the undo log for autonomous runs
+// ---------------------------------------------------------------------------
+
+/**
+ * Audit + undo log for a cloud run's REPOSITORY artifacts. One row per run that
+ * committed to a ticket branch. Modelled on {@link contributorMerges} (0205): the
+ * `undoPayload` snapshots enough state (the paths written, the commit shas, the
+ * branch/base, the PR) for a later revert to prove nothing moved underneath it,
+ * `status` flips exactly once, and `revertedAt` stamps the flip.
+ *
+ * `executionId` is ON DELETE SET NULL on purpose — the record of what a run did to
+ * a repo must outlive the run row, and a null id is precisely the "a participant
+ * was hard-deleted" condition the revert refuses on.
+ */
+export const executionRollbacks = pgTable('execution_rollbacks', {
+  id:               uuid('id').primaryKey().defaultRandom(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:        uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:        integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  taskId:           integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  executionId:      integer('execution_id').references(() => executions.id, { onDelete: 'set null' }),
+  repoId:           uuid('repo_id').references(() => projectRepositories.id, { onDelete: 'set null' }),
+  provider:         varchar('provider', { length: 16 }),
+  branchName:       varchar('branch_name', { length: 255 }),
+  baseBranch:       varchar('base_branch', { length: 255 }),
+  prRowId:          uuid('pr_row_id').references(() => pullRequests.id, { onDelete: 'set null' }),
+  undoPayload:      jsonb('undo_payload'),
+  /** 'active' | 'reverted' | 'torn_down' | 'refused' */
+  status:           varchar('status', { length: 16 }).notNull().default('active'),
+  refusalCode:      varchar('refusal_code', { length: 32 }),
+  refusalReason:    text('refusal_reason'),
+  revertedByUserId: varchar('reverted_by_user_id', { length: 36 }),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  revertedAt:       timestamp('reverted_at'),
+}, (t) => [
+  index('idx_execution_rollbacks_execution').on(t.executionId),
+  index('idx_execution_rollbacks_tenant_status').on(t.tenantId, t.status),
+  index('idx_execution_rollbacks_task').on(t.taskId),
+]);

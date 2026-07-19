@@ -1,5 +1,6 @@
 'use client';
 
+import { RoleGate } from '@/components/RoleGate';
 import { EXECUTION_STATUS_COLOR, rerunAffordance, type RerunAffordance } from '../board/AgentChip';
 
 /**
@@ -9,6 +10,11 @@ import { EXECUTION_STATUS_COLOR, rerunAffordance, type RerunAffordance } from '.
  * (future) paused run — so the user can kick it off again without scrolling back
  * up to the Run control. The chip decides for itself whether that icon shows
  * (via {@link rerunAffordance}); the parent only supplies the action.
+ *
+ * SELECTING a chip is a read (it just changes which run you're looking at) and
+ * stays open to everyone. Re-running is a DISPATCH, so the affordance carries its
+ * own DEVELOPER+ gate here rather than at the parent — per repo rule, the shared
+ * control decides its own state.
  */
 export interface ExecutionChipProps {
   id: number;
@@ -58,23 +64,25 @@ export function ExecutionChip({ id, status, selected, onSelect, onRerun, rerunni
         #{id} · {status}
       </button>
       {affordance && (
-        <button
-          type="button"
-          onClick={rerunning ? undefined : onRerun}
-          disabled={rerunning}
-          title={ICON[affordance].title}
-          aria-label={ICON[affordance].title}
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: '0 8px', border: 'none', borderLeft: '1px solid var(--border-subtle)',
-            background: 'none', color: 'var(--coral-bright)',
-            cursor: rerunning ? 'default' : 'pointer', opacity: rerunning ? 0.5 : 1,
-          }}
-        >
-          <svg viewBox="0 0 24 24" style={{ width: 13, height: 13, fill: 'currentColor' }} aria-hidden>
-            <path d={ICON[affordance].path} />
-          </svg>
-        </button>
+        <RoleGate capability="runtime.execute" style={{ alignSelf: 'stretch' }}>
+          <button
+            type="button"
+            onClick={rerunning ? undefined : onRerun}
+            disabled={rerunning}
+            title={ICON[affordance].title}
+            aria-label={ICON[affordance].title}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: '0 8px', border: 'none', borderLeft: '1px solid var(--border-subtle)',
+              background: 'none', color: 'var(--coral-bright)',
+              cursor: rerunning ? 'default' : 'pointer', opacity: rerunning ? 0.5 : 1,
+            }}
+          >
+            <svg viewBox="0 0 24 24" style={{ width: 13, height: 13, fill: 'currentColor' }} aria-hidden>
+              <path d={ICON[affordance].path} />
+            </svg>
+          </button>
+        </RoleGate>
       )}
     </span>
   );

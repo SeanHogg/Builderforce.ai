@@ -135,20 +135,28 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
  */
 vi.mock('@/lib/AuthContext', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/AuthContext')>();
+  const value = {
+    user: null,
+    tenant: { role: 'owner' },
+    webToken: null,
+    tenantToken: null,
+    isAuthenticated: true,
+    hasTenant: true,
+    login: async () => {},
+    register: async () => {},
+    selectTenant: async () => {},
+    fetchTenants: async () => [],
+    logout: () => {},
+  };
   return {
     ...actual,
-    useAuth: () => ({
-      user: null,
-      tenant: { role: 'owner' },
-      webToken: null,
-      tenantToken: null,
-      isAuthenticated: true,
-      hasTenant: true,
-      login: async () => {},
-      register: async () => {},
-      selectTenant: async () => {},
-      fetchTenants: async () => [],
-      logout: () => {},
-    }),
+    useAuth: () => value,
+    // `useOptionalAuth` must return the SAME identity, not the real (null)
+    // context: `useRole` — and therefore every `usePermission`/`<RoleGate>` —
+    // reads the optional hook. Mocking only `useAuth` left the role undefined,
+    // so gated controls rendered disabled ("Requires Developer role") in tests
+    // while working fine in the app, and the failure looked like a broken
+    // control rather than a missing mock.
+    useOptionalAuth: () => value,
   };
 });

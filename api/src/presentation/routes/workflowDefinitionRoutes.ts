@@ -15,7 +15,8 @@
  */
 import { Hono } from 'hono';
 import { eq, and, desc, sql } from 'drizzle-orm';
-import { authMiddleware } from '../middleware/authMiddleware';
+import { authMiddleware, requireRole } from '../middleware/authMiddleware';
+import { TenantRole } from '../../domain/shared/types';
 import { workflowDefinitions, workflowTriggers, agentHosts, projects, workflows } from '../../infrastructure/database/schema';
 import {
   definitionToYaml,
@@ -441,7 +442,10 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
   // taken from the request when supplied (manual run from the builder), else the
   // definition's persisted run target. Supports a self-hosted agentHost
   // (runtime=host) or the builderforce-hosted cloud runtime (runtime=cloud).
-  router.post('/:id/run', async (c) => {
+  // DEVELOPER+ — instantiating a workflow run dispatches agent work, so it matches
+  // the dispatch tier used across runtimeRoutes and /tasks/:id/run-now. Previously
+  // ungated, leaving the UI's `runtime.execute` gate unenforced server-side.
+  router.post('/:id/run', requireRole(TenantRole.DEVELOPER), async (c) => {
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
     const body = await c.req.json<{

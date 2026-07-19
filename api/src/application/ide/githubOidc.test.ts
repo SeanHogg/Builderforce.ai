@@ -69,7 +69,7 @@ beforeEach(async () => {
     true,
     ['sign', 'verify'],
   ) as CryptoKeyPair;
-  jwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey);
+  jwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey) as JsonWebKey;
 
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (String(url).includes('/.well-known/jwks')) {

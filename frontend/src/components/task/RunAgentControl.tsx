@@ -151,22 +151,28 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
             ))}
           </Select>
         )}
-        <button
-          type="button"
-          onClick={() => run({ target, model, ...(repos.length > 1 ? { repoId } : {}) })}
-          disabled={running}
-          style={{
-            padding: '7px 16px', fontSize: 13, fontWeight: 600, border: 'none',
-            background: 'var(--coral-bright)', color: '#fff', cursor: running ? 'default' : 'pointer',
-            opacity: running ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 6,
-            flexShrink: 0, whiteSpace: 'nowrap',
-          }}
-        >
-          {running ? t('running') : t('run')}
-          {!running && (
-            <svg viewBox="0 0 24 24" style={{ width: 14, height: 14, fill: 'currentColor' }}><path d="M8 5v14l11-7z" /></svg>
-          )}
-        </button>
+        {/* Only the DISPATCH is gated (DEVELOPER+, mirroring requireRole(DEVELOPER)
+            on /api/runtime/tasks/submit). The agent/model/repo pickers stay live for
+            a viewer — inspecting how a run WOULD be targeted is a read. The gate sits
+            in this shared control so every consumer inherits it. */}
+        <RoleGate capability="runtime.execute" style={{ flexShrink: 0, alignSelf: 'stretch' }}>
+          <button
+            type="button"
+            onClick={() => run({ target, model, ...(repos.length > 1 ? { repoId } : {}) })}
+            disabled={running}
+            style={{
+              padding: '7px 16px', fontSize: 13, fontWeight: 600, border: 'none',
+              background: 'var(--coral-bright)', color: '#fff', cursor: running ? 'default' : 'pointer',
+              opacity: running ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 6,
+              flexShrink: 0, whiteSpace: 'nowrap',
+            }}
+          >
+            {running ? t('running') : t('run')}
+            {!running && (
+              <svg viewBox="0 0 24 24" style={{ width: 14, height: 14, fill: 'currentColor' }}><path d="M8 5v14l11-7z" /></svg>
+            )}
+          </button>
+        </RoleGate>
       </div>
       {error && <div style={{ fontSize: 12, color: 'var(--danger, #dc2626)', marginTop: 6 }}>{error}</div>}
       {repoStatus && (!repoStatus.bound || !repoStatus.hasCredential) && (

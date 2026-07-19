@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { RoleGate } from '@/components/RoleGate';
 import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
 import {
   workflows,
@@ -198,9 +199,13 @@ function WorkflowDefCard({
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button type="button" onClick={() => onOpen(def)} style={subtleBtn}>{t('open')}</button>
-        <button type="button" onClick={() => onRun(def)} disabled={running} style={{ ...subtleBtn, opacity: running ? 0.6 : 1 }}>
-          {running ? t('running') : `▶ ${t('run')}`}
-        </button>
+        {/* Starting a workflow puts an agent to work, so it carries the same
+            DEVELOPER+ dispatch gate as a task run. Open / view-runs stay reads. */}
+        <RoleGate capability="runtime.execute">
+          <button type="button" onClick={() => onRun(def)} disabled={running} style={{ ...subtleBtn, opacity: running ? 0.6 : 1 }}>
+            {running ? t('running') : `▶ ${t('run')}`}
+          </button>
+        </RoleGate>
         {(def.runCount ?? 0) > 0 && (
           <button type="button" onClick={() => onViewRuns(def)} style={subtleBtn}>{t('runsCount', { count: def.runCount ?? 0 })}</button>
         )}
@@ -416,9 +421,11 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{runsForDef.name} · {t('runs')}</div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{t('executionHistory')}</div>
           </div>
-          <button type="button" onClick={() => runDef(runsForDef)} disabled={runningId === runsForDef.id} style={{ ...subtleBtn, opacity: runningId === runsForDef.id ? 0.6 : 1 }}>
-            {runningId === runsForDef.id ? t('running') : `▶ ${t('runNow')}`}
-          </button>
+          <RoleGate capability="runtime.execute">
+            <button type="button" onClick={() => runDef(runsForDef)} disabled={runningId === runsForDef.id} style={{ ...subtleBtn, opacity: runningId === runsForDef.id ? 0.6 : 1 }}>
+              {runningId === runsForDef.id ? t('running') : `▶ ${t('runNow')}`}
+            </button>
+          </RoleGate>
         </div>
 
         {loadingRuns ? (
@@ -537,9 +544,11 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
                   <td style={{ padding: '12px 16px' }}>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <button type="button" onClick={() => openDef(d)} style={subtleBtn}>{t('open')}</button>
-                      <button type="button" onClick={() => runDef(d)} disabled={runningId === d.id} style={{ ...subtleBtn, opacity: runningId === d.id ? 0.6 : 1 }}>
-                        {runningId === d.id ? t('running') : `▶ ${t('run')}`}
-                      </button>
+                      <RoleGate capability="runtime.execute">
+                        <button type="button" onClick={() => runDef(d)} disabled={runningId === d.id} style={{ ...subtleBtn, opacity: runningId === d.id ? 0.6 : 1 }}>
+                          {runningId === d.id ? t('running') : `▶ ${t('run')}`}
+                        </button>
+                      </RoleGate>
                       <button type="button" onClick={() => deleteDef(d)} style={subtleBtn}>{tc('delete')}</button>
                     </div>
                   </td>
