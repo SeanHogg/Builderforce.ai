@@ -118,7 +118,8 @@ async function listFiles(dir, sub, glob) {
 }
 
 /** Execute one tool call. Repo reads/writes hit local disk (the clone); write also
- *  mirrors to the ticket branch via the Worker; run_command runs in the shell. */
+ *  mirrors to the ticket branch via the Worker; run_command and the git_* tools run
+ *  in the shell; memory_* and builtin_* relay to the Worker (no DB creds here). */
 async function execTool(spec, workdir, writtenPaths, name, parsed, proc) {
   if (name === 'list_files') {
     if (!workdir) return { ok: false, error: 'no repository bound to this task' };
@@ -162,6 +163,16 @@ async function execTool(spec, workdir, writtenPaths, name, parsed, proc) {
   if (name.startsWith('git_')) {
     if (!workdir) return { ok: false, error: 'no repository checked out — git tools need a bound repo' };
     return gitTool(spec, workdir, proc, name, parsed);
+  }
+  // Durable cross-run memory. Like the platform tools, the container holds no DB
+  // creds, so both verbs relay to the Worker's `memory` op — which drives the SAME
+  // capability the durable surface uses, so a fact stored by a container run is
+  // recalled by a durable one and vice versa.
+  if (name === 'memory_recall') {
+    return op(spec, { op: 'memory', args: { action: 'recall', query: parsed.query, limit: parsed.limit } });
+  }
+  if (name === 'memory_remember') {
+    return op(spec, { op: 'memory', args: { action: 'remember', key: parsed.key, content: parsed.content, tags: parsed.tags, importance: parsed.importance } });
   }
   // Platform (project-management) tools — the container holds no DB creds, so it
   // relays each `builtin_*` call back to the Worker, which runs the curated,

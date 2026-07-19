@@ -312,7 +312,11 @@ export const webSearchTool: ToolDefinition = defineTool({
   async execute(args, ctx): Promise<ToolResult> {
     const query = typeof args.query === "string" ? args.query : "";
     if (!query.trim()) return { data: { ok: false, error: "query is required" } };
-    const r = (await ctx.caps.web!.search(query)) as WebSearchResult;
+    // `web.search` is in the surface's capability set, so the registry only reaches
+    // here when a search backing is wired (see WebCapability — `search` is optional
+    // precisely so a fetch-only surface can omit `web.search`).
+    if (!ctx.caps.web?.search) return { data: { ok: false, error: "web search is not available on this surface" } };
+    const r = (await ctx.caps.web.search(query)) as WebSearchResult;
     return { data: r as unknown as Record<string, unknown> };
   },
 });

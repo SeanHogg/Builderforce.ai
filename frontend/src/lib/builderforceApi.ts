@@ -2913,6 +2913,107 @@ export const securityApi = {
 };
 
 // ---------------------------------------------------------------------------
+// Governance policy packs — the gates the agent runtime hard-enforces at its
+// tool-call seam (`evaluatePolicyGate`). A pack is a named, toggleable bundle of
+// gates; NULL projectId/agentRef mean "applies to every project / every agent".
+// ---------------------------------------------------------------------------
+
+/** The three effects the runtime evaluator switches on. */
+export type PolicyGateEffect = 'inject-directive' | 'require-approval' | 'block';
+
+export interface PolicyGate {
+  id: string;
+  packId: string;
+  /** The gate id carried on the wire and echoed back in a block/approval decision. */
+  gateKey: string;
+  /** null or '*' governs EVERY tool — how a broad deny posture is authored. */
+  tool: string | null;
+  effect: PolicyGateEffect;
+  directive: string | null;
+  reason: string | null;
+  position: number;
+}
+
+export interface PolicyPack {
+  id: string;
+  name: string;
+  description: string | null;
+  enabled: boolean;
+  projectId: number | null;
+  agentRef: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  gates: PolicyGate[];
+}
+
+export interface PolicyPackInput {
+  name?: string;
+  description?: string | null;
+  enabled?: boolean;
+  projectId?: number | null;
+  agentRef?: string | null;
+}
+
+export interface PolicyGateInput {
+  gateKey?: string;
+  tool?: string | null;
+  effect?: PolicyGateEffect;
+  directive?: string | null;
+  reason?: string | null;
+  position?: number;
+}
+
+/** The resolved wire shape a run actually receives (preview of enforcement). */
+export interface EffectivePolicyGate {
+  id: string;
+  tool?: string;
+  effect: PolicyGateEffect;
+  directive?: string;
+  reason?: string;
+}
+
+export const policyPacksApi = {
+  list: (): Promise<PolicyPack[]> =>
+    request<PolicyPack[]>('/api/governance/policy-packs'),
+
+  create: (input: PolicyPackInput): Promise<PolicyPack> =>
+    request<PolicyPack>('/api/governance/policy-packs', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    }),
+
+  update: (packId: string, input: PolicyPackInput): Promise<void> =>
+    request(`/api/governance/policy-packs/${packId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    }).then(() => undefined),
+
+  remove: (packId: string): Promise<void> =>
+    request(`/api/governance/policy-packs/${packId}`, { method: 'DELETE' }).then(() => undefined),
+
+  addGate: (packId: string, input: PolicyGateInput): Promise<PolicyGate> =>
+    request<PolicyGate>(`/api/governance/policy-packs/${packId}/gates`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    }),
+
+  updateGate: (gateId: string, input: PolicyGateInput): Promise<void> =>
+    request(`/api/governance/policy-gates/${gateId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+    }).then(() => undefined),
+
+  removeGate: (gateId: string): Promise<void> =>
+    request(`/api/governance/policy-gates/${gateId}`, { method: 'DELETE' }).then(() => undefined),
+
+  /** What a run in this scope would actually be gated by — the same resolver dispatch uses. */
+  effective: (projectId?: number | null, agentRef?: string | null): Promise<EffectivePolicyGate[]> => {
+    const qs = new URLSearchParams();
+    if (projectId != null) qs.set('project', String(projectId));
+    if (agentRef) qs.set('agent', agentRef);
+    const suffix = qs.toString() ? `?${qs}` : '';
+    return request<{ gates: EffectivePolicyGate[] }>(`/api/governance/policy-gates/effective${suffix}`)
+      .then((r) => r.gates ?? []);
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Security agent — SOC 2 audit + access-restricted SECURITY tickets
 // ---------------------------------------------------------------------------
 

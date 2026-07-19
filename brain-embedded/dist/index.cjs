@@ -63,6 +63,7 @@ __export(src_exports, {
   formatEvermindMemoryBlock: () => formatEvermindMemoryBlock,
   getGlobalRunState: () => getGlobalRunState,
   getLastResolvedModel: () => getLastResolvedModel,
+  getMcpToolStatus: () => getMcpToolStatus,
   getRunSnapshot: () => getRunSnapshot,
   getRunTrace: () => getRunTrace,
   isCodeChangeTool: () => isCodeChangeTool,
@@ -91,6 +92,7 @@ __export(src_exports, {
   savePendingPrompt: () => savePendingPrompt,
   scopeToConsolidation: () => scopeToConsolidation,
   setLastResolvedModel: () => setLastResolvedModel,
+  setMcpToolStatus: () => setMcpToolStatus,
   startRun: () => startRun,
   stopRun: () => stopRun,
   streamChatCompletion: () => streamChatCompletion,
@@ -268,11 +270,11 @@ var BrainRequestError = class extends Error {
 function str(v) {
   return typeof v === "string" && v.length > 0 ? v : void 0;
 }
-function brainRequestError(status, body, statusText) {
+function brainRequestError(status2, body, statusText) {
   const b = body ?? {};
-  const message = str(b.error) || str(b.message) || statusText || `Request failed (${status})`;
+  const message = str(b.error) || str(b.message) || statusText || `Request failed (${status2})`;
   return new BrainRequestError(message, {
-    status,
+    status: status2,
     code: str(b.code),
     reason: str(b.reason),
     unlock: str(b.unlock),
@@ -743,6 +745,15 @@ function getLastResolvedModel() {
   return lastResolvedModel;
 }
 
+// src/mcpToolStatus.ts
+var status = { count: 0, error: null, loading: true };
+function setMcpToolStatus(next) {
+  status = next;
+}
+function getMcpToolStatus() {
+  return status;
+}
+
 // src/useMcpExtensions.ts
 var CREATE_DEDUPE_MS = 8e3;
 var recentCreates = /* @__PURE__ */ new Map();
@@ -774,6 +785,7 @@ function useMcpExtensions(options) {
   const { transport } = useBrainConfig();
   const [entries, setEntries] = (0, import_react3.useState)([]);
   const [loading, setLoading] = (0, import_react3.useState)(true);
+  const [error, setError] = (0, import_react3.useState)(null);
   const skipKey = (options?.skipExtensionIds ?? []).join(",");
   const onToolResultRef = (0, import_react3.useRef)(options?.onToolResult);
   onToolResultRef.current = options?.onToolResult;
@@ -783,10 +795,17 @@ function useMcpExtensions(options) {
     const headers = { Accept: "application/json" };
     if (token) headers.Authorization = `Bearer ${token}`;
     const skip = new Set(skipKey ? skipKey.split(",") : []);
-    fetch(`${transport.baseUrl}/llm/v1/mcp/tools`, { headers }).then((res) => res.ok ? res.json() : { tools: [] }).then((body) => {
-      if (!cancelled) setEntries((body.tools ?? []).filter((t) => !skip.has(t.extensionId)));
-    }).catch(() => {
-      if (!cancelled) setEntries([]);
+    fetch(`${transport.baseUrl}/llm/v1/mcp/tools`, { headers }).then(async (res) => {
+      if (!res.ok) throw new Error(`tool catalog unavailable (HTTP ${res.status})`);
+      return await res.json();
+    }).then((body) => {
+      if (cancelled) return;
+      setEntries((body.tools ?? []).filter((t) => !skip.has(t.extensionId)));
+      setError(null);
+    }).catch((e) => {
+      if (cancelled) return;
+      setEntries([]);
+      setError(e instanceof Error ? e.message : "tool catalog fetch failed");
     }).finally(() => {
       if (!cancelled) setLoading(false);
     });
@@ -844,7 +863,10 @@ function useMcpExtensions(options) {
     [entries, transport]
   );
   useRegisterBrainActions(actions);
-  return { loading, toolCount: actions.length };
+  (0, import_react3.useEffect)(() => {
+    setMcpToolStatus({ count: actions.length, error, loading });
+  }, [actions.length, error, loading]);
+  return { loading, toolCount: actions.length, error };
 }
 
 // src/BrainContext.tsx
@@ -2904,6 +2926,18 @@ function diagnosticsSignals(d) {
   if ((d.agents?.length ?? 0) === 0) {
     out.push("\u2139\uFE0F No agents are invited into this chat (chats.list_agents is empty), so dispatched agents post nothing back here.");
   }
+  const tools = d.tools;
+  if (tools && !tools.loading) {
+    if (tools.error) {
+      out.push(
+        `\u26A0\uFE0F The MCP tool catalog FAILED to load (${tools.error}), so the Brain has ${tools.count} tools and cannot fetch project data. Turns will say "I don't have that data" or announce a tool call and stop \u2014 with 0 tool calls in the trace. This is a wiring fault, not a model fault.`
+      );
+    } else if (tools.count === 0) {
+      out.push(
+        '\u26A0\uFE0F The model has ZERO tools registered, so it cannot read tasks, projects, or any platform data \u2014 every data question can only be answered from the prompt. Expect "I don\'t have that data" and 0 tool calls. Check that McpExtensionsBridge is mounted and `/llm/v1/mcp/tools` returns a catalog.'
+      );
+    }
+  }
   const acct = d.account;
   const tokens = tokenMeter(acct);
   if (acct) {
@@ -2969,6 +3003,12 @@ function formatChatDiagnostics(d) {
     }
   } else {
     lines.push("- Plan / usage: not gathered (account snapshot unavailable \u2014 signed out, or the consumption endpoint failed)");
+  }
+  const tools = d.tools;
+  if (tools) {
+    lines.push(
+      `- Tools available to the model: ${tools.count}${tools.loading ? " (catalog still loading)" : ""}${tools.error ? ` \xB7 catalog error: ${tools.error}` : ""}`
+    );
   }
   const ev = d.evermind;
   if (ev) {
@@ -3048,6 +3088,7 @@ function formatChatDiagnostics(d) {
   formatEvermindMemoryBlock,
   getGlobalRunState,
   getLastResolvedModel,
+  getMcpToolStatus,
   getRunSnapshot,
   getRunTrace,
   isCodeChangeTool,
@@ -3076,6 +3117,7 @@ function formatChatDiagnostics(d) {
   savePendingPrompt,
   scopeToConsolidation,
   setLastResolvedModel,
+  setMcpToolStatus,
   startRun,
   stopRun,
   streamChatCompletion,

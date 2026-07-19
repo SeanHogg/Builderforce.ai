@@ -135,6 +135,11 @@ export const CAPABILITIES = {
   // Blended human+agent workforce planning + periodic lens review snapshots.
   'workforce.plan':          'manager',
   'insights.snapshots':      'manager',
+
+  // Governance policy packs — the gates the agent runtime hard-enforces at its
+  // tool-call seam. Reads are open to any member (you may see the posture you run
+  // under); authoring mirrors the API's requireRole(MANAGER) on every write.
+  'policies.manage':         'manager',
 } as const satisfies Record<string, TenantRole>;
 
 export type Capability = keyof typeof CAPABILITIES;
