@@ -14,16 +14,33 @@
 import { coercePolicyGates, type PolicyGate } from '@builderforce/agent-tools';
 import { ExecutionStatus } from '../../domain/shared/types';
 
-export type CloudSurface = 'durable' | 'container';
+export type CloudSurface = 'durable' | 'container' | 'github_actions';
+
+/**
+ * Every surface value the platform accepts. `ide_agents.runtime_surface` is
+ * varchar(16), so a value MUST stay within 16 characters — 'github_actions' is
+ * 14. Exported so the API's validation whitelist and this union can never drift
+ * (they were previously two hand-maintained lists).
+ */
+export const CLOUD_SURFACES = ['durable', 'container', 'github_actions'] as const;
+
+export function isCloudSurface(v: unknown): v is CloudSurface {
+  return typeof v === 'string' && (CLOUD_SURFACES as readonly string[]).includes(v);
+}
 
 /**
  * Resolve the surface a run targets. An explicitly-pinned host is a long-lived
  * runtime (reached via the relay), so it maps to 'container'; otherwise honor the
  * agent's chosen surface, defaulting to 'durable' (on-demand, no always-on infra).
+ *
+ * An explicit host still wins over a 'github_actions' preference: pinning a host
+ * means "run on THAT machine", which an ephemeral GitHub runner cannot satisfy.
  */
 export function resolveCloudSurface(agentSurface: string | undefined | null, hasExplicitHost: boolean): CloudSurface {
   if (hasExplicitHost) return 'container';
-  return agentSurface === 'container' ? 'container' : 'durable';
+  if (agentSurface === 'container') return 'container';
+  if (agentSurface === 'github_actions') return 'github_actions';
+  return 'durable';
 }
 
 /**
@@ -33,7 +50,7 @@ export function resolveCloudSurface(agentSurface: string | undefined | null, has
  * outlast the ~30s serverless wall, so {@link chooseCloudExecutor} fails fast to
  * `unavailable` rather than starting a run that provably cannot finish.
  */
-export type CloudExecutor = 'container' | 'durable';
+export type CloudExecutor = 'container' | 'durable' | 'github_actions';
 export type CloudDispatchTarget = CloudExecutor | 'unavailable';
 
 /**
@@ -56,7 +73,21 @@ export function chooseCloudExecutor(caps: {
   hasContainerBinding: boolean;
   containerHealthy: boolean;
   hasCloudRunner: boolean;
+  /** The agent asked to run on the repo's GitHub Actions runners. */
+  wantsGithubActions?: boolean;
+  /**
+   * The agent workflow is present in the linked repo AND the credential can
+   * dispatch it. Unlike the container there is no liveness probe to run — an
+   * Actions runner does not exist until GitHub schedules one — so this is a
+   * "can we queue work" signal, not a "is a process alive" signal.
+   */
+  githubActionsAvailable?: boolean;
 }): CloudDispatchTarget {
+  // Checked first: when a tenant has deliberately chosen Actions, running on it
+  // is the point (their runners, their minutes, a real toolchain). Falling back
+  // to durable would silently give them the constrained surface they opted out
+  // of, so the fallback only happens when Actions genuinely cannot be queued.
+  if (caps.wantsGithubActions && caps.githubActionsAvailable) return 'github_actions';
   if (caps.wantsContainer && caps.hasContainerBinding && caps.containerHealthy) return 'container';
   if (caps.hasCloudRunner) return 'durable';
   return 'unavailable';
@@ -85,7 +116,9 @@ export async function probeContainerHealth(stub: { fetch: (input: string, init?:
  *  There is ONE engine, so only the surface varies — the label is just "Cloud Agent"
  *  plus the surface (no engine-version prefix). */
 export function cloudAgentTypeLabel(surface: string): string {
-  return surface === 'container' ? 'Cloud Agent (Node/Container)' : 'Cloud Agent (Durable Object)';
+  if (surface === 'container') return 'Cloud Agent (Node/Container)';
+  if (surface === 'github_actions') return 'Cloud Agent (GitHub Actions)';
+  return 'Cloud Agent (Durable Object)';
 }
 
 /** Terminal = the run has settled and has no live session to steer. A "Send" to a

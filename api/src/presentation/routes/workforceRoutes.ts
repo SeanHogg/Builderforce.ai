@@ -25,6 +25,7 @@ import { sanitizePsychometricProfile } from '../../application/persona/psychomet
 import { assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
 import { assignableWorkforceCacheKey } from '../../application/kanban/assignableWorkforce';
 import { parseJsonArray } from '../../domain/shared/json';
+import { CLOUD_SURFACES } from '../../application/runtime/cloudDispatch';
 import type { Env, HonoEnv } from '../../env';
 
 /** Cache key for a tenant's purchased (marketplace-acquired) agents. */
@@ -74,8 +75,14 @@ const PRICING_MODELS = ['flat_fee', 'consumption'] as const;
 // There is ONE agent engine — the current version (CURRENT_ENGINE_ID), resolved at run
 // time from the constant. It is not user-selectable and is not persisted (the vestigial
 // `ide_agents.engine` column was dropped in migration 0321).
-/** The two cloud-agent execution surfaces (see migration 0105 / cloudDispatch). */
-const RUNTIME_SURFACES = ['durable', 'container'] as const;
+/** The cloud-agent execution surfaces (see migration 0105 / cloudDispatch). */
+/**
+ * Re-exported from cloudDispatch rather than re-declared: this validation
+ * whitelist and the `CloudSurface` union were two hand-maintained lists of the
+ * same thing, so adding a surface to one silently left the other rejecting it.
+ * One list, one place.
+ */
+const RUNTIME_SURFACES = CLOUD_SURFACES;
 
 /**
  * `ide_agents.skills` is a `text` column holding a JSON string. The
