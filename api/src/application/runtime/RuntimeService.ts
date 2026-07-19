@@ -367,6 +367,7 @@ export class RuntimeService {
    *  crashed — so it must NOT be told to "downgrade to a durable runtime". Host runs
    *  lost their process/connection. */
   private orphanReason(e: Execution): string {
+    if (e.status === ExecutionStatus.PAUSED) return PAUSED_ORPHAN_REASON;
     if (!this.isCloudRun(e)) return HOST_ORPHAN_REASON;
     const startedMs = (e.startedAt ?? e.createdAt)?.getTime();
     const lastActivityMs = (e.updatedAt ?? e.createdAt)?.getTime();

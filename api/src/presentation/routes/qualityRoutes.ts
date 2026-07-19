@@ -29,6 +29,7 @@ import { qualityGroupsVersionKey, qualityGroupsTenantVersionKey, ingestErrorEven
 import type { CollectorRef, MappingRule } from '../../application/quality/errorMapping';
 import type { NormalizedErrorEvent } from '../../application/quality/errorSpec';
 import { dispatchCloudRunForTask } from './runtimeRoutes';
+import { onTaskLandedInLane } from '../../application/swimlane/laneEntryTrigger';
 import { TaskPriority } from '../../domain/shared/types';
 import type { TaskService } from '../../application/task/TaskService';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
@@ -663,6 +664,19 @@ export function createQualityRoutes(db: Db, taskService: TaskService, runtimeSer
       (p) => c.executionCtx.waitUntil(p),
       { taskId: task.id as unknown as number, tenantId, submittedBy: `quality:${userId ?? 'system'}` },
     );
+
+    // Funnel the new ticket through the ONE lane-entry helper as well. The explicit
+    // dispatch above is the human's "fix with agent" click (deliberately gate-blind,
+    // like Run-now), so this is normally a no-op — the evaluation sees that live run
+    // and returns `already_running`. It only fires when the dispatch produced no run,
+    // which is exactly the case that previously left the ticket stranded until the
+    // ≤5-minute cron backstop.
+    c.executionCtx.waitUntil(onTaskLandedInLane(c.env as Env, db, {
+      tenantId,
+      projectId:   group.projectId,
+      taskId:      task.id as unknown as number,
+      submittedBy: `quality:${userId ?? 'system'}`,
+    }));
 
     return c.json({ taskId: task.id, executionId }, 202);
   });

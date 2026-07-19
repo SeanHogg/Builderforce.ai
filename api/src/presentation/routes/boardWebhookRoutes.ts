@@ -108,7 +108,7 @@ export function createBoardWebhookRoutes(db: Db): Hono<HonoEnv> {
     const credentials = loaded?.credentials ?? {};
     const baseUrl = loaded?.baseUrl ?? null;
 
-    const store = createDrizzleStore(db);
+    const store = createDrizzleStore(db, c.env as Env);
     const engine = new SyncEngine(store, (sc: StoredConnection) =>
       createBoardProvider(
         sc.provider,
