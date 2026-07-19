@@ -1321,12 +1321,13 @@ function parseMessageProvenance(msg) {
   if (!msg.metadata) return null;
   try {
     const p = JSON.parse(msg.metadata).provenance;
-    if (p && typeof p.model === "string" && p.model.length > 0 && (p.account === "own" || p.account === "shared" || p.account === "shared_byo_unused")) {
+    if (p && typeof p.model === "string" && p.model.length > 0) {
       const ev = p.evermind;
       const evermind = ev && typeof ev.version === "number" && ev.version >= 1 ? { version: ev.version } : void 0;
+      const account = p.account === "own" || p.account === "shared" || p.account === "shared_byo_unused" ? p.account : void 0;
       return {
         model: p.model,
-        account: p.account,
+        ...account ? { account } : {},
         ...typeof p.vendor === "string" ? { vendor: p.vendor } : {},
         ...evermind ? { evermind } : {}
       };
@@ -1477,9 +1478,10 @@ function chatWorkLinkingDirective(chatId) {
 // src/brainRunStore.ts
 function provenanceMetadata(result) {
   const model = result.resolvedModel;
-  const account = result.account;
-  if (!model || account !== "own" && account !== "shared" && account !== "shared_byo_unused") return void 0;
-  return withProvenanceMetadata({ model, account });
+  if (!model) return void 0;
+  const a = result.account;
+  const account = a === "own" || a === "shared" || a === "shared_byo_unused" ? a : void 0;
+  return withProvenanceMetadata({ model, ...account ? { account } : {} });
 }
 var MAX_TOOL_ITERATIONS = 25;
 var HISTORY_WINDOW = 80;
@@ -2702,6 +2704,11 @@ function fmtMeter(m) {
 function tokenMeter(a) {
   return (a?.meters ?? []).find((m) => m.key === "ai_tokens");
 }
+function allowanceState(meter) {
+  if (!meter || meter.unlimited) return "ok";
+  if (meter.remaining <= 0) return "exhausted";
+  return meter.percentUsed >= 80 ? "warn" : "ok";
+}
 function diagnosticsSignals(d) {
   const out = [];
   const ev = d.evermind;
@@ -2745,16 +2752,15 @@ function diagnosticsSignals(d) {
     if (acct.billingStatus === "past_due") {
       out.push("\u26A0\uFE0F Billing status is past_due \u2014 plan entitlements may be suspended until payment succeeds, which reads as sudden model/quota downgrade.");
     }
-    if (tokens && !tokens.unlimited) {
-      if (tokens.remaining <= 0) {
-        out.push(
-          `\u26A0\uFE0F AI token allowance is EXHAUSTED (${tokens.used.toLocaleString("en-US")} / ${tokens.limit.toLocaleString("en-US")} this period). The gateway returns 429 \`plan_token_limit_exceeded\`, so turns fail or stop mid-answer until ${acct.resetsAt ?? "the period resets"}.`
-        );
-      } else if (tokens.percentUsed >= 80) {
-        out.push(
-          `\u26A0\uFE0F AI token allowance is ${tokens.percentUsed}% used (${tokens.remaining.toLocaleString("en-US")} left, resets ${acct.resetsAt ?? "at period end"}). Long turns may be cut off by the cap before the model finishes.`
-        );
-      }
+    const tokenState = allowanceState(tokens);
+    if (tokens && tokenState === "exhausted") {
+      out.push(
+        `\u26A0\uFE0F AI token allowance is EXHAUSTED (${tokens.used.toLocaleString("en-US")} / ${tokens.limit.toLocaleString("en-US")} this period). The gateway returns 429 \`plan_token_limit_exceeded\`, so turns fail or stop mid-answer until ${acct.resetsAt ?? "the period resets"}.`
+      );
+    } else if (tokens && tokenState === "warn") {
+      out.push(
+        `\u26A0\uFE0F AI token allowance is ${tokens.percentUsed}% used (${tokens.remaining.toLocaleString("en-US")} left, resets ${acct.resetsAt ?? "at period end"}). Long turns may be cut off by the cap before the model finishes.`
+      );
     }
     if (acct.modelFunding === "premium" && acct.canUsePremiumModels === false) {
       out.push(
@@ -2848,6 +2854,7 @@ export {
   TICKET_RECORDING_TOOLS,
   accountUsedInTrace,
   activeMentionToken,
+  allowanceState,
   attachEvermindLearn,
   brainRequestError,
   buildBrainTriageReport,

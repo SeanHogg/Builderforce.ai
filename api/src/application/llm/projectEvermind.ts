@@ -147,6 +147,47 @@ export async function getProjectEvermindHead(
 }
 
 /**
+ * Resolve the project whose Evermind a READ surface bound to `projectId` should show.
+ *
+ * An IDE build opens at its hidden `is_ide_storage` project row, but only
+ * `evermind`/`llm`-modality builds ever get their own `project_evermind` row — every
+ * other modality (video, voice, designer, finetune) inherits the Evermind of the
+ * PARENT container project it was created under. Reading the storage id verbatim
+ * therefore reported "Not set up" for a project that plainly has one.
+ *
+ * Precedence: a build's OWN seeded Evermind wins (so per-build Everminds keep working);
+ * otherwise fall back to the container project. A non-IDE project resolves to itself.
+ *
+ * Read-path only — {@link resolveEvermindTargets} and the WRITE/fan-out paths keep
+ * exact-id semantics so a contribution never silently lands on the wrong project.
+ */
+export async function resolveEffectiveEvermindProjectId(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+): Promise<number> {
+  if (!Number.isInteger(projectId) || projectId <= 0) return projectId;
+  const own = await getProjectEvermindHead(env, db, tenantId, projectId);
+  if (own.version > 0) return projectId;
+  const containerId = await getOrSetCached(
+    env,
+    `evermind:container-of:${tenantId}:${projectId}`,
+    async () => {
+      const [row] = await db
+        .select({ cid: ideProjects.containerProjectId })
+        .from(ideProjects)
+        .where(and(eq(ideProjects.tenantId, tenantId), eq(ideProjects.storageProjectId, projectId)))
+        .limit(1);
+      // `0` is the "no container" sentinel — getOrSetCached can't cache `undefined`.
+      return Number.isInteger(row?.cid) && (row!.cid as number) > 0 ? (row!.cid as number) : 0;
+    },
+    { kvTtlSeconds: 60 },
+  );
+  return containerId > 0 ? containerId : projectId;
+}
+
+/**
  * Resolve ALL Evermind heads a surface bound to `projectId` should target — the ONE
  * place "which Evermind(s)" is decided, so every surface (learn, inference, panel)
  * agrees instead of each assuming a single head. Structural model (there is no
@@ -700,6 +741,10 @@ export interface ProjectEvermindRecentEntry {
   version: number;
   at: number;
   weight: number;
+  /** True when this contribution's weights were fitted into the merge — i.e. it moved
+   *  the neocortex. Absent on rows written before the flag existed (all of which were
+   *  fitted), so read it as `fitted !== false`. */
+  fitted?: boolean;
   prompt?: string;
   /** Absent when a pinned teacher failed on a teach-a-task — see `skipReason`. */
   text?: string;

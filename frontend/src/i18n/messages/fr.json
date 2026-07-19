@@ -686,6 +686,11 @@
         "label": "Voix",
         "tagline": "Clonez et concevez une voix personnalisée, puis synthétisez de la parole à partir d’elle.",
         "runLabel": "Générer"
+      },
+      "mobile": {
+        "label": "Mobile",
+        "tagline": "Créez une application pour téléphone et prévisualisez-la dans un simulateur, puis scannez pour l'ouvrir sur votre propre appareil.",
+        "runLabel": "Exécuter"
       }
     },
     "all": "Tous",
@@ -760,7 +765,35 @@
     "recipeBlankDesc": "Un modèle minimal que vous entraînez de zéro dans le Studio.",
     "recipeSeedModelLabel": "Modèle publié pour l'initialisation",
     "recipeSeedSelect": "Sélectionnez un modèle…",
-    "recipeSeedNoModels": "aucun modèle publié pour l'instant"
+    "recipeSeedNoModels": "aucun modèle publié pour l'instant",
+    "centerPreview": "Aperçu",
+    "centerCode": "Code",
+    "device": {
+      "simulateOnWeb": "Simuler sur le web",
+      "deviceLabel": "Appareil",
+      "rotate": "Pivoter",
+      "reload": "Recharger l'aperçu",
+      "openInTab": "Ouvrir dans un nouvel onglet",
+      "tryOnDevice": "Tester sur l'appareil",
+      "previewTitle": "Aperçu de l'application mobile",
+      "emptyTitle": "Rien en cours d'exécution",
+      "emptyHint": "Cliquez sur Exécuter pour démarrer le serveur de développement et voir votre application ici.",
+      "panelTitle": "Aperçu sur votre téléphone",
+      "panelIntro": "Le simulateur s'exécute dans cet onglet du navigateur, votre téléphone ne peut donc pas y accéder. Scannez plutôt la version publiée.",
+      "checking": "Recherche d'une version publiée…",
+      "qrAlt": "QR code de l'URL de l'application publiée",
+      "copyLink": "Copier le lien",
+      "copied": "Copié",
+      "openLink": "Ouvrir",
+      "step1": "Ouvrez l'application appareil photo sur votre téléphone.",
+      "step2": "Pointez-la vers le QR code ci-dessus.",
+      "step3": "Touchez la notification pour ouvrir votre application.",
+      "lastPublished": "Dernière publication le {when}",
+      "republishHint": "Republiez après vos modifications : le QR code reste valable, il pointe toujours vers la dernière version.",
+      "notPublishedTitle": "Rien n'a encore été publié",
+      "notPublishedBody": "Publiez cette application pour obtenir un lien que votre téléphone peut ouvrir. Cela prend environ une minute.",
+      "goToPublish": "Aller à Publier"
+    }
   },
   "tools": {
     "outOf5": "sur 5,0",
@@ -5724,47 +5757,47 @@
       "document": {
         "label": "Document",
         "hint": "Rédigez un document structuré avec titres, sections et tableaux.",
-        "starter": "Rédige un document sur "
+        "starter": "Rédige un document résumant l'état actuel de ce projet."
       },
       "slides": {
         "label": "Diapositives",
         "hint": "Composez une présentation, une diapositive par section.",
-        "starter": "Crée une présentation sur "
+        "starter": "Crée une présentation résumant l'état actuel de ce projet."
       },
       "dataviz": {
         "label": "Visualisation de données",
         "hint": "Transformez les données en graphiques intégrés, chiffres à l'appui.",
-        "starter": "Visualise "
+        "starter": "Représente en graphique la répartition des tâches de ce projet par statut."
       },
       "spreadsheet": {
         "label": "Tableur",
         "hint": "Modélisez les chiffres dans un tableau avec formules et totaux.",
-        "starter": "Crée un tableur qui "
+        "starter": "Crée un tableur des tâches ouvertes de ce projet, avec responsable, statut et ancienneté."
       },
       "website": {
         "label": "Site web",
         "hint": "Construisez une application ou un site sous forme de vrais fichiers.",
-        "starter": "Construis un site web qui "
+        "starter": "Construis une page d'accueil pour ce projet."
       },
       "design": {
         "label": "Design",
         "hint": "Concevez l'interface : mise en page, espacements, typographie et thème.",
-        "starter": "Conçois l'interface de "
+        "starter": "Conçois l'écran principal de ce projet, en thèmes clair et sombre."
       },
       "mobile": {
         "label": "Mobile",
         "hint": "Construisez une application pensée mobile d'abord, navigation native.",
-        "starter": "Construis une application mobile qui "
+        "starter": "Construis un écran d'accueil mobile pour ce projet."
       },
       "animation": {
         "label": "Animation",
         "hint": "Ajoutez du mouvement utile, avec durées et courbes explicites.",
-        "starter": "Anime "
+        "starter": "Ajoute une animation d'entrée à l'écran principal de ce projet."
       },
       "game3d": {
         "label": "Jeu 3D",
         "hint": "Construisez un jeu 3D : scène, caméra, contrôles et boucle de jeu.",
-        "starter": "Construis un jeu 3D où "
+        "starter": "Construis une scène 3D simple dans laquelle je peux déplacer une caméra."
       },
       "export": {
         "docx": "Télécharger Word",
@@ -5773,6 +5806,11 @@
         "working": "Préparation…",
         "failed": "Échec de l'export",
         "untitled": "Sans titre"
+      },
+      "missing": {
+        "body": "Cette réponse ne contenait pas {capability} — le modèle n'a renvoyé qu'un titre.",
+        "retry": "Redemander",
+        "retryPrompt": "Cette réponse ne contenait aucun {capability}. Produis maintenant {capability} complet, dans cette réponse."
       }
     },
     "messageActions": {
@@ -5815,7 +5853,14 @@
     "upgrade": "Mettre à niveau",
     "upgradeToPlan": "Passer à {plan}",
     "addCard": "Ajouter une carte",
-    "cardValidationFailed": "Échec de la validation de la carte."
+    "cardValidationFailed": "Échec de la validation de la carte.",
+    "allowance": {
+      "exhausted": "Votre quota de jetons IA pour cette période est épuisé ({used} sur {limit}). Les échanges échoueront ou s'arrêteront en cours jusqu'à la réinitialisation le {resets}.",
+      "nearLimit": "Quota de jetons IA utilisé à {percent}% — il reste {remaining} jusqu'au {resets}. Les réponses longues peuvent être tronquées.",
+      "upgrade": "Passer à l'offre supérieure",
+      "connectAccount": "Connectez votre propre compte",
+      "dismiss": "Ignorer"
+    }
   },
   "chatMessage": {
     "copy": "Copier",
@@ -9851,9 +9896,14 @@
     "retryCard": "Réessayer",
     "cardWorking": "En cours…",
     "replaceCardTitle": "Remplacer votre carte ?",
-    "replaceCardWarning": "Les modèles premium sont suspendus pendant la vérification de la nouvelle carte. Votre forfait et le reste continuent de fonctionner.",
+    "replaceCardWarning": "Votre carte actuelle reste active jusqu'à la vérification de la nouvelle : les modèles premium ne sont jamais interrompus. L'ancienne carte est supprimée automatiquement dès que la nouvelle est confirmée.",
     "retryCardMessage": "Nous allons lancer une nouvelle vérification à 0 $. Votre carte n'est pas débitée.",
     "replaceCardConfirm": "Continuer",
-    "cardValidationFailed": "Impossible de lancer la vérification de la carte. Veuillez réessayer."
+    "cardValidationFailed": "Impossible de lancer la vérification de la carte. Veuillez réessayer.",
+    "removeCard": "Supprimer la carte",
+    "removeCardTitle": "Supprimer votre carte ?",
+    "removeCardWarning": "Les modèles premium seront désactivés et nous cesserons de conserver votre carte. Votre forfait et les modèles inclus continuent de fonctionner. Vous pouvez ajouter une carte à tout moment.",
+    "removeCardConfirm": "Supprimer la carte",
+    "removeCardFailed": "Impossible de supprimer la carte. Veuillez réessayer."
   }
 }

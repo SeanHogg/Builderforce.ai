@@ -150,3 +150,41 @@ describe('normaliseShotBudget', () => {
     expect(out.every((s) => s.durationFrames >= 1)).toBe(true);
   });
 });
+
+/**
+ * Planning is an ENHANCEMENT over a fully LOCAL diffusion pipeline: the reasoning LLM
+ * is remote, the renderer is WebGPU on-device. A gateway outage must therefore DEGRADE
+ * the plan, never abort the render — previously a thrown "AI vendor cascade exhausted"
+ * propagated out of planScene and killed a generation that needed no network at all.
+ */
+describe('planScene degrades when the gateway is unreachable', () => {
+  /** A client whose every call fails the way an exhausted vendor cascade does. */
+  function failingClient(err: Error): BuilderforceClient {
+    return {
+      chat: { completions: { create: async () => { throw err; } } },
+    } as unknown as BuilderforceClient;
+  }
+
+  it('returns an executable single-shot storyboard instead of throwing', async () => {
+    const client = failingClient(new Error('AI vendor cascade exhausted (3 attempts: …)'));
+    const sb = await planScene(
+      { apiKey: 'k', request: 'a cat meowing', totalFrames: 16 },
+      client,
+    );
+    expect(sb.shots).toHaveLength(1);
+    // The frame budget still sums to the requested total, so the engine can run it.
+    expect(storyboardFrameCount(sb)).toBe(16);
+    // The degraded shot renders the user's ACTUAL request, not an empty prompt.
+    expect(sb.shots[0].prompt).toBe('a cat meowing');
+    expect(sb.treatment).toBe('a cat meowing');
+    expect(sb.characters).toEqual([]);
+  });
+
+  it('still re-throws an abort — user cancellation is not a degraded plan', async () => {
+    const abort = new DOMException('Generation aborted', 'AbortError');
+    const client = failingClient(abort as unknown as Error);
+    await expect(
+      planScene({ apiKey: 'k', request: 'a cat meowing', totalFrames: 16 }, client),
+    ).rejects.toThrow(/abort/i);
+  });
+});

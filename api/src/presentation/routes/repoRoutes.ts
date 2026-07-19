@@ -357,7 +357,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     // already imported stay fully usable; only fresh pulls stop until the month
     // resets or they upgrade. 402 carries the plan-limit body the client renders.
     const ingestionDb = buildTransactionalDatabase(c.env as Env);
-    const gate = await enforceIngestionCap(db, tenantId, ingestionDb);
+    const gate = await enforceIngestionCap(db, tenantId, ingestionDb, c.env as Env);
     if (!gate.allowed) {
       return c.json({
         error: `Monthly data-ingestion allowance reached (${gate.limit.toLocaleString()} bytes). Already-imported repositories stay available; upgrade or wait for the monthly reset to import more.`,

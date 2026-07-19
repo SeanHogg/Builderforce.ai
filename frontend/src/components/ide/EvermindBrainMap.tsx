@@ -37,7 +37,7 @@ import type {
   ProjectEvermindTrainingPoint,
   ProjectEvermindEvalPoint,
 } from '@/lib/projectEvermindApi';
-import type { EvermindRegionKey } from '@/lib/evermindRegions';
+import { recentForRegion, type EvermindRegionKey } from '@/lib/evermindRegions';
 import { buildSparkline } from '@/lib/sparkline';
 import { useEvermindValidation } from './EvermindValidationContext';
 
@@ -162,8 +162,11 @@ export function EvermindBrainMap({
     const times = recent.map((e) => e.at).sort((a, b) => b - a);
     const freshCutoffAt = times.length > 3 ? times[2] : (times[times.length - 1] ?? 0);
 
-    const deltas = recent.filter((e) => e.kind === 'delta');
-    const texts = recent.filter((e) => e.kind === 'text');
+    // Region membership comes from the shared taxonomy so the map's node counts and
+    // the Learnings panel's list can never disagree (a text contribution is fitted
+    // into the neocortex weights AND kept as a hippocampal memory).
+    const fitted = recentForRegion(recent, 'neocortex');
+    const texts = recentForRegion(recent, 'hippocampus');
     const pending = data?.pending ?? 0;
     const version = data?.version ?? 0;
     const dim = seeded ? 1 : 0.08;
@@ -178,12 +181,12 @@ export function EvermindBrainMap({
     return REGIONS.map((meta): RegionState => {
       switch (meta.key) {
         case 'neocortex': {
-          const nodes = layoutRegionNodes(meta, deltas, freshCutoffAt);
+          const nodes = layoutRegionNodes(meta, fitted, freshCutoffAt);
           return {
-            meta, nodes, count: deltas.length, overflow: Math.max(0, deltas.length - nodes.length),
-            charge: seeded ? Math.max(0.3, norm(deltas.length, 12)) : dim,
+            meta, nodes, count: fitted.length, overflow: Math.max(0, fitted.length - nodes.length),
+            charge: seeded ? Math.max(0.3, norm(fitted.length, 12)) : dim,
             active: learning,
-            caption: deltas.length > 0 ? t('neocortexCaption', { count: deltas.length }) : t('neocortexRole'),
+            caption: fitted.length > 0 ? t('neocortexCaption', { count: fitted.length }) : t('neocortexRole'),
           };
         }
         case 'hippocampus': {

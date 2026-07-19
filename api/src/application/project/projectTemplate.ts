@@ -76,6 +76,124 @@ export default defineConfig({
 });`,
 };
 
+/**
+ * Default files for new Mobile projects — a React Native app rendered through
+ * react-native-web so it runs in the IDE's browser preview while staying
+ * portable to Expo. Must match MOBILE_DEFAULTS in the frontend's
+ * `lib/vanillaDefaults.ts` so a seeded project runs identically to the run-only
+ * fallback.
+ */
+export const MOBILE_TEMPLATE: Record<string, string> = {
+  'package.json': JSON.stringify({
+    name: 'my-mobile-app',
+    version: '1.0.0',
+    type: 'module',
+    scripts: {
+      dev: 'vite',
+      build: 'vite build',
+      preview: 'vite preview',
+    },
+    dependencies: {
+      react: '^18.2.0',
+      'react-dom': '^18.2.0',
+      'react-native-web': '^0.19.10',
+    },
+    devDependencies: {
+      '@vitejs/plugin-react': '^4.0.0',
+      vite: '^4.3.9',
+    },
+  }, null, 2),
+  'index.html': `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>My Mobile App</title>
+    <style>
+      html, body, #root { height: 100%; margin: 0; }
+      body { overflow: hidden; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.js"></script>
+  </body>
+</html>`,
+  'index.js': `import React from 'react';
+import { createRoot } from 'react-dom/client';
+import App from './App';
+
+createRoot(document.getElementById('root')).render(<App />);`,
+  'App.js': `import React, { useState } from 'react';
+import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+
+export default function App() {
+  const [count, setCount] = useState(0);
+
+  return (
+    <View style={styles.screen}>
+      <View style={styles.header}>
+        <Text style={styles.title}>My Mobile App</Text>
+        <Text style={styles.subtitle}>Edit App.js to get started</Text>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.card}>
+          <Text style={styles.cardLabel}>You tapped</Text>
+          <Text style={styles.counter}>{count}</Text>
+          <Pressable
+            style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+            onPress={() => setCount((c) => c + 1)}
+          >
+            <Text style={styles.buttonText}>Tap me</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: '#0f1020' },
+  header: { paddingTop: 64, paddingHorizontal: 24, paddingBottom: 16 },
+  title: { fontSize: 28, fontWeight: '700', color: '#ffffff' },
+  subtitle: { fontSize: 14, color: '#9ca3af', marginTop: 4 },
+  content: { padding: 24 },
+  card: {
+    backgroundColor: '#1a1b2e',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+  },
+  cardLabel: { fontSize: 14, color: '#9ca3af' },
+  counter: { fontSize: 48, fontWeight: '700', color: '#ffffff', marginVertical: 8 },
+  button: {
+    backgroundColor: '#e2654a',
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  buttonPressed: { opacity: 0.75 },
+  buttonText: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
+});`,
+  'vite.config.js': `import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+// react-native-web lets the same React Native source render in the browser
+// preview. Keep this alias in place so the app stays portable to Expo.
+export default defineConfig({
+  plugins: [react()],
+  resolve: {
+    alias: { 'react-native': 'react-native-web' },
+    extensions: ['.web.js', '.web.jsx', '.js', '.jsx', '.json'],
+  },
+  define: { global: 'window', __DEV__: 'true' },
+  optimizeDeps: { esbuildOptions: { loader: { '.js': 'jsx' } } },
+});`,
+};
+
 /** The project fields the seeding decision needs. A `Project` domain instance
  *  satisfies this structurally (its getters expose these names). */
 export interface SeedableProject {
@@ -92,18 +210,38 @@ export interface TemplateObject {
   size: number;
 }
 
+/** Every starter template, keyed by the `template` value that selects it. */
+export const TEMPLATES: Record<string, Record<string, string>> = {
+  vanilla: VANILLA_TEMPLATE,
+  mobile: MOBILE_TEMPLATE,
+};
+
+/** Modalities that run code in the WebContainer, mapped to their starter. */
+const TEMPLATE_BY_MODALITY: Record<string, string> = {
+  designer: 'vanilla',
+  mobile: 'mobile',
+};
+
 /**
- * Whether this project should get the vanilla starter:
- *   - explicit `template === 'vanilla'`, OR
- *   - no template on a default 'designer' project with no connected repo.
- * Repo-connected projects are skipped (their files live in the git repo, not
- * R2); video/llm modalities are skipped (they don't run the Vite app).
+ * The starter template this project should be seeded with, or null when it
+ * should be left alone.
+ *
+ * An explicit `template` wins. Otherwise the modality decides: Designer gets the
+ * vanilla Vite app, Mobile gets the React Native scaffold, and the generative
+ * modalities (video/evermind/finetune/voice) get nothing because they never run
+ * the Vite app. Repo-connected projects are always skipped — their files live in
+ * git, not R2.
  */
-export function projectWantsVanilla(project: SeedableProject): boolean {
+export function templateForProject(project: SeedableProject): Record<string, string> | null {
+  if (project.template) return TEMPLATES[project.template] ?? null;
   const hasRepo = !!(project.sourceControlRepoFullName || project.githubRepoUrl);
-  const isDesigner = (project.modality ?? 'designer') === 'designer';
-  return project.template === 'vanilla' || (!project.template && isDesigner && !hasRepo);
+  if (hasRepo) return null;
+  const key = TEMPLATE_BY_MODALITY[project.modality ?? 'designer'];
+  return (key && TEMPLATES[key]) || null;
 }
+
+/** Files belonging to any known template, used by the project-less gates below. */
+const ALL_TEMPLATE_PATHS = new Set(Object.values(TEMPLATES).flatMap((t) => Object.keys(t)));
 
 /**
  * The project's IDE workspace looks FULLY unseeded when NO template file is
@@ -112,34 +250,41 @@ export function projectWantsVanilla(project: SeedableProject): boolean {
  * repo's files (only worthwhile for a brand-new/empty workspace).
  */
 export function templateLooksUnseeded(objects: TemplateObject[]): boolean {
-  return !objects.some((o) => o.size > 0 && o.path in VANILLA_TEMPLATE);
+  return !objects.some((o) => o.size > 0 && ALL_TEMPLATE_PATHS.has(o.path));
 }
 
 /**
- * Whether ANY required template file is missing or empty (0-byte). This is the
- * gate for vanilla backfill: a partially-seeded project (e.g. `package.json` has
- * content but `src/main.jsx`/`vite.config.js` are empty placeholders) must still
- * get its empty/missing files healed, or those files open BLANK in the editor.
- * `templateLooksUnseeded` (all-empty) is the strict subset that misses exactly
- * this partial case — which is why backfill keys off this, not that.
+ * Whether NO known template is fully present, so the workspace MIGHT need
+ * seeding. A partially-seeded project (e.g. `package.json` has content but
+ * `src/main.jsx` is a 0-byte placeholder) must still get its empty files healed,
+ * or they open BLANK in the editor — `templateLooksUnseeded` (all-empty) is the
+ * strict subset that misses exactly this case, which is why backfill keys off
+ * this instead.
+ *
+ * This is deliberately a cheap, project-less SUPERSET check: it runs on every
+ * file-list, before the project lookup, so a healthy workspace pays nothing. It
+ * must therefore clear a complete workspace of ANY template — checking only the
+ * vanilla paths would flag every healthy Mobile project as needing backfill and
+ * charge it a project lookup on every request. The precise per-modality decision
+ * belongs to `ensureProjectTemplate`, which knows the project.
  */
 export function templateNeedsBackfill(objects: TemplateObject[]): boolean {
   const sizeByPath = new Map(objects.map((o) => [o.path, o.size]));
-  return Object.keys(VANILLA_TEMPLATE).some((path) => {
-    const size = sizeByPath.get(path);
-    return size === undefined || size === 0;
-  });
+  const isComplete = (template: Record<string, string>) =>
+    Object.keys(template).every((path) => (sizeByPath.get(path) ?? 0) > 0);
+  return !Object.values(TEMPLATES).some(isComplete);
 }
 
 /** Write the template files that are missing or empty. Returns count written. */
 async function writeMissingTemplateFiles(
   storage: R2Bucket,
   projectId: number,
+  template: Record<string, string>,
   existing: TemplateObject[],
 ): Promise<number> {
   const prefix = `${IDE_PREFIX}projects/${projectId}/`;
   const sizeByPath = new Map(existing.map((o) => [o.path, o.size]));
-  const toWrite = Object.entries(VANILLA_TEMPLATE).filter(([path]) => {
+  const toWrite = Object.entries(template).filter(([path]) => {
     const size = sizeByPath.get(path);
     return size === undefined || size === 0;
   });
@@ -149,9 +294,10 @@ async function writeMissingTemplateFiles(
 }
 
 /**
- * Ensure the vanilla starter exists for a project. Self-contained: checks the
- * gate, lists R2, and seeds missing/empty files only when the workspace looks
- * unseeded. Safe to call on creation AND lazily on open. Returns files written.
+ * Ensure the project's starter template exists. Self-contained: picks the
+ * template for the project's modality, lists R2, and seeds only the files that
+ * are missing or empty. Safe to call on creation AND lazily on open. Returns
+ * files written.
  *
  * Callers on a hot read path (file-list) that have ALREADY listed the prefix
  * should pass `preListed` to avoid a redundant R2 list.
@@ -161,17 +307,17 @@ export async function ensureProjectTemplate(
   project: SeedableProject,
   preListed?: TemplateObject[],
 ): Promise<number> {
-  if (!storage || !projectWantsVanilla(project)) return 0;
+  const template = storage ? templateForProject(project) : null;
+  if (!storage || !template) return 0;
   let existing = preListed;
   if (!existing) {
     const prefix = `${IDE_PREFIX}projects/${project.id}/`;
     const listed = await storage.list({ prefix });
     existing = (listed.objects ?? []).map((o) => ({ path: o.key.replace(prefix, ''), size: o.size }));
   }
-  // Backfill whenever a required file is missing or empty — NOT only when the
-  // whole workspace is unseeded. This heals partial-empty projects (the blank-
-  // editor bug) while `writeMissingTemplateFiles` still never clobbers a file
-  // that already has content.
-  if (!templateNeedsBackfill(existing)) return 0;
-  return writeMissingTemplateFiles(storage, project.id, existing);
+  // Backfill whenever a file of THIS project's template is missing or empty —
+  // not only when the whole workspace is unseeded. This heals partial-empty
+  // projects (the blank-editor bug) while `writeMissingTemplateFiles` still
+  // never clobbers a file that already has content.
+  return writeMissingTemplateFiles(storage, project.id, template, existing);
 }

@@ -3,6 +3,7 @@
  *
  * One project, many modalities. A project named "BuilderForce Agents" is built across:
  *   - designer : the default app/agent builder (Preview + Code + WebContainer)
+ *   - mobile   : the same builder, framed for phones (device simulator + scan-to-phone)
  *   - video    : client-side AI video generation (WebGPU/WebNN diffusion)
  *   - evermind : grow a living, self-teaching Evermind model (teach + Knowledge Map)
  *   - finetune : design datasets and train a classic LoRA model, then ship it
@@ -17,13 +18,25 @@
  * branching scattered across components.
  */
 
-export type ProjectModality = 'designer' | 'video' | 'evermind' | 'finetune' | 'voice';
+export type ProjectModality = 'designer' | 'mobile' | 'video' | 'evermind' | 'finetune' | 'voice';
 
 /** Legacy modality id (the combined LLM Studio) → its replacement. */
 const LEGACY_MODALITY_ALIASES: Record<string, ProjectModality> = { llm: 'evermind' };
 
 /** Right-panel tab ids the IDE can surface. Each modality picks the relevant subset. */
 export type RightTab = 'voice' | 'files' | 'agent' | 'train' | 'publish' | 'state';
+
+/**
+ * Which component fills the IDE's centre pane. Naming the layout here (rather
+ * than branching on the modality id inside the IDE) is what keeps "add a
+ * modality = one entry in this registry" true — `mobile` reuses the Designer's
+ * whole run/build pipeline and differs only by rendering `device` instead of
+ * `code-preview`.
+ */
+export type CenterPanel = 'code-preview' | 'device' | 'video' | 'voice' | 'evermind' | 'finetune';
+
+/** Which Publish panel the right rail shows: a hosted site, or a trained agent. */
+export type PublishPanel = 'site' | 'agent';
 
 export interface ModalityDef {
   id: ProjectModality;
@@ -48,8 +61,15 @@ export interface ModalityDef {
   /** Label for the green run button (e.g. "Run" for Designer, "Generate" for Voice). */
   runLabel: string;
   /** Whether the WebContainer Check + "Gate Run" controls apply — only the
-   *  code-running Designer modality validates with type-check/lint/build. */
+   *  code-running Designer/Mobile modalities validate with type-check/lint/build. */
   showChecks: boolean;
+  /** Which component fills the centre pane. */
+  center: CenterPanel;
+  /** Whether the agent chat is docked into the left panel. When false the IDE
+   *  uses the global floating Brain drawer instead. Chat-driven modalities dock. */
+  dockBrain: boolean;
+  /** Which Publish panel the right rail's Publish tab renders. */
+  publishPanel: PublishPanel;
 }
 
 /** Labels for the right-panel tabs — single source so the IDE doesn't inline them. */
@@ -88,6 +108,30 @@ const BASE_MODALITIES: ModalityDef[] = [
     showRunButton: true,
     runLabel: 'Run',
     showChecks: true,
+    center: 'code-preview',
+    dockBrain: true,
+    publishPanel: 'site',
+  },
+  {
+    id: 'mobile',
+    label: 'Mobile',
+    icon: '📱',
+    tagline: 'Build a phone app and preview it in a device simulator, then scan to open it on your own handset.',
+    brainSystemPrompt: [
+      "You are an expert mobile app developer built into Builderforce.ai's browser IDE. The user is building a MOBILE app and previews it in a phone-sized device simulator.",
+      'The project is a React Native app rendered for the web through react-native-web, so it runs in the browser preview AND stays portable to Expo. Import components (View, Text, Pressable, ScrollView, StyleSheet, FlatList) from "react-native" — never use HTML elements like div, span or button, and never use CSS files or className.',
+      'Style with StyleSheet.create and flexbox. Remember there is no hover: design for touch, keep tap targets at least 44 points, and respect safe areas at the top and bottom of the screen.',
+      'Design for a narrow portrait viewport (roughly 390 x 850 points) first. Prefer native navigation patterns — tab bars, stack headers, bottom sheets — over desktop patterns like sidebars and hover menus.',
+      'When suggesting new or existing files, use a code block with the file path as the language tag so the user can create the file in one click. Examples: ```App.js (then the component), ```src/screens/Home.js.',
+      'When you write code for the currently open file, use a normal code block (e.g. ```javascript) so the user can apply it.',
+    ].join('\n'),
+    rightTabs: ['files', 'agent', 'publish', 'state'],
+    showRunButton: true,
+    runLabel: 'Run',
+    showChecks: true,
+    center: 'device',
+    dockBrain: true,
+    publishPanel: 'site',
   },
   {
     id: 'video',
@@ -104,6 +148,9 @@ const BASE_MODALITIES: ModalityDef[] = [
     showRunButton: false,
     runLabel: 'Run',
     showChecks: false,
+    center: 'video',
+    dockBrain: false,
+    publishPanel: 'agent',
   },
   {
     id: 'evermind',
@@ -119,6 +166,9 @@ const BASE_MODALITIES: ModalityDef[] = [
     showRunButton: false,
     runLabel: 'Run',
     showChecks: false,
+    center: 'evermind',
+    dockBrain: false,
+    publishPanel: 'agent',
   },
   {
     id: 'finetune',
@@ -133,6 +183,9 @@ const BASE_MODALITIES: ModalityDef[] = [
     showRunButton: false,
     runLabel: 'Run',
     showChecks: false,
+    center: 'finetune',
+    dockBrain: false,
+    publishPanel: 'agent',
   },
   {
     id: 'voice',
@@ -148,6 +201,9 @@ const BASE_MODALITIES: ModalityDef[] = [
     showRunButton: true,
     runLabel: 'Generate',
     showChecks: false,
+    center: 'voice',
+    dockBrain: true,
+    publishPanel: 'agent',
   },
 ];
 

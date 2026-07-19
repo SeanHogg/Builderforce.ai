@@ -141,22 +141,7 @@ export async function getTenantTokenAvailability(
   //       unlimited" rule lives; every caller (cron + interactive) inherits it.
   // `users.isSuperadmin` is the sole, revocation-safe source of truth (fresh per
   // call). Only consulted for a capped tenant, so unlimited tenants pay nothing.
-  let isSuperadmin = opts?.actingIsSuperadmin === true;
-  // Only resolve the principal from a user id when the caller DIDN'T already hand us a
-  // resolved flag (the gateway does — via `access.isSuperadmin` — so we skip the query).
-  if (!isSuperadmin && opts?.actingIsSuperadmin === undefined && opts?.actingUserId) {
-    try {
-      const [u] = await db
-        .select({ isSuperadmin: users.isSuperadmin })
-        .from(users)
-        .where(eq(users.id, opts.actingUserId))
-        .limit(1);
-      isSuperadmin = u?.isSuperadmin === true;
-    } catch {
-      isSuperadmin = false;
-    }
-  }
-  if (!isSuperadmin) isSuperadmin = await tenantHasSuperadminMember(db, tenantId, env);
+  const isSuperadmin = await resolveSuperadminUnlimited(db, tenantId, opts, env);
   if (isSuperadmin) {
     const superLimits = resolveTokenLimits({
       effectivePlan: effectivePlanEnum,
@@ -185,6 +170,48 @@ export async function getTenantTokenAvailability(
     usageMonth: usage.month,
     effectivePlan,
   };
+}
+
+/**
+ * THE "superadmin ⇒ unlimited" rule. A superadmin operator is never capped, and
+ * that is resolved from THREE sources so the bypass holds on every path:
+ *   (a) `actingIsSuperadmin` — a flag the caller already resolved (the gateway
+ *       hands us `access.isSuperadmin`, so we skip a query);
+ *   (b) `actingUserId` → `users.isSuperadmin` — the interactive principal, which
+ *       covers a superadmin operating a tenant they are not a member of;
+ *   (c) the tenant's OWN active superadmin membership — so an account owned by a
+ *       superadmin is never frozen even on cron sweeps, which have no acting user.
+ *
+ * Exported because it is the SINGLE definition: the enforcement gate above and the
+ * consumption METER both call it. They diverged once — the meter resolved only (c)
+ * and showed a superadmin their plain free-plan caps against real usage while every
+ * turn sailed through the gate — so any surface that answers "is this tenant
+ * capped?" must come through here rather than re-deriving it.
+ *
+ * `users.isSuperadmin` is the sole, revocation-safe source of truth (fresh per
+ * call); (c) is cached 5 min. Call this only for a plan-capped tenant so unlimited
+ * tenants pay nothing.
+ */
+export async function resolveSuperadminUnlimited(
+  db: Db,
+  tenantId: number,
+  opts?: { actingUserId?: string | null; actingIsSuperadmin?: boolean },
+  env?: Env,
+): Promise<boolean> {
+  if (opts?.actingIsSuperadmin === true) return true;
+  if (opts?.actingIsSuperadmin === undefined && opts?.actingUserId) {
+    try {
+      const [u] = await db
+        .select({ isSuperadmin: users.isSuperadmin })
+        .from(users)
+        .where(eq(users.id, opts.actingUserId))
+        .limit(1);
+      if (u?.isSuperadmin === true) return true;
+    } catch {
+      /* fall through to the tenant-membership check */
+    }
+  }
+  return tenantHasSuperadminMember(db, tenantId, env);
 }
 
 /**

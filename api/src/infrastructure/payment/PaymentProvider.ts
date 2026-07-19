@@ -108,6 +108,10 @@ export interface WebhookEvent {
   /** Card details returned by the provider after payment (not entered by user) */
   paymentBrand?: string;
   paymentLast4?: string;
+  /** The provider's payment-method id for that card. Persisted so a later
+   *  removal/replace can detach exactly this card instead of sweeping the
+   *  customer — see migration 0346. */
+  paymentMethodId?: string;
 
   /** Raw provider-specific data for logging/debugging */
   raw: unknown;
@@ -131,6 +135,24 @@ export interface PaymentProvider {
 
   /** Cancel the active subscription for a tenant (called on downgrade to Free). */
   cancelSubscription(externalSubscriptionId: string): Promise<void>;
+
+  /**
+   * Detach a stored CARD so the processor no longer holds it. Called when a tenant
+   * removes or replaces their card on file.
+   *
+   * Prefers `paymentMethodId` — that detaches exactly the card we recorded, which
+   * is what a replace needs (revoke the OLD card, keep the new one) and what a
+   * multi-card tenant needs. `externalCustomerId` is the fallback for rows
+   * validated before migration 0346 stored the id: it sweeps every card on the
+   * customer, which is only safe because those tenants have exactly one.
+   *
+   * The caller must ensure no active subscription depends on the card — detaching
+   * one that does would silently break renewal billing.
+   *
+   * Returns how many were detached (0 is a normal outcome — nothing stored, or the
+   * card was already gone). Never throws for "nothing to do".
+   */
+  detachCards(opts: { paymentMethodId?: string | null; externalCustomerId?: string | null }): Promise<number>;
 
   /**
    * Parse and validate an inbound webhook payload.

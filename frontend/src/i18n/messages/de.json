@@ -686,6 +686,11 @@
         "label": "Stimme",
         "tagline": "Klone und gestalte eine eigene Stimme und synthetisiere daraus Sprache.",
         "runLabel": "Generieren"
+      },
+      "mobile": {
+        "label": "Mobil",
+        "tagline": "Entwickle eine Handy-App, sieh sie dir im Gerätesimulator an und scanne den Code, um sie auf deinem eigenen Gerät zu öffnen.",
+        "runLabel": "Ausführen"
       }
     },
     "all": "Alle",
@@ -760,7 +765,35 @@
     "recipeBlankDesc": "Ein minimales Modell, das du im Studio von Grund auf trainierst.",
     "recipeSeedModelLabel": "Veröffentlichtes Modell zum Initialisieren",
     "recipeSeedSelect": "Modell auswählen…",
-    "recipeSeedNoModels": "noch keine veröffentlichten Modelle"
+    "recipeSeedNoModels": "noch keine veröffentlichten Modelle",
+    "centerPreview": "Vorschau",
+    "centerCode": "Code",
+    "device": {
+      "simulateOnWeb": "Im Web simulieren",
+      "deviceLabel": "Gerät",
+      "rotate": "Drehen",
+      "reload": "Vorschau neu laden",
+      "openInTab": "In neuem Tab öffnen",
+      "tryOnDevice": "Auf dem Gerät testen",
+      "previewTitle": "Vorschau der mobilen App",
+      "emptyTitle": "Noch nichts gestartet",
+      "emptyHint": "Klicke auf „Ausführen“, um den Entwicklungsserver zu starten und deine App hier zu sehen.",
+      "panelTitle": "Vorschau auf deinem Handy",
+      "panelIntro": "Der Simulator läuft in diesem Browser-Tab, dein Handy kann ihn also nicht erreichen. Scanne stattdessen die veröffentlichte Version.",
+      "checking": "Suche nach einer veröffentlichten Version…",
+      "qrAlt": "QR-Code für die URL der veröffentlichten App",
+      "copyLink": "Link kopieren",
+      "copied": "Kopiert",
+      "openLink": "Öffnen",
+      "step1": "Öffne die Kamera-App auf deinem Handy.",
+      "step2": "Richte sie auf den QR-Code oben.",
+      "step3": "Tippe auf die Benachrichtigung, um deine App zu öffnen.",
+      "lastPublished": "Zuletzt veröffentlicht am {when}",
+      "republishHint": "Veröffentliche nach Änderungen erneut – der QR-Code bleibt gültig und verweist immer auf die neueste Version.",
+      "notPublishedTitle": "Noch nichts veröffentlicht",
+      "notPublishedBody": "Veröffentliche diese App, um einen Link zu erhalten, den dein Handy öffnen kann. Das dauert etwa eine Minute.",
+      "goToPublish": "Zu „Veröffentlichen“"
+    }
   },
   "tools": {
     "outOf5": "von 5,0",
@@ -5724,47 +5757,47 @@
       "document": {
         "label": "Dokument",
         "hint": "Schreibe ein strukturiertes Dokument mit Überschriften, Abschnitten und Tabellen.",
-        "starter": "Schreibe ein Dokument über "
+        "starter": "Schreibe ein Dokument, das den aktuellen Stand dieses Projekts zusammenfasst."
       },
       "slides": {
         "label": "Folien",
         "hint": "Erstelle eine Präsentation – eine Folie pro Abschnitt.",
-        "starter": "Erstelle eine Präsentation über "
+        "starter": "Erstelle eine Präsentation, die den aktuellen Stand dieses Projekts zusammenfasst."
       },
       "dataviz": {
         "label": "Datenvisualisierung",
         "hint": "Mache Daten als eingebettete Diagramme sichtbar, mit den Zahlen darunter.",
-        "starter": "Visualisiere "
+        "starter": "Stelle grafisch dar, wie sich die Aufgaben dieses Projekts auf die Status verteilen."
       },
       "spreadsheet": {
         "label": "Tabelle",
         "hint": "Modelliere Zahlen als Tabelle mit Formeln und Summen.",
-        "starter": "Erstelle eine Tabelle, die "
+        "starter": "Erstelle eine Tabelle der offenen Aufgaben dieses Projekts mit Verantwortlichen, Status und Alter."
       },
       "website": {
         "label": "Website",
         "hint": "Baue eine Web-App oder Website als echte, direkt anlegbare Dateien.",
-        "starter": "Baue eine Website, die "
+        "starter": "Baue eine Landingpage für dieses Projekt."
       },
       "design": {
         "label": "Design",
         "hint": "Gestalte die Oberfläche – Layout, Abstände, Typografie und Theme-Tokens.",
-        "starter": "Gestalte die Oberfläche für "
+        "starter": "Gestalte den Hauptbildschirm dieses Projekts – mit hellem und dunklem Theme."
       },
       "mobile": {
         "label": "Mobil",
         "hint": "Baue eine Mobile-First-App mit nativ wirkender Navigation.",
-        "starter": "Baue eine mobile App, die "
+        "starter": "Baue einen mobilen Startbildschirm für dieses Projekt."
       },
       "animation": {
         "label": "Animation",
         "hint": "Füge gezielte Bewegung mit klarer Dauer und Easing hinzu.",
-        "starter": "Animiere "
+        "starter": "Füge dem Hauptbildschirm dieses Projekts eine Einblendanimation hinzu."
       },
       "game3d": {
         "label": "3D-Spiel",
         "hint": "Baue ein 3D-Spiel – Szene, Kamera, Eingabe und Game-Loop.",
-        "starter": "Baue ein 3D-Spiel, in dem "
+        "starter": "Baue eine einfache 3D-Szene, in der ich eine Kamera bewegen kann."
       },
       "export": {
         "docx": "Word herunterladen",
@@ -5773,6 +5806,11 @@
         "working": "Wird vorbereitet…",
         "failed": "Export fehlgeschlagen",
         "untitled": "Ohne Titel"
+      },
+      "missing": {
+        "body": "Diese Antwort enthielt {capability} nicht — das Modell lieferte nur eine Überschrift.",
+        "retry": "Erneut anfragen",
+        "retryPrompt": "Diese Antwort enthielt kein {capability}. Erzeuge jetzt das vollständige {capability} in dieser Antwort."
       }
     },
     "messageActions": {
@@ -5815,7 +5853,14 @@
     "upgrade": "Upgrade",
     "upgradeToPlan": "Auf {plan} upgraden",
     "addCard": "Karte hinzufügen",
-    "cardValidationFailed": "Kartenprüfung fehlgeschlagen."
+    "cardValidationFailed": "Kartenprüfung fehlgeschlagen.",
+    "allowance": {
+      "exhausted": "Dein KI-Token-Kontingent für diesen Zeitraum ist aufgebraucht ({used} von {limit}). Anfragen schlagen fehl oder brechen mitten in der Antwort ab, bis es am {resets} zurückgesetzt wird.",
+      "nearLimit": "KI-Token-Kontingent zu {percent}% genutzt — {remaining} übrig bis {resets}. Lange Antworten können abgeschnitten werden.",
+      "upgrade": "Upgraden",
+      "connectAccount": "Eigenes Konto verbinden",
+      "dismiss": "Ausblenden"
+    }
   },
   "chatMessage": {
     "copy": "Kopieren",
@@ -9851,9 +9896,14 @@
     "retryCard": "Erneut versuchen",
     "cardWorking": "Wird ausgeführt…",
     "replaceCardTitle": "Karte ersetzen?",
-    "replaceCardWarning": "Premium-Modelle pausieren, während die neue Karte geprüft wird. Ihr Tarif und alles Übrige laufen weiter.",
+    "replaceCardWarning": "Ihre aktuelle Karte bleibt aktiv, bis die neue verifiziert ist — Premium-Modelle werden nie unterbrochen. Die alte Karte wird automatisch entfernt, sobald die neue bestätigt ist.",
     "retryCardMessage": "Wir starten eine neue 0-$-Prüfung. Ihre Karte wird nicht belastet.",
     "replaceCardConfirm": "Weiter",
-    "cardValidationFailed": "Die Kartenprüfung konnte nicht gestartet werden. Bitte versuchen Sie es erneut."
+    "cardValidationFailed": "Die Kartenprüfung konnte nicht gestartet werden. Bitte versuchen Sie es erneut.",
+    "removeCard": "Karte entfernen",
+    "removeCardTitle": "Karte entfernen?",
+    "removeCardWarning": "Premium-Modelle werden deaktiviert und wir speichern Ihre Karte nicht mehr. Ihr Tarif und die enthaltenen Modelle laufen weiter. Sie können jederzeit wieder eine Karte hinzufügen.",
+    "removeCardConfirm": "Karte entfernen",
+    "removeCardFailed": "Die Karte konnte nicht entfernt werden. Bitte versuchen Sie es erneut."
   }
 }

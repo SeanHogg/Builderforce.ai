@@ -740,6 +740,96 @@ describe('POST /v1/chat/completions monthly token cap', () => {
 });
 
 // ---------------------------------------------------------------------------
+// The unpinned free-plan turn — end to end through the real route.
+//
+// A free tenant's VSIX chat used to 402 on EVERY turn: the client filled in a
+// hardcoded `openai/gpt-4o-mini` whenever the user hadn't picked a model, and
+// that is a PAID OpenRouter model, so the premium gate refused a model the user
+// never chose ("Premium models … require a validated card on file"). The client
+// fix was to OMIT `model` entirely and let the gateway route the plan's pool.
+//
+// The pure-function half of that contract is covered in
+// LlmProxyService.unpinnedFreePlan.test.ts. THIS drives the actual Hono handler,
+// so the assertion is about the route's real gate order rather than a helper in
+// isolation — the closest thing to the live run short of credentials.
+// ---------------------------------------------------------------------------
+describe('POST /v1/chat/completions unpinned free-plan turn', () => {
+  beforeEach(() => {
+    mocks.hashSecret.mockReset();
+    mocks.buildDatabase.mockReset();
+  });
+
+  /** A free tenant, comfortably under both token caps. */
+  function freeTenantDb() {
+    return mockDb({
+      keyRow:    { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'free', billingStatus: 'none', tokenDailyLimitOverride: null },
+      usageRow:  { day: 100, month: 100 },
+    });
+  }
+
+  function chatRequest(body: Record<string, unknown>) {
+    return new Request('http://test.local/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer bfk_plain', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it('does NOT 402 when the body carries no model at all', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(freeTenantDb());
+
+    const res = await buildApp().request(
+      chatRequest({ messages: [{ role: 'user', content: 'hi' }] }),
+      {}, baseEnv as Record<string, unknown>, fakeExecutionCtx,
+    );
+
+    // Past the premium gate AND the strict-pin gate (both 402) → stops only at
+    // the missing-OPENROUTER_API_KEY check.
+    expect(res.status).not.toBe(402);
+    expect(res.status).toBe(503);
+  });
+
+  it('REGRESSION: the same turn WITH the old hardcoded fallback is refused 402', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(freeTenantDb());
+
+    const res = await buildApp().request(
+      chatRequest({ model: 'openai/gpt-4o-mini', messages: [{ role: 'user', content: 'hi' }] }),
+      {}, baseEnv as Record<string, unknown>, fakeExecutionCtx,
+    );
+
+    // This is the exact failure the user reported, reproduced through the route.
+    // If it ever stops being a 402 the client fix's rationale needs revisiting.
+    expect(res.status).toBe(402);
+    const body = await res.json() as { code?: string; unlock?: string; requiredPlan?: string };
+    expect(body.code).toBe('premium_model_not_allowed');
+    // The structured fields the client turns into an Upgrade / Add-a-card button.
+    expect(body.unlock).toBeTruthy();
+    expect(body.requiredPlan).toBe('pro');
+  });
+
+  it('does not 402 an unpinned turn that also asks for tools (the IDE chat shape)', async () => {
+    mocks.hashSecret.mockResolvedValue('hash_of_bfk_test');
+    mocks.buildDatabase.mockReturnValue(freeTenantDb());
+
+    // The VSIX always sends tools; that switches the gateway to the CODING pool,
+    // which is a different pool lookup and therefore worth its own assertion.
+    const res = await buildApp().request(
+      chatRequest({
+        messages: [{ role: 'user', content: 'hi' }],
+        tools: [{ type: 'function', function: { name: 'read_file', parameters: { type: 'object', properties: {} } } }],
+      }),
+      {}, baseEnv as Record<string, unknown>, fakeExecutionCtx,
+    );
+
+    expect(res.status).not.toBe(402);
+    expect(res.status).toBe(503);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Server-side / caller-side boundary [1300]: the response envelope echoes the
 // trace id (so a consumer can quote it for a superadmin lookup) but must NEVER
 // serialize the builder-side per-attempt detail (attempts[].error, requestBody,
