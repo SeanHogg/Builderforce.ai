@@ -1459,6 +1459,7 @@ export type AutoRunReason =
   | 'capability_mismatch'
   | 'already_running'
   | 'run_cap_exhausted'
+  | 'cooldown_active'
   | 'not_executable';
 
 export interface AutoRunDiagnostic {
@@ -1478,6 +1479,9 @@ export interface AutoRunDiagnostic {
   liveExecution: { id: number; status: string } | null;
   canRunNow: boolean;
   reason: AutoRunReason;
+  /** Milliseconds still owed on the per-ticket re-run cooldown (0 unless the reason
+   *  is `cooldown_active`) — lets triage say when the ticket resumes. */
+  cooldownRemainingMs?: number;
 }
 
 /** The three work-item types you can convert between across the board ⇄ OKR boundary. */
@@ -4254,8 +4258,63 @@ export const ceremonySessionsApi = {
     request(`${CEREMONY_BASE}/sessions`, { method: 'POST', body: JSON.stringify({ projectId, kind, participants }) }),
   advanceTurn: (id: string, currentTurn: number): Promise<CeremonySessionDetail> =>
     request(`${CEREMONY_BASE}/sessions/${id}/turn`, { method: 'PATCH', body: JSON.stringify({ currentTurn }) }),
+  /** End the session. The server then auto-dispatches the project's agent-owned
+   *  work through the canonical lane-entry gate (bounded) — the client does NOT
+   *  submit executions itself any more. */
   complete: (id: string): Promise<CeremonySessionDetail> =>
     request(`${CEREMONY_BASE}/sessions/${id}/complete`, { method: 'POST' }),
+};
+
+/** A recurring standup/planning. The frequent cron sweep opens a session for every
+ *  due row with its roster pre-seeded, then re-arms nextRunAt from the cron. */
+export interface CeremonySchedule {
+  id: string;
+  projectId: number;
+  kind: CeremonyKind;
+  /** 5-field cron — the same cadence language as QA schedules / workflow triggers. */
+  cron: string;
+  timezone: string;
+  enabled: boolean;
+  turnMode: 'facilitator' | 'timeboxed' | null;
+  turnSeconds: number | null;
+  /** 'members' derives the roster from member metrics; 'roster' uses `participants`. */
+  participantScope: 'members' | 'roster';
+  /** JSON array of { kind, ref, name }; only meaningful for the 'roster' scope. */
+  participants: string;
+  maxParticipants: number;
+  autoDispatch: boolean;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  lastStatus: string | null;
+  lastSessionId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CeremonyScheduleInput {
+  projectId?: number;
+  kind?: CeremonyKind;
+  cron?: string;
+  timezone?: string;
+  enabled?: boolean;
+  turnMode?: 'facilitator' | 'timeboxed' | null;
+  turnSeconds?: number | null;
+  participantScope?: 'members' | 'roster';
+  participants?: Array<{ kind: string; ref: string; name: string }>;
+  maxParticipants?: number;
+  autoDispatch?: boolean;
+}
+
+/** Ceremony cadence CRUD. Reads are member-level; writes are MANAGER+. */
+export const ceremonySchedulesApi = {
+  list: (projectId: number): Promise<{ schedules: CeremonySchedule[] }> =>
+    request(`${CEREMONY_BASE}/schedules?projectId=${projectId}`),
+  create: (body: CeremonyScheduleInput): Promise<{ schedule: CeremonySchedule }> =>
+    request(`${CEREMONY_BASE}/schedules`, { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: string, body: CeremonyScheduleInput): Promise<{ schedule: CeremonySchedule }> =>
+    request(`${CEREMONY_BASE}/schedules/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  remove: (id: string): Promise<{ deleted: boolean }> =>
+    request(`${CEREMONY_BASE}/schedules/${id}`, { method: 'DELETE' }),
 };
 
 // Member metrics & profiles (the workforce scorecard system) live in `membersApi`

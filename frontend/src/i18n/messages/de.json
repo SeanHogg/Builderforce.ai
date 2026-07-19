@@ -3856,7 +3856,8 @@
     "membersTab": "Mitglieder",
     "agentsTab": "Agenten",
     "auditTab": "SOC 2",
-    "subnavLabel": "Sicherheitsbereiche"
+    "subnavLabel": "Sicherheitsbereiche",
+    "policiesTab": "Richtlinien"
   },
   "catalogInsights": {
     "total": {
@@ -9906,5 +9907,65 @@
     "removeCardWarning": "Premium-Modelle werden deaktiviert und wir speichern Ihre Karte nicht mehr. Ihr Tarif und die enthaltenen Modelle laufen weiter. Sie können jederzeit wieder eine Karte hinzufügen.",
     "removeCardConfirm": "Karte entfernen",
     "removeCardFailed": "Die Karte konnte nicht entfernt werden. Bitte versuchen Sie es erneut."
+  },
+  "policyPacks": {
+    "title": "Richtlinienpakete",
+    "subtitle": "Governance-Schranken, an die sich Ihre Agenten halten müssen. Eine Schranke greift beim nächsten Lauf in ihrem Geltungsbereich — die Laufzeit setzt sie bei jedem Werkzeugaufruf durch.",
+    "newPack": "Neues Paket",
+    "error": "Fehler: {message}",
+    "genericError": "Etwas ist schiefgelaufen.",
+    "loading": "Richtlinienpakete werden geladen…",
+    "empty": "Noch keine Richtlinienpakete. Legen Sie eines an, um zu steuern, was Ihre Agenten tun dürfen.",
+    "effectiveTitle": "Aktuell in Kraft",
+    "effectiveEmpty": "Für einen arbeitsbereichsweiten Lauf greift keine Schranke. Die Agenten sind ungeregelt.",
+    "effectiveCount": "{count, plural, one {# Schranke greift} other {# Schranken greifen}} bei einem arbeitsbereichsweiten Lauf.",
+    "enabled": "Aktiv",
+    "disabled": "Inaktiv",
+    "noGates": "Keine Schranken in diesem Paket.",
+    "remove": "Entfernen",
+    "scopeTenant": "Gilt für alle Projekte und Agenten",
+    "scopeProject": "Projekt: {project}",
+    "scopeAgent": "Agent: {agent}",
+    "scopeProjectAgent": "{project} · {agent}",
+    "anyTool": "Beliebiges Werkzeug",
+    "fieldName": "Name",
+    "fieldNamePlaceholder": "z. B. Produktionssicherheit",
+    "fieldDescription": "Beschreibung",
+    "fieldProject": "Projekt",
+    "allProjects": "Alle Projekte",
+    "fieldAgent": "Agent",
+    "allAgents": "Alle Agenten",
+    "fieldEnabled": "Paket ist aktiv",
+    "saving": "Wird gespeichert…",
+    "createPack": "Paket anlegen",
+    "savePack": "Änderungen speichern",
+    "deletePack": "Paket löschen",
+    "deletePackTitle": "Richtlinienpaket löschen",
+    "deletePackConfirm": "„{name}“ samt aller Schranken löschen? Die Agenten unterliegen ihnen dann nicht mehr.",
+    "gatesTitle": "Schranken",
+    "gatesHelp": "Jede Schranke greift bei einem Werkzeugaufruf und entscheidet, was passiert: eine Anweisung, eine Pause zur Freigabe oder eine Verweigerung.",
+    "addGateTitle": "Schranke hinzufügen",
+    "fieldGateKey": "Schranken-ID",
+    "fieldGateKeyPlaceholder": "z. B. no-shell-in-prod",
+    "fieldTool": "Werkzeug",
+    "toolHelp": "Mit * gelten die Regeln für alle Werkzeuge — so formulieren Sie eine Grundhaltung „standardmäßig verboten“.",
+    "fieldEffect": "Wirkung",
+    "fieldDirective": "Anweisung",
+    "fieldDirectivePlaceholder": "Was der Agent tun muss — in klarer Sprache.",
+    "fieldReason": "Begründung",
+    "fieldReasonPlaceholder": "Warum dies geregelt ist — wird dem Agenten und der freigebenden Person angezeigt.",
+    "addGate": "Schranke hinzufügen",
+    "deleteGateTitle": "Schranke löschen",
+    "deleteGateConfirm": "Die Schranke „{key}“ löschen?",
+    "effect": {
+      "inject-directive": "Anweisen",
+      "require-approval": "Freigeben",
+      "block": "Sperren"
+    },
+    "effectHelp": {
+      "inject-directive": "Fügt dem Prompt des Agenten eine verbindliche Anweisung hinzu. Das Werkzeug läuft weiterhin.",
+      "require-approval": "Der Agent hält an und holt vor dem Werkzeugeinsatz eine menschliche Freigabe ein.",
+      "block": "Der Agent verweigert das Werkzeug vollständig und erklärt den Grund."
+    }
   }
 }

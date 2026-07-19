@@ -75,6 +75,11 @@ export const CAPABILITIES = {
   // per-field requireRole(MANAGER) check on PATCH /api/boards/:id.
   'board.manageApproval': 'manager',
 
+  // Ceremony cadence — create/edit/delete the recurring standup & planning
+  // schedules the cron sweep runs. Mirrors the API's requireRole(MANAGER) on the
+  // POST/PATCH/DELETE /api/agile/ceremonies/schedules routes (reads are open).
+  'ceremonies.manageSchedules': 'manager',
+
   // Enterprise insight lenses (the role-based dashboards from the platform
   // assessment). Gating them now means the lens surfaces light up for the right
   // audience the moment each is built — and show "Requires … role" until then.

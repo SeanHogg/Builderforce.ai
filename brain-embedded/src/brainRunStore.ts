@@ -72,6 +72,37 @@ function provenanceMetadata(result: StreamChatResult): string | undefined {
 }
 
 /**
+ * Does this reply PROMISE a tool call rather than make one?
+ *
+ * Observed on a live chart request: `"I need the task status breakdown for project
+ * 11 before charting. Calling the tool now."` — `finish: stop`, zero tool calls.
+ * The user is left holding an announcement. The loop uses this to re-prompt ONCE.
+ *
+ * Deliberately narrow: it must match a stated INTENT to act, in the last stretch of
+ * the reply (a mid-answer "let me check that" inside a complete answer is not a
+ * stall). A false positive costs one extra turn; a false negative just restores the
+ * old behaviour, so the bias is toward matching little.
+ */
+const ANNOUNCED_ACTION = new RegExp(
+  [
+    'calling (the|this|that|a|it|them|these) [\\w\\s-]*?(tool|function|api|now)',
+    '(i will|i\'ll|let me|going to|about to|now) (call|use|invoke|run|query|fetch|retrieve|look ?up|pull|check|get)\\b',
+    '(one|just a) (moment|second|sec)\\b',
+    '(fetching|retrieving|querying|loading|checking) (it|that|this|the data|now)\\b',
+    'stand ?by\\b',
+  ].join('|'),
+  'i',
+);
+
+export function announcesUntakenAction(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  // Only the tail matters — that is where a turn signs off with a promise.
+  const tail = t.slice(-240);
+  return ANNOUNCED_ACTION.test(tail);
+}
+
+/**
  * Max agent-loop iterations before we stop chaining tool calls (runaway guard).
  * Each iteration is one model turn and can batch several tool calls, but models
  * commonly emit one call per turn — so the cap must be high enough for real bulk
@@ -1231,6 +1262,9 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // a write/edit/delete (or any side-effecting call) can change what a re-read would
   // see, so a read after a mutation is never suppressed. Only successful reads cache.
   const readDedupe = new Set<string>();
+  // One-shot guard for the announced-but-never-made tool call recovery below, so a
+  // model that keeps narrating instead of acting cannot spin the loop.
+  let usedAnnouncementRecovery = false;
 
   for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
     // User hit Stop between turns (or after a tool call) — unwind cleanly.
@@ -1432,6 +1466,44 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
         // Cache only a SUCCESSFUL read so a failed read can be retried.
         if (isReadTool && !isFailedToolResult(out)) readDedupe.add(dedupeKey);
       }
+      continue;
+    }
+
+    // The model ANNOUNCED an action and then ended the turn without taking it
+    // ("Calling the tool now." → finish: stop, 0 tool calls). Accepting that as a
+    // final answer strands the user with a promise instead of a result. Nudge once
+    // and let the loop run another turn — bounded to a single recovery per run so a
+    // model that keeps narrating can't spin.
+    if (
+      runTool
+      && (toolSpecs?.length ?? 0) > 0
+      && !usedAnnouncementRecovery
+      && announcesUntakenAction(result.text)
+    ) {
+      usedAnnouncementRecovery = true;
+      // Keep what the user already watched stream in, as its own durable block —
+      // same treatment a narration-before-tool-calls turn gets.
+      const narration = result.text.trim();
+      if (narration) {
+        const meta = provenanceMetadata(result);
+        const [narrationMsg] = await persistence.sendMessages(chatId, [{ role: 'assistant', content: narration, ...(meta ? { metadata: meta } : {}) }]);
+        recordAppended(c, narrationMsg);
+      }
+      convo.push({ role: 'assistant', content: result.text });
+      convo.push({
+        role: 'user',
+        content:
+          'You said you would call a tool but did not actually call one — your last turn made zero tool calls. Make the call NOW in this turn, then answer using its result. If no tool can give you that data, say plainly which data you are missing and answer with what you already have. Do not announce another call.',
+      });
+      pushTrace(c, {
+        ts: nowIso(),
+        category: 'message',
+        label: 'loop.recover_announced_tool_call',
+        args: { step: iter },
+        result: 'Model announced a tool call without making one — re-prompted once.',
+      });
+      c.streamingText = '';
+      emit(c);
       continue;
     }
 

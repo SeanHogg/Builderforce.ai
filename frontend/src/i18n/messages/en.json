@@ -3856,7 +3856,8 @@
     "membersTab": "Members",
     "agentsTab": "Agents",
     "auditTab": "SOC 2",
-    "subnavLabel": "Security sections"
+    "subnavLabel": "Security sections",
+    "policiesTab": "Policies"
   },
   "catalogInsights": {
     "total": {
@@ -9908,5 +9909,65 @@
     "removeCardWarning": "Premium models will be turned off, and we will stop storing your card. Your plan and included models keep working. You can add a card again at any time.",
     "removeCardConfirm": "Remove card",
     "removeCardFailed": "We could not remove the card. Please try again."
+  },
+  "policyPacks": {
+    "title": "Policy packs",
+    "subtitle": "Governance gates your agents are held to. A gate applies on the next run in its scope — the runtime enforces it at every tool call.",
+    "newPack": "New pack",
+    "error": "Error: {message}",
+    "genericError": "Something went wrong.",
+    "loading": "Loading policy packs…",
+    "empty": "No policy packs yet. Create one to start governing what your agents may do.",
+    "effectiveTitle": "In force right now",
+    "effectiveEmpty": "No gates apply to a workspace-wide run. Agents are ungated.",
+    "effectiveCount": "{count, plural, one {# gate applies} other {# gates apply}} to a workspace-wide run.",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "noGates": "No gates in this pack.",
+    "remove": "Remove",
+    "scopeTenant": "Applies to every project and agent",
+    "scopeProject": "Project: {project}",
+    "scopeAgent": "Agent: {agent}",
+    "scopeProjectAgent": "{project} · {agent}",
+    "anyTool": "Any tool",
+    "fieldName": "Name",
+    "fieldNamePlaceholder": "e.g. Production safety",
+    "fieldDescription": "Description",
+    "fieldProject": "Project",
+    "allProjects": "All projects",
+    "fieldAgent": "Agent",
+    "allAgents": "All agents",
+    "fieldEnabled": "Pack is enabled",
+    "saving": "Saving…",
+    "createPack": "Create pack",
+    "savePack": "Save changes",
+    "deletePack": "Delete pack",
+    "deletePackTitle": "Delete policy pack",
+    "deletePackConfirm": "Delete “{name}” and all of its gates? Agents will no longer be held to them.",
+    "gatesTitle": "Gates",
+    "gatesHelp": "Each gate matches a tool call and decides what happens: an instruction, a pause for approval, or a refusal.",
+    "addGateTitle": "Add a gate",
+    "fieldGateKey": "Gate ID",
+    "fieldGateKeyPlaceholder": "e.g. no-shell-in-prod",
+    "fieldTool": "Tool",
+    "toolHelp": "Use * to govern every tool — that is how you author a deny-by-default posture.",
+    "fieldEffect": "Effect",
+    "fieldDirective": "Instruction",
+    "fieldDirectivePlaceholder": "What the agent must do, in plain language.",
+    "fieldReason": "Reason",
+    "fieldReasonPlaceholder": "Why this is gated — shown to the agent and the approver.",
+    "addGate": "Add gate",
+    "deleteGateTitle": "Delete gate",
+    "deleteGateConfirm": "Delete the gate “{key}”?",
+    "effect": {
+      "inject-directive": "Instruct",
+      "require-approval": "Approve",
+      "block": "Block"
+    },
+    "effectHelp": {
+      "inject-directive": "Adds a binding instruction to the agent’s prompt. It still runs the tool.",
+      "require-approval": "The agent pauses and asks a human before using the tool.",
+      "block": "The agent refuses the tool outright and explains why."
+    }
   }
 }

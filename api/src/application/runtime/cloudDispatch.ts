@@ -26,8 +26,15 @@ export function resolveCloudSurface(agentSurface: string | undefined | null, has
   return agentSurface === 'container' ? 'container' : 'durable';
 }
 
-export type CloudExecutor = 'container' | 'durable' | 'worker';
-export type CloudDispatchTarget = Exclude<CloudExecutor, 'worker'> | 'unavailable';
+/**
+ * The executors a cloud run can actually land on. There are exactly TWO, and both are
+ * long-lived: the alarm-ticked `durable` CloudRunnerDO and the `container` runtime.
+ * There is no in-request Worker executor — a `waitUntil` background loop cannot
+ * outlast the ~30s serverless wall, so {@link chooseCloudExecutor} fails fast to
+ * `unavailable` rather than starting a run that provably cannot finish.
+ */
+export type CloudExecutor = 'container' | 'durable';
+export type CloudDispatchTarget = CloudExecutor | 'unavailable';
 
 /**
  * Decide which cloud executor a run lands on, given the resolved capabilities.
@@ -38,9 +45,11 @@ export type CloudDispatchTarget = Exclude<CloudExecutor, 'worker'> | 'unavailabl
  *   1. `container` — only when the run wants it, the binding exists, AND a health
  *      probe proved the container is actually live;
  *   2. `durable` (CloudRunnerDO) — the surviving serverless executor, whenever bound;
- *   3. `unavailable` — no durable executor exists. Dispatch must fail fast rather
- *      than start the in-request Worker loop, which cannot reliably survive a
- *      multi-step run's background-execution wall.
+ *   3. `unavailable` — no long-lived executor exists. Dispatch fails fast. There is
+ *      deliberately no third, in-request fallback: a Worker loop running under
+ *      `waitUntil` cannot survive a multi-step run's ~30s background-execution wall,
+ *      so offering it would only convert a clear "no executor bound" error into a run
+ *      that silently dies mid-task and gets orphan-reaped.
  */
 export function chooseCloudExecutor(caps: {
   wantsContainer: boolean;
@@ -269,17 +278,17 @@ export function parseRemediation(payload: string | undefined): RemediationContex
 /**
  * The cloud executor a run actually landed on, parsed off its execution payload
  * (stamped by dispatch once {@link chooseCloudExecutor} decides). The orphan
- * detectors read this to pick the right silence ceiling: a long-lived 'durable' /
- * 'container' run heartbeats once per alarm tick and a tick legitimately spans one
- * whole (possibly slow) LLM step, so it must NOT be reaped at the serverless wall;
- * the in-request 'worker' loop never heartbeats and dies ~30s, so it keeps the tight
- * fast-fail. Absent (older/unstamped payloads) → undefined, which the ceiling helper
- * treats conservatively as long-lived so a live run is never reaped prematurely. */
+ * detectors read this to pick the silence ceiling: BOTH surviving executors are
+ * long-lived and heartbeat once per alarm tick, and a tick legitimately spans one
+ * whole (possibly slow) LLM step, so neither may be reaped at the serverless wall.
+ * An unrecognized value — including `'worker'` on a payload stamped before the
+ * in-request Worker executor was removed — parses as undefined, which the ceiling
+ * helper treats as long-lived, so a live run is never reaped prematurely. */
 export function parseExecutor(payload: string | null | undefined): CloudExecutor | undefined {
   if (!payload) return undefined;
   try {
     const e = (JSON.parse(payload) as { executor?: unknown }).executor;
-    return e === 'durable' || e === 'container' || e === 'worker' ? e : undefined;
+    return e === 'durable' || e === 'container' ? e : undefined;
   } catch {
     return undefined;
   }
