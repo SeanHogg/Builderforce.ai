@@ -305,16 +305,16 @@ export class RuntimeService {
    * process to recover, so once a run exceeds a per-kind ceiling we mark it failed
    * on read.
    *
-   * Cloud ceiling is PER-SURFACE ({@link cloudSilenceCeilingMs}, keyed off the executor
-   * stamped on the payload at dispatch): the interim Worker loop runs in `waitUntil`,
-   * which Cloudflare stops shortly after the HTTP response returns (observed ~30s), so
-   * it keeps the tight 90s wall + margin — a genuinely-dead serverless run surfaces in
-   * ~1.5 min. A long-lived executor (durable CloudRunnerDO / Cloudflare Container)
-   * heartbeats `updatedAt` once per alarm tick, and a tick legitimately spans one slow
-   * LLM step (60-90s+), so it gets the larger long-lived ceiling — measured from last
-   * activity below — and only a SILENT (crashed/hung) long-lived run is reaped;
-   * {@link orphanReason} then reports it as a crash, not a 30s timeout. A self-hosted
-   * host has a real long-lived process and keeps a far larger ceiling still.
+   * The cloud ceiling comes from {@link cloudSilenceCeilingMs} (keyed off the executor
+   * stamped on the payload at dispatch). BOTH cloud executors — the durable
+   * CloudRunnerDO and the Cloudflare Container — are long-lived: each heartbeats
+   * `updatedAt` once per alarm tick, and a tick legitimately spans one slow LLM step
+   * (60-90s+), so both get the generous long-lived ceiling, measured from last activity
+   * below, and only a SILENT (crashed/hung) run is reaped. {@link orphanReason} then
+   * reports it as a crash rather than a timeout. (There used to be a second, tight 90s
+   * ceiling for an in-request Worker loop; that executor was unreachable and has been
+   * removed.) A self-hosted host has a real long-lived process and keeps a far larger
+   * ceiling still.
    *
    * Read-path repair (no cron needed): the stream's reconciliation poll calls
    * `getExecution` every few seconds, so an orphan self-heals on next view.

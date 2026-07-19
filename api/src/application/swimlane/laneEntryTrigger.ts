@@ -32,6 +32,7 @@ import { RuntimeService } from '../runtime/RuntimeService';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { dispatchCloudRunForTask } from '../../presentation/routes/runtimeRoutes';
 import { recordCloudToolEvent } from '../runtime/cloudAgentEngine';
+import { evaluateExecutionApprovalGate } from '../runtime/executionApprovalGate';
 import { evaluateTaskAutoRun } from './evaluateAutoRun';
 import { enforceLaneRequirements } from './laneRequirementGate';
 import { TicketAuditService } from '../audit/ticketAuditService';
@@ -174,11 +175,51 @@ export async function maybeAutoRunOnLaneEntry(
     // `executionCtx`. We are off the response path, so awaiting the kickoff costs
     // nothing the user waits on — but it guarantees the run is actually started
     // rather than created-then-dropped. See this function's header for the why.
+    const payload = Object.keys(payloadObj).length > 0 ? JSON.stringify(payloadObj) : undefined;
+
+    // GOVERNANCE APPROVAL GATE — the autonomous path used to bypass this entirely.
+    // The gate was route-private in `runtimeRoutes`, so only HTTP submits were held
+    // for manager sign-off: a high/urgent ticket dragged into a staffed lane (or
+    // swept up by cron) started a billable run with no approval at all, which is the
+    // exact control the /api/approvals queue exists to enforce. It is idempotent —
+    // an outstanding pending row is reused rather than stacked on every sweep tick —
+    // and it persists `payload` so a manager's later approval replays THIS run, not
+    // a differently-shaped one. Hence gating AFTER `payloadObj` is built.
+    const [gateTask] = await db.select({
+      id:                   tasks.id,
+      title:                tasks.title,
+      priority:             tasks.priority,
+      projectId:            tasks.projectId,
+      assignedAgentHostId:  tasks.assignedAgentHostId,
+    }).from(tasks).where(eq(tasks.id, args.taskId)).limit(1);
+
+    if (gateTask) {
+      const gate = await evaluateExecutionApprovalGate(
+        db, args.tenantId, args.submittedBy, gateTask, null, { payload },
+      );
+      if (!gate.allowed) {
+        // Not a failure: the approval row is created and the manager notified. Same
+        // `false` every other "didn't run" path returns — but it gets its own event
+        // so the board can distinguish "awaiting sign-off" from "lane not staffed".
+        await recordCloudToolEvent(db, {
+          tenantId:      args.tenantId,
+          cloudAgentRef: evaln.decision.agentRef ?? args.submittedBy,
+          executionId:   null,
+          sessionKey:    `task:${args.taskId}`,
+          toolName:      'auto_run_awaiting_approval',
+          category:      'planning',
+          detail:        { taskId: args.taskId, lane: args.status, approvalId: gate.approvalId, reason: gate.reason },
+          result:        `Auto-run held for approval (${gate.reason}) on task ${args.taskId}, lane '${args.status}'.`.slice(0, 300),
+        }).catch(() => { /* best-effort telemetry — never block the trigger */ });
+        return false;
+      }
+    }
+
     const deferred: Promise<unknown>[] = [];
     await dispatchCloudRunForTask(env, db, runtimeService, (p) => { deferred.push(Promise.resolve(p)); }, {
       taskId: args.taskId,
       tenantId: args.tenantId,
-      payload: Object.keys(payloadObj).length > 0 ? JSON.stringify(payloadObj) : undefined,
+      payload,
       submittedBy: args.submittedBy,
     });
     await Promise.allSettled(deferred);

@@ -206,11 +206,24 @@ export function createCeremonyRoutes(db: Db): Hono<HonoEnv> {
     // This used to run in the browser (CeremonyStage.completeSession), which made a
     // core automation depend on a tab staying open and swallowed every failure. It
     // now runs here, through the canonical lane-entry gate, bounded per ceremony.
-    // Registered on executionCtx so the response isn't held on agent kickoff.
-    const dispatch = dispatchCeremonyCompletion(c.env as Env, db, {
-      tenantId, projectId: session.projectId, sessionId: id,
-    }).catch((err) => { console.error('[ceremony:complete] dispatch failed', err); });
-    if (c.executionCtx) c.executionCtx.waitUntil(dispatch); else await dispatch;
+    //
+    // A session opened BY a schedule honours that schedule's autoDispatch flag; an
+    // ad-hoc session always dispatches, preserving the behaviour of the client loop
+    // this replaced (there is no schedule to opt out on).
+    let shouldDispatch = true;
+    if (session.scheduleId) {
+      const [sched] = await db.select({ autoDispatch: ceremonySchedules.autoDispatch })
+        .from(ceremonySchedules)
+        .where(and(eq(ceremonySchedules.id, session.scheduleId), eq(ceremonySchedules.tenantId, tenantId)));
+      shouldDispatch = sched?.autoDispatch ?? true;
+    }
+    if (shouldDispatch) {
+      // Registered on executionCtx so the response isn't held on agent kickoff.
+      const dispatch = dispatchCeremonyCompletion(c.env as Env, db, {
+        tenantId, projectId: session.projectId, sessionId: id,
+      }).catch((err) => { console.error('[ceremony:complete] dispatch failed', err); });
+      if (c.executionCtx) c.executionCtx.waitUntil(dispatch); else await dispatch;
+    }
 
     return c.json(await hydrate(tenantId, segmentId, id));
   });

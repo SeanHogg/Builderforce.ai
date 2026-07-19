@@ -21,6 +21,7 @@ import { tasks, projects, boards, projectManagerConfigs } from '../../infrastruc
 import { TaskStatus } from '../../domain/shared/types';
 import { getTenantTokenAvailability } from '../llm/tenantTokenAvailability';
 import { runManagerForProject } from './ManagerService';
+import { createTickDispatchBudget, type TickDispatchBudget } from '../runtime/tickDispatchBudget';
 import type { Env } from '../../env';
 
 const NON_TERMINAL: string[] = [
@@ -71,7 +72,13 @@ export async function loadManagedProjects(db: Db, limit: number): Promise<Manage
   return rows;
 }
 
-export async function runManagerSweep(env: Env): Promise<ManagerSweepResult> {
+export async function runManagerSweep(
+  env: Env,
+  /** Shared per-tick dispatch ceiling (see tickDispatchBudget). The manager pass and
+   *  the autonomous executor both start billable runs in the SAME cron tick, so they
+   *  must draw from one tenant budget rather than each granting a private 25. */
+  budget: TickDispatchBudget = createTickDispatchBudget(),
+): Promise<ManagerSweepResult> {
   const db = buildDatabase(env);
   const runtimeService = buildRuntimeService(env, db);
 
@@ -98,6 +105,11 @@ export async function runManagerSweep(env: Env): Promise<ManagerSweepResult> {
       }
       if (!ok) continue;
 
+      // A tenant that already spent its tick budget in the autonomous executor gets
+      // no further manager-initiated runs until the next tick. Checked per project
+      // because one tenant can own many managed projects.
+      if (!budget.hasRoom(p.tenantId)) continue;
+
       const s = await runManagerForProject(env, db, runtimeService, {
         tenantId: p.tenantId, projectId: p.projectId, submittedBy: 'system:manager-cron',
       });
@@ -109,6 +121,9 @@ export async function runManagerSweep(env: Env): Promise<ManagerSweepResult> {
       result.prsConducted += s.prsConducted;
       result.prsMerged += s.prsMerged;
       result.dispatched += s.dispatched;
+      // Reserve what this project actually started, so the next project under the
+      // same tenant — and the next sweep in this tick — sees the spend.
+      for (let i = 0; i < s.dispatched; i++) budget.tryReserve(p.tenantId);
       result.remediated += s.remediated;
       result.remediationDeferred += s.remediationDeferred;
     } catch (err) {

@@ -106,6 +106,18 @@ Follow-up on the four residuals from "Account type is visible in VSIX chat" (bel
 
 ---
 
+## ✅ RESOLVED 2026-07-19 — The run loop now recovers from an announced-but-never-made tool call (brain-embedded 2026.7.41 · VSIX 2026.7.90)
+
+**Problem.** A turn that ends `finish: stop` with zero tool calls and text promising an imminent call ("Calling the tool now.") was accepted as the FINAL answer. The user is left holding an announcement, and the only recourse was to notice and re-ask by hand.
+
+**Fix — one bounded retry, not a policy change.** In `runLoop`, before a no-tool-call turn is finalized: if tools ARE registered, the turn made none, and the reply's TAIL announces an imminent action, the loop persists what the user already watched stream (same treatment a narration-before-tool-calls turn gets), pushes a corrective turn — *"you said you would call a tool but made zero calls; make it now, or state which data you are missing"* — and continues. Guarded by a run-scoped `usedAnnouncementRecovery` flag so a model that keeps narrating cannot spin the loop, and traced as `loop.recover_announced_tool_call` so the recovery is visible in the triage report rather than silent.
+
+**The heuristic is deliberately narrow.** `announcesUntakenAction()` matches a stated INTENT to act in the last 240 characters only — a mid-answer "let me check that" inside a complete reply does not trigger it. A false positive costs one extra turn; a false negative just restores the previous behaviour. 5 tests pin both directions, including the exact reply that prompted this and four complete answers that must NOT match.
+
+**Verified.** 174 brain-embedded tests, frontend typecheck, VS Code typecheck all green.
+
+---
+
 ## ✅ RESOLVED 2026-07-19 — A silent MCP-catalog failure left the Brain tool-less with no way to see it (brain-embedded 2026.7.40 · frontend 2026.7.79 · VSIX 2026.7.89)
 
 **Trigger.** Chat #71 answered a chart request with "Calling the tool now." and stopped, then — after the retry — "I do not have the task status data for project 11." Both turns: `toolCalls: 0`. The chat HAS a project and the project id was in the prompt, so "it doesn't know the project" was ruled out.
