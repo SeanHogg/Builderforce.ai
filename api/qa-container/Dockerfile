@@ -8,7 +8,7 @@
 # webkit (~2.76GB) and blows Cloudflare's 2000MB container limit. We only drive
 # Chromium, so we start from node-slim and install ONLY chromium + its OS deps —
 # keeping the image well under the cap. Cleans apt/npm caches to shrink further.
-FROM node:22-bookworm-slim
+FROM node:26-bookworm-slim
 
 WORKDIR /app
 COPY package.json ./
