@@ -9,6 +9,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   buildDeleteBranchRequest, buildClosePrRequest, buildListBranchCommitsUrl, parseBranchCommits,
   deleteBranch, closePullRequest, listBranchCommits,
+  MAX_BRANCH_COMMITS, MAX_TOTAL_BRANCH_COMMITS,
 } from './branchLifecycle';
 
 const target = { host: null, owner: 'acme', repo: 'app', token: 't0k' };
@@ -38,9 +39,18 @@ describe('buildDeleteBranchRequest', () => {
     expect(r.url).toBe('https://gitlab.com/api/v4/projects/acme%2Fapp/repository/branches/builderforce%2Ftask-12');
   });
 
-  it('Bitbucket deletes via refs/branches', () => {
+  it('Bitbucket Cloud deletes via refs/branches', () => {
     const r = buildDeleteBranchRequest({ ...target, provider: 'bitbucket', branch: BRANCH });
     expect(r.url).toBe('https://api.bitbucket.org/2.0/repositories/acme/app/refs/branches/builderforce/task-12');
+  });
+
+  it('Bitbucket Server uses the branch-utils API and names the ref in the body', () => {
+    const r = buildDeleteBranchRequest({ ...target, host: 'git.acme.internal', provider: 'bitbucket', branch: BRANCH });
+    expect(r).toEqual({
+      url: 'https://git.acme.internal/rest/branch-utils/1.0/projects/acme/repos/app/branches',
+      method: 'DELETE',
+      body: { name: 'refs/heads/builderforce/task-12', dryRun: false },
+    });
   });
 });
 
@@ -57,26 +67,41 @@ describe('buildClosePrRequest', () => {
     });
   });
 
-  it('Bitbucket POSTs to decline', () => {
+  it('Bitbucket Cloud POSTs to decline', () => {
     expect(buildClosePrRequest({ ...target, provider: 'bitbucket', number: 7 })).toEqual({
       url: 'https://api.bitbucket.org/2.0/repositories/acme/app/pullrequests/7/decline', method: 'POST', body: {},
+    });
+  });
+
+  it('Bitbucket Server declines through the 1.0 project/repo path', () => {
+    expect(buildClosePrRequest({ ...target, host: 'git.acme.internal', provider: 'bitbucket', number: 7 })).toEqual({
+      url: 'https://git.acme.internal/rest/api/1.0/projects/acme/repos/app/pull-requests/7/decline?version=-1',
+      method: 'POST',
+      body: {},
     });
   });
 });
 
 describe('buildListBranchCommitsUrl', () => {
   const args = { ...target, base: 'main', branch: BRANCH };
-  it('GitHub uses the three-dot compare range', () => {
+  it('GitHub uses the three-dot compare range, paged', () => {
     expect(buildListBranchCommitsUrl({ ...args, provider: 'github' }))
-      .toBe('https://api.github.com/repos/acme/app/compare/main...builderforce%2Ftask-12');
+      .toBe('https://api.github.com/repos/acme/app/compare/main...builderforce%2Ftask-12?per_page=100&page=1');
+    expect(buildListBranchCommitsUrl({ ...args, provider: 'github' }, 3)).toContain('&page=3');
   });
-  it('GitLab uses repository/compare from/to', () => {
-    expect(buildListBranchCommitsUrl({ ...args, provider: 'gitlab' }))
-      .toContain('/repository/compare?from=main&to=builderforce%2Ftask-12');
+  it('GitLab uses the PAGED commits endpoint with a base..branch range (compare cannot page)', () => {
+    expect(buildListBranchCommitsUrl({ ...args, provider: 'gitlab' }, 2))
+      .toBe('https://gitlab.com/api/v4/projects/acme%2Fapp/repository/commits'
+        + '?ref_name=main..builderforce%2Ftask-12&per_page=100&page=2');
   });
-  it('Bitbucket uses include/exclude on /commits', () => {
-    expect(buildListBranchCommitsUrl({ ...args, provider: 'bitbucket' }))
-      .toContain('/commits?include=builderforce%2Ftask-12&exclude=main');
+  it('Bitbucket Cloud uses include/exclude on /commits, paged', () => {
+    expect(buildListBranchCommitsUrl({ ...args, provider: 'bitbucket' }, 4))
+      .toContain('/commits?include=builderforce%2Ftask-12&exclude=main&pagelen=100&page=4');
+  });
+  it('Bitbucket Server uses since/until with an offset-based page', () => {
+    expect(buildListBranchCommitsUrl({ ...args, host: 'git.acme.internal', provider: 'bitbucket' }, 3))
+      .toBe('https://git.acme.internal/rest/api/1.0/projects/acme/repos/app/commits'
+        + '?until=builderforce%2Ftask-12&since=main&limit=100&start=200');
   });
 });
 
@@ -89,9 +114,17 @@ describe('parseBranchCommits', () => {
     expect(parseBranchCommits('gitlab', { commits: [{ id: 'b2', message: 'm', author_name: 'N' }] }))
       .toEqual([{ sha: 'b2', message: 'm', authorName: 'N' }]);
   });
-  it('normalises Bitbucket commits', () => {
+  it('normalises GitLab commits from the bare-array commits endpoint', () => {
+    expect(parseBranchCommits('gitlab', [{ id: 'b2', title: 't', author_name: 'N' }]))
+      .toEqual([{ sha: 'b2', message: 't', authorName: 'N' }]);
+  });
+  it('normalises Bitbucket Cloud commits', () => {
     expect(parseBranchCommits('bitbucket', { values: [{ hash: 'c3', message: 'm', author: { raw: 'N <n@x>' } }] }))
       .toEqual([{ sha: 'c3', message: 'm', authorName: 'N <n@x>' }]);
+  });
+  it('normalises Bitbucket Server commits (id + author.displayName)', () => {
+    expect(parseBranchCommits('bitbucket', { values: [{ id: 'd4', message: 'm', author: { displayName: 'N' } }] }))
+      .toEqual([{ sha: 'd4', message: 'm', authorName: 'N' }]);
   });
 });
 
@@ -101,9 +134,13 @@ describe('deleteBranch', () => {
     expect(r).toMatchObject({ ok: false, code: 'unsupported' });
   });
 
-  it('reports Bitbucket Server as unsupported (no mapped REST base)', async () => {
+  it('deletes on Bitbucket Server (self-hosted) instead of refusing as unsupported', async () => {
+    const fn = stubFetch({ status: 204 });
     const r = await deleteBranch({ ...target, host: 'git.acme.internal', provider: 'bitbucket', branch: BRANCH });
-    expect(r).toMatchObject({ ok: false, code: 'unsupported' });
+    expect(r).toEqual({ ok: true, deleted: true });
+    const [url, init] = fn.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/rest/branch-utils/1.0/projects/acme/repos/app/branches');
+    expect(JSON.parse(String(init.body))).toEqual({ name: `refs/heads/${BRANCH}`, dryRun: false });
   });
 
   it('refuses an empty branch name', async () => {

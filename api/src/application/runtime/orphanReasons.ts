@@ -71,6 +71,44 @@ export const CLOUD_LONG_LIVED_SILENCE_MS = 5 * 60_000;
 export const CLOUD_GITHUB_ACTIONS_SILENCE_MS = 20 * 60_000;
 
 /**
+ * ── GitHub Actions: reconciled (not reaped) failures ─────────────────────────
+ *
+ * Every reason above is INFERRED from silence — the reaper knows only that
+ * nothing reported in. On the Actions surface we can do materially better: GitHub
+ * will tell us whether it ever scheduled a runner, and what happened to it. The
+ * reconcile sweep ({@link ./githubActionsReconcile}) asks, so these reasons name
+ * the actual root cause instead of the generic "this run went silent".
+ *
+ * They live here with the reaper's reasons for the same reason those do: one
+ * place decides what a user is told about a run that never finished, so the
+ * reconcile sweep and the 20-minute backstop can never contradict each other.
+ */
+
+/** GitHub accepted the `workflow_dispatch` (204) but never scheduled a run for it.
+ *  The overwhelmingly common causes are Actions disabled for the repo/org, a
+ *  spending limit reached, or a `workflow_dispatch` trigger that is not present on
+ *  the DEFAULT branch (GitHub only honours the trigger definition there). */
+export const GITHUB_ACTIONS_NEVER_SCHEDULED_REASON =
+  'GitHub accepted the workflow dispatch but never scheduled a run for it, so no agent ever started. That almost always means Actions is disabled for this repository or organisation, the account has hit its Actions spending limit, or the Builderforce agent workflow is missing its workflow_dispatch trigger on the DEFAULT branch (GitHub only honours the trigger defined there). Check the repository\'s Actions tab, then re-run "Enable GitHub agent runs" from the project\'s Source control settings and re-run the task.';
+
+/** We could not even LIST the repo's workflow runs — the credential lost access, or
+ *  Actions is administratively disabled (GitHub answers 403 for both). */
+export function githubActionsUnreachableReason(detail: string): string {
+  const trimmed = (detail || '').trim();
+  return `This run was queued on GitHub Actions, but Builderforce can no longer read the repository's Actions runs to confirm it started: ${trimmed || 'access denied'}. Either the linked credential lost access to the repository or Actions is disabled for it. Re-connect the repository credential (it needs the "workflow" scope, or "workflows: write" on the GitHub App installation), then re-run the task.`;
+}
+
+/** GitHub DID schedule the run and it reached a terminal state without the agent
+ *  ever checking in — the job died in checkout/setup, was cancelled, or timed out.
+ *  The run URL is the single most useful thing to hand over here: the failure is
+ *  in GitHub's log, not ours. */
+export function githubActionsRunEndedReason(conclusion: string | null, htmlUrl: string | null): string {
+  const outcome = (conclusion || 'ended').trim();
+  const where = htmlUrl ? ` See the run log: ${htmlUrl}` : '';
+  return `The GitHub Actions job for this run ${outcome === 'success' ? 'finished' : `ended as "${outcome}"`} without the Builderforce agent ever checking in, so no steps were executed. The job stopped before or during checkout/setup — a cancelled or timed-out job, a runner that could not start, or a failing step ahead of the agent.${where} Fix the job on GitHub and re-run the task, or switch the agent to the durable cloud surface to run it on Builderforce infrastructure instead.`;
+}
+
+/**
  * The silence ceiling for the executor a run landed on (stamped on the payload by
  * dispatch; see {@link ../runtime/cloudDispatch.parseExecutor}).
  *

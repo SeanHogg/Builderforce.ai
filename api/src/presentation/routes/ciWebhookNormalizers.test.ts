@@ -54,8 +54,13 @@ describe('bitbucketNormalizeCiEvent', () => {
     expect(evt).toEqual({
       eventType: 'commit_status', branch: 'builderforce/task-12', sha: 'cafe',
       outcome: 'failure', rawState: 'FAILED', targetUrl: 'https://bb/pipelines/9',
-      runId: null, authoritative: true,
+      runId: null, authoritative: true, statusKey: 'PIPELINE',
     });
+  });
+
+  it('carries the status key so sibling posters de-duplicate onto one build', () => {
+    expect(bitbucketNormalizeCiEvent(payload({ key: 'SONAR', state: 'FAILED', commit: { hash: 'cafe' } }))?.statusKey).toBe('SONAR');
+    expect(bitbucketNormalizeCiEvent(payload({ state: 'FAILED', commit: { hash: 'cafe' } }))?.statusKey).toBeNull();
   });
 
   it('is authoritative on success too, but not while in progress', () => {
@@ -69,7 +74,9 @@ describe('bitbucketNormalizeCiEvent', () => {
     expect(evt).toMatchObject({ targetUrl: 'https://bb/s', sha: 'b', authoritative: true });
   });
 
-  it('leaves branch null when no refname is posted (post-merge sha correlation only)', () => {
+  // The route then resolves this null branch from the commit hash via the refs API
+  // (see bitbucketBranchForCommit) before ingest; unresolved still means post-merge only.
+  it('leaves branch null when no refname is posted', () => {
     expect(bitbucketNormalizeCiEvent(payload({ state: 'FAILED', commit: { hash: 'c' } }))?.branch).toBeNull();
   });
 

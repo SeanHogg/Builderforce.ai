@@ -18,7 +18,7 @@
  * to a refusal, so the failure mode is leftover residue, which is recoverable, and
  * never destroyed work, which is not.
  */
-import type { BranchCommit, ListBranchCommitsResult } from '../repos/branchLifecycle';
+import { MAX_TOTAL_BRANCH_COMMITS, type BranchCommit, type ListBranchCommitsResult } from '../repos/branchLifecycle';
 
 /** Why a teardown/revert was refused. Every value is surfaced verbatim to the
  *  caller (route → UI, and the tool-audit + activity records) so a refusal is
@@ -135,7 +135,7 @@ export function decideBranchTeardown(facts: BranchTeardownFacts): TeardownDecisi
     return refuse('commits_unverifiable', `cannot verify the commits on '${branch}': ${facts.commits.reason}`);
   }
   if (facts.commits.truncated) {
-    return refuse('commits_unverifiable', `'${branch}' carries more commits than can be verified in one page — refusing to delete on partial evidence`);
+    return refuse('commits_unverifiable', `'${branch}' carries more commits than can be verified (past the ${MAX_TOTAL_BRANCH_COMMITS}-commit listing bound) — refusing to delete on partial evidence`);
   }
 
   const commits = facts.commits.commits;

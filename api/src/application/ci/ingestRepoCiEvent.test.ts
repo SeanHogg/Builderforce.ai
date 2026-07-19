@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { ingestRepoCiEvent, type RepoCiEvent } from './ingestRepoCiEvent';
+import { ingestRepoCiEvent, AUTOFIX_DEDUPED_REASON, type RepoCiEvent } from './ingestRepoCiEvent';
 
 // A successful build completes the task, and `recordStatusTransition` reaches the
 // Validator via a RUNTIME dynamic import (deliberate — it breaks the taskLifecycle →
@@ -46,6 +46,9 @@ function makeFakeDb(rowsByTable: Map<TableRef, unknown[]>) {
   };
 }
 
+/** Prior `autofix.dispatch` audit rows — one per already-fixed BUILD (keyed by sha). */
+const dispatchRows = (...shas: string[]) => shas.map((sha) => ({ args: JSON.stringify({ sha }) }));
+
 const env = {} as unknown as Env;
 const baseEvt: RepoCiEvent = {
   eventType: 'workflow_run', branch: 'main', sha: 'merge-sha-1',
@@ -79,7 +82,7 @@ describe('ingestRepoCiEvent — post-merge build validation', () => {
       [pullRequests, [prRow]],
       [tasks, [{ assignedAgentRef: null }]],
       [executions, [{ id: 7 }]],
-      [toolAuditEvents, [{ n: 2 }]],   // 2 prior auto-fix dispatches == MAX
+      [toolAuditEvents, dispatchRows('other-sha-1', 'other-sha-2')],   // 2 prior auto-fix dispatches == MAX
     ]));
     const res = await ingestRepoCiEvent(db as never, env, 'secret', { ...baseEvt, outcome: 'failure', rawState: 'failure' });
     expect(res.processed).toBe(true);
@@ -122,7 +125,7 @@ describe('ingestRepoCiEvent — pre-merge (PR-branch) build validation', () => {
       [tasks, [taskRow]],
       [executions, [{ id: 9 }]],
       [pullRequests, [openPr]],
-      [toolAuditEvents, [{ n: 0 }]],   // no prior auto-fix dispatches
+      [toolAuditEvents, []],   // no prior auto-fix dispatches
     ]));
     const res = await ingestRepoCiEvent(db as never, env, 'secret', failEvt);
     expect(res.processed).toBe(true);
@@ -139,7 +142,7 @@ describe('ingestRepoCiEvent — pre-merge (PR-branch) build validation', () => {
       [tasks, [taskRow]],
       [executions, [{ id: 9 }]],
       [pullRequests, [openPr]],
-      [toolAuditEvents, [{ n: 2 }]],   // == MAX
+      [toolAuditEvents, dispatchRows('other-sha-1', 'other-sha-2')],   // == MAX
     ]));
     const res = await ingestRepoCiEvent(db as never, env, 'secret', failEvt);
     expect(res.buildStatus).toBe('failure');
@@ -160,6 +163,61 @@ describe('ingestRepoCiEvent — pre-merge (PR-branch) build validation', () => {
     expect(res.buildStatus).toBe('failure');
     expect(res.autoFix).toBeUndefined();   // not auto-fix eligible — many per-check events
     expect(inserts.some((i) => i.values.toolName === 'build.result')).toBe(true);
+  });
+
+  /**
+   * Bitbucket repos wire several CI systems to one commit, and EACH posts its own
+   * authoritative terminal commit status. Without per-build de-duplication two red
+   * keys on one commit would spend both auto-fix attempts on the same build.
+   */
+  describe('per-build de-duplication across status keys', () => {
+    const bbEvt: RepoCiEvent = {
+      eventType: 'commit_status', branch: 'builderforce/task-78', sha: 'commit-abc',
+      outcome: 'failure', rawState: 'FAILED', targetUrl: 'https://bb/pipelines/results/5',
+      runId: null, authoritative: true, statusKey: 'PIPELINE',
+    };
+    const rows = (audit: unknown[]) => new Map<TableRef, unknown[]>([
+      [tasks, [taskRow]],
+      [executions, [{ id: 9 }]],
+      [pullRequests, [openPr]],
+      [toolAuditEvents, audit],
+    ]);
+
+    it('spends one attempt for the first key and none for a sibling key on the same commit', async () => {
+      const first = makeFakeDb(rows([]));
+      const res1 = await ingestRepoCiEvent(first.db as never, env, 'secret', bbEvt);
+      expect(res1.autoFix?.attempt).toBe(1);
+      expect(res1.autoFix?.sha).toBe('commit-abc');
+
+      // The sibling arrives while the dispatch is still in flight (no audit row yet):
+      // the claim written by the first decision is what stops it.
+      const second = makeFakeDb(rows([]));
+      const res2 = await ingestRepoCiEvent(second.db as never, env, 'secret', { ...bbEvt, statusKey: 'SONAR' });
+      expect(res2.buildStatus).toBe('failure');
+      expect(res2.autoFix).toBeUndefined();
+      expect(res2.reason).toBe(AUTOFIX_DEDUPED_REASON);
+    });
+
+    it('de-duplicates off the durable dispatch record once it lands', async () => {
+      const { db } = makeFakeDb(rows(dispatchRows('commit-abc')));
+      const res = await ingestRepoCiEvent(db as never, env, 'secret', { ...bbEvt, statusKey: 'SONAR' });
+      expect(res.autoFix).toBeUndefined();
+      expect(res.reason).toBe(AUTOFIX_DEDUPED_REASON);
+    });
+
+    it('still spends the second attempt on the NEXT build (a fix commit = a new sha)', async () => {
+      const { db } = makeFakeDb(rows(dispatchRows('commit-abc')));
+      const res = await ingestRepoCiEvent(db as never, env, 'secret', { ...bbEvt, sha: 'commit-def' });
+      expect(res.autoFix?.attempt).toBe(2);
+      expect(res.autoFix?.sha).toBe('commit-def');
+    });
+
+    it('leaves the exhaustion path intact — two distinct builds still hit the cap', async () => {
+      const { db, inserts } = makeFakeDb(rows(dispatchRows('commit-abc', 'commit-def')));
+      const res = await ingestRepoCiEvent(db as never, env, 'secret', { ...bbEvt, sha: 'commit-ghi' });
+      expect(res.autoFix).toBeUndefined();
+      expect(inserts.some((i) => i.values.toolName === 'build.needs_human')).toBe(true);
+    });
   });
 
   it('records a green PR-branch build (clears any prior failure) and dispatches no fix', async () => {
