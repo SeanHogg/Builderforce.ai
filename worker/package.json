@@ -23,7 +23,7 @@
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",
     "vitest": "^4.0.18",
-    "wrangler": "^4.71.0",
+    "wrangler": "^4.112.0",
     "ws": "^8.19.0",
     "@typescript/native-preview": "7.0.0-dev.20260627.2"
   }
