@@ -39,7 +39,7 @@
   "now": "刚刚",
   "Rename chat": "重命名对话",
   "New chat name": "新的对话名称",
-  "Copy chat transcript (for triage)": "复制对话记录（用于排查）",
+  "Copy chat diagnostics (plan + usage + identity + Evermind state + transcript)": "复制对话诊断信息（套餐 + 用量 + 身份 + Evermind 状态 + 对话记录）",
   "Consolidate": "整合",
   "Summarize this chat into a compact context the rest of the conversation builds on": "将本对话浓缩为紧凑的上下文，供后续对话在其基础上继续",
   "Consolidating…": "正在整合…",
@@ -158,5 +158,14 @@
   "Routed per turn: your connected accounts first, then your plan.": "按轮次路由：优先使用您已连接的账户，然后才是您的套餐。",
   "Billed to your own {provider} account — no plan credit used.": "计入您自己的 {provider} 账户：不消耗套餐额度。",
   "Included in your plan.": "已包含在您的套餐中。",
-  "Premium — metered at cost + 1¢ per request.": "高级：按用量计费，成本价加每次请求 1 美分。"
+  "Premium — metered at cost + 1¢ per request.": "高级：按用量计费，成本价加每次请求 1 美分。",
+  "You are on the Free plan — chats run on the included BuilderForce models. Click to see plans and upgrade.": "您正在使用免费套餐 — 对话运行在随附的 BuilderForce 模型上。点击查看套餐并升级。",
+  "Your workspace is on the {plan} plan. Click to manage your plan.": "您的工作区使用 {plan} 套餐。点击管理您的套餐。",
+  "{count} tokens left": "剩余 {count} 个令牌",
+  "no tokens left": "没有剩余令牌",
+  "Upgrade": "升级",
+  "Upgrade to {plan}": "升级到 {plan}",
+  "Add a card": "添加银行卡",
+  "Chat diagnostics copied to clipboard.": "对话诊断信息已复制到剪贴板。",
+  "Upgrade to {0}": "升级到 {0}"
 }

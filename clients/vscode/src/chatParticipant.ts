@@ -3,6 +3,7 @@ import { runAgent } from "./agent";
 import { ChatMessage, SECRET_KEY, fetchLimbicBlock } from "./gateway";
 import { getCurrentUserId, createBrainChat, appendBrainMessages, updateBrainChatProject } from "./bfApi";
 import { formatEvermindLearnStep } from "@seanhogg/builderforce-brain-embedded";
+import { formatChatError } from "./upgradeAction";
 import { getGroundingSummary } from "./grounding";
 import { getEditorContextLive } from "./editorContext";
 import { editorContextDirective } from "./idePersona";
@@ -124,7 +125,12 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
         onText: (delta) => { assistantText += delta; stream.markdown(delta); },
         onToolStart: (label) => stream.progress(label),
         onToolResult: (label, ok) => stream.markdown(`\n\n${ok ? "✓" : "✗"} ${label}\n\n`),
-        onError: (message) => stream.markdown(`\n\n**Error:** ${message}\n`),
+        // An entitlement failure gets the fix appended as a link (Upgrade / Add a
+        // card) — same verdict the webview banner renders as a button, so the two
+        // chat surfaces never disagree about what a block means. Falls back to the
+        // bare message for an ordinary error.
+        onError: (message, cause) =>
+          stream.markdown(`\n\n**Error:** ${formatChatError(cause ?? message)}\n`),
       },
     );
 

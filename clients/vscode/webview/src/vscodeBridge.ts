@@ -91,6 +91,9 @@ export interface InitData {
    * when the user has no profile — a no-op. Fetched once per session by the host.
    */
   personalityBlock?: string;
+  /** The installed extension's version, so a copied diagnostics report pins the exact
+   *  client build it came from (a stale VSIX is a routine cause of "already fixed" bugs). */
+  extensionVersion?: string;
 }
 
 interface VsCodeApi {

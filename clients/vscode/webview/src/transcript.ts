@@ -28,9 +28,10 @@ export interface TranscriptInput {
   /** The chat's title and server id, so a pasted transcript is traceable. */
   chatTitle?: string;
   chatId?: number | null;
-  /** Gathered chat identity + Evermind wiring state — rendered as a "Chat diagnostics"
-   *  block so a pasted report answers "what STATE was this chat in?" (project, tenant,
-   *  Evermind head, learn-gate outcome, agents, linked tickets), not just the turns. */
+  /** Gathered chat identity, ACCOUNT posture and Evermind wiring state — rendered as a
+   *  "Chat diagnostics" block so a pasted report answers "what STATE was this chat in?"
+   *  (plan + billing + month-to-date quota + model entitlement, project, tenant, Evermind
+   *  head, learn-gate outcome, agents, linked tickets), not just the turns. */
   diagnostics?: ChatDiagnosticsData;
 }
 

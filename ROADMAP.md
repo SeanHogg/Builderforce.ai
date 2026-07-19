@@ -81,12 +81,26 @@
 
 ## Consolidated Gap Register
 
-### 🎨 Native `<select>` option-contrast sweep (2026-07-18)
+### 🩺 Chat diagnostics — account context residuals (2026-07-19)
 
-> Shipped this pass (api 2026.7.98 · frontend 2026.7.70): the onboarding roster step's two dropdowns (template picker + assignee picker) now go through the new canonical `frontend/src/components/ThemedSelect.tsx`, which gives every `<option>` its own opaque `--bg-surface`/`--text-primary` pair so the OS-drawn popup is legible in both themes. "Create Agent" on a gap role now also assigns the new agent to that role, and agent create/update/delete invalidates the assignable-workforce cache. Residual:
+> Shipped this pass (brain-embedded 2026.7.36 · VSIX 2026.7.83 · frontend 2026.7.71): "Copy chat diagnostics" now carries the ACCOUNT posture — plan, billing status (incl. "no payment method on file"), month-to-date usage vs allowance for every meter, model + which purse funds it, premium entitlement, connected BYO providers, and the client build/gateway — plus Signals that name the free-tier/quota/entitlement causes. Shared `classifyModelFunding` backs both the header funding line and the report. See DONE.md. Residuals:
 
-- **~29 other frontend files still render raw `<select>`/`<option>` and carry the same unreadable-popup bug.** Each needs migrating to `ThemedSelect` (or at minimum `themedOptionStyle` on every option). Unblocks: retiring the recurring "dropdown text is invisible" regression class for good.
+- **Web `BrainPanel.captureExecution` calls `llmApi.models()` directly instead of the shared `useLlmModels` cache.** The cached hook drops `byo.models[].vendor` and the raw `data[]`, which the shared `classifyModelFunding` needs, so the capture path re-fetches on each click (`frontend/src/components/brain/BrainPanel.tsx`). Fixing means widening `LlmModelLists` to retain the vendor-tagged surface. Unblocks: one cached model-surface read across the picker, the funding line, and the diagnostics report.
+- **The web Brain has no PlanBadge equivalent.** The VSIX header now shows tier + remaining allowance persistently (`clients/vscode/webview/src/accountPlan.tsx`); the web Brain still only surfaces plan state reactively, on a 402/429. Unblocks: a free web user seeing their allowance before a turn dies on it.
+
+### 📧 Transactional email is English-only (2026-07-19)
+
+> Shipped this pass (api 2026.7.100): `sendWelcomeEmail` now fires on every signup path — OAuth/social new-user branch, first successful password-signup verification, and marketplace register — and `sendAccountTypeSelectedEmail` follows the one-time Build-vs-Hired choice with role-specific next steps. See DONE.md. Residuals:
+
+- **No transactional email is localized.** Every template in `api/src/infrastructure/email/EmailService.ts` (welcome, magic link, verification code, invites, alerts, reports) is hardcoded English, while the frontend serves EN/ZH/ES/FR/DE via next-intl. There is also no stored per-user locale to key off — `users` has no `locale` column. Fixing needs a `users.locale` column (captured at signup from the request/`NEXT_LOCALE` cookie) plus a server-side message catalog for email bodies. Unblocks: non-English users getting mail in the language they signed up in.
+- **No email-preference / unsubscribe surface.** The welcome mail is transactional so it needs no opt-out, but there is no `email_preferences` table, so any future lifecycle/marketing mail has nowhere to check consent. Unblocks: CAN-SPAM-safe lifecycle email beyond purely transactional sends.
+
+### 🎨 Native `<select>` sweep — residual (2026-07-19)
+
+> The frontend raw-`<select>` migration is COMPLETE (see DONE.md). Residual:
+
 - **Hiring a marketplace agent does not invalidate `kanban:assignable:t:<tenant>`.** `POST /agents/:id/hire` writes `agent_purchases` only, so a freshly-hired agent can be missing from the role picker for up to the 60s TTL. Unblocks: hire → assign with no wait.
+- **Pre-existing test failures unrelated to this work, unfixed.** `TaskMgmtContent.test.tsx` + `.live.test.tsx` throw `useConfirm must be used within a ConfirmProvider` (the tests don't wrap the tree in `ConfirmProvider`); `AgentExecutionPanel.test.tsx` (8) leaves `kanbanApi.accountability` unmocked; plus one each in `AgentCapabilitiesContent.test.tsx` and `model-provider.test.ts`. Verified pre-existing by re-running against the unmodified sources. Unblocks: a green `vitest run` that can gate CI.
 
 ### 🔌 OpenAI Codex BYO — residuals after fixing the "connected but Test connection fails" break (2026-07-18)
 

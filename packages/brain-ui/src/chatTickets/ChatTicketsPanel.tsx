@@ -14,6 +14,7 @@
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HealthRing } from '../HealthRing';
+import { nativeOptionStyle } from '../optionStyle';
 import {
   RUNNABLE_KINDS, TICKET_KINDS,
   type ChatTicketsAdapter, type ChatTicketsLabels, type TicketKind,
@@ -179,9 +180,9 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
               </div>
               {runKey === key && (
                 <select aria-label={labels.pickAgent} value="" onChange={(e) => { if (e.target.value) void runTicket(tk, e.target.value); }} style={S.select}>
-                  <option value="">{labels.pickAgent}</option>
-                  {agents.map((a) => <option key={a.id} value={a.agentRef}>★ {poolName(a.agentRef)}</option>)}
-                  {pool.filter((p) => !agents.some((a) => a.agentRef === p.ref)).map((p) => <option key={p.ref} value={p.ref}>{p.name}</option>)}
+                  <option style={S.option} value="">{labels.pickAgent}</option>
+                  {agents.map((a) => <option style={S.option} key={a.id} value={a.agentRef}>★ {poolName(a.agentRef)}</option>)}
+                  {pool.filter((p) => !agents.some((a) => a.agentRef === p.ref)).map((p) => <option style={S.option} key={p.ref} value={p.ref}>{p.name}</option>)}
                 </select>
               )}
             </div>
@@ -328,7 +329,7 @@ function LinkForm({ search, projectId, existing, labels, onLink }: {
   return (
     <div style={S.section}>
       <select aria-label={labels.kindLabel} value={kind} onChange={(e) => { setKind(e.target.value as TicketKind); setRef(''); setQuery(''); }} style={S.select}>
-        {TICKET_KINDS.map((k) => <option key={k} value={k}>{labels.kind[k]}</option>)}
+        {TICKET_KINDS.map((k) => <option style={S.option} key={k} value={k}>{labels.kind[k]}</option>)}
       </select>
       <input
         type="search"
@@ -339,16 +340,16 @@ function LinkForm({ search, projectId, existing, labels, onLink }: {
         style={{ ...S.select, minWidth: 150 }}
       />
       <select aria-label={labels.pickTicket} value={ref} onChange={(e) => setRef(e.target.value)} style={{ ...S.select, minWidth: 200 }}>
-        <option value="">{labels.pickTicket}</option>
-        {shown.map((o) => <option key={o.ref} value={o.ref}>{o.label}</option>)}
+        <option style={S.option} value="">{labels.pickTicket}</option>
+        {shown.map((o) => <option style={S.option} key={o.ref} value={o.ref}>{o.label}</option>)}
       </select>
       {loading ? <span style={S.muted}>{labels.searching}</span>
         : shown.length === 0 ? <span style={S.muted}>{labels.noMatches}</span>
         : atCap ? <span style={S.muted}>{labels.refine}</span>
         : null}
       <select aria-label={labels.linkTypeLabel} value={linkType} onChange={(e) => setLinkType(e.target.value as LinkType)} style={S.select}>
-        <option value="linked">{labels.linkTypeLinked}</option>
-        <option value="created">{labels.linkTypeCreated}</option>
+        <option style={S.option} value="linked">{labels.linkTypeLinked}</option>
+        <option style={S.option} value="created">{labels.linkTypeCreated}</option>
       </select>
       <button type="button" onClick={() => void submit()} disabled={busy || !ref} style={S.pill(true)}>{busy ? '…' : labels.linkAction}</button>
     </div>
@@ -374,8 +375,8 @@ function AgentsSection({ agents, pool, labels, onInvite, onRemove, busy }: {
         ))}
       </div>
       <select aria-label={labels.inviteAgent} value="" onChange={(e) => { const p = pool.find((x) => x.ref === e.target.value); if (p) void onInvite(p.ref, p.kind); }} style={{ ...S.select, maxWidth: 260 }}>
-        <option value="">{labels.inviteAgent}</option>
-        {uninvited.map((p) => <option key={p.ref} value={p.ref}>{p.name} — {p.meta}</option>)}
+        <option style={S.option} value="">{labels.inviteAgent}</option>
+        {uninvited.map((p) => <option style={S.option} key={p.ref} value={p.ref}>{p.name} — {p.meta}</option>)}
       </select>
       <span style={{ fontSize: 11, ...S.muted }}>{labels.agentsHint}</span>
     </div>
@@ -508,6 +509,9 @@ const S = {
   // `colorScheme` makes the browser draw the native <select> (and its OS/UA popup)
   // in the editor's active scheme even where the token background doesn't reach.
   select: { minWidth: 120, padding: '4px 8px', fontSize: 12, borderRadius: 8, border: `1px solid ${V.border}`, background: V.field, color: V.fieldText, colorScheme: 'inherit' } as React.CSSProperties,
+  // The option popup is drawn by the OS and does NOT inherit `select`'s background,
+  // so each option needs its own opaque pair — see nativeOptionStyle.
+  option: nativeOptionStyle,
   icon: { fontSize: 12, lineHeight: 1, padding: '2px 4px', cursor: 'pointer', background: 'transparent', border: 'none', color: V.muted } as React.CSSProperties,
   pill: (active: boolean): React.CSSProperties => ({
     fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 999, cursor: 'pointer',

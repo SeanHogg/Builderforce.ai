@@ -149,8 +149,9 @@ export function createMarketplaceRoutes(db: Db): Hono<HonoEnv> {
       passwordHash,
     });
 
-    // Fire-and-forget: a mail failure must not fail the registration.
-    void sendWelcomeEmail(c.env, email, display_name ?? username, resolveAppBaseUrl(c.env));
+    // Fire-and-forget: a mail failure must not fail the registration. This path
+    // never creates a gig account, so the builder next steps apply.
+    void sendWelcomeEmail(c.env, email, display_name ?? username, resolveAppBaseUrl(c.env), 'standard');
 
     const token = await signWebJwt(
       { sub: userId, email, username },

@@ -38,6 +38,7 @@ import type {
 } from './streamChatCompletion';
 import type { ReasoningIntent } from './effort';
 import { isFailedToolResult, type BrainTraceEvent } from './brainTriage';
+import { chatErrorAction, type ChatErrorAction } from './chatError';
 import { withProvenanceMetadata, type ProvenanceAccount } from './provenance';
 import { setLastResolvedModel } from './lastResolvedModel';
 import { chatWorkLinkingDirective, isCodeChangeTool, isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, isReadOnlyPlatformTool } from './chatWorkLinking';
@@ -254,6 +255,15 @@ export interface BrainRunSnapshot {
   running: boolean;
   streamingText: string;
   error: string;
+  /**
+   * What the user can DO about {@link error}, when the failure was actionable —
+   * an expired session (reconnect), a plan that doesn't cover the request
+   * (upgrade), or billing that needs a card (validate_card). Derived ONCE here
+   * from the thrown error's structured gateway fields via {@link chatErrorAction},
+   * so a mounted view renders the right button without re-parsing error prose.
+   * Null when nothing but dismissing applies.
+   */
+  errorAction: ChatErrorAction | null;
   pendingConfirm: { name: string; args: unknown } | null;
   /** Bumped whenever a new assistant message is persisted. */
   messagesEpoch: number;
@@ -300,6 +310,8 @@ interface RunCell {
   running: boolean;
   streamingText: string;
   error: string;
+  /** Actionable verdict for {@link error} — see BrainRunSnapshot.errorAction. */
+  errorAction: ChatErrorAction | null;
   pendingConfirm: { name: string; args: unknown } | null;
   confirmResolver: ((ok: boolean) => void) | null;
   appended: BrainMessage[];
@@ -362,6 +374,7 @@ const EMPTY_SNAPSHOT: BrainRunSnapshot = {
   running: false,
   streamingText: '',
   error: '',
+  errorAction: null,
   pendingConfirm: null,
   messagesEpoch: 0,
   appended: [],
@@ -378,6 +391,7 @@ function makeCell(): RunCell {
     running: false,
     streamingText: '',
     error: '',
+    errorAction: null,
     pendingConfirm: null,
     confirmResolver: null,
     appended: [],
@@ -432,6 +446,7 @@ function emit(c: RunCell): void {
     running: c.running,
     streamingText: c.streamingText,
     error: c.error,
+    errorAction: c.errorAction,
     pendingConfirm: c.pendingConfirm,
     messagesEpoch: c.messagesEpoch,
     appended: c.appended,
@@ -877,6 +892,7 @@ export function clearRunError(chatId: number | null): void {
   const c = cells.get(chatId);
   if (!c || !c.error) return;
   c.error = '';
+  c.errorAction = null;
   emit(c);
 }
 
@@ -902,6 +918,7 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
   if (c.running) return; // already running elsewhere — never double-fire
   c.running = true;
   c.error = '';
+  c.errorAction = null;
   c.streamingText = '';
   c.byoUnresolved = []; // fresh per run — a reconnected account clears the banner
   c.providerCap = [];   // fresh per run — a topped-up account clears the banner
@@ -927,7 +944,13 @@ export async function startRun(chatId: number, req: BrainRunRequest): Promise<vo
     // A user-initiated Stop aborts the stream mid-flight; that's a clean exit,
     // not an error to surface. (runLoop already returns on an aborted signal, so
     // this guards the rare throw that races the abort.)
-    if (!c.abort?.signal.aborted) c.error = e instanceof Error ? e.message : 'Reply failed';
+    if (!c.abort?.signal.aborted) {
+      c.error = e instanceof Error ? e.message : 'Reply failed';
+      // Keep the gateway's structured entitlement verdict (402 needs-a-card /
+      // needs-a-plan, 401 expired session) attached to the surfaced error, so
+      // the banner can offer the fix instead of only naming the problem.
+      c.errorAction = chatErrorAction(e);
+    }
   } finally {
     const aborted = c.abort?.signal.aborted ?? false;
     c.running = false;

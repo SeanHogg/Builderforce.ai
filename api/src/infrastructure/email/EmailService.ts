@@ -214,19 +214,71 @@ export async function sendVerificationCodeEmail(
   await provider.send({ to, subject, html });
 }
 
-const WELCOME_BODY = `
-      <p>Hi {{RecipientName}},</p>
-      <p>Welcome to Builderforce — your account is live.</p>
-      <p>Builderforce gives you an AI workforce that plans, codes, reviews and ships
-         alongside your team. Three things worth doing first:</p>
+/** The two account shapes a user can hold — mirrors `users.account_type`. */
+export type AccountType = 'standard' | 'freelancer';
+
+/**
+ * The onboarding next-steps copy, authored ONCE per account type and shared by
+ * both the welcome email (when the role is known at signup) and the
+ * account-type-selected email (when it is picked later). Never re-inline this
+ * copy in a second template — the two emails must not drift apart.
+ *
+ * Every `path` here is a real, reachable route: the builder set matches the
+ * standard app shell, the freelancer set matches FOR_HIRE_NAV_GROUPS (the
+ * restricted shell a gig account is actually allowed to reach).
+ */
+const NEXT_STEPS: Record<AccountType, {
+  headline: string;
+  steps: { label: string; detail: string }[];
+  ctaLabel: string;
+  ctaPath: string;
+}> = {
+  standard: {
+    headline: 'Builderforce gives you an AI workforce that plans, codes, reviews and ships '
+      + 'alongside your team. Three things worth doing first:',
+    steps: [
+      { label: 'Create a project', detail: 'and connect the repository you want worked on.' },
+      { label: 'Hire an agent', detail: 'from the workforce, then assign it a ticket on your board.' },
+      { label: 'Invite your team', detail: 'so everyone shares the same board, agents and context.' },
+    ],
+    ctaLabel: 'Open your dashboard',
+    ctaPath: '/dashboard',
+  },
+  freelancer: {
+    headline: 'Your account is set up for finding work. Teams search this talent pool by '
+      + 'skill and availability, so three things get you in front of them:',
+    steps: [
+      { label: 'Complete your profile', detail: 'skills, rate and availability — it is what teams match on.' },
+      { label: 'Publish it', detail: 'an unpublished profile is private and will not appear in search.' },
+      { label: 'Browse open gigs', detail: 'and put yourself forward for the ones that fit.' },
+    ],
+    ctaLabel: 'Complete your profile',
+    ctaPath: '/freelancer/profile',
+  },
+};
+
+/**
+ * Renders the shared next-steps list + CTA for an account type. Emits `{{AppUrl}}`
+ * placeholders rather than a concrete origin so the caller's `render()` pass does
+ * the substitution (and the HTML escaping) uniformly.
+ */
+function nextStepsBlock(accountType: AccountType): string {
+  const plan = NEXT_STEPS[accountType];
+  const items = plan.steps
+    .map((s) => `        <li style="margin-bottom: 8px;"><strong>${s.label}</strong> — ${s.detail}</li>`)
+    .join('\n');
+
+  return `
+      <p>${plan.headline}</p>
       <ul style="margin: 0 0 16px; padding-left: 20px;">
-        <li style="margin-bottom: 8px;"><strong>Create a project</strong> and connect your repository.</li>
-        <li style="margin-bottom: 8px;"><strong>Hire an agent</strong> from the workforce and assign it a ticket.</li>
-        <li style="margin-bottom: 8px;"><strong>Invite your team</strong> so they share the same board and agents.</li>
+${items}
       </ul>
       <p style="text-align:center; margin: 28px 0;">
-        <a href="{{AppUrl}}/dashboard" class="button">Open your dashboard</a>
-      </p>
+        <a href="{{AppUrl}}${plan.ctaPath}" class="button">${plan.ctaLabel}</a>
+      </p>`;
+}
+
+const SUPPORT_LINE = `
       <p style="font-size:13px; color:#64748b;">
         Need a hand getting started? Just reply to this email — a human reads it.
       </p>`;
@@ -235,23 +287,86 @@ const WELCOME_BODY = `
  * Sent exactly once, when a user account is first created — from every signup
  * path (OAuth/social, verified password signup, marketplace). Linking a new
  * provider to an existing account is NOT a signup and must not trigger it.
+ *
+ * `accountType` is optional because the two signup shapes differ: a password /
+ * marketplace signup picks its role on the register form, so the welcome can
+ * carry the role-specific next steps immediately. An OAuth signup has no role
+ * yet — it gets the role-agnostic variant here, and the next steps follow from
+ * sendAccountTypeSelectedEmail() once the onboarding gate captures the choice.
+ * That split is what keeps any one user from receiving two near-identical mails.
  */
 export async function sendWelcomeEmail(
   env: EmailEnv,
   to: string,
   name: string,
   appBaseUrl: string,
+  accountType?: AccountType,
 ): Promise<void> {
   const provider = getEmailProvider(env);
   if (!provider) return;
 
+  const body = accountType
+    ? nextStepsBlock(accountType)
+    : `
+      <p>Builderforce gives you an AI workforce that plans, codes, reviews and ships
+         alongside your team — or connects you to teams hiring for that work.</p>
+      <p>Pick how you want to use it when you sign in, and we will point you at the
+         right first steps.</p>
+      <p style="text-align:center; margin: 28px 0;">
+        <a href="{{AppUrl}}/dashboard" class="button">Get started</a>
+      </p>`;
+
   const subject = 'Welcome to Builderforce';
-  const html = render(HEADER + WELCOME_BODY + FOOTER, {
-    Subject: subject,
-    RecipientName: name || to,
-    AppUrl: appBaseUrl,
-    Year: String(new Date().getFullYear()),
-  });
+  const html = render(
+    HEADER + `
+      <p>Hi {{RecipientName}},</p>
+      <p>Welcome to Builderforce — your account is live.</p>` + body + SUPPORT_LINE + FOOTER,
+    {
+      Subject: subject,
+      RecipientName: name || to,
+      AppUrl: appBaseUrl,
+      Year: String(new Date().getFullYear()),
+    },
+  );
+
+  await provider.send({ to, subject, html });
+}
+
+/**
+ * Sent when a user makes the one-time Build-vs-Hired choice (the onboarding gate
+ * for OAuth / magic-link accounts, which had no role at signup). Carries the
+ * next steps for the role they picked. Not sent for a password signup — that
+ * role is known at register time and its welcome already carried these steps.
+ */
+export async function sendAccountTypeSelectedEmail(
+  env: EmailEnv,
+  to: string,
+  name: string,
+  appBaseUrl: string,
+  accountType: AccountType,
+): Promise<void> {
+  const provider = getEmailProvider(env);
+  if (!provider) return;
+
+  const subject = accountType === 'freelancer'
+    ? "You're set up to find work on Builderforce"
+    : 'Your Builderforce workspace is ready';
+
+  const intro = accountType === 'freelancer'
+    ? 'Your account is set up as a <strong>Hired</strong> profile — for finding work.'
+    : 'Your account is set up to <strong>Build</strong> — projects, boards and an AI workforce.';
+
+  const html = render(
+    HEADER + `
+      <p>Hi {{RecipientName}},</p>
+      <p>${intro}</p>` + nextStepsBlock(accountType) + SUPPORT_LINE + FOOTER,
+    {
+      Subject: subject,
+      RecipientName: name || to,
+      AppUrl: appBaseUrl,
+      Year: String(new Date().getFullYear()),
+    },
+  );
 
   await provider.send({ to, subject, html });
 }

@@ -196,6 +196,29 @@ export async function getModels(
 }
 
 /**
+ * Would the gateway ACCEPT this pin for this tenant?
+ *
+ * The single entitlement predicate for a model id, so the picker (which offers
+ * models) and model resolution (which sends one) can never disagree. A pin the
+ * gateway will reject isn't a degraded experience — it's a hard 402 on every
+ * turn, which is exactly how a free-plan user ends up staring at "…require a
+ * validated card on file" for a model they don't remember choosing.
+ *
+ * `undefined` (gateway auto-select) is always allowed — it's the absence of a pin.
+ */
+export function isModelAllowed(choices: ModelChoices, model: string | undefined): boolean {
+  if (!model) return true;
+  // A project-Evermind pin is a plan FEATURE, not a model choice off the catalog:
+  // the gateway expands it to the project's own learned head, so it never lands on
+  // the premium/frontier gates and stays available on every tier.
+  if (model.startsWith("project_evermind:")) return true;
+  if (!choices.canChooseModel) return false;
+  if (choices.byo.models.some((m) => m.id === model)) return true;
+  if (choices.models.includes(model)) return true;
+  return choices.canUsePremiumModels && choices.premiumModels.includes(model);
+}
+
+/**
  * Paid OpenRouter models the plan pool does NOT already route — the premium tier.
  * Mirrors the server's `isPremiumModelSelection`: a model that costs money and carries
  * no `pool` marker. Cheapest-first so the picker's top entries are the affordable ones.

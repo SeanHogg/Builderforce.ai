@@ -20,7 +20,14 @@ export interface AgentEvents {
   onText: (delta: string) => void;
   onToolStart: (label: string) => void;
   onToolResult: (label: string, ok: boolean) => void;
-  onError: (message: string) => void;
+  /**
+   * A run failed. `cause` is the original thrown value when there was one — a
+   * gateway failure arrives as a `BrainRequestError` carrying the structured
+   * entitlement fields, which is what lets a surface offer "Upgrade" / "Add a
+   * card" instead of only restating the message. Consumers that just print text
+   * can ignore it.
+   */
+  onError: (message: string, cause?: unknown) => void;
 }
 
 export interface AgentDeps {
@@ -257,7 +264,7 @@ export async function runAgent(
     } catch (e) {
       const err = e as { name?: string; message?: string };
       if (err.name === "AbortError") return;
-      events.onError(err.message ?? String(e));
+      events.onError(err.message ?? String(e), e);
       return;
     }
 

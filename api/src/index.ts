@@ -765,7 +765,7 @@ export default {
         runManagerSweep(env)
           .then((r) => {
             if (r.managed > 0) {
-              console.log(`[cron:manager] projects=${r.projects} managed=${r.managed} scored=${r.scored} ranked=${r.ranked} assigned=${r.assigned} prsConducted=${r.prsConducted} prsMerged=${r.prsMerged} dispatched=${r.dispatched} tokenBlocked=${r.tokenBlockedTenants}`);
+              console.log(`[cron:manager] projects=${r.projects} managed=${r.managed} scored=${r.scored} ranked=${r.ranked} assigned=${r.assigned} prsConducted=${r.prsConducted} prsMerged=${r.prsMerged} dispatched=${r.dispatched} remediated=${r.remediated} tokenBlocked=${r.tokenBlockedTenants}`);
             }
           })
           .catch((err) => {
