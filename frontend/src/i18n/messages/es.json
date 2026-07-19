@@ -452,7 +452,10 @@
     }
   },
   "ceremonies": {
-    "selectProject": "Selecciona un proyecto para iniciar una ceremonia."
+    "selectProject": "Selecciona un proyecto para iniciar una ceremonia.",
+    "viewLive": "Mesa redonda en vivo",
+    "viewSchedules": "Programaciones",
+    "viewSwitchLabel": "Vista de ceremonia"
   },
   "projectCard": {
     "details": "Detalles",
@@ -793,6 +796,36 @@
       "notPublishedTitle": "Todavía no has publicado nada",
       "notPublishedBody": "Publica esta app para obtener un enlace que tu teléfono pueda abrir. Tarda alrededor de un minuto.",
       "goToPublish": "Ir a Publicar"
+    },
+    "publish": {
+      "title": "Publicar en la web",
+      "description": "Compila esta app y alójala en un subdominio. Alojamiento estático: tu app se ejecuta en el navegador.",
+      "subdomain": "Subdominio",
+      "building": "Compilando…",
+      "uploading": "Subiendo…",
+      "publish": "Publicar",
+      "republish": "Volver a publicar",
+      "published": "Publicado ✓",
+      "liveSite": "Sitio en vivo",
+      "preview": "vista previa",
+      "fileCount": "{count, plural, one {# archivo} other {# archivos}}",
+      "invalidSubdomain": "Introduce un subdominio válido (letras, números y guiones).",
+      "failed": "Error al publicar"
+    },
+    "deploy": {
+      "title": "Desplegar desde GitHub",
+      "description": "Deja que GitHub Actions compile este proyecto en cada push y lo despliegue aquí, sin necesidad de mantener el IDE abierto.",
+      "checking": "Comprobando el repositorio conectado…",
+      "needsRepo": "Conecta primero un repositorio de GitHub a este proyecto, desde Ajustes → Repositorio.",
+      "needsGitHub": "Este proyecto está conectado a un repositorio que no es de GitHub. Los despliegues con GitHub Actions requieren un repo de GitHub.",
+      "repoLabel": "Repositorio:",
+      "enable": "Activar despliegues de GitHub",
+      "reapply": "Actualizar el flujo de trabajo",
+      "enabling": "Escribiendo el flujo de trabajo…",
+      "enableFailed": "No se han podido activar los despliegues de GitHub.",
+      "enabledOn": "Se ha añadido {path} en {branch}. El próximo push a esa rama compilará y desplegará.",
+      "viewRuns": "Ver las ejecuciones del flujo de trabajo en GitHub",
+      "viewWorkflow": "Mostrar el archivo del flujo de trabajo"
     }
   },
   "tools": {
@@ -9967,5 +10000,51 @@
       "require-approval": "El agente se detiene y pide aprobación humana antes de usar la herramienta.",
       "block": "El agente rechaza la herramienta por completo y explica por qué."
     }
+  },
+  "ceremonySchedules": {
+    "title": "Ceremonias recurrentes",
+    "subtitle": "Ejecuta dailies y plannings con una cadencia fija. Cada ceremonia programada se abre sola, con la mesa redonda ya ocupada.",
+    "newSchedule": "Nueva programación",
+    "editSchedule": "Editar programación",
+    "empty": "Todavía no hay ceremonias recurrentes. Añade una programación y tu daily empezará sola.",
+    "enabled": "Activa",
+    "paused": "En pausa",
+    "pause": "Pausar",
+    "resume": "Reanudar",
+    "colKind": "Ceremonia",
+    "colCadence": "Cadencia",
+    "colNextRun": "Próxima ejecución",
+    "colLastRun": "Última ejecución",
+    "colStatus": "Estado",
+    "colActions": "Acciones",
+    "colRoster": "Mesa redonda",
+    "kind_standup": "Daily",
+    "kind_planning": "Planificación",
+    "scope_members": "Miembros del proyecto",
+    "scope_roster": "Lista fija",
+    "preset_weekdays9": "Días laborables a las 09:00",
+    "preset_weekdays10": "Días laborables a las 10:00",
+    "preset_daily9": "Todos los días a las 09:00",
+    "preset_mondays10": "Lunes a las 10:00",
+    "preset_fridays16": "Viernes a las 16:00",
+    "presetCustom": "Programación personalizada…",
+    "fieldKind": "Ceremonia",
+    "fieldCadence": "Con qué frecuencia",
+    "fieldCron": "Expresión cron",
+    "cronHelp": "Cinco campos: minuto, hora, día del mes, mes y día de la semana. El preajuste de arriba lo rellena; edítalo para algo más específico.",
+    "fieldTimezone": "Zona horaria",
+    "fieldRoster": "Quién participa",
+    "rosterHelp": "«Miembros del proyecto» sienta a todo el que esté activo en este proyecto, empezando por quien menos ha hablado. Una lista fija sienta siempre a las mismas personas.",
+    "fieldMaxParticipants": "Máximo de asientos",
+    "fieldTurnSeconds": "Segundos por turno",
+    "turnSecondsPlaceholder": "Usar el valor del tablero",
+    "fieldEnabled": "La programación está activa",
+    "enabledHelp": "Una programación en pausa conserva sus ajustes, pero nunca abre una ceremonia.",
+    "fieldAutoDispatch": "Iniciar el trabajo de los agentes al terminar la ceremonia",
+    "autoDispatchHelp": "Al completar la sesión, los tickets de este proyecto asignados a agentes se entregan automáticamente a sus agentes.",
+    "confirmDelete": "¿Eliminar esta ceremonia recurrente? Se conservan las sesiones ya ejecutadas.",
+    "errorLoad": "No se pudieron cargar las programaciones.",
+    "errorSave": "No se pudo guardar la programación.",
+    "errorDelete": "No se pudo eliminar la programación."
   }
 }

@@ -87,7 +87,10 @@ function buildApprovalAuth(db: Db): MiddlewareHandler<ApprovalHonoEnv> {
   return async (c, next) => {
     const agentHostIdParam = Number(c.req.query('agentHostId') ?? '');
     const apiKey = c.req.query('key');
-    if (Number.isInteger(agentHostIdParam) && agentHostIdParam > 0 && apiKey) {
+    // The machine branch is scoped to CREATION only (POST /) — the one thing a host
+    // legitimately does here. Widening it to the reads would let a host key page
+    // through the tenant's whole approval queue, which it never could before.
+    if (c.req.method === 'POST' && Number.isInteger(agentHostIdParam) && agentHostIdParam > 0 && apiKey) {
       const agentHost = await verifyAgentHostApiKey(db, agentHostIdParam, apiKey);
       if (!agentHost) return c.text('Unauthorized', 401);
       c.set('tenantId', agentHost.tenantId);
@@ -129,7 +132,7 @@ export function createApprovalRoutes(db: Db, runtimeService: RuntimeService): Ho
   // Intended to be called by a Cloudflare Cron Trigger (or an admin endpoint).
   // Finds all pending approvals whose expiresAt has passed, marks them expired,
   // and sends a Slack/email escalation alert.
-  // Auth: CRON_SECRET query param (or open for Cloudflare cron if secured at CF level)
+  // Auth: CRON_SECRET query param — see requireCronSecret (fails closed if unset).
   router.get('/escalate', requireCronSecret, async (c) => {
     const env = c.env;
     const now = new Date();

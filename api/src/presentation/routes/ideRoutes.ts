@@ -19,6 +19,7 @@ import {
   commitWorkspaceToRepo,
   createRemoteRepo,
   getRepoStatus,
+  enableGitHubDeploys,
 } from '../../application/ide/repoBridge';
 import { PUBLIC_LIST_CACHE_KEY } from './workforceRoutes';
 import {
@@ -35,14 +36,8 @@ import {
   templateNeedsBackfill,
   type SeedableProject,
 } from '../../application/project/projectTemplate';
-import {
-  SITES_PREFIX,
-  HOSTING_APEX,
-  normalizeSubdomain,
-  newVersionToken,
-  invalidateSite,
-  contentTypeFor,
-} from '../../application/ide/siteHosting';
+import { HOSTING_APEX } from '../../application/ide/siteHosting';
+import { publishStaticSite, assetsFromFormData } from '../../application/ide/publishStaticSite';
 
 function generateId(): string {
   return crypto.randomUUID();
@@ -281,6 +276,40 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     return c.json(result);
   });
 
+  // POST enable-deploys — write the GitHub Actions deploy workflow into the repo,
+  // switching this project from "build in the browser and upload" to "GitHub
+  // builds every push and deploys". Returns the committed workflow so the UI can
+  // show exactly what was added.
+  router.post('/projects/:projectId/enable-deploys', async (c) => {
+    const projectId = await resolveProjectId(c.env, c.req.param('projectId'));
+    if (!(await projectInTenant(c, projectId))) return c.json({ error: 'Project not found' }, 404);
+    const tenantId = c.get('tenantId') as number;
+    const body = await c.req
+      .json<{ repoId?: string; subdomain?: string; distDir?: string }>()
+      .catch(() => ({} as { repoId?: string; subdomain?: string; distDir?: string }));
+
+    // Default to the repo already bound to this project, so the common case
+    // needs no argument at all.
+    const repoId = body.repoId
+      ?? (await getRepoStatus(c.env as Env, tenantId, projectId)).repoId;
+    if (!repoId) {
+      return c.json({ error: 'Connect a GitHub repository to this project first.' }, 400);
+    }
+
+    // The runner posts back to whichever origin served this request, so a
+    // preview/staging API writes a workflow pointing at itself, not production.
+    const apiOrigin = new URL(c.req.url).origin;
+    const result = await enableGitHubDeploys(c.env as Env, tenantId, projectId, repoId, {
+      apiOrigin,
+      subdomain: body.subdomain ?? null,
+      distDir: body.distDir,
+    });
+    if (!result.ok) return c.json({ error: result.error }, result.status as 400);
+    await invalidateCached(c.env as Env, repoStatusKey(projectId));
+    const { ok: _ok, ...enabled } = result;
+    return c.json(enabled);
+  });
+
   // ---------- Site hosting (publish a Designer project to a subdomain) ----------
 
   // GET /projects/:projectId/site — current published-site record (or null).
@@ -321,85 +350,23 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
     const form = await c.req.formData();
 
-    // Resolve the target subdomain: explicit field, else the existing site's, else
-    // a slug of the project name.
-    const [current] = await getSql(c)`
-      SELECT subdomain FROM project_sites WHERE project_id = ${projectId} LIMIT 1`;
-    const requested = (form.get('subdomain') as string | null)?.trim()
-      || (current?.subdomain as string | undefined)
-      || String(proj.name ?? `app-${projectId}`);
-    const subdomain = normalizeSubdomain(requested);
-    if (!subdomain) {
-      return c.json({ error: 'Invalid or reserved subdomain. Use lowercase letters, numbers and hyphens.' }, 400);
-    }
+    // Subdomain claiming, stale-asset cleanup, the project_sites upsert and cache
+    // invalidation all live in the shared core, so a browser publish and a GitHub
+    // Actions deploy produce an identical site.
+    const result = await publishStaticSite({
+      env: c.env,
+      sql: getSql(c),
+      bucket,
+      projectId,
+      tenantId,
+      projectName: String(proj.name ?? ''),
+      requestedSubdomain: form.get('subdomain') as string | null,
+      assets: assetsFromFormData(form, ['subdomain']),
+    });
+    if (!result.ok) return c.json({ error: result.error }, result.status);
 
-    // Global uniqueness — a subdomain can't be claimed by another project.
-    const [owner] = await getSql(c)`
-      SELECT project_id FROM project_sites WHERE subdomain = ${subdomain} LIMIT 1`;
-    if (owner && Number(owner.project_id) !== projectId) {
-      return c.json({ error: `Subdomain "${subdomain}" is taken.` }, 409);
-    }
-
-    // Collect the asset parts (everything except the `subdomain` field).
-    const assets: Array<{ path: string; file: File }> = [];
-    for (const [name, value] of form.entries()) {
-      if (name === 'subdomain' || typeof value === 'string') continue;
-      const path = name.replace(/^\/+/, '').replace(/^dist\//, '');
-      if (path) assets.push({ path, file: value });
-    }
-    if (assets.length === 0) {
-      return c.json({ error: 'No assets uploaded. Build the project first.' }, 400);
-    }
-
-    const newPrefix = `${SITES_PREFIX}${subdomain}/`;
-    // Clear any prior contents under this subdomain (stale files from a previous
-    // build, or a different project that just released the name) before writing.
-    for (const obj of (await bucket.list({ prefix: newPrefix })).objects ?? []) {
-      await bucket.delete(obj.key!);
-    }
-    // If this project previously published under a DIFFERENT subdomain, retire it.
-    const oldSub = current?.subdomain as string | undefined;
-    if (oldSub && oldSub !== subdomain) {
-      const oldPrefix = `${SITES_PREFIX}${oldSub}/`;
-      for (const obj of (await bucket.list({ prefix: oldPrefix })).objects ?? []) {
-        await bucket.delete(obj.key!);
-      }
-      await invalidateSite(c.env, oldSub);
-    }
-
-    let totalBytes = 0;
-    for (const { path, file } of assets) {
-      totalBytes += file.size;
-      await bucket.put(newPrefix + path, file.stream(), {
-        httpMetadata: { contentType: contentTypeFor(path) },
-      });
-    }
-
-    const versionToken = newVersionToken();
-    await getSql(c)`
-      INSERT INTO project_sites
-        (project_id, tenant_id, subdomain, mode, status, r2_prefix, version_token, asset_count, total_bytes, published_at)
-      VALUES
-        (${projectId}, ${tenantId}, ${subdomain}, 'static', 'active', ${newPrefix}, ${versionToken}, ${assets.length}, ${totalBytes}, NOW())
-      ON CONFLICT (project_id) DO UPDATE SET
-        subdomain = EXCLUDED.subdomain,
-        r2_prefix = EXCLUDED.r2_prefix,
-        version_token = EXCLUDED.version_token,
-        status = 'active',
-        asset_count = EXCLUDED.asset_count,
-        total_bytes = EXCLUDED.total_bytes,
-        published_at = NOW(),
-        updated_at = NOW()`;
-    await invalidateSite(c.env, subdomain);
-
-    return c.json({
-      subdomain,
-      versionToken,
-      assetCount: assets.length,
-      totalBytes,
-      url: `https://${subdomain}.${HOSTING_APEX}`,
-      pathUrl: `/api/sites/${subdomain}/`,
-    }, 201);
+    const { ok: _ok, ...body } = result;
+    return c.json(body, 201);
   });
 
   // ---------- Datasets (project_id = API project id, integer) ----------

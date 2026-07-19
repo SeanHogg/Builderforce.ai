@@ -21,8 +21,6 @@ import { dispatchCloudRunForTask } from './runtimeRoutes';
 import { recordCloudToolEvent } from '../../application/runtime/cloudAgentEngine';
 import { evaluateTaskAutoRun, type AutoRunReason } from '../../application/swimlane/evaluateAutoRun';
 import { maybeAutoRunOnLaneEntry } from '../../application/swimlane/laneEntryTrigger';
-import { enforceLaneRequirements } from '../../application/swimlane/laneRequirementGate';
-import { TicketAuditService } from '../../application/audit/ticketAuditService';
 import { TicketParticipantsService } from '../../application/kanban/ticketParticipants';
 import { SecurityTicketAccessService } from '../../application/security/SecurityTicketAccessService';
 import { ChatTicketService } from '../../application/brain/ChatTicketService';

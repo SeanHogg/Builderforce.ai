@@ -29,6 +29,7 @@
 import { and, asc, eq, exists, inArray, isNotNull, or, sql } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { buildRuntimeService } from '../../buildRuntimeService';
+import { createTickDispatchBudget, MAX_TENANT_DISPATCHES_PER_TICK, type TickDispatchBudget } from './tickDispatchBudget';
 import { tasks, projects, boards, swimlanes, swimlaneAgentAssignments } from '../../infrastructure/database/schema';
 import { TaskStatus } from '../../domain/shared/types';
 import { getTenantTokenAvailability } from '../llm/tenantTokenAvailability';
@@ -48,7 +49,11 @@ const RUNNABLE_STATUSES: string[] = [
  *  (each dispatched ticket becomes a live run and is skipped next tick, so the
  *  backlog naturally paces itself). */
 export const MAX_CANDIDATES_PER_TICK = 400;
-export const MAX_DISPATCHES_PER_TENANT_PER_TICK = 25;
+
+/** Re-exported for back-compat. The per-tenant ceiling now lives in
+ *  {@link MAX_TENANT_DISPATCHES_PER_TICK} because it is shared with every OTHER
+ *  dispatching sweep in the same cron tick rather than owned by this one. */
+export const MAX_DISPATCHES_PER_TENANT_PER_TICK = MAX_TENANT_DISPATCHES_PER_TICK;
 
 export interface AutonomousSweepResult {
   candidates: number;
@@ -140,7 +145,12 @@ export function groupByTenant(candidates: CandidateTask[]): Map<number, Candidat
  * One sweep pass. Called from the frequent cron tick in index.ts. Returns a small
  * result summary (used by the test + logged for observability).
  */
-export async function runAutonomousExecutionSweep(env: Env): Promise<AutonomousSweepResult> {
+export async function runAutonomousExecutionSweep(
+  env: Env,
+  /** Shared per-tick ceiling. Omitted by a direct/manual call, which then gets its
+   *  own private budget and behaves exactly as this sweep did standalone. */
+  budget: TickDispatchBudget = createTickDispatchBudget(),
+): Promise<AutonomousSweepResult> {
   const db = buildDatabase(env);
   const runtimeService = buildRuntimeService(env, db);
 
@@ -190,7 +200,11 @@ export async function runAutonomousExecutionSweep(env: Env): Promise<AutonomousS
       // the run only when it genuinely should — so this is safe to call broadly.
       let dispatchedForTenant = 0;
       for (const c of tenantCandidates) {
-        if (dispatchedForTenant >= MAX_DISPATCHES_PER_TENANT_PER_TICK) break;
+        // Ceiling now belongs to the TICK, not to this sweep — see tickDispatchBudget.
+        // Previously each dispatching sweep held its own private per-tenant counter,
+        // so the manager / validator / QA sweeps could each grant a fresh 25 in the
+        // same five-minute window and the aggregate was unbounded.
+        if (!budget.hasRoom(tenantId)) break;
         try {
           const started = await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
             tenantId: c.tenantId,
@@ -201,8 +215,14 @@ export async function runAutonomousExecutionSweep(env: Env): Promise<AutonomousS
           });
           // Only a ticket that actually started a run counts against the per-tenant
           // budget — no-ops (already running / human-gated / no qualifying agent) are
-          // cheap and shouldn't starve genuinely-pending work.
-          if (started) dispatchedForTenant += 1;
+          // cheap and shouldn't starve genuinely-pending work. That property is worth
+          // a small race: two sweeps can both pass `hasRoom` and then both reserve,
+          // so a tenant may overshoot by the number of concurrent sweeps. Reserving
+          // up-front instead would burn the budget on no-ops, which is far worse.
+          if (started) {
+            budget.tryReserve(tenantId);
+            dispatchedForTenant += 1;
+          }
         } catch (err) {
           console.error(`[cron:auto-exec] dispatch failed tenant=${tenantId} task=${c.taskId}`, err);
         }

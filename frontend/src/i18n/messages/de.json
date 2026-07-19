@@ -452,7 +452,10 @@
     }
   },
   "ceremonies": {
-    "selectProject": "Wählen Sie ein Projekt, um eine Zeremonie zu starten."
+    "selectProject": "Wählen Sie ein Projekt, um eine Zeremonie zu starten.",
+    "viewLive": "Live-Runde",
+    "viewSchedules": "Zeitpläne",
+    "viewSwitchLabel": "Zeremonie-Ansicht"
   },
   "projectCard": {
     "details": "Details",
@@ -793,6 +796,36 @@
       "notPublishedTitle": "Noch nichts veröffentlicht",
       "notPublishedBody": "Veröffentliche diese App, um einen Link zu erhalten, den dein Handy öffnen kann. Das dauert etwa eine Minute.",
       "goToPublish": "Zu „Veröffentlichen“"
+    },
+    "publish": {
+      "title": "Im Web veröffentlichen",
+      "description": "Erstelle diese App und hoste sie unter einer Subdomain. Statisches Hosting – deine App läuft im Browser.",
+      "subdomain": "Subdomain",
+      "building": "Wird erstellt…",
+      "uploading": "Wird hochgeladen…",
+      "publish": "Veröffentlichen",
+      "republish": "Erneut veröffentlichen",
+      "published": "Veröffentlicht ✓",
+      "liveSite": "Live-Website",
+      "preview": "Vorschau",
+      "fileCount": "{count, plural, one {# Datei} other {# Dateien}}",
+      "invalidSubdomain": "Gib eine gültige Subdomain ein (Buchstaben, Zahlen und Bindestriche).",
+      "failed": "Veröffentlichung fehlgeschlagen"
+    },
+    "deploy": {
+      "title": "Von GitHub bereitstellen",
+      "description": "Lass GitHub Actions dieses Projekt bei jedem Push bauen und hier bereitstellen – ganz ohne geöffnete IDE.",
+      "checking": "Verbundenes Repository wird geprüft…",
+      "needsRepo": "Verbinde dieses Projekt zuerst unter Einstellungen → Repository mit einem GitHub-Repository.",
+      "needsGitHub": "Dieses Projekt ist mit einem Nicht-GitHub-Repository verbunden. GitHub-Actions-Deployments brauchen ein GitHub-Repository.",
+      "repoLabel": "Repository:",
+      "enable": "GitHub-Deployments aktivieren",
+      "reapply": "Workflow aktualisieren",
+      "enabling": "Workflow wird geschrieben…",
+      "enableFailed": "GitHub-Deployments konnten nicht aktiviert werden.",
+      "enabledOn": "{path} wurde auf {branch} hinzugefügt. Der nächste Push auf diesen Branch baut und deployt.",
+      "viewRuns": "Workflow-Läufe auf GitHub ansehen",
+      "viewWorkflow": "Workflow-Datei anzeigen"
     }
   },
   "tools": {
@@ -9967,5 +10000,51 @@
       "require-approval": "Der Agent hält an und holt vor dem Werkzeugeinsatz eine menschliche Freigabe ein.",
       "block": "Der Agent verweigert das Werkzeug vollständig und erklärt den Grund."
     }
+  },
+  "ceremonySchedules": {
+    "title": "Wiederkehrende Zeremonien",
+    "subtitle": "Dailys und Plannings in festem Rhythmus durchführen. Jede geplante Zeremonie startet von selbst – die Runde ist bereits besetzt.",
+    "newSchedule": "Neuer Zeitplan",
+    "editSchedule": "Zeitplan bearbeiten",
+    "empty": "Noch keine wiederkehrenden Zeremonien. Lege einen Zeitplan an, und dein Daily startet von allein.",
+    "enabled": "Aktiv",
+    "paused": "Pausiert",
+    "pause": "Pausieren",
+    "resume": "Fortsetzen",
+    "colKind": "Zeremonie",
+    "colCadence": "Rhythmus",
+    "colNextRun": "Nächster Lauf",
+    "colLastRun": "Letzter Lauf",
+    "colStatus": "Status",
+    "colActions": "Aktionen",
+    "colRoster": "Runde",
+    "kind_standup": "Daily",
+    "kind_planning": "Planning",
+    "scope_members": "Projektmitglieder",
+    "scope_roster": "Feste Liste",
+    "preset_weekdays9": "Werktags um 09:00 Uhr",
+    "preset_weekdays10": "Werktags um 10:00 Uhr",
+    "preset_daily9": "Täglich um 09:00 Uhr",
+    "preset_mondays10": "Montags um 10:00 Uhr",
+    "preset_fridays16": "Freitags um 16:00 Uhr",
+    "presetCustom": "Eigener Zeitplan…",
+    "fieldKind": "Zeremonie",
+    "fieldCadence": "Häufigkeit",
+    "fieldCron": "Cron-Ausdruck",
+    "cronHelp": "Fünf Felder: Minute, Stunde, Tag des Monats, Monat, Wochentag. Die Vorlage oben füllt das aus; für Spezielleres einfach anpassen.",
+    "fieldTimezone": "Zeitzone",
+    "fieldRoster": "Wer teilnimmt",
+    "rosterHelp": "„Projektmitglieder“ setzt alle auf diesem Projekt aktiven Personen an den Tisch – wer am wenigsten gesprochen hat, zuerst. Eine feste Liste setzt immer dieselben Personen.",
+    "fieldMaxParticipants": "Maximale Plätze",
+    "fieldTurnSeconds": "Sekunden pro Redebeitrag",
+    "turnSecondsPlaceholder": "Standard des Boards verwenden",
+    "fieldEnabled": "Zeitplan ist aktiv",
+    "enabledHelp": "Ein pausierter Zeitplan behält seine Einstellungen, öffnet aber nie eine Zeremonie.",
+    "fieldAutoDispatch": "Agenten-Arbeit nach Ende der Zeremonie starten",
+    "autoDispatchHelp": "Nach Abschluss der Sitzung werden Tickets dieses Projekts, die Agenten gehören, automatisch an ihre Agenten übergeben.",
+    "confirmDelete": "Diese wiederkehrende Zeremonie löschen? Bereits durchgeführte Sitzungen bleiben erhalten.",
+    "errorLoad": "Die Zeitpläne konnten nicht geladen werden.",
+    "errorSave": "Der Zeitplan konnte nicht gespeichert werden.",
+    "errorDelete": "Der Zeitplan konnte nicht gelöscht werden."
   }
 }

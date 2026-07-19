@@ -21,7 +21,7 @@ import { resolveDefaultRepoForTask } from '../repos/resolveDefaultRepo';
 import { resolveRepoCredential, isResolveError } from '../repos/resolveRepoCredential';
 import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutofixOnBuildFailure, MAX_AUTOFIX_ATTEMPTS } from '../repos/mergeBranchToBase';
 import { ticketBranchName } from '../repos/commitFileAsPendingChange';
-import { markPullRequestMergedByTask, findMergedPullRequestBySha, findOpenPullRequestByTask, setPullRequestBuildStatus } from '../repos/recordPullRequestRow';
+import { markPullRequestMergedByTask, findMergedPullRequestBySha, findOpenPullRequestByTask, findOpenPullRequestByProject, setPullRequestBuildStatus } from '../repos/recordPullRequestRow';
 import { completeTaskOnMerge } from '../task/taskLifecycle';
 import { fetchBuildError } from './fetchBuildError';
 import type { Db } from '../../infrastructure/database/connection';
@@ -52,6 +52,8 @@ export interface RepoCiEvent {
 }
 
 const TASK_BRANCH_RE = /^builderforce\/task-(\d+)\b/;
+/** The IDE bridge's branch (`repoBridge.designerBranch`) — a PROJECT, not a task. */
+const DESIGNER_BRANCH_RE = /^builderforce\/designer-(\d+)\b/;
 
 /** Telemetry toolName recorded per dispatched auto-fix run (the loop-guard counts these). */
 export const AUTOFIX_DISPATCH_EVENT = 'autofix.dispatch';
@@ -206,13 +208,78 @@ export async function ingestRepoCiEvent(
   evt: RepoCiEvent,
 ): Promise<IngestResult> {
   try {
-    const m = evt.branch ? TASK_BRANCH_RE.exec(evt.branch) : null;
-    return m
-      ? await ingestPreMergeEvent(db, env, secret, evt, Number(m[1]))
-      : await ingestPostMergeEvent(db, env, secret, evt);
+    const task = evt.branch ? TASK_BRANCH_RE.exec(evt.branch) : null;
+    if (task) return await ingestPreMergeEvent(db, env, secret, evt, Number(task[1]));
+    // Designer/Mobile PRs come from the IDE bridge, not a ticket. They previously
+    // fell through to the post-merge path, which correlates by merged-PR SHA and
+    // so matched nothing — meaning an IDE-opened PR showed no build status at all.
+    const designer = evt.branch ? DESIGNER_BRANCH_RE.exec(evt.branch) : null;
+    if (designer) return await ingestDesignerEvent(db, env, secret, evt, Number(designer[1]));
+    return await ingestPostMergeEvent(db, env, secret, evt);
   } catch (e) {
     return { processed: false, reason: e instanceof Error ? e.message : 'ingest failed' };
   }
+}
+
+/**
+ * Path 1b — an event on an IDE bridge branch (`builderforce/designer-<projectId>`).
+ *
+ * Same goal as the ticket path — the PR row carries the build verdict and the
+ * reason, so the IDE can show whether the pushed workspace actually builds — but
+ * deliberately WITHOUT the auto-fix dispatch: there is no ticket and no assigned
+ * agent to hand a failing build to. A human opened this PR from the IDE, so the
+ * feedback belongs on screen, not in an agent run.
+ */
+async function ingestDesignerEvent(
+  db: Db,
+  env: Env,
+  secret: string,
+  evt: RepoCiEvent,
+  projectId: number,
+): Promise<IngestResult> {
+  const [project] = await db
+    .select({ id: projects.id, tenantId: projects.tenantId })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1);
+  if (!project) return { processed: false, reason: `no project #${projectId}` };
+
+  if (evt.outcome !== 'success' && evt.outcome !== 'failure') {
+    return { processed: false, reason: 'not a terminal build outcome' };
+  }
+
+  const pr = await findOpenPullRequestByProject(db, project.tenantId, projectId);
+  if (!pr) return { processed: false, reason: `no open PR for project #${projectId}` };
+
+  const outcome = evt.outcome;
+  let buildError: string | null = null;
+  if (outcome === 'failure') {
+    buildError = `The PR-branch build failed.${evt.targetUrl ? ` See: ${evt.targetUrl}` : ''}`;
+    if (pr.repoId && evt.runId) {
+      const resolved = await resolveRepoCredential(db, secret, project.tenantId, pr.repoId);
+      if (!isResolveError(resolved)) {
+        const be = await fetchBuildError(env, {
+          provider: resolved.repo.provider, host: resolved.repo.host,
+          owner: resolved.repo.owner, repo: resolved.repo.repo, token: resolved.token,
+          runId: evt.runId, runUrl: evt.targetUrl,
+        });
+        buildError = be.summary;
+      }
+    }
+  }
+
+  await setPullRequestBuildStatus(db, pr.id, outcome, buildError).catch(() => {});
+
+  await db.insert(toolAuditEvents).values({
+    tenantId: project.tenantId, agentHostId: null, cloudAgentRef: null,
+    executionId: null, sessionKey: `project:${projectId}`,
+    toolName: 'build.result', category: 'ci',
+    args: JSON.stringify({ branch: evt.branch, sha: evt.sha, projectId }),
+    result: (outcome === 'success' ? 'PR-branch build passed' : (buildError ?? 'PR-branch build failed')).slice(0, 300),
+    ts: new Date(),
+  }).catch(() => { /* telemetry best-effort */ });
+
+  return { processed: true, tenantId: project.tenantId, buildStatus: outcome };
 }
 
 /** Path 1 — an event on the ticket branch (pre-merge): record + optional green merge. */

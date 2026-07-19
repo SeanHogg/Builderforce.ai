@@ -55,7 +55,7 @@ const BLOCKED_HOSTS = new Set(['localhost', 'metadata', 'metadata.google.interna
  *  this-network, private (RFC1918), loopback, link-local (incl. the 169.254.169.254
  *  cloud metadata endpoint), CGNAT, IETF protocol assignments, benchmarking,
  *  multicast, and reserved. */
-function isPrivateIPv4(octets: number[]): boolean {
+function isPrivateIPv4(octets: IPv4): boolean {
   const [a, b] = octets;
   if (a === 0 || a === 10 || a === 127) return true;
   if (a === 169 && b === 254) return true;
@@ -67,8 +67,12 @@ function isPrivateIPv4(octets: number[]): boolean {
   return a >= 224; // multicast (224/4) + reserved (240/4), incl. 255.255.255.255
 }
 
+/** The four octets of an IPv4 literal — a fixed-length tuple so the range checks above
+ *  can index it without a possibly-undefined guard on every octet. */
+type IPv4 = [number, number, number, number];
+
 /** Parse a dotted-quad into its octets, or null when `host` is not an IPv4 literal. */
-function parseIPv4(host: string): number[] | null {
+function parseIPv4(host: string): IPv4 | null {
   const parts = host.split('.');
   if (parts.length !== 4) return null;
   const octets: number[] = [];
@@ -78,7 +82,7 @@ function parseIPv4(host: string): number[] | null {
     if (n > 255) return null;
     octets.push(n);
   }
-  return octets;
+  return octets as IPv4;
 }
 
 /**
@@ -105,8 +109,10 @@ export function classifyWebEgress(rawUrl: string): string | null {
     return `scheme '${u.protocol.replace(':', '')}' is not allowed — only http and https can be fetched`;
   }
 
-  // IPv6 literals arrive bracketed; `URL.hostname` strips the brackets already.
-  const host = u.hostname.toLowerCase().replace(/\.$/, '');
+  // WHATWG `URL.hostname` KEEPS the brackets on an IPv6 literal (`[::1]`), so strip
+  // them before any address matching — leaving them on silently defeated every IPv6
+  // rule below.
+  const host = u.hostname.toLowerCase().replace(/\.$/, '').replace(/^\[|\]$/g, '');
   if (!host) return 'the URL has no host';
   if (BLOCKED_HOSTS.has(host)) return `'${host}' is a loopback/metadata host and cannot be fetched`;
   if (BLOCKED_HOST_SUFFIXES.some((s) => host.endsWith(s))) {
@@ -119,22 +125,37 @@ export function classifyWebEgress(rawUrl: string): string | null {
   }
 
   if (host.includes(':')) {
-    // IPv4-mapped / -compatible IPv6 (::ffff:10.0.0.1) — judge the embedded address.
-    const tail = host.slice(host.lastIndexOf(':') + 1);
-    const mapped = parseIPv4(tail);
+    // IPv4-mapped IPv6 — judge the address it actually wraps. `URL` canonicalizes the
+    // dotted form (`::ffff:169.254.169.254`) into hex groups (`::ffff:a9fe:a9fe`), so
+    // BOTH spellings must be decoded or the mapped form is a trivial bypass.
+    const mapped = parseMappedIPv4(host);
     if (mapped) {
       return isPrivateIPv4(mapped)
         ? `'${host}' maps to a private/loopback address and cannot be fetched`
         : null;
     }
-    if (host === '::1' || host === '::' || host === '0:0:0:0:0:0:0:1') {
-      return `'${host}' is the IPv6 loopback and cannot be fetched`;
+    if (/^(::1?|0(:0){7}|0(:0){6}:1)$/.test(host)) {
+      return `'${host}' is the IPv6 loopback/unspecified address and cannot be fetched`;
     }
     // fc00::/7 unique-local, fe80::/10 link-local.
     if (/^f[cd][0-9a-f]{0,2}:/.test(host)) return `'${host}' is a unique-local IPv6 address and cannot be fetched`;
     if (/^fe[89ab][0-9a-f]?:/.test(host)) return `'${host}' is a link-local IPv6 address and cannot be fetched`;
   }
 
+  return null;
+}
+
+/** Decode an IPv4-mapped IPv6 host (`::ffff:1.2.3.4` or its canonical `::ffff:102:304`)
+ *  into the IPv4 address it wraps, or null when `host` is not one. */
+function parseMappedIPv4(host: string): IPv4 | null {
+  const dotted = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(host);
+  if (dotted?.[1]) return parseIPv4(dotted[1]);
+  const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(host);
+  if (hex?.[1] && hex[2]) {
+    const hi = parseInt(hex[1], 16);
+    const lo = parseInt(hex[2], 16);
+    return [hi >> 8, hi & 0xff, lo >> 8, lo & 0xff];
+  }
   return null;
 }
 
@@ -148,20 +169,33 @@ export function classifyWebEgress(rawUrl: string): string | null {
  */
 export function htmlToText(html: string): string {
   return html
+    // 1. Drop what carries no readable content at all.
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<(script|style|noscript|svg|template)\b[\s\S]*?<\/\1\s*>/gi, ' ')
-    .replace(/<\/(p|div|section|article|header|footer|li|tr|h[1-6]|blockquote|pre)\s*>/gi, '\n')
-    .replace(/<(br|hr)\s*\/?>/gi, '\n')
+    // 2. Flatten SOURCE whitespace FIRST. A newline in the markup is not structure —
+    //    HTML collapses it like any other whitespace — so it must be neutralized
+    //    BEFORE step 3 introduces the newlines that ARE structure. Doing these two in
+    //    the other order cannot tell an authored line-wrap from a paragraph boundary,
+    //    and every hand-formatted page comes out shredded into one-word lines.
+    .replace(/\s+/g, ' ')
+    // 3. Only now do the block boundaries the markup actually declares become newlines.
+    .replace(/<\/(p|div|section|article|header|footer|li|tr|h[1-6]|blockquote|pre|ul|ol|table)\s*>/gi, '\n\n')
+    .replace(/<(br|hr)\s*\/?>/gi, '\n\n')
+    // 4. Everything else is inline markup — it separates words, so it becomes a space.
     .replace(/<[^>]+>/g, ' ')
+    // 5. Decode the entities that survive. `&amp;` goes LAST so a double-encoded
+    //    `&amp;lt;` yields the literal text `&lt;` instead of being re-decoded to `<`.
     .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')
     .replace(/&quot;/gi, '"')
     .replace(/&#39;|&apos;/gi, "'")
     .replace(/&#(\d+);/g, (_m, d: string) => String.fromCodePoint(Number(d)))
-    .replace(/[ \t\f\v]+/g, ' ')
-    .replace(/ *\n *(?: *\n *)+/g, '\n\n')
+    .replace(/&amp;/gi, '&')
+    // 6. Tidy: collapse the runs of spaces and stacked blank lines the steps above
+    //    left behind, so adjacent block tags yield ONE paragraph break, not four.
+    .replace(/[^\S\n]+/g, ' ')
+    .replace(/ ?\n[\n ]*/g, '\n\n')
     .trim();
 }
 
@@ -211,7 +245,9 @@ async function readCapped(res: Response): Promise<{ text: string; truncated: boo
   const joined = new Uint8Array(total);
   let offset = 0;
   for (const c of chunks) { joined.set(c, offset); offset += c.byteLength; }
-  return { text: new TextDecoder('utf-8', { fatal: false }).decode(joined), truncated };
+  // Default TextDecoder is utf-8 and non-fatal, so a body cut mid-multibyte-sequence
+  // (the truncation case) decodes to a replacement char instead of throwing.
+  return { text: new TextDecoder().decode(joined), truncated };
 }
 
 /** One real (uncached) fetch, fully bounded. Never throws — every failure comes back
@@ -235,7 +271,7 @@ async function fetchUncached(url: string): Promise<WebFetchResult> {
     const landedBlocked = classifyWebEgress(finalUrl);
     if (landedBlocked) return { ok: false, url: finalUrl, error: `redirected to a blocked address: ${landedBlocked}` };
 
-    const contentType = (res.headers.get('content-type') ?? '').split(';')[0].trim();
+    const contentType = ((res.headers.get('content-type') ?? '').split(';')[0] ?? '').trim();
     if (!isTextualContentType(contentType)) {
       return { ok: false, url: finalUrl, status: res.status, contentType, error: `content type '${contentType}' is not readable as text` };
     }
