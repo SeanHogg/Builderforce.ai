@@ -212,7 +212,7 @@ import { createEmpMetricsRoutes } from './presentation/routes/empMetricsRoutes';
 import { createForecastRoutes } from './presentation/routes/forecastRoutes';
 
 // Middleware
-import { addCorsToResponse, corsMiddleware } from './presentation/middleware/cors';
+import { addCorsToResponse, corsMiddleware, EXPOSED_HEADERS, ALLOWED_REQUEST_HEADERS } from './presentation/middleware/cors';
 import { errorHandler }   from './presentation/middleware/errorHandler';
 import { rateLimitMiddleware } from './presentation/middleware/rateLimitMiddleware';
 import { emulationMiddleware } from './presentation/middleware/emulationMiddleware';
@@ -906,10 +906,10 @@ export default {
           // will block the preflight: `Idempotency-Key` (cron retries),
           // `X-Emulation-Token` (admin emulation flow), `X-AgentHost-Signature`
           // (agentHost-relay HMAC).
-          'Access-Control-Allow-Headers': 'Content-Type,Authorization,Idempotency-Key,X-Emulation-Token,X-AgentHost-Signature',
-          // Echo the daily-budget snapshot headers so SDK consumers in the
-          // browser can pre-emptively throttle without a second fetch.
-          'Access-Control-Expose-Headers': 'x-request-id,x-builderforce-model,x-builderforce-account,x-builderforce-byo-unresolved,x-builderforce-provider-cap,x-builderforce-retries,x-builderforce-product,x-builderforce-effective-plan,x-builderforce-daily-tokens-used,x-builderforce-daily-tokens-limit,x-builderforce-daily-tokens-remaining',
+          'Access-Control-Allow-Headers': ALLOWED_REQUEST_HEADERS,
+          // Shared list — the middleware sets the SAME value on the actual
+          // response, which is the placement browsers actually honour.
+          'Access-Control-Expose-Headers': EXPOSED_HEADERS,
           'Access-Control-Max-Age': '86400',
           Vary: 'Origin',
         },
