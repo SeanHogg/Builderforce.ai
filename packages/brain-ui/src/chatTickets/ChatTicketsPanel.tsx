@@ -15,6 +15,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HealthRing } from '../HealthRing';
 import { nativeOptionStyle } from '../optionStyle';
+import { resolveRunGate } from './runGate';
 import {
   RUNNABLE_KINDS, TICKET_KINDS,
   type ChatTicketsAdapter, type ChatTicketsLabels, type TicketKind,
@@ -105,10 +106,9 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     setLineage(await adapter.listTicketChats(tk.kind, tk.ref).catch(() => []));
   };
 
-  // Ask the host whether run dispatch is permitted. A host that doesn't implement
-  // the probe (VS Code — no tenant-role context) is treated as permitted, so this
-  // gates the web surface without disabling the button where nothing can answer.
-  const runGate = adapter.canRunTicket?.() ?? { allowed: true as const };
+  // Ask the host whether run dispatch is permitted (see resolveRunGate for why an
+  // absent probe means "permitted" rather than "refuse").
+  const runGate = resolveRunGate(adapter);
 
   const runTicket = async (tk: TicketLinkVM, agentRef: string) => {
     setBusy(true);

@@ -211,11 +211,110 @@ describe('listBranchCommits', () => {
       .toMatchObject({ ok: false, code: 'provider_error' });
   });
 
-  it('flags truncation past the cap so the decision can refuse', async () => {
-    const commits = Array.from({ length: 101 }, (_, i) => ({ sha: `s${i}`, commit: { message: 'm', author: { name: 'n' } } }));
-    stubFetch({ status: 200, payload: { commits } });
+  it('stops on a short page without asking for another', async () => {
+    const fn = stubFetch({ status: 200, payload: { commits: [{ sha: 'a1', commit: { message: 'm' } }] } });
+    const r = await listBranchCommits({ ...target, provider: 'github', base: 'main', branch: BRANCH });
+    expect(r).toMatchObject({ ok: true, truncated: false });
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Pagination — the reason a branch carrying more than one page of commits is now
+ * verifiable at all. The bias is unchanged at the far end: past the ABSOLUTE bound
+ * the listing is still `truncated`, which the teardown decision still refuses on.
+ */
+describe('listBranchCommits — pagination', () => {
+  /** A fetch stub that answers page N from `pages`, keyed off the `page`/`start` query. */
+  function stubPages(pageBodies: unknown[]) {
+    const fn = vi.fn(async (url: string) => {
+      const m = /[?&](?:page|start)=(\d+)/.exec(url);
+      const raw = Number(m?.[1] ?? 1);
+      // Bitbucket Server pages by offset; everything else by 1-based page number.
+      const index = url.includes('start=') ? raw / MAX_BRANCH_COMMITS : raw - 1;
+      return {
+        ok: true, status: 200,
+        json: async () => pageBodies[index] ?? null,
+        text: async () => '',
+      };
+    });
+    vi.stubGlobal('fetch', fn);
+    return fn;
+  }
+
+  const ghPage = (from: number, count: number, total?: number) => ({
+    ...(total == null ? {} : { total_commits: total }),
+    commits: Array.from({ length: count }, (_, i) => ({ sha: `s${from + i}`, commit: { message: 'm', author: { name: 'n' } } })),
+  });
+
+  it('GitHub: follows pages past the old 100-commit wall and reports them all', async () => {
+    const fn = stubPages([ghPage(0, 100, 150), ghPage(100, 50, 150)]);
+    const r = await listBranchCommits({ ...target, provider: 'github', base: 'main', branch: BRANCH });
+    expect(r).toMatchObject({ ok: true, truncated: false });
+    if (r.ok) expect(r.commits).toHaveLength(150);
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it('GitLab: keeps paging the bare-array commits endpoint until a short page', async () => {
+    const glPage = (from: number, count: number) =>
+      Array.from({ length: count }, (_, i) => ({ id: `g${from + i}`, message: 'm', author_name: 'n' }));
+    stubPages([glPage(0, 100), glPage(100, 100), glPage(200, 7)]);
+    const r = await listBranchCommits({ ...target, provider: 'gitlab', base: 'main', branch: BRANCH });
+    expect(r).toMatchObject({ ok: true, truncated: false });
+    if (r.ok) expect(r.commits).toHaveLength(207);
+  });
+
+  it('Bitbucket Cloud: follows `next` and stops when it is absent', async () => {
+    const bbPage = (from: number, count: number, next: boolean) => ({
+      ...(next ? { next: 'https://api.bitbucket.org/next' } : {}),
+      values: Array.from({ length: count }, (_, i) => ({ hash: `b${from + i}`, message: 'm' })),
+    });
+    stubPages([bbPage(0, 100, true), bbPage(100, 100, false)]);
+    const r = await listBranchCommits({ ...target, provider: 'bitbucket', base: 'main', branch: BRANCH });
+    expect(r).toMatchObject({ ok: true, truncated: false });
+    if (r.ok) expect(r.commits).toHaveLength(200);
+  });
+
+  it('Bitbucket Server: pages by offset and honours isLastPage', async () => {
+    const svPage = (from: number, count: number, isLastPage: boolean) => ({
+      isLastPage,
+      values: Array.from({ length: count }, (_, i) => ({ id: `v${from + i}`, message: 'm', author: { displayName: 'n' } })),
+    });
+    const fn = stubPages([svPage(0, 100, false), svPage(100, 20, true)]);
+    const r = await listBranchCommits({ ...target, host: 'git.acme.internal', provider: 'bitbucket', base: 'main', branch: BRANCH });
+    expect(r).toMatchObject({ ok: true, truncated: false });
+    if (r.ok) expect(r.commits).toHaveLength(120);
+    expect(fn.mock.calls[1]?.[0]).toContain('start=100');
+  });
+
+  it('de-duplicates a commit that shifts across pages while the branch moves', async () => {
+    // Page 2 repeats page 1's last commit — a branch that gained a commit mid-listing.
+    stubPages([ghPage(0, 100), { commits: [{ sha: 's99', commit: { message: 'm' } }, { sha: 's100', commit: { message: 'm' } }] }]);
+    const r = await listBranchCommits({ ...target, provider: 'github', base: 'main', branch: BRANCH });
+    if (r.ok) expect(r.commits).toHaveLength(101);
+  });
+
+  it('STILL refuses (truncated) past the absolute bound rather than deleting on partial evidence', async () => {
+    // Every page full, forever — the pathological branch the bound exists for.
+    const fn = vi.fn(async (url: string) => {
+      const page = Number(/[?&]page=(\d+)/.exec(url)?.[1] ?? 1);
+      return { ok: true, status: 200, json: async () => ghPage((page - 1) * 100, 100), text: async () => '' };
+    });
+    vi.stubGlobal('fetch', fn);
     const r = await listBranchCommits({ ...target, provider: 'github', base: 'main', branch: BRANCH });
     expect(r).toMatchObject({ ok: true, truncated: true });
-    if (r.ok) expect(r.commits).toHaveLength(100);
+    if (r.ok) expect(r.commits).toHaveLength(MAX_TOTAL_BRANCH_COMMITS);
+    expect(fn).toHaveBeenCalledTimes(MAX_TOTAL_BRANCH_COMMITS / MAX_BRANCH_COMMITS);
+  });
+
+  it('treats a 404 on a LATER page as truncated evidence, not a complete short list', async () => {
+    const fn = vi.fn(async (url: string) => {
+      const page = Number(/[?&]page=(\d+)/.exec(url)?.[1] ?? 1);
+      if (page > 1) return { ok: false, status: 404, json: async () => null, text: async () => '' };
+      return { ok: true, status: 200, json: async () => ghPage(0, 100), text: async () => '' };
+    });
+    vi.stubGlobal('fetch', fn);
+    const r = await listBranchCommits({ ...target, provider: 'github', base: 'main', branch: BRANCH });
+    expect(r).toMatchObject({ ok: true, truncated: true });
   });
 });

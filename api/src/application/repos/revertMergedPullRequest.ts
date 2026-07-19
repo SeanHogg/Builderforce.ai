@@ -225,7 +225,11 @@ async function revertGitlab(input: RevertMergedPrInput): Promise<RevertMergedPrR
       method: 'DELETE', headers: headers(token),
     }).catch(() => { /* best-effort */ });
     const text = String(revert?.body ?? 'network');
-    if (revert && (revert.status === 400 || revert.status === 409) && /conflict|cannot be reverted|empty/i.test(text)) {
+    // GitLab's conflict answer is prose, not a code: "Sorry, we cannot revert this
+    // commit automatically… a more recent commit may have updated some of its
+    // content." That is a conflict, not an outage, and must not read as one.
+    if (revert && (revert.status === 400 || revert.status === 409)
+      && /conflict|cannot (be )?revert|already been reverted|empty/i.test(text)) {
       return fail('conflict', `GitLab could not revert ${landedSha.slice(0, 7)} onto '${input.base}': ${text.slice(0, 200)}`);
     }
     return fail('provider_error', `revert of ${landedSha.slice(0, 7)} failed: ${text.slice(0, 200)}`);

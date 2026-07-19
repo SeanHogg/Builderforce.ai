@@ -5577,7 +5577,7 @@ export const reposApi = {
   /** Ingest every OPEN code-scanning / Dependabot alert as a security finding —
    *  for a repo connected after alerts accumulated, or whose webhook never fired.
    *  Idempotent (ingestion dedupes against open findings). */
-  backfillSecurityAlerts: (id: string): Promise<{ ok: true; ingested?: number; scanned?: number }> =>
+  backfillSecurityAlerts: (id: string): Promise<{ ok: true; ingested?: number; deduped?: number }> =>
     request(`/api/repos/repositories/${id}/security/backfill-alerts`, { method: 'POST' }),
 
   listPullRequests: (projectId: number) =>

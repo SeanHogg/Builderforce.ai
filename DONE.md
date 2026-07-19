@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-19 — ✅ SHIPPED: Acceptance reviews land on the pull request (Validator agent + reviewer-role sign-off)
+
+Closes the loop opened by the Checks work below: the platform reviewed its own output but the verdict lived only in Builderforce tables, invisible to whoever was deciding whether to merge. Both reviewer paths now publish to the PR. API 2653 tests / 293 files green.
+
+**Producer — reviews can now point at code.** `ReviewGapInput` gained optional `path`/`line`, carried through the `reviews.record` MCP tool schema and the Validator's run prompt (which now instructs the agent to anchor gaps it can and explicitly *not* to invent a location for gaps about missing work). The location is also written into the GAP task description, since whoever picks the gap up only ever looks at the ticket. Nothing in the codebase produced a `{path, line}` finding before this — `CheckAnnotation` was plumbed and never populated.
+
+**Transport** — `postPrReviewComments` posts ONE review carrying every inline comment rather than N separate comments, which would notify per finding and scatter a single considered pass across the timeline. `event: 'COMMENT'`, never `REQUEST_CHANGES`: the platform is not a required reviewer and blocking a human's merge on an automated pass trains people to dismiss it.
+
+**The 422 hazard, handled** — GitHub rejects an *entire* review if any one inline comment anchors outside the PR's diff, so a reviewer legitimately commenting on an untouched file would silently destroy every valid finding alongside it. `partitionByDiffAnchor` validates anchors against the PR's real changed-file list (cached by head SHA, which is immutable per commit so it can never serve a stale diff) and **demotes** anything unanchorable into the review body. If the file list can't be read at all, everything demotes. The invariant under test: no gap is ever dropped.
+
+**Both reviewer identities** — `publishReviewToPr` for the Validator/agent path (hooked at the `reviews.record` MCP tool, which has `ctx.env`), and `publishSignoffToPr` for humans (hooked in `TicketAuditService.recordSignoff`). Human sign-offs are gated by a new `isReviewRole` in `roleCatalog.ts`: only roles that render a *judgement on the change* (code-reviewer, architect, qa-tester, security, validator, team-lead, product-owner) publish. A business analyst confirming scope is accountability, not a code review, and posting every role would bury the sign-offs a merge actually depends on. Custom roles are excluded — unknown semantics, and defaulting to publish would spam PRs as tenants add roles.
+
+**Verdict mapping** — `gaps` and `changes_requested` map to `action_required`, not `failure`: missing work is not a broken build, and a red X pushes reviewers to dismiss the check rather than read it. `waived`/`delegated` are `neutral` — procedural outcomes, not judgements on the code.
+
+**DRY** — `resolveTaskPrTarget` extracted from `publishTaskVerdict`; both publishers share it, so the head-SHA cache-busting subtlety (a stale SHA puts a check or review on a commit no longer in the PR, where nobody sees it) exists in exactly one place. 10 new tests.
+
+**Correction on the prior pass:** `postPrReviewComments` had been written and then deleted as dead code, on the grounds that nothing produced file-anchored findings. That was the wrong direction — the right question was *who should be producing them*, and the answer (the Validator agent and the reviewer role) already existed. Recovered from git and wired to its real consumers.
+
+---
+
 ## 2026-07-19 — ✅ SHIPPED: Offload to GitHub — App auth, Checks write-back, alert ingest, Actions execution surface, real CI gates
 
 Six workstreams closing the gap between "the platform reads GitHub heavily" and "the platform uses GitHub". API 2589 tests / 288 files green, frontend 398 green, both typecheck clean. Open residuals in the roadmap's *GitHub offload* section.
