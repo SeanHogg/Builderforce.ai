@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { Select } from '@/components/Select';
 import {
   listEvermindModels,
   exportPublishedModel,
@@ -83,7 +84,7 @@ export function ModelExportPanel() {
         {noModels ? (
           <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>{t('noModels')}</div>
         ) : (
-          <select
+          <Select
             id="evermind-export-model"
             value={selectedSlug}
             onChange={(e) => setSelectedSlug(e.target.value)}
@@ -99,7 +100,7 @@ export function ModelExportPanel() {
                 {m.name}
               </option>
             ))}
-          </select>
+          </Select>
         )}
       </div>
 
@@ -112,7 +113,7 @@ export function ModelExportPanel() {
           >
             {t('formatLabel')}
           </label>
-          <select
+          <Select
             id="evermind-export-format"
             value={format}
             onChange={(e) => setFormat(e.target.value as EvermindExportFormat)}
@@ -126,7 +127,7 @@ export function ModelExportPanel() {
                 {t(`format.${f.key}.label`)} ({f.ext})
               </option>
             ))}
-          </select>
+          </Select>
           <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 4 }}>
             {t(`format.${format}.description`)}
           </div>

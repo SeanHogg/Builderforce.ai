@@ -2405,7 +2405,23 @@
     },
     "performance": {
       "activityTitle": "Activité de contribution",
-      "activitySub": "Activité de toute l'équipe : humains via git/PR, agents via télémétrie."
+      "activitySub": "Activité de toute l'équipe : humains via git/PR, agents via télémétrie.",
+      "title": "Performance",
+      "scorecards": "Fiches des membres",
+      "scorecardsSub": "· {days} derniers jours · cliquez sur une ligne pour modifier capacité/disponibilité",
+      "loading": "Chargement…",
+      "noActivity": "Aucune activité sur cette période.",
+      "colMember": "Membre",
+      "colAssigned": "Assignées",
+      "colCompleted": "Terminées",
+      "colRedo": "Reprises",
+      "colReopen": "Réouvertures",
+      "colCycle": "Cycle",
+      "colPickup": "Prise en charge",
+      "colIdleDone": "Inactif→terminé",
+      "colHygiene": "Hygiène",
+      "colEngage": "Engagement",
+      "colEffective": "Efficacité"
     },
     "consolidate": {
       "title": "Regrouper les personnes",
@@ -3099,7 +3115,8 @@
       "hours": "Heures",
       "labor": "Main-d’œuvre",
       "aiSpend": "Dépense IA",
-      "qualified": "Qualifié"
+      "qualified": "Qualifié",
+      "optionalPh": "(facultatif)"
     },
     "soc": {
       "coverage": "Couverture des contrôles",
@@ -6170,6 +6187,13 @@
       "caption": "Répartition du travail ouvert selon les niveaux de priorité.",
       "empty": "Aucun ticket ouvert à afficher pour l’instant."
     },
+    "subnav": {
+      "label": "Sections du manager",
+      "overview": "Vue d’ensemble",
+      "backlog": "Backlog",
+      "activity": "Activité",
+      "policy": "Politique"
+    },
     "insightNudge": "{unscored} tickets ont encore besoin d’une valeur métier et {unranked} ne sont pas classés — lancez le manager pour les mettre à jour.",
     "policy": {
       "title": "Comment ce backlog est géré",
@@ -6235,7 +6259,8 @@
       "dispatch": "Envoyé",
       "sync_pr": "PR actualisée",
       "merge_pr": "PR fusionnée",
-      "flag": "Signalé"
+      "flag": "Signalé",
+      "coordinate": "Rôle affecté"
     },
     "runTasks": {
       "title": "Tâches du manager",
@@ -8044,6 +8069,18 @@
       },
       "invite": {
         "label": "Inviter l'équipe"
+      },
+      "talentProfile": {
+        "label": "Votre profil"
+      },
+      "resume": {
+        "label": "CV"
+      },
+      "publish": {
+        "label": "Publier"
+      },
+      "findWork": {
+        "label": "Trouver une mission"
       }
     },
     "ticketing": {
@@ -8112,6 +8149,25 @@
       "monetize": "Gagner de l’argent avec des agents IA",
       "automate": "Automatiser mon flux de développement",
       "learn": "Apprendre et explorer"
+    },
+    "welcomeHired": "Bienvenue sur Builderforce",
+    "subtitleHired": "Rendez-vous recrutable en quelques étapes.",
+    "talentProfile": {
+      "intro": "Les employeurs recherchent sur ces champs : plus vous en remplissez, plus vous apparaissez."
+    },
+    "resumeStep": {
+      "intro": "Importez un CV et nous remplirons votre titre, votre résumé et vos compétences.",
+      "skipHint": "Facultatif — vous pourrez l'ajouter plus tard depuis votre profil."
+    },
+    "publishStep": {
+      "intro": "La publication vous répertorie sur la place de marché des talents. Vous pouvez vous retirer à tout moment."
+    },
+    "findWorkStep": {
+      "intro": "Vous êtes prêt. Voici où se passe le travail.",
+      "gigs": "Parcourir les missions",
+      "gigsHint": "Des missions ouvertes adaptées à vos compétences et à votre tarif.",
+      "timecard": "Saisir vos heures",
+      "timecardHint": "Envoyez vos relevés d’heures et suivez vos paiements."
     }
   },
   "soc2": {

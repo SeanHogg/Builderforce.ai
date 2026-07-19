@@ -1651,7 +1651,9 @@ export type PrMergePolicy = 'immediate' | 'on_green' | 'queue';
 
 /** The action types the manager records on each run (drives the activity feed). */
 export type ManagerActionType =
-  | 'prioritize' | 'assign' | 'score_value' | 'dispatch' | 'sync_pr' | 'merge_pr' | 'flag';
+  | 'prioritize' | 'assign' | 'score_value' | 'dispatch' | 'sync_pr' | 'merge_pr' | 'flag'
+  /** Staffed a flagged ticket's missing role owner/reviewer (the fix for a flag). */
+  | 'coordinate';
 
 /** Persisted manager configuration for a project (null until first configured). */
 export interface ManagerConfig {

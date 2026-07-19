@@ -4,31 +4,20 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { Select } from '@/components/Select';
 import { TalentProfileView, TalentAvatar } from '@/components/freelance/TalentProfileView';
+import { TALENT_DISCIPLINES, TALENT_AVAILABILITIES } from '@/components/freelance/talentFields';
+import {
+  talentCard as card, talentLabel as label, talentInput as input, talentSoftBtn as softBtn,
+} from '@/components/freelance/formStyles';
 import {
   getMyFreelancerProfile, updateMyFreelancerProfile, uploadMyResume, uploadMyAvatar,
   getMyEmbedToken, checkMySlug, getResumeSuggestions, connectHiredVideo,
   type FreelancerProfile, type SlugCheck,
 } from '@/lib/freelancerApi';
 
-const DISCIPLINES = ['developer', 'dba', 'designer', 'devops', 'qa', 'pm', 'data', 'security', 'other'] as const;
-const AVAILABILITIES = ['open', 'limited', 'unavailable'] as const;
-
-const card: React.CSSProperties = {
-  background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 20,
-};
-const label: React.CSSProperties = {
-  display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6,
-};
-const input: React.CSSProperties = {
-  width: '100%', background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-  border: '1px solid var(--border-subtle)', borderRadius: 8, padding: '9px 12px', fontSize: 14, outline: 'none',
-};
-const softBtn: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer',
-  padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)',
-  color: 'var(--text-primary)', fontSize: 13, fontWeight: 600,
-};
+const DISCIPLINES = TALENT_DISCIPLINES;
+const AVAILABILITIES = TALENT_AVAILABILITIES;
 
 export default function FreelancerProfilePage() {
   const t = useTranslations('freelancer');
@@ -258,16 +247,16 @@ export default function FreelancerProfilePage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
               <label style={label}>{t('profile.discipline')}</label>
-              <select style={input} value={profile.discipline ?? ''} onChange={(e) => set({ discipline: e.target.value })}>
+              <Select style={input} value={profile.discipline ?? ''} onChange={(e) => set({ discipline: e.target.value })}>
                 <option value="">—</option>
                 {DISCIPLINES.map((d) => <option key={d} value={d}>{t(`discipline.${d}`)}</option>)}
-              </select>
+              </Select>
             </div>
             <div>
               <label style={label}>{t('profile.availability')}</label>
-              <select style={input} value={profile.availability} onChange={(e) => set({ availability: e.target.value as FreelancerProfile['availability'] })}>
+              <Select style={input} value={profile.availability} onChange={(e) => set({ availability: e.target.value as FreelancerProfile['availability'] })}>
                 {AVAILABILITIES.map((a) => <option key={a} value={a}>{t(`availability.${a}`)}</option>)}
-              </select>
+              </Select>
             </div>
           </div>
           <div>

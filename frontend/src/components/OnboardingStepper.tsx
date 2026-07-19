@@ -12,6 +12,13 @@ import { KanbanRosterCard } from './kanban/KanbanRosterCard';
 import { WizardTicketingStep } from './onboarding/WizardTicketingStep';
 import { WizardReposStep } from './onboarding/WizardReposStep';
 import { WizardAuditStep } from './onboarding/WizardAuditStep';
+import {
+  WizardTalentProfileStep,
+  WizardResumeStep,
+  WizardPublishStep,
+  WizardFindWorkStep,
+} from './onboarding/HiredWizardSteps';
+import { useIsFreelancer } from '@/lib/rbac';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -19,10 +26,11 @@ import { WizardAuditStep } from './onboarding/WizardAuditStep';
 
 interface OnboardingStepperProps {
   webToken: string;
-  tenantToken: string | null;
-  tenant: Tenant | null;
+  tenantToken?: string | null;
+  tenant?: Tenant | null;
   existingProjectsCount?: number;
-  onWorkspaceCreated: (tenant: Tenant) => Promise<void>;
+  /** Builder track only — a hired account never creates a workspace. */
+  onWorkspaceCreated?: (tenant: Tenant) => Promise<void>;
   onComplete: () => void;
   onDismiss: () => void;
 }
@@ -37,11 +45,21 @@ const INTENT_OPTIONS: { value: string; emoji: string }[] = [
   { value: 'learn', emoji: '📚' },
 ];
 
-type StepId = 'workspace' | 'project' | 'ticketing' | 'repos' | 'audit' | 'roster' | 'install' | 'invite';
+type BuilderStepId = 'workspace' | 'project' | 'ticketing' | 'repos' | 'audit' | 'roster' | 'install' | 'invite';
+type HiredStepId = 'talentProfile' | 'resume' | 'publish' | 'findWork';
+type StepId = BuilderStepId | HiredStepId;
 
-// Step order. Labels/descriptions are resolved through the `onboarding.steps.*`
-// i18n namespace at render time (single source; all 5 locales).
-const STEP_IDS: StepId[] = ['workspace', 'project', 'ticketing', 'repos', 'audit', 'roster', 'install', 'invite'];
+// Step order per ACCOUNT TYPE. A builder ('standard') sets up a workspace, a
+// project and an agent roster; a hired account ('freelancer') has none of those
+// — its first five minutes are about becoming hireable. Labels are resolved
+// through the `onboarding.steps.*` i18n namespace (single source; all 5 locales).
+const BUILDER_STEP_IDS: StepId[] = ['workspace', 'project', 'ticketing', 'repos', 'audit', 'roster', 'install', 'invite'];
+const HIRED_STEP_IDS: StepId[] = ['talentProfile', 'resume', 'publish', 'findWork'];
+
+/** The ONE place the onboarding track is chosen, so no caller re-derives it. */
+export function stepsForAccountType(isFreelancer: boolean): StepId[] {
+  return isFreelancer ? HIRED_STEP_IDS : BUILDER_STEP_IDS;
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -49,8 +67,8 @@ const STEP_IDS: StepId[] = ['workspace', 'project', 'ticketing', 'repos', 'audit
 
 export function OnboardingStepper({
   webToken,
-  tenantToken,
-  tenant,
+  tenantToken = null,
+  tenant = null,
   existingProjectsCount = 0,
   onWorkspaceCreated,
   onComplete,
@@ -60,14 +78,18 @@ export function OnboardingStepper({
   // Both stepper mounts sit under ProjectScopeProvider (hoisted to AppBrainShell);
   // the optional hook is defensive so the stepper stays usable outside that shell.
   const projectScope = useOptionalProjectScope();
+  // The account type decides the whole track — a hired account never sees the
+  // workspace/project/repo steps, so none of the workspace gating applies to it.
+  const isHired = useIsFreelancer();
+  const stepIds = stepsForAccountType(isHired);
   const workspaceAlreadyExists = !!tenant;
   const projectAlreadyExists = workspaceAlreadyExists && existingProjectsCount > 0;
 
   const initialCompleted = new Set<number>();
-  if (workspaceAlreadyExists) initialCompleted.add(0);
-  if (projectAlreadyExists) initialCompleted.add(1);
+  if (!isHired && workspaceAlreadyExists) initialCompleted.add(0);
+  if (!isHired && projectAlreadyExists) initialCompleted.add(1);
 
-  const initialActiveStep = projectAlreadyExists ? 2 : workspaceAlreadyExists ? 1 : 0;
+  const initialActiveStep = isHired ? 0 : projectAlreadyExists ? 2 : workspaceAlreadyExists ? 1 : 0;
 
   const [activeStep, setActiveStep] = useState<number>(initialActiveStep);
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(initialCompleted);
@@ -93,7 +115,9 @@ export function OnboardingStepper({
     setCompletedSteps((prev) => new Set([...prev, stepIndex]));
   };
 
-  const canClose = completedSteps.has(0) || workspaceAlreadyExists;
+  // A builder must create a workspace before escaping the wizard; a hired
+  // account has nothing mandatory, so it can close at any point.
+  const canClose = isHired || completedSteps.has(0) || workspaceAlreadyExists;
 
   // ── Step 1: Create Workspace ─────────────────────────────────────────────
 
@@ -105,7 +129,7 @@ export function OnboardingStepper({
       setWorkspaceLoading(true);
       try {
         const newTenant = await createTenant(webToken, workspaceName.trim());
-        await onWorkspaceCreated(newTenant);
+        await onWorkspaceCreated?.(newTenant);
         setCurrentTenant(newTenant);
         markComplete(0);
         setActiveStep(1);
@@ -153,7 +177,7 @@ export function OnboardingStepper({
 
   const handleNext = () => {
     markComplete(activeStep);
-    if (activeStep < STEP_IDS.length - 1) {
+    if (activeStep < stepIds.length - 1) {
       setActiveStep((s) => s + 1);
     }
   };
@@ -179,7 +203,7 @@ export function OnboardingStepper({
 
   // ── Render ───────────────────────────────────────────────────────────────
 
-  const currentStepId = STEP_IDS[activeStep];
+  const currentStepId = stepIds[activeStep];
 
   return (
     <div
@@ -218,10 +242,10 @@ export function OnboardingStepper({
         >
           <div>
             <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>
-              {t('welcome')}
+              {isHired ? t('welcomeHired') : t('welcome')}
             </h2>
             <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
-              {t('subtitle')}
+              {isHired ? t('subtitleHired') : t('subtitle')}
             </p>
           </div>
           <button
@@ -256,11 +280,11 @@ export function OnboardingStepper({
             overflowX: 'auto',
           }}
         >
-          {STEP_IDS.map((stepId, i) => {
+          {stepIds.map((stepId, i) => {
             const done = completedSteps.has(i);
             const active = i === activeStep;
             return (
-              <div key={stepId} style={{ display: 'flex', alignItems: 'center', flex: i < STEP_IDS.length - 1 ? 1 : undefined }}>
+              <div key={stepId} style={{ display: 'flex', alignItems: 'center', flex: i < stepIds.length - 1 ? 1 : undefined }}>
                 <button
                   type="button"
                   onClick={() => done && setActiveStep(i)}
@@ -315,7 +339,7 @@ export function OnboardingStepper({
                     {t(`steps.${stepId}.label`)}
                   </span>
                 </button>
-                {i < STEP_IDS.length - 1 && (
+                {i < stepIds.length - 1 && (
                   <div
                     style={{
                       flex: 1,
@@ -605,6 +629,12 @@ export function OnboardingStepper({
           {currentStepId === 'invite' && currentTenant && tenantToken && (
             <InviteTeamMembers tenantId={currentTenant.id} tenantToken={tenantToken} />
           )}
+
+          {/* ── Hired track: profile → résumé → publish → find work ── */}
+          {currentStepId === 'talentProfile' && <WizardTalentProfileStep />}
+          {currentStepId === 'resume' && <WizardResumeStep />}
+          {currentStepId === 'publish' && <WizardPublishStep />}
+          {currentStepId === 'findWork' && <WizardFindWorkStep />}
         </div>
 
         {/* Footer navigation */}
@@ -636,11 +666,12 @@ export function OnboardingStepper({
           </button>
 
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            {t('stepOf', { current: activeStep + 1, total: STEP_IDS.length })}
+            {t('stepOf', { current: activeStep + 1, total: stepIds.length })}
           </span>
 
-          {activeStep < STEP_IDS.length - 1 ? (
+          {activeStep < stepIds.length - 1 ? (
             (() => {
+              // Only the builder track has mandatory steps (workspace, project).
               const nextDisabled =
                 (currentStepId === 'workspace' && !completedSteps.has(0) && !workspaceAlreadyExists) ||
                 (currentStepId === 'project' && !projectCreated && !completedSteps.has(1));

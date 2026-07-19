@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslations, useFormatter } from 'next-intl';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { Select } from '@/components/Select';
 import { RoleGate } from '@/components/RoleGate';
+import PillTabs, { type PillTab } from '@/components/PillTabs';
 import { usePermission } from '@/lib/rbac';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
 import {
@@ -40,6 +42,12 @@ import {
  * lets a manager designate who runs the backlog and how (auto-score value,
  * auto-assign, auto-prioritize, PR-merge policy), and triggers a run on demand.
  *
+ * The surface is split into sub-views by the shared <PillTabs> bar (the same
+ * secondary nav Settings / Security use), driven by `?sub=` so each view is
+ * deep-linkable: Overview ('') · Backlog · Activity · Policy. The header and the
+ * data/polling effects live above the switch so a run keeps streaming whichever
+ * sub-view is open.
+ *
  * Access to EDIT the policy / trigger a run is gated on `manager.manage`
  * (manager role); the server is the real authority. Everything else is readable
  * by anyone in the workspace. Fully localized + themed (light/dark) + responsive.
@@ -61,6 +69,7 @@ const ACTION_ICON: Record<ManagerActionType, string> = {
   sync_pr: '🔄',
   merge_pr: '🔀',
   flag: '🚩',
+  coordinate: '🧭',
 };
 
 // ── Shared inline styles (all colours from theme vars → light + dark safe) ──
@@ -89,6 +98,9 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
   const t = useTranslations('manager');
   const format = useFormatter();
   const { allowed: canManage } = usePermission('manager.manage');
+  // Sub-view is URL state (`?sub=`), not local state, so every view is
+  // deep-linkable and the back button works — same convention as /settings.
+  const sub = useSearchParams().get('sub') ?? '';
 
   const [data, setData] = useState<ManagerOverview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -284,6 +296,19 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
     value: backlog.filter((b) => b.priority === p).length,
   })).filter((d) => d.value > 0);
 
+  // Sub-views. Policy is only offered to a manager (the panels inside it are
+  // `manager.manage`-gated anyway, and the server is the real authority — a
+  // deep link to ?sub=policy still renders RoleGate's block notice).
+  const href = (id: string) => (id ? `/projects?tab=manager&sub=${id}` : '/projects?tab=manager');
+  const subTabs: PillTab[] = [
+    { id: '', label: t('subnav.overview'), icon: '📊', href: href('') },
+    { id: 'backlog', label: t('subnav.backlog'), icon: '📋', href: href('backlog') },
+    { id: 'activity', label: t('subnav.activity'), icon: '📡', href: href('activity') },
+    ...(canManage ? [{ id: 'policy', label: t('subnav.policy'), icon: '⚙️', href: href('policy') }] : []),
+  ];
+  // Unknown/stale `?sub=` values fall back to Overview rather than a blank page.
+  const activeSub = subTabs.some((s) => s.id === sub) ? sub : '';
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* ── Header ── */}
@@ -341,6 +366,15 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
         </div>
       )}
 
+      {/* ── Secondary nav (shared pill bar, same as /settings) ── */}
+      <PillTabs tabs={subTabs} activeId={activeSub} ariaLabel={t('subnav.label')} style={{ marginBottom: 0 }} />
+
+      {/* The run pulse animation is declared once at the root so it survives a
+          sub-view switch (it is consumed by the Activity view's live badge). */}
+      <style>{'@keyframes bf-pulse{0%,100%{opacity:.35}50%{opacity:1}}'}</style>
+
+      {activeSub === '' && (
+      <>
       {/* ── Stats tiles + priority chart ── */}
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
         <StatTile label={t('stat.total')} value={stats.total} />
@@ -364,7 +398,11 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           </div>
         )}
       </div>
+      </>
+      )}
 
+      {activeSub === 'policy' && (
+      <>
       {/* ── Policy panel ── */}
       <RoleGate capability="manager.manage" variant="block">
         <div style={panelStyle}>
@@ -624,8 +662,11 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           </div>
         </div>
       </RoleGate>
+      </>
+      )}
 
-      {/* ── Ranked backlog ── */}
+      {activeSub === 'backlog' && (
+      /* ── Ranked backlog ── */
       <div>
         <div style={{ ...sectionTitleStyle, marginBottom: 8 }}>{t('backlog.title')}</div>
         {backlog.length === 0 ? (
@@ -660,7 +701,10 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           </div>
         )}
       </div>
+      )}
 
+      {activeSub === 'activity' && (
+      <>
       {/* ── Manager tasks (the manager's own backlog-management passes) ── */}
       <div>
         <div style={{ ...sectionTitleStyle, marginBottom: 4 }}>{t('runTasks.title')}</div>
@@ -707,7 +751,6 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
             </span>
           )}
         </div>
-        <style>{'@keyframes bf-pulse{0%,100%{opacity:.35}50%{opacity:1}}'}</style>
         {actions.length === 0 ? (
           <div style={{ ...panelStyle, ...mutedStyle }}>{t('activity.empty')}</div>
         ) : (
@@ -718,6 +761,8 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

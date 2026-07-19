@@ -2405,7 +2405,23 @@
     },
     "performance": {
       "activityTitle": "贡献活动",
-      "activitySub": "全团队活动——人类通过 git/PR，智能体通过遥测数据。"
+      "activitySub": "全团队活动——人类通过 git/PR，智能体通过遥测数据。",
+      "title": "绩效",
+      "scorecards": "成员记分卡",
+      "scorecardsSub": "· 最近 {days} 天 · 点击行可编辑能力/可用性",
+      "loading": "加载中…",
+      "noActivity": "此时间段内没有活动。",
+      "colMember": "成员",
+      "colAssigned": "已分配",
+      "colCompleted": "已完成",
+      "colRedo": "返工",
+      "colReopen": "重新打开",
+      "colCycle": "周期时间",
+      "colPickup": "领取耗时",
+      "colIdleDone": "完成后闲置",
+      "colHygiene": "看板规范",
+      "colEngage": "参与度",
+      "colEffective": "效能"
     },
     "consolidate": {
       "title": "合并人员",
@@ -3099,7 +3115,8 @@
       "hours": "工时",
       "labor": "人工",
       "aiSpend": "AI 支出",
-      "qualified": "合格"
+      "qualified": "合格",
+      "optionalPh": "（可选）"
     },
     "soc": {
       "coverage": "控制覆盖率",
@@ -6170,6 +6187,13 @@
       "caption": "开放工作在各优先级上的分布。",
       "empty": "暂无开放工单可展示。"
     },
+    "subnav": {
+      "label": "经理板块",
+      "overview": "概览",
+      "backlog": "待办列表",
+      "activity": "活动",
+      "policy": "策略"
+    },
     "insightNudge": "还有 {unscored} 个工单待评估业务价值，{unranked} 个尚未排序——运行经理以补齐。",
     "policy": {
       "title": "如何管理此待办列表",
@@ -6235,7 +6259,8 @@
       "dispatch": "已派发",
       "sync_pr": "PR 已更新",
       "merge_pr": "已合并 PR",
-      "flag": "已标记"
+      "flag": "已标记",
+      "coordinate": "已配置角色"
     },
     "runTasks": {
       "title": "经理任务",
@@ -8044,6 +8069,18 @@
       },
       "invite": {
         "label": "邀请团队"
+      },
+      "talentProfile": {
+        "label": "个人资料"
+      },
+      "resume": {
+        "label": "简历"
+      },
+      "publish": {
+        "label": "发布"
+      },
+      "findWork": {
+        "label": "寻找工作"
       }
     },
     "ticketing": {
@@ -8112,6 +8149,25 @@
       "monetize": "用 AI 代理赚钱",
       "automate": "自动化我的开发流程",
       "learn": "学习和探索"
+    },
+    "welcomeHired": "欢迎来到 Builderforce",
+    "subtitleHired": "只需几步，即可开始接单。",
+    "talentProfile": {
+      "intro": "雇主会按这些字段搜索——填写得越完整，你出现的机会越多。"
+    },
+    "resumeStep": {
+      "intro": "上传简历，我们可以为你自动填写标题、简介和技能。",
+      "skipHint": "可选——你也可以稍后在个人资料中添加。"
+    },
+    "publishStep": {
+      "intro": "发布后，你将出现在人才市场中。你可以随时取消发布。"
+    },
+    "findWorkStep": {
+      "intro": "设置完成。以下是接单的地方。",
+      "gigs": "浏览职位",
+      "gigsHint": "与你的技能和费率匹配的空缺职位。",
+      "timecard": "记录工时",
+      "timecardHint": "提交工时单并跟踪已收款项。"
     }
   },
   "soc2": {

@@ -3,7 +3,7 @@ import type { Context } from 'hono';
 import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { TenantService } from '../../application/tenant/TenantService';
 import { TenantRole, TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
-import type { Env, HonoEnv } from '../../env';
+import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { invalidateJwtMembershipCache } from '../../infrastructure/auth/keyResolutionCache';

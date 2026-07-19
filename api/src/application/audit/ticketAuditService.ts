@@ -29,6 +29,17 @@ import { findCanonicalBoard } from '../swimlane/canonicalBoard';
 
 const flaggedKey = (tenantId: number) => `audit:flagged:${tenantId}`;
 
+/** Stable identity of an audit verdict — the status plus the exact set of unmet
+ *  checks. The manager re-audits every pass, so a 'flag' action is only worth
+ *  journalling when this signature CHANGES; re-recording an unchanged verdict every
+ *  pass floods the manager feed with duplicates of the same gap. */
+function verdictSignature(status: string, missing: UnmetRequirement[]): string {
+  return [
+    status,
+    ...missing.map((m) => `${m.laneKey}|${m.kind}|${m.ref}|${m.responsibility ?? ''}|${m.reason}`).sort(),
+  ].join('\n');
+}
+
 export interface TicketAuditResult extends CoverageResult {
   taskId: number;
   boardId: string | null;
@@ -144,6 +155,14 @@ export class TicketAuditService {
     const signals = await this.gatherSignals(taskId);
     const coverage = computeCoverage(reqs, signals);
 
+    // Prior verdict, read BEFORE the upsert overwrites it — the flag journal below
+    // is change-driven, not pass-driven.
+    const [previous] = await this.db
+      .select({ status: ticketAudits.status, missing: ticketAudits.missing })
+      .from(ticketAudits)
+      .where(and(eq(ticketAudits.tenantId, tenantId), eq(ticketAudits.taskId, taskId)))
+      .limit(1);
+
     const now = new Date();
     await this.db
       .insert(ticketAudits)
@@ -175,7 +194,14 @@ export class TicketAuditService {
       .set({ auditStatus: coverage.status, auditFlagCount: coverage.missing.length })
       .where(eq(tasks.id, taskId));
 
-    if (coverage.status === 'flagged') {
+    // Journal the flag only when the verdict actually changed (newly flagged, or the
+    // set of unmet checks moved). An unchanged verdict is already visible on the
+    // ticket + the flagged list — re-recording it every pass buries the feed.
+    const previousSignature = previous
+      ? verdictSignature(previous.status, safeParseMissing(previous.missing))
+      : null;
+    const changed = verdictSignature(coverage.status, coverage.missing) !== previousSignature;
+    if (coverage.status === 'flagged' && changed) {
       await recordManagerAction(this.db, {
         tenantId,
         projectId: task.projectId,

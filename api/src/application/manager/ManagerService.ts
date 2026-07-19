@@ -55,6 +55,7 @@ import { pollPrCiStatus } from '../repos/pollPrCiStatus';
 import { dispatchTaskFinalize } from '../../presentation/routes/taskRoutes';
 import { maybeAutoRunOnLaneEntry } from '../../presentation/routes/taskRoutes';
 import { TicketAuditService } from '../audit/ticketAuditService';
+import { coordinateTicket } from './coordinateTicket';
 import { recordActivity, cloudAgentActor, SYSTEM_ACTOR } from '../activity/activityLog';
 
 /** Non-terminal statuses whose tickets the manager grooms/ranks/assigns. */
@@ -75,6 +76,8 @@ const MAX_ASSIGNMENTS_PER_RUN = 15;
 const MAX_PR_ACTIONS_PER_RUN = 20;
 const MAX_DISPATCHES_PER_RUN = 12;
 const MAX_AUDITS_PER_RUN = 40;
+/** Coordinator ticks per pass — each can rewind a lane + start a run, so pace them. */
+const MAX_REMEDIATIONS_PER_RUN = 10;
 
 export interface ManagerRunSummary {
   projectId: number;
@@ -89,6 +92,8 @@ export interface ManagerRunSummary {
   /** Tickets audited for role/diagnostic coverage, and how many were flagged. */
   audited: number;
   flagged: number;
+  /** Flagged tickets the manager actually acted on (Coordinator moved or dispatched). */
+  remediated: number;
 }
 
 // ── config store ────────────────────────────────────────────────────────────
@@ -583,7 +588,7 @@ export async function runManagerForProject(
   const runTaskId = args.runTaskId ?? null;
   const summary: ManagerRunSummary = {
     projectId, skipped: false, scored: 0, ranked: 0, assigned: 0, prsConducted: 0, prsMerged: 0, dispatched: 0,
-    audited: 0, flagged: 0,
+    audited: 0, flagged: 0, remediated: 0,
   };
 
   const policy = await getEffectiveManagerPolicy(db, tenantId, projectId);
@@ -741,16 +746,42 @@ export async function runManagerForProject(
   }
   }
 
-  // 6. AUDIT — check each managed ticket for role/diagnostic coverage and flag any
-  // that skipped a required role or diagnostic (pillar 1). Recomputes the ticket
-  // audit ledger; flagged tickets already recorded a 'flag' manager action inside.
+  // 6. AUDIT + REMEDIATE — check each managed ticket for role/diagnostic coverage
+  // (pillar 1), then CLOSE what it finds. A flagged ticket is one missing a required
+  // role owner or reviewer, so the manager drives the Coordinator over it: the tick
+  // rewinds to the earliest unmet stage, resolves the role-capable participant and
+  // dispatches them. Detecting the gap and only journalling it strands the ticket —
+  // the flag feed was a dead end, and staffing the gap is exactly the manager's job.
   {
     const auditService = new TicketAuditService(db);
     for (const t of managed.slice(0, MAX_AUDITS_PER_RUN)) {
       try {
         const result = await auditService.computeAudit(env, tenantId, t.id);
         summary.audited += 1;
-        if (result.status === 'flagged') summary.flagged += 1;
+        if (result.status !== 'flagged') continue;
+        summary.flagged += 1;
+        if (!policy.autoAssign || summary.remediated >= MAX_REMEDIATIONS_PER_RUN) continue;
+
+        const outcome = await coordinateTicket(env, db, runtimeService, { tenantId, taskId: t.id });
+        // Only journal a coordination that CHANGED something (rewound the lane or
+        // started the missing role's run). A no-op tick on an already-staffed ticket
+        // must stay silent, or the feed refills with noise every pass.
+        const moved = outcome.ok && (outcome.dispatched || outcome.status !== t.status);
+        if (!moved) continue;
+        summary.remediated += 1;
+        const roles = [...new Set(result.missing.map((m) => m.ref))];
+        await recordManagerAction(db, {
+          tenantId, projectId, taskId: t.id, runTaskId, actionType: 'coordinate',
+          summary:
+            `Staffing ${result.missing.length} unmet ${result.missing.length === 1 ? 'check' : 'checks'} ` +
+            `on "${t.title}" — ${roles.join(', ')}${outcome.status !== t.status ? ` (moved to ${outcome.status})` : ''}` +
+            `${outcome.dispatched ? ' · started' : ''}.`,
+          detail: {
+            roles, missing: result.missing.length, fromStatus: t.status,
+            toStatus: outcome.status, dispatched: outcome.dispatched,
+            requiredOutstanding: outcome.requiredOutstanding,
+          },
+        });
       } catch { /* skip this ticket */ }
     }
   }
@@ -787,11 +818,12 @@ export async function runManagerForProject(
         `Managed the backlog — scored ${summary.scored}, ranked ${summary.ranked}, ` +
         `assigned ${summary.assigned}, dispatched ${summary.dispatched}, ` +
         `PRs ${summary.prsConducted + summary.prsMerged}` +
-        `${summary.flagged ? `, flagged ${summary.flagged}` : ''}.`,
+        `${summary.flagged ? `, flagged ${summary.flagged}` : ''}` +
+        `${summary.remediated ? `, staffed ${summary.remediated}` : ''}.`,
       metadata: {
         scored: summary.scored, ranked: summary.ranked, assigned: summary.assigned,
         dispatched: summary.dispatched, prsConducted: summary.prsConducted,
-        prsMerged: summary.prsMerged, flagged: summary.flagged,
+        prsMerged: summary.prsMerged, flagged: summary.flagged, remediated: summary.remediated,
         trigger: submittedBy, managerType: policy.managerType, coachingApplied: coachingDirectives.length,
       },
     });

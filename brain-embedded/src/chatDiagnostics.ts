@@ -30,6 +30,78 @@ export interface ChatDiagnosticsEvermind {
   lastLearnedAt?: string | null;
 }
 
+/** One metered resource, mirroring the `/api/consumption` meter snapshot shape. */
+export interface ChatDiagnosticsMeter {
+  /** 'ai_tokens' | 'ingestion' | 'error_events' | 'outbound_fetches' | 'cloud_runs' */
+  key: string;
+  /** 'tokens' | 'bytes' | 'events' | 'fetches' | 'runs' */
+  unit: string;
+  used: number;
+  /** Monthly allowance; -1 = unlimited. */
+  limit: number;
+  unlimited: boolean;
+  /** Remaining this month; -1 when unlimited. */
+  remaining: number;
+  /** 0–100; 0 when unlimited. */
+  percentUsed: number;
+}
+
+/**
+ * WHO the user is to the platform and WHAT they are allowed to spend — the half of
+ * "why is this chat behaving like that?" that identity + Evermind state can't answer.
+ *
+ * The motivating case is a brand-new signup: free plan, no card, a small token
+ * allowance and no premium/frontier entitlement. From the outside that looks
+ * indistinguishable from a broken install ("it picked a weak model", "it stopped
+ * answering") — so the report states the plan, the billing status, the month-to-date
+ * meters, and the model entitlement explicitly, and the Signals section names the
+ * consequence rather than leaving the reader to infer it.
+ */
+export interface ChatDiagnosticsAccount {
+  /** Effective plan key ('free' | 'pro' | …) as the API resolves it. */
+  plan?: string | null;
+  /** Billing status ('none' = no payment method on file, 'trialing', 'active', …). */
+  billingStatus?: string | null;
+  /** Current metering period — when the allowances reset. */
+  periodStart?: string | null;
+  resetsAt?: string | null;
+  /** Month-to-date usage vs allowance for every metered resource. */
+  meters?: ChatDiagnosticsMeter[];
+  /** The model in force for this chat (absent ⇒ the gateway routes per turn). */
+  model?: string | null;
+  /** Which purse funds `model`: 'byo:<vendor>' | 'plan' | 'premium' | 'auto'. */
+  modelFunding?: string | null;
+  /** Whether the plan entitles the tenant to premium/frontier models. */
+  canUsePremiumModels?: boolean;
+  /** How many models the plan pool currently offers. */
+  planModelCount?: number;
+  /** Connected bring-your-own provider keys (empty ⇒ every turn is plan-funded). */
+  byoProviders?: string[];
+  /** Client build + gateway it is talking to, so a report pins the exact surface. */
+  extensionVersion?: string | null;
+  baseUrl?: string | null;
+}
+
+/**
+ * WHICH purse funds a model, as a machine key: `auto` (no pin — the gateway routes per
+ * turn), `byo:<vendor>` (the tenant's own connected account), `plan` (in the plan pool,
+ * included), or `premium` (metered at cost + per-request fee).
+ *
+ * ONE decision, two consumers: the chat header renders a localized sentence from it and
+ * the diagnostics report records it. Kept here (not in a UI file) so the sentence a user
+ * READS and the key a support report SHOWS can never disagree.
+ */
+export function classifyModelFunding(
+  model: string | null | undefined,
+  surface: { data?: Array<{ id?: string }>; byo?: { models?: Array<{ id?: string; vendor?: string }> } } | null | undefined,
+): string {
+  if (!model) return 'auto';
+  const byo = (surface?.byo?.models ?? []).find((m) => m.id === model);
+  if (byo?.vendor) return `byo:${byo.vendor}`;
+  if ((surface?.data ?? []).some((m) => m.id === model)) return 'plan';
+  return 'premium';
+}
+
 /** Everything the diagnostics block needs — already gathered by the host (pure in). */
 export interface ChatDiagnosticsData {
   surface?: string;
@@ -50,11 +122,47 @@ export interface ChatDiagnosticsData {
   lastLearn?: { learned: boolean; version: number; reason?: string | null } | null;
   agents?: Array<{ agentRef: string; role: string }>;
   tickets?: Array<{ kind: string; ref: string; label?: string; linkType?: string; status?: string }>;
+  /** Plan, quota and model entitlement for the signed-in tenant (see the interface). */
+  account?: ChatDiagnosticsAccount | null;
 }
 
 function fmtProject(id: number | null | undefined, name?: string | null): string {
   if (id == null) return 'none';
   return name ? `${name} (#${id})` : `#${id}`;
+}
+
+/** Human label per meter key — unknown keys fall back to the raw key. */
+const METER_LABEL: Record<string, string> = {
+  ai_tokens: 'AI tokens',
+  ingestion: 'Data ingested',
+  error_events: 'Error events',
+  outbound_fetches: 'Web fetches',
+  cloud_runs: 'Cloud runs',
+};
+
+/** Render a meter amount in its own unit (bytes get scaled; everything else counts). */
+function fmtMeterValue(value: number, unit: string): string {
+  if (value < 0) return '∞';
+  if (unit !== 'bytes') return value.toLocaleString('en-US');
+  if (value < 1024) return `${value} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let v = value / 1024;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  return `${v >= 10 ? Math.round(v) : Math.round(v * 10) / 10} ${units[i]}`;
+}
+
+/** "12,345 / 250,000 tokens (5%) · 237,655 left" — or "… (unlimited)". */
+function fmtMeter(m: ChatDiagnosticsMeter): string {
+  const label = METER_LABEL[m.key] ?? m.key;
+  if (m.unlimited) return `${label}: ${fmtMeterValue(m.used, m.unit)} used (unlimited)`;
+  return `${label}: ${fmtMeterValue(m.used, m.unit)} / ${fmtMeterValue(m.limit, m.unit)}`
+    + ` (${m.percentUsed}%) · ${fmtMeterValue(m.remaining, m.unit)} left`;
+}
+
+/** The token meter is the one that actually stops a chat mid-turn (gateway 429). */
+function tokenMeter(a: ChatDiagnosticsAccount | null | undefined): ChatDiagnosticsMeter | undefined {
+  return (a?.meters ?? []).find((m) => m.key === 'ai_tokens');
 }
 
 /**
@@ -94,6 +202,45 @@ function diagnosticsSignals(d: ChatDiagnosticsData): string[] {
   if ((d.agents?.length ?? 0) === 0) {
     out.push('ℹ️ No agents are invited into this chat (chats.list_agents is empty), so dispatched agents post nothing back here.');
   }
+
+  // Account signals — the "it's not broken, you're on the free tier" class of cause.
+  // A brand-new signup hits all of these at once, and every one of them presents as a
+  // capability bug (weak model, refused request, turn that stops) unless it is named.
+  const acct = d.account;
+  const tokens = tokenMeter(acct);
+  if (acct) {
+    const free = acct.plan === 'free';
+    const noCard = acct.billingStatus === 'none' || acct.billingStatus == null;
+    if (free && noCard) {
+      out.push(
+        'ℹ️ Free plan with NO payment method on file. Expect the smaller monthly token allowance, no premium/frontier models, and turns funded by the shared free pool — none of this is a fault. Adding a card (or connecting your own provider account) lifts all three.',
+      );
+    } else if (free) {
+      out.push('ℹ️ Free plan — premium/frontier models are not entitled and the monthly token allowance is the free tier\'s.');
+    }
+    if (acct.billingStatus === 'past_due') {
+      out.push('⚠️ Billing status is past_due — plan entitlements may be suspended until payment succeeds, which reads as sudden model/quota downgrade.');
+    }
+    if (tokens && !tokens.unlimited) {
+      if (tokens.remaining <= 0) {
+        out.push(
+          `⚠️ AI token allowance is EXHAUSTED (${tokens.used.toLocaleString('en-US')} / ${tokens.limit.toLocaleString('en-US')} this period). The gateway returns 429 \`plan_token_limit_exceeded\`, so turns fail or stop mid-answer until ${acct.resetsAt ?? 'the period resets'}.`,
+        );
+      } else if (tokens.percentUsed >= 80) {
+        out.push(
+          `⚠️ AI token allowance is ${tokens.percentUsed}% used (${tokens.remaining.toLocaleString('en-US')} left, resets ${acct.resetsAt ?? 'at period end'}). Long turns may be cut off by the cap before the model finishes.`,
+        );
+      }
+    }
+    if (acct.modelFunding === 'premium' && acct.canUsePremiumModels === false) {
+      out.push(
+        `⚠️ Model "${acct.model}" is a premium/metered model but this plan is NOT entitled to premium models — the gateway rejects it (402) or falls back to the plan pool, which is why answers look weaker than the picked model implies.`,
+      );
+    }
+    if ((acct.byoProviders?.length ?? 0) === 0 && free) {
+      out.push('ℹ️ No bring-your-own provider accounts connected, so every turn spends the plan allowance above. Connecting your own Claude/OpenAI account makes turns $0 against the plan.');
+    }
+  }
   return out;
 }
 
@@ -111,6 +258,37 @@ export function formatChatDiagnostics(d: ChatDiagnosticsData): string[] {
     lines.push(`- Panel's selected project: #${d.selectedProjectId}`);
   }
   lines.push(`- Tenant: ${d.tenantId != null ? `#${d.tenantId}` : 'unknown'} · User: ${d.userId ?? 'unknown'}`);
+
+  // Account: plan, billing, quota and model entitlement. Rendered BEFORE the Evermind
+  // block because it explains a whole class of "the model is dumb / it stopped
+  // answering" reports that have nothing to do with wiring — a free, card-less tenant
+  // out of tokens looks exactly like a broken install until these numbers are stated.
+  const acct = d.account;
+  if (acct) {
+    lines.push(
+      `- Plan: ${acct.plan ?? 'unknown'}`
+        + ` · billing ${acct.billingStatus ?? 'none'}${acct.billingStatus === 'none' || acct.billingStatus == null ? ' (no payment method on file)' : ''}`
+        + `${acct.canUsePremiumModels != null ? ` · premium models ${acct.canUsePremiumModels ? 'entitled' : 'NOT entitled'}` : ''}`,
+    );
+    lines.push(
+      `- Model: ${acct.model ?? 'auto (gateway routes per turn)'}`
+        + `${acct.modelFunding ? ` · funded by ${acct.modelFunding}` : ''}`
+        + `${acct.planModelCount != null ? ` · ${acct.planModelCount} models in plan pool` : ''}`
+        + ` · BYO accounts: ${acct.byoProviders?.length ? acct.byoProviders.join(', ') : 'none'}`,
+    );
+    const meters = acct.meters ?? [];
+    if (meters.length) {
+      lines.push(`- Usage this period${acct.periodStart ? ` (since ${acct.periodStart}` : ''}${acct.resetsAt ? `${acct.periodStart ? ', ' : ' ('}resets ${acct.resetsAt})` : acct.periodStart ? ')' : ''}:`);
+      for (const m of meters) lines.push(`  - ${fmtMeter(m)}`);
+    } else {
+      lines.push('- Usage this period: not available (consumption snapshot unavailable)');
+    }
+    if (acct.extensionVersion || acct.baseUrl) {
+      lines.push(`- Client: ${acct.extensionVersion ? `v${acct.extensionVersion}` : 'unknown version'}${acct.baseUrl ? ` → ${acct.baseUrl}` : ''}`);
+    }
+  } else {
+    lines.push('- Plan / usage: not gathered (account snapshot unavailable — signed out, or the consumption endpoint failed)');
+  }
 
   const ev = d.evermind;
   if (ev) {

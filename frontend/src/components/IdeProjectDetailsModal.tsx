@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { Select } from '@/components/Select';
 import { useModalityCopy } from '@/lib/useModalityCopy';
 import { listIdeContainers, updateIdeProject } from '@/lib/api';
 import { workflowDefinitions, type WorkflowDefinitionSummary } from '@/lib/builderforceApi';
@@ -153,7 +154,7 @@ export function IdeProjectDetailsModal({
 
           <div>
             <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>{t('parentProject')}</label>
-            <select
+            <Select
               value={containerProjectId ?? ''}
               onChange={(e) => setContainerProjectId(e.target.value ? Number(e.target.value) : null)}
               style={inputStyle}
@@ -162,14 +163,14 @@ export function IdeProjectDetailsModal({
               {containers.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
-            </select>
+            </Select>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>{t('parentProjectHint')}</p>
           </div>
 
           {isEvermind && (
             <div>
               <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>{t('workflowLabel')}</label>
-              <select
+              <Select
                 value={workflowDefinitionId ?? ''}
                 onChange={(e) => { setWorkflowDefinitionId(e.target.value || null); setNotice(null); }}
                 style={inputStyle}
@@ -178,7 +179,7 @@ export function IdeProjectDetailsModal({
                 {workflows.map((w) => (
                   <option key={w.id} value={w.id}>{w.name}{w.executionScope === 'project' ? ` · ${t('customTag')}` : ''}</option>
                 ))}
-              </select>
+              </Select>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>{t('workflowHint')}</p>
               {selectedWorkflow && (
                 <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
