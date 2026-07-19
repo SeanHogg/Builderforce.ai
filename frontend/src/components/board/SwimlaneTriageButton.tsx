@@ -29,6 +29,7 @@ const REASON_TONE: Record<AutoRunReason, 'ok' | 'warn' | 'muted' | 'info'> = {
   human_gate: 'warn',
   capability_mismatch: 'warn',
   run_cap_exhausted: 'warn',
+  cooldown_active: 'info',
   no_agent: 'muted',
   no_board: 'muted',
   no_lane: 'muted',
