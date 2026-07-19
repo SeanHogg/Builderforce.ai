@@ -31,6 +31,7 @@ import {
 } from '../../application/llm/projectEvermind';
 import { mergeCheckpointDiffs } from '../../application/llm/evermindMerge';
 import { buildEvermindTrainingText, resolveEvermindTeacherModel } from '../../application/llm/evermindTeacher';
+import type { EffectiveTeacher, TeacherSkipReason } from '../../application/llm/evermindTeacher';
 import { embedTokens, cosineVec, packVec, unpackVec, EMBED_MAX_TOKENS } from '../../application/llm/evermindEmbed';
 import { meanEvalLoss, type EvalExample } from '../../application/llm/evermindEval';
 import type { Env } from '../../env';
@@ -145,8 +146,23 @@ interface RecentEntry {
   weight: number;
   /** Readable snippet of the task prompt the run addressed (text-path only). */
   prompt?: string;
-  /** Readable snippet of the run/exemplar text that was learned (text-path only). */
+  /** Readable snippet of the run/exemplar text that was learned (text-path only).
+   *  ABSENT when a pinned teacher failed on a teach-a-task: the only text available
+   *  there is the question itself, and recording that would present the question as
+   *  its own answer. `skipReason` carries what to show instead. */
   text?: string;
+  /** True when a frontier teacher shaped what was learned (text-path only). A teach-a-task
+   *  is only meaningful when this is true — it's the frontier answer that got distilled. */
+  distilled?: boolean;
+  /** The frontier model that distilled this entry (present when `distilled`). */
+  teacherModel?: string;
+  /** Why distillation did NOT happen (present when a text entry wasn't distilled).
+   *  Surfaced in the console so a silently-broken teacher is visible, not guessed at. */
+  skipReason?: TeacherSkipReason;
+  /** Operator-facing detail behind `skipReason` (HTTP status, exception message). */
+  skipDetail?: string;
+  /** The teacher model that was pinned but failed (present on a distillation fault). */
+  attemptedTeacherModel?: string;
   /** base64-packed SSM embedding of this memory (text-path only), computed at merge
    *  time from the merged model so recall only has to embed the QUERY. Never returned
    *  to callers — it lives here purely to power {@link ProjectEvermindCoordinatorDO.handleRecall}. */
@@ -500,7 +516,7 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
     const processedIds: number[] = [];
     // Per-entry provenance for the inspection ring, stamped with the merged version
     // once the merge lands (parallel to `diffs`/`weights`).
-    const mergedMeta: Array<{ id: number; kind: 'text' | 'delta'; weight: number; prompt?: string; text?: string; emb?: string }> = [];
+    const mergedMeta: Array<Omit<RecentEntry, 'version' | 'at'>> = [];
     // Real training telemetry accumulated across the adaptations this merge runs, so
     // the Knowledge Map can show what teaching actually did to the neocortex weights.
     let lossSum = 0;
@@ -531,9 +547,9 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
       // Resolve the effective (budget-gated) teacher ONCE per alarm — the token scan
       // is a per-tenant aggregate constant across this batch, so it must not run per
       // entry. null unless a teacher is pinned AND there's trainable text to distil.
-      const effectiveTeacher = (isLM && usable.some((e) => !e.diffB64 && !!e.text))
+      const effectiveTeacher: EffectiveTeacher = (isLM && usable.some((e) => !e.diffB64 && !!e.text))
         ? await resolveEvermindTeacherModel(this.env, this.db, tenantId, head.teacherModel)
-        : null;
+        : { model: null, reason: 'not_pinned' };
       const diffs: ArrayBuffer[] = [];
       const weights: number[] = [];
       let textFits = 0;
@@ -576,15 +592,32 @@ export class ProjectEvermindCoordinatorDO implements DurableObject {
           // (its ideal answer), so that is what "Learned" must show — recording the raw
           // input instead makes a teach-a-task echo the question back as its own answer
           // (e.text === the task the user typed). Undistilled entries fall back to the
-          // raw run text, which is the meaningful signal there.
-          const learnedText = (training.distilled && training.exemplar ? training.exemplar : e.text).slice(0, RECENT_TEXT_CHARS);
+          // raw run text, which is the meaningful signal there — EXCEPT on a teach-a-task,
+          // where the raw text IS the question: producing no answer is a fault to report,
+          // not an echo to display, so we record the reason and omit the text entirely.
+          const isEcho = !training.distilled && !!e.prompt && e.text.trim() === e.prompt.trim();
+          const learnedText = training.distilled && training.exemplar ? training.exemplar : e.text;
           mergedMeta.push({
             id: e.id,
             kind: 'text',
             weight: e.weight,
             ...(e.prompt ? { prompt: e.prompt.slice(0, RECENT_PROMPT_CHARS) } : {}),
-            text: learnedText,
+            ...(isEcho ? {} : { text: learnedText.slice(0, RECENT_TEXT_CHARS) }),
+            distilled: training.distilled,
+            ...(training.teacherModel ? { teacherModel: training.teacherModel } : {}),
+            ...(training.skipReason ? { skipReason: training.skipReason } : {}),
+            ...(training.skipDetail ? { skipDetail: training.skipDetail } : {}),
+            ...(training.attemptedTeacherModel ? { attemptedTeacherModel: training.attemptedTeacherModel } : {}),
           });
+          // A PINNED teacher that produced nothing is an operational fault (bad model
+          // pin, no credit, vendor down) that otherwise fails silently — the exact way
+          // "teacher mode isn't working" stayed invisible. Log it so it's greppable.
+          if (training.attemptedTeacherModel) {
+            console.warn(
+              `[evermind] teacher distillation failed tenant=${tenantId} project=${projectId} ` +
+              `model=${training.attemptedTeacherModel} reason=${training.skipReason} detail=${training.skipDetail ?? 'none'}`,
+            );
+          }
         } else {
           processedIds.push(e.id); // unusable (e.g. text but base isn't an evermind-lm)
         }

@@ -32,6 +32,7 @@ import {
   type EvermindRegionKey,
 } from '@/lib/evermindRegions';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
+import { evermindLearnedStatus, type EvermindTeacherSkipReason } from '@seanhogg/builderforce-brain-ui';
 import { useEvermindValidation } from './EvermindValidationContext';
 
 /** A listed memory optionally carrying its Validate recall score (recall mode). */
@@ -135,6 +136,7 @@ export function EvermindLearnings({
               scoreLabel={e.score != null ? t('recallScore', { pct: Math.round(e.score * 100) }) : null}
               primaryBadge={t('recallPrimary')}
               onViewDetail={() => setDetail(e)} viewDetailLabel={t('viewDetail')}
+              faultBadge={t('faultBadge')}
             />
           ))
         )}
@@ -182,20 +184,24 @@ function StateRegionView({
 }
 
 function LearningRow({
-  entry, when, kindLabel, deltaBody, primary, scoreLabel, primaryBadge, onViewDetail, viewDetailLabel,
+  entry, when, kindLabel, deltaBody, primary, scoreLabel, primaryBadge, onViewDetail, viewDetailLabel, faultBadge,
 }: {
   entry: ListedEntry; when: string; kindLabel: string; deltaBody: string;
   primary: boolean; scoreLabel: string | null; primaryBadge: string;
-  onViewDetail: () => void; viewDetailLabel: string;
+  onViewDetail: () => void; viewDetailLabel: string; faultBadge: string;
 }) {
-  const body = entry.kind === 'delta' ? deltaBody : (entry.text ?? '');
-  const hasDetail = entry.kind !== 'delta' && (!!entry.prompt || !!entry.text);
+  // A failed teach-a-task has no trustworthy answer to preview — show the fault badge
+  // rather than the un-distilled text (which is just the question again).
+  const faulted = evermindLearnedStatus(entry).state === 'fault';
+  const body = entry.kind === 'delta' ? deltaBody : (faulted ? '' : (entry.text ?? ''));
+  const hasDetail = entry.kind !== 'delta' && (!!entry.prompt || !!entry.text || faulted);
   const pct = entry.score != null ? Math.round(entry.score * 100) : null;
   return (
     <div style={{ ...rowStyle, ...(primary ? { borderColor: 'var(--coral-bright, #ff6b5e)' } : null) }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         {primary && <span style={primaryBadgeStyle}>{primaryBadge}</span>}
         <span style={tagStyle(entry.kind === 'delta')}>{kindLabel}</span>
+        {faulted && <span style={faultBadgeStyle}>{faultBadge}</span>}
         <span style={metaText}>v{entry.version}</span>
         <span style={metaText}>×{entry.weight}</span>
         {scoreLabel ? (
@@ -235,6 +241,7 @@ function DetailPanel({
             <DetailChip label={t('detailWeight')} value={`×${entry.weight}`} />
             <DetailChip label={t('detailWhen')} value={formatWhen(entry.at)} />
             {entry.score != null && <DetailChip label={t('recallScore', { pct: Math.round(entry.score * 100) })} value="" />}
+            <TeacherChip entry={entry} t={t} />
           </div>
           {entry.prompt && (
             <div>
@@ -242,13 +249,82 @@ function DetailPanel({
               <div style={detailBody}>{entry.prompt}</div>
             </div>
           )}
-          <div>
-            <div style={detailSectionLabel}>{t('detailLearned')}</div>
-            <div style={detailBody}>{entry.kind === 'delta' ? t('deltaBody') : (entry.text ?? '')}</div>
-          </div>
+          <LearnedSection entry={entry} t={t} />
+          <TeacherFaultNotice entry={entry} t={t} />
         </div>
       )}
     </SlideOutPanel>
+  );
+}
+
+/** The provenance chip: which frontier teacher distilled this memory, or that the model
+ *  self-learned it. Absent for weight deltas (no text provenance) and for faults, which
+ *  get the louder {@link TeacherFaultNotice} instead. */
+function TeacherChip({ entry, t }: { entry: ListedEntry; t: ReturnType<typeof useTranslations> }) {
+  const status = evermindLearnedStatus(entry);
+  if (status.state === 'distilled') {
+    return <DetailChip label={t('detailTeacher')} value={status.teacherModel ?? t('detailTeacherUnknown')} />;
+  }
+  if (status.state === 'self') return <DetailChip label={t('detailTeacher')} value={t('detailTeacherSelf')} />;
+  return null;
+}
+
+/** The "Learned" body — or, when a pinned teacher produced no answer, an explicit
+ *  "nothing was learned" state. Rendering the raw text here would mean showing the
+ *  user's own question back as the model's answer, which is what made a broken teacher
+ *  look like a working one. */
+function LearnedSection({ entry, t }: { entry: ListedEntry; t: ReturnType<typeof useTranslations> }) {
+  const status = evermindLearnedStatus(entry);
+  const body = entry.kind === 'delta' ? t('deltaBody') : (entry.text ?? '');
+  return (
+    <div>
+      <div style={detailSectionLabel}>{t('detailLearned')}</div>
+      {status.state === 'fault' || !body ? (
+        <div style={{ ...detailBody, color: 'var(--text-muted)', fontStyle: 'italic' }}>{t('detailNoAnswer')}</div>
+      ) : (
+        <div style={detailBody}>{body}</div>
+      )}
+    </div>
+  );
+}
+
+/** Human-readable cause for each way a pinned teacher can produce nothing. */
+const FAULT_KEY: Record<EvermindTeacherSkipReason, string> = {
+  not_pinned: 'faultNotPinned',
+  budget_exhausted: 'faultBudget',
+  input_too_short: 'faultTooShort',
+  gateway_error: 'faultGateway',
+  empty_output: 'faultEmpty',
+  exception: 'faultException',
+  unknown: 'faultUnknown',
+};
+
+/** The actionable warning shown when teacher distillation failed: which model was asked,
+ *  why it produced nothing, and what to do. Without this the failure is invisible — the
+ *  row just silently shows un-distilled text. */
+function TeacherFaultNotice({ entry, t }: { entry: ListedEntry; t: ReturnType<typeof useTranslations> }) {
+  const status = evermindLearnedStatus(entry);
+  if (status.state !== 'fault') return null;
+  return (
+    <div
+      role="status"
+      style={{
+        display: 'flex', flexDirection: 'column', gap: 6,
+        padding: '10px 12px', borderRadius: 8,
+        border: '1px solid var(--warning-border, var(--border-subtle))',
+        background: 'var(--warning-bg, var(--bg-elevated))',
+      }}
+    >
+      <strong style={{ fontSize: '0.78rem', color: 'var(--warning-text, var(--text-primary))' }}>
+        {t('faultTitle')}
+      </strong>
+      <span style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+        {status.teacherModel
+          ? t('faultBodyWithModel', { model: status.teacherModel, reason: t(FAULT_KEY[status.reason]) })
+          : t('faultBody', { reason: t(FAULT_KEY[status.reason]) })}
+      </span>
+      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>{t('faultHint')}</span>
+    </div>
   );
 }
 
@@ -288,6 +364,15 @@ const methodChip: React.CSSProperties = {
 const primaryBadgeStyle: React.CSSProperties = {
   fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em',
   padding: '1px 6px', borderRadius: 5, color: '#fff', background: 'var(--coral-bright, #ff6b5e)',
+};
+/** The "not distilled" badge — a warning, so it must read in BOTH themes: the amber
+ *  tokens carry their own fallbacks rather than assuming a dark surface. */
+const faultBadgeStyle: React.CSSProperties = {
+  fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em',
+  padding: '1px 6px', borderRadius: 5,
+  color: 'var(--warning-text, #92400e)',
+  background: 'var(--warning-bg, #fef3c7)',
+  border: '1px solid var(--warning-border, #f59e0b)',
 };
 const detailLinkStyle: React.CSSProperties = {
   alignSelf: 'flex-start', padding: 0, fontSize: '0.7rem', fontWeight: 600, border: 'none',

@@ -138,11 +138,15 @@ export interface ReasoningParamOpts {
 /**
  * Map a model id + desired execution levers to the CORRECT vendor reasoning param,
  * or `undefined` when the model family is unknown OR the levers don't ask for
- * reasoning. The returned object is spread verbatim into the gateway request body;
- * it survives to the vendor as `extraBody` (non-standard fields pass through
- * {@link stripStandardFields}), where the anthropic / OpenAI-compatible translators
- * consume it. Returning `undefined` (the common case with no persona) leaves the
- * request unchanged.
+ * reasoning. The returned object is merged into that model's `extraBody`, where the
+ * anthropic / OpenAI-compatible translators consume it. Returning `undefined` (the
+ * common case with no persona) leaves the request unchanged.
+ *
+ * Call this PER MODEL ACTUALLY TRIED, never once for a whole candidate chain: the
+ * gateway's vendor dispatcher walks a chain internally on failover, so
+ * `vendors/registry.ts` re-derives here for each candidate (carrying the vendor-neutral
+ * intent via `VendorCallParams.reasoningIntent`). That is what lets an `auto`/mixed
+ * chain send `thinking` on its Anthropic hop and NOTHING on a Cloudflare/qwen hop.
  */
 export function reasoningParamsForModel(
   modelId: string | undefined | null,
@@ -194,32 +198,4 @@ export function parseClientReasoningIntent(raw: unknown): AgentExecParams | unde
   const normalized = level.trim().toLowerCase() as AgentThinkLevel;
   if (!CLIENT_REASONING_LEVELS.has(normalized)) return undefined;
   return { thinkLevel: normalized };
-}
-
-/**
- * Chain-safe variant of {@link reasoningParamsForModel} for the gateway cascade.
- *
- * The gateway builds `extraBody` ONCE for a whole candidate chain and hands that chain
- * to the vendor dispatcher, which walks it internally on failover — so a param derived
- * from the chain HEAD would still be on the body if the cascade lands on a
- * Cloudflare/deepseek/qwen coder. Rather than risk that leak, this returns a param only
- * when EVERY candidate the chain could serve resolves to the IDENTICAL param (a
- * single-model chain — e.g. a strict pin — trivially qualifies). A mixed-family chain
- * drops the lever, preserving the module's conservative default: when in doubt, send
- * nothing.
- */
-export function reasoningParamsForChain(
-  candidates: readonly string[],
-  execParams: AgentExecParams | undefined,
-  opts?: ReasoningParamOpts,
-): Record<string, unknown> | undefined {
-  if (!execParams || candidates.length === 0) return undefined;
-  const head = reasoningParamsForModel(candidates[0], execParams, opts);
-  if (!head) return undefined;
-  const signature = JSON.stringify(head);
-  for (let i = 1; i < candidates.length; i++) {
-    const params = reasoningParamsForModel(candidates[i], execParams, opts);
-    if (!params || JSON.stringify(params) !== signature) return undefined;
-  }
-  return head;
 }

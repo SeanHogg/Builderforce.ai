@@ -18,6 +18,7 @@ import { openAiCodexModule } from './openaiCodex';
 import { xaiOAuthModule } from './xaiOAuth';
 import { openAICompatibleModules, openAICompatibleModulesById } from './openaiCompatibleVendors';
 import { registerSchemaDialectResolver } from '../jsonSchemaSanitize';
+import { reasoningParamsForModel } from '../reasoningCapability';
 import {
   VendorRetryableError,
   VendorFatalError,
@@ -362,7 +363,7 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
   params: DispatchParams,
   cfg: SurfaceConfig<R>,
 ): Promise<R & { modelUsed: string; vendorUsed: VendorId; attempts: DispatchAttempt[] }> {
-  const { env, modelChain, ...rest } = params;
+  const { env, modelChain, reasoningIntent, ...rest } = params;
   if (modelChain.length === 0) {
     throw new Error(`${cfg.fnName}: modelChain is empty`);
   }
@@ -384,9 +385,24 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
       continue;
     }
 
+    // Derive the reasoning param for THIS candidate, not for the chain. The full
+    // chain id (prefix intact) is what classifies: `claude-opus-4-8` is the direct
+    // Anthropic vendor (native `thinking`), while `openrouter/anthropic/claude-…`
+    // speaks the OpenAI shape and correctly resolves to nothing. A family with no
+    // reasoning support yields `undefined` → this attempt's body is untouched, so
+    // the conservative "drop when unknown" default survives on every failover hop.
+    const reasoningParams = reasoningIntent
+      ? reasoningParamsForModel(model, reasoningIntent.execParams, { isFirstTurn: reasoningIntent.isFirstTurn })
+      : undefined;
+
     const startedAt = Date.now();
     try {
-      const result = await cfg.invoke(mod, { ...rest, apiKey, model: vendorModel });
+      const result = await cfg.invoke(mod, {
+        ...rest,
+        apiKey,
+        model: vendorModel,
+        ...(reasoningParams ? { extraBody: { ...rest.extraBody, ...reasoningParams } } : {}),
+      });
       cfg.validate?.(result, vendorId, vendorModel);
       // `modelUsed` echoes what the caller asked for (with prefix preserved).
       return { ...result, modelUsed: model, vendorUsed: vendorId, attempts };

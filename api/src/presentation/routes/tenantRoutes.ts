@@ -795,7 +795,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
         db.select({ displayName: users.displayName, email: users.email })
           .from(users).where(eq(users.id, actorUserId)).limit(1),
       ]);
-      const frontendBase = ((c.env as Env).APP_URL ?? 'https://builderforce.ai').split(',')[0]!.trim();
+      const frontendBase = resolveAppBaseUrl(c.env as Env);
       const signupUrl = `${frontendBase}/register?email=${encodeURIComponent(email)}`;
       await sendWorkspaceInviteEmail(c.env as Env, email, {
         workspaceName: tenantRow?.name ?? 'a Builderforce workspace',

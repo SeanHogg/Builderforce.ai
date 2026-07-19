@@ -14,6 +14,7 @@ import { listMyAgents, listPurchasedAgents } from '@/lib/api';
 import { listTenantMembers } from '@/lib/auth';
 import { listEngagements } from '@/lib/freelancerApi';
 import { kanbanApi } from '@/lib/builderforceApi';
+import { ThemedSelect } from '@/components/ThemedSelect';
 import type { AssigneeKind } from '@/lib/kanban';
 
 export interface AssigneeCandidate { ref: string; name: string }
@@ -126,20 +127,19 @@ export function RoleAssigneePicker({
           </button>
         ))}
       </div>
-      <select
+      <ThemedSelect
         value={ref}
-        onChange={(e) => setRef(e.target.value)}
+        onChange={setRef}
         disabled={workforce.loading || candidates.length === 0}
-        aria-label={t('assignPick')}
-        style={{ padding: '6px 8px', borderRadius: 8, fontSize: 13, background: 'var(--surface)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
-      >
-        <option value="">
-          {workforce.loading ? t('assignLoading') : candidates.length === 0 ? t('assignNoneOfKind') : t('assignPick')}
-        </option>
-        {candidates.map((c) => (
-          <option key={c.ref} value={c.ref}>{c.name}</option>
-        ))}
-      </select>
+        ariaLabel={t('assignPick')}
+        options={[
+          {
+            value: '',
+            label: workforce.loading ? t('assignLoading') : candidates.length === 0 ? t('assignNoneOfKind') : t('assignPick'),
+          },
+          ...candidates.map((c) => ({ value: c.ref, label: c.name })),
+        ]}
+      />
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
         <button type="button" onClick={onCancel} style={{ fontSize: 12, padding: '5px 10px', borderRadius: 6, cursor: 'pointer', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
           {t('assignCancel')}

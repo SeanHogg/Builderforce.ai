@@ -3649,6 +3649,22 @@
     "detailTitle": "Learned memory",
     "detailTask": "Task",
     "detailLearned": "Learned",
+    "detailTeacher": "Teacher",
+    "detailTeacherSelf": "Self-learned",
+    "detailTeacherUnknown": "Frontier model",
+    "detailNoAnswer": "Nothing was learned for this task — the teacher produced no answer.",
+    "faultBadge": "Not distilled",
+    "faultTitle": "Teacher produced no answer",
+    "faultBody": "The teacher did not answer this task ({reason}), so nothing was learned from it.",
+    "faultBodyWithModel": "{model} did not answer this task ({reason}), so nothing was learned from it.",
+    "faultHint": "Check the pinned teacher model and your frontier credit, then teach the task again.",
+    "faultNotPinned": "no teacher pinned",
+    "faultBudget": "out of frontier token budget",
+    "faultTooShort": "task too short to teach",
+    "faultGateway": "the model gateway returned an error",
+    "faultEmpty": "the teacher returned an empty answer",
+    "faultException": "the teacher call failed",
+    "faultUnknown": "reason not recorded",
     "detailKind": "Type",
     "detailVersion": "Version",
     "detailWeight": "Weight",
@@ -7719,6 +7735,29 @@
         "pastePrompt": "After approving access, copy the code shown on the xAI page and paste it below.",
         "pastePlaceholder": "Paste the xAI sign-in code…"
       }
+    },
+    "diagnostic": {
+      "currentStatus": "Current status: {status}",
+      "checking": "checking…",
+      "test": "Test connection",
+      "testing": "Testing…",
+      "verified": "Connection verified.",
+      "verifiedWith": "Connection verified with {model}.",
+      "usage": "Last 30 days: {requests} requests · {tokens} tokens",
+      "lastUsed": " · Last used {when}",
+      "failedFallback": "Connection test failed: {status}.",
+      "failedGeneric": "Connection test failed",
+      "failedTitle": "{label} connection failed",
+      "state": {
+        "ready": "ready",
+        "not_connected": "not connected",
+        "revoked": "revoked",
+        "expired": "expired",
+        "undecryptable": "unreadable credential",
+        "unavailable": "unavailable"
+      },
+      "tokensUsed": "AI tokens used",
+      "periodLabel": "Last {period}"
     }
   },
   "modelSelect": {

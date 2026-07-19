@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import type { Tenant } from '@/lib/types';
 import { createTenant, completeOnboarding } from '@/lib/auth';
 import { createProject } from '@/lib/api';
+import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { InstallBuilderForceAgents } from './InstallBuilderForceAgents';
 import { InviteTeamMembers } from './InviteTeamMembers';
 import { KanbanRosterCard } from './kanban/KanbanRosterCard';
@@ -56,6 +57,9 @@ export function OnboardingStepper({
   onDismiss,
 }: OnboardingStepperProps) {
   const t = useTranslations('onboarding');
+  // Both stepper mounts sit under ProjectScopeProvider (hoisted to AppBrainShell);
+  // the optional hook is defensive so the stepper stays usable outside that shell.
+  const projectScope = useOptionalProjectScope();
   const workspaceAlreadyExists = !!tenant;
   const projectAlreadyExists = workspaceAlreadyExists && existingProjectsCount > 0;
 
@@ -124,8 +128,11 @@ export function OnboardingStepper({
       setProjectLoading(true);
       try {
         const created = await createProject({ name: projectName.trim(), description: projectDesc.trim() || undefined });
-        setCreatedProjectId((created as { id?: number })?.id ?? null);
+        setCreatedProjectId(created?.id ?? null);
         setProjectCreated(true);
+        // Make the brand-new project the active global scope, so the user lands
+        // in it when the wizard closes instead of the all-projects view.
+        if (created?.id) projectScope?.adoptProject(created);
         markComplete(1);
       } catch (err) {
         setProjectError(err instanceof Error ? err.message : t('projectCreateFailed'));
@@ -133,7 +140,7 @@ export function OnboardingStepper({
         setProjectLoading(false);
       }
     },
-    [projectName, projectDesc]
+    [projectName, projectDesc, projectScope]
   );
 
   const toggleIntent = (value: string) => {
@@ -193,7 +200,7 @@ export function OnboardingStepper({
           border: '1px solid var(--border-subtle)',
           borderRadius: 16,
           width: '100%',
-          maxWidth: 680,
+          maxWidth: 880,
           maxHeight: '92vh',
           overflow: 'auto',
           display: 'flex',
@@ -246,6 +253,7 @@ export function OnboardingStepper({
             gap: 0,
             padding: '20px 24px 0',
             alignItems: 'center',
+            overflowX: 'auto',
           }}
         >
           {STEP_IDS.map((stepId, i) => {
@@ -267,6 +275,7 @@ export function OnboardingStepper({
                     cursor: done ? 'pointer' : 'default',
                     padding: 0,
                     minWidth: 60,
+                    flexShrink: 0,
                   }}
                 >
                   <div

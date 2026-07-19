@@ -2,7 +2,8 @@ import { Hono, type Context } from 'hono';
 import { and, desc, eq, gt, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { AuthService } from '../../application/auth/AuthService';
 import { DeviceAuthService } from '../../application/auth/DeviceAuthService';
-import type { HonoEnv } from '../../env';
+import { resolveAppBaseUrl, type HonoEnv } from '../../env';
+import { sendWelcomeEmail } from '../../infrastructure/email/EmailService';
 import { webAuthMiddleware } from '../middleware/webAuthMiddleware';
 import { TenantRole, type UserId } from '../../domain/shared/types';
 import {
@@ -772,6 +773,17 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         .update(users)
         .set({ emailVerifiedAt: sql`now()`, updatedAt: sql`now()` })
         .where(eq(users.id, user.id));
+
+      // First successful verification is when a password signup becomes a real
+      // account — the welcome goes here, not at the (still-unverified) insert.
+      // Guarded by the `!user.emailVerifiedAt` branch, so a re-submit can't
+      // send it twice. Fire-and-forget: mail failure must not fail the session.
+      void sendWelcomeEmail(
+        c.env,
+        user.email,
+        user.displayName ?? user.username ?? '',
+        resolveAppBaseUrl(c.env),
+      );
     }
 
     const expiresIn = body.trustDevice === true ? 30 * 86_400 : 86_400;

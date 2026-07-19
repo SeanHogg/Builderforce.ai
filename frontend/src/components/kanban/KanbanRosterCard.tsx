@@ -14,6 +14,7 @@ import { createCloudAgent } from '@/lib/api';
 import { usePermission } from '@/lib/rbac';
 import type { RecommendedRoster, TemplateSummary, FlaggedTicket, RosterRole, AssigneeKind } from '@/lib/kanban';
 import { RoleAssigneePicker, useAssignableWorkforce } from '@/components/workforce/RoleAssigneePicker';
+import { ThemedSelect } from '@/components/ThemedSelect';
 
 const chip = (bg: string, fg: string): React.CSSProperties => ({
   display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 999,
@@ -61,10 +62,22 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
     finally { setBusy(false); }
   };
 
+  /** Build an agent FOR a gap role: create it, then assign it to that role so the
+   *  gap actually closes. Creating alone leaves the role unfilled — the roster is
+   *  driven by explicit assignments, not by what an agent lists under `skills`. */
   const onCreateAgent = async (role: RosterRole) => {
     setCreating(role.roleKey); setError(null);
     try {
-      await createCloudAgent({ name: `${role.name} Agent`, title: role.name, skills: [role.roleKey], published: false });
+      const agent = await createCloudAgent({ name: `${role.name} Agent`, title: role.name, skills: [role.roleKey], published: false });
+      await kanbanApi.assignRole({
+        roleKey: role.roleKey,
+        assigneeKind: 'agent',
+        assigneeRef: agent.id,
+        assigneeName: agent.name,
+        projectId,
+      });
+      // The new agent joins the assignable pool the picker reads.
+      workforce.reload();
       await load();
     } catch (e) { setError((e as Error).message); }
     finally { setCreating(null); }
@@ -109,22 +122,17 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
       {/* Template picker */}
       <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <label htmlFor="kanban-template" style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('templateLabel')}</label>
-        <select
+        <ThemedSelect
           id="kanban-template"
           disabled={!canManage || busy}
           value={roster?.templateId ?? ''}
-          onChange={(e) => onPickTemplate(e.target.value)}
-          style={{
-            flex: '1 1 200px', minWidth: 180, padding: '6px 8px', borderRadius: 8, fontSize: 13,
-            background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1px solid var(--border)',
-          }}
-        >
-          {templates.map((tpl) => (
-            <option key={tpl.id} value={tpl.id}>
-              {tpl.name}{tpl.builtin ? ` · ${t('builtin')}` : ''}
-            </option>
-          ))}
-        </select>
+          onChange={onPickTemplate}
+          style={{ flex: '1 1 200px', minWidth: 180 }}
+          options={templates.map((tpl) => ({
+            value: tpl.id,
+            label: `${tpl.name}${tpl.builtin ? ` · ${t('builtin')}` : ''}`,
+          }))}
+        />
         {busy && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('applying')}</span>}
       </div>
 

@@ -53,7 +53,7 @@ import {
   recordFailure,
 } from '../../infrastructure/auth/cooldownStore';
 import { validateJsonSchema } from './jsonSchemaValidator';
-import { parseClientReasoningIntent, reasoningParamsForChain } from './reasoningCapability';
+import { parseClientReasoningIntent } from './reasoningCapability';
 import { estimateTokensFromChars } from './tokenUsage';
 import type { ActionType } from './actionTypes';
 import { PROVIDER_VENDOR_MAP, type TenantVendorKeys } from './tenantProviderKeyService';
@@ -1551,22 +1551,20 @@ export class LlmProxyService {
     const sanitizedBody = sanitizeRequestToolCalls(body as unknown as Record<string, unknown>) as unknown as ChatCompletionRequest;
     const messages = sanitizedBody.messages as unknown as Array<Record<string, unknown>>;
     const extraBody = stripStandardFields(sanitizedBody);
-    // ── Client reasoning intent → vendor param ──────────────────────────────
+    // ── Client reasoning intent ─────────────────────────────────────────────
     // The optional vendor-neutral `reasoning: { level }` (VS Code "Thinking" toggle) is
-    // resolved HERE, not at the route, because only this seam knows the models that will
-    // actually be tried (`auto`/cascade resolution, plan pool, backstop chain — each
-    // re-enters dispatch() with its own candidates, so the param is re-derived per chain
-    // rather than pinned to the client's requested id). `reasoningParamsForChain` emits a
-    // param only when it is correct for EVERY candidate, so a mixed-family chain drops it
-    // instead of leaking e.g. `thinking` onto a Cloudflare/qwen coder.
+    // validated into an `AgentExecParams` lever here and threaded to the vendor
+    // dispatcher AS INTENT — deliberately NOT resolved to a vendor param at this seam.
+    // A dispatch carries a candidate CHAIN that the dispatcher walks internally on
+    // failover, so a param computed once here would ride onto whichever model the
+    // cascade lands on; `dispatchInternal` instead derives it PER CANDIDATE through the
+    // single `reasoningParamsForModel` mapping, so an `auto`/mixed-family chain gets the
+    // right param on the Anthropic/OpenAI hops and nothing at all on a
+    // Cloudflare/deepseek/qwen coder.
     // `isFirstTurn`: a request with no assistant turn yet is definitionally a planning
     // turn (a tool-result continuation always carries one), which is what makes Anthropic
     // extended thinking safe alongside tools — same rule the cloud loop uses.
-    const clientReasoning = reasoningParamsForChain(
-      candidates,
-      parseClientReasoningIntent((sanitizedBody as Record<string, unknown>).reasoning),
-      { isFirstTurn: !messages.some((m) => m.role === 'assistant') },
-    );
+    const reasoningIntent = parseClientReasoningIntent((sanitizedBody as Record<string, unknown>).reasoning);
     // Timeout precedence: an explicit dispatch override (e.g. the paid backstop
     // forcing the premium budget) wins; otherwise a per-request caller override
     // (`_builderforce.vendorTimeoutMs`, clamped) lets even a free-plan one-off
@@ -1584,8 +1582,14 @@ export class LlmProxyService {
       ...(sanitizedBody.max_tokens  != null ? { maxTokens:   sanitizedBody.max_tokens  } : {}),
       ...(sanitizedBody.temperature != null ? { temperature: sanitizedBody.temperature } : {}),
       ...(sanitizedBody.top_p       != null ? { topP:        sanitizedBody.top_p       } : {}),
-      ...(Object.keys(extraBody).length > 0 || clientReasoning
-        ? { extraBody: { ...extraBody, ...clientReasoning } }
+      ...(Object.keys(extraBody).length > 0 ? { extraBody } : {}),
+      ...(reasoningIntent
+        ? {
+            reasoningIntent: {
+              execParams: reasoningIntent,
+              isFirstTurn: !messages.some((m) => m.role === 'assistant'),
+            },
+          }
         : {}),
       ...(cacheTtl ? { cacheTtl } : {}),
       title: this.productName,

@@ -185,20 +185,26 @@ function ProviderConnectionCard({
   const loadDiagnostic = () => providerKeysApi.status(config.id).then(setDiagnostic).catch((e: Error) => setError(e.message));
   useEffect(() => { void loadDiagnostic(); }, [config.id, authType]);
 
+  /** Localized label for a diagnostic status; unknown values degrade to the raw id. */
+  const stateLabel = (status: string) => {
+    const label = t(`diagnostic.state.${status}`);
+    return label === `diagnostic.state.${status}` ? status.replaceAll('_', ' ') : label;
+  };
+
   const testConnection = async () => {
     setTesting(true); setTestResult(null); setError(null);
     try {
       const result = await providerKeysApi.test(config.id);
       const message = result.ok
-        ? `Connection verified${result.model ? ` with ${result.model}` : ''}.`
-        : result.error ?? `Connection test failed: ${result.status.replaceAll('_', ' ')}.`;
+        ? (result.model ? t('diagnostic.verifiedWith', { model: result.model }) : t('diagnostic.verified'))
+        : result.error ?? t('diagnostic.failedFallback', { status: stateLabel(result.status) });
       setTestResult({ message, ok: result.ok });
-      if (!result.ok) toast.error(message, { title: `${config.label} connection failed` });
+      if (!result.ok) toast.error(message, { title: t('diagnostic.failedTitle', { label: config.label }) });
       await loadDiagnostic();
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'Connection test failed';
+      const message = e instanceof Error ? e.message : t('diagnostic.failedGeneric');
       setTestResult({ message, ok: false });
-      toast.error(message, { title: `${config.label} connection failed` });
+      toast.error(message, { title: t('diagnostic.failedTitle', { label: config.label }) });
     } finally { setTesting(false); }
   };
 
@@ -281,15 +287,18 @@ function ProviderConnectionCard({
       <div style={{ padding: 12, marginBottom: 14, borderRadius: 8, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
           <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: diagnostic?.usable ? 'rgba(34,197,94,0.9)' : 'var(--text-muted)' }}>
-            Current status: {diagnostic?.status?.replaceAll('_', ' ') ?? 'checking…'}
+            {t('diagnostic.currentStatus', { status: diagnostic?.status ? stateLabel(diagnostic.status) : t('diagnostic.checking') })}
           </span>
           <button type="button" onClick={testConnection} disabled={testing || !configured} style={{ ...buttonPrimary, opacity: testing || !configured ? 0.5 : 1 }}>
-            {testing ? 'Testing…' : 'Test connection'}
+            {testing ? t('diagnostic.testing') : t('diagnostic.test')}
           </button>
         </div>
         <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
-          Last 30 days: {(diagnostic?.usage.requests ?? 0).toLocaleString()} requests · {(diagnostic?.usage.tokens ?? 0).toLocaleString()} tokens
-          {diagnostic?.usage.lastUsedAt ? ` · Last used ${new Date(diagnostic.usage.lastUsedAt).toLocaleString()}` : ''}
+          {t('diagnostic.usage', {
+            requests: (diagnostic?.usage.requests ?? 0).toLocaleString(),
+            tokens: (diagnostic?.usage.tokens ?? 0).toLocaleString(),
+          })}
+          {diagnostic?.usage.lastUsedAt ? t('diagnostic.lastUsed', { when: new Date(diagnostic.usage.lastUsedAt).toLocaleString() }) : ''}
         </div>
         {testResult && (
           <div
@@ -454,9 +463,9 @@ export function ProviderKeysSettings({
                         limit: -1, unlimited: true, remaining: -1, percentUsed: 0,
                       }}
                       isFree={false}
-                      title="AI tokens used"
+                      title={t('diagnostic.tokensUsed')}
                       usageOnly
-                      periodLabel={`Last ${usage.period}`}
+                      periodLabel={t('diagnostic.periodLabel', { period: usage.period })}
                     />
                   )}
                 </div>

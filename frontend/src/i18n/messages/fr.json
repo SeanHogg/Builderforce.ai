@@ -3649,6 +3649,22 @@
     "detailTitle": "Mémoire apprise",
     "detailTask": "Tâche",
     "detailLearned": "Appris",
+    "detailTeacher": "Enseignant",
+    "detailTeacherSelf": "Auto-apprentissage",
+    "detailTeacherUnknown": "Modèle de pointe",
+    "detailNoAnswer": "Rien n'a été appris de cette tâche : l'enseignant n'a produit aucune réponse.",
+    "faultBadge": "Non distillé",
+    "faultTitle": "L'enseignant n'a produit aucune réponse",
+    "faultBody": "L'enseignant n'a pas répondu à cette tâche ({reason}), donc rien n'en a été appris.",
+    "faultBodyWithModel": "{model} n'a pas répondu à cette tâche ({reason}), donc rien n'en a été appris.",
+    "faultHint": "Vérifiez le modèle enseignant épinglé et votre crédit de pointe, puis réenseignez la tâche.",
+    "faultNotPinned": "aucun enseignant épinglé",
+    "faultBudget": "budget de jetons de pointe épuisé",
+    "faultTooShort": "tâche trop courte pour être enseignée",
+    "faultGateway": "la passerelle de modèles a renvoyé une erreur",
+    "faultEmpty": "l'enseignant a renvoyé une réponse vide",
+    "faultException": "l'appel à l'enseignant a échoué",
+    "faultUnknown": "motif non enregistré",
     "detailKind": "Type",
     "detailVersion": "Version",
     "detailWeight": "Poids",
@@ -7717,6 +7733,29 @@
         "pastePrompt": "Après approbation, copiez le code affiché sur la page xAI et collez-le ici.",
         "pastePlaceholder": "Collez le code de connexion xAI…"
       }
+    },
+    "diagnostic": {
+      "currentStatus": "État actuel : {status}",
+      "checking": "vérification…",
+      "test": "Tester la connexion",
+      "testing": "Test en cours…",
+      "verified": "Connexion vérifiée.",
+      "verifiedWith": "Connexion vérifiée avec {model}.",
+      "usage": "30 derniers jours : {requests} requêtes · {tokens} jetons",
+      "lastUsed": " · Dernière utilisation {when}",
+      "failedFallback": "Échec du test de connexion : {status}.",
+      "failedGeneric": "Échec du test de connexion",
+      "failedTitle": "Échec de la connexion à {label}",
+      "state": {
+        "ready": "prête",
+        "not_connected": "non connectée",
+        "revoked": "révoquée",
+        "expired": "expirée",
+        "undecryptable": "identifiant illisible",
+        "unavailable": "indisponible"
+      },
+      "tokensUsed": "Jetons IA utilisés",
+      "periodLabel": "Derniers {period}"
     }
   },
   "modelSelect": {

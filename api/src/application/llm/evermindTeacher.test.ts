@@ -54,7 +54,7 @@ describe('generateTeacherExemplar', () => {
   it('strict-pins the chosen frontier model and returns its exemplar', async () => {
     completeMock.mockResolvedValue(gatewayResponse('A clean, complete retry handler with backoff.'));
     const r = await generateTeacherExemplar(env, TENANT, 'claude-opus-4-8', RUN_TEXT);
-    expect(r).toEqual({ model: 'claude-opus-4-8', output: 'A clean, complete retry handler with backoff.' });
+    expect(r).toEqual({ ok: true, exemplar: { model: 'claude-opus-4-8', output: 'A clean, complete retry handler with backoff.' } });
     // The manager's pick must be dispatched as a hard pin (no silent substitution).
     const body = completeMock.mock.calls[0]![0] as { model?: string; modelStrict?: boolean };
     expect(body.model).toBe('claude-opus-4-8');
@@ -76,28 +76,35 @@ describe('generateTeacherExemplar', () => {
   it('reports the model the gateway actually resolved', async () => {
     completeMock.mockResolvedValue(gatewayResponse('A fully worked, idiomatic implementation of the retry path.', 200, 'mistral-large'));
     const r = await generateTeacherExemplar(env, TENANT, 'mistral-large', RUN_TEXT);
-    expect(r?.model).toBe('mistral-large');
+    expect(r.ok && r.exemplar.model).toBe('mistral-large');
   });
 
-  it('returns null on a gateway error status (best-effort — never throws)', async () => {
+  // Every failure must name its CAUSE rather than collapse to a bare null — a silently
+  // skipped teacher is exactly how a broken teacher mode stayed invisible in the console.
+  it('reports gateway_error (with the status) on a gateway error', async () => {
     completeMock.mockResolvedValue(gatewayResponse('nope', 503));
-    expect(await generateTeacherExemplar(env, TENANT, 'claude-opus-4-8', RUN_TEXT)).toBeNull();
+    const r = await generateTeacherExemplar(env, TENANT, 'claude-opus-4-8', RUN_TEXT);
+    expect(r).toEqual({ ok: false, reason: 'gateway_error', detail: 'HTTP 503' });
   });
 
-  it('returns null on a too-short exemplar (not a teaching signal)', async () => {
+  it('reports empty_output on a too-short exemplar (not a teaching signal)', async () => {
     completeMock.mockResolvedValue(gatewayResponse('ok'));
-    expect(await generateTeacherExemplar(env, TENANT, 'claude-opus-4-8', RUN_TEXT)).toBeNull();
+    const r = await generateTeacherExemplar(env, TENANT, 'claude-opus-4-8', RUN_TEXT);
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.reason).toBe('empty_output');
   });
 
-  it('returns null when the teacher model is empty or the input is trivial', async () => {
-    expect(await generateTeacherExemplar(env, TENANT, '', RUN_TEXT)).toBeNull();
-    expect(await generateTeacherExemplar(env, TENANT, 'claude-opus-4-8', 'short')).toBeNull();
+  it('reports input_too_short when the model is empty or the input is trivial', async () => {
+    expect(await generateTeacherExemplar(env, TENANT, '', RUN_TEXT)).toEqual({ ok: false, reason: 'input_too_short' });
+    expect(await generateTeacherExemplar(env, TENANT, 'claude-opus-4-8', 'short')).toEqual({ ok: false, reason: 'input_too_short' });
     expect(completeMock).not.toHaveBeenCalled();
   });
 
-  it('swallows a malformed gateway result and returns null (never throws)', async () => {
+  it('reports exception on a malformed gateway result (never throws)', async () => {
     completeMock.mockResolvedValue({});
-    expect(await generateTeacherExemplar(env, TENANT, 'claude-opus-4-8', RUN_TEXT)).toBeNull();
+    const r = await generateTeacherExemplar(env, TENANT, 'claude-opus-4-8', RUN_TEXT);
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.reason).toBe('exception');
   });
 });
 
@@ -105,14 +112,14 @@ describe('buildEvermindTrainingText', () => {
   beforeEach(() => completeMock.mockReset());
 
   it('with no teacher, returns raw run text unchanged', async () => {
-    const r = await buildEvermindTrainingText(env, TENANT, null, RUN_TEXT);
-    expect(r).toEqual({ text: RUN_TEXT, distilled: false, skipReason: 'no_teacher' });
+    const r = await buildEvermindTrainingText(env, TENANT, { model: null, reason: 'not_pinned' }, RUN_TEXT);
+    expect(r).toEqual({ text: RUN_TEXT, distilled: false, skipReason: 'not_pinned' });
     expect(completeMock).not.toHaveBeenCalled();
   });
 
   it('with a teacher + task prompt, distils (task → answer) via answer mode', async () => {
     completeMock.mockResolvedValue(gatewayResponse('The ideal, expert, fully-worked retry implementation.'));
-    const r = await buildEvermindTrainingText(env, TENANT, 'claude-opus-4-8', RUN_TEXT, { prompt: TASK_PROMPT });
+    const r = await buildEvermindTrainingText(env, TENANT, { model: 'claude-opus-4-8' }, RUN_TEXT, { prompt: TASK_PROMPT });
     expect(r.distilled).toBe(true);
     expect(r.teacherModel).toBe('claude-opus-4-8');
     // The teacher answers the TASK prompt (answer mode), and the training text pairs it.
@@ -127,16 +134,16 @@ describe('buildEvermindTrainingText', () => {
   });
 
   it('leaves exemplar undefined when the teacher is skipped (no answer to surface)', async () => {
-    const noTeacher = await buildEvermindTrainingText(env, TENANT, null, RUN_TEXT);
+    const noTeacher = await buildEvermindTrainingText(env, TENANT, { model: null, reason: 'not_pinned' }, RUN_TEXT);
     expect(noTeacher.exemplar).toBeUndefined();
     completeMock.mockResolvedValue(gatewayResponse('too short', 500));
-    const failed = await buildEvermindTrainingText(env, TENANT, 'claude-opus-4-8', RUN_TEXT);
+    const failed = await buildEvermindTrainingText(env, TENANT, { model: 'claude-opus-4-8' }, RUN_TEXT);
     expect(failed.exemplar).toBeUndefined();
   });
 
   it('with a teacher but no prompt, refines the run OUTPUT', async () => {
     completeMock.mockResolvedValue(gatewayResponse('The ideal, expert version of this task output text.'));
-    const r = await buildEvermindTrainingText(env, TENANT, 'claude-opus-4-8', RUN_TEXT);
+    const r = await buildEvermindTrainingText(env, TENANT, { model: 'claude-opus-4-8' }, RUN_TEXT);
     expect(r.distilled).toBe(true);
     expect((completeMock.mock.calls[0]![0] as { messages: Array<{ content: string }> }).messages[1]!.content).toBe(RUN_TEXT);
     expect(r.text.startsWith(RUN_TEXT.slice(0, 20))).toBe(true);
@@ -144,8 +151,13 @@ describe('buildEvermindTrainingText', () => {
 
   it('falls back to raw text when the teacher call fails (contribution never lost)', async () => {
     completeMock.mockResolvedValue(gatewayResponse('too short', 500));
-    const r = await buildEvermindTrainingText(env, TENANT, 'claude-opus-4-8', RUN_TEXT);
-    expect(r).toEqual({ text: RUN_TEXT, distilled: false, skipReason: 'teacher_failed' });
+    const r = await buildEvermindTrainingText(env, TENANT, { model: 'claude-opus-4-8' }, RUN_TEXT);
+    // The FAILING model is carried so the console can NAME it rather than only saying
+    // "not distilled" — the difference between a diagnosable and an invisible fault.
+    expect(r).toEqual({
+      text: RUN_TEXT, distilled: false, skipReason: 'gateway_error',
+      attemptedTeacherModel: 'claude-opus-4-8', skipDetail: 'HTTP 500',
+    });
   });
 });
 
@@ -156,18 +168,19 @@ describe('resolveEvermindTeacherModel (once-per-alarm budget gate)', () => {
   });
 
   it('returns null (no scan) when no teacher is pinned', async () => {
-    expect(await resolveEvermindTeacherModel(env, db, TENANT, null)).toBeNull();
-    expect(await resolveEvermindTeacherModel(env, db, TENANT, '   ')).toBeNull();
+    expect(await resolveEvermindTeacherModel(env, db, TENANT, null)).toEqual({ model: null, reason: 'not_pinned' });
+    expect(await resolveEvermindTeacherModel(env, db, TENANT, '   ')).toEqual({ model: null, reason: 'not_pinned' });
     expect(availabilityMock).not.toHaveBeenCalled();
   });
 
   it('returns the model when the tenant has token budget', async () => {
-    expect(await resolveEvermindTeacherModel(env, db, TENANT, 'claude-opus-4-8')).toBe('claude-opus-4-8');
+    expect(await resolveEvermindTeacherModel(env, db, TENANT, 'claude-opus-4-8')).toEqual({ model: 'claude-opus-4-8' });
   });
 
   it('returns null when the tenant is out of token budget', async () => {
     availabilityMock.mockResolvedValue({ hasTokens: false, reason: 'daily_exhausted' });
-    expect(await resolveEvermindTeacherModel(env, db, TENANT, 'claude-opus-4-8')).toBeNull();
+    // Distinct from 'not_pinned': a pinned teacher blocked by budget is a different fix.
+    expect(await resolveEvermindTeacherModel(env, db, TENANT, 'claude-opus-4-8')).toEqual({ model: null, reason: 'budget_exhausted' });
   });
 
   it('BYPASSES the our-pool budget gate when the tenant has a connected BYO account', async () => {
@@ -175,12 +188,12 @@ describe('resolveEvermindTeacherModel (once-per-alarm budget gate)', () => {
     // disable distillation — and the token scan is never even run.
     availabilityMock.mockResolvedValue({ hasTokens: false, reason: 'daily_exhausted' });
     providerKeysMock.mockResolvedValue([{ provider: 'anthropic', authType: 'oauth' }]);
-    expect(await resolveEvermindTeacherModel(env, db, TENANT, 'claude-opus-4-8')).toBe('claude-opus-4-8');
+    expect(await resolveEvermindTeacherModel(env, db, TENANT, 'claude-opus-4-8')).toEqual({ model: 'claude-opus-4-8' });
     expect(availabilityMock).not.toHaveBeenCalled();
   });
 
   it('fails OPEN (keeps the teacher) when the token scan throws', async () => {
     availabilityMock.mockRejectedValue(new Error('db down'));
-    expect(await resolveEvermindTeacherModel(env, db, TENANT, 'claude-opus-4-8')).toBe('claude-opus-4-8');
+    expect(await resolveEvermindTeacherModel(env, db, TENANT, 'claude-opus-4-8')).toEqual({ model: 'claude-opus-4-8' });
   });
 });

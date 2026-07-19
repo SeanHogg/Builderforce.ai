@@ -29,29 +29,26 @@ describe("matchGlob / filterByGlob", () => {
 
   it("crosses directories with a double star", () => {
     expect(filterByGlob(TREE, "src/**/*.ts")).toEqual([
+      "src/index.ts",
       "src/board/Card.test.ts",
       "src/boardroom/Table.ts",
     ]);
     expect(matchGlob("packages/agent-tools/src/glob.ts", "packages/**/*.ts")).toBe(true);
   });
 
-  // KNOWN BUG (see report): `**` compiles to `.*`, so `src/**/*.ts` becomes
-  // `^src/.*/[^/]*\.ts$` — the pattern's literal slash after `**` forces at least one
-  // intermediate directory. Every mainstream glob (minimatch, bash globstar, ripgrep
-  // --glob, VS Code) lets `**` match ZERO segments, so `src/**/*.ts` matches
-  // `src/index.ts` there. `list_files`' own tool description advertises
-  // `src/**/*.test.ts` as an example, so an agent following that documentation silently
-  // misses every file sitting directly in the scoped directory.
-  // Flip to a plain `it` once globToRegExp handles the zero-segment case.
-  it.fails("`**` should match ZERO path segments (src/**/*.ts finds src/index.ts)", () => {
+  // Regression lock: `**/` used to compile with a LITERAL slash (`^src/.*/[^/]*\.ts$`),
+  // forcing at least one intermediate directory. `list_files`' own tool description
+  // advertises `src/**/*.test.ts`, so an agent following the documentation silently
+  // missed every file sitting directly in the scoped dir — and the zero-match note then
+  // told it the file did not exist.
+  it("matches ZERO path segments across `**` (src/**/*.ts finds src/index.ts)", () => {
     expect(matchGlob("src/index.ts", "src/**/*.ts")).toBe(true);
-  });
-
-  it("currently requires at least one intermediate directory after `**`", () => {
-    // Pins today's behaviour so the bug above cannot change unnoticed in either direction.
-    expect(matchGlob("src/index.ts", "src/**/*.ts")).toBe(false);
-    // The documented workaround an agent must use instead.
-    expect(matchGlob("src/index.ts", "src/*.ts")).toBe(true);
+    expect(matchGlob("a.ts", "**/*.ts")).toBe(true);
+    expect(matchGlob("src/board/Card.test.ts", "src/**/*.test.ts")).toBe(true);
+    // Still anchored: `**` after `src/` must not escape the scoped directory.
+    expect(matchGlob("docs/index.ts", "src/**/*.ts")).toBe(false);
+    // A single star must still not cross a boundary.
+    expect(matchGlob("src/board/Card.tsx", "src/*.tsx")).toBe(false);
   });
 
   it("matches a single character with ?", () => {

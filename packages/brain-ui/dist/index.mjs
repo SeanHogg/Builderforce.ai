@@ -1789,9 +1789,33 @@ var DEFAULT_EVERMIND_LABELS = {
   hideDetail: "Hide detail",
   detailPromptLabel: "Task",
   detailTextLabel: "Learned",
+  notDistilled: "Not distilled",
+  distilledBy: (model) => `via ${model}`,
+  teacherFault: (model, reason) => `The teacher${model ? ` (${model})` : ""} produced no answer (${reason}), so nothing was learned for this task. Check the pinned teacher model and your frontier credit, then teach it again.`,
   refresh: "Refresh",
   errorGeneric: "Something went wrong. Try again."
 };
+
+// src/evermind/learnedStatus.ts
+function evermindLearnedStatus(entry) {
+  if (entry.kind === "delta") return { state: "delta" };
+  if (entry.distilled) {
+    return { state: "distilled", ...entry.teacherModel ? { teacherModel: entry.teacherModel } : {} };
+  }
+  if (entry.skipReason) {
+    if (entry.skipReason === "not_pinned") return { state: "self" };
+    return {
+      state: "fault",
+      reason: entry.skipReason,
+      ...entry.attemptedTeacherModel ? { teacherModel: entry.attemptedTeacherModel } : {},
+      ...entry.skipDetail ? { detail: entry.skipDetail } : {}
+    };
+  }
+  const prompt = entry.prompt?.trim();
+  const text2 = entry.text?.trim();
+  if (prompt && text2 && prompt === text2) return { state: "fault", reason: "unknown" };
+  return { state: "self" };
+}
 
 // src/evermind/EvermindConsole.tsx
 import { Fragment as Fragment3, jsx as jsx9, jsxs as jsxs9 } from "react/jsx-runtime";
@@ -2253,23 +2277,38 @@ function RecentList({ t, entries }) {
 }
 function RecentRow({ t, entry }) {
   const [open, setOpen] = useState7(false);
-  const body = entry.kind === "delta" ? t.deltaEntry : entry.text ?? "";
-  const hasDetail = entry.kind !== "delta" && (!!entry.prompt || !!entry.text);
+  const status = evermindLearnedStatus(entry);
+  const faulted = status.state === "fault";
+  const body = entry.kind === "delta" ? t.deltaEntry : faulted ? "" : entry.text ?? "";
+  const hasDetail = entry.kind !== "delta" && (!!entry.prompt || !!entry.text || faulted);
   return /* @__PURE__ */ jsxs9("li", { style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 3 }, children: [
     /* @__PURE__ */ jsxs9("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
       /* @__PURE__ */ jsx9("span", { style: tag(entry.kind === "delta"), children: entry.kind === "delta" ? t.kindDelta : t.kindText }),
       /* @__PURE__ */ jsx9("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.versionTag(entry.version) }),
       /* @__PURE__ */ jsx9("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.weightTag(entry.weight) }),
+      faulted && /* @__PURE__ */ jsx9("span", { style: faultTag, children: t.notDistilled }),
+      status.state === "distilled" && status.teacherModel && /* @__PURE__ */ jsx9("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.distilledBy(status.teacherModel) }),
       /* @__PURE__ */ jsx9("span", { style: { marginLeft: "auto", fontSize: "0.68rem", color: C.text2 }, children: t.formatWhen(entry.at) })
     ] }),
     entry.prompt && /* @__PURE__ */ jsx9("div", { style: { fontSize: "0.76rem", fontWeight: 600, color: C.text, wordBreak: "break-word" }, children: entry.prompt }),
-    open ? /* @__PURE__ */ jsx9("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 2 }, children: entry.text && /* @__PURE__ */ jsxs9("div", { children: [
+    open ? /* @__PURE__ */ jsx9("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 2 }, children: faulted ? /* @__PURE__ */ jsx9("div", { style: { fontSize: "0.74rem", color: C.text2, lineHeight: 1.5 }, children: t.teacherFault(status.teacherModel ?? "", status.reason) }) : entry.text && /* @__PURE__ */ jsxs9("div", { children: [
       /* @__PURE__ */ jsx9("div", { style: { fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: t.detailTextLabel }),
       /* @__PURE__ */ jsx9("div", { style: { fontSize: "0.74rem", color: C.text, lineHeight: 1.5, wordBreak: "break-word", whiteSpace: "pre-wrap" }, children: entry.text })
     ] }) }) : body && /* @__PURE__ */ jsx9("div", { style: { fontSize: "0.74rem", color: C.text2, lineHeight: 1.45, wordBreak: "break-word", whiteSpace: "pre-wrap", maxHeight: 72, overflow: "hidden" }, children: body }),
     hasDetail && /* @__PURE__ */ jsx9("button", { type: "button", onClick: () => setOpen((v) => !v), style: { ...linkBtn, alignSelf: "flex-start" }, children: open ? t.hideDetail : t.viewDetail })
   ] });
 }
+var faultTag = {
+  fontSize: "0.6rem",
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+  padding: "1px 6px",
+  borderRadius: 5,
+  color: "var(--bf-warn-text, #92400e)",
+  background: "var(--bf-warn-bg, #fef3c7)",
+  border: "1px solid var(--bf-warn-border, #f59e0b)"
+};
 var italic = { margin: 0, fontSize: "0.78rem", color: C.text2, fontStyle: "italic" };
 var fieldLabel = { fontSize: "0.78rem", fontWeight: 600, color: C.text2 };
 var fieldTitle = { fontSize: "0.82rem", fontWeight: 600, color: C.text };
@@ -2814,6 +2853,7 @@ export {
   avatarColor,
   buildSettledTimeline,
   buildTimeline,
+  evermindLearnedStatus,
   formatDuration,
   formatPayload,
   healthRingColor,

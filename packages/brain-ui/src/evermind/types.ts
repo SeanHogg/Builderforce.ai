@@ -22,8 +22,19 @@ export interface EvermindRecentEntry {
   weight: number;
   /** The task prompt the run addressed (text-path only). */
   prompt?: string;
-  /** The run/exemplar text that was learned (text-path only). */
+  /** The run/exemplar text that was learned (text-path only). Absent when a pinned
+   *  teacher failed on a teach-a-task — see `skipReason`. */
   text?: string;
+  /** True when a frontier teacher shaped what was learned (text-path only). */
+  distilled?: boolean;
+  /** The frontier model that distilled this entry (present when `distilled`). */
+  teacherModel?: string;
+  /** Why distillation did NOT happen — {@link EvermindTeacherSkipReason}. */
+  skipReason?: string;
+  /** Operator-facing detail behind `skipReason` (HTTP status, exception message). */
+  skipDetail?: string;
+  /** The pinned teacher model that failed (present on a distillation fault). */
+  attemptedTeacherModel?: string;
 }
 
 /** A scored recall match — a learned memory plus its 0..1 relevance to a task. */
@@ -234,6 +245,12 @@ export interface EvermindConsoleLabels {
   hideDetail: string;
   detailPromptLabel: string;
   detailTextLabel: string;
+  /** Badge on a row whose pinned teacher produced no exemplar. */
+  notDistilled: string;
+  /** Provenance note naming the frontier teacher that distilled the row. */
+  distilledBy: (model: string) => string;
+  /** The expanded explanation of a distillation fault (model may be empty). */
+  teacherFault: (model: string, reason: string) => string;
   // Misc
   refresh: string;
   errorGeneric: string;
@@ -328,6 +345,11 @@ export const DEFAULT_EVERMIND_LABELS: EvermindConsoleLabels = {
   hideDetail: 'Hide detail',
   detailPromptLabel: 'Task',
   detailTextLabel: 'Learned',
+  notDistilled: 'Not distilled',
+  distilledBy: (model) => `via ${model}`,
+  teacherFault: (model, reason) =>
+    `The teacher${model ? ` (${model})` : ''} produced no answer (${reason}), so nothing was learned for this task. ` +
+    'Check the pinned teacher model and your frontier credit, then teach it again.',
   refresh: 'Refresh',
   errorGeneric: 'Something went wrong. Try again.',
 };

@@ -3649,6 +3649,22 @@
     "detailTitle": "Memoria aprendida",
     "detailTask": "Tarea",
     "detailLearned": "Aprendido",
+    "detailTeacher": "Profesor",
+    "detailTeacherSelf": "Aprendido por sí mismo",
+    "detailTeacherUnknown": "Modelo de frontera",
+    "detailNoAnswer": "No se aprendió nada de esta tarea: el profesor no produjo ninguna respuesta.",
+    "faultBadge": "Sin destilar",
+    "faultTitle": "El profesor no produjo ninguna respuesta",
+    "faultBody": "El profesor no respondió a esta tarea ({reason}), por lo que no se aprendió nada de ella.",
+    "faultBodyWithModel": "{model} no respondió a esta tarea ({reason}), por lo que no se aprendió nada de ella.",
+    "faultHint": "Revisa el modelo profesor fijado y tu crédito de frontera, y vuelve a enseñar la tarea.",
+    "faultNotPinned": "no hay profesor fijado",
+    "faultBudget": "sin presupuesto de tokens de frontera",
+    "faultTooShort": "tarea demasiado corta para enseñar",
+    "faultGateway": "la pasarela de modelos devolvió un error",
+    "faultEmpty": "el profesor devolvió una respuesta vacía",
+    "faultException": "la llamada al profesor falló",
+    "faultUnknown": "motivo no registrado",
     "detailKind": "Tipo",
     "detailVersion": "Versión",
     "detailWeight": "Peso",
@@ -7717,6 +7733,29 @@
         "pastePrompt": "Después de aprobar el acceso, copia el código mostrado en la página de xAI y pégalo aquí.",
         "pastePlaceholder": "Pega el código de acceso de xAI…"
       }
+    },
+    "diagnostic": {
+      "currentStatus": "Estado actual: {status}",
+      "checking": "comprobando…",
+      "test": "Probar conexión",
+      "testing": "Probando…",
+      "verified": "Conexión verificada.",
+      "verifiedWith": "Conexión verificada con {model}.",
+      "usage": "Últimos 30 días: {requests} solicitudes · {tokens} tokens",
+      "lastUsed": " · Último uso {when}",
+      "failedFallback": "La prueba de conexión falló: {status}.",
+      "failedGeneric": "La prueba de conexión falló",
+      "failedTitle": "Falló la conexión con {label}",
+      "state": {
+        "ready": "lista",
+        "not_connected": "sin conectar",
+        "revoked": "revocada",
+        "expired": "caducada",
+        "undecryptable": "credencial ilegible",
+        "unavailable": "no disponible"
+      },
+      "tokensUsed": "Tokens de IA usados",
+      "periodLabel": "Últimos {period}"
     }
   },
   "modelSelect": {

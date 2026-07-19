@@ -402,6 +402,19 @@ export interface Env {
   CLOUDFLARE_TURN_API_TOKEN?: string;
 }
 
+/**
+ * The single resolver for the user-facing app origin used to build links in
+ * redirects and emails. APP_URL may hold a comma-separated allow-list (the CORS
+ * config shares the var) — the first entry is the canonical origin. Trailing
+ * slashes are stripped so callers can always append `/path`.
+ */
+export function resolveAppBaseUrl(env: { APP_URL?: string }): string {
+  return (env.APP_URL ?? 'https://builderforce.ai')
+    .split(',')[0]!
+    .trim()
+    .replace(/\/$/, '');
+}
+
 /** Variables injected into Hono context by the auth middleware. */
 export interface Vars {
   userId:   string;

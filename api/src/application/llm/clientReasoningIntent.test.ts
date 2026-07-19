@@ -1,10 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { llmProxyForPlan, type ProxyEnv } from './LlmProxyService';
-import {
-  parseClientReasoningIntent,
-  reasoningParamsForChain,
-  reasoningParamsForModel,
-} from './reasoningCapability';
+import { parseClientReasoningIntent, reasoningParamsForModel } from './reasoningCapability';
+import { dispatchVendor } from './vendors/registry';
+import type { VendorEnv } from './vendors/types';
 
 // ---------------------------------------------------------------------------
 // Client-supplied, VENDOR-NEUTRAL reasoning intent (the VS Code chat "Thinking"
@@ -15,7 +13,8 @@ import {
 //   • absent/garbage        → request byte-identical to today (no param, no throw)
 //   • the level is mapped by the EXISTING reasoningCapability registry against the
 //     model the gateway RESOLVES, so an unsupported family silently drops it
-//   • a mixed-family cascade drops it too — `thinking` must never leak onto a
+//   • the intent is carried into the CASCADE and resolved PER FAILOVER ATTEMPT, so a
+//     mixed-family chain sends the right param on each supported hop and NOTHING on a
 //     Cloudflare/deepseek/qwen coder that would reject it.
 //
 // Vendor calls are mocked via global fetch so the assertions are on the REAL
@@ -104,31 +103,132 @@ describe('parseClientReasoningIntent', () => {
   });
 });
 
-// ── 2. Chain safety (the anti-leak guarantee) ──────────────────────────────
-describe('reasoningParamsForChain', () => {
-  const HIGH = { thinkLevel: 'high' } as const;
+// ── 2. PER-ATTEMPT derivation inside the cascade (the anti-leak guarantee) ──
+//
+// This is the case that motivated the design: the dispatcher walks the candidate
+// chain internally on failover, so the reasoning param CANNOT be computed once for
+// the chain — it is derived for each model actually tried. Every candidate below is
+// forced to fail (429) so the walk visits ALL of them and we can inspect each
+// outgoing body.
+describe('dispatchVendor derives the reasoning param per failover attempt', () => {
+  const CASCADE_ENV: VendorEnv = {
+    CLAUDE_API_KEY: 'sk-ant-test',
+    OPENROUTER_API_KEY: 'or-test',
+    CLOUDFLARE_AI_API_TOKEN: 'cfut_test',
+    CLOUDFLARE_ACCOUNT_ID: 'acct-test',
+  };
 
-  it('emits the param for a single-model (strict-pin) chain', () => {
-    expect(reasoningParamsForChain(['claude-opus-4-8'], HIGH))
-      .toEqual({ thinking: { type: 'enabled', budget_tokens: 16384 } });
+  /** Fail every vendor call with a cascade-eligible 429, recording each body by URL. */
+  function captureCascade(): Array<{ url: string; body: Record<string, any> }> {
+    const seen: Array<{ url: string; body: Record<string, any> }> = [];
+    const fn = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      seen.push({
+        url: typeof input === 'string' ? input : input.toString(),
+        body: JSON.parse(String(init?.body ?? '{}')),
+      });
+      return new Response('rate limited', { status: 429 });
+    });
+    (globalThis as { fetch: typeof fetch }).fetch = fn as unknown as typeof fetch;
+    return seen;
+  }
+
+  async function walk(
+    modelChain: string[],
+    reasoningIntent?: Record<string, unknown>,
+    extraBody?: Record<string, unknown>,
+  ) {
+    const seen = captureCascade();
+    await expect(dispatchVendor({
+      env: CASCADE_ENV,
+      modelChain,
+      messages: [{ role: 'user', content: 'Refactor the avatar filter.' }],
+      maxTokens: 1024,
+      ...(extraBody ? { extraBody } : {}),
+      ...(reasoningIntent ? { reasoningIntent } as never : {}),
+    })).rejects.toThrow(/cascade exhausted/i);
+    expect(seen).toHaveLength(modelChain.length);
+    return seen;
+  }
+
+  const HIGH = { execParams: { thinkLevel: 'high' as const }, isFirstTurn: true };
+
+  it('MIXED chain [claude-opus-4-8, @cf/qwen/…]: thinking on the Anthropic hop, NOTHING on the Cloudflare failover', async () => {
+    const [anthropic, cloudflare] = await walk(
+      ['claude-opus-4-8', '@cf/qwen/qwen3-30b-a3b-fp8'],
+      HIGH,
+    );
+
+    // Anthropic attempt — native extended thinking at the `high` budget.
+    expect(anthropic!.url).toBe(ANTHROPIC_ENDPOINT);
+    expect(anthropic!.body.thinking).toEqual({ type: 'enabled', budget_tokens: 16384 });
+
+    // Cloudflare failover — no reasoning param of ANY kind, and no leaked hint.
+    expect(cloudflare!.url).toContain('api.cloudflare.com');
+    expect(cloudflare!.body.thinking).toBeUndefined();
+    expect(cloudflare!.body.reasoning_effort).toBeUndefined();
+    expect(cloudflare!.body.reasoning).toBeUndefined();
+    expect(cloudflare!.body.firstTurn).toBeUndefined();
+    expect(cloudflare!.body.budget_tokens).toBeUndefined();
   });
 
-  it('emits it for a homogeneous chain (every candidate resolves identically)', () => {
-    expect(reasoningParamsForChain(['openai/gpt-5-nano', 'openai/o3'], HIGH))
-      .toEqual({ reasoning_effort: 'high' });
+  it('MIXED chain [gpt-5, claude-opus-4-8]: each hop gets its OWN param shape', async () => {
+    const [openai, anthropic] = await walk(['gpt-5', 'claude-opus-4-8'], HIGH);
+
+    // OpenAI-shaped hop → reasoning_effort only.
+    expect(openai!.body.reasoning_effort).toBe('high');
+    expect(openai!.body.thinking).toBeUndefined();
+
+    // Anthropic hop → thinking only (no reasoning_effort crossing over).
+    expect(anthropic!.url).toBe(ANTHROPIC_ENDPOINT);
+    expect(anthropic!.body.thinking).toEqual({ type: 'enabled', budget_tokens: 16384 });
+    expect(anthropic!.body.reasoning_effort).toBeUndefined();
   });
 
-  it('DROPS it for a mixed chain — no thinking can leak onto a non-Anthropic coder', () => {
-    expect(reasoningParamsForChain(['claude-opus-4-8', '@cf/qwen/qwen3-30b-a3b-fp8'], HIGH)).toBeUndefined();
-    expect(reasoningParamsForChain(['claude-opus-4-8', 'deepseek/deepseek-v4-flash'], HIGH)).toBeUndefined();
-    // Different vendor param shapes also disagree → drop.
-    expect(reasoningParamsForChain(['claude-opus-4-8', 'openai/gpt-5-nano'], HIGH)).toBeUndefined();
+  it('an unsupported-only chain gets no param on any hop', async () => {
+    const seen = await walk(['@cf/qwen/qwen3-30b-a3b-fp8', 'deepseek/deepseek-v4-flash'], HIGH);
+    for (const { body } of seen) {
+      expect(body.thinking).toBeUndefined();
+      expect(body.reasoning_effort).toBeUndefined();
+    }
   });
 
-  it('drops for an unsupported-only chain or no intent', () => {
-    expect(reasoningParamsForChain(['@cf/qwen/qwen3-30b-a3b-fp8'], HIGH)).toBeUndefined();
-    expect(reasoningParamsForChain(['claude-opus-4-8'], undefined)).toBeUndefined();
-    expect(reasoningParamsForChain([], HIGH)).toBeUndefined();
+  it('ABSENT intent → every attempt is byte-identical to the same walk without the field', async () => {
+    const chain = ['claude-opus-4-8', '@cf/qwen/qwen3-30b-a3b-fp8', 'gpt-5'];
+    const withoutField = await walk(chain);
+    const withUndefined = await walk(chain, undefined);
+    expect(withUndefined.map((s) => JSON.stringify(s.body)))
+      .toEqual(withoutField.map((s) => JSON.stringify(s.body)));
+    for (const { body } of withoutField) {
+      expect(body.reasoning_effort).toBeUndefined();
+      expect(body.reasoning).toBeUndefined();
+    }
+  });
+
+  // `isFirstTurn` is threaded to vendors/anthropic.ts so extended thinking is safe on a
+  // planning turn but OFF on a continuation turn whose thinking block was lost in the
+  // OpenAI round-trip (which would 400). It only bites when tools are present.
+  // (Tools reach the Anthropic translator via `extraBody` — see toAnthropicRequest.)
+  const TOOLS = { tools: [{ type: 'function', function: { name: 'read_file', parameters: { type: 'object' } } }] };
+
+  it('isFirstTurn=true + tools → thinking stays ON for the Anthropic hop', async () => {
+    const [anthropic] = await walk(['claude-opus-4-8'], HIGH, TOOLS);
+    expect(anthropic!.body.thinking).toEqual({ type: 'enabled', budget_tokens: 16384 });
+    // The caller's own extraBody survives the per-attempt merge.
+    expect(anthropic!.body.tools).toHaveLength(1);
+  });
+
+  it('isFirstTurn=false + tools → the Anthropic hop DISABLES thinking; the hint never reaches an OpenAI-shaped hop', async () => {
+    const [openai, anthropic] = await walk(
+      ['gpt-5', 'claude-opus-4-8'],
+      { execParams: { thinkLevel: 'high' }, isFirstTurn: false },
+      TOOLS,
+    );
+    // The hint rides the anthropic branch only — an OpenAI-shaped vendor gets
+    // `reasoning_effort` and nothing else.
+    expect(openai!.body.reasoning_effort).toBe('high');
+    expect(openai!.body.firstTurn).toBeUndefined();
+    expect(anthropic!.body.thinking).toEqual({ type: 'disabled' });
+    expect(anthropic!.body.firstTurn).toBeUndefined();
   });
 });
 
@@ -199,7 +299,7 @@ describe('gateway chat/completions honours the client reasoning intent', () => {
     expect(body?.budget_tokens).toBeUndefined();
   });
 
-  it('a NON-pinned (cascading) request never leaks thinking to the chain', async () => {
+  it('a NON-pinned (auto) request sends nothing to a model whose family has no reasoning param', async () => {
     const cap = captureVendorBody();
     const proxy = llmProxyForPlan(env, 'pro');
     await proxy.complete({

@@ -3649,6 +3649,22 @@
     "detailTitle": "已学记忆",
     "detailTask": "任务",
     "detailLearned": "已学内容",
+    "detailTeacher": "教师模型",
+    "detailTeacherSelf": "自主学习",
+    "detailTeacherUnknown": "前沿模型",
+    "detailNoAnswer": "本任务未学到任何内容——教师模型没有给出回答。",
+    "faultBadge": "未蒸馏",
+    "faultTitle": "教师模型没有给出回答",
+    "faultBody": "教师模型未回答此任务（{reason}），因此没有从中学到任何内容。",
+    "faultBodyWithModel": "{model} 未回答此任务（{reason}），因此没有从中学到任何内容。",
+    "faultHint": "请检查已固定的教师模型和前沿模型额度，然后重新教授该任务。",
+    "faultNotPinned": "未固定教师模型",
+    "faultBudget": "前沿模型令牌额度已用尽",
+    "faultTooShort": "任务过短，无法教授",
+    "faultGateway": "模型网关返回错误",
+    "faultEmpty": "教师模型返回了空回答",
+    "faultException": "教师模型调用失败",
+    "faultUnknown": "未记录原因",
     "detailKind": "类型",
     "detailVersion": "版本",
     "detailWeight": "权重",
@@ -7717,6 +7733,29 @@
         "pastePrompt": "批准访问后，复制 xAI 页面显示的代码并粘贴到这里。",
         "pastePlaceholder": "粘贴 xAI 登录代码…"
       }
+    },
+    "diagnostic": {
+      "currentStatus": "当前状态：{status}",
+      "checking": "检查中…",
+      "test": "测试连接",
+      "testing": "测试中…",
+      "verified": "连接验证成功。",
+      "verifiedWith": "已通过 {model} 验证连接。",
+      "usage": "最近 30 天：{requests} 次请求 · {tokens} 个令牌",
+      "lastUsed": " · 上次使用 {when}",
+      "failedFallback": "连接测试失败：{status}。",
+      "failedGeneric": "连接测试失败",
+      "failedTitle": "{label} 连接失败",
+      "state": {
+        "ready": "就绪",
+        "not_connected": "未连接",
+        "revoked": "已撤销",
+        "expired": "已过期",
+        "undecryptable": "凭据无法读取",
+        "unavailable": "不可用"
+      },
+      "tokensUsed": "已使用的 AI 令牌",
+      "periodLabel": "最近 {period}"
     }
   },
   "modelSelect": {

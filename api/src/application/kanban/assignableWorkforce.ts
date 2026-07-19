@@ -9,8 +9,9 @@
  * the tenant, which is where a hired marketplace agent materialises) so the picker no
  * longer omits them.
  *
- * Served read-through cached (short TTL — the roster changes rarely and 60s of
- * staleness on a picker is harmless), invalidated implicitly by the TTL.
+ * Served read-through cached (short TTL — the roster changes rarely), and explicitly
+ * invalidated on agent create/update/delete via {@link assignableWorkforceCacheKey}
+ * so a just-built agent is immediately pickable rather than hidden behind the TTL.
  */
 import { and, eq, inArray } from 'drizzle-orm';
 import { ideAgents, tenantMembers, users, freelancerEngagements } from '../../infrastructure/database/schema';
@@ -22,6 +23,10 @@ export interface AssignableWorkforce {
   humans: AssigneeCandidate[];
   hires: AssigneeCandidate[];
 }
+
+/** Cache key for one tenant's assignable workforce. Any write that changes who is
+ *  assignable (agent create/update/delete, hire, membership) must invalidate this. */
+export const assignableWorkforceCacheKey = (tenantId: number): string => `kanban:assignable:t:${tenantId}`;
 
 /** Engagement statuses that still count as an assignable hire (not declined/ended). */
 const LIVE_ENGAGEMENT = ['invited', 'interviewing', 'active'];

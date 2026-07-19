@@ -38,6 +38,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import { rankEvermindRecall, hashRecallPrompt, type RankedRecall } from './evermindRecall';
+import type { TeacherSkipReason } from './evermindTeacher';
 
 /** R2 key prefix under which per-project Evermind model versions live. */
 export const PROJECT_EVERMIND_ROOT = 'evermind/project';
@@ -700,7 +701,18 @@ export interface ProjectEvermindRecentEntry {
   at: number;
   weight: number;
   prompt?: string;
+  /** Absent when a pinned teacher failed on a teach-a-task — see `skipReason`. */
   text?: string;
+  /** True when a frontier teacher shaped what was learned (text-path only). */
+  distilled?: boolean;
+  /** The frontier model that distilled this entry (present when `distilled`). */
+  teacherModel?: string;
+  /** Why distillation did NOT happen, so a broken teacher is visible in the console. */
+  skipReason?: TeacherSkipReason;
+  /** Operator-facing detail behind `skipReason` (HTTP status, exception message). */
+  skipDetail?: string;
+  /** The pinned teacher model that failed (present on a distillation fault). */
+  attemptedTeacherModel?: string;
 }
 
 /** One measured training run the coordinator recorded (mirrors the DO's TrainingPoint).

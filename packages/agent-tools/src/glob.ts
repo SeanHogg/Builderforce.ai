@@ -7,6 +7,12 @@
  * Semantics (deliberately small, tuned for file discovery):
  *   - a single star matches any run of characters except a slash
  *   - a double star matches any run of characters INCLUDING slashes (crosses dirs)
+ *   - `**` followed by a slash may also match ZERO directories, so "src/**\/*.ts"
+ *     finds "src/index.ts" as well as "src/a/b.ts" -- the semantics minimatch, bash
+ *     globstar, ripgrep --glob and VS Code all use, and the one list_files' own tool
+ *     description advertises. Compiling the slash literally would force at least one
+ *     intermediate directory and silently hide every file sitting directly in the
+ *     scoped dir, which the zero-match note then reports as "no such file".
  *   - a question mark matches a single character except a slash
  *   - matching is CASE-INSENSITIVE, so "Roadmap.md" finds "ROADMAP.md"
  *   - a pattern with NO slash matches the BASENAME anywhere in the tree, so the
@@ -25,8 +31,15 @@ export function globToRegExp(pattern: string): RegExp {
     const c = pattern[i]!;
     if (c === "*") {
       if (pattern[i + 1] === "*") {
-        re += ".*"; // double star -- cross directory boundaries
-        i++;
+        // `**/` is ONE token spanning "any number of directories, including none".
+        // Consume the trailing slash with it so the slash is optional too.
+        if (pattern[i + 2] === "/") {
+          re += "(?:.*/)?";
+          i += 2;
+        } else {
+          re += ".*"; // trailing/mid-segment double star -- cross directory boundaries
+          i++;
+        }
       } else {
         re += "[^/]*"; // single star -- within a path segment
       }
