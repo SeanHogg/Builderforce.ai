@@ -1362,6 +1362,114 @@ function withProvenanceMetadata(provenance, base) {
   return Object.keys(meta).length > 0 ? JSON.stringify(meta) : void 0;
 }
 
+// src/selectTools.ts
+var DEFAULT_TOOL_LIMIT = 64;
+var STOP_WORDS = /* @__PURE__ */ new Set([
+  "the",
+  "a",
+  "an",
+  "and",
+  "or",
+  "of",
+  "for",
+  "to",
+  "in",
+  "on",
+  "is",
+  "are",
+  "was",
+  "be",
+  "by",
+  "with",
+  "from",
+  "this",
+  "that",
+  "these",
+  "those",
+  "it",
+  "its",
+  "as",
+  "at",
+  "me",
+  "my",
+  "\u6211",
+  "i",
+  "we",
+  "you",
+  "your",
+  "please",
+  "can",
+  "could",
+  "would",
+  "should",
+  "do",
+  "does",
+  "did",
+  "get",
+  "show",
+  "give",
+  "make",
+  "now",
+  "all",
+  "any",
+  "how",
+  "what",
+  "which",
+  "who",
+  "when"
+]);
+function tokenize(text) {
+  return text.toLowerCase().split(/[^a-z0-9一-鿿]+/).filter((w) => w.length > 1 && !STOP_WORDS.has(w));
+}
+function stem(word) {
+  if (word.length > 3 && word.endsWith("ies")) return `${word.slice(0, -3)}y`;
+  if (word.length > 3 && word.endsWith("es")) return word.slice(0, -2);
+  if (word.length > 2 && word.endsWith("s")) return word.slice(0, -1);
+  return word;
+}
+function scoreTool(tool, queryStems) {
+  const name = (tool.function?.name ?? "").toLowerCase();
+  const description = (tool.function?.description ?? "").toLowerCase();
+  if (!name) return 0;
+  let score = 0;
+  const nameStems = new Set(tokenize(name).map(stem));
+  for (const s of nameStems) if (queryStems.has(s)) score += 10;
+  const descStems = new Set(tokenize(description).map(stem));
+  for (const s of descStems) if (queryStems.has(s)) score += 1;
+  return score;
+}
+function selectToolsForTurn(tools, options) {
+  const available = tools?.length ?? 0;
+  const limit = options.limit ?? DEFAULT_TOOL_LIMIT;
+  if (!tools || available <= limit) {
+    return { tools: tools ?? [], trimmed: false, available };
+  }
+  const pinned = new Set(options.pinned ?? []);
+  const queryStems = new Set(tokenize(options.query).map(stem));
+  const chosen = [];
+  const taken = /* @__PURE__ */ new Set();
+  const take = (tool) => {
+    const name = tool.function?.name;
+    if (!name || taken.has(name)) return;
+    taken.add(name);
+    chosen.push(tool);
+  };
+  for (const tool of tools) {
+    if (chosen.length >= limit) break;
+    if (pinned.has(tool.function?.name ?? "")) take(tool);
+  }
+  const scored = tools.map((tool, index) => ({ tool, index, score: scoreTool(tool, queryStems) })).filter((e) => e.score > 0).sort((a, b) => b.score - a.score || a.index - b.index);
+  for (const entry of scored) {
+    if (chosen.length >= limit) break;
+    take(entry.tool);
+  }
+  for (const tool of tools) {
+    if (chosen.length >= limit) break;
+    take(tool);
+  }
+  return { tools: chosen, trimmed: true, available };
+}
+
 // src/chatWorkLinking.ts
 var TICKET_RECORDING_TOOLS = /* @__PURE__ */ new Set([
   "builtin_tickets_from_delta",
@@ -1990,7 +2098,8 @@ async function autoLinkCreatedItem(chatId, c, persistence, runTool, toolName, ou
 async function runLoop(chatId, c, req) {
   const { resolvedSystemPrompt, tools: toolSpecs, model, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
   const convo = c.transcript;
-  const tools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0;
+  const allTools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0;
+  const usedTools = /* @__PURE__ */ new Set();
   const metadata = {
     chatId,
     ...req.projectId != null ? { projectId: req.projectId } : {}
@@ -2079,6 +2188,20 @@ ${chatWorkLinkingDirective(chatId)}`;
     const llmStart = nowMs2();
     let firstTokenAt;
     let result;
+    const selection = selectToolsForTurn(allTools, {
+      query: latestUserText(working) ?? latestUserText(convo) ?? "",
+      pinned: usedTools
+    });
+    const tools = selection.tools.length > 0 ? selection.tools : void 0;
+    if (selection.trimmed) {
+      pushTrace(c, {
+        ts: nowIso(),
+        category: "message",
+        label: "tools.selected",
+        args: { step: iter },
+        result: `${selection.tools.length} of ${selection.available} tools advertised this turn (relevance-selected; ${usedTools.size} pinned from earlier calls)`
+      });
+    }
     try {
       result = await stream(
         { messages: working, tools, tool_choice: tools ? "auto" : void 0, model, maxTokens, reasoning, metadata, signal: c.abort?.signal },
@@ -2225,6 +2348,7 @@ ${chatWorkLinkingDirective(chatId)}`;
           truncated: trimmedOut.truncated
         });
         if (isReadTool && !isFailedToolResult(out)) readDedupe.add(dedupeKey);
+        usedTools.add(tc.name);
       }
       continue;
     }
@@ -2926,6 +3050,7 @@ export {
   CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META,
   DEFAULT_CHAT_TITLE,
+  DEFAULT_TOOL_LIMIT,
   EVERMIND_LEARN_MIN_CHARS,
   NOT_STARTED_TASK_STATUSES,
   PROVENANCE_META_KEY,
@@ -2987,6 +3112,7 @@ export {
   startRun as runBrainLoop,
   savePendingPrompt,
   scopeToConsolidation,
+  selectToolsForTurn,
   setLastResolvedModel,
   setMcpToolStatus,
   startRun,
