@@ -6947,7 +6947,8 @@ export const executionRollbacks = pgTable('execution_rollbacks', {
   baseBranch:       varchar('base_branch', { length: 255 }),
   prRowId:          uuid('pr_row_id').references(() => pullRequests.id, { onDelete: 'set null' }),
   undoPayload:      jsonb('undo_payload'),
-  /** 'active' | 'reverted' | 'torn_down' | 'refused' */
+  /** 'active' | 'reverted' | 'torn_down' | 'refused' | 'revert_pr' (a revert pull
+   *  request is open against the base — the undo is proposed, not yet applied) */
   status:           varchar('status', { length: 16 }).notNull().default('active'),
   refusalCode:      varchar('refusal_code', { length: 32 }),
   refusalReason:    text('refusal_reason'),

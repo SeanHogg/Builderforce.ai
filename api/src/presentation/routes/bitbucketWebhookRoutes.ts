@@ -19,6 +19,7 @@ import { ingestForRepo, type IngestEvent } from '../../application/contributors/
 import { mapBbCommit, mapBbPull } from '../../application/contributors/bitbucketActivitySource';
 import type { RepoCiEvent } from '../../application/ci/ingestRepoCiEvent';
 import { handleCiEventOutcome } from '../../application/ci/handleCiEventOutcome';
+import { resolveBitbucketBranchForCommit } from '../../application/ci/bitbucketBranchForCommit';
 import { ciOutcomeDeps } from './ciOutcomeDeps';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 
@@ -89,8 +90,12 @@ function toOutcome(state: string | null): RepoCiEvent['outcome'] {
  * Bitbucket build failure auto-fix ineligible. A commit status is however already a
  * whole-build verdict — Bitbucket posts one terminal state per build key rather than
  * a stream of per-check events — so we mark terminal states `authoritative` and stay
- * genuinely eligible. `runId: null` only costs the failed-step detail from
- * `fetchBuildError` (GitHub-only anyway); the summary degrades to the build URL.
+ * genuinely eligible. The failed-step detail still resolves without a run id:
+ * `fetchBuildError` recovers the build number from the status URL.
+ *
+ * The status `key` identifies the POSTER (one per CI system wired to the repo), so it
+ * rides along as `statusKey` — several keys on one commit are one build, and the
+ * auto-fix budget de-duplicates on `(sha, key)` rather than spending an attempt each.
  */
 export function bitbucketNormalizeCiEvent(p: Record<string, unknown>): RepoCiEvent | null {
   const st = g(p, 'commit_status') ?? g(p, 'build_status');
@@ -99,8 +104,8 @@ export function bitbucketNormalizeCiEvent(p: Record<string, unknown>): RepoCiEve
   const outcome = toOutcome(state);
   return {
     eventType: 'commit_status',
-    // `refname` is present on branch builds; a status posted without it can only be
-    // correlated post-merge by sha (see the Consolidated Gap Register in ROADMAP.md).
+    // `refname` is present on branch builds; without it the branch is resolved from
+    // the commit hash via the refs API below (falling back to post-merge sha correlation).
     branch: gs(st, 'refname') ?? gs(g(st, 'commit'), 'refname'),
     sha: gs(g(st, 'commit'), 'hash'),
     outcome,
@@ -108,6 +113,7 @@ export function bitbucketNormalizeCiEvent(p: Record<string, unknown>): RepoCiEve
     targetUrl: gs(st, 'url') ?? gs(g(g(st, 'links'), 'self'), 'href'),
     runId: null,
     authoritative: outcome === 'success' || outcome === 'failure',
+    statusKey: gs(st, 'key'),
   };
 }
 
@@ -135,6 +141,18 @@ export function createBitbucketWebhookRoutes(db: Db, runtimeService: RuntimeServ
         || key === 'repo:build_status_created' || key === 'repo:build_status_updated') {
       const norm = bitbucketNormalizeCiEvent(p);
       if (!norm) return c.json({ received: true, processed: false, reason: 'commit status not normalized' });
+      // No `refname` → the status was posted against a bare commit hash. Ask the refs
+      // API which branch that hash heads, so a red PR-branch build still reaches the
+      // PRE-merge auto-fix path instead of only post-merge sha correlation. Cached +
+      // best-effort: still null → unchanged behaviour (post-merge correlation).
+      if (!norm.branch && norm.sha) {
+        const full = repoNames(p).full;
+        if (full) {
+          const env = c.env as Env;
+          const credSecret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
+          norm.branch = await resolveBitbucketBranchForCommit(db, env, credSecret, full, norm.sha);
+        }
+      }
       const res = await handleCiEventOutcome(ciOutcomeDeps(c, db, runtimeService), norm, 'bitbucket');
       return c.json({ received: true, ...res, autoFix: res.autoFix ? { dispatched: res.autoFixDispatched, attempt: res.autoFix.attempt } : undefined });
     }

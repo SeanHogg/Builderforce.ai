@@ -54,6 +54,7 @@ import { ChatTicketService } from '../brain/ChatTicketService';
 import { BrainService } from '../brain/BrainService';
 import { WorkDeltaService, type DeltaKind } from '../delta/WorkDeltaService';
 import { ValidationService, type ReviewVerdict, type ReviewGapInput } from '../validation/ValidationService';
+import { publishReviewToPr } from '../validation/publishReviewToPr';
 import { SecurityAuditService, type FindingSeverity, type TrustCriterion } from '../security/SecurityAuditService';
 import { IncidentService, type IncidentSeverity, type IncidentStatus } from '../incident/IncidentService';
 import { OnCallService } from '../incident/OnCallService';
@@ -684,25 +685,58 @@ const CATALOG: BuiltinTool[] = [
   },
   {
     tool: 'reviews.record', mutates: true,
-    description: 'Report the outcome of reviewing a Done work item against the codebase (Validator agent). verdict: complete (the delivered code fully satisfies the ticket) | gaps (work is missing). For every gap, pass an entry in gaps[] — each becomes a first-class GAP task tied back to the reviewed item so it is scheduled, not lost. Provide a one-paragraph summary of what you checked. A Done item may be reviewed repeatedly; each call is one recorded pass.',
+    description: 'Report the outcome of reviewing a Done work item against the codebase (Validator agent). verdict: complete (the delivered code fully satisfies the ticket) | gaps (work is missing). For every gap, pass an entry in gaps[] — each becomes a first-class GAP task tied back to the reviewed item so it is scheduled, not lost. When a gap is about a SPECIFIC line of code, set path (repo-relative) and line: those gaps are posted as inline comments on the pull request, anchored to that line, so the reviewer sees them against the code. Omit path/line for gaps about missing work ("no tests added") — they go in the review summary instead, which is equally visible. Provide a one-paragraph summary of what you checked. A Done item may be reviewed repeatedly; each call is one recorded pass.',
     parameters: obj({
       taskId: N,
       verdict: { type: 'string', enum: ['complete', 'gaps'] },
       summary: S,
       reviewerRef: S,
-      gaps: { type: 'array', items: obj({ title: S, detail: S, priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] } }, ['title']) },
+      gaps: {
+        type: 'array',
+        items: obj({
+          title: S,
+          detail: S,
+          priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] },
+          path: { type: 'string', description: 'Repo-relative file path this gap is about, e.g. src/api/handler.ts. Only set it if the file is part of this change.' },
+          line: { type: 'number', description: 'Line number in the changed file that the gap refers to.' },
+        }, ['title']),
+      },
     }, ['taskId']),
     run: async (ctx, a) => {
       const gaps: ReviewGapInput[] = Array.isArray(a.gaps)
-        ? (a.gaps as Json[]).map((g) => ({ title: str(g.title), detail: g.detail != null ? str(g.detail) : null, priority: g.priority != null ? (str(g.priority) as TaskPriority) : undefined }))
+        ? (a.gaps as Json[]).map((g) => ({
+            title: str(g.title),
+            detail: g.detail != null ? str(g.detail) : null,
+            priority: g.priority != null ? (str(g.priority) as TaskPriority) : undefined,
+            path: g.path != null ? str(g.path) : null,
+            line: g.line != null ? num(g.line) : null,
+          }))
         : [];
-      return new ValidationService(ctx.db).recordReview(ctx.tenantId, {
-        taskId: num(a.taskId),
+      const taskId = num(a.taskId);
+      const summary = a.summary != null ? str(a.summary) : null;
+      const result = await new ValidationService(ctx.db).recordReview(ctx.tenantId, {
+        taskId,
         verdict: a.verdict != null ? (str(a.verdict) as ReviewVerdict) : undefined,
-        summary: a.summary != null ? str(a.summary) : null,
+        summary,
         reviewerRef: a.reviewerRef != null ? str(a.reviewerRef) : (ctx.userId ?? null),
         gaps,
       });
+
+      // Publish the review onto the ticket's pull request. This is the point of
+      // the whole review: a verdict that lives only in Builderforce is invisible
+      // to whoever is actually deciding whether to merge.
+      //
+      // Best-effort and after the fact — the review is already durably recorded
+      // above, and a GitHub outage must not fail the tool call or lose the gaps.
+      if (ctx.env) {
+        await publishReviewToPr(ctx.env, ctx.db, ctx.tenantId, taskId, {
+          verdict: result.verdict,
+          summary,
+          gaps,
+          reviewerRef: a.reviewerRef != null ? str(a.reviewerRef) : (ctx.userId ?? null),
+        }).catch(() => { /* best-effort */ });
+      }
+      return result;
     },
   },
 

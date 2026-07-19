@@ -105,6 +105,11 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     setLineage(await adapter.listTicketChats(tk.kind, tk.ref).catch(() => []));
   };
 
+  // Ask the host whether run dispatch is permitted. A host that doesn't implement
+  // the probe (VS Code — no tenant-role context) is treated as permitted, so this
+  // gates the web surface without disabling the button where nothing can answer.
+  const runGate = adapter.canRunTicket?.() ?? { allowed: true as const };
+
   const runTicket = async (tk: TicketLinkVM, agentRef: string) => {
     setBusy(true);
     try {
@@ -173,7 +178,18 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
                   <button type="button" title={`${labels.open} · ${tk.label}`} onClick={() => onOpenTicket(tk)} style={S.icon}>↗</button>
                 )}
                 {RUNNABLE.has(tk.kind) && tk.exists && (
-                  <button type="button" title={labels.run} onClick={() => setRunKey(runKey === key ? null : key)} style={S.icon}>▶</button>
+                  <button
+                    type="button"
+                    // Disabled + explained, not hidden: a viewer should see that
+                    // running exists and why they can't, matching every other
+                    // dispatch control. Previously this always looked live and
+                    // failed at click time with a role error.
+                    disabled={!runGate.allowed}
+                    aria-disabled={!runGate.allowed}
+                    title={runGate.allowed ? labels.run : (runGate.reason ?? labels.run)}
+                    onClick={() => setRunKey(runKey === key ? null : key)}
+                    style={runGate.allowed ? S.icon : { ...S.icon, opacity: 0.45, cursor: 'not-allowed' }}
+                  >▶</button>
                 )}
                 <button type="button" title={labels.lineage} onClick={() => void openLineage(tk)} style={S.icon}>⑃</button>
                 <button type="button" title={labels.unlink} disabled={busy} onClick={() => void unlink(tk)} style={S.icon}>✕</button>

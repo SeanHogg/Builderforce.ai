@@ -16,7 +16,7 @@
  */
 import { findOpenPullRequestByTask } from '../repos/recordPullRequestRow';
 import { getPullRequestDetail, invalidatePullRequestDetail } from '../repos/getPullRequestDetail';
-import { resolveRepoAuth } from '../repos/githubClient';
+import { resolveRepoAuth, type ResolvedRepoAuth } from '../repos/githubClient';
 import { publishCheckRun, type CheckAnnotation, type CheckConclusion } from './publishCheckRun';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -33,6 +33,8 @@ export const CHECK_NAMES = {
   agentRun: `${CHECK_PREFIX} · Agent run`,
   qa: `${CHECK_PREFIX} · QA exploration`,
   security: `${CHECK_PREFIX} · Security audit`,
+  /** Acceptance review — the Validator agent, or a human holding the reviewer role. */
+  review: `${CHECK_PREFIX} · Acceptance review`,
 } as const;
 
 export type CheckName = (typeof CHECK_NAMES)[keyof typeof CHECK_NAMES];
@@ -62,6 +64,66 @@ function credentialSecret(env: Env): string {
   return env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET ?? '';
 }
 
+/**
+ * Everything needed to write ANYTHING to a task's pull request: the resolved
+ * credential, the PR number, and the current head SHA.
+ *
+ * Extracted because there are now two publishers with identical resolution
+ * needs — the check-run publisher below and the review publisher in
+ * application/validation/publishReviewToPr.ts. In particular the head-SHA
+ * cache-busting subtlety (see inline) is easy to get wrong and must not be
+ * reimplemented per publisher.
+ */
+export interface TaskPrTarget {
+  auth: ResolvedRepoAuth;
+  prId: string;
+  prNumber: number;
+  headSha: string;
+}
+
+export type ResolveTaskPrResult =
+  | { ok: true; target: TaskPrTarget }
+  | { ok: false; reason: string };
+
+export async function resolveTaskPrTarget(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  taskId: number,
+): Promise<ResolveTaskPrResult> {
+  const pr = await findOpenPullRequestByTask(db, tenantId, taskId);
+  if (!pr) return { ok: false, reason: 'no open pull request for task' };
+  if (!pr.repoId) return { ok: false, reason: 'pull request row has no repo' };
+  if (pr.number == null) return { ok: false, reason: 'pull request has no provider number yet' };
+
+  const auth = await resolveRepoAuth(env, db, credentialSecret(env), tenantId, pr.repoId);
+  if (!auth.ok) return { ok: false, reason: auth.error };
+  if (auth.auth.repo.provider !== 'github') {
+    return { ok: false, reason: `provider '${auth.auth.repo.provider}' is not GitHub` };
+  }
+
+  // Anything anchored to a commit must target the CURRENT head.
+  // getPullRequestDetail is cached for 30s keyed on the PR row's updatedAt, and an
+  // agent that just pushed will very often be inside that window — posting to the
+  // pre-push SHA puts the check (or the review) on a commit no longer in the PR,
+  // where nobody ever sees it. Busting first costs one request and removes the
+  // whole failure mode.
+  const versionToken = String(Date.now());
+  await invalidatePullRequestDetail(env, pr.id, versionToken).catch(() => {});
+  const detail = await getPullRequestDetail(env, pr.id, versionToken, {
+    provider: auth.auth.repo.provider,
+    host: auth.auth.coords.host,
+    owner: auth.auth.coords.owner,
+    repo: auth.auth.coords.repo,
+    token: auth.auth.token,
+    number: pr.number,
+  });
+
+  if (!detail.headSha) return { ok: false, reason: detail.error ?? 'could not resolve PR head SHA' };
+
+  return { ok: true, target: { auth: auth.auth, prId: pr.id, prNumber: pr.number, headSha: detail.headSha } };
+}
+
 export async function publishTaskVerdict(
   env: Env,
   db: Db,
@@ -70,40 +132,13 @@ export async function publishTaskVerdict(
   verdict: TaskVerdict,
 ): Promise<PublishVerdictOutcome> {
   try {
-    const pr = await findOpenPullRequestByTask(db, tenantId, taskId);
-    if (!pr) return { published: false, reason: 'no open pull request for task' };
-    if (!pr.repoId) return { published: false, reason: 'pull request row has no repo' };
-    if (pr.number == null) return { published: false, reason: 'pull request has no provider number yet' };
+    const resolved = await resolveTaskPrTarget(env, db, tenantId, taskId);
+    if (!resolved.ok) return { published: false, reason: resolved.reason };
+    const { auth, headSha } = resolved.target;
 
-    const auth = await resolveRepoAuth(env, db, credentialSecret(env), tenantId, pr.repoId);
-    if (!auth.ok) return { published: false, reason: auth.error };
-    if (auth.auth.repo.provider !== 'github') {
-      return { published: false, reason: `provider '${auth.auth.repo.provider}' has no checks API` };
-    }
-
-    // A check must target the CURRENT head. getPullRequestDetail is cached for
-    // 30s keyed on the PR row's updatedAt, and an agent that just pushed will
-    // very often be inside that window — posting to the pre-push SHA would put
-    // the check on a commit no longer in the PR, where nobody ever sees it.
-    // Busting first costs one extra request and removes that whole failure mode.
-    const versionToken = String(Date.now());
-    await invalidatePullRequestDetail(env, pr.id, versionToken).catch(() => {});
-    const detail = await getPullRequestDetail(env, pr.id, versionToken, {
-      provider: auth.auth.repo.provider,
-      host: auth.auth.coords.host,
-      owner: auth.auth.coords.owner,
-      repo: auth.auth.coords.repo,
-      token: auth.auth.token,
-      number: pr.number,
-    });
-
-    if (!detail.headSha) {
-      return { published: false, reason: detail.error ?? 'could not resolve PR head SHA' };
-    }
-
-    const result = await publishCheckRun(auth.auth, {
+    const result = await publishCheckRun(auth, {
       name: verdict.name,
-      headSha: detail.headSha,
+      headSha,
       status: verdict.status,
       conclusion: verdict.conclusion,
       title: verdict.title,

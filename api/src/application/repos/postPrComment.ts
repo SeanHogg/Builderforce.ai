@@ -160,6 +160,78 @@ export async function postPrIssueComment(
   return { ok: true, id: res.data?.id ?? null, skipped: false };
 }
 
+/** One inline comment, anchored to a line of a file in the PR's diff. */
+export interface PrInlineComment {
+  /** Repo-relative path, exactly as it appears in the PR diff. */
+  path: string;
+  /** Line number in the file AFTER the change (GitHub's `RIGHT` side). */
+  line: number;
+  body: string;
+}
+
+/**
+ * Post ONE review containing every inline comment.
+ *
+ * One review, not N comments: `POST /pulls/{n}/comments` per finding would send a
+ * separate notification for each, burn rate limit, and scatter the reviewer's
+ * findings across the timeline instead of presenting them as a single considered
+ * pass — which is what a review by the Validator (or a human reviewer) actually is.
+ *
+ * `commitSha` must be the PR's current head: GitHub rejects (422) comments
+ * anchored to a commit that is no longer the tip. Callers resolve the head fresh —
+ * see `resolveTaskPrTarget` in application/checks/publishTaskVerdict.ts.
+ *
+ * `event: 'COMMENT'` rather than 'REQUEST_CHANGES' is deliberate. The platform is
+ * not a required reviewer; blocking a human's merge on an automated pass would
+ * train people to dismiss it, which is worse than not posting at all. The verdict
+ * is still unambiguous — it is stated in the review body and mirrored to a check.
+ *
+ * NOTE ON ANCHORS: a comment whose `path`/`line` is not part of the diff fails the
+ * WHOLE review with a 422. A reviewer commenting on a file the PR did not touch is
+ * entirely legitimate, so callers must split those out and send them as a normal
+ * conversation comment instead — see `partitionByDiffAnchor`.
+ */
+export async function postPrReviewComments(
+  auth: ResolvedRepoAuth,
+  prNumber: number,
+  commitSha: string,
+  comments: PrInlineComment[],
+  opts?: { body?: string; fetchFn?: typeof fetch },
+): Promise<PostCommentResult> {
+  const fetchFn = opts?.fetchFn ?? fetch;
+  if (auth.repo.provider !== 'github') {
+    return { ok: false, code: 'unsupported', reason: `pr reviews not supported for provider '${auth.repo.provider}'` };
+  }
+  // An empty review body with no comments is a 422; treat "nothing to say" as a
+  // no-op success so callers don't have to guard every call site.
+  if (comments.length === 0 && !opts?.body) return { ok: true, id: null, skipped: true };
+
+  const res = await githubRequest<{ id: number }>({
+    coords: auth.coords,
+    token: auth.token,
+    path: repoPath(auth.coords, `/pulls/${prNumber}/reviews`),
+    method: 'POST',
+    fetchFn,
+    body: {
+      commit_id: commitSha,
+      event: 'COMMENT',
+      ...(opts?.body ? { body: opts.body } : {}),
+      comments: comments.map((c) => ({
+        path: c.path,
+        line: c.line,
+        // Without an explicit side, GitHub defaults to RIGHT for `line` but the
+        // behaviour differs for multi-line and deleted-line anchors; pinning it
+        // keeps every anchor pointing at the post-change file.
+        side: 'RIGHT',
+        body: c.body,
+      })),
+    },
+  });
+
+  if (!res.ok) return { ok: false, code: res.code, reason: res.reason };
+  return { ok: true, id: res.data?.id ?? null, skipped: false };
+}
+
 /**
  * Convenience for the common caller shape: "I know the repo row and the PR
  * number, put this on the PR." Resolves the App-first credential itself and

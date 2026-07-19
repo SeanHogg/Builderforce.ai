@@ -66,27 +66,78 @@ export function buildGitAuthHeader(provider: string, token: string): string {
 }
 
 /**
+ * Which REST dialect a (provider, host) pair speaks. Bitbucket is TWO products
+ * with two incompatible APIs — Cloud's `/2.0/repositories/:owner/:repo/...` and
+ * Server's (Data Center's) `/rest/api/1.0/projects/:key/repos/:slug/...` — so the
+ * provider string alone is not enough to shape a URL. Callers that only know the
+ * Cloud path shapes must keep asking for `buildGitApiBaseUrl` WITHOUT
+ * `allowBitbucketServer` so they still refuse out loud on a Server host, rather
+ * than aiming Cloud-shaped paths at an API that has never had them.
+ */
+export type GitApiFlavor = 'github' | 'gitlab' | 'bitbucket-cloud' | 'bitbucket-server';
+
+/** Resolve the REST dialect for a repo. Throws for a provider we have no API for. */
+export function resolveGitApiFlavor(provider: string, host: string | null): GitApiFlavor {
+  const h = (host ?? '').trim();
+  if (provider === 'github') return 'github';
+  if (provider === 'gitlab') return 'gitlab';
+  if (provider === 'bitbucket') return !h || h === 'bitbucket.org' ? 'bitbucket-cloud' : 'bitbucket-server';
+  throw new Error(`No REST API base for provider '${provider}'`);
+}
+
+export interface GitApiBaseOptions {
+  /**
+   * Opt in to the Bitbucket Server 1.0 base. OFF by default and deliberately so:
+   * the returned base is NOT interchangeable with the Cloud one, so only a caller
+   * that shapes Server paths itself (see `bitbucketServerRepoPath`) may set it.
+   * Every other caller keeps the historical throw → typed `unsupported` refusal.
+   */
+  allowBitbucketServer?: boolean;
+}
+
+/**
  * Build the provider REST API base URL for a repo's host.
  *   - GitHub: api.github.com (cloud) or `https://<host>/api/v3` (Enterprise).
  *   - GitLab: `https://<host||gitlab.com>/api/v4` (cloud + self-managed).
- *   - Bitbucket: `https://api.bitbucket.org/2.0` (Cloud). Bitbucket *Server*
- *     (self-hosted, `/rest/api/1.0`) is a different API and not mapped here.
+ *   - Bitbucket Cloud: `https://api.bitbucket.org/2.0`.
+ *   - Bitbucket Server (self-hosted): `https://<host>/rest/api/1.0`, but ONLY when
+ *     the caller passes `allowBitbucketServer` to declare it speaks that dialect.
  */
-export function buildGitApiBaseUrl(provider: string, host: string | null): string {
+export function buildGitApiBaseUrl(provider: string, host: string | null, opts: GitApiBaseOptions = {}): string {
   const h = (host ?? '').trim();
-  if (provider === 'github') {
+  const flavor = resolveGitApiFlavor(provider, host);
+  if (flavor === 'github') {
     if (!h || h === 'github.com') return 'https://api.github.com';
     return `https://${h}/api/v3`;
   }
-  if (provider === 'gitlab') {
+  if (flavor === 'gitlab') {
     return `https://${!h || h === 'gitlab.com' ? 'gitlab.com' : h}/api/v4`;
   }
-  if (provider === 'bitbucket') {
-    // Bitbucket Cloud only; a custom host implies Bitbucket Server (unsupported).
-    if (!h || h === 'bitbucket.org') return 'https://api.bitbucket.org/2.0';
+  if (flavor === 'bitbucket-cloud') return 'https://api.bitbucket.org/2.0';
+  if (!opts.allowBitbucketServer) {
     throw new Error('Bitbucket Server (self-hosted) REST API is not supported');
   }
-  throw new Error(`No REST API base for provider '${provider}'`);
+  return `https://${h}/rest/api/1.0`;
+}
+
+/**
+ * The repo-addressing path segment for Bitbucket Server: `/projects/:key/repos/:slug`.
+ * The `owner` we hold for a Server repo IS the project key (or `~user` for a personal
+ * repo, which is why the value is passed through verbatim rather than upper-cased).
+ */
+export function bitbucketServerRepoPath(owner: string, repo: string): string {
+  return `/projects/${encodeURIComponent(owner)}/repos/${encodeURIComponent(repo)}`;
+}
+
+/**
+ * Bitbucket Server keeps branch DELETION on a separate plugin API
+ * (`/rest/branch-utils/1.0`), not on `/rest/api/1.0` — a delete aimed at the core
+ * base 404s, which would read as "already gone" and silently lose the residue.
+ */
+export function buildBitbucketServerBranchUtilsBase(host: string | null): string {
+  const h = (host ?? '').trim();
+  if (!h) throw new Error('Bitbucket Server host is required');
+  return `https://${h}/rest/branch-utils/1.0`;
 }
 
 /**

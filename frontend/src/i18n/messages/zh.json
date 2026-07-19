@@ -10057,5 +10057,36 @@
     "errorLoad": "无法加载计划。",
     "errorSave": "无法保存计划。",
     "errorDelete": "无法删除计划。"
+  },
+  "permissionDebugger": {
+    "title": "权限调试器",
+    "copyAll": "全部复制",
+    "copyAllHint": "以 JSON 复制全部",
+    "exportCsv": "导出 CSV",
+    "exportCsvHint": "导出为 CSV",
+    "close": "关闭",
+    "role": "角色：",
+    "activeCount": "已启用：{granted} / {total} 项权限",
+    "deniedCount": "{count} 项被拒绝",
+    "softGatedCount": "{count} 项软限制",
+    "empty": "此视图中没有权限。",
+    "tab": {
+      "page": "页面",
+      "user": "用户",
+      "role": "角色",
+      "missing": "缺失"
+    },
+    "col": {
+      "permission": "权限",
+      "status": "状态",
+      "source": "来源",
+      "count": "数量",
+      "apiEndpoint": "API 端点"
+    },
+    "status": {
+      "granted": "已授予",
+      "denied": "已拒绝",
+      "soft-gate": "软限制"
+    }
   }
 }

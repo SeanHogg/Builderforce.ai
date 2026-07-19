@@ -17,7 +17,7 @@
  * Best-effort: never throws (a webhook must always 200 to stop provider retries).
  */
 import { toolAuditEvents } from '../../infrastructure/database/schema';
-import { ingestRepoCiEvent, AUTOFIX_DISPATCH_EVENT, type RepoCiEvent, type IngestResult } from './ingestRepoCiEvent';
+import { ingestRepoCiEvent, AUTOFIX_DISPATCH_EVENT, AUTOFIX_DEDUPED_REASON, type RepoCiEvent, type IngestResult } from './ingestRepoCiEvent';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -76,7 +76,9 @@ export async function handleCiEventOutcome(
             tenantId: intent.tenantId, agentHostId: null, cloudAgentRef: null,
             executionId, sessionKey: `exec:${executionId}`,
             toolName: AUTOFIX_DISPATCH_EVENT, category: 'ci',
-            args: JSON.stringify({ taskId: intent.taskId, attempt: intent.attempt, source }),
+            // `sha` is load-bearing, not just telemetry: the per-build de-duplication
+            // in `ingestRepoCiEvent` reads it back off these rows.
+            args: JSON.stringify({ taskId: intent.taskId, attempt: intent.attempt, source, sha: intent.sha, statusKey: intent.statusKey ?? null }),
             result: `auto-fix run dispatched (attempt ${intent.attempt})`, ts: new Date(),
           }).catch(() => { /* telemetry best-effort */ });
         }
@@ -87,10 +89,13 @@ export async function handleCiEventOutcome(
 
   // A red build that produced NO fix run is the case operators need to see. The
   // `reason` alone dies in a webhook response body nobody reads, so make it an
-  // event on the run's Logs/Timeline (the exhaustion case already emits its own
-  // `build.needs_human`, so don't double-report it).
+  // event on the run's Logs/Timeline. Two reasons are deliberately silent: the
+  // exhaustion case already emits its own `build.needs_human`, and a de-duplicated
+  // sibling status key is a build already being fixed, not a skipped one — a repo
+  // with several keys would otherwise log one of these per poster per build.
   if (res.buildStatus === 'failure' && res.taskId != null && res.tenantId != null
-      && res.reason && res.reason !== 'auto-fix attempts exhausted') {
+      && res.reason && res.reason !== 'auto-fix attempts exhausted'
+      && res.reason !== AUTOFIX_DEDUPED_REASON) {
     await db.insert(toolAuditEvents).values({
       tenantId: res.tenantId, agentHostId: null, cloudAgentRef: null,
       executionId: res.executionId ?? null,

@@ -2550,21 +2550,23 @@ textarea.input { resize: vertical; line-height: 1.5; }
   z-index: 9998;
   width: 420px;
   max-width: 95vw;
-  background: #18181b;
-  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--surface, #18181b);
+  border-left: 1px solid var(--border, rgba(255, 255, 255, 0.12));
   display: flex;
   flex-direction: column;
-  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.5);
+  box-shadow: -4px 0 24px var(--shadow-color, rgba(0, 0, 0, 0.5));
   font-size: 12px;
-  color: #e4e4e7;
+  color: var(--text-primary, #e4e4e7);
 }
 
 .perm-debugger-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
   padding: 10px 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.1));
   flex-shrink: 0;
 }
 
@@ -2575,21 +2577,26 @@ textarea.input { resize: vertical; line-height: 1.5; }
 }
 
 .perm-debugger-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
   padding: 8px 14px;
   font-size: 11px;
   color: var(--text-muted, #9ca3af);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.06));
   flex-shrink: 0;
 }
 
 .perm-debugger-tabs {
   display: flex;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
   flex-shrink: 0;
 }
 
 .perm-debugger-tab {
   flex: 1;
+  /* Tap-friendly on a phone; the panel goes full-width under 480px. */
+  min-height: 36px;
   padding: 7px 4px;
   background: none;
   border: none;
@@ -2599,12 +2606,20 @@ textarea.input { resize: vertical; line-height: 1.5; }
   transition: background 0.1s;
 }
 
-.perm-debugger-tab:hover { background: rgba(255,255,255,0.05); }
-.perm-debugger-tab--active { color: #e4e4e7; border-bottom: 2px solid #6366f1; font-weight: 600; }
+.perm-debugger-tab:hover { background: var(--surface-hover, rgba(255, 255, 255, 0.05)); }
+.perm-debugger-tab--active {
+  color: var(--text-primary, #e4e4e7);
+  border-bottom: 2px solid var(--accent, #6366f1);
+  font-weight: 600;
+}
 
 .perm-debugger-body {
   flex: 1;
   overflow-y: auto;
+  /* The table carries a monospace permission key + API endpoint and cannot
+     reflow, so scroll it inside its own container rather than letting the
+     panel overflow the viewport. */
+  overflow-x: auto;
 }
 
 .perm-debugger-table {
@@ -2618,33 +2633,53 @@ textarea.input { resize: vertical; line-height: 1.5; }
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  white-space: nowrap;
   color: var(--text-muted, #9ca3af);
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.08));
   position: sticky;
   top: 0;
-  background: #18181b;
+  background: var(--surface, #18181b);
 }
 
 .perm-debugger-table td {
   padding: 5px 12px;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.04));
   vertical-align: middle;
 }
 
-.perm-debugger-table tr:hover td { background: rgba(255,255,255,0.03); }
+.perm-debugger-table tr:hover td { background: var(--surface-hover, rgba(255, 255, 255, 0.03)); }
 
 .perm-debugger-btn {
+  min-height: 28px;
   padding: 3px 8px;
   font-size: 11px;
-  border: 1px solid rgba(255,255,255,0.2);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.2));
   border-radius: 4px;
   background: transparent;
-  color: #e4e4e7;
+  color: var(--text-primary, #e4e4e7);
   cursor: pointer;
 }
 
-.perm-debugger-btn:hover { background: rgba(255,255,255,0.1); }
+.perm-debugger-btn:hover { background: var(--surface-hover, rgba(255, 255, 255, 0.1)); }
 .perm-debugger-btn--close { font-size: 16px; padding: 1px 7px; }
+
+.perm-debugger-count-badge {
+  margin-left: 4px;
+  background: var(--error, #ef4444);
+  color: #fff;
+  border-radius: 8px;
+  padding: 0 5px;
+  font-size: 10px;
+}
+
+/* Below 480px a fixed 420px panel leaves a useless sliver of page behind it and
+   pushes the table off-screen — take the full width instead. */
+@media (max-width: 480px) {
+  .perm-debugger-panel {
+    width: 100vw;
+    max-width: 100vw;
+  }
+}
 
 /* User detail drawer */
 .user-drawer-overlay {

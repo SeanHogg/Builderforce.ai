@@ -15,8 +15,9 @@
  * fix-run dispatch is performed by the caller (it owns the request/execution
  * context); this module only DECIDES and returns the intent.
  */
-import { and, count, desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { executions, tasks, projects, toolAuditEvents } from '../../infrastructure/database/schema';
+import { peekCached, setCached } from '../../infrastructure/cache/readThroughCache';
 import { resolveDefaultRepoForTask } from '../repos/resolveDefaultRepo';
 import { resolveRepoCredential, isResolveError } from '../repos/resolveRepoCredential';
 import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutofixOnBuildFailure, MAX_AUTOFIX_ATTEMPTS } from '../repos/mergeBranchToBase';
@@ -49,6 +50,13 @@ export interface RepoCiEvent {
    * rather than silently skipped.
    */
   authoritative?: boolean;
+  /**
+   * Identifies the POSTER of the status, not the build (Bitbucket commit-status
+   * `key` — one per CI system wired to the repo). A repo with several keys posts
+   * several authoritative terminal states for the SAME commit, so the auto-fix
+   * budget de-duplicates on `(sha, key)` and spends one attempt per BUILD.
+   */
+  statusKey?: string | null;
 }
 
 const TASK_BRANCH_RE = /^builderforce\/task-(\d+)\b/;
@@ -58,6 +66,9 @@ const DESIGNER_BRANCH_RE = /^builderforce\/designer-(\d+)\b/;
 /** Telemetry toolName recorded per dispatched auto-fix run (the loop-guard counts these). */
 export const AUTOFIX_DISPATCH_EVENT = 'autofix.dispatch';
 
+/** `reason` returned when a second status poster reports an already-claimed build. */
+export const AUTOFIX_DEDUPED_REASON = 'auto-fix already dispatched for this build';
+
 export interface AutoFixIntent {
   taskId: number;
   tenantId: number;
@@ -65,6 +76,11 @@ export interface AutoFixIntent {
   attempt: number;
   /** JSON payload carrying the remediation context for the fix run's prompt. */
   payload: string;
+  /** Commit the failing build ran on — recorded on the dispatch event so a later
+   *  status post for the SAME build is recognised and doesn't burn a second attempt. */
+  sha: string | null;
+  /** Status poster that claimed this build's attempt (Bitbucket key), for telemetry. */
+  statusKey?: string | null;
 }
 
 export interface IngestResult {
@@ -91,10 +107,16 @@ async function latestExecutionId(db: Db, taskId: number, tenantId: number): Prom
   return exec?.id;
 }
 
-/** How many auto-fix runs have already been dispatched for this task (loop-guard). */
-async function autofixAttemptsSoFar(db: Db, taskId: number, tenantId: number): Promise<number> {
-  const [row] = await db
-    .select({ n: count() })
+/**
+ * The auto-fix runs already dispatched for this task (loop-guard): how many, and
+ * which commits they were dispatched FOR. The sha set is what makes the budget count
+ * BUILDS — a repo with several commit-status keys posts several authoritative
+ * terminal states for one commit, and without this each poster would spend its own
+ * attempt. A real second attempt always follows a fix commit, i.e. a new sha.
+ */
+async function priorAutofixDispatches(db: Db, taskId: number, tenantId: number): Promise<{ attempts: number; shas: Set<string> }> {
+  const rows = await db
+    .select({ args: toolAuditEvents.args })
     .from(toolAuditEvents)
     .innerJoin(executions, eq(executions.id, toolAuditEvents.executionId))
     .where(and(
@@ -102,7 +124,19 @@ async function autofixAttemptsSoFar(db: Db, taskId: number, tenantId: number): P
       eq(executions.tenantId, tenantId),
       eq(toolAuditEvents.toolName, AUTOFIX_DISPATCH_EVENT),
     ));
-  return row?.n ?? 0;
+  const shas = new Set<string>();
+  for (const r of rows) {
+    try {
+      const sha = (JSON.parse(r.args ?? '{}') as { sha?: unknown }).sha;
+      if (typeof sha === 'string' && sha) shas.add(sha);
+    } catch { /* pre-sha rows (and malformed args) just don't contribute a sha */ }
+  }
+  return { attempts: rows.length, shas };
+}
+
+/** Cache key for the in-flight claim on a build's single auto-fix attempt. */
+function autofixClaimKey(tenantId: number, taskId: number, sha: string): string {
+  return `autofix-build:${tenantId}:${taskId}:${sha}`;
 }
 
 /**
@@ -142,7 +176,9 @@ async function applyBuildOutcome(
   let buildError: string | null = null;
   if (outcome === 'failure') {
     buildError = `The ${phaseLabel} failed.${evt.targetUrl ? ` See: ${evt.targetUrl}` : ''}`;
-    if (pr.repoId && evt.runId) {
+    // A run id OR a run URL is enough: GitHub/GitLab address the run by id, Bitbucket
+    // recovers its build number from the status URL.
+    if (pr.repoId && (evt.runId != null || evt.targetUrl)) {
       const resolved = await resolveRepoCredential(db, secret, tenantId, pr.repoId);
       if (!isResolveError(resolved)) {
         const be = await fetchBuildError(env, {
@@ -178,7 +214,24 @@ async function applyBuildOutcome(
   if (!cloudAutofixOnBuildFailure(env)) {
     return { processed: true, taskId, tenantId, executionId: execId, buildStatus: 'failure', reason: 'auto-fix disabled' };
   }
-  const priorAttempts = await autofixAttemptsSoFar(db, taskId, tenantId);
+  // De-duplicate per BUILD, identified by (sha, status key): the first key to report
+  // a commit red claims that build's attempt, and every other key reporting the SAME
+  // commit is the same failing build, not a new one. Two layers because the durable
+  // record is written asynchronously (the caller dispatches in `waitUntil`, so a
+  // second webhook can arrive first): a short-lived claim in the shared read-through
+  // cache covers the in-flight window, the dispatch events' shas cover the rest.
+  const { attempts: priorAttempts, shas: dispatchedShas } = await priorAutofixDispatches(db, taskId, tenantId);
+  if (evt.sha) {
+    const claimed = dispatchedShas.has(evt.sha)
+      || (await peekCached<{ statusKey: string | null }>(env, autofixClaimKey(tenantId, taskId, evt.sha))) != null;
+    if (claimed) {
+      return {
+        processed: true, taskId, tenantId, executionId: execId, buildStatus: 'failure',
+        reason: AUTOFIX_DEDUPED_REASON,
+      };
+    }
+  }
+
   if (priorAttempts >= MAX_AUTOFIX_ATTEMPTS) {
     await db.insert(toolAuditEvents).values({
       tenantId, agentHostId: null, cloudAgentRef: agentRef,
@@ -194,9 +247,16 @@ async function applyBuildOutcome(
   const payload = JSON.stringify({
     remediation: { kind: 'build_failure', phase, attempt, maxAttempts: MAX_AUTOFIX_ATTEMPTS, buildError, runUrl: evt.targetUrl },
   });
+  // Claim this build BEFORE returning the intent, so a sibling status key that
+  // arrives while the dispatch is still in flight sees the claim above.
+  if (evt.sha) {
+    await setCached(env, autofixClaimKey(tenantId, taskId, evt.sha), { statusKey: evt.statusKey ?? null }, {
+      kvTtlSeconds: 3600, l1TtlMs: 3600_000,
+    }).catch(() => { /* claim is an optimization — the dispatch events are the record */ });
+  }
   return {
     processed: true, taskId, tenantId, executionId: execId, buildStatus: 'failure',
-    autoFix: { taskId, tenantId, attempt, payload },
+    autoFix: { taskId, tenantId, attempt, payload, sha: evt.sha, statusKey: evt.statusKey ?? null },
   };
 }
 
@@ -255,7 +315,7 @@ async function ingestDesignerEvent(
   let buildError: string | null = null;
   if (outcome === 'failure') {
     buildError = `The PR-branch build failed.${evt.targetUrl ? ` See: ${evt.targetUrl}` : ''}`;
-    if (pr.repoId && evt.runId) {
+    if (pr.repoId && (evt.runId != null || evt.targetUrl)) {
       const resolved = await resolveRepoCredential(db, secret, project.tenantId, pr.repoId);
       if (!isResolveError(resolved)) {
         const be = await fetchBuildError(env, {
@@ -347,8 +407,10 @@ async function ingestPreMergeEvent(db: Db, env: Env, secret: string, evt: RepoCi
   }
 
   // Carry the build status + any auto-fix intent (failure) up to the webhook, which
-  // owns the run dispatch — same contract the post-merge path returns.
-  return { processed: true, taskId, tenantId: task.tenantId, executionId: execId, merged, buildStatus: buildResult?.buildStatus, autoFix: buildResult?.autoFix };
+  // owns the run dispatch — same contract the post-merge path returns. The `reason`
+  // rides along too: it is what `handleCiEventOutcome` turns into the observable
+  // `build.autofix_skipped` event, so dropping it here blinded the pre-merge path.
+  return { processed: true, taskId, tenantId: task.tenantId, executionId: execId, merged, buildStatus: buildResult?.buildStatus, autoFix: buildResult?.autoFix, reason: buildResult?.reason };
 }
 
 /** Path 2 — an event on the deploy branch (post-merge): validate + maybe auto-fix. */

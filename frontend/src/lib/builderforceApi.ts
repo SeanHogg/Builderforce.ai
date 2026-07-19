@@ -5488,6 +5488,24 @@ export interface ProjectRepository {
   updatedAt: string;
 }
 
+/** Per-repo readiness of the GitHub Actions execution surface. */
+export interface GithubActionsRepoStatus {
+  repoId: string;
+  /** Only GitHub has Actions — a GitLab/Bitbucket repo has nothing to enable. */
+  supported: boolean;
+  /** The Builderforce agent workflow is present on the repo's default branch. */
+  enabled: boolean;
+  isDefault: boolean;
+}
+
+export interface GithubActionsStatus {
+  /** The repo dispatch would actually use (the default) carries the workflow, so
+   *  an agent set to the `github_actions` surface will really run there. */
+  ready: boolean;
+  workflowPath: string;
+  repositories: GithubActionsRepoStatus[];
+}
+
 export interface AddRepositoryBody {
   provider: string;
   owner: string;
@@ -5540,6 +5558,27 @@ export const reposApi = {
 
   remove: (id: string): Promise<void> =>
     request<void>(`/api/repos/repositories/${id}`, { method: 'DELETE' }),
+
+  /**
+   * Is the GitHub Actions execution surface usable for this project's repos?
+   * `ready` answers the question the agent surface picker asks (the DEFAULT repo
+   * carries the agent workflow); `repositories` answers the per-row question the
+   * Source control panel asks. Server-side this is read-through cached and
+   * invalidated by `enableGithubActions`, so callers may refetch freely.
+   */
+  githubActionsStatus: (projectId: number): Promise<GithubActionsStatus> =>
+    request<GithubActionsStatus>(`/api/repos/projects/${projectId}/github-actions`),
+
+  /** Commit the Builderforce agent workflow into a repo's default branch — what
+   *  makes the `github_actions` surface actually runnable for this project. */
+  enableGithubActions: (id: string): Promise<{ ok: true; created: boolean; path: string }> =>
+    request(`/api/repos/repositories/${id}/github-actions/enable`, { method: 'POST' }),
+
+  /** Ingest every OPEN code-scanning / Dependabot alert as a security finding —
+   *  for a repo connected after alerts accumulated, or whose webhook never fired.
+   *  Idempotent (ingestion dedupes against open findings). */
+  backfillSecurityAlerts: (id: string): Promise<{ ok: true; ingested?: number; scanned?: number }> =>
+    request(`/api/repos/repositories/${id}/security/backfill-alerts`, { method: 'POST' }),
 
   listPullRequests: (projectId: number) =>
     request<{ pullRequests: unknown[] }>(`/api/repos/projects/${projectId}/pull-requests`).then((r) => r.pullRequests ?? []),

@@ -67,7 +67,38 @@ const OVERLOADED_STATUS = 529;
  *  so one non-streaming Anthropic call stays inside the vendor timeout budget
  *  (both catalog models support far more, but the floor is a single coding turn). */
 const DEFAULT_MAX_TOKENS = 16_000;
+/**
+ * Output ceiling for the NON-STREAMING `call()` path. Deliberately conservative:
+ * a non-streaming request holds one HTTP response open for the whole generation,
+ * so the cap is what keeps a single turn inside `DEFAULT_VENDOR_CALL_TIMEOUT_MS`
+ * (25s, 60s premium). Raising it here would not produce longer answers — it would
+ * produce 408 timeouts partway through them, which cascade off Anthropic entirely.
+ */
 const MAX_OUTPUT_TOKENS = 32_000;
+/**
+ * Output ceiling for the STREAMING `callStream()` path — the model's own 128K
+ * per-response maximum (both catalog entries, Sonnet 5 and Opus 4.8, cap there).
+ *
+ * The vendor timeout that forces the conservative non-streaming floor above does
+ * NOT apply here: `fetchWithVendorTimeout` bounds the time to RESPONSE HEADERS,
+ * and a streaming request returns headers as soon as the first SSE event lands,
+ * after which the body drains outside that budget. So the streaming surface can
+ * safely carry the full model ceiling — which is the point: a long coding turn on
+ * a streaming surface (IDE chat, agent replies) was being truncated at 32K by a
+ * limit that only ever existed for the non-streaming timeout.
+ */
+const MAX_OUTPUT_TOKENS_STREAM = 128_000;
+
+/**
+ * Resolve the `max_tokens` this request sends: the caller's value (or the default
+ * when absent), floored at 1 and clamped to the SURFACE-appropriate ceiling. Split
+ * out so the streaming-vs-non-streaming boundary is directly unit-testable —
+ * `prepareAnthropicRequest` needs live params, this needs a number and a boolean.
+ */
+export function anthropicOutputCap(requested: number | undefined, stream: boolean): number {
+  const ceiling = stream ? MAX_OUTPUT_TOKENS_STREAM : MAX_OUTPUT_TOKENS;
+  return Math.min(Math.max(1, requested ?? DEFAULT_MAX_TOKENS), ceiling);
+}
 
 // Model ids are the exact Anthropic API strings (no date suffix). These are the
 // reliability floor, ordered cheapest-first in the fallback chain: Sonnet first,
@@ -326,7 +357,7 @@ function prepareAnthropicRequest(
         : 'CLAUDE_API_KEY is empty',
     );
   }
-  const maxTokens = Math.min(Math.max(1, params.maxTokens ?? DEFAULT_MAX_TOKENS), MAX_OUTPUT_TOKENS);
+  const maxTokens = anthropicOutputCap(params.maxTokens, stream);
   // Cache the large STABLE prefix (tools + system instructions/repo context) so a
   // multi-turn run pays ~0.1x for it after the first turn. `{type:'ephemeral'}` is the
   // GA 5-minute cache. A SUBSCRIPTION (OAuth) token REQUIRES the Claude Code identity as

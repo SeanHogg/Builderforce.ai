@@ -50,6 +50,33 @@ async function invalidateAgentCaches(env: Env, tenantId: number): Promise<void> 
 }
 
 /**
+ * Every cached read a HIRE or UNHIRE staled. Hiring adds a callable role to the
+ * tenant's workforce and unhiring removes one, so both change exactly the same
+ * surfaces an agent create/delete does — plus the buyer's purchased list and the
+ * runtime's hired-agent registry.
+ *
+ * This exists because the two hire handlers hand-rolled their own invalidation
+ * list and it had drifted from {@link invalidateAgentCaches}: neither cleared
+ * `kanban:assignable:t:<tenant>`, so a freshly-hired agent was missing from the
+ * role/ticket picker for up to that key's 60s TTL (hire → assign made you wait),
+ * and neither cleared the assignee hovercard profiles the picker then reads.
+ * One helper, so the next key added to the roster can't miss the hire path.
+ *
+ * `publicListing` is conditional because `hire_count` drives the public listing's
+ * ordering and only moves on a real inactive→active transition — a redundant
+ * re-hire must not bust a cache shared by every tenant.
+ */
+export async function invalidateHireCaches(env: Env, tenantId: number, opts: { publicListing: boolean }): Promise<void> {
+  await Promise.all([
+    invalidateCached(env, purchasedCacheKey(tenantId)),
+    invalidateCached(env, runtimeHiredAgentsCacheKey(tenantId)),
+    invalidateCached(env, assignableWorkforceCacheKey(tenantId)),
+    invalidateCached(env, assigneeProfilesCacheKey(tenantId)),
+    opts.publicListing ? invalidateCached(env, PUBLIC_LIST_CACHE_KEY) : Promise.resolve(),
+  ]);
+}
+
+/**
  * The PUBLIC projection of a marketplace agent. Marketing promises agents listed
  * "with evaluation scores", so a single non-sensitive `evalScore` (the agent's
  * 0..1 evaluation/quality score from training — `ide_agents.eval_score`) ships
@@ -254,14 +281,7 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
           UPDATE ide_agents SET hire_count = hire_count + 1, updated_at = NOW() WHERE id = ${id} RETURNING *
         `
       : await sql(c.env)`SELECT * FROM ide_agents WHERE id = ${id}`;
-    // hire_count drives the public listing's ordering, so a real hire must
-    // invalidate it alongside the buyer's purchased list and the runtime's
-    // hired-agents registry (the new agent is now a callable role).
-    await Promise.all([
-      invalidateCached(c.env as Env, purchasedCacheKey(tenantId)),
-      invalidateCached(c.env as Env, runtimeHiredAgentsCacheKey(tenantId)),
-      changed.length > 0 ? invalidateCached(c.env as Env, PUBLIC_LIST_CACHE_KEY) : Promise.resolve(),
-    ]);
+    await invalidateHireCaches(c.env as Env, tenantId, { publicListing: changed.length > 0 });
     return c.json(mapAgentRow(row));
   });
 
@@ -279,10 +299,8 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       WHERE tenant_id = ${tenantId} AND agent_id = ${id} AND unhired_at IS NULL
       RETURNING agent_id
     `;
-    await Promise.all([
-      invalidateCached(c.env as Env, purchasedCacheKey(tenantId)),
-      invalidateCached(c.env as Env, runtimeHiredAgentsCacheKey(tenantId)),
-    ]);
+    // hire_count is cumulative, so an unhire never reorders the public listing.
+    await invalidateHireCaches(c.env as Env, tenantId, { publicListing: false });
     return c.json({ unhired: removed.length > 0 });
   });
 

@@ -36,6 +36,43 @@ export const AGENT_WORKFLOW_PATH = '.github/workflows/builderforce-agent.yml';
  */
 export const BUILDERFORCE_AGENT_OIDC_AUDIENCE = 'builderforce.ai/agent';
 
+/**
+ * The workflow's `run-name`, which GitHub returns as `display_title` on the
+ * workflow-runs API.
+ *
+ * This exists because `workflow_dispatch` gives us NOTHING to correlate with: the
+ * REST call returns 204 with no body and no run id, and the runs list does not
+ * echo a run's `inputs`. Without a discriminator in the name there is no way to
+ * ask "did GitHub ever schedule a runner for execution 4211?" — which is exactly
+ * the question the reconcile sweep ({@link ./githubActionsReconcile}) has to
+ * answer to distinguish "queued behind a concurrency cap" (healthy, wait) from
+ * "GitHub never scheduled this" (terminal, fail with a real reason).
+ *
+ * Stamping the id into the run name also makes the tenant's own Actions tab
+ * readable: one row per execution instead of forty identical "Builderforce Agent"
+ * entries.
+ */
+export function agentRunName(executionId: number | string): string {
+  return `Builderforce Agent · execution ${executionId}`;
+}
+
+/**
+ * Recover the execution id from a run's `display_title`, or null when the title
+ * carries none.
+ *
+ * Null is a REAL case, not just a parse failure: a repo whose workflow was
+ * committed before `run-name` existed reports the bare workflow name for every
+ * run. The reconcile sweep treats those as unattributable and waits rather than
+ * guessing — see its `runsSinceDispatch` handling.
+ */
+export function parseExecutionIdFromRunName(displayTitle: string | null | undefined): number | null {
+  if (!displayTitle) return null;
+  const m = /execution\s+(\d+)/i.exec(displayTitle);
+  if (!m) return null;
+  const id = Number(m[1]);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
 export interface AgentWorkflowOptions {
   /** API origin the runner pulls its script from and posts every op to. */
   apiOrigin: string;
@@ -69,6 +106,12 @@ export function renderAgentWorkflow(opts: AgentWorkflowOptions): string {
 # Edit freely — Builderforce only rewrites this file when you re-run
 # "Enable GitHub agent runs" from the app.
 name: Builderforce Agent
+
+# Carries the execution id into \`display_title\` on the workflow-runs API, which
+# is the ONLY way to correlate a dispatch with the run it produced (the dispatch
+# call returns 204 with no run id, and the runs list does not echo inputs). The
+# reconcile sweep reads this to tell "still queued" from "never scheduled".
+run-name: ${agentRunName('${{ inputs.execution_id }}')}
 
 on:
   workflow_dispatch:

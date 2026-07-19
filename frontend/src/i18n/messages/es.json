@@ -10057,5 +10057,36 @@
     "errorLoad": "No se pudieron cargar las programaciones.",
     "errorSave": "No se pudo guardar la programación.",
     "errorDelete": "No se pudo eliminar la programación."
+  },
+  "permissionDebugger": {
+    "title": "Depurador de permisos",
+    "copyAll": "Copiar todo",
+    "copyAllHint": "Copiar todo como JSON",
+    "exportCsv": "Exportar CSV",
+    "exportCsvHint": "Exportar como CSV",
+    "close": "Cerrar",
+    "role": "Rol:",
+    "activeCount": "Activos: {granted} / {total} permisos",
+    "deniedCount": "{count} denegados",
+    "softGatedCount": "{count} con restricción parcial",
+    "empty": "No hay permisos en esta vista.",
+    "tab": {
+      "page": "Página",
+      "user": "Usuario",
+      "role": "Rol",
+      "missing": "Faltantes"
+    },
+    "col": {
+      "permission": "Permiso",
+      "status": "Estado",
+      "source": "Origen",
+      "count": "Recuento",
+      "apiEndpoint": "Endpoint de API"
+    },
+    "status": {
+      "granted": "CONCEDIDO",
+      "denied": "DENEGADO",
+      "soft-gate": "RESTRICCIÓN PARCIAL"
+    }
   }
 }

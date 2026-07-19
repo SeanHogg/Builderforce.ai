@@ -10057,5 +10057,36 @@
     "errorLoad": "Die Zeitpläne konnten nicht geladen werden.",
     "errorSave": "Der Zeitplan konnte nicht gespeichert werden.",
     "errorDelete": "Der Zeitplan konnte nicht gelöscht werden."
+  },
+  "permissionDebugger": {
+    "title": "Berechtigungs-Debugger",
+    "copyAll": "Alle kopieren",
+    "copyAllHint": "Alle als JSON kopieren",
+    "exportCsv": "CSV exportieren",
+    "exportCsvHint": "Als CSV exportieren",
+    "close": "Schließen",
+    "role": "Rolle:",
+    "activeCount": "Aktiv: {granted} / {total} Berechtigungen",
+    "deniedCount": "{count} verweigert",
+    "softGatedCount": "{count} eingeschränkt",
+    "empty": "Keine Berechtigungen in dieser Ansicht.",
+    "tab": {
+      "page": "Seite",
+      "user": "Benutzer",
+      "role": "Rolle",
+      "missing": "Fehlend"
+    },
+    "col": {
+      "permission": "Berechtigung",
+      "status": "Status",
+      "source": "Quelle",
+      "count": "Anzahl",
+      "apiEndpoint": "API-Endpunkt"
+    },
+    "status": {
+      "granted": "GEWÄHRT",
+      "denied": "VERWEIGERT",
+      "soft-gate": "EINGESCHRÄNKT"
+    }
   }
 }

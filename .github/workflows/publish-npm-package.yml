@@ -55,6 +55,10 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Use Node.js 20
         uses: actions/setup-node@v4
         with:
@@ -68,20 +72,26 @@ jobs:
           npm install -g npm@11
           echo "npm $(npm --version) — Trusted Publishing requires >= 11.5.1"
 
-      # When this package file:-depends on a sibling, install the sibling first
-      # so its devDeps (e.g. tsup) are present — otherwise the main install's
-      # re-run of the sibling's `prepare` hook fails with `tsup: not found`.
+      # npm is the PUBLISHER here (Trusted Publishing/OIDC is npm-only) but it is
+      # no longer the RESOLVER: a package with its own pnpm-lock.yaml installs
+      # frozen from it, so the tarball published to the registry is built from
+      # the exact tree ci.yml type-checked and tested. Re-resolving with `npm
+      # install` meant a published package could be built against versions no
+      # gate had ever run. Packages with no pnpm-lock.yaml keep npm.
       - name: Pre-build local dependency
         if: inputs.prebuild-package-dir != ''
         working-directory: ${{ inputs.prebuild-package-dir }}
-        run: npm install --no-audit --no-fund
+        run: |
+          if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile
+          else npm install --no-audit --no-fund; fi
 
-      # `npm install` triggers the package's `prepare` script which runs the
-      # build, so we don't need an explicit Build step here.
+      # Installing triggers the package's `prepare` script which runs the build,
+      # so we don't need an explicit Build step here.
       - name: Install + type-check + test
         working-directory: ${{ inputs.package-dir }}
         run: |
-          npm install --no-audit --no-fund
+          if [ -f pnpm-lock.yaml ]; then pnpm install --frozen-lockfile
+          else npm install --no-audit --no-fund; fi
           npm run type-check
           npm test
 

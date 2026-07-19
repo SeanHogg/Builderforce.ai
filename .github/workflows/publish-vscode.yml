@@ -17,12 +17,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: pnpm
+          cache-dependency-path: clients/vscode/pnpm-lock.yaml
 
+      # pnpm --frozen-lockfile so the published .vsix is compiled against the
+      # same tree ci.yml's `clients/vscode · types` job type-checked. `npm
+      # install` re-resolved from a package-lock.json nothing gates, so the
+      # extension users install could differ from the one that passed types.
       - name: Install
-        run: npm install
+        run: pnpm install --frozen-lockfile
 
       - name: Compile
         run: npm run compile

@@ -179,6 +179,7 @@ import { runAlertSweep } from './application/alerts/runAlertSweep';
 import { runDueTriggers } from './application/workflow/runDueTriggers';
 import { processPendingCloudWorkflows } from './application/workflow/cloudExecutor';
 import { reapStaleExecutions } from './application/runtime/staleExecutionReaper';
+import { reconcileGithubActionsRuns } from './application/runtime/githubActionsReconcile';
 import { runAutonomousExecutionSweep } from './application/runtime/autonomousExecutionSweep';
 import { createTickDispatchBudget } from './application/runtime/tickDispatchBudget';
 import { runManagerSweep } from './application/manager/runManagerSweep';
@@ -740,6 +741,18 @@ export default {
         reapStaleExecutions(env).catch((err) => {
           console.error('[cron:exec-reaper] failed', err);
         }),
+      );
+      // GitHub Actions reconcile — `workflow_dispatch` returns 204 meaning "queued",
+      // never "started", so a dispatch GitHub never scheduled (Actions disabled,
+      // spending limit, no trigger on the default branch) is invisible until the
+      // reaper above fails it with a generic silence message ~20 min later. Ask
+      // GitHub whether a run exists and fail the ones it never scheduled with the
+      // real cause. Runs BEFORE nothing and after everything — it deliberately acts
+      // only inside the window the reaper has not yet reached.
+      ctx.waitUntil(
+        reconcileGithubActionsRuns(env)
+          .then((r) => { if (r.failed > 0) console.log(`[cron:gh-actions-reconcile] checked=${r.checked} failed=${r.failed} stillQueued=${r.stillQueued}`); })
+          .catch((err) => { console.error('[cron:gh-actions-reconcile] failed', err); }),
       );
       // Incident escalation sweep — for every still-open (unacknowledged) incident,
       // fire the next escalation tier whose timer has elapsed (Teams/Slack/email).
